@@ -1,0 +1,45 @@
+# Decisions
+
+One line each: the decision, and why. "Owner" means the owner chose it in conversation before
+the build; "Build" means it was chosen during the overnight build.
+
+## Owner's decisions (recorded as given)
+1. **Dedicated new AWS account** for AI City. The owner confirms the account before the first deploy.
+2. **Budget $150/month, daily global cap $10.** Starting values only: heavy use of Fable and Opus will need higher caps.
+3. **No connection to the owner's Mac.** Nothing in this product reaches it.
+4. **Workers run isolated in AgentCore microVMs with the policy gate on** (setting `policy_applies_to_workers`, default true).
+5. **Global inference profiles.** Cheapest, and the only way to reach Fable from Europe. Prompts may be processed outside the EU. The prefix is one config value (`profilePrefix` in `config/models.json`, `profile_prefix` in Terraform); switching to `eu.` makes Fable roles fall back to Opus 5.5.
+6. **Cognito web login over CloudFront** with MFA; the web app is the only public entry point.
+7. **Private GitHub repo** for the code.
+8. **Start with empty memory.** Nothing imported from the Mac.
+9. **Single `prod` environment.**
+10. **Anthropic models only**, as pinned in `config/models.json`: Ace Sonnet 5.5, Orchestrator and Managers Fable 5.1 (Opus 5.5 fallback), Workers Opus 5.5, utility Haiku 5.5.
+
+## Build decisions
+11. **Region `eu-north-1`.** Facts check confirmed Runtime, Memory, Gateway, Identity, built-in tools and Observability there.
+12. **Transcribe and Polly are AWS speech services, not language models**, so they do not conflict with "Anthropic models only".
+13. **Voice through a Cognito identity pool** scoped to `transcribe:StartStreamTranscriptionWebSocket` and `polly:SynthesizeSpeech` only (ADR 0006). Simpler and lower latency than a Lambda proxy.
+14. **Workers' web search uses the SDK's WebSearch/WebFetch**, because the AgentCore Gateway Web Search connector is not in Stockholm.
+15. **Application inference profiles per role, with a switch.** Created from global profiles; if AWS refuses a global source at deploy, `use_application_inference_profiles = false` falls back to calling global profiles and the ledger carries per-role cost.
+16. **Fable fallback is one retry on Opus 5.5 per turn**, recorded in the ledger (`fallback: true`). Refusal or no verdict never loops.
+17. **Cache TTL:** 1-hour prompt cache for orchestrator and managers (their turns are event-driven and minutes apart), 5-minute for Ace and workers (continuous turns). Cost math supports both.
+18. **`CLAUDE_CODE_DISABLE_1M_CONTEXT=1`** everywhere; long sessions compact at 60 % of a 200k window with a Haiku summary.
+19. **Runtimes invoked with IAM (SigV4) from Lambda only**, not JWT: only the dispatcher talks to AgentCore, so no inbound JWT config is needed on runtimes.
+20. **Ledger is one DynamoDB table** (`aic-prod-ledger`) with `pk`/`sk` plus two GSIs (`gsi1` by status, `gsi2` by department); spend counters are separate items updated atomically with `ADD` and a condition.
+21. **Daily caps are per UTC day**, as in upstream; the HUD shows Stockholm time beside it.
+22. **Per-department daily cap default $5**, global $10, monthly $150. A department cap above the global cap is pointless and is rejected by Settings.
+23. **Concurrency defaults:** 100 workers per department, 2,450 global (2,500 Stockholm quota − 50), 20 new sessions per second (quota 25).
+24. **Turn timeout 15 minutes** for synchronous turns (AgentCore request timeout); long worker jobs run async up to 8 h, with a 7.5 h soft limit so the worker reports before AgentCore kills it.
+25. **SQS visibility timeout 16 minutes** (turn timeout + 1 minute), DLQ after 3 receives.
+26. **Departments are data.** `config/departments.json` is an empty seed; the Orchestrator creates them.
+27. **Docker is not installed on the build machine**, so the image was not built tonight; the Dockerfile is written and checked by a unit test that parses it (arm64, port 8080, non-root user).
+28. **tflint and checkov installed locally** with Homebrew/pip to run the offline checks (they are local tools, not cloud calls). If installation failed it is listed in the morning report.
+29. **HUD state in a plain reducer** ported from upstream `city-state.js`, so the City view is unit-tested in Node.
+30. **The City view canvas renderer is ported from upstream `city.js`** (pixel art drawn in code, no image assets), changed for the new cast: Ace in the plaza where Jarvis stood, Orchestrator at the HQ door, Secretary and Reviewer removed.
+31. **Ledger writes from workers** go only through the `report_to_manager` / `ask_manager` tools, which put events on the bus; the ledger Lambda writes them. Workers have no DynamoDB permission at all (stricter than "only their own hire record").
+32. **Step Functions approvals** use `waitForTaskToken`; the token is stored on the approval item and returned when the owner approves in the HUD.
+33. **EventBridge Scheduler jobs are created with `state = "DISABLED"`** (retire idle agents, weekly self-improvement, reminders sweep).
+34. **Self-improvement loop: built, disabled, and fenced** — its changed-file check refuses any path under `infra/`, IAM, `config/caps.json`, `config/policy.json` and `.github/`.
+35. **Pause flag** lives in the ledger (`CONFIG#city`), read by the dispatcher before every turn; `scripts/city-off.sh` sets it and disables the SQS event source mappings.
+36. **No Reviewer and no Secretary agents.** Managers review; the Orchestrator signs off; Ace summarizes.
+37. **Bedrock throttling** is retried with full-jitter exponential backoff (base 1 s, cap 30 s, 5 tries), never a pause. "Spend cap reached" is the only pause from spend.
