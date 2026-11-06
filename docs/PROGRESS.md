@@ -61,4 +61,4 @@
 - `infra/bootstrap` now also creates the GitHub OIDC provider and the deploy role, trusted only for `repo:<owner/repo>:environment:production` / `refs/heads/main` and `deploy.yml@refs/heads/main`.
 - `scripts/city-off.sh`, `scripts/city-on.sh` (pause flag + queue triggers; owner runs them), `scripts/build-images.sh` (local build, no push). `bash -n` passes on all three.
 - `tests/workflows.test.ts` (7 tests): only `workflow_dispatch`, deploy needs approval and applies the exact plan, CI never touches AWS, OIDC trust is narrow, every commit subject ends with `[skip ci]`.
-- Infra re-checked after adding the OIDC role: validate pass (both roots), tflint 0, checkov 303 passed / 0 failed / 49 justified skips, tag check 57 resources, IAM check pass. Full suite: 13 files, 245 tests pass.
+- Infra re-checked after adding the OIDC role: validate pass (both roots), tflint 0, checkov 303 passed / 0 failed / 49 justified skips, tag check 57 resources, IAM check pass. Full suite: 12 files, 239 tests pass.
