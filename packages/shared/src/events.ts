@@ -59,6 +59,8 @@ export const TicketRecord = z.object({
   acceptance: z.string().optional(),
   result: z.string().optional(),
   review_rounds: z.number().default(0),
+  /** Ace's conversation the task came from, so the result is spoken back there. */
+  conversation: z.string().optional(),
   created_at: z.string(),
   updated_at: z.string(),
 });

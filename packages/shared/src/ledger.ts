@@ -486,6 +486,62 @@ export class Ledger {
   async listNotes(kind: "note" | "reminder"): Promise<Array<{ id: string; text: string; due_at: string | null }>> {
     return (await this.table.queryIndex("gsi1", kind === "note" ? "NOTE" : "REMINDER#pending")).map((i) => strip(i)!);
   }
+  /** Takes a lease on one unit of work (a queue message). False when it is done, or running under a live lease. */
+  async beginWork(key: string, leaseMs: number, message?: unknown): Promise<boolean> {
+    const cur = await this.table.get(`WORK#${key}`, "META");
+    const now = this.now().getTime();
+    if (cur?.state === "done") return false;
+    if (cur?.state === "started" && Number(cur.lease_until) > now) return false;
+    const ok = await this.table.update(`WORK#${key}`, "META", {
+      set: {
+        state: "started",
+        lease_until: now + leaseMs,
+        ttl: Math.floor(now / 1000) + 7 * 86_400,
+        gsi1pk: "WORK#started",
+        gsi1sk: String(now + leaseMs),
+        ...(message ? { message } : {}),
+      },
+      expect: { state: cur?.state, lease_until: cur?.lease_until },
+    });
+    return Boolean(ok);
+  }
+  async finishWork(key: string): Promise<void> {
+    await this.table.update(`WORK#${key}`, "META", { set: { state: "done", gsi1pk: "WORK#done" } });
+  }
+  /** Lets a failed unit of work be picked up again at once instead of after its lease. */
+  async abandonWork(key: string): Promise<void> {
+    await this.table.update(`WORK#${key}`, "META", {
+      set: { state: "abandoned", lease_until: 0, gsi1pk: "WORK#abandoned" },
+    });
+  }
+  /** Units of work whose lease ran out without finishing: the turn crashed or its microVM died. */
+  async staleWork(): Promise<Array<{ key: string; message: unknown }>> {
+    const now = this.now().getTime();
+    return (await this.table.queryIndex("gsi1", "WORK#started"))
+      .filter((i) => Number(i.lease_until) <= now)
+      .map((i) => ({ key: i.pk.slice(5), message: i.message }));
+  }
+  async isWorkDone(key: string): Promise<boolean> {
+    return (await this.table.get(`WORK#${key}`, "META"))?.state === "done";
+  }
+  /** Every tool call, with the gate's decision. Tool input itself is not stored (it can hold outside content). */
+  async auditTool(agentId: string, tool: string, decision: "allow" | "deny", reason: string): Promise<void> {
+    const at = this.iso();
+    await this.table.put({
+      pk: `TOOL#${agentId}`,
+      sk: `${at}#${seq()}`,
+      agent: agentId,
+      tool,
+      decision,
+      reason: reason.slice(0, 300),
+      at,
+      ttl: Math.floor(this.now().getTime() / 1000) + 90 * 86_400,
+    });
+  }
+  async toolCalls(agentId: string): Promise<Array<{ tool: string; decision: string; reason: string; at: string }>> {
+    return (await this.table.query(`TOOL#${agentId}`)).map((i) => strip(i)!);
+  }
+
   /** True the first time a key is seen (within its TTL), false for a duplicate delivery. */
   async claim(key: string, ttlSeconds = 86_400): Promise<boolean> {
     return this.table.put(

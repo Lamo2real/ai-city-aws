@@ -44,3 +44,9 @@ the build; "Build" means it was chosen during the overnight build.
 36. **No Reviewer and no Secretary agents.** Managers review; the Orchestrator signs off; Ace summarizes.
 37. **Bedrock throttling** is retried with full-jitter exponential backoff (base 1 s, cap 30 s, 5 tries), never a pause. "Spend cap reached" is the only pause from spend.
 38. **TypeScript pinned ~6.0.3**, because typescript-eslint 8.72 supports TypeScript below 6.1 only.
+39. **A fourth queue for Ace** (`aic-prod-ace`), next to the orchestrator, manager and worker queues, so owner messages and results pass the same pause/cap checks as every other turn.
+40. **Managers get an `answer_worker` tool** beside the listed ones; without it a worker's `ask_manager` question had no way back.
+41. **`gh pr merge` is denied for every agent** (upstream: ask), because the owner merges PRs into `main`.
+42. **Cloud mutation from agents is denied, not asked** (upstream asked for `aws ... delete-*` and `terraform destroy`/`apply ... prod`). An owner approval can never unlock a deny rule.
+43. **Instructions copy the manager on the record, without waking it**, so an `@agent` instruction costs one turn, not two.
+44. **The stale-lease sweep** (scheduled job `sweep`) re-sends messages whose turn crashed; it gives back the dead worker's concurrency slot.
