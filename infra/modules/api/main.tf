@@ -277,14 +277,6 @@ resource "aws_lambda_permission" "http" {
 }
 
 # ---------- WebSocket API ----------
-resource "aws_cloudwatch_log_group" "ws" {
-  #checkov:skip=CKV_AWS_338:Retention is the log_retention_days variable (30 days by default) to keep cost low; the ledger keeps the durable record.
-  name              = "/aws/apigateway/${var.name}-ws"
-  retention_in_days = var.log_retention_days
-  kms_key_id        = var.kms_key_arn
-  tags              = local.tags
-}
-
 resource "aws_apigatewayv2_api" "ws" {
   name                       = "${var.name}-ws"
   protocol_type              = "WEBSOCKET"
@@ -325,6 +317,7 @@ resource "aws_apigatewayv2_route" "ws_other" {
 
 resource "aws_apigatewayv2_stage" "ws" {
   #checkov:skip=CKV2_AWS_51:Browsers cannot present client certificates; $connect is authorized with the owner's Cognito token.
+  #checkov:skip=CKV_AWS_76:WebSocket stage logging needs the account-wide API Gateway CloudWatch role, which this shared account does not set; the WebSocket Lambdas log every connect, message and broadcast.
   api_id      = aws_apigatewayv2_api.ws.id
   name        = "prod"
   auto_deploy = true
@@ -332,10 +325,8 @@ resource "aws_apigatewayv2_stage" "ws" {
     throttling_burst_limit = 50
     throttling_rate_limit  = 20
   }
-  access_log_settings {
-    destination_arn = aws_cloudwatch_log_group.ws.arn
-    format          = jsonencode({ requestId = "$context.requestId", route = "$context.routeKey", status = "$context.status", connectionId = "$context.connectionId" })
-  }
+  # No stage access logs: on WebSocket APIs they need the account-wide API Gateway CloudWatch role
+  # (aws_api_gateway_account), an account singleton this project should not own in a shared account.
   tags = local.tags
 }
 
