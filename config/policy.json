@@ -1,0 +1,140 @@
+{
+  "$comment": "Ported from upstream config/policy.json. Shell rules match Bash, exec, bash and process. Cloud mutation is denied for every agent, workers included. The self-improvement loop may never change this file.",
+  "policy_applies_to_workers": true,
+  "caps": { "ad_daily_budget_cents": 5000 },
+  "rules": [
+    {
+      "tool": "^(Bash|exec|bash|process)$",
+      "match": "\\baws\\s+(iam|budgets|secretsmanager|sts\\s+assume-role|organizations|account|kms)\\b",
+      "decision": "deny",
+      "reason": "Agents never touch IAM, budgets, secrets, keys or accounts."
+    },
+    {
+      "tool": "^(Bash|exec|bash|process)$",
+      "match": "\\baws\\b[^|;&]*\\s(create|delete|put|update|attach|detach|modify|terminate|run|start|stop|tag|untag|deregister|register|remove|associate|disassociate|enable|disable|restore|import|replace|reboot|set|invoke|send|publish|copy|reset|revoke|authorize|cancel|purge)-[a-z0-9-]+",
+      "decision": "deny",
+      "reason": "Agents never create, change or delete AWS resources. The owner deploys with Terraform."
+    },
+    {
+      "tool": "^(Bash|exec|bash|process)$",
+      "match": "\\baws\\s+s3\\s+(rm|rb|mb)\\b",
+      "decision": "deny",
+      "reason": "Agents never create or delete S3 buckets or objects from the shell."
+    },
+    {
+      "tool": "^(Bash|exec|bash|process)$",
+      "match": "\\b(terraform|tofu)\\s+(-chdir=\\S+\\s+)?(apply|destroy|import|state\\s+(rm|mv|push))\\b",
+      "decision": "deny",
+      "reason": "Infrastructure changes are applied by the owner, never by an agent."
+    },
+    {
+      "tool": "^(Bash|exec|bash|process)$",
+      "match": "\\b(cdk\\s+(deploy|destroy|bootstrap)|sam\\s+deploy|agentcore\\s+(launch|deploy|destroy)|docker\\s+(push|login)|pulumi\\s+(up|destroy))\\b",
+      "decision": "deny",
+      "reason": "Deploys and image pushes are done by the owner."
+    },
+    {
+      "tool": "^(Bash|exec|bash|process)$",
+      "match": "\\bsecurity\\s+(add|delete|set|unlock|find)-",
+      "decision": "deny",
+      "reason": "Agents do not touch a keychain. Secrets reach a process through its launcher."
+    },
+    {
+      "tool": "^(Bash|exec|bash|process)$",
+      "match": "\\b(stripe\\s+(charges|payment_intents|refunds|payouts|transfers)\\b.*(create|capture|confirm)|npm\\s+publish|gh\\s+secret\\s+set|gh\\s+release\\s+create)",
+      "decision": "ask",
+      "reason": "Payments, publishing and credential changes need the owner."
+    },
+    {
+      "tool": "^(Bash|exec|bash|process)$",
+      "match": "\\b(drop\\s+(table|database)|truncate\\s+table)\\b",
+      "decision": "ask",
+      "reason": "Destructive database statements need the owner."
+    },
+    {
+      "tool": "^(Bash|exec|bash|process)$",
+      "match": "git(\\s+-\\S+(\\s+[^-\\s]\\S*)?)*\\s+push\\b.*(--force|-f\\b)",
+      "decision": "deny",
+      "reason": "Force-push is never allowed."
+    },
+    {
+      "tool": "^(Bash|exec|bash|process)$",
+      "match": "git(\\s+-\\S+(\\s+[^-\\s]\\S*)?)*\\s+push\\b.*\\b(main|master)\\b",
+      "decision": "deny",
+      "reason": "Never push to main. Open a PR after the Orchestrator's sign-off; the owner merges."
+    },
+    {
+      "tool": "^(Bash|exec|bash|process)$",
+      "match": "(^|[\\s\"';&|(])git\\s+([^;&|]*\\s)?(-c\\s|--output|--ext-diff|--textconv)",
+      "decision": "deny",
+      "reason": "git -c, --output, --ext-diff and --textconv can run programs or write files; not allowed."
+    },
+    {
+      "tool": "^(Bash|exec|bash|process)$",
+      "match": "(^|[\\s\"';&|(])git\\s[^;&|]*(\\d?>(?!&[0-9-])|&>)",
+      "decision": "deny",
+      "reason": "Redirecting git output into a file is a write path; not allowed. 2>&1 and >&2 are fine."
+    },
+    {
+      "tool": "^(Bash|exec|bash|process)$",
+      "match": "gh\\s+repo\\s+delete",
+      "decision": "deny",
+      "reason": "Deleting repositories needs the owner, by hand."
+    },
+    {
+      "tool": "^(Bash|exec|bash|process)$",
+      "match": "rm\\s+-[a-zA-Z]*r[a-zA-Z]*f?\\s+(/|~|\\$HOME)/?(\\s|\\\"|$)",
+      "decision": "deny",
+      "reason": "Recursive delete of root or home."
+    },
+    {
+      "tool": "^(Bash|exec|bash|process)$",
+      "match": "(curl|wget)[^|]*\\|\\s*(ba|z)?sh",
+      "decision": "deny",
+      "reason": "Piping downloads into a shell."
+    },
+    {
+      "tool": "^(Bash|exec|bash|process)$",
+      "match": "gh\\s+api\\b.*(-X|--method)[\\s=]*(PUT|DELETE|PATCH)",
+      "decision": "ask",
+      "reason": "Changing GitHub through its API needs the owner."
+    },
+    {
+      "tool": "^(Bash|exec|bash|process)$",
+      "match": "gh\\s+pr\\s+merge",
+      "decision": "deny",
+      "reason": "Agents never merge. The owner merges PRs into main."
+    },
+    {
+      "tool": "^(Bash|exec|bash|process)$",
+      "match": "\\b(cat|less|head|tail|more|cp|base64|xxd|strings)\\b[^|;&]*(\\.aws/|\\.ssh/|/proc/self/environ|\\.env\\b)",
+      "decision": "deny",
+      "reason": "Reading credential files is not allowed."
+    },
+    {
+      "tool": "^(Read|read)$",
+      "match": "(\\.aws/|\\.ssh/|/proc/self/environ|\\.env\")",
+      "decision": "deny",
+      "reason": "Reading credential files is not allowed."
+    },
+    {
+      "tool": "^mcp__github__merge_pull_request$",
+      "match": ".*",
+      "decision": "deny",
+      "reason": "Agents never merge. The owner merges PRs into main."
+    },
+    { "tool": "^mcp__github__.*delete", "match": ".*", "decision": "deny", "reason": "Destructive GitHub operation." },
+    {
+      "tool": "^mcp__meta-ads__",
+      "match": "\"status\"\\s*:\\s*\"ACTIVE\"",
+      "decision": "ask",
+      "reason": "Activating ads spends real money; create them paused."
+    },
+    {
+      "tool": ".*",
+      "match": "\"privacy(Status)?\"\\s*:\\s*\"public\"",
+      "decision": "ask",
+      "reason": "Publishing a video publicly can't be undone; upload private or unlisted first."
+    }
+  ]
+}

@@ -14,3 +14,9 @@
 - TypeScript 7 is the latest on npm but typescript-eslint supports only `<6.1`, so TS is pinned `~6.0.3` (DECISIONS).
 - Installed local check tools: tflint 0.65.0 (official Homebrew tap), checkov 3.4.3 (pip, in a scratch venv).
 - Gate: `npm install`, `npm run lint` pass, `npm run typecheck` pass, `npm test` 2 files / 2 tests pass.
+
+## Phase 3: Shared core — done
+- `packages/shared`: `models.ts` (role → model → profile, Fable→Opus fallback, `eu.` degradation, application profile ARNs), `guard.ts` (startup guard), `policy.ts` (ported `decide()` + exact-action approvals + worker setting), `table.ts` (one storage interface, `MemoryTable` and `DynamoTable`), `ledger.ts` (single-table ledger: tickets with history, departments, agents, specialists, questions, approvals, turns, spend counters, worker slots, session rate limit, settings, events, notes, idempotency), `cost.ts` (5-minute vs 1-hour cache writes, geo surcharge, Haiku long-context tier), `caps.ts`, `turn.ts` (the one gate: pause, caps, throttle back-off, fallback once, cost row), `events.ts` (zod schemas + `MemoryBus`), `bus.ts` (EventBridge).
+- `config/models.json` (the only place model IDs live), `config/policy.json` (upstream rules + cloud-mutation denies), `config/caps.json`, `config/departments.json` (empty).
+- Gate: `npx vitest run` — 5 files, 130 tests pass. Proven: guard refuses each forbidden variable and Bedrock-off; every role maps to the right model/profile incl. fallback; caps block all 7 turn kinds; throttling backs off with jitter and never pauses; a refusal triggers exactly one fallback. Plus a repo-wide test that no file but `config/models.json` contains a model ID.
+- lint and typecheck pass.
