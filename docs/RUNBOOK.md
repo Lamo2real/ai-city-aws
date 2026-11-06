@@ -17,7 +17,7 @@ AWS_PROFILE=aic ./scripts/city-on.sh
 **Still costs money while paused:** S3 storage, CloudWatch logs and dashboard, KMS keys ($1/month each), Secrets Manager ($0.40/secret/month), WAF ($5 + $1/rule/month), DynamoDB storage and PITR, CloudFront requests, ECR storage. Agents cost nothing while idle.
 
 ## Update
-- Code or infrastructure: push to `main`, then run **Actions → deploy → Run workflow**, type `deploy prod`, read `plan.txt` from the plan job's artifact, and approve the `production` environment.
+- Code or infrastructure: push to `main`. `deploy.yml` plans and applies on its own (no approval); the plan is in the log of its `terraform plan` step. To re-run without a new commit: **Actions → deploy → Run workflow**. To push without deploying, put `[skip ci]` in the commit message.
 - By hand (if GitHub is unavailable): build Lambdas (`npm run build -w @aic/lambdas`), build and push the image with a new tag, then `terraform plan -var agent_image_tag=<tag> -out prod.tfplan`, read it, `terraform apply prod.tfplan`, then upload `web/dist`.
 
 ## See costs

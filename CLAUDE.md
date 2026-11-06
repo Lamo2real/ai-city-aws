@@ -13,8 +13,8 @@ AI City is the owner's personal organization of AI agents, running only in the o
 - `docs/PRODUCT.md` is the living spec: requirements, features with status, defaults, invariants. Read it first in a new or compacted session, and update it in the same commit as any change to a requirement, feature, default or invariant.
 
 ## Rules
-- Never deploy from an agent session. `terraform apply`, image pushes and AWS CLI changes are run by the owner, or by `deploy.yml` after the owner approves.
-- GitHub workflows are `workflow_dispatch` only unless the owner changes that.
+- Every push to `main` deploys prod automatically (`deploy.yml`, no approval step: the owner's choice). So an agent session never runs `terraform apply`, image pushes or AWS CLI changes itself, and pushes to `main` only when the owner asks for it in that session. A commit message containing `[skip ci]` does not deploy.
+- `ci.yml` runs only by hand; `deploy.yml` runs on pushes to `main` (docs-only pushes excepted) or by hand, never on pull requests.
 - Every taggable resource carries the default cost-allocation tags (`Project`, `App`, `Environment`, `Owner`, `ManagedBy`, `CostCenter`, `Component`; plus `AgentRole` on agent runtimes and inference profiles).
 - Secrets live in Secrets Manager and are read by name at runtime. Never write a secret to code, Terraform, logs, prompts, docs or commits.
 - Every non-trivial module comes with tests. Unit tests use fake model runners and never call Bedrock.

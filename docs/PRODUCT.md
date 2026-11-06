@@ -21,7 +21,7 @@ The owner's personal organization of AI agents, running only in the owner's AWS 
 3. **Anthropic models only**, IDs pinned in `config/models.json` and nowhere else (a test scans the repo). Transcribe and Polly are speech services, allowed.
 4. **Single environment `prod`**, region `eu-north-1`, Terraform in `infra/`.
 5. **Only the owner can get in:** Cognito with MFA, no self-sign-up, `owner` group checked on every API route.
-6. **Never deploy from an agent session.** `terraform apply`, image pushes and AWS CLI changes are run by the owner or by `deploy.yml` after approval. Workflows are `workflow_dispatch` only. Commit subjects end with `[skip ci]`.
+6. **Push to `main` = deploy to prod** (the owner's choice, no approval step). Agent sessions never run `terraform apply`, image pushes or AWS CLI changes themselves, and push to `main` only when the owner asks. `[skip ci]` in a commit message skips the deploy. `ci.yml` runs only by hand.
 7. **Secrets** in Secrets Manager, read by name at runtime; never in code, Terraform, logs, prompts, docs or commits.
 8. **Every tool call by every agent (workers too) passes the policy gate** in `packages/shared`.
 9. **No spend limit by default** (the owner's choice, 2026-11-06). Spend caps are optional; when the owner sets one in Settings it is checked before every turn of every kind. AWS Budgets only emails. Money in the city is an estimate; the AWS bill is the truth.
@@ -93,7 +93,7 @@ Owner message → `POST /messages` → SQS (`ace` queue) → **dispatcher** Lamb
 | Infra | Cost-allocation tags on every taggable resource | ✅ (static check) | `scripts/check-tags.mjs` |
 | Infra | AWS Budgets 50/80/100 + forecast, email alerts only (no deny action, no pause) | 🟡 | `infra/modules/budgets` |
 | Ops | `city-off.sh` / `city-on.sh`, `build-images.sh` (no push) | 🟡 not run | `scripts/` |
-| CI/CD | `ci.yml`, `deploy.yml`: needs only the variable `AIC_DEPLOY_ROLE_ARN` + the secret `AIC_OWNER_EMAIL`; creates the state bucket if missing; one approved plan builds + pushes the image and deploys from nothing; dispatch-only | 🟡 never run | `.github/workflows/`, `scripts/ensure-state-bucket.sh`, `scripts/push-image.sh` |
+| CI/CD | `ci.yml`, `deploy.yml`: needs only the variable `AIC_DEPLOY_ROLE_ARN` + the secret `AIC_OWNER_EMAIL`; creates the state bucket if missing; runs on every push to `main` (no approval; docs-only pushes skipped); one plan builds + pushes the image (tag = hash of the runtime sources) and deploys from nothing | 🟡 never run | `.github/workflows/`, `scripts/ensure-state-bucket.sh`, `scripts/push-image.sh` |
 | Gap | Worker S3 workspace sync (IAM ready) | ❌ | — |
 | Gap | Runtime use of AgentCore Memory | ❌ | — |
 | Gap | Self-improvement runner (switch + fence exist) | ❌ | `services/lambdas/src/improve.ts` |
@@ -108,7 +108,7 @@ Owner message → `POST /messages` → SQS (`ace` queue) → **dispatcher** Lamb
 - Policy decisions for ~70 commands incl. `exec` and AWS mutation (`policy.test.ts`).
 - Every API route rejects a token without the `owner` group (`services/lambdas/test/api.test.ts`).
 - 500 hires respect ceilings and the session rate; nothing dropped (`tests/hierarchy.e2e.test.ts`).
-- Workflows are `workflow_dispatch` only; commit subjects end with `[skip ci]` (`tests/workflows.test.ts`).
+- `deploy.yml` runs only on pushes to `main` or by hand (never on pull requests); `ci.yml` only by hand (`tests/workflows.test.ts`).
 - Tags and worker IAM limits (`tests/infra.test.ts`).
 - HUD journeys, ≤ 1 primary button per screen, axe clean (`web/e2e/`).
 
@@ -141,6 +141,7 @@ Terraform (offline only): `fmt -check -recursive`, `init -backend=false`, `valid
 ## 10. Feature log (newest first)
 | Date | Feature | Notes |
 |---|---|---|
+| 2026-11-06 | Push to main deploys | Owner's choice: `deploy.yml` runs on every push to `main` (docs-only pushes skipped) and applies without an approval step. The image tag is a hash of the runtime's sources, so web-only pushes don't rebuild it. Commits no longer need `[skip ci]`; adding it skips a deploy. |
 | 2026-11-06 | Owner email and state bucket | The owner email is the GitHub secret `AIC_OWNER_EMAIL` (masked in public logs); Cognito creates only that user and allows no sign-up. State goes to `lamo-labs-state-bucket` under `ai-city-aws/prod/terraform.tfstate` (used as is if it exists, in its own region). The full plan is shown in the masked log, not uploaded as a file. |
 | 2026-11-06 | Deploy needs only the role ARN | `deploy.yml` needs two variables (role ARN, owner email), creates the Terraform state bucket on its first run, and one approved plan builds and pushes the image (`terraform_data.image`) before the runtimes. `infra/bootstrap` removed; the owner provides the OIDC role (`docs/deploy-role-trust-policy.json`). Public repo `Lamo2real/ai-city-aws`. |
 | 2026-11-06 | AWS Budgets at $10,000 | Owner's choice. The monthly alert amount is $10,000 (was $150): emails at $5k / $8k / $10k and on a forecast above it. Still alerts only. |

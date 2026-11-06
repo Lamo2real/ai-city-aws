@@ -1,6 +1,5 @@
-// Guards for "nothing runs by itself": every workflow is workflow_dispatch only, deploys need the
-// owner's approval, and the OIDC trust is limited to the owner's repo and main.
-import { execFileSync } from "node:child_process";
+// Guards for the workflows: ci.yml runs only by hand; deploy.yml deploys prod on every push to main
+// (the owner's choice, no approval) and from nowhere else; the OIDC trust is limited to the owner's repo.
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -28,16 +27,18 @@ describe("GitHub workflows", () => {
   it("exist: ci.yml and deploy.yml", () => {
     expect(files.sort()).toEqual(["ci.yml", "deploy.yml"]);
   });
-  it.each(files)("%s is started only by hand (workflow_dispatch)", (f) => {
-    const text = readFileSync(join(WF, f), "utf8");
+  it("ci.yml is started only by hand (workflow_dispatch)", () => {
+    const text = readFileSync(join(WF, "ci.yml"), "utf8");
     expect(triggers(text)).toEqual(["workflow_dispatch"]);
     expect(text).not.toMatch(/^\s+(push|pull_request|schedule|workflow_run|pull_request_target):/m);
   });
-  it("deploy applies only after the owner's approval on the production environment, from main", () => {
+  it("deploy.yml runs on pushes to main (and by hand), never on pull requests or forks", () => {
     const text = readFileSync(join(WF, "deploy.yml"), "utf8");
-    expect(text).toMatch(/environment: production/);
+    expect(triggers(text)).toEqual(["push", "workflow_dispatch"]);
+    expect(text).toMatch(/push:\n\s+branches: \[main\]\n/);
+    expect(text).not.toMatch(/^\s+(pull_request|pull_request_target|schedule|workflow_run):/m);
     expect(text).toMatch(/github\.ref == 'refs\/heads\/main'/);
-    expect(text).toMatch(/terraform apply -input=false prod\.tfplan/); // the reviewed plan, exactly
+    expect(text).toMatch(/terraform apply -input=false prod\.tfplan/); // exactly the plan the run made
     expect(text).toMatch(/id-token: write/);
     expect(text).not.toMatch(/AWS_SECRET_ACCESS_KEY|aws-access-key-id/);
   });
@@ -74,21 +75,5 @@ describe("GitHub workflows", () => {
     expect(tf).toMatch(/resource "terraform_data" "image"/);
     expect(tf).toMatch(/scripts\/push-image\.sh/);
     expect(tf).toMatch(/depends_on\s+= \[terraform_data\.image\]/);
-  });
-});
-
-describe("commits", () => {
-  it("every commit message ends with [skip ci]", () => {
-    let log: string;
-    try {
-      log = execFileSync("git", ["log", "--format=%B%x00"], { cwd: ROOT, encoding: "utf8" });
-    } catch {
-      return; // not a git checkout (e.g. a source tarball): nothing to check
-    }
-    const messages = log
-      .split("\0")
-      .map((m) => m.trim())
-      .filter(Boolean);
-    for (const m of messages) expect(m.split("\n")[0], m).toMatch(/\[skip ci\]$/);
   });
 });

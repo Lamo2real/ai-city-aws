@@ -1,4 +1,5 @@
-# Deploy prod. Started by hand only (workflow_dispatch), from main only. The owner provides:
+# Deploy prod. Runs automatically on every push to main (the owner's choice: no approval step), and can
+# also be started by hand. Docs-only pushes don't deploy. The owner provides:
 #   variable AIC_DEPLOY_ROLE_ARN  an IAM role GitHub can assume through OIDC (trust: docs/deploy-role-trust-policy.json)
 #   secret   AIC_OWNER_EMAIL      the only login (Cognito, admin-created) and where alerts go. A secret, not a
 #                                 variable, so it is masked in the logs of this public repository.
@@ -7,17 +8,19 @@
 #
 # One run deploys from nothing:
 #   plan     - tests, builds the Lambdas, creates the Terraform state bucket if it is missing, plans.
-#   apply    - waits for the owner's approval on the `production` environment, then applies exactly the
-#              reviewed plan. The plan itself builds and pushes the agent image (scripts/push-image.sh)
-#              after the ECR repository exists and before the runtimes.
+#   apply    - applies exactly that plan (no approval). The plan builds and pushes the agent image
+#              (scripts/push-image.sh) after the ECR repository exists and before the runtimes. The image
+#              tag is a hash of the runtime's sources, so pushes that don't touch them don't rebuild it.
 #   frontend - uploads the HUD to its bucket and refreshes CloudFront, using Terraform's outputs.
+# A push whose commit message contains [skip ci] does not deploy.
 name: deploy
 on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
   workflow_dispatch:
-    inputs:
-      confirm:
-        description: Type "deploy prod" to run
-        required: true
 
 permissions:
   contents: read
@@ -31,11 +34,10 @@ env:
   TF_STATE_BUCKET: ${{ vars.AIC_STATE_BUCKET || 'lamo-labs-state-bucket' }}
   TF_STATE_KEY: ai-city-aws/prod/terraform.tfstate
   TF_IN_AUTOMATION: "1"
-  IMAGE_TAG: ${{ github.sha }}
 
 jobs:
   plan:
-    if: github.ref == 'refs/heads/main' && inputs.confirm == 'deploy prod'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -55,6 +57,11 @@ jobs:
           [ -n "$EMAIL" ] || { echo "::error::Set the secret AIC_OWNER_EMAIL (Settings → Secrets and variables → Actions → Secrets)."; ok=0; }
           [ "$ok" = 1 ]
       - uses: actions/checkout@v5
+      - name: agent image tag (changes only when the runtime's sources change)
+        id: image
+        run: |
+          h="${{ hashFiles('services/agent-runtime/**', 'packages/shared/**', 'agents/**', 'config/**', 'package-lock.json', 'package.json') }}"
+          echo "tag=rt-${h:0:16}" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
@@ -81,6 +88,7 @@ jobs:
           STATE_REGION: ${{ steps.state.outputs.region }}
           OWNER_EMAIL: ${{ secrets.AIC_OWNER_EMAIL }}
           BUDGET: ${{ vars.AIC_MONTHLY_BUDGET_USD || '10000' }}
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
         run: |
           terraform init -input=false \
             -backend-config="bucket=${STATE_BUCKET}" \
@@ -99,7 +107,7 @@ jobs:
             echo "## Terraform plan"
             grep -E '^Plan:|No changes' /tmp/plan.txt || true
             echo
-            echo "Read the full plan in the log of the 'terraform plan' step, then approve the production environment."
+            echo "The full plan is in the log of the 'terraform plan' step. It is applied next, without approval."
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
@@ -115,7 +123,7 @@ jobs:
     needs: plan
     runs-on: ubuntu-24.04
     timeout-minutes: 90
-    environment: production # the owner approves here, after reading the plan
+    environment: production # deployment history only; no required reviewers (the owner's choice)
     permissions:
       contents: read
       id-token: write

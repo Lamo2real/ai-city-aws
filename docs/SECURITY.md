@@ -21,7 +21,7 @@ The Mac version had **no public port**. This version is reachable from the inter
 | **Public login page** (credential stuffing, enumeration, bots) | MFA required; no self-sign-up; enumeration-safe errors; WAF IP reputation + rate limit; Cognito's own lockout after repeated failures. | Phishing of the owner's password + TOTP code. Enabling passkeys would remove that. |
 | **Stolen session token** | 15-minute tokens; refresh token rotation and revocation; tokens in `sessionStorage` (gone when the tab closes); CSP blocks third-party scripts. | A token stolen in its 15 minutes can act as the owner (except approvals that need a hold — a UI, not a server, guard). |
 | **Agent escalates via AWS** | One role per runtime with a **permission boundary** that never allows IAM changes, Organizations, account or billing. Workers: no IAM actions, no resource creation, Bedrock only on the worker profile, S3 only under `hires/<own hire id>/` via a session-tagged role (checked by `scripts/check-iam.mjs`). Deploys are done by the owner or by `deploy.yml` after approval. | A worker can update another worker's `AGENT#wkr-*` record and any ticket (key prefixes are coarse). |
-| **Supply chain** | Lockfile; pinned Terraform providers and Node engines; ECR scan on push, immutable tags; CI and deploy are manual (`workflow_dispatch`) and deploy needs the `production` environment approval. | Actions are pinned by major version, not SHA. |
+| **Supply chain** | Lockfile; pinned Terraform providers and Node engines; ECR scan on push, immutable tags; CI is manual; deploy runs on every push to `main` with **no approval step** (the owner's choice), never on pull requests or forks. | Anyone who can push to `main` deploys prod: keep write access to the owner only. Actions are pinned by major version, not SHA. |
 | **Self-improvement rewriting its judges** | Built and disabled (`AIC_SELF_IMPROVE` unset). Even if enabled, a change touching `infra/`, IAM, `config/policy.json`, `config/caps.json`, the policy/caps/guard code, CI, any `package.json` or an existing test is refused. | — |
 
 ## IAM summary
@@ -31,7 +31,7 @@ The Mac version had **no public port**. This version is reachable from the inter
 - **Worker**: its model (Opus) only; ledger reads, writes only under listed key prefixes; consume (delete) owner approvals; send to the manager queue; assume the workspace role with a `hire_id` session tag; Code Interpreter and Browser; the GitHub secret only.
 - **Lambdas**: one role each with only what that handler needs.
 - **Every role**: the `aic-prod-boundary` permission boundary.
-- **Deploy role** (provided by the owner): AdministratorAccess; the suggested trust (`docs/deploy-role-trust-policy.json`) lets only `deploy.yml` on `main` of `Lamo2real/ai-city-aws`, or its `production` environment, assume it. Every apply waits for the owner's approval. The repository is public, so the role ARN is not secret but is useless outside that trust.
+- **Deploy role** (provided by the owner): AdministratorAccess; the suggested trust (`docs/deploy-role-trust-policy.json`) lets only `deploy.yml` on `main` of `Lamo2real/ai-city-aws`, or its `production` environment, assume it. Applies run without approval on every push to `main`. The repository is public, so the role ARN is not secret but is useless outside that trust.
 
 ## Known gaps
 - Workers use the microVM's disk; the code that assumes the workspace role and syncs to S3 (`hires/<id>/`) is not written yet (the IAM is). Until then nothing persists outside Git and the ledger.

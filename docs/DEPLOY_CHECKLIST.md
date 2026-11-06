@@ -31,9 +31,9 @@ aws bedrock list-inference-profiles --region eu-north-1 --profile aic --query "i
 12. Service Quotas → Amazon Bedrock AgentCore → check "Active session workloads per account" (2,500 in Stockholm) and "New Runtime session creation rate" (25/s). Defaults are fine to start.
 
 ## D. GitHub (~10 min)
-13. The repository is **`Lamo2real/ai-city-aws`** (public). Workflows only run when you start them by hand, so a push never deploys anything.
-14. Settings → Environments → New environment **`production`** → Required reviewers: **you** → Deployment branches: `main` only. Every apply waits for your approval here.
-15. Optional: Settings → Branches → protect `main` (require a pull request).
+13. The repository is **`Lamo2real/ai-city-aws`** (public). **Every push to `main` deploys prod** with no approval step; docs-only pushes and commits with `[skip ci]` don't.
+14. Keep write access to the repository to yourself: anyone who can push to `main` deploys. (The `production` environment is created on the first run, for deployment history only; leave it without required reviewers.)
+15. Optional: Settings → Branches → protect `main` (require a pull request); merging a pull request then deploys.
 
 ## E. The deploy role (from you or your account admin, ~10 min)
 16. In the AI City account: IAM → Identity providers → Add provider → OpenID Connect → URL `https://token.actions.githubusercontent.com`, audience `sts.amazonaws.com` (skip if it already exists).
@@ -48,13 +48,12 @@ aws bedrock list-inference-profiles --region eu-north-1 --profile aic --query "i
    - Optional variables: `AIC_REGION` (default `eu-north-1`), `AIC_MONTHLY_BUDGET_USD` (alert amount, default `10000`), `AIC_STATE_BUCKET` (default `lamo-labs-state-bucket`; the state lives under `ai-city-aws/prod/terraform.tfstate`).
 
 ## G. First deploy (~45 min, one run)
-21. Actions → **deploy** → Run workflow → type `deploy prod`.
-22. The **plan** job runs the tests, builds the Lambdas, uses the Terraform state bucket `lamo-labs-state-bucket` (if it doesn't exist yet it creates it: private, versioned, encrypted, TLS-only; an existing bucket is used as it is, in its own region), and makes the plan.
-23. **Read the plan.** The run summary shows the counts; the full text is in the log of the `terraform plan` step. First time: roughly 200 resources to add, **0 to change, 0 to destroy**: KMS key, Cognito user pool with your user, DynamoDB tables, an EventBridge bus, 8 SQS queues, 10 Lambda functions, 2 API Gateway APIs, 4 AgentCore runtimes, 4 memories, 5 inference profiles, an ECR repository plus the image build, a CloudFront distribution with WAF, a budget (email alerts only), a dashboard and alarms, 5 schedules (all **DISABLED**). If anything says "destroy", reject it.
-24. **Approve** the `production` environment. The **apply** job applies exactly that plan; while doing so it builds the ARM64 agent image and pushes it to ECR before the runtimes are created (about 10–20 minutes for the first image).
-   If `aws_bedrock_inference_profile` fails because a global profile can't be copied, tell Claude: it switches `use_application_inference_profiles` off (cost per role then comes from the ledger only) and you run the workflow again.
-25. The **frontend** job uploads the HUD and refreshes CloudFront. The run summary ends with the HUD's URL.
-26. Every later deploy is the same: Run workflow → read the plan → approve.
+21. Push to `main` (or Actions → **deploy** → Run workflow). Before the role variable is set, a run stops at its first step with a clear message.
+22. The **plan** job runs the tests, builds the Lambdas, uses the Terraform state bucket `lamo-labs-state-bucket` (if it doesn't exist yet it creates it: private, versioned, encrypted, TLS-only; an existing bucket is used as it is, in its own region), and makes the plan. The run summary shows the counts; the full plan is in the log of the `terraform plan` step. First time: roughly 200 resources to add, 0 to change, 0 to destroy.
+23. The **apply** job applies exactly that plan, **without approval**. On the first run it builds the ARM64 agent image and pushes it to ECR before the runtimes are created (about 10–20 minutes). Later runs rebuild the image only when the runtime's sources change.
+   If `aws_bedrock_inference_profile` fails because a global profile can't be copied, tell Claude: it switches `use_application_inference_profiles` off (cost per role then comes from the ledger only) and the next push deploys it.
+24. The **frontend** job uploads the HUD and refreshes CloudFront. The run summary ends with the HUD's URL.
+25. Every later deploy: push to `main`. If a plan ever shows something being destroyed that you didn't intend, revert the commit and push again.
 
 ## H. After the first apply (~20 min)
 27. **Confirm the alert emails**: you get two "AWS Notification - Subscription Confirmation" emails (city notifications and, separately, the budget emails go straight to you). Click **Confirm subscription**.

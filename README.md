@@ -31,4 +31,4 @@ npm run build -w @aic/web && npm run e2e -w web
 node scripts/check-tags.mjs && node scripts/check-iam.mjs
 ```
 
-Unit tests use fake model runners and never call Bedrock. GitHub workflows run only when started by hand.
+Unit tests use fake model runners and never call Bedrock. **Every push to `main` deploys prod** (`.github/workflows/deploy.yml`); `ci.yml` runs only by hand.
