@@ -7,7 +7,9 @@
 # AIC_STATE_BUCKET (default lamo-labs-state-bucket; state key ai-city-aws/prod/terraform.tfstate).
 #
 # One run deploys from nothing:
-#   plan     - tests, builds the Lambdas, creates the Terraform state bucket if it is missing, plans.
+#   web      - web tests and the HUD build                         } in parallel
+#   backend  - Python lint, types and tests; the Lambda package    }
+#   plan     - creates the Terraform state bucket if it is missing, plans.
 #   apply    - applies exactly that plan (no approval). The plan builds and pushes the agent image
 #              (scripts/push-image.sh) after the ECR repository exists and before the runtimes. The image
 #              tag is a hash of the runtime's sources, so pushes that don't touch them don't rebuild it.
@@ -36,8 +38,66 @@ env:
   TF_IN_AUTOMATION: "1"
 
 jobs:
-  plan:
+  # ---------- stage 1, in parallel: the web app and the backend are tested and built ----------
+  web:
     if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build -w @aic/web
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+          retention-days: 3
+
+  backend:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      image_tag: ${{ steps.image.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.6"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: lint, types and tests (Python)
+        working-directory: backend
+        run: |
+          uv sync --frozen --all-extras
+          uv run ruff check
+          uv run mypy
+          uv run pytest -q
+      - name: build the Lambda package (Python 3.13, arm64)
+        run: python3 backend/scripts/build_lambdas.py
+      - name: agent image tag (changes only when the runtime's sources change)
+        id: image
+        run: |
+          h="${{ hashFiles('services/agent-runtime/**', 'backend/src/**', 'backend/pyproject.toml', 'backend/uv.lock', 'agents/**', 'config/**') }}"
+          echo "tag=rt-${h:0:16}" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lambda-package
+          path: backend/dist/lambda
+          retention-days: 3
+
+  # ---------- stage 2: plan the infrastructure (Lambdas, runtimes, API, HUD hosting) ----------
+  plan:
+    needs: [web, backend]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -57,29 +117,16 @@ jobs:
           [ -n "$EMAIL" ] || { echo "::error::Set the secret AIC_OWNER_EMAIL (Settings → Secrets and variables → Actions → Secrets)."; ok=0; }
           [ "$ok" = 1 ]
       - uses: actions/checkout@v5
-      - name: agent image tag (changes only when the runtime's sources change)
-        id: image
-        run: |
-          h="${{ hashFiles('services/agent-runtime/**', 'backend/src/**', 'backend/pyproject.toml', 'backend/uv.lock', 'agents/**', 'config/**') }}"
-          echo "tag=rt-${h:0:16}" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-node@v5
+      - uses: actions/download-artifact@v4
         with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci
-      - run: npm test
-      - uses: astral-sh/setup-uv@v6
-        with:
-          version: "0.13.6"
-          enable-cache: true
-          cache-dependency-glob: backend/uv.lock
-      - name: backend tests (Python)
-        working-directory: backend
+          name: lambda-package
+          path: backend/dist/lambda
+      - name: who GitHub says this job is (what the deploy role's trust policy must match)
         run: |
-          uv sync --frozen --all-extras
-          uv run pytest -q
-      - name: build the Lambda package (Python 3.13, arm64)
-        run: python3 backend/scripts/build_lambdas.py
+          # Prints only the token's claims, never the token itself.
+          curl -sS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" \
+            | python3 -c 'import sys,json,base64; p=json.load(sys.stdin)["value"].split(".")[1]; c=json.loads(base64.urlsafe_b64decode(p+"="*(-len(p)%4))); print(json.dumps({k:c.get(k) for k in ("sub","aud","repository","ref","environment","job_workflow_ref")}, indent=2))'
       - uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ vars.AIC_DEPLOY_ROLE_ARN }}
@@ -99,7 +146,7 @@ jobs:
           STATE_REGION: ${{ steps.state.outputs.region }}
           OWNER_EMAIL: ${{ secrets.AIC_OWNER_EMAIL }}
           BUDGET: ${{ vars.AIC_MONTHLY_BUDGET_USD || '10000' }}
-          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+          IMAGE_TAG: ${{ needs.backend.outputs.image_tag }}
         run: |
           terraform init -input=false \
             -backend-config="bucket=${STATE_BUCKET}" \
@@ -127,11 +174,11 @@ jobs:
           path: |
             infra/envs/prod/prod.tfplan
             infra/envs/prod/.build
-            backend/dist/lambda
           retention-days: 3
 
+  # ---------- stage 3: apply exactly that plan (builds and pushes the agent image too) ----------
   apply:
-    needs: plan
+    needs: [backend, plan]
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     environment: production # deployment history only; no required reviewers (the owner's choice)
@@ -182,6 +229,7 @@ jobs:
           echo "distribution_id=$(terraform output -raw cloudfront_distribution_id)" >> "$GITHUB_OUTPUT"
           echo "hud_url=$(terraform output -raw hud_url)" >> "$GITHUB_OUTPUT"
 
+  # ---------- stage 4: the HUD ----------
   frontend:
     needs: apply
     runs-on: ubuntu-24.04
@@ -190,13 +238,10 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/download-artifact@v4
         with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci
-      - run: npm run build -w @aic/web
+          name: web-dist
+          path: web/dist
       - uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ vars.AIC_DEPLOY_ROLE_ARN }}
