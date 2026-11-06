@@ -81,15 +81,15 @@ Departments and workers are data and sessions, never new runtimes, so the accoun
 1. The owner types or speaks. The HUD posts `/messages`; the API queues a message for Ace (`aic-prod-ace`).
 2. The **dispatcher** takes it: pause flag → spend caps (only if the owner set one; none by default) → for workers, concurrency ceilings and the new-session rate → a lease on the message (idempotency) → `InvokeAgentRuntime`.
 3. Inside the runtime, the **startup guard** has already refused to run without `CLAUDE_CODE_USE_BEDROCK=1` or with any other credential. The **host** reads the ledger, builds the prompt (stable system prompt first, for prompt caching), and runs one **gated turn**: caps again, throttling back-off, Fable → Opus fallback once, a cost row in the ledger and a `cost.update` event.
-4. Every tool call passes the **policy gate** (`packages/shared/src/policy.ts`): deny rules (cloud mutation, force-push, push to main, credential files, merging), ask rules (become an approval bound to the exact action, via Step Functions), and the call is audited in the ledger.
+4. Every tool call passes the **policy gate** (`backend/src/aic/shared/policy.py`): deny rules (cloud mutation, force-push, push to main, credential files, merging), ask rules (become an approval bound to the exact action, via Step Functions), and the call is audited in the ledger.
 5. Tools change the ledger, put events on the bus and queue the next agent's message, then the turn ends. Nobody waits in a session: the next turn starts when a report arrives.
 6. Events fan out: to the WebSocket (City view, Ace's streamed reply), to the ledger (ticket trace) and to SNS (results, cap alerts, pause).
 7. The Orchestrator signs off (PASS/FAIL) before anything leaves the city; Ace tells the owner.
 
 ## Shared code
-- `packages/shared`: model map (`config/models.json` is the only place model IDs live), startup guard, policy gate, single-table ledger (one implementation over a `Table` interface with in-memory and DynamoDB backends), cost math (5-minute vs 1-hour cache writes, geo surcharge, Haiku long-context tier), spend caps, event schemas (zod), the turn gate, the dispatcher's decisions, the Agent Factory, the actions shared by tools and API, utility (Haiku) calls and the wake word.
-- `services/agent-runtime`: the AgentCore container (HTTP on 8080, arm64), role tools, the Claude Agent SDK engine.
-- `services/lambdas`: api, dispatcher, factory, ledger writer, ws (authorizer, connections, broadcast), notifier, approvals, scheduler (+ the fenced, disabled self-improvement check).
+- `backend/src/aic/shared` (Python): model map (`config/models.json` is the only place model IDs live), startup guard, policy gate, single-table ledger (one implementation over a `Table` interface with in-memory and DynamoDB backends), cost math (5-minute vs 1-hour cache writes, geo surcharge, Haiku long-context tier), spend caps, event schemas (Pydantic), the turn gate, the dispatcher's decisions, the Agent Factory, the actions shared by tools and API, utility (Haiku) calls and the wake word.
+- `backend/src/aic/runtime` (Python): the AgentCore container (Starlette on 8080, arm64; image built from `services/agent-runtime/Dockerfile`), role tools, the Claude Agent SDK engine.
+- `backend/src/aic/lambdas` (Python 3.13, one zip for all functions): api, dispatcher, factory, ledger writer, ws (authorizer, connections, broadcast), notifier, approvals, scheduler (+ the fenced, disabled self-improvement check).
 - `web`: React HUD; the City view is ported from the owner's Mac HUD (`web/src/city/`).
 
 ## Data model (DynamoDB, one table)

@@ -16,3 +16,11 @@ web/playwright-report/
 infra/.build
 infra/**/.build/
 infra/**/.terraform.lock.hcl.bak
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

@@ -1,0 +1,65 @@
+{
+  "$comment": "Wake-word answers both halves must give: the browser (web/src/voice/wake.ts) and the server (backend/src/aic/shared/utility.py). Tests on both sides read this file.",
+  "cases": [
+    {
+      "text": "yo Ace",
+      "want": "yes"
+    },
+    {
+      "text": "hi Ace, status",
+      "want": "yes"
+    },
+    {
+      "text": "hey ace",
+      "want": "yes"
+    },
+    {
+      "text": "what's up Ace",
+      "want": "yes"
+    },
+    {
+      "text": "how's it going Ace",
+      "want": "yes"
+    },
+    {
+      "text": "Ace, pause everything",
+      "want": "yes"
+    },
+    {
+      "text": "what's the status of the product, Ace?",
+      "want": "yes"
+    },
+    {
+      "text": "the race",
+      "want": "no"
+    },
+    {
+      "text": "I have an ace",
+      "want": "yes"
+    },
+    {
+      "text": "AIC hello",
+      "want": "yes"
+    },
+    {
+      "text": "",
+      "want": "no"
+    },
+    {
+      "text": "so I told ace about it",
+      "want": "unclear"
+    },
+    {
+      "text": "pass the salt",
+      "want": "no"
+    },
+    {
+      "text": "hello AIC.",
+      "want": "yes"
+    },
+    {
+      "text": "I placed an ace in the deck",
+      "want": "unclear"
+    }
+  ]
+}

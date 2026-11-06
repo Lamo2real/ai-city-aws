@@ -16,7 +16,7 @@ variable "kms_key_arn" { type = string }
 variable "boundary_arn" { type = string }
 variable "lambda_dist" {
   type        = string
-  description = "services/lambdas/dist, built by `npm run build -w @aic/lambdas` before plan."
+  description = "backend/dist/lambda, built by `python3 backend/scripts/build_lambdas.py` before plan (one Python package, folder app/)."
 }
 variable "ledger_table" { type = string }
 variable "ledger_arn" { type = string }
@@ -55,20 +55,19 @@ locals {
     AIC_QUEUE_MANAGER      = var.queue_urls["manager"]
     AIC_QUEUE_WORKER       = var.queue_urls["worker"]
     AIC_PROFILE_PREFIX     = var.profile_prefix
-    NODE_OPTIONS           = "--enable-source-maps"
   }
   # name => bundle, handler, timeout, memory, extra env
   functions = {
-    api           = { bundle = "api", handler = "index.handler", timeout = 30, memory = 512, env = { AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_AGENTS_DIR = "/var/task/agents" } }
-    dispatcher    = { bundle = "dispatcher", handler = "index.handler", timeout = 120, memory = 256, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_ARN_ORCHESTRATOR = var.runtime_arns["orchestrator"], AIC_RUNTIME_ARN_MANAGER = var.runtime_arns["manager"], AIC_RUNTIME_ARN_WORKER = var.runtime_arns["worker"] } }
-    factory       = { bundle = "factory", handler = "index.handler", timeout = 30, memory = 256, env = {} }
-    ledger-writer = { bundle = "ledger-writer", handler = "index.handler", timeout = 30, memory = 256, env = {} }
-    scheduler     = { bundle = "scheduler", handler = "index.handler", timeout = 120, memory = 256, env = {} }
-    notifier      = { bundle = "notifier", handler = "index.handler", timeout = 30, memory = 256, env = { AIC_NOTIFY_TOPIC_ARN = var.notify_topic_arn } }
-    approvals     = { bundle = "approvals", handler = "index.handler", timeout = 30, memory = 256, env = {} }
-    ws-authorizer = { bundle = "ws", handler = "index.authorizerHandler", timeout = 10, memory = 256, env = { AIC_USER_POOL_ID = var.user_pool_id, AIC_USER_POOL_CLIENT_ID = var.client_id } }
-    ws-connection = { bundle = "ws", handler = "index.connectionHandler", timeout = 10, memory = 256, env = { AIC_CONNECTIONS_TABLE = var.connections_table } }
-    ws-broadcast  = { bundle = "ws", handler = "index.broadcastHandler", timeout = 30, memory = 256, env = { AIC_CONNECTIONS_TABLE = var.connections_table, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod" } }
+    api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 512, env = { AIC_APP_PROFILE_UTILITY = var.utility_profile_arn } }
+    dispatcher    = { bundle = "app", handler = "aic.lambdas.dispatcher.handler", timeout = 120, memory = 256, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_ARN_ORCHESTRATOR = var.runtime_arns["orchestrator"], AIC_RUNTIME_ARN_MANAGER = var.runtime_arns["manager"], AIC_RUNTIME_ARN_WORKER = var.runtime_arns["worker"] } }
+    factory       = { bundle = "app", handler = "aic.lambdas.factory.handler", timeout = 30, memory = 256, env = {} }
+    ledger-writer = { bundle = "app", handler = "aic.lambdas.ledger_writer.handler", timeout = 30, memory = 256, env = {} }
+    scheduler     = { bundle = "app", handler = "aic.lambdas.scheduler.handler", timeout = 120, memory = 256, env = {} }
+    notifier      = { bundle = "app", handler = "aic.lambdas.notifier.handler", timeout = 30, memory = 256, env = { AIC_NOTIFY_TOPIC_ARN = var.notify_topic_arn } }
+    approvals     = { bundle = "app", handler = "aic.lambdas.approvals.handler", timeout = 30, memory = 256, env = {} }
+    ws-authorizer = { bundle = "app", handler = "aic.lambdas.ws.authorizer_handler", timeout = 10, memory = 256, env = { AIC_USER_POOL_ID = var.user_pool_id, AIC_USER_POOL_CLIENT_ID = var.client_id } }
+    ws-connection = { bundle = "app", handler = "aic.lambdas.ws.connection_handler", timeout = 10, memory = 256, env = { AIC_CONNECTIONS_TABLE = var.connections_table } }
+    ws-broadcast  = { bundle = "app", handler = "aic.lambdas.ws.broadcast_handler", timeout = 30, memory = 256, env = { AIC_CONNECTIONS_TABLE = var.connections_table, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod" } }
   }
   ledger_rw = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:ConditionCheckItem"]
   # What each function may do, beyond logs, tracing and the KMS key.
@@ -170,7 +169,7 @@ resource "aws_lambda_function" "fn" {
   for_each                       = local.functions
   function_name                  = "${var.name}-${each.key}"
   role                           = aws_iam_role.fn[each.key].arn
-  runtime                        = "nodejs24.x"
+  runtime                        = "python3.13"
   architectures                  = ["arm64"]
   handler                        = each.value.handler
   filename                       = data.archive_file.bundle[each.value.bundle].output_path

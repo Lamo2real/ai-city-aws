@@ -18,7 +18,7 @@ AWS_PROFILE=aic ./scripts/city-on.sh
 
 ## Update
 - Code or infrastructure: push to `main`. `deploy.yml` plans and applies on its own (no approval); the plan is in the log of its `terraform plan` step. To re-run without a new commit: **Actions → deploy → Run workflow**. To push without deploying, put `[skip ci]` in the commit message.
-- By hand (if GitHub is unavailable): build Lambdas (`npm run build -w @aic/lambdas`), build and push the image with a new tag, then `terraform plan -var agent_image_tag=<tag> -out prod.tfplan`, read it, `terraform apply prod.tfplan`, then upload `web/dist`.
+- By hand (if GitHub is unavailable): build the Lambda package (`python3 backend/scripts/build_lambdas.py`), build and push the image with a new tag, then `terraform plan -var agent_image_tag=<tag> -out prod.tfplan`, read it, `terraform apply prod.tfplan`, then upload `web/dist`.
 
 ## See costs
 - HUD: the pill at the top, and **Costs (estimates)**.
