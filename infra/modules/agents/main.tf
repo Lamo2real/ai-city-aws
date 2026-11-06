@@ -187,9 +187,27 @@ resource "aws_iam_role_policy" "workspace" {
   policy = templatefile("${path.module}/policies/workspace.json.tftpl", { bucket_arn = var.workspaces_arn, kms_key_arn = var.kms_key_arn })
 }
 
+# ---------- the image ----------
+# Built and pushed during `terraform apply` (deploy.yml, after the owner approves the plan), after the
+# repository exists and before the runtimes, so one reviewed plan deploys from nothing. A new tag rebuilds.
+resource "terraform_data" "image" {
+  triggers_replace = [var.image_tag]
+  depends_on       = [aws_ecr_repository.runtime]
+  provisioner "local-exec" {
+    command = "bash ${abspath("${path.module}/../../../scripts/push-image.sh")}"
+    environment = {
+      REPO_URL    = aws_ecr_repository.runtime.repository_url
+      IMAGE_TAG   = var.image_tag
+      AWS_REGION  = var.region
+      CONTEXT_DIR = abspath("${path.module}/../../..")
+    }
+  }
+}
+
 # ---------- the four runtimes ----------
 resource "aws_bedrockagentcore_agent_runtime" "role" {
   for_each           = toset(local.roles)
+  depends_on         = [terraform_data.image]
   agent_runtime_name = "${replace(var.name, "-", "_")}_${each.key}"
   description        = "AI City ${each.key}"
   role_arn           = aws_iam_role.agent[each.key].arn

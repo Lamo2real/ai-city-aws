@@ -30,58 +30,31 @@ aws bedrock list-inference-profiles --region eu-north-1 --profile aic --query "i
 11. Service Quotas → Amazon Bedrock → search each model ("Claude Opus 5.5", "Claude Fable 5.1", …) → check **tokens per minute** and **requests per minute** for **global cross-region** inference. Request more if they look small (see `docs/SCALING.md`).
 12. Service Quotas → Amazon Bedrock AgentCore → check "Active session workloads per account" (2,500 in Stockholm) and "New Runtime session creation rate" (25/s). Defaults are fine to start.
 
-## D. GitHub (~15 min)
-13. Create a **private** repository, e.g. `you/ai-city-aws`. Push this repo's `main` to it:
-```bash
-git remote add origin git@github.com:you/ai-city-aws.git
-```
-```bash
-git push -u origin main
-```
-14. Branch protection on `main` for private repos needs **GitHub Pro** (or Team). If you want it: Settings → Branches → Add rule → require a pull request.
-15. Settings → Environments → New environment **`production`** → Required reviewers: **you**. Deployment branches: `main` only.
+## D. GitHub (~10 min)
+13. The repository is **`Lamo2real/ai-city-aws`** (public). Workflows only run when you start them by hand, so a push never deploys anything.
+14. Settings → Environments → New environment **`production`** → Required reviewers: **you** → Deployment branches: `main` only. Every apply waits for your approval here.
+15. Optional: Settings → Branches → protect `main` (require a pull request).
 
-## E. Bootstrap: state bucket and deploy role (~10 min)
-16. Build nothing yet. Apply the bootstrap once from your machine:
-```bash
-cd infra/bootstrap && terraform init && terraform apply -var owner_email=you@example.com -var github_repo=you/ai-city-aws
-```
-   Read the plan in plain words: one KMS key, one S3 bucket (versioned, private), the GitHub OIDC provider and one deploy role. Type `yes`.
-17. Note the outputs `state_bucket`, `state_kms_key_arn`, `deploy_role_arn`.
+## E. The deploy role (from you or your account admin, ~10 min)
+16. In the AI City account: IAM → Identity providers → Add provider → OpenID Connect → URL `https://token.actions.githubusercontent.com`, audience `sts.amazonaws.com` (skip if it already exists).
+17. IAM → Roles → Create role → Custom trust policy → paste `docs/deploy-role-trust-policy.json` with `<ACCOUNT_ID>` filled in. It lets only `deploy.yml` on `main` (and the `production` environment) assume the role.
+18. Permissions: `AdministratorAccess`. Terraform creates IAM roles, KMS keys, Cognito, CloudFront, WAF, AgentCore and more, so it needs broad rights. Nothing else can assume this role.
+19. Copy the role ARN.
 
-## F. Fill in the prod settings (~5 min)
-18. `cp infra/envs/prod/prod.tfvars.example infra/envs/prod/prod.tfvars` and set `owner_email`. Keep `monthly_budget_usd = 10000` (the AWS Budgets alert amount; emails only).
-19. `cp infra/envs/prod/backend.hcl.example infra/envs/prod/backend.hcl` and paste the bootstrap outputs.
-20. In GitHub → Settings → Secrets and variables → Actions → **Variables** (not secrets; none of these are secret): `AIC_REGION=eu-north-1`, `AIC_DEPLOY_ROLE_ARN`, `AIC_STATE_BUCKET`, `AIC_STATE_KMS_KEY_ARN`, `AIC_OWNER_EMAIL`, `AIC_MONTHLY_BUDGET_USD=10000`. (`AIC_ECR_REPOSITORY_URL`, `AIC_HUD_BUCKET`, `AIC_CLOUDFRONT_DISTRIBUTION_ID` come after step 23.)
+## F. Two GitHub variables (~2 min)
+20. GitHub → Settings → Secrets and variables → Actions → **Variables** (not secrets; neither is secret):
+   - `AIC_DEPLOY_ROLE_ARN` = the role ARN from step 19
+   - `AIC_OWNER_EMAIL` = your email (Cognito login, alerts)
+   - Optional: `AIC_REGION` (default `eu-north-1`), `AIC_MONTHLY_BUDGET_USD` (alert amount, default `10000`).
 
-## G. First deploy (~45 min)
-The runtimes need an image that exists, so the first deploy is done in two steps from your machine.
-21. Build the Lambdas and create just the image repository:
-```bash
-npm ci && npm run build -w @aic/lambdas
-```
-```bash
-cd infra/envs/prod && terraform init -backend-config=backend.hcl && terraform apply -var-file=prod.tfvars -target=module.agents.aws_ecr_repository.runtime
-```
-22. Build and push the first image (needs Docker with buildx):
-```bash
-ECR=$(terraform output -raw ecr_repository_url); aws ecr get-login-password --region eu-north-1 --profile aic | docker login --username AWS --password-stdin ${ECR%%/*}; docker buildx build --platform linux/arm64 -f ../../../services/agent-runtime/Dockerfile -t $ECR:first --push ../../..
-```
-23. **First full plan, reviewed in plain words**:
-```bash
-terraform plan -var-file=prod.tfvars -var agent_image_tag=first -out prod.tfplan
-```
-   What you should see: roughly 200 resources to add (a static count of the HCL gives about 205), **0 to change, 0 to destroy**: KMS key, Cognito user pool with your user, DynamoDB tables, an EventBridge bus, 8 SQS queues, 10 Lambda functions, 2 API Gateway APIs, 4 AgentCore runtimes, 4 memories, 5 inference profiles, an ECR repository, a CloudFront distribution with WAF, a budget (email alerts only), a dashboard and alarms, 5 schedules (all **DISABLED**). If anything says "destroy", stop.
-24. Apply exactly that plan:
-```bash
-terraform apply prod.tfplan
-```
-   If `aws_bedrock_inference_profile` fails because a global profile can't be copied, set `use_application_inference_profiles = false` in `prod.tfvars` and plan/apply again (cost per role then comes from the ledger only).
-25. Upload the HUD:
-```bash
-cd ../../../web && npm run build && aws s3 sync dist s3://$(terraform -chdir=../infra/envs/prod output -raw hud_bucket) --exclude config.json --profile aic
-```
-26. Add the GitHub variables `AIC_ECR_REPOSITORY_URL`, `AIC_HUD_BUCKET`, `AIC_CLOUDFRONT_DISTRIBUTION_ID` from `terraform output`. From now on deploy with **Actions → deploy → Run workflow** and approve the `production` environment.
+## G. First deploy (~45 min, one run)
+21. Actions → **deploy** → Run workflow → type `deploy prod`.
+22. The **plan** job runs the tests, builds the Lambdas, creates the Terraform state bucket `aic-prod-tfstate-<account>-<region>` if it is missing (private, versioned, encrypted, TLS-only), and makes the plan.
+23. **Read the plan.** The run summary shows the counts; the full text is `plan.txt` in the `prod-plan` artifact. First time: roughly 200 resources to add, **0 to change, 0 to destroy**: KMS key, Cognito user pool with your user, DynamoDB tables, an EventBridge bus, 8 SQS queues, 10 Lambda functions, 2 API Gateway APIs, 4 AgentCore runtimes, 4 memories, 5 inference profiles, an ECR repository plus the image build, a CloudFront distribution with WAF, a budget (email alerts only), a dashboard and alarms, 5 schedules (all **DISABLED**). If anything says "destroy", reject it.
+24. **Approve** the `production` environment. The **apply** job applies exactly that plan; while doing so it builds the ARM64 agent image and pushes it to ECR before the runtimes are created (about 10–20 minutes for the first image).
+   If `aws_bedrock_inference_profile` fails because a global profile can't be copied, tell Claude: it switches `use_application_inference_profiles` off (cost per role then comes from the ledger only) and you run the workflow again.
+25. The **frontend** job uploads the HUD and refreshes CloudFront. The run summary ends with the HUD's URL.
+26. Every later deploy is the same: Run workflow → read the plan → approve.
 
 ## H. After the first apply (~20 min)
 27. **Confirm the alert emails**: you get two "AWS Notification - Subscription Confirmation" emails (city notifications and, separately, the budget emails go straight to you). Click **Confirm subscription**.

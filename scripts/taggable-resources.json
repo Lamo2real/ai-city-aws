@@ -35,6 +35,7 @@
     "aws_wafv2_web_acl"
   ],
   "untaggable": [
+    "terraform_data",
     "aws_apigatewayv2_authorizer",
     "aws_apigatewayv2_integration",
     "aws_apigatewayv2_route",

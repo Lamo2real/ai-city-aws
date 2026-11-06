@@ -15,7 +15,7 @@ Agents run on **Amazon Bedrock AgentCore** with Anthropic Claude models billed o
 | `services/agent-runtime/` | The AgentCore container (Claude Agent SDK, role tools, Dockerfile) |
 | `services/lambdas/` | api, dispatcher, factory, ledger writer, WebSocket, notifier, budget, approvals, scheduler |
 | `web/` | The HUD (React): Ace, City view, Needs you, Tickets, Costs, Settings |
-| `infra/` | Terraform: `bootstrap/`, `modules/`, `envs/prod/` |
+| `infra/` | Terraform: `modules/`, `envs/prod/` (no bootstrap: `deploy.yml` creates the state bucket) |
 | `scripts/` | `city-on.sh`, `city-off.sh`, `build-images.sh` (no push), `check-tags.mjs`, `check-iam.mjs` |
 | `tests/` | End-to-end hierarchy test with a fake model runner, infra and workflow checks |
 | `docs/` | Architecture, ADRs, security, scaling, runbook, costs, decisions, facts checked, progress |

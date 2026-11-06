@@ -1,7 +1,7 @@
-# Copy to backend.hcl after applying infra/bootstrap; use its outputs.
-bucket       = "aic-prod-tfstate-<account-id>"
+# Only for running Terraform by hand. deploy.yml creates the bucket on its first run
+# (scripts/ensure-state-bucket.sh) and passes these values itself.
+bucket       = "aic-prod-tfstate-<account-id>-eu-north-1"
 key          = "prod/terraform.tfstate"
 region       = "eu-north-1"
 encrypt      = true
-kms_key_id   = "<state_kms_key_arn from bootstrap>"
 use_lockfile = true

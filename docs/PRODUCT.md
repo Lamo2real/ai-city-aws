@@ -88,12 +88,12 @@ Owner message → `POST /messages` → SQS (`ace` queue) → **dispatcher** Lamb
 | HUD | City view ported from the Mac HUD (Ace in plaza, Orchestrator at HQ door, manager at each department door, workers walk in/out, FREE LOTs, growing town, count badges, houses for specialists, top bar, right panel, bottom bar) | ✅ | `web/src/city/`, `CityView.tsx` |
 | HUD | Needs you (default answer in one tap; hold-to-approve), Tickets, Costs, Settings, first-run guide, spend pill (amber 80 %, red 100 %) | ✅ | `web/src/components/` |
 | HUD | Idiot-proof rules (one primary button, confirms with cost, Undo, plain errors, 44 px targets) | ✅ | `docs/UX_REVIEW.md` |
-| Infra | Terraform: bootstrap, 10 modules, prod root; KMS; deletion protection | 🟡 offline checks only | `infra/` |
+| Infra | Terraform: 10 modules, prod root (state bucket created by `deploy.yml`); KMS; deletion protection | 🟡 offline checks only | `infra/` |
 | Infra | One role per runtime, permission boundary on every role, worker limits | ✅ (static check) | `infra/modules/agents/policies/`, `scripts/check-iam.mjs` |
 | Infra | Cost-allocation tags on every taggable resource | ✅ (static check) | `scripts/check-tags.mjs` |
 | Infra | AWS Budgets 50/80/100 + forecast, email alerts only (no deny action, no pause) | 🟡 | `infra/modules/budgets` |
 | Ops | `city-off.sh` / `city-on.sh`, `build-images.sh` (no push) | 🟡 not run | `scripts/` |
-| CI/CD | `ci.yml`, `deploy.yml` (OIDC, approval on `production`), dispatch-only | 🟡 never run | `.github/workflows/` |
+| CI/CD | `ci.yml`, `deploy.yml`: needs only `AIC_DEPLOY_ROLE_ARN` + `AIC_OWNER_EMAIL`; creates the state bucket if missing; one approved plan builds + pushes the image and deploys from nothing; dispatch-only | 🟡 never run | `.github/workflows/`, `scripts/ensure-state-bucket.sh`, `scripts/push-image.sh` |
 | Gap | Worker S3 workspace sync (IAM ready) | ❌ | — |
 | Gap | Runtime use of AgentCore Memory | ❌ | — |
 | Gap | Self-improvement runner (switch + fence exist) | ❌ | `services/lambdas/src/improve.ts` |
@@ -122,7 +122,7 @@ npm run build -w @aic/web && npm run e2e -w web
 ```bash
 node scripts/check-tags.mjs && node scripts/check-iam.mjs
 ```
-Terraform (offline only): `fmt -check -recursive`, `init -backend=false`, `validate` in `infra/bootstrap` and `infra/envs/prod`, `tflint --recursive`, `checkov -d infra`.
+Terraform (offline only): `fmt -check -recursive`, `init -backend=false`, `validate` in `infra/envs/prod`, `tflint --recursive`, `checkov -d infra`.
 
 ## 9. Where to look
 | Need | Doc |
@@ -141,6 +141,7 @@ Terraform (offline only): `fmt -check -recursive`, `init -backend=false`, `valid
 ## 10. Feature log (newest first)
 | Date | Feature | Notes |
 |---|---|---|
+| 2026-11-06 | Deploy needs only the role ARN | `deploy.yml` needs two variables (role ARN, owner email), creates the Terraform state bucket on its first run, and one approved plan builds and pushes the image (`terraform_data.image`) before the runtimes. `infra/bootstrap` removed; the owner provides the OIDC role (`docs/deploy-role-trust-policy.json`). Public repo `Lamo2real/ai-city-aws`. |
 | 2026-11-06 | AWS Budgets at $10,000 | Owner's choice. The monthly alert amount is $10,000 (was $150): emails at $5k / $8k / $10k and on a forecast above it. Still alerts only. |
 | 2026-11-06 | No spend limit | Owner's choice. Spend caps are off by default (`null` = no limit) and optional in Settings (empty field = no limit). AWS Budgets only emails; the deny-Bedrock budget action and the budget Lambda that paused the city are removed. 241 tests, Playwright 15/15, Checkov 275/0. |
 | 2026-11-06 | Initial build, phases 1–9 | Not deployed. 240 tests, Playwright 14/14, Terraform checks clean. See `docs/MORNING_REPORT.md`. |

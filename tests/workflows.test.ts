@@ -45,11 +45,31 @@ describe("GitHub workflows", () => {
     const text = readFileSync(join(WF, "ci.yml"), "utf8");
     expect(text).not.toMatch(/configure-aws-credentials|id-token: write|terraform apply|aws /);
   });
-  it("the OIDC deploy role trusts only the owner's repo, main and the production environment", () => {
-    const tf = readFileSync(join(ROOT, "infra", "bootstrap", "main.tf"), "utf8");
-    expect(tf).toMatch(/repo:\$\{var\.github_repo\}:environment:production/);
-    expect(tf).toMatch(/\.github\/workflows\/deploy\.yml@refs\/heads\/main/);
-    expect(tf).not.toMatch(/repo:\*|"repo:\$\{var\.github_repo\}:\*"/);
+  it("deploy needs only the deploy role ARN and the owner's email (region and budget are optional)", () => {
+    const text = readFileSync(join(WF, "deploy.yml"), "utf8");
+    const used = new Set([...text.matchAll(/vars\.([A-Z0-9_]+)/g)].map((m) => m[1]));
+    expect([...used].sort()).toEqual(
+      ["AIC_DEPLOY_ROLE_ARN", "AIC_MONTHLY_BUDGET_USD", "AIC_OWNER_EMAIL", "AIC_REGION"].sort(),
+    );
+    expect(text).toMatch(/scripts\/ensure-state-bucket\.sh/); // the state bucket is created on the first run
+    expect(text).not.toMatch(/secrets\./);
+  });
+  it("the suggested deploy role trust allows only deploy.yml on main and the production environment", () => {
+    const doc = JSON.parse(readFileSync(join(ROOT, "docs", "deploy-role-trust-policy.json"), "utf8"));
+    const cond = doc.Statement[0].Condition;
+    expect(cond.StringEquals["token.actions.githubusercontent.com:sub"].sort()).toEqual(
+      ["repo:Lamo2real/ai-city-aws:environment:production", "repo:Lamo2real/ai-city-aws:ref:refs/heads/main"].sort(),
+    );
+    expect(cond.StringLike["token.actions.githubusercontent.com:job_workflow_ref"]).toMatch(
+      /\/\.github\/workflows\/deploy\.yml@refs\/heads\/main$/,
+    );
+    expect(JSON.stringify(doc)).not.toMatch(/repo:[^"]*\*/);
+  });
+  it("one reviewed plan deploys from nothing: the image is pushed inside apply, before the runtimes", () => {
+    const tf = readFileSync(join(ROOT, "infra", "modules", "agents", "main.tf"), "utf8");
+    expect(tf).toMatch(/resource "terraform_data" "image"/);
+    expect(tf).toMatch(/scripts\/push-image\.sh/);
+    expect(tf).toMatch(/depends_on\s+= \[terraform_data\.image\]/);
   });
 });
 

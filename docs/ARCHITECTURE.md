@@ -109,4 +109,4 @@ Departments and workers are data and sessions, never new runtimes, so the accoun
 | Event trace, tool audit, notes, reminders | `EVENT#ticket`, `TOOL#agent`, `NOTE#…`, `REMINDER#…` | gsi1 |
 
 ## Infrastructure
-Terraform in `infra/`: `bootstrap` (state bucket, OIDC deploy role), `envs/prod` (the only root), modules `security`, `auth`, `storage`, `ledger`, `bus`, `agents`, `api`, `frontend`, `budgets`, `observability`. Every taggable resource carries `Project`, `App`, `Environment`, `Owner`, `ManagedBy`, `CostCenter` (provider default tags) and `Component`; runtimes, inference profiles and memories also carry `AgentRole` (checked by `scripts/check-tags.mjs`).
+Terraform in `infra/`: `envs/prod` (the only root; `deploy.yml` creates its state bucket on the first run and the owner provides the OIDC deploy role), modules `security`, `auth`, `storage`, `ledger`, `bus`, `agents`, `api`, `frontend`, `budgets`, `observability`. Every taggable resource carries `Project`, `App`, `Environment`, `Owner`, `ManagedBy`, `CostCenter` (provider default tags) and `Component`; runtimes, inference profiles and memories also carry `AgentRole` (checked by `scripts/check-tags.mjs`).

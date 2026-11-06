@@ -94,9 +94,9 @@ export function checkTags({
         problems.push(`${rel}: ${type}.${name} has no AgentRole tag`);
     }
   }
-  // The six base tags must come from somewhere for every resource: the prod root and bootstrap providers.
+  // The six base tags must come from somewhere for every resource: the prod root's providers.
   const envs = files
-    .filter((f) => /envs\/prod\/main\.tf$|bootstrap\/main\.tf$/.test(f))
+    .filter((f) => /envs\/prod\/main\.tf$/.test(f))
     .map((f) => readFileSync(f, "utf8"));
   for (const t of BASE_TAGS)
     if (!envs.every((e) => new RegExp(`\\b${t}\\s*=`).test(e)))

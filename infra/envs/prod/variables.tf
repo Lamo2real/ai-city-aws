@@ -25,7 +25,7 @@ variable "monthly_budget_usd" {
 
 variable "agent_image_tag" {
   type        = string
-  description = "Tag of the agent runtime image in ECR (pushed by deploy.yml before the runtimes are applied)."
+  description = "Tag of the agent runtime image. terraform apply builds and pushes it (scripts/push-image.sh) before the runtimes."
 }
 
 variable "profile_prefix" {

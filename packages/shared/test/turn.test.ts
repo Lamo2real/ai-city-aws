@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_SETTINGS, SpendCapReached, CityPaused, checkCaps, validateCaps } from "../src/caps.ts";
 import { estimateUsd, cacheSavingsUsd } from "../src/cost.ts";
 import { MemoryBus } from "../src/events.ts";
-import { Ledger, TURN_KINDS, type TurnKind } from "../src/ledger.ts";
+import { Ledger, TURN_KINDS, type CitySettings, type TurnKind } from "../src/ledger.ts";
 import { resolveRole, type Role } from "../src/models.ts";
 import { MemoryTable } from "../src/table.ts";
 import {
@@ -24,7 +24,7 @@ const noSleep = { sleep: async () => {}, random: () => 0.5 };
 
 // Caps are off by default; these tests set them explicitly to check the brake when the owner wants one.
 const CAPPED = { ...DEFAULT_SETTINGS, daily_global_usd: 10, monthly_budget_usd: 150, daily_department_usd: 5 };
-function setup(runner: ModelRunner, settings = CAPPED) {
+function setup(runner: ModelRunner, settings: CitySettings = CAPPED) {
   const ledger = new Ledger(new MemoryTable(), () => new Date("2026-11-06T10:00:00Z"));
   const bus = new MemoryBus();
   return { ledger, bus, deps: { ledger, bus, runner, settings, backoff: noSleep } };
