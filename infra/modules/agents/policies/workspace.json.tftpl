@@ -1,0 +1,24 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "OwnHirePrefixOnly",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+      "Resource": "${bucket_arn}/hires/$${aws:PrincipalTag/hire_id}/*"
+    },
+    {
+      "Sid": "ListOwnHirePrefixOnly",
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket"],
+      "Resource": "${bucket_arn}",
+      "Condition": { "StringLike": { "s3:prefix": ["hires/$${aws:PrincipalTag/hire_id}/*"] } }
+    },
+    {
+      "Sid": "UseTheDataKey",
+      "Effect": "Allow",
+      "Action": ["kms:Decrypt", "kms:GenerateDataKey"],
+      "Resource": "${kms_key_arn}"
+    }
+  ]
+}

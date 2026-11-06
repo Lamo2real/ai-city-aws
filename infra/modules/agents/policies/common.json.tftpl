@@ -1,0 +1,72 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "PullImage",
+      "Effect": "Allow",
+      "Action": ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"],
+      "Resource": "${ecr_repo_arn}"
+    },
+    {
+      "Sid": "EcrToken",
+      "Effect": "Allow",
+      "Action": ["ecr:GetAuthorizationToken"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "Logs",
+      "Effect": "Allow",
+      "Action": ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents", "logs:DescribeLogStreams", "logs:DescribeLogGroups"],
+      "Resource": "arn:aws:logs:${region}:${account_id}:log-group:/aws/bedrock-agentcore/runtimes/*"
+    },
+    {
+      "Sid": "Tracing",
+      "Effect": "Allow",
+      "Action": ["xray:PutTraceSegments", "xray:PutTelemetryRecords", "xray:GetSamplingRules", "xray:GetSamplingTargets"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "Metrics",
+      "Effect": "Allow",
+      "Action": ["cloudwatch:PutMetricData"],
+      "Resource": "*",
+      "Condition": { "StringEquals": { "cloudwatch:namespace": ["AIC", "bedrock-agentcore"] } }
+    },
+    {
+      "Sid": "WorkloadIdentity",
+      "Effect": "Allow",
+      "Action": ["bedrock-agentcore:GetWorkloadAccessToken", "bedrock-agentcore:GetWorkloadAccessTokenForJWT", "bedrock-agentcore:GetWorkloadAccessTokenForUserId"],
+      "Resource": ["arn:aws:bedrock-agentcore:${region}:${account_id}:workload-identity-directory/default", "arn:aws:bedrock-agentcore:${region}:${account_id}:workload-identity-directory/default/workload-identity/*"]
+    },
+    {
+      "Sid": "Memory",
+      "Effect": "Allow",
+      "Action": ["bedrock-agentcore:CreateEvent", "bedrock-agentcore:ListEvents", "bedrock-agentcore:GetEvent", "bedrock-agentcore:RetrieveMemoryRecords", "bedrock-agentcore:ListMemoryRecords"],
+      "Resource": "${memory_arn}"
+    },
+    {
+      "Sid": "InvokeOwnModels",
+      "Effect": "Allow",
+      "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
+      "Resource": ${model_arns}
+    },
+    {
+      "Sid": "ReadProfiles",
+      "Effect": "Allow",
+      "Action": ["bedrock:GetInferenceProfile"],
+      "Resource": ${profile_arns}
+    },
+    {
+      "Sid": "UseTheDataKey",
+      "Effect": "Allow",
+      "Action": ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"],
+      "Resource": "${kms_key_arn}"
+    },
+    {
+      "Sid": "PutCityEvents",
+      "Effect": "Allow",
+      "Action": ["events:PutEvents"],
+      "Resource": "${bus_arn}"
+    }
+  ]
+}

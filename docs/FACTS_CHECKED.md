@@ -159,3 +159,11 @@ figures from the build prompt, consistent with Anthropic's list prices. **Verify
   reset each budget period; Budgets data lags by hours.
 - Claude usage on Bedrock is billed partly through AWS Marketplace, so the budget is
   account-wide, not filtered to the Bedrock service.
+
+### 4a (filled in Phase 7). AgentCore resources in the downloaded provider schema
+`terraform providers schema -json` on hashicorp/aws **v6.72.0** (downloaded by `terraform init -backend=false`) lists:
+`aws_bedrockagentcore_agent_runtime`, `aws_bedrockagentcore_agent_runtime_endpoint`, `aws_bedrockagentcore_api_key_credential_provider`, `aws_bedrockagentcore_browser`, `aws_bedrockagentcore_browser_profile`, `aws_bedrockagentcore_code_interpreter`, `aws_bedrockagentcore_evaluator`, `aws_bedrockagentcore_gateway`, `aws_bedrockagentcore_gateway_rule`, `aws_bedrockagentcore_gateway_target`, `aws_bedrockagentcore_harness`, `aws_bedrockagentcore_memory`, `aws_bedrockagentcore_memory_strategy`, `aws_bedrockagentcore_oauth2_credential_provider`, `aws_bedrockagentcore_online_evaluation_config`, `aws_bedrockagentcore_policy`, `aws_bedrockagentcore_policy_engine`, `aws_bedrockagentcore_registry`, `aws_bedrockagentcore_resource_policy`, `aws_bedrockagentcore_token_vault_cmk`, `aws_bedrockagentcore_workload_identity`.
+`aws_bedrockagentcore_agent_runtime` arguments used: `agent_runtime_name`, `role_arn`, `platform_version`,
+`agent_runtime_artifact.container_configuration.container_uri`, `network_configuration.network_mode`,
+`lifecycle_configuration { idle_runtime_session_timeout, max_lifetime }`, `environment_variables`, `tags`.
+`aws_bedrock_inference_profile` takes `model_source.copy_from`. No `awscc` provider and no script stubs were needed.

@@ -1,0 +1,11 @@
+output "hud_url" { value = module.frontend.url }
+output "hud_bucket" { value = module.frontend.bucket }
+output "cloudfront_distribution_id" { value = module.frontend.distribution_id }
+output "ecr_repository_url" { value = module.agents.ecr_repository_url }
+output "http_api_url" { value = module.api.http_api_url }
+output "ws_url" { value = module.api.ws_url }
+output "ledger_table" { value = module.ledger.ledger_table }
+output "event_source_mapping_uuids" { value = module.api.event_source_mapping_uuids }
+output "budget_name" { value = module.budgets.budget_name }
+output "deny_bedrock_policy_arn" { value = module.budgets.deny_policy_arn }
+output "agent_role_names" { value = module.agents.role_names }

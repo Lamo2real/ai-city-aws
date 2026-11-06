@@ -16,3 +16,25 @@ export function log(level: "info" | "warn" | "error", event: string, fields: Log
   if (level === "error") console.error(line);
   else console.warn(line);
 }
+
+/**
+ * CloudWatch embedded metric format: one line becomes metrics in namespace "AIC" for the dashboard
+ * (turns, tokens by model, cache reads, refusals, fallbacks, spend). Dimensions are plain names.
+ */
+export function metric(dimensions: Record<string, string>, values: Record<string, number>): void {
+  const line = {
+    _aws: {
+      Timestamp: Date.now(),
+      CloudWatchMetrics: [
+        {
+          Namespace: "AIC",
+          Dimensions: [Object.keys(dimensions)],
+          Metrics: Object.keys(values).map((Name) => ({ Name, Unit: Name.endsWith("Usd") ? "None" : "Count" })),
+        },
+      ],
+    },
+    ...dimensions,
+    ...values,
+  };
+  process.stdout.write(`${JSON.stringify(line)}\n`);
+}

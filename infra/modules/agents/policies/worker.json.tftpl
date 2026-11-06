@@ -1,0 +1,56 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "LedgerRead",
+      "Effect": "Allow",
+      "Action": ["dynamodb:GetItem", "dynamodb:Query"],
+      "Resource": ["${ledger_arn}", "${ledger_arn}/index/*"]
+    },
+    {
+      "Sid": "LedgerWriteOwnWorkOnly",
+      "Effect": "Allow",
+      "Action": ["dynamodb:PutItem", "dynamodb:UpdateItem"],
+      "Resource": "${ledger_arn}",
+      "Condition": {
+        "ForAllValues:StringLike": {
+          "dynamodb:LeadingKeys": ["TICKET#*", "AGENT#wkr-*", "TURN#wkr-*", "TOOL#wkr-*", "WORK#*", "SPEND#*", "SLOTS", "RATE", "IDEMP#*", "APPROVAL#*"]
+        }
+      }
+    },
+    {
+      "Sid": "ConsumeOwnerApprovalsOnly",
+      "Effect": "Allow",
+      "Action": ["dynamodb:DeleteItem"],
+      "Resource": "${ledger_arn}",
+      "Condition": { "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["APPROVED#*"] } }
+    },
+    {
+      "Sid": "ReportToManager",
+      "Effect": "Allow",
+      "Action": ["sqs:SendMessage"],
+      "Resource": ["${manager_queue_arn}"]
+    },
+    {
+      "Sid": "AssumeOwnWorkspace",
+      "Effect": "Allow",
+      "Action": ["sts:AssumeRole", "sts:TagSession"],
+      "Resource": "${workspace_role_arn}"
+    },
+    {
+      "Sid": "CodeInterpreterAndBrowser",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock-agentcore:StartCodeInterpreterSession", "bedrock-agentcore:InvokeCodeInterpreter", "bedrock-agentcore:StopCodeInterpreterSession", "bedrock-agentcore:GetCodeInterpreterSession",
+        "bedrock-agentcore:StartBrowserSession", "bedrock-agentcore:StopBrowserSession", "bedrock-agentcore:GetBrowserSession", "bedrock-agentcore:ConnectBrowserAutomationStream", "bedrock-agentcore:UpdateBrowserStream"
+      ],
+      "Resource": ["arn:aws:bedrock-agentcore:${region}:aws:code-interpreter/aws.codeinterpreter.v1", "arn:aws:bedrock-agentcore:${region}:aws:browser/aws.browser.v1"]
+    },
+    {
+      "Sid": "GitHubCredentialOnly",
+      "Effect": "Allow",
+      "Action": ["secretsmanager:GetSecretValue"],
+      "Resource": "${github_secret_arn}"
+    }
+  ]
+}

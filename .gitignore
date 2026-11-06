@@ -13,3 +13,5 @@ web/test-results/
 web/playwright-report/
 *.log
 .DS_Store
+infra/.build
+infra/**/.terraform.lock.hcl.bak

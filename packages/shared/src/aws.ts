@@ -65,7 +65,7 @@ export function requireEnv(name: string, env: NodeJS.ProcessEnv = process.env): 
 
 /** Production wiring shared by Lambdas and the runtime. */
 export function awsCity(env: NodeJS.ProcessEnv = process.env) {
-  const region = requireEnv("AWS_REGION", env);
+  const region = env.AWS_REGION ?? env.AWS_DEFAULT_REGION ?? requireEnv("AIC_REGION", env);
   const doc = DynamoDBDocumentClient.from(new DynamoDBClient({ region }), {
     marshallOptions: { removeUndefinedValues: true },
   });

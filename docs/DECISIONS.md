@@ -50,3 +50,11 @@ the build; "Build" means it was chosen during the overnight build.
 42. **Cloud mutation from agents is denied, not asked** (upstream asked for `aws ... delete-*` and `terraform destroy`/`apply ... prod`). An owner approval can never unlock a deny rule.
 43. **Instructions copy the manager on the record, without waking it**, so an `@agent` instruction costs one turn, not two.
 44. **The stale-lease sweep** (scheduled job `sweep`) re-sends messages whose turn crashed; it gives back the dead worker's concurrency slot.
+45. **Ace's role can write the ledger and send to the queues.** The prompt lists "read ledger status" for Ace, but Ace's own tools (delegate a task, answer a question, notes, pause) write tickets and messages. Its role still has no Factory, no S3, no secrets.
+46. **Worker ledger writes are limited by key prefix** (`dynamodb:LeadingKeys`): tickets, its own agent/turn/tool records, work leases, spend counters, slots, approval *requests*. Workers cannot write settings (pause, caps), departments, specialists, questions or owner approvals. Owner approvals are separate `APPROVED#<hash>` items only the API writes; a worker can only consume (delete) one. Residual: a worker can update another worker's `AGENT#wkr-*` record (documented in SECURITY.md).
+47. **Workers reach S3 only by assuming `aic-prod-worker-workspace` with a `hire_id` session tag**; that role is limited to `hires/${aws:PrincipalTag/hire_id}/*`.
+48. **The Factory's function name is fixed** (`aic-prod-factory`), so the agents module gets its ARN without depending on the api module (avoids a cycle).
+49. **The HUD's `config.json` is written by Terraform** into the site bucket with public values only (endpoints, client and pool IDs).
+50. **Log retention 30 days** (variable), not checkov's suggested 1 year, to keep cost low; the ledger is the durable record.
+51. **The site bucket uses SSE-S3**, not the KMS key, so CloudFront OAC can read it without a cross-service key policy; it holds only public app files.
+52. **WAF also gets AWS's KnownBadInputs rule set** besides the common rules, IP reputation and a 1,000-requests-per-5-minutes rate limit.

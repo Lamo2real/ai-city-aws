@@ -38,6 +38,8 @@ export interface Table {
   query(pk: string, skPrefix?: string): Promise<Item[]>;
   queryIndex(index: Index, pk: string, skPrefix?: string): Promise<Item[]>;
   delete(pk: string, sk: string): Promise<void>;
+  /** Deletes the item if it exists; true when this call deleted it (so two callers can't both win). */
+  deleteIfExists(pk: string, sk: string): Promise<boolean>;
 }
 
 const key = (pk: string, sk: string) => `${pk}\u0000${sk}`;
@@ -99,6 +101,10 @@ export class MemoryTable implements Table {
   async delete(pk: string, sk: string) {
     this.guard();
     this.items.delete(key(pk, sk));
+  }
+  async deleteIfExists(pk: string, sk: string) {
+    this.guard();
+    return this.items.delete(key(pk, sk));
   }
 }
 
@@ -205,5 +211,16 @@ export class DynamoTable implements Table {
   }
   async delete(pk: string, sk: string) {
     await this.doc.send(new DeleteCommand({ TableName: this.tableName, Key: { pk, sk } }));
+  }
+  async deleteIfExists(pk: string, sk: string) {
+    try {
+      await this.doc.send(
+        new DeleteCommand({ TableName: this.tableName, Key: { pk, sk }, ConditionExpression: "attribute_exists(pk)" }),
+      );
+      return true;
+    } catch (e) {
+      if (isConditionFailure(e)) return false;
+      throw e;
+    }
   }
 }

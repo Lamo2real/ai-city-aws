@@ -1,0 +1,7 @@
+# Copy to backend.hcl after applying infra/bootstrap; use its outputs.
+bucket       = "aic-prod-tfstate-<account-id>"
+key          = "prod/terraform.tfstate"
+region       = "eu-north-1"
+encrypt      = true
+kms_key_id   = "<state_kms_key_arn from bootstrap>"
+use_lockfile = true

@@ -1,0 +1,17 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "Ledger",
+      "Effect": "Allow",
+      "Action": ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:ConditionCheckItem"],
+      "Resource": ["${ledger_arn}", "${ledger_arn}/index/*"]
+    },
+    {
+      "Sid": "SendWork",
+      "Effect": "Allow",
+      "Action": ["sqs:SendMessage"],
+      "Resource": ${queue_arns}
+    }
+  ]
+}

@@ -310,28 +310,39 @@ export class Ledger {
   async getApproval(id: string): Promise<Approval | undefined> {
     return strip<Approval>(await this.table.get(`APPROVAL#${id}`, "META"));
   }
+  /**
+   * The owner's decision. An approval also writes APPROVED#<hash>, which only the API may write and
+   * an agent's turn consumes by deleting it once. IAM lets workers delete it, never write it.
+   */
   async decideApproval(id: string, approved: boolean): Promise<Approval | undefined> {
     const cur = await this.getApproval(id);
     if (!cur) return undefined;
     const status = approved ? "approved" : "denied";
-    return strip<Approval>(
+    const r = strip<Approval>(
       await this.table.update(`APPROVAL#${id}`, "META", {
         set: { status, gsi1pk: `APPROVAL#${status}` },
         expect: { status: "pending" },
       }),
     );
+    if (r && approved)
+      await this.table.put({
+        pk: `APPROVED#${cur.hash}`,
+        sk: id,
+        at: this.iso(),
+        ttl: Math.floor(this.now().getTime() / 1000) + 86_400,
+      });
+    return r;
   }
   async pendingApprovals(): Promise<Approval[]> {
     return (await this.table.queryIndex("gsi1", "APPROVAL#pending")).map((i) => strip<Approval>(i)!);
   }
   /** Uses an owner approval for this exact action once. */
   async consumeApproval(hash: string): Promise<boolean> {
-    for (const it of await this.table.queryIndex("gsi1", "APPROVAL#approved", `${hash}#`)) {
-      const used = await this.table.update(it.pk, "META", {
-        set: { status: "used", gsi1pk: "APPROVAL#used" },
-        expect: { status: "approved" },
-      });
-      if (used) return true;
+    for (const it of await this.table.query(`APPROVED#${hash}`)) {
+      if (await this.table.deleteIfExists(it.pk, it.sk)) {
+        await this.table.update(`APPROVAL#${it.sk}`, "META", { set: { status: "used", gsi1pk: "APPROVAL#used" } });
+        return true;
+      }
     }
     return false;
   }

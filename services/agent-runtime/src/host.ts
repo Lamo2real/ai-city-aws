@@ -3,6 +3,7 @@
 // invocation (each runtime is configured with one role and refuses others).
 import {
   log,
+  metric,
   managerId,
   resolveRoleFromEnv,
   runGatedTurn,
@@ -135,6 +136,20 @@ export class AgentHost {
                   ? (text) => void bus.put({ type: "ace.reply", conversation: inv.conversation!, text, done: false })
                   : undefined,
             }),
+        },
+      );
+      const u = result.output.usage;
+      metric(
+        { Role: inv.role, Model: result.model.name },
+        {
+          Turns: 1,
+          InputTokens: u.input,
+          OutputTokens: u.output,
+          CacheReadTokens: u.cacheRead,
+          CacheWriteTokens: u.cacheWrite5m + u.cacheWrite1h,
+          Refusals: result.output.stopReason === "refusal" ? 1 : 0,
+          Fallbacks: result.fallback ? 1 : 0,
+          SpendUsd: result.usd,
         },
       );
       if (isAce && inv.conversation)
