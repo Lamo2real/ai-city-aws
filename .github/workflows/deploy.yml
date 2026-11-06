@@ -1,7 +1,9 @@
-# Deploy prod. Started by hand only (workflow_dispatch), from main only. The owner provides just two
-# repository variables: AIC_DEPLOY_ROLE_ARN (an IAM role GitHub can assume through OIDC, see
-# docs/DEPLOY_CHECKLIST.md for its trust policy) and AIC_OWNER_EMAIL. Optional: AIC_REGION
-# (default eu-north-1) and AIC_MONTHLY_BUDGET_USD (alert amount, default 10000).
+# Deploy prod. Started by hand only (workflow_dispatch), from main only. The owner provides:
+#   variable AIC_DEPLOY_ROLE_ARN  an IAM role GitHub can assume through OIDC (trust: docs/deploy-role-trust-policy.json)
+#   secret   AIC_OWNER_EMAIL      the only login (Cognito, admin-created) and where alerts go. A secret, not a
+#                                 variable, so it is masked in the logs of this public repository.
+# Optional variables: AIC_REGION (default eu-north-1), AIC_MONTHLY_BUDGET_USD (alert amount, default 10000),
+# AIC_STATE_BUCKET (default lamo-labs-state-bucket; state key ai-city-aws/prod/terraform.tfstate).
 #
 # One run deploys from nothing:
 #   plan     - tests, builds the Lambdas, creates the Terraform state bucket if it is missing, plans.
@@ -26,6 +28,8 @@ concurrency:
 
 env:
   AWS_REGION: ${{ vars.AIC_REGION || 'eu-north-1' }}
+  TF_STATE_BUCKET: ${{ vars.AIC_STATE_BUCKET || 'lamo-labs-state-bucket' }}
+  TF_STATE_KEY: ai-city-aws/prod/terraform.tfstate
   TF_IN_AUTOMATION: "1"
   IMAGE_TAG: ${{ github.sha }}
 
@@ -39,19 +43,17 @@ jobs:
       id-token: write
     outputs:
       state_bucket: ${{ steps.state.outputs.bucket }}
+      state_region: ${{ steps.state.outputs.region }}
     steps:
-      - name: check the repository variables
+      - name: check the repository settings
         env:
           ROLE: ${{ vars.AIC_DEPLOY_ROLE_ARN }}
-          EMAIL: ${{ vars.AIC_OWNER_EMAIL }}
+          EMAIL: ${{ secrets.AIC_OWNER_EMAIL }}
         run: |
-          missing=""
-          [ -n "$ROLE" ] || missing="$missing AIC_DEPLOY_ROLE_ARN"
-          [ -n "$EMAIL" ] || missing="$missing AIC_OWNER_EMAIL"
-          if [ -n "$missing" ]; then
-            echo "::error::Set these in GitHub → Settings → Secrets and variables → Actions → Variables:$missing"
-            exit 1
-          fi
+          ok=1
+          [ -n "$ROLE" ] || { echo "::error::Set the variable AIC_DEPLOY_ROLE_ARN (Settings → Secrets and variables → Actions → Variables)."; ok=0; }
+          [ -n "$EMAIL" ] || { echo "::error::Set the secret AIC_OWNER_EMAIL (Settings → Secrets and variables → Actions → Secrets)."; ok=0; }
+          [ "$ok" = 1 ]
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
@@ -64,8 +66,10 @@ jobs:
         with:
           role-to-assume: ${{ vars.AIC_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Terraform state bucket (created on the first run)
+      - name: Terraform state bucket (created on the first run if missing)
         id: state
+        env:
+          STATE_BUCKET: ${{ env.TF_STATE_BUCKET }}
         run: bash scripts/ensure-state-bucket.sh
       - uses: hashicorp/setup-terraform@v3
         with:
@@ -74,13 +78,14 @@ jobs:
         working-directory: infra/envs/prod
         env:
           STATE_BUCKET: ${{ steps.state.outputs.bucket }}
-          OWNER_EMAIL: ${{ vars.AIC_OWNER_EMAIL }}
+          STATE_REGION: ${{ steps.state.outputs.region }}
+          OWNER_EMAIL: ${{ secrets.AIC_OWNER_EMAIL }}
           BUDGET: ${{ vars.AIC_MONTHLY_BUDGET_USD || '10000' }}
         run: |
           terraform init -input=false \
             -backend-config="bucket=${STATE_BUCKET}" \
-            -backend-config="key=prod/terraform.tfstate" \
-            -backend-config="region=${AWS_REGION}" \
+            -backend-config="key=${TF_STATE_KEY}" \
+            -backend-config="region=${STATE_REGION}" \
             -backend-config="encrypt=true" \
             -backend-config="use_lockfile=true"
           terraform plan -input=false -out=prod.tfplan \
@@ -88,12 +93,13 @@ jobs:
             -var "owner_email=${OWNER_EMAIL}" \
             -var "agent_image_tag=${IMAGE_TAG}" \
             -var "monthly_budget_usd=${BUDGET}"
-          terraform show -no-color prod.tfplan > plan.txt
+          # The full plan goes to this log (where the owner email is masked), not to a downloadable file.
+          terraform show -no-color prod.tfplan | tee /tmp/plan.txt
           {
             echo "## Terraform plan"
-            grep -E '^Plan:|No changes' plan.txt || true
+            grep -E '^Plan:|No changes' /tmp/plan.txt || true
             echo
-            echo "Read plan.txt in the prod-plan artifact, then approve the production environment."
+            echo "Read the full plan in the log of the 'terraform plan' step, then approve the production environment."
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
@@ -101,7 +107,6 @@ jobs:
           include-hidden-files: true
           path: |
             infra/envs/prod/prod.tfplan
-            infra/envs/prod/plan.txt
             infra/envs/prod/.build
             services/lambdas/dist
           retention-days: 3
@@ -110,7 +115,7 @@ jobs:
     needs: plan
     runs-on: ubuntu-24.04
     timeout-minutes: 90
-    environment: production # the owner approves here, after reading plan.txt
+    environment: production # the owner approves here, after reading the plan
     permissions:
       contents: read
       id-token: write
@@ -140,11 +145,12 @@ jobs:
         working-directory: infra/envs/prod
         env:
           STATE_BUCKET: ${{ needs.plan.outputs.state_bucket }}
+          STATE_REGION: ${{ needs.plan.outputs.state_region }}
         run: |
           terraform init -input=false \
             -backend-config="bucket=${STATE_BUCKET}" \
-            -backend-config="key=prod/terraform.tfstate" \
-            -backend-config="region=${AWS_REGION}" \
+            -backend-config="key=${TF_STATE_KEY}" \
+            -backend-config="region=${STATE_REGION}" \
             -backend-config="encrypt=true" \
             -backend-config="use_lockfile=true"
           terraform apply -input=false prod.tfplan

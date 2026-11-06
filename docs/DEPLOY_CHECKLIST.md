@@ -41,16 +41,16 @@ aws bedrock list-inference-profiles --region eu-north-1 --profile aic --query "i
 18. Permissions: `AdministratorAccess`. Terraform creates IAM roles, KMS keys, Cognito, CloudFront, WAF, AgentCore and more, so it needs broad rights. Nothing else can assume this role.
 19. Copy the role ARN.
 
-## F. Two GitHub variables (~2 min)
-20. GitHub → Settings → Secrets and variables → Actions → **Variables** (not secrets; neither is secret):
-   - `AIC_DEPLOY_ROLE_ARN` = the role ARN from step 19
-   - `AIC_OWNER_EMAIL` = your email (Cognito login, alerts)
-   - Optional: `AIC_REGION` (default `eu-north-1`), `AIC_MONTHLY_BUDGET_USD` (alert amount, default `10000`).
+## F. One variable and one secret (~2 min)
+20. GitHub → Settings → Secrets and variables → Actions:
+   - **Variable** `AIC_DEPLOY_ROLE_ARN` = the role ARN from step 19.
+   - **Secret** `AIC_OWNER_EMAIL` = the only account that can sign in (Cognito creates just this user; nobody can sign up) and where alerts go. A secret, so it is masked in this public repository's logs.
+   - Optional variables: `AIC_REGION` (default `eu-north-1`), `AIC_MONTHLY_BUDGET_USD` (alert amount, default `10000`), `AIC_STATE_BUCKET` (default `lamo-labs-state-bucket`; the state lives under `ai-city-aws/prod/terraform.tfstate`).
 
 ## G. First deploy (~45 min, one run)
 21. Actions → **deploy** → Run workflow → type `deploy prod`.
-22. The **plan** job runs the tests, builds the Lambdas, creates the Terraform state bucket `aic-prod-tfstate-<account>-<region>` if it is missing (private, versioned, encrypted, TLS-only), and makes the plan.
-23. **Read the plan.** The run summary shows the counts; the full text is `plan.txt` in the `prod-plan` artifact. First time: roughly 200 resources to add, **0 to change, 0 to destroy**: KMS key, Cognito user pool with your user, DynamoDB tables, an EventBridge bus, 8 SQS queues, 10 Lambda functions, 2 API Gateway APIs, 4 AgentCore runtimes, 4 memories, 5 inference profiles, an ECR repository plus the image build, a CloudFront distribution with WAF, a budget (email alerts only), a dashboard and alarms, 5 schedules (all **DISABLED**). If anything says "destroy", reject it.
+22. The **plan** job runs the tests, builds the Lambdas, uses the Terraform state bucket `lamo-labs-state-bucket` (if it doesn't exist yet it creates it: private, versioned, encrypted, TLS-only; an existing bucket is used as it is, in its own region), and makes the plan.
+23. **Read the plan.** The run summary shows the counts; the full text is in the log of the `terraform plan` step. First time: roughly 200 resources to add, **0 to change, 0 to destroy**: KMS key, Cognito user pool with your user, DynamoDB tables, an EventBridge bus, 8 SQS queues, 10 Lambda functions, 2 API Gateway APIs, 4 AgentCore runtimes, 4 memories, 5 inference profiles, an ECR repository plus the image build, a CloudFront distribution with WAF, a budget (email alerts only), a dashboard and alarms, 5 schedules (all **DISABLED**). If anything says "destroy", reject it.
 24. **Approve** the `production` environment. The **apply** job applies exactly that plan; while doing so it builds the ARM64 agent image and pushes it to ECR before the runtimes are created (about 10–20 minutes for the first image).
    If `aws_bedrock_inference_profile` fails because a global profile can't be copied, tell Claude: it switches `use_application_inference_profiles` off (cost per role then comes from the ledger only) and you run the workflow again.
 25. The **frontend** job uploads the HUD and refreshes CloudFront. The run summary ends with the HUD's URL.

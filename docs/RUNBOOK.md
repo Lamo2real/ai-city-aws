@@ -52,5 +52,5 @@ EventBridge → Scheduler → schedule group `aic-prod` → enable `aic-prod-swe
 3. Empty the S3 buckets `aic-prod-hud`, `aic-prod-workspaces` (versioned: delete all versions) and the ECR repository.
 4. `terraform destroy` in `infra/envs/prod`, read the plan, confirm.
 5. Secrets have a 7-day recovery window. KMS keys are scheduled for deletion with a 30-day wait (Terraform does this on destroy); a key pending deletion is not billed.
-6. Optionally delete the state bucket `aic-prod-tfstate-<account>-<region>` (empty its versions first).
+6. Optionally delete the state file `ai-city-aws/prod/terraform.tfstate` (all versions) from `lamo-labs-state-bucket`.
 7. Billing → check the next day's Cost Explorer for anything left; Budgets stop costing when deleted.

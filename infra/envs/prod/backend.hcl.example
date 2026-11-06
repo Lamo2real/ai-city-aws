@@ -1,7 +1,7 @@
 # Only for running Terraform by hand. deploy.yml creates the bucket on its first run
 # (scripts/ensure-state-bucket.sh) and passes these values itself.
-bucket       = "aic-prod-tfstate-<account-id>-eu-north-1"
-key          = "prod/terraform.tfstate"
+bucket       = "lamo-labs-state-bucket"
+key          = "ai-city-aws/prod/terraform.tfstate"
 region       = "eu-north-1"
 encrypt      = true
 use_lockfile = true

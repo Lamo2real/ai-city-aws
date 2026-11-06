@@ -45,14 +45,18 @@ describe("GitHub workflows", () => {
     const text = readFileSync(join(WF, "ci.yml"), "utf8");
     expect(text).not.toMatch(/configure-aws-credentials|id-token: write|terraform apply|aws /);
   });
-  it("deploy needs only the deploy role ARN and the owner's email (region and budget are optional)", () => {
+  it("deploy needs only the deploy role ARN and the owner's email (the rest is optional)", () => {
     const text = readFileSync(join(WF, "deploy.yml"), "utf8");
-    const used = new Set([...text.matchAll(/vars\.([A-Z0-9_]+)/g)].map((m) => m[1]));
-    expect([...used].sort()).toEqual(
-      ["AIC_DEPLOY_ROLE_ARN", "AIC_MONTHLY_BUDGET_USD", "AIC_OWNER_EMAIL", "AIC_REGION"].sort(),
+    const vars = new Set([...text.matchAll(/vars\.([A-Z0-9_]+)/g)].map((m) => m[1]));
+    expect([...vars].sort()).toEqual(
+      ["AIC_DEPLOY_ROLE_ARN", "AIC_MONTHLY_BUDGET_USD", "AIC_REGION", "AIC_STATE_BUCKET"].sort(),
     );
+    // The owner email is a secret so it is masked in this public repository's logs.
+    const secrets = new Set([...text.matchAll(/secrets\.([A-Z0-9_]+)/g)].map((m) => m[1]));
+    expect([...secrets]).toEqual(["AIC_OWNER_EMAIL"]);
     expect(text).toMatch(/scripts\/ensure-state-bucket\.sh/); // the state bucket is created on the first run
-    expect(text).not.toMatch(/secrets\./);
+    expect(text).toMatch(/AIC_STATE_BUCKET \|\| 'lamo-labs-state-bucket'/);
+    expect(text).not.toMatch(/infra\/envs\/prod\/plan\.txt/); // the full plan stays in the masked log, not in an artifact
   });
   it("the suggested deploy role trust allows only deploy.yml on main and the production environment", () => {
     const doc = JSON.parse(readFileSync(join(ROOT, "docs", "deploy-role-trust-policy.json"), "utf8"));
