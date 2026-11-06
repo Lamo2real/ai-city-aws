@@ -21,8 +21,20 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build -w @aic/web
-      - run: npm run build -w @aic/lambdas
-      - run: npm run build -w @aic/agent-runtime
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.6"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: backend (Python) - ruff, mypy, pytest
+        working-directory: backend
+        run: |
+          uv sync --frozen --all-extras
+          uv run ruff check
+          uv run ruff format --check
+          uv run mypy
+          uv run pytest -q
+      - run: python3 backend/scripts/build_lambdas.py
       - name: Playwright (mocked backend)
         run: |
           npx playwright install --with-deps chromium

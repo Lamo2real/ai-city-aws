@@ -7,7 +7,7 @@ import { Eyes } from "../src/components/Eyes.tsx";
 import { spendLevel, money } from "../src/lib/format.ts";
 import { store } from "../src/lib/store.ts";
 import { wakeMatch } from "../src/voice/wake.ts";
-import { wakeMatch as serverWakeMatch } from "../../packages/shared/src/utility.ts";
+import wakeCases from "../../tests/fixtures/wake-cases.json" with { type: "json" };
 
 afterEach(cleanup);
 const at = new Date().toISOString();
@@ -196,20 +196,7 @@ describe("Ace's eyes", () => {
 });
 
 describe("wake word", () => {
-  it("the browser and the server agree", () => {
-    for (const t of [
-      "yo Ace",
-      "hi Ace, status",
-      "hey ace",
-      "what's up Ace",
-      "how's it going Ace",
-      "Ace, pause everything",
-      "what's the status of the product, Ace?",
-      "the race",
-      "I have an ace",
-      "AIC hello",
-      "",
-    ])
-      expect(wakeMatch(t), t).toBe(serverWakeMatch(t));
+  it("the browser gives the answers the server gives (shared fixture, checked by the Python tests too)", () => {
+    for (const { text, want } of wakeCases.cases) expect(wakeMatch(text), text).toBe(want);
   });
 });

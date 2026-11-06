@@ -1,37 +1,36 @@
 # AgentCore Runtime image: ARM64, plain HTTP on 8080, one image for all four roles (AIC_ROLE).
+# Python 3.13 + the Claude Agent SDK (its wheel bundles the Claude Code CLI, so no Node.js is needed).
 # Build from the repo root:  docker build --platform linux/arm64 -f services/agent-runtime/Dockerfile .
-FROM --platform=linux/arm64 public.ecr.aws/docker/library/node:24-bookworm-slim AS build
+FROM --platform=linux/arm64 public.ecr.aws/docker/library/python:3.13-slim-bookworm AS build
+COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /usr/local/bin/uv
 WORKDIR /src
-COPY package.json package-lock.json ./
-COPY packages/shared/package.json packages/shared/
-COPY services/agent-runtime/package.json services/agent-runtime/
-RUN npm ci --workspace @aic/shared --workspace @aic/agent-runtime --include-workspace-root --ignore-scripts
-COPY config config
-COPY packages/shared packages/shared
-COPY services/agent-runtime services/agent-runtime
-RUN npx esbuild services/agent-runtime/src/server.ts --bundle --platform=node --target=node24 --format=esm \
-      --outfile=dist/server.mjs --external:@anthropic-ai/claude-agent-sdk \
-      --banner:js="import{createRequire}from'module';const require=createRequire(import.meta.url);"
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
+COPY backend/pyproject.toml backend/uv.lock ./
+RUN uv sync --frozen --no-dev --extra runtime --no-install-project
+COPY backend/src ./src
+RUN uv sync --frozen --no-dev --extra runtime --no-editable
 
-FROM --platform=linux/arm64 public.ecr.aws/docker/library/node:24-bookworm-slim
+FROM --platform=linux/arm64 public.ecr.aws/docker/library/python:3.13-slim-bookworm
 # git for workers' branches; nothing else. No AWS CLI in the image: agents never change AWS.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git ca-certificates \
  && apt-get clean \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/* \
+ && useradd --create-home --uid 1000 aic
 WORKDIR /app
-COPY --from=build /src/dist/server.mjs ./server.mjs
-COPY --from=build /src/node_modules/@anthropic-ai ./node_modules/@anthropic-ai
-COPY agents ./agents
-ENV NODE_ENV=production \
-    AIC_RUNTIME_MAIN=1 \
+COPY --from=build /src/.venv /app/.venv
+COPY config /app/config
+COPY agents /app/agents
+ENV PATH=/app/.venv/bin:$PATH \
+    PYTHONUNBUFFERED=1 \
+    AIC_CONFIG_DIR=/app/config \
     AIC_AGENTS_DIR=/app/agents \
     PORT=8080 \
     CLAUDE_CODE_USE_BEDROCK=1 \
     CLAUDE_CODE_DISABLE_1M_CONTEXT=1 \
     CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1
-RUN mkdir -p /tmp/work && chown node:node /tmp/work
-USER node
+RUN mkdir -p /tmp/work && chown aic:aic /tmp/work
+USER aic
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=3s CMD node -e "fetch('http://127.0.0.1:8080/ping').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-CMD ["node", "server.mjs"]
+HEALTHCHECK --interval=30s --timeout=3s CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/ping').status==200 else 1)"
+CMD ["python", "-m", "aic.runtime.server"]

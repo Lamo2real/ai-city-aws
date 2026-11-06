@@ -115,7 +115,7 @@ module "api" {
   account_id          = data.aws_caller_identity.me.account_id
   kms_key_arn         = module.security.kms_key_arn
   boundary_arn        = module.security.boundary_arn
-  lambda_dist         = "${path.root}/../../../services/lambdas/dist"
+  lambda_dist         = "${path.root}/../../../backend/dist/lambda"
   ledger_table        = module.ledger.ledger_table
   ledger_arn          = module.ledger.ledger_arn
   connections_table   = module.ledger.connections_table

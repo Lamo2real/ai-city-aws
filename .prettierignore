@@ -11,3 +11,8 @@ docs/screenshots
 *.md
 web/src/city/*.js
 web/dist
+backend/.venv
+backend/dist
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache

@@ -60,7 +60,7 @@ jobs:
       - name: agent image tag (changes only when the runtime's sources change)
         id: image
         run: |
-          h="${{ hashFiles('services/agent-runtime/**', 'packages/shared/**', 'agents/**', 'config/**', 'package-lock.json', 'package.json') }}"
+          h="${{ hashFiles('services/agent-runtime/**', 'backend/src/**', 'backend/pyproject.toml', 'backend/uv.lock', 'agents/**', 'config/**') }}"
           echo "tag=rt-${h:0:16}" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v5
         with:
@@ -68,7 +68,18 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - run: npm run build -w @aic/lambdas
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.6"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: backend tests (Python)
+        working-directory: backend
+        run: |
+          uv sync --frozen --all-extras
+          uv run pytest -q
+      - name: build the Lambda package (Python 3.13, arm64)
+        run: python3 backend/scripts/build_lambdas.py
       - uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ vars.AIC_DEPLOY_ROLE_ARN }}
@@ -116,7 +127,7 @@ jobs:
           path: |
             infra/envs/prod/prod.tfplan
             infra/envs/prod/.build
-            services/lambdas/dist
+            backend/dist/lambda
           retention-days: 3
 
   apply:

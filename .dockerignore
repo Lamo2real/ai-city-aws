@@ -1,10 +1,17 @@
+# The agent runtime image needs only backend/ (pyproject, uv.lock, src), config/ and agents/.
 **/node_modules
+**/.venv
 **/dist
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.terraform
 .git
-.terraform
-infra
 web
 docs
+infra
 tests
+backend/tests
 *.tfstate*
 .env*
