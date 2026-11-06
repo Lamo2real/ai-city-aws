@@ -82,12 +82,14 @@ resource "aws_cognito_user_pool_client" "hud" {
   supported_identity_providers         = ["COGNITO"]
   callback_urls                        = ["${var.app_url}/"]
   logout_urls                          = ["${var.app_url}/"]
-  explicit_auth_flows                  = ["ALLOW_USER_SRP_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"] # the HUD's own sign-in screens
-  prevent_user_existence_errors        = "ENABLED"
-  enable_token_revocation              = true
-  access_token_validity                = 15
-  id_token_validity                    = 15
-  refresh_token_validity               = 7
+  # SRP for the HUD's own sign-in screens. No ALLOW_REFRESH_TOKEN_AUTH: with refresh token rotation on, Cognito
+  # refuses it, and Amplify refreshes through GetTokensFromRefreshToken instead.
+  explicit_auth_flows           = ["ALLOW_USER_SRP_AUTH"]
+  prevent_user_existence_errors = "ENABLED"
+  enable_token_revocation       = true
+  access_token_validity         = 15
+  id_token_validity             = 15
+  refresh_token_validity        = 7
   token_validity_units {
     access_token  = "minutes"
     id_token      = "minutes"
