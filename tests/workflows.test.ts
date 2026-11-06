@@ -73,6 +73,10 @@ describe("GitHub workflows", () => {
     expect(cond.StringLike).toBeUndefined();
     expect(JSON.stringify(doc)).not.toMatch(/repo:[^"]*\*/);
   });
+  it("the apply job unpacks the saved plan where terraform runs (infra/envs/prod)", () => {
+    const text = readFileSync(join(WF, "deploy.yml"), "utf8");
+    expect(text).toMatch(/download-artifact@v4\n\s+with:\n\s+name: prod-plan\n(\s+#.*\n)?\s+path: infra\/envs\/prod\n/);
+  });
   it("one reviewed plan deploys from nothing: the image is pushed inside apply, before the runtimes", () => {
     const tf = readFileSync(join(ROOT, "infra", "modules", "agents", "main.tf"), "utf8");
     expect(tf).toMatch(/resource "terraform_data" "image"/);

@@ -194,6 +194,8 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: prod-plan
+          # The artifact holds prod.tfplan and .build/ relative to infra/envs/prod (their common folder).
+          path: infra/envs/prod
       - uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ vars.AIC_DEPLOY_ROLE_ARN }}
