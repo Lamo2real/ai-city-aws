@@ -53,3 +53,12 @@
 - `node scripts/check-tags.mjs`: 54 taggable resources carry `Component`, runtimes/profiles/memories carry `AgentRole`, both roots set the six default tags. `node scripts/check-iam.mjs`: workers have no IAM actions, no wildcard `GetSecretValue`, no resource-creating actions, Bedrock invoke only on the worker profile; every role has a permission boundary. Both also run in `npm test` (`tests/infra.test.ts`, with negative cases).
 - Code changes for least privilege: owner approvals as delete-only `APPROVED#` items; EMF metrics (`AIC` namespace) for the dashboard; region read from `AWS_REGION`/`AIC_REGION`.
 - Full suite: 11 files, 232 tests pass; lint and typecheck pass.
+
+## Phase 8: CI/CD definitions (not run) — done
+- `.github/workflows/ci.yml`: lint, typecheck, tests, builds, Playwright against mocks, terraform fmt/init/validate (offline), tflint, checkov, tag and IAM checks. No AWS credentials at all.
+- `.github/workflows/deploy.yml`: OIDC into the deploy role → tests → Lambda build → `terraform plan` (artifact with `plan.txt`) → **`production` environment approval** → image build and push (arm64) → `terraform apply` of the reviewed plan file → HUD upload and CloudFront invalidation. Requires typing "deploy prod"; refuses to run off `main`.
+- Both are **`workflow_dispatch` only**. Nothing was triggered: no `gh workflow`, `gh run` or `gh api` calls were made.
+- `infra/bootstrap` now also creates the GitHub OIDC provider and the deploy role, trusted only for `repo:<owner/repo>:environment:production` / `refs/heads/main` and `deploy.yml@refs/heads/main`.
+- `scripts/city-off.sh`, `scripts/city-on.sh` (pause flag + queue triggers; owner runs them), `scripts/build-images.sh` (local build, no push). `bash -n` passes on all three.
+- `tests/workflows.test.ts` (7 tests): only `workflow_dispatch`, deploy needs approval and applies the exact plan, CI never touches AWS, OIDC trust is narrow, every commit subject ends with `[skip ci]`.
+- Infra re-checked after adding the OIDC role: validate pass (both roots), tflint 0, checkov 303 passed / 0 failed / 49 justified skips, tag check 57 resources, IAM check pass. Full suite: 13 files, 245 tests pass.

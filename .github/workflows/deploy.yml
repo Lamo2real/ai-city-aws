@@ -1,0 +1,136 @@
+# Deploy prod. Started by hand only (workflow_dispatch), from main only. AWS access through OIDC into
+# the deploy role created by infra/bootstrap; its trust allows only this repository's main branch and
+# the `production` environment. The apply waits for the owner's approval on the `production`
+# environment (GitHub → Settings → Environments → production → required reviewers: the owner).
+name: deploy
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type "deploy prod" to run
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AIC_REGION || 'eu-north-1' }}
+  TF_IN_AUTOMATION: "1"
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  plan:
+    if: github.ref == 'refs/heads/main' && inputs.confirm == 'deploy prod'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build -w @aic/lambdas
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AIC_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.8
+      - name: terraform plan
+        working-directory: infra/envs/prod
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.AIC_STATE_BUCKET }}" \
+            -backend-config="key=prod/terraform.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="encrypt=true" \
+            -backend-config="kms_key_id=${{ vars.AIC_STATE_KMS_KEY_ARN }}" \
+            -backend-config="use_lockfile=true"
+          terraform plan -input=false -out=prod.tfplan \
+            -var "owner_email=${{ vars.AIC_OWNER_EMAIL }}" \
+            -var "agent_image_tag=${IMAGE_TAG}" \
+            -var "monthly_budget_usd=${{ vars.AIC_MONTHLY_BUDGET_USD || '150' }}"
+          terraform show -no-color prod.tfplan > plan.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prod-plan
+          path: |
+            infra/envs/prod/prod.tfplan
+            infra/envs/prod/plan.txt
+            services/lambdas/dist
+          retention-days: 3
+
+  apply:
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: production # the owner approves here, after reading plan.txt
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: prod-plan
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AIC_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      # The runtimes reference the image by tag, so the image is pushed before the plan is applied.
+      - name: build and push the agent runtime image (arm64)
+        run: |
+          ECR="${{ vars.AIC_ECR_REPOSITORY_URL }}"
+          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "${ECR%%/*}"
+          docker buildx create --use
+          docker buildx build --platform linux/arm64 -f services/agent-runtime/Dockerfile -t "$ECR:$IMAGE_TAG" --push .
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.8
+      - name: terraform apply (the reviewed plan, exactly)
+        working-directory: infra/envs/prod
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.AIC_STATE_BUCKET }}" \
+            -backend-config="key=prod/terraform.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="encrypt=true" \
+            -backend-config="kms_key_id=${{ vars.AIC_STATE_KMS_KEY_ARN }}" \
+            -backend-config="use_lockfile=true"
+          terraform apply -input=false prod.tfplan
+
+  frontend:
+    needs: apply
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w @aic/web
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AIC_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: upload the HUD (config.json is managed by Terraform) and invalidate CloudFront
+        run: |
+          aws s3 sync web/dist "s3://${{ vars.AIC_HUD_BUCKET }}" --delete --exclude config.json --cache-control "public,max-age=31536000,immutable" --exclude index.html
+          aws s3 cp web/dist/index.html "s3://${{ vars.AIC_HUD_BUCKET }}/index.html" --cache-control "no-cache"
+          aws cloudfront create-invalidation --distribution-id "${{ vars.AIC_CLOUDFRONT_DISTRIBUTION_ID }}" --paths "/index.html" "/"

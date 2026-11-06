@@ -58,3 +58,6 @@ the build; "Build" means it was chosen during the overnight build.
 50. **Log retention 30 days** (variable), not checkov's suggested 1 year, to keep cost low; the ledger is the durable record.
 51. **The site bucket uses SSE-S3**, not the KMS key, so CloudFront OAC can read it without a cross-service key policy; it holds only public app files.
 52. **WAF also gets AWS's KnownBadInputs rule set** besides the common rules, IP reputation and a 1,000-requests-per-5-minutes rate limit.
+53. **In deploy.yml the image is pushed before `terraform apply`** (inside the approved job), because the reviewed plan points the runtimes at that image tag; applying first would point them at an image that does not exist yet.
+54. **The deploy role has AdministratorAccess fenced by a boundary and its trust**: only `deploy.yml` on `main` in the `production` environment (owner approval) can assume it; the boundary denies Organizations, account, IAM users/access keys and CloudTrail tampering. Terraform must manage IAM, KMS and Cognito, so a narrower policy was not attempted tonight.
+55. **Commit messages carry `[skip ci]` at the end of the subject line**, followed by the Co-Authored-By trailer (git trailers must be the last paragraph). GitHub skips workflows when `[skip ci]` appears in the message, and every workflow is `workflow_dispatch`-only anyway.

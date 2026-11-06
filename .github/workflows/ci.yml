@@ -1,0 +1,51 @@
+# Checks only. Started by hand (workflow_dispatch); a push never starts it. Never calls AWS or Bedrock.
+name: ci
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build -w @aic/web
+      - run: npm run build -w @aic/lambdas
+      - run: npm run build -w @aic/agent-runtime
+      - name: Playwright (mocked backend)
+        run: |
+          npx playwright install --with-deps chromium
+          npm run e2e -w web
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.8
+      - name: terraform fmt / init / validate (offline)
+        run: |
+          terraform -chdir=infra fmt -check -recursive
+          for d in infra/bootstrap infra/envs/prod; do
+            terraform -chdir=$d init -backend=false -input=false
+            terraform -chdir=$d validate
+          done
+      - uses: terraform-linters/setup-tflint@v4
+      - name: tflint
+        run: |
+          cd infra
+          tflint --init --config "$PWD/.tflint.hcl"
+          tflint --recursive --config "$PWD/.tflint.hcl"
+      - name: checkov
+        run: |
+          pipx install checkov
+          checkov -d infra --framework terraform --compact --quiet
+      - run: node scripts/check-tags.mjs
+      - run: node scripts/check-iam.mjs
