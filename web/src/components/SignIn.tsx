@@ -130,6 +130,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
     if (busy) return;
     setBusy(true);
     setProblem(null);
+    setNotice(null);
     try {
       await fn();
     } catch (e) {

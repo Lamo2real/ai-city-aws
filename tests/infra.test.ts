@@ -66,3 +66,12 @@ describe("IAM", () => {
     expect(checkBoundaries()).toEqual([]);
   });
 });
+
+describe("HUD content security policy", () => {
+  it("lets the browser reach Cognito's sign-in API (our own sign-in screens use it directly)", async () => {
+    const { readFileSync } = await import("node:fs");
+    const tf = readFileSync("infra/modules/frontend/main.tf", "utf8");
+    const connect = tf.split("\n").find((l) => l.includes('"connect-src'));
+    expect(connect).toContain("https://cognito-idp.${var.region}.amazonaws.com");
+  });
+});
