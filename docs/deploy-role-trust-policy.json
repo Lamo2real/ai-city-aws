@@ -2,7 +2,7 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "GitHubDeployYmlOnMainOnly",
+      "Sid": "GitHubAiCityAwsMainOnly",
       "Effect": "Allow",
       "Principal": {
         "Federated": "arn:aws:iam::<ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com"
@@ -12,12 +12,9 @@
         "StringEquals": {
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
           "token.actions.githubusercontent.com:sub": [
-            "repo:Lamo2real/ai-city-aws:ref:refs/heads/main",
-            "repo:Lamo2real/ai-city-aws:environment:production"
+            "repo:Lamo2real@143636021/ai-city-aws@1448210802:ref:refs/heads/main",
+            "repo:Lamo2real@143636021/ai-city-aws@1448210802:environment:production"
           ]
-        },
-        "StringLike": {
-          "token.actions.githubusercontent.com:job_workflow_ref": "Lamo2real/ai-city-aws/.github/workflows/deploy.yml@refs/heads/main"
         }
       }
     }

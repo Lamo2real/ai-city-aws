@@ -31,7 +31,7 @@ The Mac version had **no public port**. This version is reachable from the inter
 - **Worker**: its model (Opus) only; ledger reads, writes only under listed key prefixes; consume (delete) owner approvals; send to the manager queue; assume the workspace role with a `hire_id` session tag; Code Interpreter and Browser; the GitHub secret only.
 - **Lambdas**: one role each with only what that handler needs.
 - **Every role**: the `aic-prod-boundary` permission boundary.
-- **Deploy role** (provided by the owner): AdministratorAccess; the suggested trust (`docs/deploy-role-trust-policy.json`) lets only `deploy.yml` on `main` of `Lamo2real/ai-city-aws`, or its `production` environment, assume it. Applies run without approval on every push to `main`. The repository is public, so the role ARN is not secret but is useless outside that trust.
+- **Deploy role** (provided by the owner): AdministratorAccess; its trust (`docs/deploy-role-trust-policy.json`) accepts only GitHub OIDC tokens for `main` or the `production` environment of this repository, matched by GitHub's immutable subject (owner and repository IDs), so a renamed or re-created repository can't use it. Applies run without approval on every push to `main`. The repository is public, so the role ARN is not secret but is useless outside that trust.
 
 ## Known gaps
 - Workers use the microVM's disk; the code that assumes the workspace role and syncs to S3 (`hires/<id>/`) is not written yet (the IAM is). Until then nothing persists outside Git and the ledger.

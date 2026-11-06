@@ -59,15 +59,18 @@ describe("GitHub workflows", () => {
     expect(text).toMatch(/AIC_STATE_BUCKET \|\| 'lamo-labs-state-bucket'/);
     expect(text).not.toMatch(/infra\/envs\/prod\/plan\.txt/); // the full plan stays in the masked log, not in an artifact
   });
-  it("the suggested deploy role trust allows only deploy.yml on main and the production environment", () => {
+  it("the deploy role trust allows only this repo's main branch and production environment", () => {
+    // GitHub's immutable subject format: owner and repository IDs, so a renamed or re-created repo can't match.
     const doc = JSON.parse(readFileSync(join(ROOT, "docs", "deploy-role-trust-policy.json"), "utf8"));
     const cond = doc.Statement[0].Condition;
+    expect(cond.StringEquals["token.actions.githubusercontent.com:aud"]).toBe("sts.amazonaws.com");
     expect(cond.StringEquals["token.actions.githubusercontent.com:sub"].sort()).toEqual(
-      ["repo:Lamo2real/ai-city-aws:environment:production", "repo:Lamo2real/ai-city-aws:ref:refs/heads/main"].sort(),
+      [
+        "repo:Lamo2real@143636021/ai-city-aws@1448210802:environment:production",
+        "repo:Lamo2real@143636021/ai-city-aws@1448210802:ref:refs/heads/main",
+      ].sort(),
     );
-    expect(cond.StringLike["token.actions.githubusercontent.com:job_workflow_ref"]).toMatch(
-      /\/\.github\/workflows\/deploy\.yml@refs\/heads\/main$/,
-    );
+    expect(cond.StringLike).toBeUndefined();
     expect(JSON.stringify(doc)).not.toMatch(/repo:[^"]*\*/);
   });
   it("one reviewed plan deploys from nothing: the image is pushed inside apply, before the runtimes", () => {
