@@ -1,0 +1,15 @@
+// The browser half of the wake word: plain matching decides most transcripts on the spot; only
+// unclear ones go to the server, which asks Haiku. Kept in step with packages/shared/src/utility.ts
+// (a test checks both give the same answers).
+const GREETING = String.raw`(?:yo|hi|hey|hello|hiya|ok|okay|morning|good (?:morning|afternoon|evening)|what'?s up|whats up|sup|how'?s it going|hows it going)`;
+const NAME = String.raw`(?:ace|aic|a\.?\s?i\.?\s?c\.?)`;
+const ADDRESSED = new RegExp(String.raw`^\s*(?:${GREETING}[\s,!.]*)?${NAME}\b`, "i");
+const ENDS_WITH_NAME = new RegExp(String.raw`[,\s]${NAME}[\s?.!]*$`, "i");
+const MENTIONS = new RegExp(String.raw`\b${NAME}\b|\bays\b|\bace's\b`, "i");
+
+export function wakeMatch(transcript: string): "yes" | "no" | "unclear" {
+  const t = transcript.trim().replace(/[“”"]/g, "");
+  if (!t) return "no";
+  if (ADDRESSED.test(t) || ENDS_WITH_NAME.test(t)) return "yes";
+  return MENTIONS.test(t) ? "unclear" : "no";
+}

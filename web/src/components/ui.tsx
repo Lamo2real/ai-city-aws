@@ -1,0 +1,199 @@
+// The one design system: the same button, dialog, banner and toast everywhere.
+import { useEffect, useRef, useState, type ReactNode } from "react";
+
+type Variant = "primary" | "secondary" | "quiet" | "danger";
+export function Button(p: {
+  variant?: Variant;
+  onClick?: () => void | Promise<unknown>;
+  children: ReactNode;
+  label?: string;
+  type?: "button" | "submit";
+  disabled?: boolean;
+  className?: string;
+}) {
+  const [busy, setBusy] = useState(false);
+  const click = async () => {
+    if (!p.onClick || busy) return;
+    const r = p.onClick();
+    if (r instanceof Promise) {
+      setBusy(true);
+      try {
+        await r;
+      } finally {
+        setBusy(false);
+      }
+    }
+  };
+  return (
+    <button
+      type={p.type ?? "button"}
+      className={`btn btn-${p.variant ?? "secondary"} ${p.className ?? ""}`}
+      onClick={p.type === "submit" ? undefined : click}
+      disabled={p.disabled || busy}
+      aria-busy={busy || undefined}
+      aria-label={p.label}
+    >
+      {busy ? <span className="spin" aria-hidden="true" /> : null}
+      {p.children}
+    </button>
+  );
+}
+
+export function Banner(p: {
+  tone: "info" | "warn" | "bad" | "good";
+  children: ReactNode;
+  action?: { label: string; onClick: () => void };
+}) {
+  return (
+    <div className={`banner banner-${p.tone}`} role={p.tone === "bad" ? "alert" : "status"}>
+      <span>{p.children}</span>
+      {p.action ? (
+        <Button variant="quiet" onClick={p.action.onClick}>
+          {p.action.label}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+/** Shows a skeleton at once and a plain sentence if loading takes more than 10 seconds. */
+export function Loading(p: { what: string }) {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), 10_000);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <div className="loading" role="status" aria-live="polite">
+      <div className="skeleton" aria-hidden="true" />
+      <div className="skeleton short" aria-hidden="true" />
+      <span className="sr">{`Loading ${p.what}`}</span>
+      {slow ? (
+        <p className="mute">
+          Still loading {p.what}. This is taking longer than usual; it will appear as soon as AI City answers.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * A confirmation that says in plain words what will happen and what it costs. Destructive ones
+ * need a typed word ("confirmWord") or holding the button ("hold").
+ */
+export function Confirm(p: {
+  title: string;
+  what: string;
+  cost: string;
+  confirmLabel: string;
+  confirmWord?: string;
+  hold?: boolean;
+  danger?: boolean;
+  onConfirm: () => void | Promise<unknown>;
+  onCancel: () => void;
+}) {
+  const [typed, setTyped] = useState("");
+  const [held, setHeld] = useState(0);
+  const timer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current?.querySelector<HTMLElement>("input, button")?.focus();
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && p.onCancel();
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [p]);
+  const ready =
+    (!p.confirmWord || typed.trim().toLowerCase() === p.confirmWord.toLowerCase()) && (!p.hold || held >= 100);
+  const startHold = () => {
+    clearInterval(timer.current);
+    timer.current = setInterval(() => setHeld((h) => Math.min(100, h + 5)), 50);
+  };
+  const stopHold = () => {
+    clearInterval(timer.current);
+    setHeld((h) => (h >= 100 ? h : 0));
+  };
+  return (
+    <div className="scrim" role="presentation">
+      <div className="dialog panel" role="dialog" aria-modal="true" aria-labelledby="dlg-title" ref={ref}>
+        <h2 id="dlg-title">{p.title}</h2>
+        <p>{p.what}</p>
+        <p className="cost">
+          <b>Cost:</b> {p.cost}
+        </p>
+        {p.confirmWord ? (
+          <label className="field">
+            Type <b>{p.confirmWord}</b> to confirm
+            <input value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
+          </label>
+        ) : null}
+        <div className="row-end">
+          <Button variant="quiet" onClick={p.onCancel}>
+            Cancel
+          </Button>
+          {p.hold ? (
+            <button
+              type="button"
+              className={`btn ${p.danger ? "btn-danger" : "btn-primary"} hold`}
+              style={{ ["--held" as string]: `${held}%` }}
+              onPointerDown={startHold}
+              onPointerUp={stopHold}
+              onPointerLeave={stopHold}
+              onKeyDown={(e) => (e.key === " " || e.key === "Enter") && !e.repeat && startHold()}
+              onKeyUp={stopHold}
+              onClick={() => ready && void p.onConfirm()}
+              aria-label={`Hold to ${p.confirmLabel.toLowerCase()}`}
+            >
+              {held >= 100 ? `Release to ${p.confirmLabel.toLowerCase()}` : `Hold to ${p.confirmLabel.toLowerCase()}`}
+            </button>
+          ) : (
+            <Button variant={p.danger ? "danger" : "primary"} onClick={p.onConfirm} disabled={!ready}>
+              {p.confirmLabel}
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- toasts with Undo (at least 10 seconds) ----------
+export interface Toast {
+  id: number;
+  text: string;
+  undo?: () => void | Promise<unknown>;
+  tone?: "good" | "bad" | "info";
+}
+let push: (t: Omit<Toast, "id">) => void = () => {};
+export const toast = (t: Omit<Toast, "id">) => push(t);
+export const UNDO_MS = 12_000;
+
+export function Toaster() {
+  const [items, setItems] = useState<Toast[]>([]);
+  useEffect(() => {
+    push = (t) => {
+      const id = Date.now() + Math.random();
+      setItems((xs) => [...xs, { ...t, id }]);
+      setTimeout(() => setItems((xs) => xs.filter((x) => x.id !== id)), t.undo ? UNDO_MS : 5000);
+    };
+  }, []);
+  return (
+    <div className="toasts" aria-live="polite">
+      {items.map((t) => (
+        <div key={t.id} className={`toast toast-${t.tone ?? "info"}`} role="status">
+          <span>{t.text}</span>
+          {t.undo ? (
+            <Button
+              variant="quiet"
+              onClick={async () => {
+                await t.undo!();
+                setItems((xs) => xs.filter((x) => x.id !== t.id));
+              }}
+            >
+              Undo
+            </Button>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}

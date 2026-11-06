@@ -1,3 +1,6 @@
 import { createRoot } from "react-dom/client";
+import "@fontsource/silkscreen/400.css";
+import "./styles.css";
+import { App } from "./App.tsx";
 
-createRoot(document.getElementById("root")!).render(<p>AI City</p>);
+createRoot(document.getElementById("root")!).render(<App />);

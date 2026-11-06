@@ -9,3 +9,5 @@ web/playwright-report
 docs/reference
 docs/screenshots
 *.md
+web/src/city/*.js
+web/dist

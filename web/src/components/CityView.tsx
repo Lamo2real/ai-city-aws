@@ -1,0 +1,554 @@
+// The City view: the ported pixel-art scene on a canvas, with the Mac HUD's layout around it —
+// status bar on top, departments / records / activity on the right, zoom and actions at the bottom.
+// Driven entirely by WebSocket events through the store.
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  COST_NOTE,
+  MODEL_NAME,
+  VISUALS,
+  departmentNames,
+  gateStatus,
+  plainText,
+  stockholmTime,
+  ticketWords,
+  topBar,
+  visualState,
+  type CityState,
+} from "../city/city-state.js";
+import { mountCity, type CityScene } from "../city/scene.js";
+import { instruct } from "../lib/actions.ts";
+import { api, ApiError } from "../lib/api.ts";
+import { money, tokensK } from "../lib/format.ts";
+import { store, useHud, waitingCount } from "../lib/store.ts";
+import { useVoice } from "../voice/useVoice.ts";
+import { MicIcon } from "./AceScreen.tsx";
+import { Banner, Button, Loading } from "./ui.tsx";
+
+const REGION_CITY: Record<string, string> = {
+  "eu-north-1": "STOCKHOLM",
+  "eu-central-1": "FRANKFURT",
+  "eu-west-1": "IRELAND",
+  "us-east-1": "N. VIRGINIA",
+  "us-west-2": "OREGON",
+};
+const SWATCH = [
+  "#c0533f",
+  "#3f7fa8",
+  "#3f8f6a",
+  "#b5823a",
+  "#7f5aa8",
+  "#b84f78",
+  "#4a6fb0",
+  "#8d9440",
+  "#b0663a",
+  "#3f9a9a",
+  "#a84848",
+  "#5f7a8a",
+];
+
+type Open = { agent: string } | { dept: string } | { record: "workforce" | "health" | "parked" | "legend" } | null;
+
+export function CityView({ go }: { go: (view: string) => void }) {
+  const root = useRef<HTMLDivElement>(null);
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const scene = useRef<CityScene | null>(null);
+  const city = useHud((s) => s.city);
+  const loaded = useHud((s) => s.loaded);
+  const loadError = useHud((s) => s.loadError);
+  const waiting = useHud(waitingCount);
+  const live = useHud((s) => s.live);
+  const [open, setOpen] = useState<Open>(null);
+  const [now, setNow] = useState(Date.now());
+  const voice = useVoice();
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Mount the scene once; feed it the snapshot and every event after it.
+  useEffect(() => {
+    if (!root.current || !canvas.current) return;
+    const wide = () =>
+      root.current!.clientWidth >= 800 ? { l: 0, t: 64, r: 250, b: 70 } : { l: 0, t: 96, r: 0, b: 254 };
+    const s = mountCity(root.current, {
+      canvas: canvas.current,
+      insets: wide,
+      onSelectAgent: (id) => setOpen(id ? { agent: id } : null),
+      onSelectBuilding: (dept) => setOpen({ dept }),
+    });
+    scene.current = s;
+    s.load(snapshotOf(store.get().city));
+    const off = (e: unknown) => s.onEvent(e);
+    store.sceneEvents.add(off);
+    return () => {
+      store.sceneEvents.delete(off);
+    };
+  }, []);
+  // A fresh snapshot (first load, reconnect) rebuilds the scene's copy.
+  const loadedAt = useHud((s) => (s.loaded ? s.city.now : 0));
+  useEffect(() => {
+    if (loadedAt && scene.current) scene.current.load(snapshotOf(store.get().city));
+  }, [loadedAt]);
+
+  const t = topBar(city);
+  const g = gateStatus(city);
+  const names = departmentNames(city);
+  const region = (city as CityState & { region?: string }).region ?? "eu-north-1";
+
+  return (
+    <section className="city" ref={root} aria-label="City view">
+      <canvas
+        ref={canvas}
+        aria-label="The city of the agents as a small map. Every building and agent is also listed under Departments and in the panel."
+      />
+      <div className="cityui citytop" role="status">
+        <Stat k="AGENTS" v={`${t.agentsActive} active · ${t.agentsTotal} total`} />
+        <Stat k="TICKETS RUNNING" v={String(t.ticketsRunning)} />
+        <Stat k="QUESTIONS" v={String(t.questionsWaiting)} />
+        <Stat k="PARKED" v={String(t.parked)} />
+        <Stat k="TURNS" v={`${g.running ?? 0} running · ${g.waiting ?? 0} waiting`} />
+        <Stat k="USAGE TODAY, UTC" v={t.usage ? `${t.usage.turns} turns · ${tokensK(t.usage.tokens)} tokens` : "—"} />
+        <Stat k="EST. VALUE, NOT A CHARGE" v={t.usage ? `est. ${money(t.usage.usd)}` : "—"} title={COST_NOTE} />
+        <Stat k={REGION_CITY[region] ?? region.toUpperCase()} v={stockholmTime(now)} />
+      </div>
+      <div className="cityalerts">
+        {!loaded && !loadError ? <Loading what="the city" /> : null}
+        {loadError ? (
+          <Banner tone="bad">{`Can't reach AI City (${loadError}). Nothing is shown until it answers.`}</Banner>
+        ) : null}
+        {live === "reconnecting" ? (
+          <Banner tone="bad">Live updates stopped. Reconnecting… The map catches up when it is back.</Banner>
+        ) : null}
+        {g.paused ? (
+          <Banner tone="warn">{`The city is paused${g.paused.reason ? `: ${g.paused.reason}` : ""}. Work already running finishes; nothing new starts.`}</Banner>
+        ) : null}
+        {city.capHit ? (
+          <Banner
+            tone="bad"
+            action={{ label: "See costs", onClick: () => go("costs") }}
+          >{`Spend cap reached (${city.capHit.cap.replace(/_/g, " ")}, $${city.capHit.limit}). No new work starts until you raise it.`}</Banner>
+        ) : null}
+        {loaded && !names.length ? (
+          <p className="cityui empty">
+            No departments yet. A building goes up on the next free lot the moment a task needs one.
+          </p>
+        ) : null}
+      </div>
+      <aside className="cityside">
+        <nav className="cityui depts" aria-label="Departments">
+          <h3 className="pixel">Departments</h3>
+          <button
+            type="button"
+            className="dept"
+            style={{ ["--swatch" as string]: "#3f5f92" }}
+            onClick={() => setOpen({ dept: "HQ" })}
+          >
+            HQ
+          </button>
+          {names.map((n, i) => {
+            const count = Object.values(city.agents).filter(
+              (a) => a.department === n && a.kind === "worker" && a.state === "active",
+            ).length;
+            return (
+              <button
+                key={n}
+                type="button"
+                className="dept"
+                style={{ ["--swatch" as string]: SWATCH[i % SWATCH.length] }}
+                onClick={() => setOpen({ dept: n })}
+                data-count={count || undefined}
+              >
+                {n}
+                {count ? (
+                  <span className="count" aria-label={`${count} workers`}>
+                    {count}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+          <h3 className="pixel">Records</h3>
+          <button type="button" className="dept rec" onClick={() => setOpen({ record: "workforce" })}>
+            Workforce
+          </button>
+          <button type="button" className="dept rec" onClick={() => go("costs")}>
+            Costs (estimates)
+          </button>
+          <button type="button" className="dept rec" onClick={() => setOpen({ record: "health" })}>
+            Health
+          </button>
+          <button
+            type="button"
+            className="dept rec"
+            onClick={() => setOpen({ record: "parked" })}
+          >{`Parked (${t.parked})`}</button>
+          <button type="button" className="dept rec" onClick={() => setOpen({ record: "legend" })}>
+            What the marks mean
+          </button>
+        </nav>
+        <div className="cityui feed" aria-live="polite" tabIndex={0} role="log" aria-label="Activity">
+          <h3 className="pixel">Activity</h3>
+          {city.feed.length ? (
+            city.feed.slice(0, 12).map((f, i) => (
+              <div key={`${f.at}-${i}`} className={`fline ${f.kind}`}>
+                <span className="t">
+                  {new Date(f.at).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}
+                </span>
+                <span>{f.text}</span>
+              </div>
+            ))
+          ) : (
+            <p className="mute">Quiet. Nothing has happened since this page opened.</p>
+          )}
+        </div>
+        <div className="cityui inboxbar">
+          {waiting ? (
+            <>
+              <span>{waiting === 1 ? "One thing needs you." : `${waiting} things need you.`}</span>
+              <Button variant="primary" onClick={() => go("inbox")}>
+                Open: needs you
+              </Button>
+            </>
+          ) : (
+            <span>Nothing waiting.</span>
+          )}
+        </div>
+      </aside>
+      <div className="citybottom" role="toolbar" aria-label="Map and actions">
+        <div className="zoom">
+          <button type="button" className="tile" onClick={() => scene.current?.zoomIn()} aria-label="Zoom in">
+            +
+          </button>
+          <button type="button" className="tile" onClick={() => scene.current?.zoomOut()} aria-label="Zoom out">
+            -
+          </button>
+          <button type="button" className="tile" onClick={() => scene.current?.fit()} aria-label="Fit the whole map">
+            Fit
+          </button>
+        </div>
+        <div className="actions">
+          <button type="button" className="tile" onClick={() => go("ace")} aria-label="Chat with Ace">
+            <Glyph d="M4 5h16v10H9l-5 4z" />
+          </button>
+          <button type="button" className="tile" onClick={() => go("tickets")} aria-label="Tickets">
+            <Glyph d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5" />
+          </button>
+          <button type="button" className="tile" onClick={() => go("inbox")} aria-label="Needs you inbox">
+            <Glyph d="M4 6h16v12H4zM4 13h5l1 2h4l1-2h5" />
+          </button>
+          <button
+            type="button"
+            className={`tile mic-big ${voice.listening ? "on" : ""}`}
+            onClick={voice.pushToTalk}
+            aria-pressed={voice.listening}
+            aria-label={voice.listening ? "Stop listening" : "Talk to Ace"}
+          >
+            <MicIcon />
+          </button>
+          <button
+            type="button"
+            className="tile"
+            onClick={voice.toggleSound}
+            aria-pressed={voice.sound}
+            aria-label={voice.sound ? "Sound on (tap to mute)" : "Sound off (tap to turn on)"}
+          >
+            <Glyph
+              d={voice.sound ? "M4 9v6h4l5 4V5L8 9zM16 9a4 4 0 0 1 0 6" : "M4 9v6h4l5 4V5L8 9zM17 9l4 6M21 9l-4 6"}
+            />
+          </button>
+          <button type="button" className="tile" onClick={() => go("costs")} aria-label="Charts and costs">
+            <Glyph d="M5 19V9M10 19V5M15 19v-7M20 19v-4" />
+          </button>
+        </div>
+      </div>
+      {open ? (
+        <CityPanel
+          open={open}
+          city={city}
+          onClose={() => {
+            setOpen(null);
+            scene.current?.select(null);
+          }}
+          onZoom={(d) => scene.current?.focusBuilding(d)}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function snapshotOf(city: CityState) {
+  return {
+    agents: Object.values(city.agents),
+    departments: Object.values(city.departments).map((d) => ({ ...d, created_at: new Date(d.builtAt).toISOString() })),
+    tickets: Object.values(city.tickets),
+    parked: Object.values(city.parked),
+    questions: Object.values(city.questions),
+    approvals: Object.values(city.approvals),
+    usage: city.usage,
+    spend: city.spend,
+    caps: city.caps,
+    city: city.city,
+  };
+}
+
+const Stat = ({ k, v, title }: { k: string; v: string; title?: string }) => (
+  <div className="stat" title={title}>
+    <span className="k">{k}</span>
+    <b>{v}</b>
+  </div>
+);
+const Glyph = ({ d }: { d: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    width="22"
+    height="22"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d={d} />
+  </svg>
+);
+
+function CityPanel({
+  open,
+  city,
+  onClose,
+  onZoom,
+}: {
+  open: NonNullable<Open>;
+  city: CityState;
+  onClose: () => void;
+  onZoom: (dept: string) => void;
+}) {
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    ref.current?.querySelector<HTMLElement>("button")?.focus();
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [open, onClose]);
+  const title =
+    "agent" in open
+      ? (city.agents[open.agent]?.role ?? open.agent)
+      : "dept" in open
+        ? open.dept === "HQ"
+          ? "Headquarters"
+          : `${open.dept} department`
+        : { workforce: "Workforce", health: "Health", parked: "Parked", legend: "What the marks mean" }[open.record];
+  return (
+    <aside className="cityui citypanel" role="dialog" aria-label={title} ref={ref}>
+      <header>
+        <h3 className="pixel">{title}</h3>
+        <button type="button" className="closer" onClick={onClose} aria-label="Close">
+          ×
+        </button>
+      </header>
+      {"agent" in open ? <AgentPanel id={open.agent} city={city} /> : null}
+      {"dept" in open ? <DeptPanel name={open.dept} city={city} onZoom={onZoom} /> : null}
+      {"record" in open && open.record === "legend" ? <Legend /> : null}
+      {"record" in open && open.record === "parked" ? <Parked city={city} /> : null}
+      {"record" in open && (open.record === "workforce" || open.record === "health") ? (
+        <Remote what={open.record} />
+      ) : null}
+    </aside>
+  );
+}
+
+function AgentPanel({ id, city }: { id: string; city: CityState }) {
+  const a = city.agents[id];
+  const [live, setLive] = useState<{
+    cost_usd: number;
+    recent: Array<{ tool: string; decision: string; at: string }>;
+  } | null>(null);
+  const [text, setText] = useState("");
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => {
+    let gone = false;
+    if (a && a.kind !== "specialist")
+      void api<{ cost_usd: number; recent: Array<{ tool: string; decision: string; at: string }> }>(
+        `/city/agent?id=${encodeURIComponent(id)}`,
+      ).then(
+        (r) => !gone && setLive(r),
+        () => undefined,
+      );
+    return () => {
+      gone = true;
+    };
+  }, [id, a]);
+  if (!a) return <p className="mute">This agent is no longer in the city.</p>;
+  const doing = VISUALS[visualState(city, id)] ?? VISUALS.idle!;
+  const ticket = Object.values(city.tickets).find((t) => t.to === id);
+  const send = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!text.trim()) return;
+    try {
+      await instruct(id, text.trim());
+      setNote("Sent. Its manager is copied.");
+      setText("");
+    } catch (err) {
+      setNote(err instanceof ApiError ? err.message : "Not sent. Try again.");
+    }
+  };
+  return (
+    <div>
+      <p className="doing">
+        <b>{doing.label}.</b> {a.kind === "specialist" ? "A saved specialist, at home until hired again." : doing.words}
+      </p>
+      <Row k="Department" v={a.department ?? "Headquarters"} />
+      <Row k="Model" v={MODEL_NAME[a.model] ?? a.model} />
+      <Row k="Reports to" v={a.parent ?? "the owner"} />
+      <Row k="Cost so far" v={`est. ${money(live?.cost_usd ?? a.total_cost_usd ?? 0)}`} />
+      <h4>Ticket</h4>
+      <p>{ticket ? `${ticketWords(ticket.status)}: ${plainText(ticket.goal).short}` : "No open ticket."}</p>
+      {live?.recent.length ? (
+        <>
+          <h4>Recent activity</h4>
+          <ul className="recent">
+            {live.recent.slice(-6).map((r, i) => (
+              <li
+                key={i}
+              >{`${new Date(r.at).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })} ${r.tool.replace(/^mcp__city__/, "").replace(/_/g, " ")}${r.decision === "deny" ? " (blocked by policy)" : ""}`}</li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+      {a.kind !== "specialist" && a.state !== "retired" ? (
+        <form className="instruct" onSubmit={send}>
+          <label>
+            Instruct this agent
+            <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Tell it something…" />
+          </label>
+          <Button variant="secondary" type="submit">
+            Send
+          </Button>
+          {note ? <p className="mute">{note}</p> : null}
+        </form>
+      ) : null}
+    </div>
+  );
+}
+
+function DeptPanel({ name, city, onZoom }: { name: string; city: CityState; onZoom: (d: string) => void }) {
+  const d = city.departments[name];
+  const members = Object.values(city.agents).filter(
+    (a) => (name === "HQ" ? a.kind === "core" : a.department === name) && a.state !== "retired",
+  );
+  const workers = members.filter((a) => a.kind === "worker");
+  const open = Object.values(city.tickets).filter((t) => members.some((m) => m.id === t.to));
+  return (
+    <div>
+      <p className="doing">
+        {name === "HQ"
+          ? "Ace and the Orchestrator work here."
+          : `${workers.length ? `${workers.length} workers at their desks.` : "Nobody hired right now."} ${d?.mission ?? ""}`}
+      </p>
+      {name !== "HQ" ? <Row k="Manager" v={d?.manager_id ?? "—"} /> : null}
+      {name !== "HQ" ? <Row k="Today, estimate" v={money(city.spend[name] ?? 0)} /> : null}
+      <h4>{`Open tickets (${open.length})`}</h4>
+      <ul className="recent">
+        {open.length ? (
+          open.map((t) => <li key={t.id}>{`${t.to}: ${ticketWords(t.status)} — ${plainText(t.goal, 90).short}`}</li>)
+        ) : (
+          <li className="mute">None right now.</li>
+        )}
+      </ul>
+      <Button variant="secondary" onClick={() => onZoom(name)}>
+        Zoom in
+      </Button>
+    </div>
+  );
+}
+
+function Legend() {
+  return (
+    <ul className="legend">
+      <li>
+        <span className="mark">Figure at a desk</span> working, or holding its place
+      </li>
+      <li>
+        <span className="mark">Figure in a yard</span> off work, or a saved specialist at home
+      </li>
+      <li>
+        <span className="mark">Figure at a door</span> the department's manager
+      </li>
+      <li>
+        <span className="mark">Yellow “!” bubble, glowing</span> needs you
+      </li>
+      <li>
+        <span className="mark">Red ✕ bubble</span> failed or blocked
+      </li>
+      <li>
+        <span className="mark">Number badge on a roof</span> how many people are at their desks
+      </li>
+      {Object.entries(VISUALS).map(([k, v]) => (
+        <li key={k}>
+          <span className="mark">{v.label}</span> {v.words}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function Parked({ city }: { city: CityState }) {
+  const rows = Object.values(city.parked);
+  return rows.length ? (
+    <ul className="recent">
+      {rows.map((t) => (
+        <li key={t.id}>{`${t.to}: ${plainText(t.goal, 90).short}`}</li>
+      ))}
+    </ul>
+  ) : (
+    <p className="mute">Nothing is parked.</p>
+  );
+}
+
+function Remote({ what }: { what: "workforce" | "health" }) {
+  const [data, setData] = useState<Record<string, unknown> | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    void api<Record<string, unknown>>(`/${what}`).then(setData, (e: Error) => setErr(e.message));
+  }, [what]);
+  if (err) return <Banner tone="bad">{`Could not load ${what} (${err}).`}</Banner>;
+  if (!data) return <Loading what={what} />;
+  if (what === "health")
+    return (
+      <div>
+        <Row k="City" v={data.paused ? "Paused" : "Running"} />
+        <Row k="Workers busy" v={`${String(data.workers_busy)} of ${String(data.worker_ceiling)}`} />
+        <Row k="Stuck turns" v={String(data.stale_turns)} />
+      </div>
+    );
+  const workers =
+    (data.workers as Array<{
+      id: string;
+      role: string;
+      department: string;
+      worker_state: string;
+      state: string;
+      total_cost_usd: number;
+    }>) ?? [];
+  const specialists = (data.specialists as Array<{ id: string; specialty: string; department: string }>) ?? [];
+  return (
+    <div>
+      <p>{`${workers.length} hired ever · ${workers.filter((w) => w.state === "active").length} working now · ${specialists.length} saved specialists`}</p>
+      <ul className="recent">
+        {workers.slice(-30).map((w) => (
+          <li
+            key={w.id}
+          >{`${w.id} — ${w.role}, ${w.department}: ${(w.worker_state ?? w.state).replace(/_/g, " ")} · est. ${money(w.total_cost_usd)}`}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+const Row = ({ k, v }: { k: string; v: string }) => (
+  <div className="row">
+    <span className="k">{k}</span>
+    <span className="v">{v}</span>
+  </div>
+);

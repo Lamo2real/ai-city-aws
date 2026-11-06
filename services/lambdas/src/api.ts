@@ -100,17 +100,19 @@ const str = (v: unknown, name: string, max = 4000): string => {
 
 export async function citySnapshot(d: ApiDeps) {
   const s = await d.settings();
-  const [agents, departments, tickets, parked, questions, approvals, today, month, dayBreakdown] = await Promise.all([
-    d.ledger.listAgents(),
-    d.ledger.listDepartments(),
-    d.ledger.listTickets(LIVE),
-    d.ledger.listTickets(["parked"]),
-    d.ledger.openQuestions(),
-    d.ledger.pendingApprovals(),
-    d.ledger.spend("day", "GLOBAL"),
-    d.ledger.spend("month", "GLOBAL"),
-    d.ledger.spendBreakdown("day"),
-  ]);
+  const [agents, departments, tickets, parked, questions, approvals, today, month, dayBreakdown, specialists] =
+    await Promise.all([
+      d.ledger.listAgents(),
+      d.ledger.listDepartments(),
+      d.ledger.listTickets(LIVE),
+      d.ledger.listTickets(["parked"]),
+      d.ledger.openQuestions(),
+      d.ledger.pendingApprovals(),
+      d.ledger.spend("day", "GLOBAL"),
+      d.ledger.spend("month", "GLOBAL"),
+      d.ledger.spendBreakdown("day"),
+      d.ledger.listSpecialists(),
+    ]);
   const spend: Record<string, number> = {};
   for (const dep of departments) spend[dep.name] = dayBreakdown[`DEPT#${dep.key}`]?.usd ?? 0;
   const running = tickets.filter((t) => t.status === "in_progress").length;
@@ -121,6 +123,7 @@ export async function citySnapshot(d: ApiDeps) {
     parked,
     questions,
     approvals,
+    specialists,
     usage: { usd: today.usd, turns: today.turns, tokens: today.tokens },
     month: { usd: month.usd },
     spend,
