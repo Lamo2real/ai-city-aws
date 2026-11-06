@@ -2,7 +2,7 @@
 // screen says. Every backend is mocked (see mock.ts). Screenshots go to docs/screenshots/.
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-import { at, CONFIG, hired, mockBackend } from "./mock.ts";
+import { at, hired, mockBackend } from "./mock.ts";
 
 const SHOTS = `${import.meta.dirname}/../../docs/screenshots`;
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: false });
@@ -18,15 +18,83 @@ async function noSeriousA11y(page: Page, label: string) {
 }
 const primaries = (page: Page) => page.locator(".btn-primary:visible").count();
 
-test("signed out: the app sends the owner to the Cognito sign-in with PKCE", async ({ page }) => {
+test("first sign-in on our own screens: temporary password, own password, authenticator app, in", async ({ page }) => {
   await mockBackend(page, { signedIn: false });
   await page.goto("/");
-  await page.waitForURL(new RegExp(`https://${CONFIG.cognitoDomain}/oauth2/authorize`));
-  const url = new URL(page.url());
-  expect(url.searchParams.get("response_type")).toBe("code");
-  expect(url.searchParams.get("code_challenge_method")).toBe("S256");
-  expect(url.searchParams.get("code_challenge")).toBeTruthy();
-  expect(url.searchParams.get("client_id")).toBe(CONFIG.clientId);
+  await expect(page.getByRole("heading", { name: "Sign in to AI City" })).toBeVisible();
+  await expect(page.getByText(/register|sign up|create account/i)).toHaveCount(0); // only the owner exists
+  await noSeriousA11y(page, "Sign in");
+  expect(await primaries(page)).toBe(1);
+  await shot(page, "signin");
+
+  await page.getByLabel("Email").fill("owner@example.com");
+  await page.getByLabel("Password", { exact: true }).fill("Temp-Password-1!");
+  await page.getByRole("button", { name: "Sign in" }).click();
+
+  await expect(page.getByRole("heading", { name: "Choose your own password" })).toBeVisible();
+  await expect(page.getByText("First sign-in · step 2 of 3")).toBeVisible();
+  const save = page.getByRole("button", { name: "Save my password" });
+  await page.getByLabel("New password").fill("short");
+  await expect(save).toBeDisabled();
+  await page.getByLabel("New password").fill("My-Own-Password-1!");
+  await page.getByLabel("Type it again").fill("My-Own-Password-1?");
+  await expect(page.getByText("The two passwords are not the same.")).toBeVisible();
+  await page.getByLabel("Type it again").fill("My-Own-Password-1!");
+  await expect(page.getByRole("list", { name: "Password rules" }).locator("li.ok")).toHaveCount(5);
+  await noSeriousA11y(page, "New password");
+  await shot(page, "signin-new-password");
+  await save.click();
+
+  await expect(page.getByRole("heading", { name: "Connect an authenticator app" })).toBeVisible();
+  await expect(page.getByText("First sign-in · step 3 of 3")).toBeVisible();
+  await expect(page.getByRole("img", { name: "QR code for your authenticator app" })).toBeVisible();
+  await expect(page.getByLabel("Setup key")).toHaveText(/^JBSW Y3DP/);
+  await noSeriousA11y(page, "Authenticator setup");
+  await shot(page, "signin-authenticator");
+  await page.getByLabel("6-digit code").fill("000000");
+  await page.getByRole("button", { name: "Confirm and sign in" }).click();
+  await expect(page.getByText(/That code is not right/)).toBeVisible();
+  await page.getByLabel("6-digit code").fill("123456");
+  await page.getByRole("button", { name: "Confirm and sign in" }).click();
+
+  await expect(page.getByRole("button", { name: "AI City — talk to Ace" })).toBeVisible();
+});
+
+test("later sign-ins: a wrong password says so plainly; then password and code", async ({ page }) => {
+  await mockBackend(page, { signedIn: false });
+  await page.goto("/");
+  await page.getByLabel("Email", { exact: true }).fill("owner@example.com");
+  await page.getByLabel("Password", { exact: true }).fill("nope");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("alert")).toHaveText(/That email or password is not right/);
+  await page.getByLabel("Password", { exact: true }).fill("Own-Password-12!");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Enter your 6-digit code" })).toBeVisible();
+  await page.getByLabel("6-digit code", { exact: true }).fill("12a3456"); // only digits are kept
+  await expect(page.getByLabel("6-digit code", { exact: true })).toHaveValue("123456");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("button", { name: "AI City — talk to Ace" })).toBeVisible();
+});
+
+test("forgot password and a new first-login email, without leaving AI City", async ({ page }) => {
+  const m = await mockBackend(page, { signedIn: false });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Forgot your password?" }).click();
+  await page.getByLabel("Email", { exact: true }).fill("owner@example.com");
+  await page.getByRole("button", { name: "Email me a code" }).click();
+  await expect(page.getByRole("heading", { name: "Choose a new password" })).toBeVisible();
+  await page.getByLabel("Code from the email", { exact: true }).fill("654321");
+  await page.getByLabel("New password", { exact: true }).fill("Brand-New-Pass-1!");
+  await page.getByLabel("Type it again", { exact: true }).fill("Brand-New-Pass-1!");
+  await page.getByRole("button", { name: "Save new password" }).click();
+  await expect(page.getByText("Your new password is saved. Sign in with it.")).toBeVisible();
+
+  await page.getByRole("button", { name: "First time here, or the temporary password expired?" }).click();
+  await page.getByLabel("Email", { exact: true }).fill("Owner@Example.com");
+  await page.getByRole("button", { name: "Send me a new email" }).click();
+  await expect(page.getByText(/a new first-login email is on its way/)).toBeVisible();
+  const sent = m.calls.find((c) => c.path === "/auth/first-login-email");
+  expect(sent?.body).toEqual({ email: "owner@example.com" });
 });
 
 test("first login shows a three-step guide that can be skipped", async ({ page }) => {

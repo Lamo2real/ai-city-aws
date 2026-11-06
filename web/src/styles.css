@@ -404,51 +404,58 @@ main {
 .eyes {
   display: grid;
   justify-items: center;
+  --eye: var(--paper3);
 }
-.eyes svg {
-  width: min(320px, 70vw);
-  height: auto;
+/* The owner's eye drawing (white lines, transparent background) as a mask: the colour comes from --eye. */
+.eye-pair {
+  display: flex;
+  width: min(220px, 56vw);
 }
-.eyes-small svg {
-  width: 52px;
+.eyes-small .eye-pair {
+  width: 40px;
 }
-.eyes .white {
-  fill: var(--paper3);
-  stroke: var(--ink);
-  stroke-width: 6;
+.eye-shape {
+  flex: 1;
+  aspect-ratio: 600 / 324;
+  background: var(--eye);
+  -webkit-mask: url("/ace-eye.png") center / contain no-repeat;
+  mask: url("/ace-eye.png") center / contain no-repeat;
+  transition:
+    background-color 0.3s,
+    transform 0.3s;
 }
-.eyes .pupil {
-  fill: #54c8ee;
-  stroke: var(--ink);
-  stroke-width: 4;
-  transition: transform 0.3s;
-}
-.eyes .lid {
-  fill: var(--night);
-  opacity: 0;
-  transform-origin: center 15px;
-}
-.eyes-idle .eye {
+.eyes-idle .eye-pair {
   animation: blink 5s infinite;
-  transform-origin: center 45px;
 }
-.eyes-listening .pupil {
-  fill: #8ef0a0;
+.eyes-listening {
+  --eye: #8ef0a0;
+}
+.eyes-listening .eye-pair {
   animation: pulse 1s ease-in-out infinite;
 }
-.eyes-thinking .pupil {
+.eyes-thinking {
+  --eye: #9fd8f0;
+}
+.eyes-thinking .eye-pair {
   animation: look 1.6s ease-in-out infinite;
 }
-.eyes-speaking .white {
-  animation: talk 0.4s ease-in-out infinite alternate;
-  transform-origin: center 45px;
+.eyes-speaking {
+  --eye: var(--paper3);
 }
-.eyes-waiting .pupil {
-  fill: var(--amber);
+.eyes-speaking .eye-pair {
+  animation: talk 0.4s ease-in-out infinite alternate;
+}
+.eyes-waiting {
+  --eye: var(--amber);
 }
 .eyes .bang {
-  fill: var(--amber);
+  color: var(--amber);
   font: 400 26px var(--pixel);
+  line-height: 1;
+}
+/* On the light sign-in card the eyes are drawn in ink. */
+.signin-brand .eyes {
+  --eye: var(--ink);
 }
 .eyes-word {
   margin: var(--s1) 0 0;
@@ -1164,4 +1171,98 @@ table.costs td {
     bottom: 254px;
     max-height: 45%;
   }
+}
+
+/* ---------- sign-in (our own screens; no Cognito hosted pages) ---------- */
+.signin {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: var(--s4);
+  background: var(--night);
+}
+.signin-card {
+  width: min(440px, 100%);
+  background: var(--paper);
+  border: 3px solid var(--wood);
+  border-radius: var(--r);
+  box-shadow: 0 0 0 3px var(--ink);
+  padding: var(--s5);
+  color: var(--text);
+}
+.signin-card h1 {
+  margin: var(--s2) 0;
+  font-size: 1.4rem;
+}
+.signin-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  color: var(--ink);
+}
+.signin-actions {
+  margin-top: var(--s4);
+  display: grid;
+}
+.signin-actions .btn {
+  width: 100%;
+}
+.signin-links {
+  margin-top: var(--s4);
+  display: grid;
+  gap: var(--s2);
+  justify-items: start;
+}
+.small {
+  font-size: 0.875rem;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.rules {
+  list-style: none;
+  padding: 0;
+  margin: var(--s2) 0;
+  display: grid;
+  gap: var(--s1);
+  color: var(--soft);
+}
+.rules .ok {
+  color: var(--good);
+}
+.steps {
+  padding-left: var(--s5);
+  display: grid;
+  gap: var(--s3);
+}
+.qr {
+  margin: var(--s2) 0;
+  min-height: 220px;
+}
+.qr img {
+  background: #fff;
+  padding: var(--s2);
+  border: 2px solid var(--wood2);
+  border-radius: var(--r);
+  image-rendering: pixelated;
+}
+.secret {
+  display: block;
+  margin-top: var(--s1);
+  padding: var(--s2);
+  background: var(--paper3);
+  border: 1px dashed var(--wood2);
+  border-radius: var(--r);
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  word-break: break-all;
+  user-select: all;
+}
+.signin-links .link {
+  text-align: left;
 }
