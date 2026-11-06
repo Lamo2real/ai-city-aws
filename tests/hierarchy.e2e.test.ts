@@ -2,8 +2,8 @@
 // owner → Ace → Orchestrator → creates a department → Manager hires three workers → workers report →
 // manager rejects one (FAIL) → the worker fixes it → manager PASS → Orchestrator sign-off → Ace reports.
 import { describe, expect, it } from "vitest";
-import { Dispatcher, resumeStale, type WorkMessage } from "@aic/shared";
-import { instructAgent } from "../services/agent-runtime/src/tools.ts";
+
+import { Dispatcher, instructAgent, resumeStale, type WorkMessage } from "@aic/shared";
 import { makeCity, scriptedEngine, sessionIdFor, type Script } from "./support/city.ts";
 
 const GOAL = "Add a power(a, b) function to add.js with a matching test";

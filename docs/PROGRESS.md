@@ -32,3 +32,10 @@
   - `@agent` instruction reaches the right worker with its manager copied;
   - 500 hires: peak 150 global / ≤100 per department / ≤20 new sessions per second, rest deferred, all 500 started exactly once.
 - `docker build`: **not run — Docker is not installed** on this machine. Instead the runtime was bundled with esbuild (2.5 MB) and started with `ANTHROPIC_API_KEY` set: the startup guard refused to start, as intended.
+
+## Phase 5: API and real-time — done
+- `services/lambdas/src/api.ts`: HTTP API handler (22 routes: city snapshot, agent panel, instruct, messages, wake check, tickets, departments, agents, workforce, costs, health, questions + one-tap default, approvals → Step Functions task result, settings with validation, pause/resume, memory/notes). Every route re-checks the `owner` group after API Gateway's JWT authorizer. Errors are plain words; internals never reach the HUD.
+- `ws.ts`: `$connect` Lambda authorizer (Cognito token via `aws-jwt-verify`, `owner` group), connections in DynamoDB with a 2-hour TTL refreshed by keep-alive pings, broadcaster from EventBridge to every connection (gone connections removed).
+- `notifier.ts` (SNS email: results, cap alerts, pause, 15-minute question nudges once each), `budget.ts` (AWS Budgets 100% → pause), `approvals.ts` (Step Functions `waitForTaskToken` steps), `build.mjs` (esbuild bundles per function; built 9 bundles).
+- Shared: `utility.ts` (wake-word plain matching + Haiku for unclear cases only, title, compaction; prompts truncated far below 100k tokens; Bedrock Converse runner), `hierarchy/actions.ts` (answer question, `@agent` instruct, status — used by both the runtime tools and the API). Approvals filed from the policy gate, bound to the exact action.
+- Gate: 10 files, 212 tests pass. Every one of the 22 routes rejects tokens without the `owner` group (5 shapes each: no claim, empty, other group, array of other group, look-alike string).

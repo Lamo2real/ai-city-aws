@@ -13,7 +13,7 @@ import {
 } from "@aic/shared";
 import type { AgentEngine } from "./engine.ts";
 import { departmentTemplate, loadPrompt } from "./prompts.ts";
-import { gateTools, move, toolsFor, type CityDeps, type TurnCtx } from "./tools.ts";
+import { fileApproval, gateTools, move, toolsFor, type CityDeps, type TurnCtx } from "./tools.ts";
 
 const WORKER_BUILTINS: Record<string, string[]> = {
   Bash: ["Bash"],
@@ -128,6 +128,7 @@ export class AgentHost {
               ctx,
               ledger,
               cwd: agent.kind === "worker" ? `/tmp/work/${agent.id}` : undefined,
+              onNeedsApproval: (tool, input, needs) => fileApproval(this.d, ctx, tool, input, needs),
               onActivity: (activity, detail) => void bus.put({ type: "activity", id: agent.id, activity, detail }),
               onText:
                 isAce && inv.conversation

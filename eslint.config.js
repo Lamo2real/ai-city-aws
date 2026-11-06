@@ -14,7 +14,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["scripts/**/*.mjs", "tests/**/*.ts"],
+    files: ["scripts/**/*.mjs", "tests/**/*.ts", "services/*/build.mjs"],
     rules: { "no-console": "off" },
   },
 );

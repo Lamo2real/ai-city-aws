@@ -15,6 +15,12 @@ export interface EngineRequest {
   ledger: Ledger;
   /** Text as it streams, for Ace's spoken replies. */
   onText?: (chunk: string) => void;
+  /** Called when a built-in tool call needs the owner's approval for this exact action. */
+  onNeedsApproval?: (
+    tool: string,
+    input: Record<string, unknown>,
+    needs: { hash: string; reason: string },
+  ) => Promise<void>;
   /** What the agent is doing, for the City view ("coding", "reading", ...). */
   onActivity?: (activity: string, detail?: string) => void;
   cwd?: string;
@@ -108,6 +114,7 @@ export const sdkEngine: AgentEngine = async (req) => {
           consumeApproval: (h) => req.ledger.consumeApproval(h),
         });
         await req.ledger.auditTool(req.ctx.agentId, name, r.decision, r.reason);
+        if (r.needsApproval) await req.onNeedsApproval?.(name, input, r.needsApproval);
         if (r.decision === "allow") req.onActivity?.(activityFor(name));
         return r.decision === "allow"
           ? { behavior: "allow" as const, updatedInput: input }
