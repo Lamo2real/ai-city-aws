@@ -43,3 +43,4 @@ the build; "Build" means it was chosen during the overnight build.
 35. **Pause flag** lives in the ledger (`CONFIG#city`), read by the dispatcher before every turn; `scripts/city-off.sh` sets it and disables the SQS event source mappings.
 36. **No Reviewer and no Secretary agents.** Managers review; the Orchestrator signs off; Ace summarizes.
 37. **Bedrock throttling** is retried with full-jitter exponential backoff (base 1 s, cap 30 s, 5 tries), never a pause. "Spend cap reached" is the only pause from spend.
+38. **TypeScript pinned ~6.0.3**, because typescript-eslint 8.72 supports TypeScript below 6.1 only.

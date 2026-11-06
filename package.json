@@ -1,0 +1,36 @@
+{
+  "name": "ai-city-aws",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AI City (Ace): the owner's personal organization of AI agents on AWS.",
+  "type": "module",
+  "engines": {
+    "node": ">=24 <27"
+  },
+  "workspaces": [
+    "packages/shared",
+    "services/agent-runtime",
+    "services/lambdas",
+    "web"
+  ],
+  "scripts": {
+    "lint": "eslint . && prettier --check \"**/*.{ts,tsx,json,md,yml}\" --log-level warn",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md,yml}\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit && npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "test:e2e": "npm run e2e -w web",
+    "build": "npm run build --workspaces --if-present",
+    "check:tags": "node scripts/check-tags.mjs",
+    "check:iam": "node scripts/check-iam.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.14.0",
+    "prettier": "^3.9.10",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.1.0"
+  }
+}

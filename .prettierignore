@@ -1,0 +1,11 @@
+node_modules
+dist
+coverage
+.terraform
+package-lock.json
+web/src/city/legacy
+web/test-results
+web/playwright-report
+docs/reference
+docs/screenshots
+*.md
