@@ -9,6 +9,9 @@ AI City is the owner's personal organization of AI agents, running only in the o
 - Utility calls (wake-word check, titles, compaction): Claude Haiku 5.5, prompts kept under 100,000 tokens
 - Anthropic models only, via Amazon Bedrock with IAM roles. Never an Anthropic API key, never a subscription login.
 
+## Product spec
+- `docs/PRODUCT.md` is the living spec: requirements, features with status, defaults, invariants. Read it first in a new or compacted session, and update it in the same commit as any change to a requirement, feature, default or invariant.
+
 ## Rules
 - Never deploy from an agent session. `terraform apply`, image pushes and AWS CLI changes are run by the owner, or by `deploy.yml` after the owner approves.
 - GitHub workflows are `workflow_dispatch` only unless the owner changes that.
