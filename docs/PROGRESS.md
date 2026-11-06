@@ -62,3 +62,9 @@
 - `scripts/city-off.sh`, `scripts/city-on.sh` (pause flag + queue triggers; owner runs them), `scripts/build-images.sh` (local build, no push). `bash -n` passes on all three.
 - `tests/workflows.test.ts` (7 tests): only `workflow_dispatch`, deploy needs approval and applies the exact plan, CI never touches AWS, OIDC trust is narrow, every commit subject ends with `[skip ci]`.
 - Infra re-checked after adding the OIDC role: validate pass (both roots), tflint 0, checkov 303 passed / 0 failed / 49 justified skips, tag check 57 resources, IAM check pass. Full suite: 12 files, 239 tests pass.
+
+## Phase 9: Documents and final check — done
+- Wrote `ARCHITECTURE.md` (Mermaid diagram, hierarchy, request flow, data model), 10 ADRs, `SECURITY.md` (threat model incl. prompt injection, credential exposure, runaway spend, public login page), `SCALING.md`, `RUNBOOK.md`, `CAPABILITY_GAPS.md`, `COST_ESTIMATE.md` (task costs computed with the project's own `estimateUsd()`), `DEPLOY_CHECKLIST.md`, `MORNING_REPORT.md` (with the requirements table), rewrote `README.md`.
+- Fresh-eyes review found one functional gap and fixed it: Ace's turns did not carry the conversation history. Ace now keeps a 30-day conversation log in the ledger and sees the last 12 lines each turn (new test).
+- Final checks from a **clean clone** (`git clone` + `npm ci`): lint pass, typecheck pass, 12 files / 239 tests pass; web build pass; Playwright 14/14; Lambda and runtime bundles built; terraform fmt pass, validate pass ×2, tflint 0, checkov 303/0/49; tag check and IAM check pass. After the conversation fix, in the working tree: 12 files / **240 tests** pass, lint and typecheck pass.
+- Evidence of no deploy / no secrets: see `MORNING_REPORT.md`.

@@ -248,6 +248,26 @@ describe("the whole chain with a fake model runner", () => {
   });
 });
 
+describe("one Ace conversation", () => {
+  it("the next turn sees the earlier exchange, typed or spoken", async () => {
+    const prompts: string[] = [];
+    const city = makeCity(
+      scriptedEngine({
+        ace: async (req) => (
+          prompts.push(req.turn.prompt),
+          prompts.length === 1 ? "Eighteen." : "You asked about 9 + 9."
+        ),
+      }),
+    );
+    await city.ownerSays("yo Ace, what's 9 + 9?");
+    await city.run();
+    await city.ownerSays("what did I just ask?");
+    await city.run();
+    expect(prompts[1]).toMatch(/Owner: yo Ace, what's 9 \+ 9\?/);
+    expect(prompts[1]).toMatch(/Ace: Eighteen\./);
+  });
+});
+
 describe("@agent instructions", () => {
   it("reach the right worker with its manager copied", async () => {
     const quietWorker: Script = async () => "working on it";

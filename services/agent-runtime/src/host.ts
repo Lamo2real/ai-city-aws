@@ -152,8 +152,12 @@ export class AgentHost {
           SpendUsd: result.usd,
         },
       );
-      if (isAce && inv.conversation)
+      if (isAce && inv.conversation) {
         await bus.put({ type: "ace.reply", conversation: inv.conversation, text: result.output.text, done: true });
+        if (inv.from === "owner") await ledger.addConversationLine(inv.conversation, "owner", inv.body);
+        else await ledger.addConversationLine(inv.conversation, "owner", `[${inv.kind} from ${inv.from}]`);
+        await ledger.addConversationLine(inv.conversation, "ace", result.output.text);
+      }
       await bus.put({ type: "activity", id: agent.id, activity: "idle" });
       await ledger.finishWork(inv.id);
       return result.output.text;
@@ -202,7 +206,18 @@ export class AgentHost {
   private async prompt(agent: AgentRecord, inv: Invocation): Promise<string> {
     const { ledger } = this.d;
     const lines = [`Message (${inv.kind}) from ${inv.from}:`, inv.body, "", "Current state from the ledger:"];
-    if (inv.role === "orchestrator") {
+    if (inv.role === "ace" && inv.conversation) {
+      const recent = await ledger.recentConversation(inv.conversation);
+      if (recent.length) {
+        lines.splice(
+          0,
+          0,
+          "Conversation so far (most recent last):",
+          ...recent.map((l) => `${l.who === "ace" ? "Ace" : "Owner"}: ${l.text}`),
+          "",
+        );
+      }
+    } else if (inv.role === "orchestrator") {
       const task = await ledger.getTicket(inv.taskId);
       lines.push(`Task ${inv.taskId}: ${task?.goal ?? ""} [${task?.status ?? "?"}]`);
       lines.push(`Departments: ${(await ledger.listDepartments()).map((d) => d.name).join(", ") || "none yet"}`);

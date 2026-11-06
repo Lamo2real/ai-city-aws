@@ -553,6 +553,22 @@ export class Ledger {
     return (await this.table.query(`TOOL#${agentId}`)).map((i) => strip(i)!);
   }
 
+  /** Ace's conversation: typed and spoken turns share it. Kept 30 days; the prompt uses the last few lines. */
+  async addConversationLine(conversation: string, who: "owner" | "ace", text: string): Promise<void> {
+    const at = this.iso();
+    await this.table.put({
+      pk: `CONV#${conversation}`,
+      sk: `${at}#${seq()}`,
+      who,
+      text: text.slice(0, 4000),
+      at,
+      ttl: Math.floor(this.now().getTime() / 1000) + 30 * 86_400,
+    });
+  }
+  async recentConversation(conversation: string, n = 12): Promise<Array<{ who: string; text: string; at: string }>> {
+    return (await this.table.query(`CONV#${conversation}`)).slice(-n).map((i) => strip(i)!);
+  }
+
   /** True the first time a key is seen (within its TTL), false for a duplicate delivery. */
   async claim(key: string, ttlSeconds = 86_400): Promise<boolean> {
     return this.table.put(
