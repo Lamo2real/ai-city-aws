@@ -1,7 +1,7 @@
 [project]
 name = "aic"
 version = "0.2.0"
-description = "AI City (Ace) backend: shared core, Lambdas and the AgentCore runtime, in Python."
+description = "AI City (AIC) backend: shared core, Lambdas and the AgentCore runtime, in Python."
 requires-python = ">=3.13"
 dependencies = [
   "boto3>=1.40",

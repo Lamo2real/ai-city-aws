@@ -185,7 +185,7 @@ resource "aws_cognito_identity_pool_roles_attachment" "voice" {
 resource "aws_transcribe_vocabulary" "names" {
   vocabulary_name = "${var.name}-names"
   language_code   = "en-US"
-  phrases         = ["Ace", "A.I.C.", "AI-City", "Orchestrator"]
+  phrases         = ["A.I.C.", "AI-City", "Orchestrator"]
   tags            = local.tags
 }
 

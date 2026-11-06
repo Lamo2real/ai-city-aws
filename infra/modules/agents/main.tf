@@ -136,7 +136,7 @@ resource "aws_iam_role_policy" "common" {
   })
 }
 
-# Ace, the Orchestrator and managers coordinate: ledger and queues. Workers don't (see worker.json).
+# AIC, the Orchestrator and managers coordinate: ledger and queues. Workers don't (see worker.json).
 resource "aws_iam_role_policy" "coordinator" {
   for_each = toset(["ace", "orchestrator", "manager"])
   name     = "coordinate"

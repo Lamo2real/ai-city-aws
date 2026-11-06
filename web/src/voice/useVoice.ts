@@ -1,4 +1,4 @@
-// Push-to-talk, the optional wake-word mode, and spoken replies, shared by the Ace screen and the
+// Push-to-talk, the optional wake-word mode, and spoken replies, shared by the AIC screen and the
 // City view's big mic button. Typed and spoken turns go into the same conversation.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { sendMessage } from "../lib/actions.ts";

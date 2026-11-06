@@ -39,7 +39,7 @@ def notice_for(detail: Any) -> Notice | None:
     if t == "result":
         return Notice(
             "AI City: a task is done",
-            f"Ace has a result for you. Open AI City to hear it.\n\nSummary: {e['summary'][:300]}",
+            f"AIC has a result for you. Open AI City to hear it.\n\nSummary: {e['summary'][:300]}",
         )
     if t == "spend.cap_reached":
         return Notice(

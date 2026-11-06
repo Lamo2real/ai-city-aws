@@ -51,7 +51,7 @@ describe("IAM", () => {
       .flatMap((s) => s.Resource);
     expect(workerQueues).toEqual([expect.stringMatching(/aic-prod-manager$/)]);
   });
-  it("Fable roles may invoke their Opus fallback; Ace only Sonnet", () => {
+  it("Fable roles may invoke their Opus fallback; AIC only Sonnet", () => {
     const models = (role: string) =>
       (rolePolicies(role) as Stmt[])
         .filter((s) => actions([s]).includes("bedrock:InvokeModel"))

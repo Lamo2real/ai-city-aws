@@ -1,4 +1,4 @@
-# AI City (Ace) — product spec (living document)
+# AI City (AIC) — product spec (living document)
 
 **Read this first after a context reset or a compacted session.** It is the single source of truth for what the product must do, what it does today, and where each part lives. Details live in the linked docs; this file stays short enough to read in one go.
 
@@ -13,7 +13,7 @@ Last updated: 2026-11-06 (initial build, not deployed).
 ---
 
 ## 1. What the product is
-The owner's personal organization of AI agents, running only in the owner's AWS account. The owner signs in to a web app and talks or types to **Ace** (written AIC, said "Ace"). Ace hands real work to an organization that hires workers on demand, does the work, checks it, and reports back.
+The owner's personal organization of AI agents, running only in the owner's AWS account. The owner signs in to a web app and talks or types to **AIC** (said as the letters A-I-C; it used to be called "Ace"). AIC hands real work to an organization that hires workers on demand, does the work, checks it, and reports back.
 
 ## 2. Non-negotiables (from `CLAUDE.md` and `BUILD_PROMPT.md`)
 1. **AWS only, serverless-first.** Agents on Amazon Bedrock AgentCore; everything else Lambda, API Gateway, DynamoDB, SQS, EventBridge, Step Functions, S3, CloudFront, Cognito. No EC2 for the core. Code on GitHub.
@@ -33,11 +33,11 @@ The owner's personal organization of AI agents, running only in the owner's AWS 
 
 ## 3. The hierarchy (exactly this)
 ```
-Owner (Cognito) → Ace → Orchestrator → Department Manager (one per department) → Workers (unlimited, hired per assignment)
+Owner (Cognito) → AIC → Orchestrator → Department Manager (one per department) → Workers (unlimited, hired per assignment)
 ```
 | Agent | Model | Does | Tools |
 |---|---|---|---|
-| Ace | Sonnet 5.5 | Talks to the owner; answers simple things; hands real work to the Orchestrator; relays questions; reports results | `delegate_to_orchestrator`, `get_status`, `answer_question`, `instruct_agent` (@agent, manager copied), `add_note`, `list_notes`, `add_reminder`, `pause_city`, `resume_city` |
+| AIC | Sonnet 5.5 | Talks to the owner; answers simple things; hands real work to the Orchestrator; relays questions; reports results | `delegate_to_orchestrator`, `get_status`, `answer_question`, `instruct_agent` (@agent, manager copied), `add_note`, `list_notes`, `add_reminder`, `pause_city`, `resume_city` |
 | Orchestrator | Fable 5.1 → Opus 5.5 once | Plans, creates departments (data), one goal per department, **final sign-off** before anything leaves the city (PR to main, protected push, spend) | `create_department`, `assign_to_department`, `get_reports`, `sign_off`, `ask_owner`, `report_to_ace` |
 | Manager | Fable 5.1 → Opus 5.5 once | Plans the department's work, hires, **reviews every deliverable (PASS/FAIL)**, releases, reports | `hire_worker`, `assign`, `answer_worker`, `review`, `release_worker`, `save_specialist`, `ask_owner`, `report_to_orchestrator` |
 | Worker | Opus 5.5 | One assignment, then released | granted built-ins (shell, files, git, web, Code Interpreter, Browser) + `ask_manager`, `report_to_manager` |
@@ -46,7 +46,7 @@ Owner (Cognito) → Ace → Orchestrator → Department Manager (one per departm
 No Reviewer and no Executive Secretary. The owner merges PRs into `main`.
 
 ## 4. How it runs (one paragraph)
-Owner message → `POST /messages` → SQS (`ace` queue) → **dispatcher** Lambda (pause flag → spend caps, if the owner set any → worker ceilings → session rate → lease) → `InvokeAgentRuntime` → runtime **host** reads the ledger, builds the prompt, runs one **gated turn** (caps, throttle back-off, fallback once, cost row) → tools write the ledger, put events on the bus, queue the next agent → turn ends. Events fan out to the WebSocket (City view, Ace's streamed reply), the ledger (ticket trace) and SNS email. Turns are stateless: context comes from the ledger each turn (plus Ace's conversation log). Details: `docs/ARCHITECTURE.md`.
+Owner message → `POST /messages` → SQS (`ace` queue) → **dispatcher** Lambda (pause flag → spend caps, if the owner set any → worker ceilings → session rate → lease) → `InvokeAgentRuntime` → runtime **host** reads the ledger, builds the prompt, runs one **gated turn** (caps, throttle back-off, fallback once, cost row) → tools write the ledger, put events on the bus, queue the next agent → turn ends. Events fan out to the WebSocket (City view, AIC's streamed reply), the ledger (ticket trace) and SNS email. Turns are stateless: context comes from the ledger each turn (plus AIC's conversation log). Details: `docs/ARCHITECTURE.md`.
 
 ## 5. Key defaults (change in Settings / `config/caps.json` / `prod.tfvars`)
 | Setting | Default |
@@ -58,7 +58,7 @@ Owner message → `POST /messages` → SQS (`ace` queue) → **dispatcher** Lamb
 | Turn timeout / worker async soft limit | 15 min / 7.5 h (hard 8 h) |
 | Review rounds before asking the owner | 3 |
 | Inference profile prefix | `global` (`eu` → Fable roles use Opus) |
-| Prompt cache TTL | 1 h orchestrator/managers, 5 min Ace/workers |
+| Prompt cache TTL | 1 h orchestrator/managers, 5 min AIC/workers |
 | Log retention | 30 days |
 | Scheduled jobs | all created **DISABLED** |
 
@@ -77,7 +77,7 @@ Owner message → `POST /messages` → SQS (`ace` queue) → **dispatcher** Lamb
 | Hierarchy | Agent Factory (spec validation, unlimited hires, saved specialists) | ✅ | `hierarchy/factory.py` |
 | Hierarchy | Dispatcher ceilings, session rate, idempotent leases, crash sweep | ✅ | `hierarchy/dispatch.py` |
 | Hierarchy | `@agent` instructions with manager copied (no extra turn) | ✅ | `hierarchy/actions.py` |
-| Hierarchy | Ace conversation memory (typed + spoken, last 12 lines) | ✅ | `ledger.py`, `runtime/host.py` |
+| Hierarchy | AIC conversation memory (typed + spoken, last 12 lines) | ✅ | `ledger.py`, `runtime/host.py` |
 | Runtime | AgentCore container (8080, `/ping` Healthy/HealthyBusy, `/invocations` sync/async) | ✅ code / 🟡 image never built | `backend/src/aic/runtime/server.py`, `services/agent-runtime/Dockerfile` |
 | Runtime | Claude Agent SDK (Python) engine on Bedrock | 🟡 type-checked only, never run against Bedrock | `runtime/engine.py` |
 | API | HTTP API, 22 routes, owner group re-checked | ✅ | `backend/src/aic/lambdas/api.py` |
@@ -85,8 +85,8 @@ Owner message → `POST /messages` → SQS (`ace` queue) → **dispatcher** Lamb
 | API | Notifications (results, cap alerts, pause, 15-min question nudge) | ✅ / nudge job off | `lambdas/notifier.py` |
 | Voice | Push-to-talk, wake mode (plain match, Haiku for unclear), Transcribe + Polly via identity pool | 🟡 fake voice only | `web/src/voice/`, `utility.py`, `tests/fixtures/wake-cases.json` |
 | HUD | Own sign-in screens: temporary password → own password (live rules) → authenticator app (QR + key) → code; later password + code; forgot password; “send me a new first-login email” (public API route, owner's email only, 1 per 10 min) | ✅ (fake auth in Playwright) / 🟡 real Cognito not yet tried | `web/src/components/SignIn.tsx`, `web/src/lib/auth.ts`, `backend/src/aic/lambdas/api.py` |
-| HUD | Ace screen (Ace's eye: the owner's own drawing, `web/public/ace-eye.png`; states idle/listening/thinking/speaking/waiting; streaming; drafts + outbox survive reloads) | ✅ | `web/src/components/AceScreen.tsx` |
-| HUD | City view ported from the Mac HUD (Ace in plaza, Orchestrator at HQ door, manager at each department door, workers walk in/out, FREE LOTs, growing town, count badges, houses for specialists, top bar, right panel, bottom bar) | ✅ | `web/src/city/`, `CityView.tsx` |
+| HUD | AIC screen (AIC's eye: the owner's own drawing, `web/public/ace-eye.png`; states idle/listening/thinking/speaking/waiting; streaming; drafts + outbox survive reloads) | ✅ | `web/src/components/AceScreen.tsx` |
+| HUD | City view ported from the Mac HUD (AIC in plaza, Orchestrator at HQ door, manager at each department door, workers walk in/out, FREE LOTs, growing town, count badges, houses for specialists, top bar, right panel, bottom bar) | ✅ | `web/src/city/`, `CityView.tsx` |
 | HUD | Needs you (default answer in one tap; hold-to-approve), Tickets, Costs, Settings, first-run guide, spend pill (amber 80 %, red 100 %) | ✅ | `web/src/components/` |
 | HUD | Idiot-proof rules (one primary button, confirms with cost, Undo, plain errors, 44 px targets) | ✅ | `docs/UX_REVIEW.md` |
 | Infra | Terraform: 10 modules, prod root (state bucket created by `deploy.yml`); KMS; deletion protection | 🟡 offline checks only | `infra/` |
@@ -148,7 +148,8 @@ Terraform (offline only): `fmt -check -recursive`, `init -backend=false`, `valid
 ## 10. Feature log (newest first)
 | Date | Feature | Notes |
 |---|---|---|
-| 2026-11-06 | Own sign-in, clear first-login email, Ace's eye | The HUD signs in on its own screens (Amplify Auth, SRP; no Cognito hosted pages): first login walks through temporary password → own password → authenticator app. Cognito's invitation email is rewritten (link, user name, temporary password valid 7 days, steps) and so is the reset-code email; a public `POST /auth/first-login-email` re-sends the invitation (owner only, once per 10 min, same answer for any email). Ace is shown with one eye, the owner's own drawing. |
+| 2026-11-07 | Named AIC, not Ace | The owner's choice: the front agent is called AIC everywhere (screens, its prompt, docs) and is said as the letters A-I-C; Polly reads it as “A.I.C.”. The wake word is AIC / “A I C”; “Ace” no longer wakes it. Internal ids (`ace` role, queues, runtimes) are unchanged so nothing in AWS is replaced. Also: the HUD's CSP now allows Cognito's sign-in API (`cognito-idp`), which our own sign-in screens need. |
+| 2026-11-06 | Own sign-in, clear first-login email, AIC's eye | The HUD signs in on its own screens (Amplify Auth, SRP; no Cognito hosted pages): first login walks through temporary password → own password → authenticator app. Cognito's invitation email is rewritten (link, user name, temporary password valid 7 days, steps) and so is the reset-code email; a public `POST /auth/first-login-email` re-sends the invitation (owner only, once per 10 min, same answer for any email). AIC is shown with one eye, the owner's own drawing. |
 | 2026-11-06 | Deploy stages | `deploy.yml` runs **web** and **backend** (ruff, mypy, pytest, Lambda package) in parallel, then **plan → apply → frontend**; the plan job prints the OIDC claims GitHub presents (never the token), so a trust-policy mismatch is visible in the log. |
 | 2026-11-06 | Backend in Python | The owner's choice: the whole application (shared core, 10 Lambdas, the AgentCore runtime) is Python 3.13 in `backend/` (`uv`, ruff, mypy, pytest; Claude Agent SDK for Python, whose wheel bundles the CLI). The HUD stays React, the infrastructure Terraform. Same behaviour, same JSON on the wire and in DynamoDB; 219 pytest tests replace the vitest backend tests. Lambdas ship as one zip (`backend/scripts/build_lambdas.py`, `python3.13`, arm64). |
 | 2026-11-06 | Push to main deploys | Owner's choice: `deploy.yml` runs on every push to `main` (docs-only pushes skipped) and applies without an approval step. The image tag is a hash of the runtime's sources, so web-only pushes don't rebuild it. Commits no longer need `[skip ci]`; adding it skips a deploy. |

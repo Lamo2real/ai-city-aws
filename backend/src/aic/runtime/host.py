@@ -55,7 +55,7 @@ class AgentHost:
 
     async def ensure_core(self) -> None:
         at = now_iso(self.d.ledger.now())
-        for id, role, model in (("ace", "Ace", "sonnet-5-5"), ("orchestrator", "Orchestrator", "fable-5-1")):
+        for id, role, model in (("ace", "AIC", "sonnet-5-5"), ("orchestrator", "Orchestrator", "fable-5-1")):
             if not await self.d.ledger.get_agent(id):
                 await self.d.ledger.put_agent(
                     {
@@ -229,7 +229,7 @@ class AgentHost:
             if recent:
                 lines = [
                     "Conversation so far (most recent last):",
-                    *[f"{'Ace' if r['who'] == 'ace' else 'Owner'}: {r['text']}" for r in recent],
+                    *[f"{'AIC' if r['who'] == 'ace' else 'Owner'}: {r['text']}" for r in recent],
                     "",
                     *lines,
                 ]

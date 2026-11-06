@@ -1,6 +1,6 @@
 // The City view scene, ported from the owner's Mac HUD (ai-city/jarvis/hud/city.js): the same pixel art,
 // drawn in code, the same streets, plaza, fountain, offices, free lots and houses. Changed for AWS:
-// Ace stands in the plaza where Jarvis stood, the Orchestrator at the HQ entrance, no Secretary or
+// AIC stands in the plaza where Jarvis stood, the Orchestrator at the HQ entrance, no Secretary or
 // Reviewer; each department's manager stands at its door; panels are React (see CityView.tsx).
 // The City View: a small game world of the agents, drawn pixel by pixel on a canvas from city-state.js.
 // All of the art is drawn here in code. Every person on screen is a real agent; only the scenery moves on its own.
@@ -310,7 +310,7 @@ function freeLot(g, l, text) {
 }
 
 // Where the four of the core stand on the plaza, in art pixels from the corner of HQ's plot.
-// The Orchestrator stands on the podium at the HQ entrance; Ace in the plaza, by the fountain.
+// The Orchestrator stands on the podium at the HQ entrance; AIC in the plaza, by the fountain.
 const CORE_SPOT = { orchestrator: [96, 100], ace: [62, 152] };
 const FOUNTAIN = [112, 140];
 const CORE_DESK = new Set();
@@ -733,7 +733,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     // The one being looked at gets an arrow and its name; so does whoever the mouse is on, and the core keep name plates.
     for (const p of order) if (p.id === selected || p.id === hover || CORE.has(p.id)) {
       const a = state.agents[p.id];
-      if (a) label(p.id === hover && p.visual && p.visual !== "idle" ? `${p.id === "ace" ? "ACE" : p.id}: ${VISUALS[p.visual].label}` : p.id === "ace" ? "ACE" : p.id, p.x, p.y + 4, p.id === selected ? INK : "#fff6e0", p.id === selected ? "#ffd84a" : INK);
+      if (a) label(p.id === hover && p.visual && p.visual !== "idle" ? `${p.id === "ace" ? "AIC" : p.id}: ${VISUALS[p.visual].label}` : p.id === "ace" ? "AIC" : p.id, p.x, p.y + 4, p.id === selected ? INK : "#fff6e0", p.id === selected ? "#ffd84a" : INK);
     }
     for (const p of order) if (p.say && p.say.until > performance.now()) label(p.say.text, p.x, p.y - 46, INK, "#8fdcff"); // AIC's word stays on top of every mark
     const s = selected && people.get(selected);

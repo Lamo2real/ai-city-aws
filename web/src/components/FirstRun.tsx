@@ -1,12 +1,12 @@
-// A three-step guide on first login: meet Ace, see the City, where the money is. Skippable, and it
+// A three-step guide on first login: meet AIC, see the City, where the money is. Skippable, and it
 // can be opened again from Settings.
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./ui.tsx";
 
 const STEPS = [
   {
-    title: "Meet Ace",
-    text: "Ace is the only one you talk to. Type or tap the mic and just ask: “yo Ace, what’s the status?”. Ace hands real work to the team and tells you when it is done.",
+    title: "Meet AIC",
+    text: "AIC is the only one you talk to. Type or tap the mic and just ask: “yo AIC, what’s the status?”. AIC hands real work to the team and tells you when it is done.",
   },
   {
     title: "See the City",

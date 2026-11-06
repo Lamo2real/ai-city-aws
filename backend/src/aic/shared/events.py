@@ -54,7 +54,7 @@ class TicketRecord(_M):
     result: str | None = None
     review_rounds: float = 0
     conversation: str | None = None
-    """Ace's conversation the task came from, so the result is spoken back there."""
+    """AIC's conversation the task came from, so the result is spoken back there."""
     created_at: str
     updated_at: str
 

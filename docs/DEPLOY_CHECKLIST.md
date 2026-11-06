@@ -57,17 +57,17 @@ aws bedrock list-inference-profiles --region eu-north-1 --profile aic --query "i
 
 ## H. After the first apply (~20 min)
 27. **Confirm the alert emails**: you get two "AWS Notification - Subscription Confirmation" emails (city notifications and, separately, the budget emails go straight to you). Click **Confirm subscription**.
-28. **First sign-in** (all on AI City's own screens): open `hud_url`. The email **“Welcome to AI City: your first sign-in”** (from `no-reply@verificationemail.com`; check spam) has your user name and a **temporary password** (valid 7 days). Sign in with it → **choose your own password** (the rules are shown and ticked off as you type) → **connect an authenticator app** (scan the QR code, or type the key) → type the 6-digit code. You land on Ace. No email, or it expired? Choose **“First time here, or the temporary password expired?”** on the sign-in screen for a new one (owner's email only, once per 10 minutes). Forgot your own password later? **“Forgot your password?”**.
+28. **First sign-in** (all on AI City's own screens): open `hud_url`. The email **“Welcome to AI City: your first sign-in”** (from `no-reply@verificationemail.com`; check spam) has your user name and a **temporary password** (valid 7 days). Sign in with it → **choose your own password** (the rules are shown and ticked off as you type) → **connect an authenticator app** (scan the QR code, or type the key) → type the 6-digit code. You land on AIC. No email, or it expired? Choose **“First time here, or the temporary password expired?”** on the sign-in screen for a new one (owner's email only, once per 10 minutes). Forgot your own password later? **“Forgot your password?”**.
 29. **Secrets** (only when you need them): Secrets Manager → `aic/prod/github` → Retrieve secret value → **Set secret value** → paste a fine-grained GitHub token scoped to the repos workers may touch (contents read/write, pull requests read/write). Google and Spotify stay empty while their integrations are off.
 30. **Activate cost allocation tags** (takes up to 24 h to appear): Billing → Cost allocation tags → User-defined → select `Project`, `App`, `Environment`, `Owner`, `ManagedBy`, `CostCenter`, `Component`, `AgentRole` → **Activate**.
 31. Turn on the crash sweep: EventBridge → Scheduler → group `aic-prod` → `aic-prod-sweep` → Enable. (Others are optional; leave `aic-prod-improve` disabled.)
 
 ## I. First live smoke test, under a $1 cap (~10 min)
 32. In the HUD: **Settings → Daily cap, all departments = 1**, **per department = 1** → Save. (Caps are off by default; this one is just for the smoke test.)
-33. Say or type: **"yo Ace, what's 9 + 9?"** → Ace answers "Eighteen." (one Sonnet turn, about a cent).
+33. Say or type: **"yo AIC, what's 9 + 9?"** → AIC answers "Eighteen." (one Sonnet turn, about a cent).
 34. One turn per model:
-   - Haiku: turn on **Hands-free** and say something unclear that mentions Ace (e.g. "I told Ace about it") → the wake check asks Haiku.
-   - Fable + Opus: ask "Ace, create a Research department and have it find today's date in Stockholm from one official source." → watch the City: a building goes up, the manager hires one worker, the worker reports, the manager reviews, the Orchestrator signs off, Ace tells you.
+   - Haiku: turn on **Hands-free** and say something unclear that mentions AIC (e.g. "I told AIC about it") → the wake check asks Haiku.
+   - Fable + Opus: ask "AIC, create a Research department and have it find today's date in Stockholm from one official source." → watch the City: a building goes up, the manager hires one worker, the worker reports, the manager reviews, the Orchestrator signs off, AIC tells you.
 35. Check **Costs (estimates)** shows a few cents by role and model, and the CloudWatch dashboard `aic-prod` shows turns.
 36. Empty the cap fields again and Save for no limit (or keep any cap you want).
 

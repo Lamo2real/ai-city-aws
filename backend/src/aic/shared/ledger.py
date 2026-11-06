@@ -503,7 +503,7 @@ class Ledger:
         return [_strip(i) for i in await self.table.query(f"TOOL#{agent_id}")]
 
     async def add_conversation_line(self, conversation: str, who: Literal["owner", "ace"], text: str) -> None:
-        """Ace's conversation: typed and spoken turns share it. Kept 30 days; the prompt uses the last few lines."""
+        """AIC's conversation: typed and spoken turns share it. Kept 30 days; the prompt uses the last few lines."""
         at = self._iso()
         await self.table.put(
             {

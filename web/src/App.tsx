@@ -19,7 +19,7 @@ import { SignIn } from "./components/SignIn.tsx";
 const VIEWS = ["ace", "city", "inbox", "tickets", "costs", "settings"] as const;
 type View = (typeof VIEWS)[number];
 const LABEL: Record<View, string> = {
-  ace: "Ace",
+  ace: "AIC",
   city: "City",
   inbox: "Needs you",
   tickets: "Tickets",
@@ -120,7 +120,7 @@ export function App() {
         Skip to content
       </a>
       <header className="top">
-        <button type="button" className="brand" onClick={() => go("ace")} aria-label="AI City — talk to Ace">
+        <button type="button" className="brand" onClick={() => go("ace")} aria-label="AI City — talk to AIC">
           <Eyes presence={presence} small />
           <span className="pixel">AI CITY</span>
         </button>
@@ -155,8 +155,8 @@ export function App() {
       <Toaster />
       {view !== "ace" && view !== "city" ? (
         <div className="fab">
-          <Button variant="quiet" onClick={() => go("ace")} label="Talk to Ace">
-            Talk to Ace
+          <Button variant="quiet" onClick={() => go("ace")} label="Talk to AIC">
+            Talk to AIC
           </Button>
         </div>
       ) : null}

@@ -98,13 +98,13 @@ def test_every_role_prompt_exists_and_lists_its_tools() -> None:
 def test_aces_prompt_states_its_name_greetings_spoken_style_and_limits() -> None:
     body = load_prompt("ace.md").body
     for s in (
-        "Ace",
         "AIC",
-        "yo Ace",
-        "hi Ace",
-        "what's up Ace",
-        "how's it going Ace",
-        "what's the status of the product, Ace?",
+        "AIC",
+        "yo AIC",
+        "hi AIC",
+        "what's up AIC",
+        "how's it going AIC",
+        "what's the status of the product, AIC?",
         "Short",
         "can't",
     ):

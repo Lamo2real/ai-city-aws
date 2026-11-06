@@ -35,7 +35,7 @@ export function Inbox() {
     return (
       <section className="screen" aria-labelledby="inbox-title">
         <h1 id="inbox-title">Needs you</h1>
-        <p className="empty">Nothing is waiting for you. Ace will tell you when something is.</p>
+        <p className="empty">Nothing is waiting for you. AIC will tell you when something is.</p>
       </section>
     );
 

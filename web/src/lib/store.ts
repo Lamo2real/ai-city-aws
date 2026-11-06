@@ -1,4 +1,4 @@
-// One store for the whole HUD: the city (via the ported reducer), Ace's chat, connection status and
+// One store for the whole HUD: the city (via the ported reducer), AIC's chat, connection status and
 // the owner's outbox. Every screen reads from here; the WebSocket and API write to it.
 import { useSyncExternalStore } from "react";
 import { applySnapshot, initialState, reduce, type CityState } from "../city/city-state.js";
@@ -8,7 +8,7 @@ export interface ChatLine {
   id: string;
   who: "owner" | "ace";
   text: string;
-  /** Owner lines: queued (not sent yet), sent, or failed. Ace lines: streaming until done. */
+  /** Owner lines: queued (not sent yet), sent, or failed. AIC lines: streaming until done. */
   state: "queued" | "sent" | "failed" | "streaming" | "done";
   at: number;
 }

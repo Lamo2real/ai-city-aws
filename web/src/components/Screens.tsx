@@ -60,7 +60,7 @@ export function Tickets() {
       {!data && !error ? <Loading what="tickets" /> : null}
       {data && !data.tickets.length ? (
         <p className="empty">
-          {which === "live" ? "Nothing is being worked on. Ask Ace for something." : "Nothing finished yet."}
+          {which === "live" ? "Nothing is being worked on. Ask AIC for something." : "Nothing finished yet."}
         </p>
       ) : null}
       <ul className="list">

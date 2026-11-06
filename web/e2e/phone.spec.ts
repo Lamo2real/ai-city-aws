@@ -1,15 +1,15 @@
-// On a phone: Ace is the default, the mic is in reach, the City fits and the money is visible.
+// On a phone: AIC is the default, the mic is in reach, the City fits and the money is visible.
 import { expect, test } from "@playwright/test";
 import { hired, mockBackend } from "./mock.ts";
 
 const SHOTS = `${import.meta.dirname}/../../docs/screenshots`;
 
-test("phone: Ace and the City work at 412px wide", async ({ page }) => {
+test("phone: AIC and the City work at 412px wide", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/");
-  await expect(page.getByRole("textbox", { name: "Message to Ace" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Message to AIC" })).toBeVisible();
   await expect(page.getByRole("button", { name: /Today:/ })).toBeVisible();
-  const mic = page.getByRole("button", { name: "Talk to Ace", exact: true });
+  const mic = page.getByRole("button", { name: "Talk to AIC", exact: true });
   const box = (await mic.boundingBox())!;
   expect(box.height).toBeGreaterThanOrEqual(44);
   await page.screenshot({ path: `${SHOTS}/phone-ace.png` });

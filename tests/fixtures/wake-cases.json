@@ -2,31 +2,31 @@
   "$comment": "Wake-word answers both halves must give: the browser (web/src/voice/wake.ts) and the server (backend/src/aic/shared/utility.py). Tests on both sides read this file.",
   "cases": [
     {
-      "text": "yo Ace",
+      "text": "yo AIC",
       "want": "yes"
     },
     {
-      "text": "hi Ace, status",
+      "text": "hi AIC, status",
       "want": "yes"
     },
     {
-      "text": "hey ace",
+      "text": "hey a.i.c.",
       "want": "yes"
     },
     {
-      "text": "what's up Ace",
+      "text": "what's up AIC",
       "want": "yes"
     },
     {
-      "text": "how's it going Ace",
+      "text": "how's it going AIC",
       "want": "yes"
     },
     {
-      "text": "Ace, pause everything",
+      "text": "AIC, pause everything",
       "want": "yes"
     },
     {
-      "text": "what's the status of the product, Ace?",
+      "text": "what's the status of the product, AIC?",
       "want": "yes"
     },
     {
@@ -35,7 +35,7 @@
     },
     {
       "text": "I have an ace",
-      "want": "yes"
+      "want": "no"
     },
     {
       "text": "AIC hello",
@@ -46,7 +46,7 @@
       "want": "no"
     },
     {
-      "text": "so I told ace about it",
+      "text": "so I told AIC about it",
       "want": "unclear"
     },
     {
@@ -59,7 +59,15 @@
     },
     {
       "text": "I placed an ace in the deck",
-      "want": "unclear"
+      "want": "no"
+    },
+    {
+      "text": "yo Ace",
+      "want": "no"
+    },
+    {
+      "text": "hey A I C, status",
+      "want": "yes"
     }
   ]
 }

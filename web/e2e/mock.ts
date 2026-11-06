@@ -32,7 +32,7 @@ export const baseSnapshot = () => ({
     {
       id: "ace",
       kind: "core",
-      role: "Ace",
+      role: "AIC",
       department: null,
       model: "sonnet-5-5",
       parent: null,
@@ -130,7 +130,7 @@ export async function mockBackend(
       (window as unknown as { __aicVoice: unknown }).__aicVoice = {
         async listen(onText: (t: string) => void) {
           const t = setTimeout(
-            () => onText((window as unknown as { __heard?: string }).__heard ?? "yo Ace, status?"),
+            () => onText((window as unknown as { __heard?: string }).__heard ?? "yo AIC, status?"),
             300,
           );
           return () => clearTimeout(t);

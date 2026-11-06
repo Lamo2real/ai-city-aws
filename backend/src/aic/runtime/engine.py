@@ -31,7 +31,7 @@ class EngineRequest:
     ctx: TurnCtx
     ledger: Ledger
     on_text: Callable[[str], Awaitable[None]] | None = None
-    """Text as it streams, for Ace's spoken replies."""
+    """Text as it streams, for AIC's spoken replies."""
     on_needs_approval: Callable[[str, dict[str, Any], str, str], Awaitable[None]] | None = None
     """Called when a built-in tool call needs the owner's approval for this exact action (tool, input, hash, reason)."""
     on_activity: Callable[[str, str | None], Awaitable[None]] | None = None

@@ -57,7 +57,7 @@ test("first sign-in on our own screens: temporary password, own password, authen
   await page.getByLabel("6-digit code").fill("123456");
   await page.getByRole("button", { name: "Confirm and sign in" }).click();
 
-  await expect(page.getByRole("button", { name: "AI City — talk to Ace" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "AI City — talk to AIC" })).toBeVisible();
 });
 
 test("later sign-ins: a wrong password says so plainly; then password and code", async ({ page }) => {
@@ -73,7 +73,7 @@ test("later sign-ins: a wrong password says so plainly; then password and code",
   await page.getByLabel("6-digit code", { exact: true }).fill("12a3456"); // only digits are kept
   await expect(page.getByLabel("6-digit code", { exact: true })).toHaveValue("123456");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "AI City — talk to Ace" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "AI City — talk to AIC" })).toBeVisible();
 });
 
 test("forgot password and a new first-login email, without leaving AI City", async ({ page }) => {
@@ -100,7 +100,7 @@ test("forgot password and a new first-login email, without leaving AI City", asy
 test("first login shows a three-step guide that can be skipped", async ({ page }) => {
   await mockBackend(page, { firstRunDone: false });
   await page.goto("/");
-  await expect(page.getByRole("dialog", { name: "Meet Ace" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Meet AIC" })).toBeVisible();
   await shot(page, "first-run-guide");
   await page.getByRole("button", { name: "Next" }).click();
   await expect(page.getByRole("heading", { name: "See the City" })).toBeVisible();
@@ -108,46 +108,46 @@ test("first login shows a three-step guide that can be skipped", async ({ page }
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
-test("lands on Ace with the input focused; asking something shows Ace's streamed reply", async ({ page }) => {
+test("lands on AIC with the input focused; asking something shows AIC's streamed reply", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/");
-  const box = page.getByRole("textbox", { name: "Message to Ace" });
+  const box = page.getByRole("textbox", { name: "Message to AIC" });
   await expect(box).toBeFocused();
-  await expect(page.getByRole("button", { name: "Talk to Ace", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Talk to AIC", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /Today: \$0.42 of \$10/ })).toBeVisible();
   expect(await primaries(page)).toBeLessThanOrEqual(1);
-  await box.fill("yo Ace, what's 9 + 9?");
-  await page.getByRole("button", { name: "Send to Ace" }).click();
+  await box.fill("yo AIC, what's 9 + 9?");
+  await page.getByRole("button", { name: "Send to AIC" }).click();
   await expect
     .poll(() => m.calls.find((c) => c.path === "/messages")?.body)
-    .toMatchObject({ text: "yo Ace, what's 9 + 9?", conversation: "main" });
-  await expect(page.locator("section.ace").getByRole("img", { name: "Ace is thinking" })).toBeVisible();
+    .toMatchObject({ text: "yo AIC, what's 9 + 9?", conversation: "main" });
+  await expect(page.locator("section.ace").getByRole("img", { name: "AIC is thinking" })).toBeVisible();
   m.send({ type: "ace.reply", conversation: "main", text: "Eigh", done: false });
   m.send({ type: "ace.reply", conversation: "main", text: "Eighteen.", done: true });
-  await expect(page.getByLabel("Conversation with Ace").getByText("Eighteen.")).toBeVisible();
+  await expect(page.getByLabel("Conversation with AIC").getByText("Eighteen.")).toBeVisible();
   await expect(page.getByText(/Not sent yet/)).toHaveCount(0); // delivered, so nothing waits in the outbox
   await shot(page, "ace");
-  await noSeriousA11y(page, "Ace");
+  await noSeriousA11y(page, "AIC");
 });
 
-test("push-to-talk sends what the owner said to Ace", async ({ page }) => {
+test("push-to-talk sends what the owner said to AIC", async ({ page }) => {
   const m = await mockBackend(page);
   await page.addInitScript(
-    () => ((window as unknown as { __heard: string }).__heard = "hey Ace, what's the status of the product?"),
+    () => ((window as unknown as { __heard: string }).__heard = "hey AIC, what's the status of the product?"),
   );
   await page.goto("/");
-  await page.getByRole("button", { name: "Talk to Ace", exact: true }).click();
+  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
   await expect
     .poll(() => m.calls.find((c) => c.path === "/messages")?.body)
-    .toMatchObject({ text: "hey Ace, what's the status of the product?" });
+    .toMatchObject({ text: "hey AIC, what's the status of the product?" });
 });
 
 test("a draft survives a reload", async ({ page }) => {
   await mockBackend(page);
   await page.goto("/");
-  await page.getByRole("textbox", { name: "Message to Ace" }).fill("half a thought");
+  await page.getByRole("textbox", { name: "Message to AIC" }).fill("half a thought");
   await page.reload();
-  await expect(page.getByRole("textbox", { name: "Message to Ace" })).toHaveValue("half a thought");
+  await expect(page.getByRole("textbox", { name: "Message to AIC" })).toHaveValue("half a thought");
 });
 
 test("watching the City: a department goes up and workers appear when hired", async ({ page }) => {
@@ -189,7 +189,7 @@ test("watching the City: a department goes up and workers appear when hired", as
   await expect(depts.getByLabel("3 workers")).toBeVisible();
   await expect(page.locator(".feed")).toContainText("Department Engineering created");
   await expect(page.locator(".feed")).toContainText("wkr-engineering-a1 got a ticket from mgr-engineering");
-  await expect.poll(async () => Number(await city.getAttribute("data-people"))).toBeGreaterThanOrEqual(6); // Ace, Orchestrator, manager, 3 workers
+  await expect.poll(async () => Number(await city.getAttribute("data-people"))).toBeGreaterThanOrEqual(6); // AIC, Orchestrator, manager, 3 workers
   await page.waitForTimeout(800); // let the walk-in finish for the picture
   await shot(page, "city-workers");
   await depts.getByRole("button", { name: /Engineering/ }).click();
@@ -316,7 +316,7 @@ test("hitting the spend cap: the money pill turns red and the City says so plain
 test("a lost connection says what happened and that nothing was lost", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/");
-  await expect(page.getByRole("textbox", { name: "Message to Ace" })).toBeFocused();
+  await expect(page.getByRole("textbox", { name: "Message to AIC" })).toBeFocused();
   await expect
     .poll(() => {
       try {

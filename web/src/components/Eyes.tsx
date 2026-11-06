@@ -1,14 +1,14 @@
-// Ace's eye: the owner's own eye drawing (public/ace-eye.png, white lines with a transparent background), one
+// AIC's eye: the owner's own eye drawing (public/ace-eye.png, white lines with a transparent background), one
 // eye, used as a mask so each state can colour and move it. Each state has a colour, a motion and a word, so
 // it never relies on colour alone.
 import type { Presence } from "../lib/store.ts";
 
 const WORDS: Record<Presence, string> = {
-  idle: "Ace is here",
-  listening: "Ace is listening",
-  thinking: "Ace is thinking",
-  speaking: "Ace is speaking",
-  waiting: "Ace is waiting for you",
+  idle: "AIC is here",
+  listening: "AIC is listening",
+  thinking: "AIC is thinking",
+  speaking: "AIC is speaking",
+  waiting: "AIC is waiting for you",
 };
 
 export function Eyes({ presence, small = false }: { presence: Presence; small?: boolean }) {

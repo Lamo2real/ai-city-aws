@@ -1,5 +1,5 @@
-// The landing screen: Ace, with the input focused and the mic in reach. Everything else can be done
-// by asking Ace ("Ace, pause everything", "what's the status of the product?").
+// The landing screen: AIC, with the input focused and the mic in reach. Everything else can be done
+// by asking AIC ("AIC, pause everything", "what's the status of the product?").
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { sendMessage } from "../lib/actions.ts";
 import { store, useHud, waitingCount } from "../lib/store.ts";
@@ -52,7 +52,7 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
   return (
     <section className="ace" aria-labelledby="ace-title">
       <h1 id="ace-title" className="sr">
-        Talk to Ace
+        Talk to AIC
       </h1>
       <Eyes presence={shown} />
       {waiting ? (
@@ -69,13 +69,13 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
           automatically.
         </Banner>
       ) : null}
-      <div className="chat" ref={log} aria-live="polite" aria-label="Conversation with Ace">
+      <div className="chat" ref={log} aria-live="polite" aria-label="Conversation with AIC">
         {chat.length === 0 ? (
-          <p className="mute hello">Say hi — try “yo Ace, what’s the status?” or tap the mic.</p>
+          <p className="mute hello">Say hi — try “yo AIC, what’s the status?” or tap the mic.</p>
         ) : null}
         {chat.map((l) => (
           <div key={l.id} className={`line line-${l.who}`}>
-            <span className="who">{l.who === "ace" ? "Ace" : "You"}</span>
+            <span className="who">{l.who === "ace" ? "AIC" : "You"}</span>
             <p>{l.text}</p>
             {l.state === "failed" || l.state === "queued" ? (
               <span className="note">Not sent yet — it will send when the connection is back.</span>
@@ -91,20 +91,20 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
           className={`mic ${voice.listening ? "on" : ""}`}
           onClick={voice.pushToTalk}
           aria-pressed={voice.listening}
-          aria-label={voice.listening ? "Stop listening" : "Talk to Ace"}
+          aria-label={voice.listening ? "Stop listening" : "Talk to AIC"}
         >
           <MicIcon />
           <span>{voice.listening ? "Listening… tap to stop" : "Talk"}</span>
         </button>
         <label className="sr" htmlFor="say">
-          Message to Ace
+          Message to AIC
         </label>
         <textarea
           id="say"
           ref={input}
           rows={2}
           value={text}
-          placeholder="Ask Ace anything…"
+          placeholder="Ask AIC anything…"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -113,14 +113,14 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
             }
           }}
         />
-        <Button variant="primary" type="submit" label="Send to Ace" disabled={!text.trim()}>
+        <Button variant="primary" type="submit" label="Send to AIC" disabled={!text.trim()}>
           Send
         </Button>
       </form>
       <div className="toggles">
         <label className="switch">
           <input type="checkbox" checked={voice.wakeMode} onChange={voice.toggleWake} /> Hands-free: listen for “hey
-          Ace”
+          AIC”
         </label>
         <label className="switch">
           <input type="checkbox" checked={voice.sound} onChange={voice.toggleSound} /> Speak replies

@@ -4,7 +4,7 @@ Workers are unlimited by design. What actually limits how many run **at once**:
 
 | Limit | Real? | Default here | Where it's set | What happens at the limit |
 |---|---|---|---|---|
-| AgentCore concurrent sessions | **Real (AWS quota)** — 2,500 in Stockholm (5,000 in us-east-1/us-west-2), adjustable | `max_concurrent_workers_global` = 2,450 (2,500 − 50 kept for Ace, Orchestrator, managers) | Settings / `config/caps.json` | Work waits in the worker queue and starts when a slot frees |
+| AgentCore concurrent sessions | **Real (AWS quota)** — 2,500 in Stockholm (5,000 in us-east-1/us-west-2), adjustable | `max_concurrent_workers_global` = 2,450 (2,500 − 50 kept for AIC, Orchestrator, managers) | Settings / `config/caps.json` | Work waits in the worker queue and starts when a slot frees |
 | New AgentCore sessions per second | **Real** — 25/s, adjustable | `max_new_sessions_per_second` = 20 | Settings (API refuses > 25) | Deferred 1 s |
 | Workers per department | City ceiling (config) | 100 | Settings | Waits in the queue |
 | AgentCore runtimes per account | Real — 1,000 | 4 used | — | Never reached: departments and workers are sessions |
@@ -15,7 +15,7 @@ Workers are unlimited by design. What actually limits how many run **at once**:
 | DynamoDB on-demand | Effectively unlimited for this load (hot keys: spend counters, `SLOTS`) | — | — | Counter items are small; at thousands of turns per second they would need sharding |
 | API Gateway | 10,000 rps account default | stage throttling 20 rps / burst 50 | Terraform | 429 to the HUD, which retries |
 | SQS | Effectively unlimited | DelaySeconds max 900 | — | — |
-| Spend caps | Optional city brake | none (no limit, the owner's choice) | Settings | Only if set: no new turns; Ace asks to raise |
+| Spend caps | Optional city brake | none (no limit, the owner's choice) | Settings | Only if set: no new turns; AIC asks to raise |
 
 ## How "hundreds of workers" stay readable
 The City view gives each department a building whose terrace grows a row of desks for every four workers, with a count badge on the roof; released workers go home, and only the latest 24 stand in the neighbourhood (the rest are listed in Workforce). Rendering is a single canvas with the static town baked once per layout.

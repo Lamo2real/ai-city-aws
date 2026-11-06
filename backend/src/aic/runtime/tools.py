@@ -99,7 +99,7 @@ def validate_args(schema: dict[str, Any], args: dict[str, Any]) -> str | None:
     return None
 
 
-# ---------- Ace ----------
+# ---------- AIC ----------
 def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
     async def delegate(a: dict[str, Any]) -> str:
         cons = a.get("constraints")
@@ -234,7 +234,7 @@ def _ask_owner(d: CityDeps, c: TurnCtx) -> ToolSpec:
 
     return ToolSpec(
         "ask_owner",
-        "Ask the owner a question through Ace. Always give options and a default.",
+        "Ask the owner a question through AIC. Always give options and a default.",
         _obj({"question": _s(3), "options": {**_STRS, "minItems": 1}, "default_answer": _s(1)}),
         ask,
     )
@@ -363,13 +363,13 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         await d.bus.put(
             {"type": "signoff.result", "ticket_id": c.task_id, "verdict": verdict, "summary": str(a["reasons"])[:300]}
         )
-        return "Signed off. Now report to Ace." if verdict == "PASS" else "Sent back for fixes."
+        return "Signed off. Now report to AIC." if verdict == "PASS" else "Sent back for fixes."
 
     async def report_to_ace(a: dict[str, Any]) -> str:
         signed = await d.ledger.table.get(f"TICKET#{c.task_id}", "SIGNOFF")
         if (signed or {}).get("verdict") != "PASS":
             return "Sign off with PASS before reporting."
-        task = await move(d, c.task_id, "done", "reported to Ace", {"result": str(a["summary"])})
+        task = await move(d, c.task_id, "done", "reported to AIC", {"result": str(a["summary"])})
         await d.bus.put({"type": "result", "ticket_id": c.task_id, "summary": str(a["summary"])[:500]})
         msg: dict[str, Any] = {
             "role": "ace",
@@ -384,7 +384,7 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         if task.get("conversation"):
             msg["conversation"] = task["conversation"]
         await send(d, msg)
-        return "Reported to Ace."
+        return "Reported to AIC."
 
     return [
         ToolSpec(
@@ -414,7 +414,7 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         _ask_owner(d, c),
         ToolSpec(
             "report_to_ace",
-            "Report the finished task to Ace. Only after a PASS sign-off.",
+            "Report the finished task to AIC. Only after a PASS sign-off.",
             _obj({"summary": _s(3)}),
             report_to_ace,
         ),

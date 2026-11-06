@@ -1,5 +1,5 @@
 // Voice behind one small interface. Production: Amazon Transcribe streaming (speech → text, with a
-// custom vocabulary for "Ace" and "AIC") and Amazon Polly (text → speech, neural voice), both called
+// custom vocabulary for "AIC") and Amazon Polly (text → speech, neural voice), both called
 // from the browser with short-lived credentials from a Cognito identity pool scoped to those two
 // actions only. Tests inject a fake on window.__aicVoice. Transcribe and Polly are AWS speech
 // services, not language models.
@@ -111,7 +111,8 @@ class AwsVoice implements Voice {
       new SynthesizeSpeechCommand({
         Engine: "neural",
         OutputFormat: "mp3",
-        Text: text.slice(0, 2900),
+        // Said as letters: "A.I.C.", never a word like "Ace" or "Aick".
+        Text: text.replace(/\bAIC\b/g, "A.I.C.").slice(0, 2900),
         VoiceId: (c.pollyVoice || "Matthew") as never,
       }),
     );
