@@ -137,15 +137,10 @@ module "api" {
 }
 
 module "budgets" {
-  source              = "../../modules/budgets"
-  name                = local.name
-  account_id          = data.aws_caller_identity.me.account_id
-  owner_email         = var.owner_email
-  monthly_budget_usd  = var.monthly_budget_usd
-  agent_role_names    = values(module.agents.role_names)
-  boundary_arn        = module.security.boundary_arn
-  kms_key_arn         = module.security.kms_key_arn
-  budget_function_arn = module.api.budget_function_arn
+  source             = "../../modules/budgets"
+  name               = local.name
+  owner_email        = var.owner_email
+  monthly_budget_usd = var.monthly_budget_usd
 }
 
 module "observability" {

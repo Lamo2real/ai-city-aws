@@ -65,7 +65,6 @@ locals {
     ledger-writer = { bundle = "ledger-writer", handler = "index.handler", timeout = 30, memory = 256, env = {} }
     scheduler     = { bundle = "scheduler", handler = "index.handler", timeout = 120, memory = 256, env = {} }
     notifier      = { bundle = "notifier", handler = "index.handler", timeout = 30, memory = 256, env = { AIC_NOTIFY_TOPIC_ARN = var.notify_topic_arn } }
-    budget        = { bundle = "budget", handler = "index.handler", timeout = 30, memory = 256, env = {} }
     approvals     = { bundle = "approvals", handler = "index.handler", timeout = 30, memory = 256, env = {} }
     ws-authorizer = { bundle = "ws", handler = "index.authorizerHandler", timeout = 10, memory = 256, env = { AIC_USER_POOL_ID = var.user_pool_id, AIC_USER_POOL_CLIENT_ID = var.client_id } }
     ws-connection = { bundle = "ws", handler = "index.connectionHandler", timeout = 10, memory = 256, env = { AIC_CONNECTIONS_TABLE = var.connections_table } }
@@ -95,7 +94,6 @@ locals {
       { Action = ["sqs:SendMessage"], Resource = values(var.queue_arns) },
     ]
     notifier      = [{ Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] }, { Action = ["sns:Publish"], Resource = [var.notify_topic_arn] }]
-    budget        = [{ Action = local.ledger_rw, Resource = [var.ledger_arn] }, { Action = ["events:PutEvents"], Resource = [var.bus_arn] }]
     approvals     = [{ Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] }, { Action = ["sqs:SendMessage"], Resource = values(var.queue_arns) }]
     ws-authorizer = [{ Action = ["cognito-idp:DescribeUserPool"], Resource = ["arn:aws:cognito-idp:${var.region}:${var.account_id}:userpool/${var.user_pool_id}"] }]
     ws-connection = [{ Action = ["dynamodb:PutItem", "dynamodb:DeleteItem", "dynamodb:UpdateItem"], Resource = [var.connections_arn] }]
@@ -536,5 +534,4 @@ output "http_api_url" { value = aws_apigatewayv2_api.http.api_endpoint }
 output "ws_url" { value = "${aws_apigatewayv2_api.ws.api_endpoint}/prod" }
 output "function_arns" { value = { for k, f in aws_lambda_function.fn : k => f.arn } }
 output "function_names" { value = { for k, f in aws_lambda_function.fn : k => f.function_name } }
-output "budget_function_arn" { value = aws_lambda_function.fn["budget"].arn }
 output "event_source_mapping_uuids" { value = { for k, m in aws_lambda_event_source_mapping.queue : k => m.uuid } }

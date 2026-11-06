@@ -201,21 +201,31 @@ test("pausing the city asks first, then offers Undo", async ({ page }) => {
   expect(await primaries(page)).toBeLessThanOrEqual(1);
 });
 
-test("settings reject an impossible cap and confirm a raise in plain words", async ({ page }) => {
+test("spend caps are optional: an impossible cap is refused, an empty field means no limit", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/#/settings");
   const daily = page.getByLabel("Daily cap, all departments ($)");
   await daily.fill("-5");
-  await expect(page.getByText("Caps must be zero or more dollars.")).toBeVisible();
+  await expect(page.getByText("Caps must be zero or more dollars, or empty for no limit.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
-  await daily.fill("20");
+  await daily.fill("");
+  await expect(daily).toHaveAttribute("placeholder", "No limit");
   await page.getByRole("button", { name: "Save changes" }).click();
-  const dialog = page.getByRole("dialog", { name: "Raise the spend cap?" });
-  await expect(dialog).toContainText("$20 a day");
-  await dialog.getByRole("button", { name: "Raise the cap" }).click();
   await expect
-    .poll(() => (m.calls.find((c) => c.method === "PUT")?.body as Record<string, unknown>)?.daily_global_usd)
-    .toBe(20);
+    .poll(() => {
+      const put = m.calls.find((c) => c.method === "PUT")?.body as Record<string, unknown> | undefined;
+      return put ? put.daily_global_usd : "not sent";
+    })
+    .toBeNull();
+});
+
+test("with no spend limit the money pill shows only what was spent", async ({ page }) => {
+  await mockBackend(page, {
+    snapshot: { caps: { daily_global_usd: null, monthly_budget_usd: null, daily_department_usd: null } },
+  });
+  await page.goto("/#/city");
+  const pill = page.getByRole("button", { name: /^Today: \$[\d.]+, estimate\. Open costs\.$/ });
+  await expect(pill).toHaveAttribute("data-level", "ok");
 });
 
 test("hitting the spend cap: the money pill turns red and the City says so plainly", async ({ page }) => {

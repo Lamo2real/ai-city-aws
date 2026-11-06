@@ -26,8 +26,7 @@ AWS_PROFILE=aic ./scripts/city-on.sh
 - CloudWatch dashboard `aic-prod`.
 
 ## Raise limits
-- Spend caps and concurrency: **Settings** (raising asks for confirmation; very high caps need typing `raise`). The monthly AWS Budget: change `monthly_budget_usd` in `prod.tfvars` and deploy.
-- If the budget action fired (deny-Bedrock attached): IAM → Roles → each `aic-prod-agent-*` → detach `aic-prod-deny-bedrock` — or raise the budget and wait for the next period. Then resume the city.
+- Spend caps (optional, none by default) and concurrency: **Settings**; an empty cap field means no limit. The AWS Budgets alert amount: change `monthly_budget_usd` in `prod.tfvars` and deploy; it only sends emails.
 - AWS quotas: see `docs/SCALING.md`.
 
 ## Restore the ledger (point-in-time recovery)

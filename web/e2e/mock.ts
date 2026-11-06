@@ -128,8 +128,7 @@ export async function mockBackend(
     m.calls.push({ method: req.method(), path, body });
     const ok = (json: unknown, status = 200) => route.fulfill({ status, json });
     if (path === "/city") return ok(m.snapshot);
-    if (path === "/settings" && req.method() === "GET")
-      return ok({ settings: m.settings, limits: { sanity_daily_cap_usd: 200, sanity_monthly_cap_usd: 2000 } });
+    if (path === "/settings" && req.method() === "GET") return ok({ settings: m.settings });
     if (path === "/settings" && req.method() === "PUT") {
       Object.assign(m.settings, body);
       return ok({ settings: m.settings });

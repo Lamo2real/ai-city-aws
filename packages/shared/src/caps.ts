@@ -1,5 +1,6 @@
-// The brake: checked before every turn of every kind. At a cap the city starts no new turns; turns
-// already running finish within the turn timeout. Counters are DynamoDB items updated with ADD.
+// Optional brake. Caps are off by default (null = no limit, the owner's choice). When the owner sets one
+// it is checked before every turn of every kind; at a cap the city starts no new turns and turns already
+// running finish within the turn timeout. Spend counters (DynamoDB ADD) are kept either way for the HUD.
 import { CAPS_CONFIG } from "./config.ts";
 import { departmentKey } from "./ids.ts";
 import type { CitySettings, Ledger, TurnKind } from "./ledger.ts";
@@ -24,7 +25,7 @@ export const DEFAULT_SETTINGS: CitySettings = {
   first_run_done: false,
 };
 
-export function departmentCap(s: CitySettings, department: string): number {
+export function departmentCap(s: CitySettings, department: string): number | null {
   return s.department_caps[departmentKey(department)] ?? s.daily_department_usd;
 }
 
@@ -45,25 +46,18 @@ export async function checkCaps(
   _kind: TurnKind,
   department: string | null,
 ): Promise<CapCheck> {
-  const [day, month] = await Promise.all([ledger.spend("day", "GLOBAL"), ledger.spend("month", "GLOBAL")]);
-  if (month.usd >= settings.monthly_budget_usd)
-    return block(
-      "monthly",
-      month.usd,
-      settings.monthly_budget_usd,
-      null,
-      `This month's spend cap of $${settings.monthly_budget_usd} is reached.`,
-    );
-  if (day.usd >= settings.daily_global_usd)
-    return block(
-      "daily_global",
-      day.usd,
-      settings.daily_global_usd,
-      null,
-      `Today's spend cap of $${settings.daily_global_usd} is reached.`,
-    );
+  const monthly = settings.monthly_budget_usd;
+  const daily = settings.daily_global_usd;
+  if (monthly !== null || daily !== null) {
+    const [day, month] = await Promise.all([ledger.spend("day", "GLOBAL"), ledger.spend("month", "GLOBAL")]);
+    if (monthly !== null && month.usd >= monthly)
+      return block("monthly", month.usd, monthly, null, `This month's spend cap of $${monthly} is reached.`);
+    if (daily !== null && day.usd >= daily)
+      return block("daily_global", day.usd, daily, null, `Today's spend cap of $${daily} is reached.`);
+  }
   if (department) {
     const limit = departmentCap(settings, department);
+    if (limit === null) return { ok: true };
     const d = await ledger.spend("day", `DEPT#${departmentKey(department)}`);
     if (d.usd >= limit)
       return block(
@@ -87,20 +81,14 @@ function block(cap: CapName, spent: number, limit: number, department: string | 
   };
 }
 
-/** Validates a cap change from Settings. Returns a plain-language problem, or null. */
+/** Validates a cap change from Settings: null (no limit) or zero or more dollars. Returns a problem, or null. */
 export function validateCaps(
   patch: Partial<Pick<CitySettings, "daily_global_usd" | "monthly_budget_usd" | "daily_department_usd">>,
-  confirmedHigh = false,
 ): string | null {
   for (const [k, v] of Object.entries(patch)) {
+    if (v === null) continue;
     if (typeof v !== "number" || !Number.isFinite(v) || v < 0)
-      return `${k.replace(/_/g, " ")} must be zero or more dollars.`;
-  }
-  if (!confirmedHigh) {
-    if ((patch.daily_global_usd ?? 0) > CAPS_CONFIG.sanity_daily_cap_usd)
-      return `A daily cap above $${CAPS_CONFIG.sanity_daily_cap_usd} needs an extra confirmation.`;
-    if ((patch.monthly_budget_usd ?? 0) > CAPS_CONFIG.sanity_monthly_cap_usd)
-      return `A monthly cap above $${CAPS_CONFIG.sanity_monthly_cap_usd} needs an extra confirmation.`;
+      return `${k.replace(/_/g, " ")} must be zero or more dollars, or empty for no limit.`;
   }
   return null;
 }

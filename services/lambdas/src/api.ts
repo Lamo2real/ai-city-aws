@@ -310,14 +310,7 @@ async function route(event: HttpEvent, d: ApiDeps): Promise<HttpResult> {
     await d.bus.put({ type: "approval.decided", id: a.id, approved: b.approved });
     return reply(200, { approval: a });
   }
-  if (is("GET", /^\/settings$/))
-    return reply(200, {
-      settings: await d.settings(),
-      limits: {
-        sanity_daily_cap_usd: CAPS_CONFIG.sanity_daily_cap_usd,
-        sanity_monthly_cap_usd: CAPS_CONFIG.sanity_monthly_cap_usd,
-      },
-    });
+  if (is("GET", /^\/settings$/)) return reply(200, { settings: await d.settings() });
   if (is("PUT", /^\/settings$/)) {
     const b = body(event);
     const patch: Partial<CitySettings> = {};
@@ -349,7 +342,7 @@ async function route(event: HttpEvent, d: ApiDeps): Promise<HttpResult> {
         .filter((k) => patch[k] !== undefined)
         .map((k) => [k, patch[k]]),
     );
-    const bad = validateCaps(capPatch, b.confirm_high === true);
+    const bad = validateCaps(capPatch);
     if (bad) return problem(400, bad);
     for (const k of [
       "max_concurrent_workers_per_department",
@@ -364,11 +357,12 @@ async function route(event: HttpEvent, d: ApiDeps): Promise<HttpResult> {
       return problem(400, "New sessions per second can't go above AgentCore's limit of 25.");
     const cur = await d.settings();
     if (
-      Object.values(patch.department_caps ?? {}).some(
-        (v) => !Number.isFinite(v) || v < 0 || v > (patch.daily_global_usd ?? cur.daily_global_usd),
-      )
+      Object.values(patch.department_caps ?? {}).some((v) => {
+        const daily = patch.daily_global_usd !== undefined ? patch.daily_global_usd : cur.daily_global_usd;
+        return !Number.isFinite(v) || v < 0 || (daily !== null && v > daily);
+      })
     )
-      return problem(400, "A department cap must be between $0 and the daily cap.");
+      return problem(400, "A department cap must be $0 or more, and not above the daily cap if one is set.");
     await d.ledger.updateSettings(patch);
     return reply(200, { settings: await d.settings() });
   }

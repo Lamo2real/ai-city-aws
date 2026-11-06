@@ -58,7 +58,10 @@ export async function statusSummary(d: CityDeps) {
     departments: departments.map((x) => x.name),
     workers_busy: active.filter((a) => a.kind === "worker").length,
     questions_waiting: questions.length,
-    spend_today: `${formatUsd(today.usd)} of ${formatUsd(s.daily_global_usd)} (estimate)`,
+    spend_today:
+      s.daily_global_usd === null
+        ? `${formatUsd(today.usd)} (estimate, no daily limit)`
+        : `${formatUsd(today.usd)} of ${formatUsd(s.daily_global_usd)} (estimate)`,
   };
 }
 

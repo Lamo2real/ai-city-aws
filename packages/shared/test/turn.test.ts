@@ -22,10 +22,12 @@ const reply = (text: string, stopReason: TurnOutput["stopReason"] = "end_turn"):
 });
 const noSleep = { sleep: async () => {}, random: () => 0.5 };
 
-function setup(runner: ModelRunner) {
+// Caps are off by default; these tests set them explicitly to check the brake when the owner wants one.
+const CAPPED = { ...DEFAULT_SETTINGS, daily_global_usd: 10, monthly_budget_usd: 150, daily_department_usd: 5 };
+function setup(runner: ModelRunner, settings = CAPPED) {
   const ledger = new Ledger(new MemoryTable(), () => new Date("2026-11-06T10:00:00Z"));
   const bus = new MemoryBus();
-  return { ledger, bus, deps: { ledger, bus, runner, settings: DEFAULT_SETTINGS, backoff: noSleep } };
+  return { ledger, bus, deps: { ledger, bus, runner, settings, backoff: noSleep } };
 }
 const turn = (role: Role, kind: TurnKind = role as TurnKind, extra = {}) => ({
   kind,
@@ -65,7 +67,26 @@ describe("cost math", () => {
   });
 });
 
-describe("spend caps block every turn kind", () => {
+describe("no spend limit by default", () => {
+  it("the defaults have no caps, and a turn runs however much was spent", async () => {
+    expect(DEFAULT_SETTINGS).toMatchObject({
+      daily_global_usd: null,
+      monthly_budget_usd: null,
+      daily_department_usd: null,
+    });
+    const runner = vi.fn<ModelRunner>(async () => reply("ok"));
+    const { ledger, bus, deps } = setup(runner, DEFAULT_SETTINGS);
+    await ledger.table.update("SPEND#DAY#2026-11-06", "GLOBAL", { add: { usd: 100_000 } });
+    await ledger.table.update("SPEND#MONTH#2026-11", "GLOBAL", { add: { usd: 1_000_000 } });
+    await ledger.table.update("SPEND#DAY#2026-11-06", "DEPT#engineering", { add: { usd: 50_000 } });
+    await runGatedTurn(turn("worker"), deps);
+    expect(runner).toHaveBeenCalledOnce();
+    expect(bus.ofType("spend.cap_reached")).toHaveLength(0);
+    expect(await checkCaps(ledger, DEFAULT_SETTINGS, "worker", "Engineering")).toEqual({ ok: true });
+  });
+});
+
+describe("spend caps, when the owner sets one, block every turn kind", () => {
   it.each(TURN_KINDS)("%s turns stop at the daily global cap", async (kind) => {
     const runner = vi.fn<ModelRunner>(async () => reply("ok"));
     const { ledger, bus, deps } = setup(runner);
@@ -78,14 +99,14 @@ describe("spend caps block every turn kind", () => {
   it("the monthly cap and the department cap block too", async () => {
     const { ledger } = setup(async () => reply("ok"));
     await ledger.table.update("SPEND#MONTH#2026-11", "GLOBAL", { add: { usd: 150 } });
-    expect(await checkCaps(ledger, DEFAULT_SETTINGS, "worker", null)).toMatchObject({ ok: false, cap: "monthly" });
+    expect(await checkCaps(ledger, CAPPED, "worker", null)).toMatchObject({ ok: false, cap: "monthly" });
     const l2 = setup(async () => reply("ok")).ledger;
     await l2.table.update("SPEND#DAY#2026-11-06", "DEPT#engineering", { add: { usd: 5 } });
-    expect(await checkCaps(l2, DEFAULT_SETTINGS, "worker", "Engineering")).toMatchObject({
+    expect(await checkCaps(l2, CAPPED, "worker", "Engineering")).toMatchObject({
       ok: false,
       cap: "daily_department",
     });
-    expect(await checkCaps(l2, DEFAULT_SETTINGS, "worker", "Research")).toEqual({ ok: true });
+    expect(await checkCaps(l2, CAPPED, "worker", "Research")).toEqual({ ok: true });
   });
   it("a paused city starts no turn", async () => {
     const runner = vi.fn<ModelRunner>(async () => reply("ok"));
@@ -94,11 +115,11 @@ describe("spend caps block every turn kind", () => {
     await expect(runGatedTurn(turn("ace"), deps)).rejects.toBeInstanceOf(CityPaused);
     expect(runner).not.toHaveBeenCalled();
   });
-  it("rejects impossible cap values and asks to confirm very high ones", () => {
+  it("accepts any cap of zero or more, or none, and rejects impossible values", () => {
     expect(validateCaps({ daily_global_usd: -1 })).toMatch(/zero or more/);
-    expect(validateCaps({ daily_global_usd: 500 })).toMatch(/extra confirmation/);
-    expect(validateCaps({ daily_global_usd: 500 }, true)).toBeNull();
-    expect(validateCaps({ monthly_budget_usd: 300 })).toBeNull();
+    expect(validateCaps({ daily_global_usd: Number.NaN })).toMatch(/zero or more/);
+    expect(validateCaps({ daily_global_usd: 500_000 })).toBeNull();
+    expect(validateCaps({ daily_global_usd: null, monthly_budget_usd: null, daily_department_usd: null })).toBeNull();
   });
 });
 

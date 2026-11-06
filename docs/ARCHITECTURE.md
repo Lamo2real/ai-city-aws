@@ -42,7 +42,7 @@ flowchart LR
     sns[SNS email]
     sch[Scheduler jobs: DISABLED]
   end
-  bud[AWS Budgets + deny-Bedrock action]
+  bud[AWS Budgets: email alerts only]
 
   owner --> cf --> s3h
   owner --> cog
@@ -64,7 +64,6 @@ flowchart LR
   eb --> sns
   eb --> sfn --> q
   sch -.-> disp
-  bud -.-> rA & rO & rM & rW
 ```
 
 ## The hierarchy as code
@@ -80,7 +79,7 @@ Departments and workers are data and sessions, never new runtimes, so the accoun
 
 ## A request, end to end
 1. The owner types or speaks. The HUD posts `/messages`; the API queues a message for Ace (`aic-prod-ace`).
-2. The **dispatcher** takes it: pause flag → spend caps (daily global, per department, monthly) → for workers, concurrency ceilings and the new-session rate → a lease on the message (idempotency) → `InvokeAgentRuntime`.
+2. The **dispatcher** takes it: pause flag → spend caps (only if the owner set one; none by default) → for workers, concurrency ceilings and the new-session rate → a lease on the message (idempotency) → `InvokeAgentRuntime`.
 3. Inside the runtime, the **startup guard** has already refused to run without `CLAUDE_CODE_USE_BEDROCK=1` or with any other credential. The **host** reads the ledger, builds the prompt (stable system prompt first, for prompt caching), and runs one **gated turn**: caps again, throttling back-off, Fable → Opus fallback once, a cost row in the ledger and a `cost.update` event.
 4. Every tool call passes the **policy gate** (`packages/shared/src/policy.ts`): deny rules (cloud mutation, force-push, push to main, credential files, merging), ask rules (become an approval bound to the exact action, via Step Functions), and the call is audited in the ledger.
 5. Tools change the ledger, put events on the bus and queue the next agent's message, then the turn ends. Nobody waits in a session: the next turn starts when a report arrives.
@@ -90,7 +89,7 @@ Departments and workers are data and sessions, never new runtimes, so the accoun
 ## Shared code
 - `packages/shared`: model map (`config/models.json` is the only place model IDs live), startup guard, policy gate, single-table ledger (one implementation over a `Table` interface with in-memory and DynamoDB backends), cost math (5-minute vs 1-hour cache writes, geo surcharge, Haiku long-context tier), spend caps, event schemas (zod), the turn gate, the dispatcher's decisions, the Agent Factory, the actions shared by tools and API, utility (Haiku) calls and the wake word.
 - `services/agent-runtime`: the AgentCore container (HTTP on 8080, arm64), role tools, the Claude Agent SDK engine.
-- `services/lambdas`: api, dispatcher, factory, ledger writer, ws (authorizer, connections, broadcast), notifier, budget, approvals, scheduler (+ the fenced, disabled self-improvement check).
+- `services/lambdas`: api, dispatcher, factory, ledger writer, ws (authorizer, connections, broadcast), notifier, approvals, scheduler (+ the fenced, disabled self-improvement check).
 - `web`: React HUD; the City view is ported from the owner's Mac HUD (`web/src/city/`).
 
 ## Data model (DynamoDB, one table)

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS, Ledger, MemoryBus, MemoryQueue, MemoryTable, wakeMatch, type TurnOutput } from "@aic/shared";
 import { ROUTES, handleHttp, isOwner, type ApiDeps, type HttpEvent } from "../src/api.ts";
-import { onBudgetAlert, thresholdOf } from "../src/budget.ts";
 import { onApprovalStep } from "../src/approvals.ts";
 import { noticeFor, staleQuestions } from "../src/notifier.ts";
 import { authorize, broadcast, onConnection, type TokenVerifier } from "../src/ws.ts";
@@ -66,7 +65,7 @@ describe("HTTP routes", () => {
       usage: { usd: 0, turns: 0, tokens: 0 },
       city: { paused: false },
     });
-    expect(r.caps).toMatchObject({ daily_global_usd: 10, monthly_budget_usd: 150 });
+    expect(r.caps).toEqual({ daily_global_usd: null, monthly_budget_usd: null, daily_department_usd: null });
   });
   it("answers a question with the default in one tap, once", async () => {
     const d = deps();
@@ -108,18 +107,18 @@ describe("HTTP routes", () => {
     expect(await d.ledger.consumeApproval("h")).toBe(true);
     expect((await handleHttp(ev("POST", `/approvals/${a.id}`, { approved: false }), d)).statusCode).toBe(409);
   });
-  it("PUT /settings rejects impossible caps and needs confirmation for very high ones", async () => {
+  it("PUT /settings: caps are optional; impossible values are refused and null clears a cap", async () => {
     const d = deps();
     expect(json(await handleHttp(ev("PUT", "/settings", { daily_global_usd: -5 }), d)).error).toMatch(/zero or more/);
-    expect(json(await handleHttp(ev("PUT", "/settings", { daily_global_usd: 500 }), d)).error).toMatch(
-      /extra confirmation/,
-    );
-    expect(
-      (await handleHttp(ev("PUT", "/settings", { daily_global_usd: 500, confirm_high: true }), d)).statusCode,
-    ).toBe(200);
-    expect((await handleHttp(ev("PUT", "/settings", { max_new_sessions_per_second: 40 }), d)).statusCode).toBe(400);
-    expect((await handleHttp(ev("PUT", "/settings", { department_caps: { Eng: 9999 } }), d)).statusCode).toBe(400);
+    // No daily cap: a department cap of any size is fine.
+    expect((await handleHttp(ev("PUT", "/settings", { department_caps: { Eng: 9999 } }), d)).statusCode).toBe(200);
+    expect((await handleHttp(ev("PUT", "/settings", { daily_global_usd: 500 }), d)).statusCode).toBe(200);
     expect((await d.settings()).daily_global_usd).toBe(500);
+    // With a daily cap, a department cap above it is refused.
+    expect((await handleHttp(ev("PUT", "/settings", { department_caps: { Eng: 9999 } }), d)).statusCode).toBe(400);
+    expect((await handleHttp(ev("PUT", "/settings", { max_new_sessions_per_second: 40 }), d)).statusCode).toBe(400);
+    expect((await handleHttp(ev("PUT", "/settings", { daily_global_usd: null }), d)).statusCode).toBe(200);
+    expect((await d.settings()).daily_global_usd).toBeNull();
   });
   it("pauses and resumes the city", async () => {
     const d = deps();
@@ -254,7 +253,7 @@ describe("WebSocket", () => {
   });
 });
 
-describe("notifications, budget alerts and approval steps", () => {
+describe("notifications and approval steps", () => {
   it("emails results and cap alerts, and nudges questions waiting over 15 minutes once", async () => {
     expect(noticeFor({ type: "result", ticket_id: "t", summary: "done", at: now.toISOString() })?.subject).toMatch(
       /done/,
@@ -282,15 +281,6 @@ describe("notifications, budget alerts and approval steps", () => {
     now = new Date(now.getTime() + 16 * 60_000);
     expect(await staleQuestions(d.ledger)).toHaveLength(1);
     expect(await staleQuestions(d.ledger)).toHaveLength(0);
-  });
-  it("a 100% AWS Budgets alert pauses the city; 80% does not", async () => {
-    const d = deps();
-    expect(thresholdOf("AWS Budgets: aic-prod-monthly has exceeded your alert threshold of 80.0%")).toBe(80);
-    expect((await onBudgetAlert({ Records: [{ Sns: { Message: "exceeded 80% of budget" } }] }, d)).paused).toBe(false);
-    expect(
-      (await onBudgetAlert({ Records: [{ Sns: { Subject: "Budget exceeded 100%", Message: "x" } }] }, d)).paused,
-    ).toBe(true);
-    expect(await d.ledger.isPaused()).toBe(true);
   });
   it("stores the task token and wakes the agent with the owner's decision", async () => {
     const d = deps();

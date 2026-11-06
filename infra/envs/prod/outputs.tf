@@ -7,5 +7,4 @@ output "ws_url" { value = module.api.ws_url }
 output "ledger_table" { value = module.ledger.ledger_table }
 output "event_source_mapping_uuids" { value = module.api.event_source_mapping_uuids }
 output "budget_name" { value = module.budgets.budget_name }
-output "deny_bedrock_policy_arn" { value = module.budgets.deny_policy_arn }
 output "agent_role_names" { value = module.agents.role_names }

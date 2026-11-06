@@ -71,7 +71,7 @@ ECR=$(terraform output -raw ecr_repository_url); aws ecr get-login-password --re
 ```bash
 terraform plan -var-file=prod.tfvars -var agent_image_tag=first -out prod.tfplan
 ```
-   What you should see: roughly 200 resources to add (a static count of the HCL gives about 205), **0 to change, 0 to destroy**: KMS key, Cognito user pool with your user, DynamoDB tables, an EventBridge bus, 8 SQS queues, 11 Lambda functions, 2 API Gateway APIs, 4 AgentCore runtimes, 4 memories, 5 inference profiles, an ECR repository, a CloudFront distribution with WAF, a budget with a budget action, a dashboard and alarms, 5 schedules (all **DISABLED**). If anything says "destroy", stop.
+   What you should see: roughly 200 resources to add (a static count of the HCL gives about 205), **0 to change, 0 to destroy**: KMS key, Cognito user pool with your user, DynamoDB tables, an EventBridge bus, 8 SQS queues, 10 Lambda functions, 2 API Gateway APIs, 4 AgentCore runtimes, 4 memories, 5 inference profiles, an ECR repository, a CloudFront distribution with WAF, a budget (email alerts only), a dashboard and alarms, 5 schedules (all **DISABLED**). If anything says "destroy", stop.
 24. Apply exactly that plan:
 ```bash
 terraform apply prod.tfplan
@@ -91,12 +91,12 @@ cd ../../../web && npm run build && aws s3 sync dist s3://$(terraform -chdir=../
 31. Turn on the crash sweep: EventBridge → Scheduler → group `aic-prod` → `aic-prod-sweep` → Enable. (Others are optional; leave `aic-prod-improve` disabled.)
 
 ## I. First live smoke test, under a $1 cap (~10 min)
-32. In the HUD: **Settings → Daily cap, all departments = 1**, **per department = 1** → Save (confirm).
+32. In the HUD: **Settings → Daily cap, all departments = 1**, **per department = 1** → Save. (Caps are off by default; this one is just for the smoke test.)
 33. Say or type: **"yo Ace, what's 9 + 9?"** → Ace answers "Eighteen." (one Sonnet turn, about a cent).
 34. One turn per model:
    - Haiku: turn on **Hands-free** and say something unclear that mentions Ace (e.g. "I told Ace about it") → the wake check asks Haiku.
    - Fable + Opus: ask "Ace, create a Research department and have it find today's date in Stockholm from one official source." → watch the City: a building goes up, the manager hires one worker, the worker reports, the manager reviews, the Orchestrator signs off, Ace tells you.
 35. Check **Costs (estimates)** shows a few cents by role and model, and the CloudWatch dashboard `aic-prod` shows turns.
-36. Put the caps back to your real values (start: $10 daily, $5 per department).
+36. Empty the cap fields again and Save for no limit (or keep any cap you want).
 
 If something fails, `docs/RUNBOOK.md` → "Something is stuck".

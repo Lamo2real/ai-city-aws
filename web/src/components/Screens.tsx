@@ -140,7 +140,7 @@ interface Costs {
   by_department: Record<string, Spend>;
   by_role: Record<string, Spend>;
   by_model: Record<string, Spend>;
-  caps: { daily_global_usd: number; monthly_budget_usd: number; daily_department_usd: number };
+  caps: { daily_global_usd: number | null; monthly_budget_usd: number | null; daily_department_usd: number | null };
   cost_explorer_url: string;
 }
 export function CostsScreen() {
@@ -173,7 +173,16 @@ export function CostsScreen() {
     </section>
   );
 }
-function Meter({ label, spent, cap }: { label: string; spent: number; cap: number }) {
+function Meter({ label, spent, cap }: { label: string; spent: number; cap: number | null }) {
+  if (cap === null)
+    return (
+      <div className="meter meter-ok">
+        <div className="meter-head">
+          <b>{label}</b>
+          <span>{`${money(spent)} (estimate, no limit)`}</span>
+        </div>
+      </div>
+    );
   const level = spendLevel(spent, cap);
   const pct = cap > 0 ? Math.min(100, (spent / cap) * 100) : 100;
   return (
@@ -232,9 +241,9 @@ function Table({ title, rows }: { title: string; rows: Record<string, Spend> }) 
 // ---------- Settings ----------
 type S = Record<string, unknown> & {
   paused: boolean;
-  monthly_budget_usd: number;
-  daily_global_usd: number;
-  daily_department_usd: number;
+  monthly_budget_usd: number | null;
+  daily_global_usd: number | null;
+  daily_department_usd: number | null;
   max_concurrent_workers_per_department: number;
   max_concurrent_workers_global: number;
   max_new_sessions_per_second: number;
@@ -243,13 +252,10 @@ type S = Record<string, unknown> & {
   integrations: Record<string, boolean>;
 };
 export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
-  const { data, error, retry } = useApi<{
-    settings: S;
-    limits: { sanity_daily_cap_usd: number; sanity_monthly_cap_usd: number };
-  }>("/settings");
+  const { data, error, retry } = useApi<{ settings: S }>("/settings");
   const [form, setForm] = useState<S | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState<null | { kind: "save"; high: boolean } | { kind: "pause" }>(null);
+  const [confirm, setConfirm] = useState<null | { kind: "pause" }>(null);
   useEffect(() => {
     if (data) setForm(data.settings);
   }, [data]);
@@ -269,29 +275,25 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
     );
   const before = data.settings;
   const num = (k: keyof S, v: string) => setForm({ ...form, [k]: v === "" ? Number.NaN : Number(v) });
-  const raised =
-    form.daily_global_usd > before.daily_global_usd ||
-    form.monthly_budget_usd > before.monthly_budget_usd ||
-    form.daily_department_usd > before.daily_department_usd;
-  const high =
-    form.daily_global_usd > data.limits.sanity_daily_cap_usd ||
-    form.monthly_budget_usd > data.limits.sanity_monthly_cap_usd;
+  // Spend caps are optional: an empty field means no limit (null), which is the default.
+  const cap = (k: "daily_global_usd" | "daily_department_usd" | "monthly_budget_usd", v: string) =>
+    setForm({ ...form, [k]: v === "" ? null : Number(v) });
   const invalid = [form.daily_global_usd, form.monthly_budget_usd, form.daily_department_usd].some(
-    (v) => !Number.isFinite(v) || v < 0,
+    (v) => v !== null && (!Number.isFinite(v) || v < 0),
   );
 
-  const save = async (confirmHigh: boolean) => {
+  const save = async () => {
     setProblem(null);
     const prev = { ...before };
     try {
-      const r = await saveSettings({ ...form, confirm_high: confirmHigh });
+      const r = await saveSettings({ ...form });
       setForm(r.settings as S);
       data.settings = r.settings as S;
       toast({
         text: "Settings saved.",
         tone: "good",
         undo: async () => {
-          const back = await saveSettings({ ...prev, confirm_high: true });
+          const back = await saveSettings({ ...prev });
           setForm(back.settings as S);
           data.settings = back.settings as S;
         },
@@ -322,23 +324,33 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
       <Button variant="secondary" onClick={() => (form.paused ? togglePause() : setConfirm({ kind: "pause" }))}>
         {form.paused ? "Resume the city" : "Pause the city…"}
       </Button>
-      <h2>Spend caps (estimates)</h2>
+      <h2>Spend caps (optional)</h2>
+      <p className="mute">
+        No limit by default. Leave a field empty for no limit, or enter dollars to stop new work there.
+      </p>
       <div className="fields">
         <Field
           label="Daily cap, all departments ($)"
-          value={form.daily_global_usd}
-          onChange={(v) => num("daily_global_usd", v)}
+          value={form.daily_global_usd ?? Number.NaN}
+          onChange={(v) => cap("daily_global_usd", v)}
+          placeholder="No limit"
         />
         <Field
           label="Daily cap per department ($)"
-          value={form.daily_department_usd}
-          onChange={(v) => num("daily_department_usd", v)}
+          value={form.daily_department_usd ?? Number.NaN}
+          onChange={(v) => cap("daily_department_usd", v)}
+          placeholder="No limit"
         />
-        <Field label="Monthly cap ($)" value={form.monthly_budget_usd} onChange={(v) => num("monthly_budget_usd", v)} />
+        <Field
+          label="Monthly cap ($)"
+          value={form.monthly_budget_usd ?? Number.NaN}
+          onChange={(v) => cap("monthly_budget_usd", v)}
+          placeholder="No limit"
+        />
       </div>
       {invalid ? (
         <p className="field-error" role="alert">
-          Caps must be zero or more dollars.
+          Caps must be zero or more dollars, or empty for no limit.
         </p>
       ) : null}
       <h2>How many workers at once</h2>
@@ -377,7 +389,7 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
           checked={form.notify_email}
           onChange={(e) => setForm({ ...form, notify_email: e.target.checked })}
         />{" "}
-        Email me when a task is done, a question waits, or spend nears the cap
+        Email me when a task is done, a question waits, or spend nears a cap you set
       </label>
       <h2>Integrations</h2>
       <p className="mute">Built but off. Each needs its sign-in set up in AWS first (see the deploy checklist).</p>
@@ -396,29 +408,10 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
         Show the first-run guide again
       </Button>
       <div className="savebar">
-        <Button
-          variant="primary"
-          disabled={invalid}
-          onClick={() => (raised || high ? setConfirm({ kind: "save", high }) : save(false))}
-        >
+        <Button variant="primary" disabled={invalid} onClick={() => save()}>
           Save changes
         </Button>
       </div>
-      {confirm?.kind === "save" ? (
-        <Confirm
-          title="Raise the spend cap?"
-          what={`The city may then spend up to ${money(form.daily_global_usd)} a day and ${money(form.monthly_budget_usd)} a month on models (estimates).${confirm.high ? " This is far above the usual range." : ""}`}
-          cost={`Up to ${money(form.monthly_budget_usd - before.monthly_budget_usd > 0 ? form.monthly_budget_usd - before.monthly_budget_usd : form.daily_global_usd - before.daily_global_usd)} more than before, if the city uses it all. AWS Budgets still alerts you separately.`}
-          confirmLabel="Raise the cap"
-          confirmWord={confirm.high ? "raise" : undefined}
-          onCancel={() => setConfirm(null)}
-          onConfirm={async () => {
-            const h = confirm.high;
-            setConfirm(null);
-            await save(h);
-          }}
-        />
-      ) : null}
       {confirm?.kind === "pause" ? (
         <Confirm
           title="Pause the city?"
@@ -445,11 +438,13 @@ function Field({
   value,
   onChange,
   step = 0.5,
+  placeholder,
 }: {
   label: string;
   value: number;
   onChange: (v: string) => void;
   step?: number;
+  placeholder?: string;
 }) {
   return (
     <label className="field">
@@ -460,6 +455,7 @@ function Field({
         min={0}
         step={step}
         value={Number.isFinite(value) ? value : ""}
+        placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
       />
     </label>

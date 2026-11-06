@@ -49,7 +49,11 @@ export interface CityState {
   departments: Record<string, { name: string; mission?: string; manager_id?: string; state?: string; builtAt: number }>;
   usage: { usd: number; turns: number; tokens: number } | null;
   spend: Record<string, number>;
-  caps: { daily_global_usd: number; monthly_budget_usd: number; daily_department_usd: number } | null;
+  caps: {
+    daily_global_usd: number | null;
+    monthly_budget_usd: number | null;
+    daily_department_usd: number | null;
+  } | null;
   city: { paused?: boolean; reason?: string | null; running?: number | null; waiting?: number | null } | null;
   capHit: { cap: string; limit: number; spent: number } | null;
   costs: Record<string, { usd: number; tokens: number }>;

@@ -60,7 +60,7 @@ export class Factory implements FactoryClient {
     if (dept.manager_id !== managerId) throw new HireRefused(`Only ${dept.name}'s manager can hire for it.`);
     const s = await this.settings();
     const cap = departmentCap(s, dept.name);
-    if (spec.budget_hint_usd && spec.budget_hint_usd > cap)
+    if (spec.budget_hint_usd && cap !== null && spec.budget_hint_usd > cap)
       throw new HireRefused(
         `The budget hint of $${spec.budget_hint_usd} is above ${dept.name}'s daily cap of $${cap}.`,
       );

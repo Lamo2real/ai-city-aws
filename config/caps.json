@@ -1,8 +1,8 @@
 {
-  "$comment": "Starting values only. Heavy Fable/Opus use needs higher caps. The owner changes them in prod.tfvars and Settings.",
-  "monthly_budget_usd": 150,
-  "daily_global_usd": 10,
-  "daily_department_usd": 5,
+  "$comment": "Spend caps are off by default (null = no limit), by the owner's choice. The owner can set one in Settings. Concurrency ceilings stay: they protect AgentCore quotas, not spend.",
+  "monthly_budget_usd": null,
+  "daily_global_usd": null,
+  "daily_department_usd": null,
   "max_concurrent_workers_per_department": 100,
   "max_concurrent_workers_global": 2450,
   "max_new_sessions_per_second": 20,
@@ -10,7 +10,5 @@
   "async_job_soft_limit_minutes": 450,
   "max_review_rounds": 3,
   "compact_at_context_pct": 60,
-  "context_window_tokens": 200000,
-  "sanity_daily_cap_usd": 200,
-  "sanity_monthly_cap_usd": 2000
+  "context_window_tokens": 200000
 }

@@ -88,7 +88,15 @@ describe("Agent Factory", () => {
     ).rejects.toBeInstanceOf(HireRefused);
     await expect(factory.hire(spec, "mgr-research", "Engineering")).rejects.toThrow(/Only Engineering's manager/);
     await expect(factory.hire(spec, "mgr-x", "Nope")).rejects.toThrow(/no active department/);
-    await expect(factory.hire({ ...spec, budget_hint_usd: 50 }, "mgr-engineering", "Engineering")).rejects.toThrow(
+    // No department cap by default, so any budget hint is accepted.
+    await expect(
+      factory.hire({ ...spec, budget_hint_usd: 50 }, "mgr-engineering", "Engineering"),
+    ).resolves.toBeTruthy();
+  });
+  it("refuses a budget hint above a department cap the owner set", async () => {
+    const { ledger, bus } = await setup();
+    const capped = new Factory(ledger, bus, async () => ({ ...DEFAULT_SETTINGS, daily_department_usd: 5 }));
+    await expect(capped.hire({ ...spec, budget_hint_usd: 50 }, "mgr-engineering", "Engineering")).rejects.toThrow(
       /above Engineering's daily cap/,
     );
   });

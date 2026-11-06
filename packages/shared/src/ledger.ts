@@ -83,9 +83,10 @@ export interface Spend {
 export interface CitySettings {
   paused: boolean;
   pause_reason: string | null;
-  monthly_budget_usd: number;
-  daily_global_usd: number;
-  daily_department_usd: number;
+  /** Spend caps in USD; null = no limit (the default). */
+  monthly_budget_usd: number | null;
+  daily_global_usd: number | null;
+  daily_department_usd: number | null;
   department_caps: Record<string, number>;
   max_concurrent_workers_per_department: number;
   max_concurrent_workers_global: number;

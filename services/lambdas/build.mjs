@@ -14,7 +14,6 @@ export const ENTRIES = {
   scheduler: "src/scheduler.ts",
   ws: "src/ws.ts",
   notifier: "src/notifier.ts",
-  budget: "src/budget.ts",
   approvals: "src/approvals.ts",
 };
 

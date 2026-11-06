@@ -47,13 +47,13 @@ resource "aws_kms_alias" "data" {
   target_key_id = aws_kms_key.data.key_id
 }
 
-# The boundary: the most any city role can ever do. It never allows IAM changes (except the budget
-# action attaching or detaching the one deny-Bedrock policy), Organizations, account or billing changes.
+# The boundary: the most any city role can ever do. It never allows IAM changes, Organizations,
+# account or billing changes.
 resource "aws_iam_policy" "boundary" {
   #checkov:skip=CKV_AWS_288:A permission boundary is a ceiling, not a grant; each role's own policy scopes resources.
   #checkov:skip=CKV_AWS_290:A permission boundary is a ceiling, not a grant; each role's own policy scopes resources.
   #checkov:skip=CKV_AWS_287:A permission boundary is a ceiling, not a grant; only the worker role grants one named secret.
-  #checkov:skip=CKV_AWS_289:The only IAM write allowed is the budget action's attach/detach of one named policy on agent roles.
+  #checkov:skip=CKV_AWS_289:A permission boundary is a ceiling, not a grant; it allows no IAM writes at all.
   #checkov:skip=CKV_AWS_355:A permission boundary is a ceiling, not a grant; each role's own policy scopes resources.
   name        = "${var.name}-boundary"
   description = "Permission boundary for every AI City role"
@@ -72,15 +72,6 @@ resource "aws_iam_policy" "boundary" {
           "transcribe:StartStreamTranscription", "transcribe:StartStreamTranscriptionWebSocket", "polly:SynthesizeSpeech",
         ]
         Resource = "*"
-      },
-      {
-        Sid      = "BudgetActionOnly"
-        Effect   = "Allow"
-        Action   = ["iam:AttachRolePolicy", "iam:DetachRolePolicy"]
-        Resource = "arn:aws:iam::${var.account_id}:role/${var.name}-agent-*"
-        Condition = {
-          ArnEquals = { "iam:PolicyARN" = "arn:aws:iam::${var.account_id}:policy/${var.name}-deny-bedrock" }
-        }
       },
       {
         Sid      = "NeverTheseServices"
