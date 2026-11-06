@@ -37,7 +37,7 @@ aws bedrock list-inference-profiles --region eu-north-1 --profile aic --query "i
 
 ## E. The deploy role (from you or your account admin, ~10 min)
 16. In the AI City account: IAM → Identity providers → Add provider → OpenID Connect → URL `https://token.actions.githubusercontent.com`, audience `sts.amazonaws.com` (skip if it already exists).
-17. IAM → Roles → Create role → Custom trust policy → paste `docs/deploy-role-trust-policy.json` with `<ACCOUNT_ID>` filled in. It lets only `deploy.yml` on `main` (and the `production` environment) assume the role.
+17. IAM → Roles → Create role (maximum session duration **2 hours**, the first apply can take over an hour) → Custom trust policy → paste `docs/deploy-role-trust-policy.json` with `<ACCOUNT_ID>` filled in. It lets only `deploy.yml` on `main` (and the `production` environment) assume the role.
 18. Permissions: `AdministratorAccess`. Terraform creates IAM roles, KMS keys, Cognito, CloudFront, WAF, AgentCore and more, so it needs broad rights. Nothing else can assume this role.
 19. Copy the role ARN.
 

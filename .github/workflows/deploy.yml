@@ -140,6 +140,7 @@ jobs:
         with:
           role-to-assume: ${{ vars.AIC_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+          role-duration-seconds: 7200 # the first apply builds the image under QEMU; the role allows 2 h
       # The plan builds the ARM64 agent image while it applies (scripts/push-image.sh).
       - uses: docker/setup-qemu-action@v3
         with:
