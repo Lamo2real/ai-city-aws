@@ -71,6 +71,10 @@ class ApiDeps:
     """A boto3 ``stepfunctions`` client."""
     utility_runner: ModelRunner | None = None
     owner_id: str | None = None
+    cognito: Any = None
+    """A boto3 ``cognito-idp`` client, for re-sending the owner's first-login email."""
+    user_pool_id: str | None = None
+    owner_email: str | None = None
 
 
 class _NoFactory:
@@ -443,7 +447,55 @@ async def _put_settings(b: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
     return reply(200, {"settings": await d.settings()})
 
 
+FIRST_LOGIN_EMAIL_WINDOW_MS = 10 * 60_000
+FIRST_LOGIN_ACCEPTED = {
+    "accepted": True,
+    "message": "If this is the owner's email, a new first-login email is on its way.",
+}
+
+
+async def first_login_email(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
+    """The one route that works without a token: re-sends the owner's invitation (a new temporary password).
+
+    It answers the same way whatever the email, so it never tells anyone whether an account exists. It sends
+    only to the owner's own address, and at most once every 10 minutes.
+    """
+    email = str(_body(event).get("email") or "").strip().lower()
+    owner = (d.owner_email or "").strip().lower()
+    if not email or len(email) > 254:
+        raise BadRequest("Type your email.")
+    if not owner or email != owner or d.cognito is None or not d.user_pool_id:
+        return reply(202, FIRST_LOGIN_ACCEPTED)
+    window = d.ledger.now_ms() // FIRST_LOGIN_EMAIL_WINDOW_MS
+    if not await d.ledger.claim(f"first-login-email:{window}", 3600):
+        log("info", "auth.first_login_email.throttled")
+        return reply(202, FIRST_LOGIN_ACCEPTED)
+    try:
+        await asyncio.to_thread(
+            d.cognito.admin_create_user,
+            UserPoolId=d.user_pool_id,
+            Username=owner,
+            MessageAction="RESEND",
+            DesiredDeliveryMediums=["EMAIL"],
+        )
+        log("info", "auth.first_login_email.sent")
+    except Exception as e:
+        # UnsupportedUserStateException: the owner already chose a password, so "Forgot password" is the way.
+        code = (getattr(e, "response", None) or {}).get("Error", {}).get("Code", type(e).__name__)
+        log("warn", "auth.first_login_email.not_sent", error=str(code))
+    return reply(202, FIRST_LOGIN_ACCEPTED)
+
+
 async def handle_http(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
+    method = ((event.get("requestContext") or {}).get("http") or {}).get("method", "").upper()
+    if method == "POST" and (event.get("rawPath") or "").rstrip("/") == "/auth/first-login-email":
+        try:
+            return await first_login_email(event, d)
+        except BadRequest as e:
+            return problem(400, str(e))
+        except Exception as e:
+            log("error", "api.failed", path="/auth/first-login-email", error=type(e).__name__)
+            return reply(202, FIRST_LOGIN_ACCEPTED)
     if not is_owner(event):
         return problem(403, "Only the owner can use AI City.", "Sign in again with the owner account.")
     try:
@@ -469,5 +521,8 @@ def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
             settings=city.settings,
             sfn=city.session.client("stepfunctions"),
             utility_runner=bedrock_converse_runner(city.session.client("bedrock-runtime")),
+            cognito=city.session.client("cognito-idp"),
+            user_pool_id=os.environ.get("AIC_USER_POOL_ID"),
+            owner_email=os.environ.get("AIC_OWNER_EMAIL"),
         )
     return run(handle_http(event, _deps))

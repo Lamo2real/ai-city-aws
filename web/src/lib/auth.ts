@@ -1,108 +1,159 @@
-// Cognito managed login with the authorization code flow and PKCE. MFA (TOTP) and the first-login
-// password change happen on Cognito's own pages. Tokens stay in sessionStorage (gone when the tab
-// closes); the refresh token renews them before they expire.
+// Sign-in with our own screens, straight against Cognito (no hosted pages). The Amplify Auth library does
+// the SRP exchange (the password itself is never sent), the first-login "choose your own password" step,
+// the authenticator-app (TOTP) setup and code steps, "forgot password", and token refresh. Tokens stay in
+// sessionStorage, so they are gone when the tab closes.
+//
+// Everything goes through the small AuthClient interface below. Tests (and the Playwright journeys) put a
+// fake on window.__aicAuth; production uses Amplify.
 import { config } from "./config.ts";
 
-const KEY = "aic.tokens";
-const VERIFIER = "aic.pkce";
+/** What the owner has to do next. */
+export type SignInStep =
+  | { kind: "done" }
+  | { kind: "new_password" }
+  | { kind: "totp_setup"; secret: string; uri: string }
+  | { kind: "totp_code" };
 
-export interface Tokens {
-  idToken: string;
-  accessToken: string;
-  refreshToken?: string;
-  expiresAt: number;
+export interface AuthClient {
+  signIn(email: string, password: string): Promise<SignInStep>;
+  /** First login: replace the temporary password with the owner's own. */
+  setNewPassword(password: string): Promise<SignInStep>;
+  /** Confirms the authenticator app (setup) or a sign-in code with a 6-digit code. */
+  confirmCode(code: string): Promise<SignInStep>;
+  /** Sends a reset code by email. */
+  forgotPassword(email: string): Promise<void>;
+  confirmForgotPassword(email: string, code: string, password: string): Promise<void>;
+  /** A valid ID token (refreshed when needed), or null: sign in again. */
+  idToken(): Promise<string | null>;
+  signOut(): Promise<void>;
 }
 
-const b64url = (bytes: Uint8Array) =>
-  btoa(String.fromCharCode(...bytes))
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
-
-export function readTokens(): Tokens | null {
-  try {
-    const t = JSON.parse(sessionStorage.getItem(KEY) ?? "null") as Tokens | null;
-    return t?.idToken ? t : null;
-  } catch {
-    return null;
+/** Plain words for Cognito's errors. Never the raw message (it can name the user pool). */
+export function authProblem(e: unknown): string {
+  const name = (e as { name?: string })?.name ?? "";
+  switch (name) {
+    case "NotAuthorizedException":
+      return "That email or password is not right. Check both and try again.";
+    case "UserNotFoundException":
+      return "That email or password is not right. Check both and try again.";
+    case "CodeMismatchException":
+    case "EnableSoftwareTokenMFAException":
+      return "That code is not right. Use the newest 6-digit code from your authenticator app.";
+    case "ExpiredCodeException":
+      return "That code has expired. Ask for a new one and try again.";
+    case "InvalidPasswordException":
+    case "InvalidParameterException":
+      return "The new password does not meet the rules below.";
+    case "LimitExceededException":
+    case "TooManyRequestsException":
+    case "TooManyFailedAttemptsException":
+      return "Too many tries. Wait a few minutes, then try again.";
+    case "PasswordResetRequiredException":
+      return "Your password must be reset. Use “Forgot your password?” below.";
+    default:
+      return "Signing in did not work. Check your connection and try again.";
   }
 }
-function saveTokens(t: Tokens) {
-  sessionStorage.setItem(KEY, JSON.stringify(t));
-}
-export function signOutLocally() {
-  sessionStorage.removeItem(KEY);
+
+export const PASSWORD_RULES =
+  "At least 14 characters, with an uppercase letter, a lowercase letter, a number and a symbol.";
+
+export function passwordProblem(p: string): string | null {
+  if (p.length < 14) return "Use at least 14 characters.";
+  if (!/[a-z]/.test(p)) return "Add a lowercase letter.";
+  if (!/[A-Z]/.test(p)) return "Add an uppercase letter.";
+  if (!/[0-9]/.test(p)) return "Add a number.";
+  if (!/[^A-Za-z0-9]/.test(p)) return "Add a symbol, like ! or #.";
+  return null;
 }
 
-export async function loginUrl(): Promise<string> {
-  const c = config();
-  const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
-  sessionStorage.setItem(VERIFIER, verifier);
-  const challenge = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
-  const p = new URLSearchParams({
-    response_type: "code",
-    client_id: c.clientId,
-    redirect_uri: c.redirectUri,
-    scope: "openid email profile",
-    code_challenge_method: "S256",
-    code_challenge: challenge,
-  });
-  return `https://${c.cognitoDomain}/oauth2/authorize?${p}`;
-}
+// ---------- the Amplify implementation ----------
+type AmplifyAuth = typeof import("aws-amplify/auth");
 
-async function tokenRequest(body: Record<string, string>): Promise<Tokens> {
-  const c = config();
-  const r = await fetch(`https://${c.cognitoDomain}/oauth2/token`, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ client_id: c.clientId, ...body }),
-  });
-  if (!r.ok) throw new Error("Sign-in did not finish.");
-  const j = (await r.json()) as { id_token: string; access_token: string; refresh_token?: string; expires_in: number };
+function amplifyClient(): AuthClient {
+  let ready: Promise<AmplifyAuth> | null = null;
+  const auth = () =>
+    (ready ??= (async () => {
+      const [{ Amplify }, mod, { cognitoUserPoolsTokenProvider }, { sessionStorage }] = await Promise.all([
+        import("aws-amplify"),
+        import("aws-amplify/auth"),
+        import("aws-amplify/auth/cognito"),
+        import("aws-amplify/utils"),
+      ]);
+      const c = config();
+      Amplify.configure({ Auth: { Cognito: { userPoolId: c.userPoolId, userPoolClientId: c.clientId } } });
+      cognitoUserPoolsTokenProvider.setKeyValueStorage(sessionStorage);
+      return mod;
+    })());
+
+  let email = "";
+  const step = (out: Awaited<ReturnType<AmplifyAuth["signIn"]>>): SignInStep => {
+    if (out.isSignedIn) return { kind: "done" };
+    const n = out.nextStep;
+    switch (n.signInStep) {
+      case "DONE":
+        return { kind: "done" };
+      case "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED":
+        return { kind: "new_password" };
+      case "CONTINUE_SIGN_IN_WITH_TOTP_SETUP":
+        return {
+          kind: "totp_setup",
+          secret: n.totpSetupDetails.sharedSecret,
+          uri: n.totpSetupDetails.getSetupUri("AI City", email).toString(),
+        };
+      case "CONFIRM_SIGN_IN_WITH_TOTP_CODE":
+        return { kind: "totp_code" };
+      default:
+        throw Object.assign(new Error(`unsupported sign-in step ${n.signInStep}`), { name: "UnsupportedStep" });
+    }
+  };
+
   return {
-    idToken: j.id_token,
-    accessToken: j.access_token,
-    refreshToken: j.refresh_token ?? body.refresh_token,
-    expiresAt: Date.now() + j.expires_in * 1000,
+    async signIn(e, password) {
+      const a = await auth();
+      email = e.trim().toLowerCase();
+      await a.signOut().catch(() => undefined); // a half-finished earlier attempt must not get in the way
+      return step(await a.signIn({ username: email, password, options: { authFlowType: "USER_SRP_AUTH" } }));
+    },
+    async setNewPassword(password) {
+      return step(await (await auth()).confirmSignIn({ challengeResponse: password }));
+    },
+    async confirmCode(code) {
+      return step(await (await auth()).confirmSignIn({ challengeResponse: code.trim() }));
+    },
+    async forgotPassword(e) {
+      await (await auth()).resetPassword({ username: e.trim().toLowerCase() });
+    },
+    async confirmForgotPassword(e, code, password) {
+      await (
+        await auth()
+      ).confirmResetPassword({
+        username: e.trim().toLowerCase(),
+        confirmationCode: code.trim(),
+        newPassword: password,
+      });
+    },
+    async idToken() {
+      try {
+        const s = await (await auth()).fetchAuthSession();
+        return s.tokens?.idToken?.toString() ?? null;
+      } catch {
+        return null;
+      }
+    },
+    async signOut() {
+      await (await auth()).signOut().catch(() => undefined);
+    },
   };
 }
 
-/** Completes the redirect back from Cognito, if this page load is one. */
-export async function finishLogin(): Promise<boolean> {
-  const params = new URLSearchParams(location.search);
-  const code = params.get("code");
-  if (!code) return false;
-  const verifier = sessionStorage.getItem(VERIFIER) ?? "";
-  sessionStorage.removeItem(VERIFIER);
-  saveTokens(
-    await tokenRequest({
-      grant_type: "authorization_code",
-      code,
-      code_verifier: verifier,
-      redirect_uri: config().redirectUri,
-    }),
-  );
-  history.replaceState(null, "", location.pathname + location.hash);
-  return true;
+let client: AuthClient | null = null;
+/** The auth client: a test fake on window.__aicAuth when present, else Amplify. */
+export function auth(): AuthClient {
+  const fake = (window as unknown as { __aicAuth?: AuthClient }).__aicAuth;
+  if (fake) return fake;
+  return (client ??= amplifyClient());
 }
 
-/** A valid ID token, refreshed if it expires within two minutes. Null means: sign in again. */
-export async function idToken(): Promise<string | null> {
-  const t = readTokens();
-  if (!t) return null;
-  if (t.expiresAt - Date.now() > 120_000) return t.idToken;
-  if (!t.refreshToken) return null;
-  try {
-    const next = await tokenRequest({ grant_type: "refresh_token", refresh_token: t.refreshToken });
-    saveTokens(next);
-    return next.idToken;
-  } catch {
-    signOutLocally();
-    return null;
-  }
-}
-
-export function logoutUrl(): string {
-  const c = config();
-  return `https://${c.cognitoDomain}/logout?${new URLSearchParams({ client_id: c.clientId, logout_uri: c.redirectUri })}`;
-}
+/** A valid ID token for API calls, WebSocket and voice. Null means: sign in again. */
+export const idToken = (): Promise<string | null> => auth().idToken();

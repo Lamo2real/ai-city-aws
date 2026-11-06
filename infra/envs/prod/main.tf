@@ -126,6 +126,8 @@ module "api" {
   queue_arns          = module.bus.queue_arns
   notify_topic_arn    = module.bus.notify_topic_arn
   user_pool_id        = module.auth.user_pool_id
+  user_pool_arn       = module.auth.user_pool_arn
+  owner_email         = var.owner_email
   user_pool_endpoint  = module.auth.user_pool_endpoint
   client_id           = module.auth.client_id
   app_origin          = module.frontend.url

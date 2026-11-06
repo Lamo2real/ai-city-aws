@@ -1,4 +1,4 @@
-# Cognito: one owner, no self-sign-up, MFA required (TOTP), managed login with code + PKCE, short
+# Cognito: one owner, no self-sign-up, MFA required (TOTP), sign-in on the HUD's own screens (SRP), short
 # access tokens, rotating refresh tokens, one `owner` group. Plus an identity pool that gives the
 # signed-in owner short-lived credentials for Transcribe streaming and Polly only (voice).
 terraform {
@@ -36,8 +36,8 @@ resource "aws_cognito_user_pool" "this" {
   admin_create_user_config {
     allow_admin_create_user_only = true # no self-sign-up
     invite_message_template {
-      email_subject = "Your AI City sign-in"
-      email_message = "Your AI City user name is {username} and your temporary password is {####}. Sign in, choose a new password and set up an authenticator app."
+      email_subject = "Welcome to AI City: your first sign-in"
+      email_message = "<p>Hi,</p><p>Your AI City account is ready. Sign in once with the temporary password below, then choose your own.</p><p><b>1.</b> Open <a href=\"${var.app_url}/\">${var.app_url}</a></p><p><b>2.</b> Email: <b>{username}</b><br>Temporary password: <b>{####}</b><br>(copy it exactly; it works once and expires in 7 days)</p><p><b>3.</b> Choose your own password. You use it from then on.</p><p><b>4.</b> Connect an authenticator app (Microsoft Authenticator, Google Authenticator or 1Password): scan the QR code AI City shows, then type the 6-digit code.</p><p>Temporary password expired? On the sign-in page choose <i>First time here, or the temporary password expired?</i> to get a new email.</p><p>AI City</p>"
       sms_message   = "AI City: user {username}, temporary password {####}"
     }
   }
@@ -50,7 +50,12 @@ resource "aws_cognito_user_pool" "this" {
     require_uppercase                = true
     require_numbers                  = true
     require_symbols                  = true
-    temporary_password_validity_days = 3
+    temporary_password_validity_days = 7
+  }
+  verification_message_template {
+    default_email_option = "CONFIRM_WITH_CODE"
+    email_subject        = "Your AI City password reset code"
+    email_message        = "<p>Your AI City password reset code is <b>{####}</b>.</p><p>Type it on the AI City sign-in page and choose a new password. If you did not ask for this, ignore this email; your password stays the same.</p>"
   }
   account_recovery_setting {
     recovery_mechanism {
@@ -77,7 +82,7 @@ resource "aws_cognito_user_pool_client" "hud" {
   supported_identity_providers         = ["COGNITO"]
   callback_urls                        = ["${var.app_url}/"]
   logout_urls                          = ["${var.app_url}/"]
-  explicit_auth_flows                  = ["ALLOW_USER_SRP_AUTH"]
+  explicit_auth_flows                  = ["ALLOW_USER_SRP_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"] # the HUD's own sign-in screens
   prevent_user_existence_errors        = "ENABLED"
   enable_token_revocation              = true
   access_token_validity                = 15

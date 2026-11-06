@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { flushOutbox, loadCity, saveSettings } from "./lib/actions.ts";
 import { api } from "./lib/api.ts";
-import { finishLogin, idToken, loginUrl } from "./lib/auth.ts";
+import { idToken } from "./lib/auth.ts";
 import { loadConfig } from "./lib/config.ts";
 import { store, useHud, waitingCount } from "./lib/store.ts";
 import { live } from "./lib/ws.ts";
@@ -14,6 +14,7 @@ import { CostsScreen, SettingsScreen, Tickets } from "./components/Screens.tsx";
 import { SpendPill } from "./components/SpendPill.tsx";
 import { Banner, Button, Toaster } from "./components/ui.tsx";
 import { Eyes } from "./components/Eyes.tsx";
+import { SignIn } from "./components/SignIn.tsx";
 
 const VIEWS = ["ace", "city", "inbox", "tickets", "costs", "settings"] as const;
 type View = (typeof VIEWS)[number];
@@ -31,7 +32,7 @@ const viewFromHash = (): View => {
 };
 const GUIDE = "aic.guide.done";
 
-type Boot = "starting" | "signing_in" | "ready" | "failed";
+type Boot = "starting" | "signed_out" | "ready" | "failed";
 
 export function App() {
   const [boot, setBoot] = useState<Boot>("starting");
@@ -50,41 +51,40 @@ export function App() {
     return () => window.removeEventListener("hashchange", on);
   }, []);
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        await loadConfig();
-        await finishLogin();
-        if (!(await idToken())) {
-          setBoot("signing_in");
-          location.assign(await loginUrl());
-          return;
-        }
-        setBoot("ready");
-        live.onEvent((e) => store.event(e));
-        live.onStatus((s) => {
-          const was = store.get().live;
-          store.set({ live: s });
-          if (s === "online" && was !== "online") {
-            void loadCity(); // events may have been missed: start again from a fresh snapshot
-            void flushOutbox();
-          }
-        });
-        void live.start();
-        const s = await api<{ settings: Record<string, unknown> }>("/settings").catch(() => null);
-        let done = false;
-        try {
-          done = localStorage.getItem(GUIDE) === "1";
-        } catch {
-          /* no storage: rely on the server flag */
-        }
-        if (s && !s.settings.first_run_done && !done) setGuide(true);
-      } catch (e) {
-        setBootError((e as Error).message);
-        setBoot("failed");
+  const start = useCallback(async () => {
+    try {
+      await loadConfig();
+      if (!(await idToken())) {
+        setBoot("signed_out");
+        return;
       }
-    })();
+      setBoot("ready");
+      live.onEvent((e) => store.event(e));
+      live.onStatus((s) => {
+        const was = store.get().live;
+        store.set({ live: s });
+        if (s === "online" && was !== "online") {
+          void loadCity(); // events may have been missed: start again from a fresh snapshot
+          void flushOutbox();
+        }
+      });
+      void live.start();
+      const s = await api<{ settings: Record<string, unknown> }>("/settings").catch(() => null);
+      let done = false;
+      try {
+        done = localStorage.getItem(GUIDE) === "1";
+      } catch {
+        /* no storage: rely on the server flag */
+      }
+      if (s && !s.settings.first_run_done && !done) setGuide(true);
+    } catch (e) {
+      setBootError((e as Error).message);
+      setBoot("failed");
+    }
   }, []);
+  useEffect(() => {
+    void start();
+  }, [start]);
 
   const finishGuide = () => {
     setGuide(false);
@@ -105,11 +105,12 @@ export function App() {
         >{`AI City could not start: ${bootError ?? "unknown problem"}. Nothing was lost.`}</Banner>
       </main>
     );
+  if (boot === "signed_out") return <SignIn onSignedIn={() => void start()} />;
   if (boot !== "ready")
     return (
       <main className="center" aria-busy="true">
         <Eyes presence="idle" />
-        <p>{boot === "signing_in" ? "Taking you to sign in…" : "Starting…"}</p>
+        <p>Starting…</p>
       </main>
     );
 

@@ -28,6 +28,8 @@ variable "queue_urls" { type = map(string) }
 variable "queue_arns" { type = map(string) }
 variable "notify_topic_arn" { type = string }
 variable "user_pool_id" { type = string }
+variable "user_pool_arn" { type = string }
+variable "owner_email" { type = string }
 variable "user_pool_endpoint" { type = string }
 variable "client_id" { type = string }
 variable "app_origin" { type = string }
@@ -58,7 +60,7 @@ locals {
   }
   # name => bundle, handler, timeout, memory, extra env
   functions = {
-    api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 512, env = { AIC_APP_PROFILE_UTILITY = var.utility_profile_arn } }
+    api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 512, env = { AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_USER_POOL_ID = var.user_pool_id, AIC_OWNER_EMAIL = var.owner_email } }
     dispatcher    = { bundle = "app", handler = "aic.lambdas.dispatcher.handler", timeout = 120, memory = 256, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_ARN_ORCHESTRATOR = var.runtime_arns["orchestrator"], AIC_RUNTIME_ARN_MANAGER = var.runtime_arns["manager"], AIC_RUNTIME_ARN_WORKER = var.runtime_arns["worker"] } }
     factory       = { bundle = "app", handler = "aic.lambdas.factory.handler", timeout = 30, memory = 256, env = {} }
     ledger-writer = { bundle = "app", handler = "aic.lambdas.ledger_writer.handler", timeout = 30, memory = 256, env = {} }
@@ -78,6 +80,8 @@ locals {
       { Action = ["sqs:SendMessage"], Resource = values(var.queue_arns) },
       { Action = ["states:SendTaskSuccess", "states:SendTaskFailure"], Resource = [aws_sfn_state_machine.approval.arn] },
       { Action = ["bedrock:InvokeModel"], Resource = var.utility_invoke_arns },
+      # "Send me a new first-login email": re-sends the owner's invitation, nothing else.
+      { Action = ["cognito-idp:AdminCreateUser"], Resource = [var.user_pool_arn] },
     ]
     dispatcher = [
       { Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] },
@@ -251,6 +255,16 @@ resource "aws_apigatewayv2_route" "http" {
   target             = "integrations/${aws_apigatewayv2_integration.api.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+# The one route that works before sign-in: it can only re-send the owner's first-login email (to the
+# owner's own address, at most once every 10 minutes), so it needs no token.
+resource "aws_apigatewayv2_route" "first_login_email" {
+  #checkov:skip=CKV_AWS_309:Public on purpose: it only re-sends the owner's invitation to the owner's own email, rate-limited in the Lambda.
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "POST /auth/first-login-email"
+  target             = "integrations/${aws_apigatewayv2_integration.api.id}"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_stage" "http" {

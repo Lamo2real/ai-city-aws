@@ -6,6 +6,7 @@ import { api, ApiError } from "../lib/api.ts";
 import { ago, money, spendLevel } from "../lib/format.ts";
 import { store } from "../lib/store.ts";
 import { Banner, Button, Confirm, Loading, toast } from "./ui.tsx";
+import { auth } from "../lib/auth.ts";
 
 function useApi<T>(path: string | null) {
   const [data, setData] = useState<T | null>(null);
@@ -406,6 +407,15 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
       <h2>Help</h2>
       <Button variant="quiet" onClick={reopenGuide}>
         Show the first-run guide again
+      </Button>
+      <Button
+        variant="quiet"
+        onClick={async () => {
+          await auth().signOut();
+          location.reload();
+        }}
+      >
+        Sign out
       </Button>
       <div className="savebar">
         <Button variant="primary" disabled={invalid} onClick={() => save()}>

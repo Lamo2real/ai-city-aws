@@ -20,7 +20,7 @@ The owner's personal organization of AI agents, running only in the owner's AWS 
 2. **Billed only through Bedrock with IAM roles.** Never an Anthropic API key, OAuth token, Bedrock API key or subscription login. The startup guard refuses to start otherwise.
 3. **Anthropic models only**, IDs pinned in `config/models.json` and nowhere else (a test scans the repo). Transcribe and Polly are speech services, allowed.
 4. **Single environment `prod`**, region `eu-north-1`, Terraform in `infra/`.
-5. **Only the owner can get in:** Cognito with MFA, no self-sign-up, `owner` group checked on every API route.
+5. **Only the owner can get in:** Cognito with MFA, no self-sign-up (no register screen), `owner` group checked on every API route. Sign-in happens on AI City's own screens (SRP; Cognito's hosted pages are not used).
 6. **Push to `main` = deploy to prod** (the owner's choice, no approval step). Agent sessions never run `terraform apply`, image pushes or AWS CLI changes themselves, and push to `main` only when the owner asks. `[skip ci]` in a commit message skips the deploy. `ci.yml` runs only by hand.
 7. **Secrets** in Secrets Manager, read by name at runtime; never in code, Terraform, logs, prompts, docs or commits.
 8. **Every tool call by every agent (workers too) passes the policy gate** in `backend/src/aic/shared/policy.py`.
@@ -84,7 +84,8 @@ Owner message → `POST /messages` → SQS (`ace` queue) → **dispatcher** Lamb
 | API | WebSocket: `$connect` authorizer, connections with TTL, broadcast | ✅ | `lambdas/ws.py` (Cognito token checked with PyJWT) |
 | API | Notifications (results, cap alerts, pause, 15-min question nudge) | ✅ / nudge job off | `lambdas/notifier.py` |
 | Voice | Push-to-talk, wake mode (plain match, Haiku for unclear), Transcribe + Polly via identity pool | 🟡 fake voice only | `web/src/voice/`, `utility.py`, `tests/fixtures/wake-cases.json` |
-| HUD | Ace screen (eyes: idle/listening/thinking/speaking/waiting; streaming; drafts + outbox survive reloads) | ✅ | `web/src/components/AceScreen.tsx` |
+| HUD | Own sign-in screens: temporary password → own password (live rules) → authenticator app (QR + key) → code; later password + code; forgot password; “send me a new first-login email” (public API route, owner's email only, 1 per 10 min) | ✅ (fake auth in Playwright) / 🟡 real Cognito not yet tried | `web/src/components/SignIn.tsx`, `web/src/lib/auth.ts`, `backend/src/aic/lambdas/api.py` |
+| HUD | Ace screen (Ace's eye: the owner's own drawing, `web/public/ace-eye.png`; states idle/listening/thinking/speaking/waiting; streaming; drafts + outbox survive reloads) | ✅ | `web/src/components/AceScreen.tsx` |
 | HUD | City view ported from the Mac HUD (Ace in plaza, Orchestrator at HQ door, manager at each department door, workers walk in/out, FREE LOTs, growing town, count badges, houses for specialists, top bar, right panel, bottom bar) | ✅ | `web/src/city/`, `CityView.tsx` |
 | HUD | Needs you (default answer in one tap; hold-to-approve), Tickets, Costs, Settings, first-run guide, spend pill (amber 80 %, red 100 %) | ✅ | `web/src/components/` |
 | HUD | Idiot-proof rules (one primary button, confirms with cost, Undo, plain errors, 44 px targets) | ✅ | `docs/UX_REVIEW.md` |
@@ -147,6 +148,7 @@ Terraform (offline only): `fmt -check -recursive`, `init -backend=false`, `valid
 ## 10. Feature log (newest first)
 | Date | Feature | Notes |
 |---|---|---|
+| 2026-11-06 | Own sign-in, clear first-login email, Ace's eye | The HUD signs in on its own screens (Amplify Auth, SRP; no Cognito hosted pages): first login walks through temporary password → own password → authenticator app. Cognito's invitation email is rewritten (link, user name, temporary password valid 7 days, steps) and so is the reset-code email; a public `POST /auth/first-login-email` re-sends the invitation (owner only, once per 10 min, same answer for any email). Ace is shown with one eye, the owner's own drawing. |
 | 2026-11-06 | Deploy stages | `deploy.yml` runs **web** and **backend** (ruff, mypy, pytest, Lambda package) in parallel, then **plan → apply → frontend**; the plan job prints the OIDC claims GitHub presents (never the token), so a trust-policy mismatch is visible in the log. |
 | 2026-11-06 | Backend in Python | The owner's choice: the whole application (shared core, 10 Lambdas, the AgentCore runtime) is Python 3.13 in `backend/` (`uv`, ruff, mypy, pytest; Claude Agent SDK for Python, whose wheel bundles the CLI). The HUD stays React, the infrastructure Terraform. Same behaviour, same JSON on the wire and in DynamoDB; 219 pytest tests replace the vitest backend tests. Lambdas ship as one zip (`backend/scripts/build_lambdas.py`, `python3.13`, arm64). |
 | 2026-11-06 | Push to main deploys | Owner's choice: `deploy.yml` runs on every push to `main` (docs-only pushes skipped) and applies without an approval step. The image tag is a hash of the runtime's sources, so web-only pushes don't rebuild it. Commits no longer need `[skip ci]`; adding it skips a deploy. |

@@ -1,4 +1,8 @@
-// A mocked AI City backend for Playwright: config.json, the HTTP API, the WebSocket and Cognito.
+// A mocked AI City backend for Playwright: config.json, the HTTP API, the WebSocket, and a fake sign-in
+// (window.__aicAuth, the same AuthClient interface the app uses for Cognito).
+//   password "Temp-Password-1!"   → first login: choose own password → authenticator setup → code 123456
+//   password "Own-Password-12!"   → the 6-digit code (123456)
+//   anything else                   → "That email or password is not right"
 import type { Page, WebSocketRoute } from "@playwright/test";
 
 export const CONFIG = {
@@ -91,16 +95,37 @@ export async function mockBackend(
   };
   await page.addInitScript(
     ({ signedIn }) => {
-      if (signedIn)
-        sessionStorage.setItem(
-          "aic.tokens",
-          JSON.stringify({
-            idToken: "header.payload.sig",
-            accessToken: "a",
-            refreshToken: "r",
-            expiresAt: Date.now() + 3600_000,
-          }),
-        );
+      if (signedIn) sessionStorage.setItem("aic.fake.signedIn", "1");
+      const fail = (name: string) => Object.assign(new Error(name), { name });
+      (window as unknown as { __aicAuth: unknown }).__aicAuth = {
+        async signIn(_email: string, password: string) {
+          if (password === "Temp-Password-1!") return { kind: "new_password" };
+          if (password === "Own-Password-12!") return { kind: "totp_code" };
+          throw fail("NotAuthorizedException");
+        },
+        async setNewPassword() {
+          return {
+            kind: "totp_setup",
+            secret: "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+            uri: "otpauth://totp/AI%20City:owner%40example.com?secret=JBSWY3DPEHPK3PXP&issuer=AI%20City",
+          };
+        },
+        async confirmCode(code: string) {
+          if (code !== "123456") throw fail("CodeMismatchException");
+          sessionStorage.setItem("aic.fake.signedIn", "1");
+          return { kind: "done" };
+        },
+        async forgotPassword() {},
+        async confirmForgotPassword(_e: string, code: string) {
+          if (code !== "654321") throw fail("CodeMismatchException");
+        },
+        async idToken() {
+          return sessionStorage.getItem("aic.fake.signedIn") === "1" ? "header.payload.sig" : null;
+        },
+        async signOut() {
+          sessionStorage.removeItem("aic.fake.signedIn");
+        },
+      };
       // A fake voice: the mic "hears" whatever the test puts in window.__heard.
       (window as unknown as { __aicVoice: unknown }).__aicVoice = {
         async listen(onText: (t: string) => void) {
@@ -117,9 +142,6 @@ export async function mockBackend(
     { signedIn: opts.signedIn ?? true },
   );
   await page.route("**/config.json", (r) => r.fulfill({ json: CONFIG }));
-  await page.route(`https://${CONFIG.cognitoDomain}/**`, (r) =>
-    r.fulfill({ contentType: "text/html", body: "<html><body><h1>Cognito sign-in (mock)</h1></body></html>" }),
-  );
   await page.route(`${CONFIG.apiUrl}/**`, async (route) => {
     const req = route.request();
     const url = new URL(req.url());
@@ -127,6 +149,11 @@ export async function mockBackend(
     const body = req.postData() ? (JSON.parse(req.postData()!) as Record<string, unknown>) : null;
     m.calls.push({ method: req.method(), path, body });
     const ok = (json: unknown, status = 200) => route.fulfill({ status, json });
+    if (path === "/auth/first-login-email")
+      return ok(
+        { accepted: true, message: "If this is the owner's email, a new first-login email is on its way." },
+        202,
+      );
     if (path === "/city") return ok(m.snapshot);
     if (path === "/settings" && req.method() === "GET") return ok({ settings: m.settings });
     if (path === "/settings" && req.method() === "PUT") {
