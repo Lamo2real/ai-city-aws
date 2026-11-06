@@ -15,7 +15,7 @@ variable "owner_email" {
 
 variable "monthly_budget_usd" {
   type        = number
-  default     = 150
+  default     = 10000
   description = "Amount at which AWS Budgets emails the owner (50/80/100 % and forecast). Alerts only: nothing is blocked or paused."
   validation {
     condition     = var.monthly_budget_usd > 0 && var.monthly_budget_usd <= 10000

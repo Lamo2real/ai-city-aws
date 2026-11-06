@@ -35,13 +35,13 @@ Prompt caching roughly halves the cost because agent turns resend long, stable s
 
 ## 3. Monthly, by usage level (infrastructure + AI)
 
-| Usage | Tasks / month | Ace chats (status, small talk) | AI estimate | Total estimate | Fits $150 budget? |
+| Usage | Tasks / month | Ace chats (status, small talk) | AI estimate | Total estimate | vs. the $10,000 alert |
 |---|---|---|---|---|---|
-| Low | 8 (2 a week) | 100 | $28 + $1 | **≈ $47** | Yes |
-| Normal | 30 (1 a day) | 300 | $105 + $3 | **≈ $126** | Just; caps will bite on busy days |
-| Heavy | 150 (5 a day) | 600 | $525 + $6 | **≈ $549** | No — raise the caps and budget first |
+| Low | 8 (2 a week) | 100 | $28 + $1 | **≈ $47** | far below |
+| Normal | 30 (1 a day) | 300 | $105 + $3 | **≈ $126** | far below |
+| Heavy | 150 (5 a day) | 600 | $525 + $6 | **≈ $549** | below (no first email until $5,000) |
 
-The $10 daily cap allows about 2–3 typical tasks a day. Heavy use of Fable (coordinators) and Opus (workers) needs higher caps; Fable is 2.5× Opus per token, so a cheaper option is `eu.` or switching coordinators to Opus 5.5 in `config/models.json` (owner's call).
+There is no spend cap by default (the owner's choice) and the AWS Budgets alert is $10,000 a month, so the first email comes at $5,000. Heavy use of Fable (coordinators) and Opus (workers) is what drives the bill; Fable is 2.5× Opus per token, so a cheaper option is `eu.` or switching coordinators to Opus 5.5 in `config/models.json` (owner's call).
 
 ## What moves the number most
 1. Worker job length (output tokens at $20/M and uncached input).

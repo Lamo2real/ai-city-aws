@@ -50,9 +50,9 @@ cd infra/bootstrap && terraform init && terraform apply -var owner_email=you@exa
 17. Note the outputs `state_bucket`, `state_kms_key_arn`, `deploy_role_arn`.
 
 ## F. Fill in the prod settings (~5 min)
-18. `cp infra/envs/prod/prod.tfvars.example infra/envs/prod/prod.tfvars` and set `owner_email`. Keep `monthly_budget_usd = 150` to start.
+18. `cp infra/envs/prod/prod.tfvars.example infra/envs/prod/prod.tfvars` and set `owner_email`. Keep `monthly_budget_usd = 10000` (the AWS Budgets alert amount; emails only).
 19. `cp infra/envs/prod/backend.hcl.example infra/envs/prod/backend.hcl` and paste the bootstrap outputs.
-20. In GitHub → Settings → Secrets and variables → Actions → **Variables** (not secrets; none of these are secret): `AIC_REGION=eu-north-1`, `AIC_DEPLOY_ROLE_ARN`, `AIC_STATE_BUCKET`, `AIC_STATE_KMS_KEY_ARN`, `AIC_OWNER_EMAIL`, `AIC_MONTHLY_BUDGET_USD=150`. (`AIC_ECR_REPOSITORY_URL`, `AIC_HUD_BUCKET`, `AIC_CLOUDFRONT_DISTRIBUTION_ID` come after step 23.)
+20. In GitHub → Settings → Secrets and variables → Actions → **Variables** (not secrets; none of these are secret): `AIC_REGION=eu-north-1`, `AIC_DEPLOY_ROLE_ARN`, `AIC_STATE_BUCKET`, `AIC_STATE_KMS_KEY_ARN`, `AIC_OWNER_EMAIL`, `AIC_MONTHLY_BUDGET_USD=10000`. (`AIC_ECR_REPOSITORY_URL`, `AIC_HUD_BUCKET`, `AIC_CLOUDFRONT_DISTRIBUTION_ID` come after step 23.)
 
 ## G. First deploy (~45 min)
 The runtimes need an image that exists, so the first deploy is done in two steps from your machine.

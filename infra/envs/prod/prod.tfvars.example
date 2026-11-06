@@ -1,7 +1,7 @@
 # Copy to prod.tfvars (git-ignored) and fill in. No secrets belong here.
 owner_email        = "you@example.com"
 region             = "eu-north-1"
-monthly_budget_usd = 150
+monthly_budget_usd = 10000
 agent_image_tag    = "set-by-deploy-workflow"
 profile_prefix     = "global"
 # Set to false if creating application inference profiles from global profiles is refused.

@@ -59,7 +59,7 @@ jobs:
           terraform plan -input=false -out=prod.tfplan \
             -var "owner_email=${{ vars.AIC_OWNER_EMAIL }}" \
             -var "agent_image_tag=${IMAGE_TAG}" \
-            -var "monthly_budget_usd=${{ vars.AIC_MONTHLY_BUDGET_USD || '150' }}"
+            -var "monthly_budget_usd=${{ vars.AIC_MONTHLY_BUDGET_USD || '10000' }}"
           terraform show -no-color prod.tfplan > plan.txt
       - uses: actions/upload-artifact@v4
         with:

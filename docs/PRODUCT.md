@@ -52,7 +52,7 @@ Owner message → `POST /messages` → SQS (`ace` queue) → **dispatcher** Lamb
 | Setting | Default |
 |---|---|
 | Spend caps: daily all departments / per department / monthly | **none (no limit)**; optional in Settings |
-| AWS Budgets alert amount (whole account) | $150, **emails only** at 50/80/100 % + forecast; nothing is blocked |
+| AWS Budgets alert amount (whole account) | **$10,000 / month**, emails only at 50/80/100 % ($5k / $8k / $10k) + forecast; nothing is blocked |
 | Workers at once: per department / global | 100 / 2,450 (Stockholm quota 2,500 − 50) |
 | New sessions per second | 20 (AgentCore limit 25) |
 | Turn timeout / worker async soft limit | 15 min / 7.5 h (hard 8 h) |
@@ -141,5 +141,6 @@ Terraform (offline only): `fmt -check -recursive`, `init -backend=false`, `valid
 ## 10. Feature log (newest first)
 | Date | Feature | Notes |
 |---|---|---|
+| 2026-11-06 | AWS Budgets at $10,000 | Owner's choice. The monthly alert amount is $10,000 (was $150): emails at $5k / $8k / $10k and on a forecast above it. Still alerts only. |
 | 2026-11-06 | No spend limit | Owner's choice. Spend caps are off by default (`null` = no limit) and optional in Settings (empty field = no limit). AWS Budgets only emails; the deny-Bedrock budget action and the budget Lambda that paused the city are removed. 241 tests, Playwright 15/15, Checkov 275/0. |
 | 2026-11-06 | Initial build, phases 1–9 | Not deployed. 240 tests, Playwright 14/14, Terraform checks clean. See `docs/MORNING_REPORT.md`. |
