@@ -81,9 +81,10 @@ resource "aws_ecr_lifecycle_policy" "runtime" {
 # One application inference profile per role, copied from the role's global profile, so the AWS
 # bill splits model cost by role (AgentRole tag). Off: the runtimes call the global profiles.
 resource "aws_bedrock_inference_profile" "role" {
-  for_each    = var.use_application_inference_profiles ? toset(local.all_roles) : toset([])
-  name        = "aic-${each.key}"
-  description = "AI City ${each.key} (${local.models.roles[each.key].model})"
+  for_each = var.use_application_inference_profiles ? toset(local.all_roles) : toset([])
+  name     = "aic-${each.key}"
+  # Bedrock allows only letters, digits, ":" and "." separated by single spaces, "_" or "-" here.
+  description = "AI City ${each.key} ${local.models.roles[each.key].model}"
   model_source {
     copy_from = local.system_profile_arn[local.models.roles[each.key].model]
   }
