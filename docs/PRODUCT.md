@@ -8,7 +8,7 @@
 - If this file and the code disagree, the code wins: fix this file.
 - New larger features: add a row under §6 and an entry in §10.
 
-Last updated: 2026-11-06 (initial build, not deployed).
+Last updated: 2026-11-07 (knowledge base designed, not built).
 
 ---
 
@@ -18,7 +18,7 @@ The owner's personal organization of AI agents, running only in the owner's AWS 
 ## 2. Non-negotiables (from `CLAUDE.md` and `BUILD_PROMPT.md`)
 1. **AWS only, serverless-first.** Agents on Amazon Bedrock AgentCore; everything else Lambda, API Gateway, DynamoDB, SQS, EventBridge, Step Functions, S3, CloudFront, Cognito. No EC2 for the core. Code on GitHub.
 2. **Billed only through Bedrock with IAM roles.** Never an Anthropic API key, OAuth token, Bedrock API key or subscription login. The startup guard refuses to start otherwise.
-3. **Anthropic models only**, IDs pinned in `config/models.json` and nowhere else (a test scans the repo). Transcribe and Polly are speech services, allowed.
+3. **Anthropic models only**, IDs pinned in `config/models.json` and nowhere else (a test scans the repo). Transcribe and Polly are speech services, allowed. One exception (the owner's, 2026-11-07): the knowledge base embeds text with Amazon Titan Text Embeddings V2 (`embeddings.knowledge`), which never reasons or writes.
 4. **Single environment `prod`**, region `eu-north-1`, Terraform in `infra/`.
 5. **Only the owner can get in:** Cognito with MFA, no self-sign-up (no register screen), `owner` group checked on every API route. Sign-in happens on AI City's own screens (SRP; Cognito's hosted pages are not used).
 6. **Push to `main` = deploy to prod** (the owner's choice, no approval step). Agent sessions never run `terraform apply`, image pushes or AWS CLI changes themselves, and push to `main` only when the owner asks. `[skip ci]` in a commit message skips the deploy. `ci.yml` runs only by hand.
@@ -95,6 +95,7 @@ Owner message → `POST /messages` → SQS (`ace` queue) → **dispatcher** Lamb
 | Infra | AWS Budgets 50/80/100 + forecast, email alerts only (no deny action, no pause) | 🟡 | `infra/modules/budgets` |
 | Ops | `city-off.sh` / `city-on.sh`, `build-images.sh` (no push) | 🟡 not run | `scripts/` |
 | CI/CD | `ci.yml`, `deploy.yml`: needs only the variable `AIC_DEPLOY_ROLE_ARN` + the secret `AIC_OWNER_EMAIL`; creates the state bucket if missing; runs on every push to `main` (no approval; docs-only pushes skipped); one plan builds + pushes the image (tag = hash of the runtime sources) and deploys from nothing | 🟡 never run | `.github/workflows/`, `scripts/ensure-state-bucket.sh`, `scripts/push-image.sh` |
+| Knowledge | Knowledge base: links, documents, images, audio, video, text; routed by format (Transcribe, MediaConvert, Haiku vision), Bedrock Knowledge Base on S3 Vectors (Titan V2 embeddings) + DynamoDB graph; scopes always / relevant / on request; `search_knowledge` for every role, `add_to_knowledge` and `list_knowledge` for AIC; HUD Knowledge screen | ❌ designed, not built | `docs/KNOWLEDGE.md` |
 | Gap | Worker S3 workspace sync (IAM ready) | ❌ | — |
 | Gap | Runtime use of AgentCore Memory | ❌ | — |
 | Gap | Self-improvement runner (switch + fence exist) | ❌ | `backend/src/aic/lambdas/improve.py` |
@@ -135,6 +136,7 @@ Terraform (offline only): `fmt -check -recursive`, `init -backend=false`, `valid
 | Need | Doc |
 |---|---|
 | Why a choice was made | `docs/DECISIONS.md`, `docs/adr/` |
+| Knowledge base contract (routes, keys, tools, pipeline) | `docs/KNOWLEDGE.md` |
 | AWS/Anthropic facts and IDs (with URLs) | `docs/FACTS_CHECKED.md` |
 | Architecture, data model | `docs/ARCHITECTURE.md` |
 | Security, threat model, IAM | `docs/SECURITY.md` |
@@ -148,6 +150,7 @@ Terraform (offline only): `fmt -check -recursive`, `init -backend=false`, `valid
 ## 10. Feature log (newest first)
 | Date | Feature | Notes |
 |---|---|---|
+| 2026-11-07 | Knowledge base (designed) | The owner stores links, PDFs, documents, images, audio and video; each is routed by format, embedded into a Bedrock Knowledge Base on S3 Vectors in Stockholm (Titan V2 embeddings, the owner's one exception to Anthropic-only) and linked in a DynamoDB entity graph built by Haiku 5.5. Every item has a scope: always include, when relevant, only when asked. Contract in `docs/KNOWLEDGE.md`, decision 64. Not built yet. |
 | 2026-11-06 | Own sign-in, clear first-login email, Ace's eye | The HUD signs in on its own screens (Amplify Auth, SRP; no Cognito hosted pages): first login walks through temporary password → own password → authenticator app. Cognito's invitation email is rewritten (link, user name, temporary password valid 7 days, steps) and so is the reset-code email; a public `POST /auth/first-login-email` re-sends the invitation (owner only, once per 10 min, same answer for any email). Ace is shown with one eye, the owner's own drawing. |
 | 2026-11-06 | Deploy stages | `deploy.yml` runs **web** and **backend** (ruff, mypy, pytest, Lambda package) in parallel, then **plan → apply → frontend**; the plan job prints the OIDC claims GitHub presents (never the token), so a trust-policy mismatch is visible in the log. |
 | 2026-11-06 | Backend in Python | The owner's choice: the whole application (shared core, 10 Lambdas, the AgentCore runtime) is Python 3.13 in `backend/` (`uv`, ruff, mypy, pytest; Claude Agent SDK for Python, whose wheel bundles the CLI). The HUD stays React, the infrastructure Terraform. Same behaviour, same JSON on the wire and in DynamoDB; 219 pytest tests replace the vitest backend tests. Lambdas ship as one zip (`backend/scripts/build_lambdas.py`, `python3.13`, arm64). |
