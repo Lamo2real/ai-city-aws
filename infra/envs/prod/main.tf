@@ -322,6 +322,7 @@ resource "aws_s3_object" "config" {
     redirectUri          = "${module.frontend.url}/"
     pollyVoice           = var.polly_voice
     pollyRegion          = var.polly_region
+    budgetAlertUsd       = var.monthly_budget_usd
     transcribeVocabulary = module.auth.vocabulary_name
     appsUrl              = module.apps.url
   })

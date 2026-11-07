@@ -7,8 +7,8 @@ const ev = (activity: string, detail?: string) => store.event({ type: "activity"
 
 describe("AIC's steps in plain words", () => {
   it("names the tool AIC used, else the activity, and skips idle", () => {
-    expect(stepWords("working", "get_status")).toBe("Checking the ledger");
-    expect(stepWords("delegating", "delegate_to_orchestrator")).toBe("Handing this to the Orchestrator");
+    expect(stepWords("working", "get_status")).toBe("Checking how things are going");
+    expect(stepWords("delegating", "delegate_to_orchestrator")).toBe("Passing this to my team");
     expect(stepWords("working", "mcp__city__list_notes")).toBe("Reading your notes");
     expect(stepWords("working", "search_knowledge")).toBe("Searching your knowledge base");
     expect(stepWords("working", "mcp__city__add_to_knowledge")).toBe("Saving to your knowledge base");
@@ -23,10 +23,10 @@ describe("AIC's steps in plain words", () => {
     ev("working", "get_status");
     store.event({ type: "activity", id: "orchestrator", activity: "delegating" }); // not AIC's step
     ev("idle");
-    expect(store.get().turn?.steps).toEqual(["Understanding your message", "Checking the ledger"]);
+    expect(store.get().turn?.steps).toEqual(["Understanding your message", "Checking how things are going"]);
     store.event({ type: "ace.reply", conversation: "main", text: "All quiet.", done: true });
     const reply = store.get().chat.at(-1)!;
-    expect(reply.steps).toEqual(["Understanding your message", "Checking the ledger"]);
+    expect(reply.steps).toEqual(["Understanding your message", "Checking how things are going"]);
     expect(reply.tookMs).toBeGreaterThanOrEqual(0);
     expect(store.get().turn).toBeNull();
   });

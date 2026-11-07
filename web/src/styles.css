@@ -620,6 +620,32 @@ main {
   font-size: 18px;
   font-weight: 800;
 }
+/* Quick replies under AIC's latest reply: big, obvious, one tap. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  padding-left: 0;
+}
+.chip {
+  min-height: var(--tap);
+  padding: 0 var(--s4);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: var(--sheet);
+  color: var(--text);
+  font-weight: 700;
+  cursor: pointer;
+}
+.chip:hover {
+  background: var(--paper);
+}
+.chip:active {
+  transform: translateY(1px);
+}
+.talk-head .stop-all {
+  margin-left: auto;
+}
 .icon-btn {
   width: var(--tap);
   height: var(--tap);

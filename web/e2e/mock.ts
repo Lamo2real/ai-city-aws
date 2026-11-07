@@ -15,6 +15,7 @@ export const CONFIG = {
   identityPoolId: "eu-north-1:00000000-0000-0000-0000-000000000000",
   redirectUri: "",
   pollyVoice: "Matthew",
+  budgetAlertUsd: 10000,
   transcribeVocabulary: "aic-names",
   appsUrl: "https://apps.aic.test",
 };

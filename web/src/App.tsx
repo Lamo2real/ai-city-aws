@@ -29,7 +29,7 @@ const LABEL: Record<View, string> = {
   ace: "AIC",
   city: "City",
   inbox: "Needs you",
-  tickets: "Tickets",
+  tickets: "Work",
   apps: "Apps",
   knowledge: "Knowledge",
   costs: "Costs",

@@ -37,11 +37,11 @@ const PUBLISH = {
   department: "Apps",
 };
 
-test("Apps is in the nav after Tickets, with an empty state that says how to get one", async ({ page }) => {
+test("Apps is in the nav after Work, with an empty state that says how to get one", async ({ page }) => {
   await mockBackend(page);
   await page.goto("/");
   const names = await page.getByRole("navigation", { name: "Screens" }).getByRole("link").allTextContents();
-  expect(names.indexOf("Apps")).toBe(names.indexOf("Tickets") + 1);
+  expect(names.indexOf("Apps")).toBe(names.indexOf("Work") + 1);
   await page.getByRole("link", { name: "Apps", exact: true }).click();
   await expect(page).toHaveURL(/#\/apps$/);
   await expect(page.getByRole("heading", { name: "Apps" })).toBeVisible();

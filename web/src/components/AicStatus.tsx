@@ -51,9 +51,9 @@ export function AicSteps({
     const secs = started ? Math.max(0, Math.floor((now - started) / 1000)) : null;
     return (
       <details className="aic-steps is-running">
-        <summary aria-label={`Still working: ${current}. ${steps.length} steps so far.`}>
+        <summary aria-label={`Still working on it: ${current}.`}>
           <span className="shimmer" aria-hidden="true">
-            {`${steps.length} steps · ${current}…`}
+            {`Working on it: ${current}…`}
           </span>
           {secs !== null ? (
             <span className="aic-status-time" aria-hidden="true">
@@ -75,8 +75,8 @@ export function AicSteps({
   return (
     <details className="aic-steps">
       <summary>
-        {`${steps.length} steps`}
-        {secs ? ` · ${secs}s` : ""}
+        {"What I did"}
+        {secs ? ` · ${secs} s` : ""}
       </summary>
       <ol>
         {steps.map((s, i) => (

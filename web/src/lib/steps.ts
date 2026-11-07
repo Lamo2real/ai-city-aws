@@ -2,11 +2,11 @@
 // activity events the runtime sends for agent "ace". The detail is the tool AIC called (see runtime/direct.py).
 // Never model reasoning: only what AIC does.
 const BY_TOOL: Record<string, string> = {
-  get_status: "Checking the ledger",
+  get_status: "Checking how things are going",
   list_notes: "Reading your notes",
   add_note: "Saving a note",
   add_reminder: "Setting a reminder",
-  delegate_to_orchestrator: "Handing this to the Orchestrator",
+  delegate_to_orchestrator: "Passing this to my team",
   instruct_agent: "Passing your instruction on",
   answer_question: "Answering a question from the team",
   pause_city: "Pausing the City",
@@ -18,7 +18,7 @@ const BY_TOOL: Record<string, string> = {
 const BY_ACTIVITY: Record<string, string> = {
   understanding: "Understanding your message",
   answering: "Answering a question from the team",
-  delegating: "Handing this to the Orchestrator",
+  delegating: "Passing this to my team",
   asking: "Asking you a question",
   reading: "Reading",
   researching: "Looking things up",
