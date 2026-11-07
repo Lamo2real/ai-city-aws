@@ -60,7 +60,7 @@ Owner message → `POST /messages` → SQS (`ace` queue) → **dispatcher** Lamb
 | Inference profile prefix | `global` (`eu` → Fable roles use Opus) |
 | Prompt cache TTL | 1 h orchestrator/managers, 5 min AIC/workers |
 | Log retention | 30 days |
-| Scheduled jobs | all created **DISABLED** |
+| Scheduled jobs | sweep, retire-idle, reminders, nudge and warm-ace **ENABLED**; `improve` **DISABLED** |
 
 ## 6. Features and status
 | Area | Feature | Status | Where |

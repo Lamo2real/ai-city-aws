@@ -199,11 +199,13 @@ locals {
   ]
   queue_batch = { ace = 1, orchestrator = 5, manager = 5, worker = 10 }
   queue_conc  = { ace = 5, orchestrator = 10, manager = 20, worker = var.worker_queue_concurrency }
+  # Enabled: the crash sweep, idle-agent retirement, reminders and nudges are part of the product (the owner
+  # asked for everything to run). The weekly self-improvement job stays DISABLED by rule.
   jobs = {
-    sweep       = { schedule = "rate(5 minutes)", fn = "scheduler", input = { job = "sweep" } }
-    retire-idle = { schedule = "rate(1 hour)", fn = "scheduler", input = { job = "retire_idle" } }
-    reminders   = { schedule = "rate(5 minutes)", fn = "scheduler", input = { job = "reminders" } }
-    nudge       = { schedule = "rate(5 minutes)", fn = "notifier", input = { job = "nudge" } }
+    sweep       = { schedule = "rate(5 minutes)", fn = "scheduler", input = { job = "sweep" }, state = "ENABLED" }
+    retire-idle = { schedule = "rate(1 hour)", fn = "scheduler", input = { job = "retire_idle" }, state = "ENABLED" }
+    reminders   = { schedule = "rate(5 minutes)", fn = "scheduler", input = { job = "reminders" }, state = "ENABLED" }
+    nudge       = { schedule = "rate(5 minutes)", fn = "notifier", input = { job = "nudge" }, state = "ENABLED" }
     improve     = { schedule = "cron(0 3 ? * SUN *)", fn = "scheduler", input = { job = "improve" } }
     # Enabled from the start: keeps AIC's container running so a message never waits for a cold start
     # (AgentCore bills active processing only, so a warm idle container costs nothing). The owner's under-3-seconds target.
