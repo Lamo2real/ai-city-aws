@@ -376,14 +376,10 @@ export function identity(id) {
 export const TILE = 16;
 export const BUILDING_H = 5;
 const PLOT_W = 9, SEAT_PITCH = 40, SEATS_PER_ROW = 4, STREET = 3, HQ_W = 12, HQ_H = 11, HOUSES_PER_ROW = 4, HOUSE_W = 3, HOUSE_ROW_H = 4;
-// Modern buildings: the lobby at street level, then floors of stations; apartment blocks for the overflow.
-const LOBBY_PX = 46;
-export const BLOCK_W = 6, BLOCK_H = 5, BLOCK_PER_FLOOR = 4, BLOCK_MAX_FLOORS = 4, BLOCK_FLOOR_PX = 14;
-const BLOCK_CAP = BLOCK_PER_FLOOR * BLOCK_MAX_FLOORS;
 
 // An archived department keeps its slot, so a building never lands on another; it isn't drawn unless work is still open there.
 // `seats` is { dept: the highest seat in use + 1 }, so a crowded row of offices gets a deeper terrace.
-export function layout(state, { portrait = false, seats = {}, houses = 0, residents = 0 } = {}) {
+export function layout(state, { portrait = false, seats = {}, houses = 0 } = {}) {
   const names = departmentNames(state);
   for (const d of Object.keys(seats)) if (d !== "HQ" && !names.includes(d)) names.push(d); // someone works in a department the registry no longer lists
   const n = names.length;
@@ -416,79 +412,35 @@ export function layout(state, { portrait = false, seats = {}, houses = 0, reside
   const perRow = portrait ? Math.floor(homesW / HOUSE_W) : HOUSES_PER_ROW;
   const home = [];
   for (let i = 0; i < houses; i++) home.push({ x: 1 + (i % perRow) * HOUSE_W, y: homesY + Math.floor(i / perRow) * HOUSE_ROW_H });
-  // More residents than the small houses hold: apartment blocks go up below them, in a fixed order, so a
-  // block never moves between reloads. Each holds up to 16 (four windows a floor, 2-4 floors), one window each.
-  const blocks = [];
-  const blocksPerRow = Math.max(1, Math.floor(homesW / BLOCK_W));
-  const blockY0 = homesY + Math.ceil(houses / perRow) * HOUSE_ROW_H;
-  let overflow = Math.max(0, residents - houses * 2);
-  for (let i = 0; overflow > 0; i++) {
-    const units = Math.min(overflow, BLOCK_CAP);
-    blocks.push({
-      x: 1 + (i % blocksPerRow) * BLOCK_W,
-      y: blockY0 + Math.floor(i / blocksPerRow) * BLOCK_H,
-      w: BLOCK_W,
-      h: BLOCK_H,
-      floors: Math.max(2, Math.ceil(units / BLOCK_PER_FLOOR)),
-      cap: BLOCK_CAP,
-      from: houses * 2 + i * BLOCK_CAP,
-    });
-    overflow -= units;
-  }
-  const blockRows = Math.ceil(blocks.length / blocksPerRow);
-  const homesH = Math.max(
-    Math.ceil(houses / perRow) * HOUSE_ROW_H + blockRows * BLOCK_H,
-    portrait ? HOUSE_ROW_H : officesEnd - homesY,
-  );
-  return { hq, buildings, lots, streets, hqStreet: 1 + HQ_H, officesEnd, avenue: avenueX, width, height: Math.max(y, homesY + homesH + 1), homes: { x: 1, y: homesY, w: homesW, h: homesH, houses: home, blocks }, portrait };
+  const homesH = Math.max(Math.ceil(houses / perRow) * HOUSE_ROW_H, portrait ? HOUSE_ROW_H : officesEnd - homesY);
+  return { hq, buildings, lots, streets, hqStreet: 1 + HQ_H, officesEnd, avenue: avenueX, width, height: Math.max(y, homesY + homesH + 1), homes: { x: 1, y: homesY, w: homesW, h: homesH, houses: home }, portrait };
 }
 
-// Stations are windows up the building's face: four a floor, the first floor just above the lobby, the
-// building growing a floor at a time. The spot is where the seated figure's feet are, inside the window.
+// The art-pixel spot for a seat on a department's terrace: where the figure's feet are.
 export const seatRows = (building) => Math.floor(((building.h - BUILDING_H) * TILE) / SEAT_PITCH);
 export function seatSpot(building, seat) {
   const r = Math.floor(seat / SEATS_PER_ROW), c = seat % SEATS_PER_ROW;
   const pitch = (building.w * TILE - 8) / SEATS_PER_ROW;
-  return { x: building.x * TILE + 4 + Math.round(pitch * (c + 0.5)), y: (building.y + building.h) * TILE - LOBBY_PX - r * SEAT_PITCH - 12 };
+  return { x: building.x * TILE + 4 + Math.round(pitch * (c + 0.5)), y: (building.y + BUILDING_H) * TILE + r * SEAT_PITCH + 24 };
 }
 
-/** The manager's own window at street level, beside the door. */
-export function managerSpot(building) {
-  return { x: (building.x + building.w / 2) * TILE - 30, y: (building.y + building.h) * TILE - 16 };
-}
-
-// Two spots in each house's front yard; later residents stand in front of their apartment block.
+// Two spots in each house's front yard.
 export function homeSpot(world, slot) {
   const h = world.homes.houses[Math.floor(slot / 2)];
-  if (h) return { x: h.x * TILE + (slot % 2 ? 36 : 12), y: h.y * TILE + 58 };
-  const b = blockOf(world, slot);
-  if (!b) return null;
-  const within = slot - b.from;
-  return { x: b.x * TILE + 13 + (within % BLOCK_PER_FLOOR) * 20 + 6, y: (b.y + b.h) * TILE - 4 };
-}
-
-const blockOf = (world, slot) => (world.homes.blocks ?? []).find((b) => slot >= b.from && slot < b.from + b.cap) ?? null;
-
-/** A block resident's own window (null for a house resident): lit while they are home, dark at work. */
-export function blockWindow(world, slot) {
-  const b = blockOf(world, slot);
-  if (!b) return null;
-  const within = slot - b.from, f = Math.floor(within / BLOCK_PER_FLOOR), col = within % BLOCK_PER_FLOOR;
-  return { x: b.x * TILE + 11 + col * 20, y: (b.y + b.h) * TILE - 12 - (f + 1) * BLOCK_FLOOR_PX + 3, w: 12, h: 9 };
+  return h ? { x: h.x * TILE + (slot % 2 ? 36 : 12), y: h.y * TILE + 58 } : null;
 }
 
 // An evening walk keeps to the streets: to the nearest street, along it to the avenue, along the avenue, and in.
 export function walkRoute(world, from, to) {
-  const lanes = [...world.streets.map((s) => (s.y + STREET / 2) * TILE), ...new Set(world.homes.houses.map((h) => h.y * TILE - 5)), ...new Set((world.homes.blocks ?? []).map((b) => (b.y + b.h) * TILE - 2))];
+  const lanes = [...world.streets.map((s) => (s.y + STREET / 2) * TILE), ...new Set(world.homes.houses.map((h) => h.y * TILE - 5))];
   const nearest = (y) => lanes.reduce((best, l) => (Math.abs(l - y) < Math.abs(best - y) ? l : best), lanes[0] ?? y);
   const ax = (world.avenue + STREET / 2) * TILE, a = nearest(from.y), b = nearest(to.y);
   return a === b ? [{ x: from.x, y: a }, { x: to.x, y: a }, to] : [{ x: from.x, y: a }, { x: ax, y: a }, { x: ax, y: b }, { x: to.x, y: b }, to];
 }
 
-// The street-level door of a building: everyone enters and leaves here, and the recruiting manager
-// steps out beside it.
+// The street-side door of a building: everyone enters and leaves here (the manager also stands at it).
 export function doorOf(building) {
-  return { x: (building.x + building.w / 2) * TILE, y: (building.y + building.h) * TILE - 10 };
+  return { x: (building.x + building.w / 2) * TILE + 14, y: building.y * TILE + 78 };
 }
 
 // A commute keeps to the streets and uses doors: out through the door of the building being left, along the
