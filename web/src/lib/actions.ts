@@ -75,7 +75,6 @@ export const applyDefault = (id: string) => api(`/questions/${id}/default`, { me
 export const decideApproval = (id: string, approved: boolean) =>
   api(`/approvals/${id}`, { method: "POST", body: { approved } });
 /** Every worker drops what it is doing and walks home; the city keeps running. Instant: no model in the loop. */
-export const sendEveryoneHome = () => api<{ workers: number; parts: number }>("/workers/home", { method: "POST" });
 /** Stops one job: its open parts are cancelled and its workers go home. */
 export const cancelJob = (id: string) =>
   api<{ jobs: number; workers: number }>(`/tasks/${id}/cancel`, { method: "POST" });

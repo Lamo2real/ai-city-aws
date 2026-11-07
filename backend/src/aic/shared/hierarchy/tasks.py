@@ -188,7 +188,7 @@ async def cancel_task(d: CityDeps, task: Record) -> dict[str, int]:
     ids = {t["id"] for t in tree}
     # The workers on the job before anything moves: cancelling a part sends its worker home on its own
     # (`move`), so they are counted here and the explicit release below is a no-op for most of them.
-    workers = _workers_of(await d.ledger.list_agents("active"), ids)
+    workers = [w for w in _workers_of(await d.ledger.list_agents(), ids) if w.get("state") != "retired"]
     stopped = 0  # parts under the job; the job itself is not a part
     for t in tree:
         if t["status"] not in DONE_OR_GONE:

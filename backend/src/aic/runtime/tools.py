@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
@@ -30,12 +31,14 @@ from aic.shared.apps import (
 )
 from aic.shared.events import now_iso
 from aic.shared.hierarchy.actions import (
+    STAND_DOWN_NOTE,
     CityDeps,
     answer_question,
     instruct_agent,
     move,
     new_ticket,
     quote,
+    running_jobs,
     send,
     send_workers_home,
     status_summary,
@@ -56,7 +59,7 @@ from aic.shared.knowledge.search import search
 from aic.shared.knowledge.service import KnowledgeError
 from aic.shared.log import log
 from aic.shared.policy import gate
-from aic.shared.utility import UtilityDeps, triage
+from aic.shared.utility import UtilityDeps, about_ai_city, triage
 
 CITY_SERVER = "city"
 DONE_OR_GONE = ("done", "failed", "cancelled")
@@ -150,21 +153,51 @@ def validate_args(schema: dict[str, Any], args: dict[str, Any]) -> str | None:
     return None
 
 
+def _norm(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+
+async def owner_said(d: CityDeps, conversation: str, answer: str, since: str) -> bool:
+    """True when the answer is (part of) something the owner typed or said after `since`: a verbatim answer, or a
+    short one like "yes" / "the first one" / "B" that appears in an owner line. The team's default is never it."""
+    want = _norm(answer)
+    if not want:
+        return False
+    for line in await d.ledger.recent_conversation(conversation, 30):
+        if line.get("who") != "owner" or (since and str(line.get("at", "")) < since):
+            continue
+        said = _norm(str(line.get("text", "")))
+        if want in said or (said and said in want and len(said) >= 2):
+            return True
+    return False
+
+
 # ---------- AIC ----------
 def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
     async def delegate(a: dict[str, Any]) -> str:
         cons = a.get("constraints")
+        words = f"{a.get('owner_words') or ''}\n{a['goal']}"
+        # Complaints, bug reports and questions about AI City itself are never jobs: nothing the team builds
+        # changes AI City, and the owner's last "the voice is bugged" became three departments.
+        if about_ai_city(words):
+            log("info", "aic.triage", route="self", department=None, reason="about AI City itself")
+            return (
+                "Triage: this is about AI City itself (its voice, screens, speed, app or city view), so there is "
+                "no job for the team. Answer the owner yourself, and say that changes to AI City are made in "
+                "their builder session, not by the team. No task was created."
+            )
         target = await get_app(d.ledger, str(a["app_id"])) if a.get("app_id") else None
         if a.get("app_id") and not target:
             return "There is no app with that id. Check get_status for the apps and their ids."
         hint = ""
+        verdict = None
         if d.utility_runner is not None and not target:
             # The Orchestrator's quick triage (one short utility call): most questions, lists and drafts are
             # AIC's to answer right now; only real work becomes a task.
             t0 = time.monotonic()
             names = [str(x.get("name", "")) for x in await d.ledger.list_departments()]
             verdict = await triage(
-                f"{a.get('owner_words') or ''}\nGoal: {a['goal']}",
+                words,
                 [n for n in names if n],
                 UtilityDeps(ledger=d.ledger, bus=d.bus, settings=await d.settings(), runner=d.utility_runner),
             )
@@ -175,7 +208,7 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 department=verdict.department,
                 ms=round((time.monotonic() - t0) * 1000),
             )
-            if verdict.route == "self":
+            if verdict.route == "self" and not a.get("confirm"):
                 return "Triage: answer this yourself now, in full. No task was created."
             hint = (
                 f"\nTriage suggests the {verdict.department} department."
@@ -184,6 +217,28 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 if verdict.department
                 else ""
             ) + (f" ({verdict.reason})" if verdict.reason else "")
+        open_cap = int((await d.settings()).get("max_open_jobs") or 3)
+        open_jobs = len(await running_jobs(d))
+        if open_jobs >= open_cap and not target:
+            log("info", "delegate.refused", open_jobs=open_jobs, cap=open_cap)
+            return (
+                f"Not started: {open_jobs} job{'s' if open_jobs != 1 else ''} already running (the limit is "
+                f"{open_cap}). Tell the owner; they can stop one, or raise the limit in Settings."
+            )
+        if not a.get("confirm"):
+            # A job starts only on the owner's explicit yes: nothing is created until AIC has asked.
+            who = (
+                f"the {target['title']} app's team"
+                if target
+                else f"{verdict.department}"
+                if verdict and verdict.department
+                else "the team"
+            )
+            return (
+                f"Ask the owner first, in one short sentence, whether the team should take this on, for example: "
+                f"“Want the team to build that? {who}, a few dollars.” Nothing was started. On a clear yes, call "
+                "delegate_to_orchestrator again with confirm=true; on a no or anything unclear, start nothing."
+            )
         t = await new_ticket(
             d,
             {
@@ -253,6 +308,17 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         return json.dumps({**await status_summary(d), "apps": apps})
 
     async def answer(a: dict[str, Any]) -> str:
+        # Only the owner answers the team's questions. The answer must be words the owner actually typed or
+        # said in this conversation after the question was asked; AIC never fills in a default on its own.
+        q = await d.ledger.get_question(str(a["question_id"]))
+        if not q or q.get("status") != "open":
+            return "That question was already answered or does not exist."
+        if not await owner_said(d, c.conversation or "main", str(a["answer"]), str(q.get("created_at") or "")):
+            log("info", "answer.refused", question=q["id"], reason="not the owner's words")
+            return (
+                "Not sent: the owner hasn't said that. Ask the owner in your reply, offering the default, and "
+                "send their words when they answer. Until then the question waits in Needs you."
+            )
         r = await answer_question(d, str(a["question_id"]), str(a["answer"]), "owner")
         return r or "That question was already answered or does not exist."
 
@@ -278,28 +344,37 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
 
     async def everyone_home(a: dict[str, Any]) -> str:
         n = len(await workers_at_work(d))
-        if n == 0:
-            return "Nobody is at work right now."
+        jobs = len(await running_jobs(d))
+        if n == 0 and jobs == 0:
+            return "Nobody is at work right now, and no job is running."
         if not a.get("confirm"):
             return (
-                f"Send all {n} worker{'s' if n != 1 else ''} home now? They'll drop what they're doing. "
-                "(Ask the owner; call again with confirm=true on yes.)"
+                f"Send everyone home and stop all {jobs} job{'s' if jobs != 1 else ''}? "
+                f"{n} worker{'s' if n != 1 else ''} will drop everything. "
+                "(Ask the owner; call again with confirm=true on a clear yes.)"
             )
         r = await send_workers_home(d)
         return (
-            f"Sent {r['workers']} worker{'s' if r['workers'] != 1 else ''} home. "
-            f"{r['parts']} part{'s' if r['parts'] != 1 else ''} will need a new worker when the managers pick them up again. "
-            "The city is still running."
+            f"Sent {r['workers']} worker{'s' if r['workers'] != 1 else ''} home and stopped "
+            f"{r['jobs']} job{'s' if r['jobs'] != 1 else ''}. Nobody is hired or assigned again until the owner "
+            "starts a new job. The city is still running."
         )
 
     return [
         ToolSpec(
             "delegate_to_orchestrator",
-            "Hand real work to the Orchestrator. Use for anything beyond a quick answer. To change one of the "
-            "owner's apps, pass its app_id (from get_status).",
+            "Hand real work to the Orchestrator, only when the owner asked for a deliverable. First call with "
+            "confirm=false: it tells you what to ask the owner (nothing starts); on the owner's clear yes, call "
+            "again with confirm=true. To change one of the owner's apps, pass its app_id (from get_status).",
             _obj(
-                {"goal": _s(3), "owner_words": _s(), "constraints": _s(), "app_id": _s(1, 40)},
-                ("constraints", "app_id"),
+                {
+                    "goal": _s(3),
+                    "owner_words": _s(),
+                    "constraints": _s(),
+                    "app_id": _s(1, 40),
+                    "confirm": {"type": "boolean"},
+                },
+                ("constraints", "app_id", "confirm"),
             ),
             delegate,
         ),
@@ -340,9 +415,10 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         ),
         ToolSpec(
             "send_workers_home",
-            "Send every worker home now: they drop what they are doing and walk home; their unfinished parts wait "
-            "for a new worker. The city keeps running. First call with confirm=false to get the one-line question "
-            "to ask the owner; on their yes, call again with confirm=true.",
+            "Send everyone home now: every running job is stopped, every worker drops what it is doing and walks "
+            "home, and nobody is hired or assigned again until the owner starts a new job. The city keeps running. "
+            "First call with confirm=false to get the one-line question to ask the owner; on their clear yes, "
+            "call again with confirm=true.",
             _obj({"confirm": {"type": "boolean"}}, ()),
             everyone_home,
         ),
@@ -381,6 +457,14 @@ def _ask_owner(d: CityDeps, c: TurnCtx) -> ToolSpec:
 def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
     async def create_department(a: dict[str, Any]) -> str:
         name = str(a["name"]).strip()
+        dept_cap = int((await d.settings()).get("max_departments") or 6)
+        existing = await d.ledger.list_departments()
+        if len(existing) >= dept_cap and not any(str(x.get("name", "")).lower() == name.lower() for x in existing):
+            log("info", "department.refused", name=name, departments=len(existing), cap=dept_cap)
+            return (
+                f"Refused: the city already has {len(existing)} departments (the ceiling is {dept_cap}). "
+                "Use one of them: " + ", ".join(str(x.get("name", "")) for x in existing) + "."
+            )
         dept, created = await d.ledger.create_department(name, str(a["mission"]), manager_id(name))
         if not created:
             return f"{dept['name']} already exists; use it."
@@ -407,6 +491,8 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         dept = await d.ledger.get_department(str(a["department"]))
         if not dept:
             return f"There is no department called {a['department']}. Create it first."
+        if dept.get("stood_down_at"):
+            await d.ledger.stand_down_department(dept["name"], down=False)  # a new job from the owner lifts it
         t = await new_ticket(
             d,
             {
@@ -586,7 +672,19 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         # may have at most max_workers_per_goal live workers on one goal, and a department at most
         # max_concurrent_workers_per_department live workers. Workers hired before goal ids existed count
         # against the goal, to be safe.
+        stood = await d.ledger.get_department(dept) or {}
+        if stood.get("stood_down_at"):
+            log("info", "hire.refused", department=dept, reason="stood down")
+            return f"Hire refused: {STAND_DOWN_NOTE}"
         s = await d.settings()
+        city_cap = int(s.get("max_live_workers_city") or 10)
+        city_live = len(await workers_at_work(d))
+        if city_live >= city_cap:
+            log("info", "hire.refused", department=dept, live_city=city_live, cap=city_cap)
+            return (
+                f"Hire refused: the whole city already has {city_live} workers at work (the ceiling is {city_cap}). "
+                "Wait for one to finish, or do it with the workers you have."
+            )
         goal_cap = int(s.get("max_workers_per_goal") or 3)
         dept_cap = int(s.get("max_concurrent_workers_per_department") or 10)
         live = [

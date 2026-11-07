@@ -2,7 +2,7 @@
 // screen says. Every backend is mocked (see mock.ts). Screenshots go to docs/screenshots/.
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-import { at, baseSnapshot, hired, mockBackend } from "./mock.ts";
+import { at, hired, mockBackend } from "./mock.ts";
 
 const SHOTS = `${import.meta.dirname}/../../docs/screenshots`;
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: false });
@@ -1031,32 +1031,4 @@ test("knowledge: add files, paste a link, change how it's used, delete with Undo
   await expect.poll(deletes, { timeout: 16_000 }).toBe(1);
   expect(m.calls.find((c) => c.method === "DELETE")?.path).toMatch(/^\/knowledge\/k-/);
   await expect(row("photo.png")).toHaveCount(0);
-});
-
-test("Send everyone home is quiet when nobody is at work", async ({ page }) => {
-  await mockBackend(page);
-  await page.goto("/");
-  await expect(page.getByRole("button", { name: /Send everyone home/ })).toBeDisabled();
-});
-
-test("Send everyone home: one confirm, then every worker is sent home", async ({ page }) => {
-  const atWork = (id: string) => ({ ...hired(id, "Apps").agent, worker_state: "working", state: "active" });
-  const m = await mockBackend(page, {
-    snapshot: {
-      agents: [...baseSnapshot().agents, hired("mgr-apps", "Apps", "manager").agent, atWork("wkr-1"), atWork("wkr-2")],
-    },
-  });
-  await page.goto("/");
-  const button = page.getByRole("button", { name: /Send everyone home/ });
-  await expect(button).toBeEnabled();
-  await button.click();
-  const dialog = page.getByRole("dialog", { name: "Send everyone home?" });
-  await expect(dialog.getByText("Send all 2 workers home? They'll drop what they're doing.")).toBeVisible();
-  await dialog.getByRole("button", { name: "Send everyone home" }).click();
-  await expect.poll(() => m.calls.some((c) => c.path === "/workers/home" && c.method === "POST")).toBe(true);
-  await expect(page.getByText(/Sent 2 workers home/)).toBeVisible();
-  await shot(page, "ace-send-home");
-  // The City view has the same button in its top bar.
-  await page.getByRole("link", { name: "City" }).click();
-  await expect(page.getByRole("button", { name: /Send everyone home/ })).toBeVisible();
 });

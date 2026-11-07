@@ -23,7 +23,7 @@ PARTS = ["implement power", "write the test", "update the docs"]
 
 async def ace(req: EngineRequest, call: Call) -> str:
     if "(task) from owner" in req.turn.prompt:
-        await call("delegate_to_orchestrator", {"goal": GOAL, "owner_words": GOAL})
+        await call("delegate_to_orchestrator", {"goal": GOAL, "owner_words": GOAL, "confirm": True})
         return "On it — the team is starting."
     return "Done: power(a, b) is in add.js with a test, reviewed and signed off. About a cent of model time."
 

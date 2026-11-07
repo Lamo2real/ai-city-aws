@@ -340,19 +340,22 @@ async def _office(d: Any) -> tuple[str, list[str]]:
     return task["id"], workers
 
 
-async def test_post_workers_home_sends_everyone_home_at_once_without_pausing() -> None:
+async def test_post_workers_home_stops_every_job_and_sends_everyone_home_at_once() -> None:
     d = make()
-    _, workers = await _office(d)
+    task_id, workers = await _office(d)
     r = await handle_http(ev("POST", "/workers/home"), d)
-    assert r["statusCode"] == 200 and js(r) == {"workers": 2, "parts": 2, "failed": 0}
+    assert r["statusCode"] == 200 and js(r) == {"jobs": 1, "workers": 2, "parts": 3, "managers": 1, "failed": 0}
     for w in workers:
         a = await d.ledger.get_agent(w)
         assert a and a["state"] == "retired" and a["worker_state"] == "released"
     assert sorted(e["id"] for e in d.bus.of_type("agent.retired")) == workers
-    assert d.bus.of_type("city.state") == []  # nothing else happens to the city
-    # The manager hears once which parts need a new worker; nobody is at work afterwards.
-    assert len([m for m in d.queue.sent if m["agentId"] == "mgr-writing"]) == 1
-    assert js(await handle_http(ev("POST", "/workers/home"), d)) == {"workers": 0, "parts": 0}
+    assert (await d.ledger.get_ticket(task_id))["status"] == "cancelled"  # the job itself is stopped
+    # The manager stands down: dormant, its department hires nothing, and nobody is asked to re-assign.
+    assert (await d.ledger.get_agent("mgr-writing"))["state"] == "dormant"
+    assert (await d.ledger.get_department("Writing")).get("stood_down_at")
+    assert not [m for m in d.queue.sent if "Assign again" in str(m.get("body"))]
+    again = await handle_http(ev("POST", "/workers/home"), d)
+    assert js(again) == {"jobs": 0, "workers": 0, "parts": 0, "managers": 1, "failed": 0}
 
 
 async def test_post_tasks_cancel_stops_one_job_and_knows_a_wrong_or_finished_one() -> None:

@@ -104,6 +104,28 @@ _TRIAGE_CACHE: dict[str, Triage] = {}
 _TRIAGE_CACHE_MAX = 256
 TRIAGE_WHEN_UNSURE = Triage("department", None, "triage unavailable; the Orchestrator decides")
 
+_CITY_PARTS = re.compile(
+    r"\b(ai city|aic|ace|the city|city view|the map|hud|the app|this app|the iphone app|the voice|your voice|"
+    r"the mic|microphone|the sound|the audio|the chat|the screen|the button|the buttons|settings|the login|"
+    r"sign[- ]in|the workers|the team|the planner|the orchestrator)\b",
+    re.I,
+)
+_COMPLAINT = re.compile(
+    r"\b(bug|bugged|bugs|broken|crash|crashed|doesn'?t work|does not work|not working|isn'?t working|slow|too long|"
+    r"lag|laggy|fix|fixed|more human|humane|robotic|can'?t hear|cannot hear|no sound|wrong|annoying|bad ux|hate|"
+    r"remove|get rid|why (is|does|do|can'?t)|don'?t want|should be|supposed to|not listening|doesn'?t listen|"
+    r"don'?t listen|ignoring|ignores)\b",
+    re.I,
+)
+_EXPLICIT_TEAM = re.compile(r"\b(have the team|get the team|let the team|ask the team|the team should|team to)\b", re.I)
+
+
+def about_ai_city(text: str) -> bool:
+    """Feedback, a complaint, a bug report or a question about AI City itself (its voice, screens, speed, app,
+    city view, team): never a job for the city. Those are answered by AIC and changed in the owner's builder
+    session. An explicit "have the team …" still goes through."""
+    return bool(_CITY_PARTS.search(text) and _COMPLAINT.search(text) and not _EXPLICIT_TEAM.search(text))
+
 
 def parse_triage(text: str) -> Triage | None:
     """The utility model's JSON answer, or None when it isn't one."""

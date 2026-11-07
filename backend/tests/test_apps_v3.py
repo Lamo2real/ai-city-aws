@@ -129,7 +129,12 @@ async def test_aic_lists_the_apps_and_hands_over_a_change_to_one_by_id() -> None
     status = await tool(d, ACE, "get_status")({})
     assert '"app_id": "app-snake"' in status and '"version": 1' in status
     out = await tool(d, ACE, "delegate_to_orchestrator")(
-        {"goal": "make snake harder", "owner_words": "make my snake game harder", "app_id": "app-snake"}
+        {
+            "goal": "make snake harder",
+            "owner_words": "make my snake game harder",
+            "app_id": "app-snake",
+            "confirm": True,
+        }
     )
     assert out.startswith("Handed to the Orchestrator")
     (t,) = [t for t in await d.ledger.list_tickets(("open",)) if t.get("kind") == "task"]

@@ -81,23 +81,41 @@ async def workers_at_work(d: CityDeps) -> list[Record]:
     ]
 
 
-SENT_HOME_NOTE = "sent home by the owner; needs a new worker"
+SENT_HOME_NOTE = "sent home by the owner"
+STAND_DOWN_NOTE = "The owner sent everyone home; do not hire or assign anything until the owner starts a new job."
+
+
+async def running_jobs(d: CityDeps) -> list[Record]:
+    """The owner's top-level jobs that are still going."""
+    return [
+        t
+        for t in await d.ledger.list_tickets(list(OPEN_ASSIGNMENT))
+        if t.get("kind") == "task" and not t.get("parent_id")
+    ]
 
 
 async def send_workers_home(d: CityDeps) -> dict[str, int]:
-    """The owner's "send the workers home": every live worker drops what it is doing and goes home (released,
-    one `agent.retired` each, so the City walks them out), its open parts are cancelled with a note, and each
-    manager is told once which parts need a new worker. Nothing else changes."""
-    workers = await workers_at_work(d)
-    by_manager: dict[str, list[Record]] = {}
-    parts = sent = failed = 0
-    for w in workers:
+    """The owner's "send everyone home": every running job is stopped (its whole tree cancelled), every live
+    worker drops what it is doing and goes home (released, one `agent.retired` each, so the City walks them
+    out), and every manager stands down: it goes dormant and its department hires or assigns nothing until the
+    owner starts a new job (`assign_to_department` lifts that). Nobody is woken up; there is nothing to do."""
+    from .tasks import cancel_task  # tasks builds on actions
+
+    at_work = await workers_at_work(d)  # counted before anything moves: stopping a job sends its workers home
+    jobs = parts = sent = failed = 0
+    for job in await running_jobs(d):
+        try:
+            parts += (await cancel_task(d, job))["jobs"]
+            jobs += 1
+        except Exception as e:  # one stuck job never keeps the rest running
+            log("warn", "job.cancel_failed", task=job["id"], error=type(e).__name__)
+    for w in at_work:
         # One worker that cannot be released never keeps the others at their desks.
         try:
             stale = await d.ledger.tickets_of(w["id"], OPEN_ASSIGNMENT)
             for t in stale:
                 await move(d, t["id"], "cancelled", f"{w['id']} {SENT_HOME_NOTE}")
-            await d.factory.release(w["id"], str(w.get("parent")))  # a no-op if the last cancel above sent it home
+            await d.factory.release(w["id"], str(w.get("parent")))  # a no-op if a cancel above sent it home
         except Exception as e:
             failed += 1
             log("warn", "worker.release_failed", worker=w["id"], error=type(e).__name__)
@@ -105,24 +123,20 @@ async def send_workers_home(d: CityDeps) -> dict[str, int]:
         parts += len(stale)
         sent += 1
         log("info", "worker.sent_home", worker=w["id"], department=w.get("department"), assignments=len(stale))
-        if stale and w.get("parent"):
-            by_manager.setdefault(str(w["parent"]), []).extend(stale)
-    for mgr, stale in by_manager.items():
-        listed = "; ".join(f"{t['id']}: {t.get('goal', '')}" for t in stale)
-        await send(
-            d,
-            {
-                "role": "manager",
-                "agentId": mgr,
-                "department": stale[0].get("department"),
-                "ticketId": str(stale[0].get("parent_id") or stale[0]["id"]),
-                "taskId": str(stale[0].get("task_id") or stale[0].get("parent_id") or stale[0]["id"]),
-                "kind": "task",
-                "from": "city",
-                "body": f"The owner sent the workers home. Assign again when you are ready: {listed}",
-            },
-        )
-    return {"workers": sent, "parts": parts, "failed": failed}
+    managers = 0
+    for m in await d.ledger.list_agents():
+        if m.get("kind") != "manager" or m.get("state") == "retired":
+            continue
+        try:
+            if m.get("department"):
+                await d.ledger.stand_down_department(str(m["department"]))
+            if m.get("state") != "dormant":
+                await d.ledger.update_agent(m["id"], {"state": "dormant"})
+            managers += 1
+        except Exception as e:
+            log("warn", "manager.stand_down_failed", manager=m["id"], error=type(e).__name__)
+    log("info", "city.everyone_home", jobs=jobs, workers=sent, parts=parts, managers=managers, failed=failed)
+    return {"jobs": jobs, "workers": sent, "parts": parts, "managers": managers, "failed": failed}
 
 
 async def move(d: CityDeps, id: str, status: str, note: str = "", patch: Record | None = None) -> Record:
