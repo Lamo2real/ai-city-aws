@@ -241,7 +241,9 @@ export async function mockBackend(
   };
   await page.addInitScript(
     ({ signedIn }) => {
-      if (signedIn) sessionStorage.setItem("aic.fake.signedIn", "1");
+      // Like Amplify now: the sign-in lives in localStorage, so it survives closing the tab. "revoked" keeps the
+      // stored sign-in but refuses it, as Cognito does with an expired or revoked refresh token.
+      if (signedIn) localStorage.setItem("aic.fake.signedIn", "1");
       const fail = (name: string) => Object.assign(new Error(name), { name });
       (window as unknown as { __aicAuth: unknown }).__aicAuth = {
         async signIn(_email: string, password: string) {
@@ -258,18 +260,23 @@ export async function mockBackend(
         },
         async confirmCode(code: string) {
           if (code !== "123456") throw fail("CodeMismatchException");
-          sessionStorage.setItem("aic.fake.signedIn", "1");
+          localStorage.setItem("aic.fake.signedIn", "1");
           return { kind: "done" };
         },
         async forgotPassword() {},
         async confirmForgotPassword(_e: string, code: string) {
           if (code !== "654321") throw fail("CodeMismatchException");
         },
+        hadSession() {
+          return localStorage.getItem("aic.fake.signedIn") !== null;
+        },
         async idToken() {
-          return sessionStorage.getItem("aic.fake.signedIn") === "1" ? "header.payload.sig" : null;
+          const v = localStorage.getItem("aic.fake.signedIn");
+          if (v === "revoked") localStorage.removeItem("aic.fake.signedIn"); // Amplify drops a rejected sign-in
+          return v === "1" ? "header.payload.sig" : null;
         },
         async signOut() {
-          sessionStorage.removeItem("aic.fake.signedIn");
+          localStorage.removeItem("aic.fake.signedIn");
         },
       };
       // A fake voice: the mic "hears" whatever the test puts in window.__heard (or nothing when __micHold is set,

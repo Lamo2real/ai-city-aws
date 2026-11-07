@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { flushOutbox, loadCity, saveSettings } from "./lib/actions.ts";
 import { api } from "./lib/api.ts";
-import { idToken } from "./lib/auth.ts";
+import { bootAuth } from "./lib/auth.ts";
 import { loadConfig } from "./lib/config.ts";
 import { store, useHud, waitingCount } from "./lib/store.ts";
 import { live } from "./lib/ws.ts";
@@ -43,6 +43,7 @@ type Boot = "starting" | "signed_out" | "ready" | "failed";
 export function App() {
   const [boot, setBoot] = useState<Boot>("starting");
   const [bootError, setBootError] = useState<string | null>(null);
+  const [signInNote, setSignInNote] = useState<string | null>(null);
   const [{ view, slug }, setRoute] = useState<{ view: View; slug: string | null }>(() => route(location.hash, VIEWS));
   const [guide, setGuide] = useState(false);
   const waiting = useHud(waitingCount);
@@ -60,7 +61,11 @@ export function App() {
   const start = useCallback(async () => {
     try {
       await loadConfig();
-      if (!(await idToken())) {
+      const a = await bootAuth();
+      if (a.state === "offline")
+        throw new Error("you seem to be offline, and your sign-in needs the network to refresh");
+      if (a.state === "signed_out") {
+        setSignInNote(a.note);
         setBoot("signed_out");
         return;
       }
@@ -117,7 +122,7 @@ export function App() {
         >{`AI City could not start: ${bootError ?? "unknown problem"}. Nothing was lost.`}</Banner>
       </main>
     );
-  if (boot === "signed_out") return <SignIn onSignedIn={() => void start()} />;
+  if (boot === "signed_out") return <SignIn note={signInNote} onSignedIn={() => void start()} />;
   if (boot !== "ready")
     return (
       <main className="center" aria-busy="true">
