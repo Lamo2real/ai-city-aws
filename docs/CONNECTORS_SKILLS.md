@@ -118,7 +118,7 @@ One `Query` on `pk = "CONNECTORS"` lists them all. Runtimes read the list at tur
 - Runtime: at turn start, `connectors_for(role, hire)` reads the `ready` records and keeps those whose `roles` include
   the role (level `read` keeps only `read_only` tools). For a worker, it keeps only the connector ids on its hire
   (`WorkerSpec.connectors`, validated by the Factory against records whose roles include `worker`; saved specialists keep them).
-- `backend/src/aic/runtime/gateway.py`: `GatewayClient(url)` speaks MCP over streamable HTTP signed with **SigV4** (service
+- `backend/src/aic/shared/gateway.py` (importable from Lambdas; the runtime's `runtime/gateway.py` adds the per-role filter and wrapping): `GatewayClient(url)` speaks MCP over streamable HTTP signed with **SigV4** (service
   `bedrock-agentcore`) and runs `tools/list` (cached 5 minutes per process, and refreshed when the connector list's `updated_at`
   changes) and `tools/call` (60 s). The Gateway's tool names are `<id>___<tool>`.
 - **SDK path** (`engine._options`): an in-process MCP server `gateway` proxies the allowed tools, so their names are
@@ -178,22 +178,23 @@ Events: `{"type": "connector.updated", "id", "label", "status", "auth", "needs"?
 - A connector is one **account** on one server. The same server may be added several times ("work Outlook" and "personal Outlook"). Each copy has its own `id` (`<server>-<label>`, e.g. `outlook-work`), its own `label`, its own Identity provider `aic-conn-<id>` (so its own token in the vault, even though the vault user is `owner` for all of them) or its own secret, and its own tools `<id>___<tool>`. `add_connector` takes `{query, label?}`. When the server is already connected, AIC asks the owner for a label instead of replacing the existing one. Approval cards and Settings show `label` first.
 - **Mail and calendar accounts** (Google, Microsoft, IMAP/CalDAV) are built by the mail/calendar work (`docs/MAIL_CALENDAR.md`, decisions 70–72) as city tools with their own `connect_account`. When the owner asks for a mailbox or calendar from those providers, AIC uses `connect_account`, not `add_connector`. A remote MCP server for mail or calendar, if the owner names one, is added as an ordinary connector. In the HUD, both show under Settings, as "Connectors" and "Mail & calendar accounts", with the same sign-in card.
 
-### 1.9 Calling a connector for an app (the apps feature's data bridge)
-Apps (built by the apps feature, session "apps") may read connector data the owner approved for them. **There is no HTTP route for this and no token ever leaves AWS.** The interface is a Python function in the shared package, run inside the apps bridge Lambda:
+### 1.9 Calling a connector for an app (the apps feature's data bridge, `docs/APPS.md` § "v2: data bridge")
+Published apps may read connector data the owner granted them at publish (manifest `connector.read`, stored as `grants` on the app record `APPS` / `APP#<app_id>`). The HUD's data bridge asks the **api Lambda**, which calls the Gateway with its own role. **No token ever leaves AWS.** The connectors side provides:
 ```python
-# aic.shared.connector_calls
-async def app_call(d: CityDeps, *, app_id: str, capability_id: str, connector_id: str,
-                   tool: str, args: dict[str, Any]) -> AppCallResult
+# aic.shared.connector_calls (importable from Lambdas: no runtime-only imports)
+async def app_call(d: CityDeps, *, app_id: str, connector_id: str, tool: str,
+                   args: dict[str, Any]) -> AppCallResult
 # AppCallResult = {"ok": bool, "data": list[{"type": "text", "text": str} | {"type": "json", "json": Any}],
 #                  "truncated": bool, "error": str | None}
 ```
 It checks, in order (the first that fails answers `ok: false` with a plain `error`, and the tool isn't called):
-1. The **capability** exists, is owner-approved and not revoked, and names this `connector_id` and this `tool` (the record and its shape belong to the apps contract; this function only reads it).
-2. The connector is `ready`, and the tool is **read-only** (`read_only: true` and `destructive: false` from the annotations). **Outward or destructive tools are never callable this way**, whatever the capability says. Unknown counts as a write.
-3. `policy.gate(f"mcp__gateway__{connector_id}___{tool}", args, role="app", agent_id=f"app-{app_id}")`: an "ask" is a deny here, because apps can't ask. Then `ledger.audit_tool` (name, decision and duration only).
+1. The app record exists and its `grants` contain `connector.read` for exactly this `connector_id` and `tool`.
+2. The connector is `ready`, and the tool is **read-only** (`read_only: true` and `destructive: false`). **Outward or destructive tools are never callable this way**, whatever the grant says. Unknown counts as a write.
+3. `policy.gate(f"mcp__gateway__{connector_id}___{tool}", args, role="app", agent_id=f"app-{app_id}")` (the same name the agents use, so every `config/policy.json` rule applies). An "ask" is a deny here. Then `ledger.audit_tool` (name, decision and duration only).
 4. A rate limit of 60 calls per minute per app (a ledger counter).
-Then it calls through the **Gateway** with the apps bridge Lambda's role (`aic-prod-app-bridge`, SigV4). The Cedar rewrite (§1.5) adds one `permit` for that principal covering **every read-only tool of every ready connector**, so AWS refuses writes even if this code is bypassed. Results are capped at 200,000 characters, with no wrapping text (the data is for code, not a model). They are still **untrusted**: the apps contract renders them as text, never as HTML or script.
-IAM: `aic-prod-app-bridge` gets `bedrock-agentcore:InvokeGateway` on the gateway, and ledger read of `CONNECTORS` and of the apps' capability rows. Never Identity, Secrets Manager or the bridge Lambda.
+Then `GatewayClient` (in **`aic.shared.gateway`**, also used by the runtimes; SigV4 with whatever boto3 credentials the process has) calls `<id>___<tool>`. Results are capped at 200,000 characters, with no wrapping text. They are still **untrusted**, so apps render them as text only.
+**Cedar:** the connectors Lambda's rewrite adds one `permit` for the **api Lambda's role**, listing exactly the `<id>___<tool>` pairs that appear in some app's `grants` and are still read-only and ready. The apps code invokes the connectors Lambda with `{"action": "policies"}` (async) after a publish, a removal or a grant change, and the connectors Lambda also runs it after every connector sync or removal. So AWS refuses anything that isn't granted, even if this code is bypassed.
+IAM (apps infra): the api role gets `bedrock-agentcore:InvokeGateway` on the gateway. It already may invoke the connectors Lambda (§1.6). Never Identity token or Secrets Manager reads for this.
 
 ## 2. Skills
 
