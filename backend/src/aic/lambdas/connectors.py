@@ -20,6 +20,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from aic.shared import connector_packages
 from aic.shared.connectors import (
     LEVELS,
     ROLES,
@@ -75,6 +76,7 @@ class ConnectorsDeps:
     transport: Transport = urllib_transport
     resolve: Resolver = system_resolver
     tags: dict[str, str] = field(default_factory=resource_tags)
+    mcp_host_arn: str = ""
 
 
 async def _emit(d: ConnectorsDeps, rec: Record | None) -> None:
@@ -116,6 +118,8 @@ async def provision(d: ConnectorsDeps, id: str) -> Record | None:
     rec = await d.store.get(id)
     if not rec or rec.get("status") != "provisioning":
         return rec
+    if rec.get("transport") == "package":  # §1.10
+        return await connector_packages.provision(d, rec, _set, sync)
     if bad := check_url(str(rec.get("url", "")), d.resolve):
         return await _fail(d, id, bad)
     try:
@@ -330,8 +334,11 @@ async def sync(d: ConnectorsDeps, id: str) -> Record | None:
         return rec
     await _set(d, id, {"status": "syncing"})
     try:
-        headers = await asyncio.to_thread(credential_headers, rec, d.identity, d.workload)
-        raw = await remote_client(rec, headers, d.transport).list_tools()
+        if rec.get("transport") == "package":  # §1.10: listing also pre-warms the host session
+            raw = await connector_packages.list_tools(rec, d)
+        else:
+            headers = await asyncio.to_thread(credential_headers, rec, d.identity, d.workload)
+            raw = await remote_client(rec, headers, d.transport).list_tools()
     except NeedsLogin:
         return await _set(d, id, {"status": "needs_login", "error": None})
     except NeedsKey:
@@ -495,6 +502,8 @@ async def remove(d: ConnectorsDeps, id: str) -> None:
         steps.append(("provider", d.control.delete_oauth2_credential_provider, {"name": f"aic-conn-{id}"}))
     if rec.get("auth") == "api_key":
         steps.append(("provider", d.control.delete_api_key_credential_provider, {"name": f"aic-conn-{id}"}))
+    if rec.get("transport") == "package":  # §1.10: end the connector's microVM
+        steps.append(("session", d.identity.stop_runtime_session, connector_packages.stop_kwargs(rec, d.mcp_host_arn)))
     if rec.get("secret_name"):
         steps.append(("secret", d.secrets.delete_secret, {"SecretId": rec["secret_name"], "RecoveryWindowInDays": 7}))
     for what, fn, kw in steps:
@@ -559,5 +568,6 @@ def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
             bridge_arn=require_env("AIC_BRIDGE_ARN"),
             workload=require_env("AIC_CONNECTORS_WORKLOAD"),
             app_role=os.environ.get("AIC_APP_BRIDGE_ROLE") or "aic-prod-fn-app-bridge",
+            mcp_host_arn=os.environ.get("AIC_MCP_HOST_ARN", ""),
         )
     return run(handle(event, _deps))

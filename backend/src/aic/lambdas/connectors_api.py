@@ -14,6 +14,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from aic.shared import connector_packages
 from aic.shared.connectors import (
     APPROVALS,
     ConnectorStore,
@@ -263,6 +264,8 @@ async def _key(c: ConnectorsApi, rec: Record, b: dict[str, Any]) -> Answer:
     if not (c.secrets and c.control):
         return _err(503, "Keys can't be stored yet.", "The owner deploys the connectors infrastructure first.")
     id = rec["id"]
+    if "env" in b:  # §1.10: a package connector's variables, stored as {"env": {…}} (no Identity provider)
+        return await _store_env(c, rec, connector_packages.env_secret(rec, b["env"]))
     if "api_key" in b:
         if rec.get("auth") != "api_key":
             return _err(409, "That connector doesn't use an API key.")
@@ -297,6 +300,18 @@ async def _key(c: ConnectorsApi, rec: Record, b: dict[str, Any]) -> Answer:
         await _set(c, id, {"oauth": {**oauth, "registered": "owner"}, "status": "needs_login", "needs": None})
         return 200, {"ok": True}
     raise ValueError("Send api_key, or client_id and client_secret.")
+
+
+async def _store_env(c: ConnectorsApi, rec: Record, value: str) -> Answer:
+    name = f"{c.secret_prefix}/{rec['id']}"
+    try:
+        await asyncio.to_thread(_store_secret, c, name, value)
+    except Exception as e:
+        log("warn", "connector.key_failed", connector=rec["id"], error=type(e).__name__)
+        return _err(502, "The settings couldn't be stored.", "Try again in a moment.")
+    await _set(c, rec["id"], {"secret_name": name, "status": "syncing", "needs": None, "error": None})
+    await _invoke(c, "sync", rec["id"])
+    return 200, {"ok": True}
 
 
 def _store_secret(c: ConnectorsApi, name: str, value: str) -> str:
