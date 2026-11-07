@@ -409,6 +409,8 @@ test("a spoken reply starts with its first sentence while the rest still streams
   const spoken = () => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []);
   await page.getByRole("button", { name: "Talk to AIC", exact: true }).click(); // asked by voice
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
+  // The hands-free loop reopens the mic after the spoken reply; the next thing heard ends the conversation.
+  await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "stop listening"));
   m.send({ type: "ace.reply", conversation: "main", text: "All **quiet** in the city 🎉. Research", done: false });
   await expect.poll(spoken).toEqual(["All quiet in the city."]); // talking before the reply is complete
   await expect(page.locator(".voice")).toHaveAttribute("data-speaker", "aic");
@@ -614,6 +616,48 @@ test("the message box starts one line tall, grows with more lines up to a limit,
   await box.press("Enter"); // Enter still sends
   await expect.poll(() => m.calls.find((c) => c.path === "/messages")?.body).toMatchObject({ text: "hello" });
   expect(await height()).toBe(oneLine);
+});
+
+test("speech to speech: a spoken question gets a spoken answer, and the mic reopens until 'stop listening'", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  await page.addInitScript(() => {
+    (window as unknown as { __heard: string }).__heard = "what's the status?";
+    (window as unknown as { __speakMs: number }).__speakMs = 700;
+  });
+  await page.goto("/");
+  const strip = page.locator(".voice");
+  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
+  // Whatever the mic hears next ends the conversation.
+  await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "stop listening"));
+  m.send({ type: "ace.reply", conversation: "main", text: "All quiet. Nothing needs you.", done: true });
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []))
+    .toEqual(["All quiet.", "Nothing needs you."]); // the reply is spoken, sentence by sentence, no typing
+  await expect(strip).toHaveAttribute("data-speaker", "aic");
+  await expect(page.getByRole("button", { name: "Talk to AIC", exact: true })).toBeVisible(); // not listening while it talks
+  // AIC finished talking: the mic reopens by itself for the owner's next sentence.
+  await expect(strip).toHaveAttribute("data-speaker", "you");
+  await expect(page.getByRole("button", { name: "Stop listening" })).toBeVisible();
+  // It hears "stop listening": the conversation ends and nothing is sent.
+  await expect(strip).toHaveAttribute("data-speaker", "idle");
+  await page.waitForTimeout(200);
+  expect(m.calls.filter((c) => c.path === "/messages")).toHaveLength(1);
+
+  // A typed message never reopens the mic, and its reply stays silent under "Only when I talk".
+  await page.getByRole("textbox", { name: "Message to AIC" }).fill("hello");
+  await page.keyboard.press("Enter");
+  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(2);
+  m.send({ type: "ace.reply", conversation: "main", text: "Hi.", done: true });
+  await expect(page.getByLabel("Conversation with AIC").getByText("Hi.")).toBeVisible();
+  await page.waitForTimeout(400);
+  expect(await page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken)).toEqual([
+    "All quiet.",
+    "Nothing needs you.",
+  ]);
+  await expect(strip).toHaveAttribute("data-speaker", "idle");
 });
 
 test("a draft survives a reload", async ({ page }) => {

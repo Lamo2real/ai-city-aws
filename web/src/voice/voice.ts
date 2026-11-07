@@ -105,6 +105,15 @@ export function logVoiceError(where: string, e: unknown) {
 
 const named = (name: string, message: string) => Object.assign(new Error(message), { name });
 
+/** Plain words for why AIC's reply could not be spoken (Polly or its playback), shown on the voice line. */
+export function speakProblem(e: unknown): string {
+  const name = (e as { name?: string } | null)?.name ?? "";
+  if (name === "AudioPlayError" || name === "NotAllowedError")
+    return "The browser blocked the sound until you tap something. Tap the mic and ask again.";
+  if (name === "SignedOut") return "AIC's voice needs a fresh sign-in. Sign out and in again.";
+  return `AIC's voice could not play (${name || "Error"}${awsSays(e)}). The text above is the answer; typing still works.`;
+}
+
 declare global {
   interface Window {
     __aicVoice?: Voice;
@@ -175,8 +184,13 @@ function loudness(a: AnalyserNode | null, buf: Float32Array<ArrayBuffer> | null)
   return Math.min(1, Math.sqrt(sum / buf.length) * 5);
 }
 
+// A short silent clip: playing it inside the tap unlocks the one reusable audio element in Safari.
+const SILENCE = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=";
+
 class AwsVoice implements Voice {
   private audio: HTMLAudioElement | null = null;
+  private metered = false;
+  private meterNode: AnalyserNode | null = null;
   private polly: import("@aws-sdk/client-polly").PollyClient | null = null;
   private inMeter: AnalyserNode | null = null;
   private inBuf: Float32Array<ArrayBuffer> | null = null;
@@ -204,6 +218,20 @@ class AwsVoice implements Voice {
       void this.primed.resume().catch(() => undefined);
       this.outCtx ??= new AudioContext();
       void this.outCtx.resume().catch(() => undefined);
+      // Unlock the one reusable audio element inside the tap: Safari only lets an element play later
+      // (AIC's reply, long after this gesture) if it has already played, even silently, during one.
+      const a = (this.audio ??= new Audio());
+      if (a.paused) {
+        a.muted = true;
+        a.src = SILENCE;
+        void a
+          .play()
+          .then(() => {
+            a.pause();
+            a.muted = false;
+          })
+          .catch(() => (a.muted = false));
+      }
     } catch {
       this.primed = null; // listen() reports the real problem
     }
@@ -357,18 +385,23 @@ class AwsVoice implements Voice {
     };
   }
 
-  /** Routes the reply through an analyser when Web Audio is running; otherwise plays it directly. */
+  /** Routes the reply through an analyser when Web Audio is running; otherwise plays it directly.
+   *  The element is wired to Web Audio at most once (createMediaElementSource allows no second call). */
   private meterOutput(audio: HTMLAudioElement) {
     try {
       this.outCtx ??= new AudioContext();
       if (this.outCtx.state !== "running") void this.outCtx.resume().catch(() => undefined);
       if (this.outCtx.state !== "running") return void (this.outFallback = true); // never route into a muted context
-      const src = this.outCtx.createMediaElementSource(audio);
-      this.outMeter = this.outCtx.createAnalyser();
-      this.outMeter.fftSize = 1024;
-      this.outBuf = new Float32Array(this.outMeter.fftSize);
-      src.connect(this.outMeter);
-      this.outMeter.connect(this.outCtx.destination);
+      if (!this.metered) {
+        const src = this.outCtx.createMediaElementSource(audio);
+        this.meterNode = this.outCtx.createAnalyser();
+        this.meterNode.fftSize = 1024;
+        this.outBuf = new Float32Array(this.meterNode.fftSize);
+        src.connect(this.meterNode);
+        this.meterNode.connect(this.outCtx.destination);
+        this.metered = true;
+      }
+      this.outMeter = this.meterNode;
       this.outFallback = false;
     } catch {
       this.outFallback = true;
@@ -395,16 +428,19 @@ class AwsVoice implements Voice {
   async play(clip: Blob) {
     this.stopSpeaking();
     const url = URL.createObjectURL(clip);
-    const audio = new Audio(url);
-    this.audio = audio;
+    const audio = (this.audio ??= new Audio()); // one element, unlocked by prime() inside the owner's tap
+    audio.src = url;
     this.meterOutput(audio);
-    await new Promise<void>((resolve) => {
-      audio.onended = () => resolve();
-      audio.onerror = () => resolve();
-      audio.onpause = () => resolve(); // stopSpeaking() pauses it
-      void audio.play().catch(() => resolve());
-    });
-    URL.revokeObjectURL(url);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        audio.onended = () => resolve();
+        audio.onpause = () => resolve(); // stopSpeaking() pauses it
+        audio.onerror = () => reject(named("AudioPlayError", "the reply's audio clip could not play"));
+        audio.play().catch(reject); // a blocked autoplay surfaces instead of failing silently
+      });
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   }
 
   async speak(text: string) {
@@ -414,8 +450,7 @@ class AwsVoice implements Voice {
 
   stopSpeaking() {
     this.audio?.pause();
-    this.audio = null;
-    this.outMeter = null;
+    this.outMeter = null; // the element is kept: it stays unlocked for the next reply
   }
 }
 

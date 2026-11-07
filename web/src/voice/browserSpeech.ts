@@ -162,3 +162,45 @@ export function browserListen(
     }
   };
 }
+
+// ---------- the browser's own voice (speechSynthesis), when Polly or its playback refuses ----------
+const TTS_KEY = "aic.voice.tts";
+
+export const browserVoiceAvailable = (): boolean => "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
+
+/** True once Polly failed on this page session: replies go through the browser's own voice. */
+export function usingBrowserVoice(): boolean {
+  try {
+    return sessionStorage.getItem(TTS_KEY) === "browser";
+  } catch {
+    return false;
+  }
+}
+export function rememberBrowserVoice() {
+  try {
+    sessionStorage.setItem(TTS_KEY, "browser");
+  } catch {
+    /* fine: we try Polly again next time */
+  }
+}
+
+/** Says one cleaned sentence with the browser's voice; resolves when it ends (or cannot start). */
+export function browserSpeak(text: string): Promise<void> {
+  return new Promise((resolve) => {
+    try {
+      const u = new SpeechSynthesisUtterance(text);
+      u.onend = () => resolve();
+      u.onerror = () => resolve();
+      window.speechSynthesis.speak(u);
+    } catch {
+      resolve();
+    }
+  });
+}
+export function browserStopSpeaking() {
+  try {
+    window.speechSynthesis?.cancel();
+  } catch {
+    /* nothing was speaking */
+  }
+}
