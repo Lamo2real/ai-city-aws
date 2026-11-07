@@ -37,6 +37,13 @@ variable "runtime_arns" { type = map(string) }
 variable "utility_invoke_arns" { type = list(string) }
 variable "utility_profile_arn" { type = string }
 variable "profile_prefix" { type = string }
+variable "knowledge_table" { type = string }
+variable "knowledge_table_arn" { type = string }
+variable "knowledge_bucket" { type = string }
+variable "knowledge_bucket_arn" { type = string }
+variable "knowledge_base_id" { type = string }
+variable "knowledge_base_arn" { type = string }
+variable "knowledge_data_source_id" { type = string }
 variable "log_retention_days" {
   type    = number
   default = 30
@@ -60,7 +67,7 @@ locals {
   }
   # name => bundle, handler, timeout, memory, extra env
   functions = {
-    api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 512, env = { AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_USER_POOL_ID = var.user_pool_id, AIC_OWNER_EMAIL = var.owner_email } }
+    api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 512, env = { AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_USER_POOL_ID = var.user_pool_id, AIC_OWNER_EMAIL = var.owner_email, KNOWLEDGE_TABLE = var.knowledge_table, KNOWLEDGE_BUCKET = var.knowledge_bucket, KNOWLEDGE_BASE_ID = var.knowledge_base_id, KNOWLEDGE_DATA_SOURCE_ID = var.knowledge_data_source_id } }
     dispatcher    = { bundle = "app", handler = "aic.lambdas.dispatcher.handler", timeout = 120, memory = 256, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_ARN_ORCHESTRATOR = var.runtime_arns["orchestrator"], AIC_RUNTIME_ARN_MANAGER = var.runtime_arns["manager"], AIC_RUNTIME_ARN_WORKER = var.runtime_arns["worker"] } }
     factory       = { bundle = "app", handler = "aic.lambdas.factory.handler", timeout = 30, memory = 256, env = {} }
     ledger-writer = { bundle = "app", handler = "aic.lambdas.ledger_writer.handler", timeout = 30, memory = 256, env = {} }
@@ -82,6 +89,15 @@ locals {
       { Action = ["bedrock:InvokeModel"], Resource = var.utility_invoke_arns },
       # "Send me a new first-login email": re-sends the owner's invitation, nothing else.
       { Action = ["cognito-idp:AdminCreateUser"], Resource = [var.user_pool_arn] },
+      # The knowledge base (docs/KNOWLEDGE.md section 9): items, presigned uploads (single and multipart) under raw/,
+      # scope changes rewrite normalized/…metadata.json, deletes remove the item's files, then a re-sync.
+      { Action = local.ledger_rw, Resource = [var.knowledge_table_arn, "${var.knowledge_table_arn}/index/*"] },
+      { Action = ["dynamodb:BatchWriteItem", "dynamodb:BatchGetItem"], Resource = [var.knowledge_table_arn] },
+      { Action = ["s3:PutObject", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts", "s3:DeleteObject"], Resource = ["${var.knowledge_bucket_arn}/raw/*"] },
+      { Action = ["s3:PutObject", "s3:DeleteObject"], Resource = ["${var.knowledge_bucket_arn}/normalized/*"] },
+      { Action = ["s3:DeleteObject"], Resource = ["${var.knowledge_bucket_arn}/work/*"] },
+      { Action = ["s3:ListBucket"], Resource = [var.knowledge_bucket_arn], Condition = { StringLike = { "s3:prefix" = ["raw/*", "work/*", "normalized/*"] } } },
+      { Action = ["bedrock:StartIngestionJob"], Resource = [var.knowledge_base_arn] },
     ]
     dispatcher = [
       { Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] },
@@ -110,6 +126,8 @@ locals {
     "GET /departments", "GET /agents", "GET /workforce", "GET /costs", "GET /health", "GET /questions", "POST /questions/{id}/answer",
     "POST /questions/{id}/default", "POST /approvals/{id}", "GET /settings", "PUT /settings", "POST /city/pause", "POST /city/resume",
     "GET /memory", "POST /notes",
+    "GET /knowledge", "GET /knowledge/{id}", "POST /knowledge/uploads", "POST /knowledge/uploads/{id}/complete", "POST /knowledge/links",
+    "POST /knowledge/text", "PUT /knowledge/{id}", "DELETE /knowledge/{id}",
   ]
   queue_batch = { ace = 1, orchestrator = 5, manager = 5, worker = 10 }
   queue_conc  = { ace = 5, orchestrator = 10, manager = 20, worker = var.worker_queue_concurrency }
@@ -222,7 +240,7 @@ resource "aws_apigatewayv2_api" "http" {
   protocol_type = "HTTP"
   cors_configuration {
     allow_origins = [var.app_origin]
-    allow_methods = ["GET", "POST", "PUT"]
+    allow_methods = ["GET", "POST", "PUT", "DELETE"]
     allow_headers = ["authorization", "content-type"]
     max_age       = 600
   }
@@ -534,6 +552,9 @@ resource "aws_scheduler_schedule" "job" {
   }
 }
 
+# The one Lambda bundle, reused by the knowledge module's function.
+output "lambda_zip_path" { value = data.archive_file.bundle["app"].output_path }
+output "lambda_zip_hash" { value = data.archive_file.bundle["app"].output_base64sha256 }
 output "http_api_url" { value = aws_apigatewayv2_api.http.api_endpoint }
 output "ws_url" { value = "${aws_apigatewayv2_api.ws.api_endpoint}/prod" }
 output "function_arns" { value = { for k, f in aws_lambda_function.fn : k => f.arn } }

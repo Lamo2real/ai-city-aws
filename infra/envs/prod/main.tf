@@ -106,6 +106,14 @@ module "agents" {
   workspaces_arn        = module.storage.workspaces_arn
   github_secret_arn     = module.storage.secret_arns["github"]
   enable_gateway        = var.enable_gateway
+  # The knowledge base: every runtime searches it; AIC (ace) may add to it.
+  knowledge_table          = module.knowledge.table
+  knowledge_table_arn      = module.knowledge.table_arn
+  knowledge_bucket         = module.knowledge.bucket
+  knowledge_bucket_arn     = module.knowledge.bucket_arn
+  knowledge_base_id        = module.knowledge.knowledge_base_id
+  knowledge_base_arn       = module.knowledge.knowledge_base_arn
+  knowledge_data_source_id = module.knowledge.data_source_id
 }
 
 module "api" {
@@ -136,6 +144,35 @@ module "api" {
   utility_profile_arn = module.agents.utility_profile_arn
   profile_prefix      = var.profile_prefix
   log_retention_days  = var.log_retention_days
+  # The knowledge routes (docs/KNOWLEDGE.md section 5).
+  knowledge_table          = module.knowledge.table
+  knowledge_table_arn      = module.knowledge.table_arn
+  knowledge_bucket         = module.knowledge.bucket
+  knowledge_bucket_arn     = module.knowledge.bucket_arn
+  knowledge_base_id        = module.knowledge.knowledge_base_id
+  knowledge_base_arn       = module.knowledge.knowledge_base_arn
+  knowledge_data_source_id = module.knowledge.data_source_id
+}
+
+# The owner's knowledge base (docs/KNOWLEDGE.md): bucket, S3 Vectors + Bedrock Knowledge Base, graph table,
+# the knowledge Lambda and the ingest workflow.
+module "knowledge" {
+  source              = "../../modules/knowledge"
+  name                = local.name
+  region              = var.region
+  account_id          = data.aws_caller_identity.me.account_id
+  kms_key_arn         = module.security.kms_key_arn
+  boundary_arn        = module.security.boundary_arn
+  app_origin          = module.frontend.url
+  lambda_zip_path     = module.api.lambda_zip_path
+  lambda_zip_hash     = module.api.lambda_zip_hash
+  bus_name            = module.bus.bus_name
+  bus_arn             = module.bus.bus_arn
+  utility_invoke_arns = module.agents.utility_invoke_arns
+  utility_profile_arn = module.agents.utility_profile_arn
+  profile_prefix      = var.profile_prefix
+  deletion_protection = var.deletion_protection
+  log_retention_days  = var.log_retention_days
 }
 
 module "budgets" {
@@ -149,7 +186,7 @@ module "observability" {
   source           = "../../modules/observability"
   name             = local.name
   region           = var.region
-  dlq_names        = module.bus.dlq_names
+  dlq_names        = merge(module.bus.dlq_names, { knowledge-start = module.knowledge.start_dlq_name })
   queue_names      = [for k in ["ace", "orchestrator", "manager", "worker"] : "${local.name}-${k}"]
   function_names   = module.api.function_names
   notify_topic_arn = module.bus.notify_topic_arn

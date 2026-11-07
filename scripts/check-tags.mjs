@@ -19,6 +19,7 @@ export const COMPONENTS = [
   "security",
   "storage",
   "budgets",
+  "knowledge",
 ];
 export const AGENT_ROLE_TYPES = [
   "aws_bedrockagentcore_agent_runtime",
@@ -95,9 +96,7 @@ export function checkTags({
     }
   }
   // The six base tags must come from somewhere for every resource: the prod root's providers.
-  const envs = files
-    .filter((f) => /envs\/prod\/main\.tf$/.test(f))
-    .map((f) => readFileSync(f, "utf8"));
+  const envs = files.filter((f) => /envs\/prod\/main\.tf$/.test(f)).map((f) => readFileSync(f, "utf8"));
   for (const t of BASE_TAGS)
     if (!envs.every((e) => new RegExp(`\\b${t}\\s*=`).test(e)))
       problems.push(`default tag ${t} is not set in every root`);

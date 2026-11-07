@@ -89,12 +89,13 @@ Owner message → `POST /messages` → SQS (`ace` queue) → **dispatcher** Lamb
 | HUD | City view ported from the Mac HUD (Ace in plaza, Orchestrator at HQ door, manager at each department door, workers walk in/out, FREE LOTs, growing town, count badges, houses for specialists, top bar, right panel, bottom bar) | ✅ | `web/src/city/`, `CityView.tsx` |
 | HUD | Needs you (default answer in one tap; hold-to-approve), Tickets, Costs, Settings, first-run guide, spend pill (amber 80 %, red 100 %) | ✅ | `web/src/components/` |
 | HUD | Idiot-proof rules (one primary button, confirms with cost, Undo, plain errors, 44 px targets) | ✅ | `docs/UX_REVIEW.md` |
-| Infra | Terraform: 10 modules, prod root (state bucket created by `deploy.yml`); KMS; deletion protection | 🟡 offline checks only | `infra/` |
+| Infra | Terraform: 11 modules, prod root (state bucket created by `deploy.yml`); KMS; deletion protection | 🟡 offline checks only | `infra/` |
 | Infra | One role per runtime, permission boundary on every role, worker limits | ✅ (static check) | `infra/modules/agents/policies/`, `scripts/check-iam.mjs` |
 | Infra | Cost-allocation tags on every taggable resource | ✅ (static check) | `scripts/check-tags.mjs` |
 | Infra | AWS Budgets 50/80/100 + forecast, email alerts only (no deny action, no pause) | 🟡 | `infra/modules/budgets` |
 | Ops | `city-off.sh` / `city-on.sh`, `build-images.sh` (no push) | 🟡 not run | `scripts/` |
 | CI/CD | `ci.yml`, `deploy.yml`: needs only the variable `AIC_DEPLOY_ROLE_ARN` + the secret `AIC_OWNER_EMAIL`; creates the state bucket if missing; runs on every push to `main` (no approval; docs-only pushes skipped); one plan builds + pushes the image (tag = hash of the runtime sources) and deploys from nothing | 🟡 never run | `.github/workflows/`, `scripts/ensure-state-bucket.sh`, `scripts/push-image.sh` |
+| Knowledge | Knowledge infra: bucket `aic-prod-knowledge` (KMS, versioned, private, EventBridge, CORS PUT from the HUD, `work/` expires in 7 days), S3 Vectors index (1,024 dims, cosine), Bedrock Knowledge Base + `normalized/` data source (embedding model read from `config/models.json`), graph table (PITR, KMS), knowledge Lambda, Step Functions ingest, `raw/` rule → Lambda `start` (run named after the item) + DLQ, MediaConvert role, 8 HTTP routes, env vars and IAM (boundary passes only the MediaConvert role) | 🟡 offline checks only (fmt, validate, tflint, checkov, tag/IAM checks, `tests/infra.test.ts`); not applied | `infra/modules/knowledge`, `scripts/check-iam.mjs` |
 | Knowledge | Knowledge base: links, documents, images, audio, video, text; routed by format (Transcribe, MediaConvert, Haiku vision), Bedrock Knowledge Base on S3 Vectors (Titan V2 embeddings) + DynamoDB graph; scopes always / relevant / on request; `search_knowledge` for every role, `add_to_knowledge` and `list_knowledge` for AIC; HUD Knowledge screen | ❌ designed, not built | `docs/KNOWLEDGE.md` |
 | Gap | Worker S3 workspace sync (IAM ready) | ❌ | — |
 | Gap | Runtime use of AgentCore Memory | ❌ | — |
@@ -112,6 +113,7 @@ Owner message → `POST /messages` → SQS (`ace` queue) → **dispatcher** Lamb
 - 500 hires respect ceilings and the session rate; nothing dropped (`backend/tests/test_hierarchy_e2e.py`).
 - `deploy.yml` runs only on pushes to `main` or by hand (never on pull requests); `ci.yml` only by hand (`tests/workflows.test.ts`).
 - Tags and worker IAM limits (`tests/infra.test.ts`).
+- Knowledge roles: no IAM except passing the MediaConvert role to MediaConvert; Bedrock only Titan (KB role) or Haiku (knowledge Lambda); every runtime may search, only AIC may add; the pipeline covers every action of `docs/KNOWLEDGE.md` §10 (`tests/infra.test.ts`, `scripts/check-iam.mjs`).
 - HUD journeys, ≤ 1 primary button per screen, axe clean (`web/e2e/`).
 
 ## 8. How to verify everything locally
@@ -150,6 +152,7 @@ Terraform (offline only): `fmt -check -recursive`, `init -backend=false`, `valid
 ## 10. Feature log (newest first)
 | Date | Feature | Notes |
 |---|---|---|
+| 2026-11-07 | Knowledge base infra | `infra/modules/knowledge`: S3 bucket, S3 Vectors + Bedrock Knowledge Base, graph table, knowledge Lambda, Step Functions ingest, MediaConvert role; routes, env vars and IAM on the api Lambda and runtimes. EventBridge can't name a Step Functions run, so the `raw/` rule calls the Lambda's `start` action (decision 65). Checked offline only; not applied. |
 | 2026-11-07 | Knowledge base (designed) | The owner stores links, PDFs, documents, images, audio and video; each is routed by format, embedded into a Bedrock Knowledge Base on S3 Vectors in Stockholm (Titan V2 embeddings, the owner's one exception to Anthropic-only) and linked in a DynamoDB entity graph built by Haiku 5.5. Every item has a scope: always include, when relevant, only when asked. Contract in `docs/KNOWLEDGE.md`, decision 64. Not built yet. |
 | 2026-11-06 | Own sign-in, clear first-login email, Ace's eye | The HUD signs in on its own screens (Amplify Auth, SRP; no Cognito hosted pages): first login walks through temporary password → own password → authenticator app. Cognito's invitation email is rewritten (link, user name, temporary password valid 7 days, steps) and so is the reset-code email; a public `POST /auth/first-login-email` re-sends the invitation (owner only, once per 10 min, same answer for any email). Ace is shown with one eye, the owner's own drawing. |
 | 2026-11-06 | Deploy stages | `deploy.yml` runs **web** and **backend** (ruff, mypy, pytest, Lambda package) in parallel, then **plan → apply → frontend**; the plan job prints the OIDC claims GitHub presents (never the token), so a trust-policy mismatch is visible in the log. |

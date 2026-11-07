@@ -43,6 +43,15 @@ flowchart LR
     sch[Scheduler jobs: DISABLED]
   end
   bud[AWS Budgets: email alerts only]
+  subgraph knowledge[Knowledge base]
+    ks3[(S3 aic-prod-knowledge: raw/, work/, normalized/)]
+    kfn[knowledge Lambda]
+    ksfn[Step Functions: knowledge ingest]
+    kmc[MediaConvert + Transcribe batch]
+    kb[Bedrock Knowledge Base, Titan V2 embeddings]
+    kvec[(S3 Vectors: index items)]
+    kddb[(DynamoDB aic-prod-knowledge: items + entity graph)]
+  end
 
   owner --> cf --> s3h
   owner --> cog
@@ -64,6 +73,16 @@ flowchart LR
   eb --> sns
   eb --> sfn --> q
   sch -.-> disp
+  owner -->|presigned PUT| ks3
+  api --> kddb & ks3
+  ks3 -->|raw/ object created, default bus| kfn
+  kfn -->|start, name = item id| ksfn --> kfn
+  kfn --> kmc & kddb & br & eb
+  kfn -->|sync| kb
+  kb --> ks3
+  kb --> kvec
+  rA & rO & rM & rW -->|Retrieve| kb
+  rA & rO & rM & rW --> kddb
 ```
 
 ## The hierarchy as code
@@ -108,5 +127,15 @@ Departments and workers are data and sessions, never new runtimes, so the accoun
 | Settings, pause flag | `CONFIG` / `city` | — |
 | Event trace, tool audit, notes, reminders | `EVENT#ticket`, `TOOL#agent`, `NOTE#…`, `REMINDER#…` | gsi1 |
 
+## Knowledge base (DynamoDB `aic-prod-knowledge`, contract in `docs/KNOWLEDGE.md`)
+| Item | pk / sk | Index |
+|---|---|---|
+| Knowledge item | `ITEM#<id>` / `META` | gsi1 `ITEM` / `<created_at>`; gsi2 `SCOPE#<scope>` / `<created_at>` |
+| Entity | `ENT#<key>` / `META` | — |
+| Mention | `ENT#<key>` / `ITEM#<id>` | gsi2 `MENTION#<id>` / `ENT#<key>` |
+| Relationship | `ENT#<a>` / `REL#<relation>#<b>#<id>` (and the reverse `REL#~…`) | — |
+
+Files: `raw/<id>/…` (uploads; a new object starts the pipeline), `work/<id>/…` (MediaConvert and Transcribe output, 7 days), `normalized/<id>/…` + `.metadata.json` (the Knowledge Base data source). Vectors: S3 Vectors bucket `aic-prod-knowledge-vectors`, index `items` (1,024 dims, cosine; `item_id`, `scope`, `kind` filterable).
+
 ## Infrastructure
-Terraform in `infra/`: `envs/prod` (the only root; `deploy.yml` creates its state bucket on the first run and the owner provides the OIDC deploy role), modules `security`, `auth`, `storage`, `ledger`, `bus`, `agents`, `api`, `frontend`, `budgets`, `observability`. Every taggable resource carries `Project`, `App`, `Environment`, `Owner`, `ManagedBy`, `CostCenter` (provider default tags) and `Component`; runtimes, inference profiles and memories also carry `AgentRole` (checked by `scripts/check-tags.mjs`).
+Terraform in `infra/`: `envs/prod` (the only root; `deploy.yml` creates its state bucket on the first run and the owner provides the OIDC deploy role), modules `security`, `auth`, `storage`, `ledger`, `bus`, `agents`, `api`, `frontend`, `budgets`, `observability`, `knowledge`. Every taggable resource carries `Project`, `App`, `Environment`, `Owner`, `ManagedBy`, `CostCenter` (provider default tags) and `Component`; runtimes, inference profiles and memories also carry `AgentRole` (checked by `scripts/check-tags.mjs`).
