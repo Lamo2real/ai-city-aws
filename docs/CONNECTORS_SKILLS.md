@@ -2,7 +2,7 @@
 
 This file is the **contract** between the infra (`infra/`), backend (`backend/`) and web (`web/`) work for
 connectors and skills: names, keys, routes, tools and environment variables. If a contract changes, change it
-here first, in its own commit. The decisions and trade-offs are in `docs/DECISIONS.md` (decisions 67–69 and 77; 67 and 68 rewritten for v2).
+here first, in its own commit. The decisions and trade-offs are in `docs/DECISIONS.md` (decisions 67–69, 77 and 78; 67 and 68 rewritten for v2).
 
 Status: designed 2026-11-07 on branch `connectors-skills`. Nothing is built yet. **v2 (same day): connectors are added at runtime by asking AIC, for any MCP server, with sign-in when needed (the owner's requirement). It replaces v1's fixed Terraform list.**
 
@@ -153,6 +153,7 @@ New module `infra/modules/connectors` (replaces the unused `aws_bedrockagentcore
 - `aws_bedrockagentcore_workload_identity` `aic-prod-connectors` with `allowed_resource_oauth2_return_urls = ["https://<HUD domain>/?connect=return"]`.
 - The policy engine, with **no** Terraform-managed policies (the city writes them; document it as decision 68).
 - Lambda `aic-prod-connector-bridge` (Python, same zip). Its resource policy lets only the gateway role invoke it. IAM: `GetWorkloadAccessTokenForUserId` on the workload identity, `GetResourceOauth2Token` and `GetResourceApiKey` on `aic-conn-*` providers, `secretsmanager:GetSecretValue` on `aic/prod/connectors/*`, the project key, and the ledger `GetItem`/`Query` on `CONNECTORS` and `UpdateItem` of `status` (login_expired). Outbound internet (no VPC). Timeout 70 s.
+- S3 bucket `aic-prod-connectors` (SSE-KMS with the project key, versioning, no public access, TLS only) for OpenAPI specs under `specs/` (§1.11). The connectors Lambda gets put and delete there; the bridge gets read.
 - Lambda `aic-prod-connectors` (async admin actions `provision`, `sync`, `remove`, `refresh`). IAM: Gateway `Create/Update/Delete/GetGatewayTarget` on the gateway; `Create/Update/Delete/GetOauth2CredentialProvider` and `…ApiKeyCredentialProvider` on `aic-conn-*`; `GetWorkloadAccessTokenForUserId`, `GetResourceOauth2Token`, `GetResourceApiKey`; policy-engine `Create/Update/Delete/ListPolicies` on the engine; `secretsmanager:CreateSecret/PutSecretValue/DeleteSecret/GetSecretValue/TagResource` on `aic/prod/connectors/*` (tags required at create, via `aws:RequestTag` conditions); ledger rows `CONNECTORS`, approvals and events. The boundary must allow exactly these.
 - api Lambda: add `lambda:InvokeFunction` on `aic-prod-connectors`, `GetWorkloadAccessTokenForUserId`, `GetResourceOauth2Token` and `CompleteResourceTokenAuth`, and `secretsmanager:CreateSecret/PutSecretValue` on `aic/prod/connectors/*` plus the API-key provider create/update (for the key field), and ledger `CONNECTORS`.
 - Env: runtimes `AIC_GATEWAY_URL`. api `AIC_CONNECTORS_FUNCTION`, `AIC_CONNECTORS_WORKLOAD`, `AIC_HUD_ORIGIN`. Connectors Lambda `AIC_GATEWAY_ID`, `AIC_POLICY_ENGINE_ID`, `AIC_BRIDGE_ARN`, `AIC_CONNECTORS_WORKLOAD`. Bridge `AIC_CONNECTORS_WORKLOAD`, `AIC_LEDGER_TABLE`.
@@ -214,6 +215,25 @@ The owner's words: *"its not just these connectors it could scale to any connect
 - **Removing** a package connector also ends its runtime session (`StopRuntimeSession`).
 - **Cost:** no fixed cost. AgentCore Runtime is billed for the CPU and memory a session uses, and an idle session ends after 15 minutes. Check the prices at deploy.
 - **Residual risk** (`docs/SECURITY.md`): a package the owner approved is someone else's code, running with the owner's key for that service and with internet access. It can misuse that one key or return poisoned tool output (which is treated as untrusted data). It can't reach AWS, the city or other connectors. The card names the publisher, the source and the exact version.
+
+### 1.11 Web APIs without an MCP server (OpenAPI), on demand
+The owner's choice (2026-11-07): a service that has no MCP server, only a normal web API, can be connected the same way: *"connect the Acme API, here's its OpenAPI link"*.
+- **Input:** `add_connector({query, label?})`, where `query` is an https link to an **OpenAPI 3.0/3.1** document (JSON or YAML, ≤ 2 MB). With a name instead, AIC first looks for an MCP server (§1.3/§1.10). If there's none, it asks the owner for the API's OpenAPI link. It never guesses a spec from web search. Swagger 2.0 documents are refused in plain words ("ask the provider for an OpenAPI 3 link").
+- **Checks (connectors Lambda, `provision`):**
+  - The URL rules are the same as §1.3.
+  - The API base is the document's first `servers[].url`. It must be https and a public host, and every call is pinned to that host, with no redirects to another host.
+  - `$ref`s are resolved within the document only; remote `$ref`s are refused.
+  - There are at most 200 operations. With more, the approval card asks the owner to pick tags, or the first 200 GET operations are offered.
+- **Tools:** one per operation, named from `operationId` (or `<method>_<path>`), cleaned to `[a-z0-9_]`, and ≤ 64 characters with the `<id>___` prefix. The input schema comes from the path, query and header parameters plus a JSON `requestBody`. Operations that don't map (multipart, non-JSON bodies, cookie params) are skipped and listed. Annotations: `GET`/`HEAD` are `read_only`, `DELETE` is `destructive`, and everything else is a write. So the approval rules and the app bridge (§1.4, §1.9) work as for MCP tools.
+- **Auth, from `securitySchemes`:**
+  - `apiKey` (header or query) and `http bearer`/`basic` → `auth = api_key`. The secure field asks for the key, and the scheme says where it goes.
+  - `oauth2` `authorizationCode` → `auth = oauth`, through an AgentCore Identity custom provider (endpoints and scopes from the spec). The HUD asks for the owner's client id and secret in the secure field (most APIs have no dynamic registration) and shows the callback URL to register. Then "Sign in to <label>".
+  - `oauth2` `clientCredentials` → client id and secret in the secure field. Identity runs the M2M flow, with no sign-in.
+  - No scheme → `none`.
+- **Record (§1.2) adds:** `transport = "openapi"`, `openapi: {spec_url, spec_key, base_url, operations: n}`. The normalized spec is stored in S3 **`aic-prod-connectors`** at `specs/<id>/<sha256>.json` (only the connectors Lambda writes it, and only the bridge reads it).
+- **Bridge (§1.1):** for `transport = "openapi"`, it builds the HTTPS request from the stored operation (path params URL-encoded, query, headers, JSON body), adds the credential from Identity (API key or OAuth token), and sends it with `httpx`: 30 s, a 5 MB response cap, no redirects off the host, JSON or text only. It returns the status and body as the tool result. A non-2xx answer is an error result with the status and the first 2,000 characters.
+- **Approval card:** *"Connect the Acme API at `https://api.acme.com` (from `<spec URL>`): 34 actions, 12 read-only, 3 delete. Used by: …?"*. Everything else is as in §1.3: owner-message turns only, the owner's yes, then sign-in or key, then tools on the next turn.
+- **Not supported (said plainly):** GraphQL, SOAP, gRPC, websockets, file uploads, and APIs that need request signing (such as AWS SigV4 to someone else's account).
 
 ## 2. Skills
 
