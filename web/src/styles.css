@@ -1724,3 +1724,115 @@ a.back {
 .view-app main {
   overflow: hidden;
 }
+
+/* ---------- apps v2: pins in the top bar, permissions ---------- */
+.top nav.pins {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: var(--s1);
+  align-items: center;
+}
+.top nav.pins a.pin {
+  padding: 0;
+}
+a.pin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--tap);
+  min-height: var(--tap);
+  border-radius: var(--r);
+}
+a.pin:hover {
+  background: #34365e;
+}
+.top nav a.pin-nav {
+  display: none;
+}
+.pin .appicon {
+  width: 28px;
+  height: 28px;
+}
+@media (max-width: 799px) {
+  .top nav.pins {
+    display: none;
+  }
+  .top nav a.pin-nav {
+    display: inline-flex;
+    padding: 0 var(--s1);
+  }
+}
+.apphead .pinbtn {
+  font-size: 22px;
+  text-decoration: none;
+}
+.appperms {
+  position: relative;
+}
+.appperms summary {
+  cursor: pointer;
+  min-height: var(--tap);
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--s2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.appperms-body {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 5;
+  width: min(360px, 90vw);
+  background: var(--paper);
+  color: var(--text);
+  padding: var(--s3);
+  border-radius: var(--r);
+  box-shadow:
+    0 0 0 3px var(--wood),
+    0 5px 0 3px var(--ink);
+}
+.appperms-body .mute,
+.settings-apps .mute {
+  color: var(--soft);
+}
+.grants {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.grants li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  border-bottom: 1px solid var(--paper2);
+}
+.settings-apps {
+  list-style: none;
+  padding: 0;
+}
+.settings-apps .card a {
+  color: var(--text);
+  font-weight: 700;
+}
+.settings-apps .row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.grants-pick {
+  border: 2px solid var(--paper2);
+  border-radius: var(--r);
+  margin: var(--s3) 0;
+}
+.grants-pick legend {
+  font-weight: 700;
+}
+.grants-pick .switch,
+.card.publish > .switch {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: var(--tap);
+}

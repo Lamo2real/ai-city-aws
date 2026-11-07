@@ -7,7 +7,7 @@ import { loadConfig } from "./lib/config.ts";
 import { store, useHud, waitingCount } from "./lib/store.ts";
 import { live } from "./lib/ws.ts";
 import { route } from "./lib/apps.ts";
-import { AppPage, AppsScreen } from "./components/Apps.tsx";
+import { AppPage, AppsScreen, PinnedApps } from "./components/Apps.tsx";
 import { AceScreen } from "./components/AceScreen.tsx";
 import { CityView } from "./components/CityView.tsx";
 import { FirstRun } from "./components/FirstRun.tsx";
@@ -139,7 +139,9 @@ export function App() {
               ) : null}
             </a>
           ))}
+          <PinnedApps inNav />
         </nav>
+        <PinnedApps />
         <SpendPill onOpen={() => go("costs")} />
       </header>
       <main id="main" tabIndex={-1}>

@@ -20,6 +20,27 @@ export const CONFIG = {
 };
 // A tiny original game served by the fake apps origin: it proves scripts run in the sandbox and that the
 // frame has an opaque origin (no storage, no access to the HUD).
+// A tiny original calendar app that talks to the HUD the v2 way (docs/APPS.md "v2: data bridge"): it posts
+// {aic: 1, id, cap, params} to its parent and shows the reply. The fake apps origin serves it for app-cal….
+export const CALENDAR_HTML = `<!doctype html><meta charset="utf-8"><title>Star Calendar</title>
+<body style="font-family:sans-serif;background:#fff;color:#111">
+<h1>Star Calendar</h1>
+<button id="load">Load my week</button> <button id="rsvp">Accept the team sync</button>
+<p id="out">Nothing loaded.</p>
+<script>
+const waiting = new Map(); let n = 0;
+addEventListener("message", (e) => { const m = e.data; if (e.source === parent && m && m.aic === 1 && waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); } });
+const ask = (cap, params) => new Promise((r) => { const id = "q" + (++n); waiting.set(id, r); parent.postMessage({ aic: 1, id, cap, params }, "*"); });
+const out = (t) => { document.getElementById("out").textContent = t; };
+document.getElementById("load").onclick = async () => {
+  const r = await ask("calendar.read", { from: "2026-11-02T00:00:00Z", to: "2026-11-09T00:00:00Z" });
+  out(r.ok ? "Events: " + r.data.events.map((e) => e.title).join(", ") : "Error: " + r.error);
+};
+document.getElementById("rsvp").onclick = async () => {
+  const r = await ask("propose", { kind: "calendar.respond", params: { event_id: "evt-1", response: "accepted" } });
+  out(r.ok ? "Proposal: " + r.status : "Error: " + r.error);
+};
+</script></body>`;
 export const GAME_HTML = `<!doctype html><meta charset="utf-8"><title>Star Sweeper</title>
 <body style="font-family:sans-serif;background:#123;color:#fff">
 <h1>Star Sweeper</h1><p>Click the button to sweep a star.</p>
@@ -209,6 +230,34 @@ export async function mockBackend(
       );
     if (path === "/city") return ok({ ...m.snapshot, apps: m.apps });
     if (path === "/apps" && req.method() === "GET") return ok({ apps: m.apps });
+    const appAt = () => m.apps.find((a) => a.app_id === decodeURIComponent(path.split("/")[2] ?? ""));
+    if (/^\/apps\/[^/]+\/bridge$/.test(path)) {
+      const a = appAt();
+      const cap = String(body?.cap);
+      if (!a || !((a.grants as Array<{ id: string }>) ?? []).some((g) => g.id === cap))
+        return ok({ error: "not_granted" }, 403);
+      return ok({ data: { events: [{ title: "Dentist" }, { title: "Team sync" }], calendars: [], errors: [] } });
+    }
+    if (/^\/apps\/[^/]+\/proposals$/.test(path)) {
+      const a = appAt()!;
+      const approval = {
+        id: `apr-prop-${m.calls.length}`,
+        kind: "tool",
+        agent: "calendar",
+        action: "Accept the invitation: Team sync (Mon 10:00)",
+        reason: "An app asked; answering an invitation acts for you.",
+        requested_by: `app:${String(a.app_id)}`,
+      };
+      (m.snapshot.approvals as unknown[]).push(approval);
+      m.send({ type: "approval.requested", ...approval });
+      return ok({ approval: { id: approval.id, status: "pending" } }, 202);
+    }
+    if (/^\/apps\/[^/]+$/.test(path) && req.method() === "PUT") {
+      const a = appAt();
+      if (!a) return ok({ error: "There is no such app." }, 404);
+      Object.assign(a, body);
+      return ok({ app: a });
+    }
     if (path.startsWith("/apps/") && req.method() === "DELETE") {
       const id = decodeURIComponent(path.split("/")[2] ?? "");
       const i = m.apps.findIndex((a) => a.app_id === id);
@@ -230,7 +279,17 @@ export async function mockBackend(
       (a) => a.id === path.split("/")[2] && a.kind === "app.publish",
     );
     if (path.startsWith("/approvals/") && publish) {
-      const app = body?.approved ? appRecord("app-0000000000aa", "star-sweeper", String(publish.title)) : null;
+      const cal = String(publish.draft_id).startsWith("drf-cal");
+      const app = body?.approved
+        ? appRecord(
+            cal ? "app-cal000000001" : "app-0000000000aa",
+            cal ? "star-calendar" : "star-sweeper",
+            String(publish.title),
+            {
+              grants: body.grants ?? publish.capabilities ?? [],
+            },
+          )
+        : null;
       if (app) m.apps.unshift(app);
       return ok({
         approval: { id: publish.id, status: body?.approved ? "approved" : "denied" },
@@ -281,7 +340,7 @@ export async function mockBackend(
     r.fulfill({
       status: 200,
       contentType: "text/html",
-      body: GAME_HTML,
+      body: /\/(live\/app-cal|drafts\/drf-cal)/.test(r.request().url()) ? CALENDAR_HTML : GAME_HTML,
       headers: { "access-control-allow-origin": "*" },
     }),
   );

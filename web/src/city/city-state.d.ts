@@ -41,6 +41,10 @@ export interface CityApproval {
   title?: string;
   description?: string;
   department?: string;
+  /** app.publish, v2: what the app asks to read, and whether its manifest suggests pinning it. */
+  capabilities?: Array<{ id: string; connector?: string; tool?: string; label?: string }>;
+  pin?: boolean;
+  requested_by?: string;
 }
 /** An app the city built and the owner published (docs/APPS.md). Title and description are agent text. */
 export interface CityApp {
@@ -53,6 +57,10 @@ export interface CityApp {
   department?: string;
   task_id?: string;
   published_at?: string;
+  /** v2: what the owner allowed it to read (docs/APPS.md "v2: data bridge"), and whether it sits in the top bar. */
+  grants?: Array<{ id: string; connector?: string; tool?: string }>;
+  granted_at?: string;
+  pinned?: boolean;
 }
 export interface FeedLine {
   at: number;

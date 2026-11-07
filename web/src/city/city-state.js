@@ -154,6 +154,11 @@ export function reduce(state, event, now = Date.now()) {
       delete app.type; delete app.at;
       return { ...state, now, apps: { ...state.apps, [event.app_id]: app }, feed: feed(state, `New app under Apps: ${String(event.title ?? "").slice(0, 40)}`, "pass", now) };
     }
+    case "app.updated": {
+      const a = event.app;
+      if (!a?.app_id || !state.apps[a.app_id]) return state; // an app this HUD doesn't have: GET /apps brings it
+      return { ...state, now, apps: { ...state.apps, [a.app_id]: { ...state.apps[a.app_id], ...a } } };
+    }
     case "app.removed": {
       const gone = state.apps[event.app_id];
       if (!gone) return state; // already gone (the HUD removes it at once; the event follows)
