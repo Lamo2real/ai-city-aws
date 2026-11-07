@@ -64,6 +64,7 @@ DynamoDB `aic-prod-knowledge` (`pk`, `sk`, `gsi1pk`/`gsi1sk`, `gsi2pk`/`gsi2sk`,
 | Relationship | `ENT#<a>` / `REL#<relation>#<b>#<id>` (and the reverse `ENT#<b>` / `REL#~<relation>#<a>#<id>`) | — |
 
 `id` = `k-` + 12 random URL-safe characters. Status: `uploading → processing → ready | failed | unsupported`.
+Pipeline bookkeeping on the item (optional, shown in Item JSON): `upload_id` (multipart, until complete), `work_key` (a fetched link's file under `work/<id>/fetched/`), `audio_key`, `mediaconvert_job`, `transcribe_job`, `sync_job`. Relationship items also carry `relation, other, item_id, from_name, to_name`.
 
 ## 5. HTTP API (owner group checked like every route)
 | Route | Body → answer |
@@ -119,6 +120,8 @@ system prompt (so the prompt cache still works).
 - `other` → `mark_unsupported` (end)
 
 → `enrich` (summary + graph) → `start_sync` → wait 20 s / `check_sync` loop → `finish` (status `ready`, event). Any failure → `fail` (status `failed`, plain `error`, event). Retries: Lambda service errors 3×; `ConflictException` on `start_sync` 10× with back-off.
+
+Each step returns `{item_id, …}`: `route` and `fetch_link` add `kind` and `convert` (MediaConvert first), `fetch_link` also `normalized` (true → straight to `enrich`); `start_*` add `job_id`; `check_*` add `done`; `finish`/`fail`/`mark_unsupported` add `status`. `fail` takes the Catch output as `error: {Error, Cause}`. A running sync raises an error named exactly `ConflictException`.
 
 ## 11. HUD
 A **Knowledge** screen beside the others: one drop zone (files, many at once) + "Paste a link or text" field;
