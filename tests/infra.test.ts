@@ -663,6 +663,25 @@ describe("notifications: no email, one iPhone push per finished job (decision 90
   });
 });
 
+describe("voice: OpenAI text-to-speech (decision 96)", () => {
+  const voice = readFileSync("infra/modules/voice/main.tf", "utf8");
+  const prodTf = readFileSync("infra/envs/prod/main.tf", "utf8");
+  const apiTf = readFileSync("infra/modules/api/main.tf", "utf8");
+  it("the OpenAI key is a secret only the api function may read or store", () => {
+    expect(voice).toMatch(/secret_name = "aic\/prod\/openai"/);
+    expect(voice).toMatch(/kms_key_id\s*=\s*var\.kms_key_arn/);
+    expect(voice).toMatch(
+      /Action = \["secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue", "secretsmanager:DescribeSecret"\], Resource = \[aws_secretsmanager_secret\.openai\.arn\]/,
+    );
+    expect(voice).toMatch(/role\s*=\s*var\.api_role_name/);
+    expect(prodTf).toMatch(/module "voice"/);
+    expect(prodTf).toMatch(/AIC_OPENAI_SECRET\s*=\s*"aic\/prod\/openai"/);
+  });
+  it("the speech and key routes exist", () => {
+    for (const r of ["POST /speech", "GET /voice/openai", "PUT /voice/openai-key"]) expect(apiTf).toContain(`"${r}"`);
+  });
+});
+
 describe("the city is always on", () => {
   it("has no pause or resume route in the HTTP API", async () => {
     const { readFileSync } = await import("node:fs");

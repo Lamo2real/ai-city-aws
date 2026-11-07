@@ -46,6 +46,16 @@ from aic.shared.ledger import Ledger, Record
 from aic.shared.log import log
 from aic.shared.models import model_label
 from aic.shared.push import DeviceStore, PushApps, PushDeps, apns_key_secret, store_apns_secret
+from aic.shared.speech import (
+    DEFAULT_VOICE,
+    VOICES,
+    NotConfigured,
+    SpeechDeps,
+    SpeechError,
+    openai_key_secret,
+    store_secret,
+    synthesize,
+)
 from aic.shared.turn import ModelRunner
 from aic.shared.utility import UtilityDeps, bedrock_converse_runner, is_addressed_to_ace
 
@@ -125,6 +135,9 @@ ROUTES: list[tuple[str, str]] = [
     ("DELETE", "/devices/d-aaaaaaaaaaaaaaaaaaaaaaaa"),
     ("GET", "/notifications/apns"),
     ("PUT", "/notifications/apns"),
+    ("POST", "/speech"),
+    ("GET", "/voice/openai"),
+    ("PUT", "/voice/openai-key"),
 ]
 
 
@@ -159,6 +172,8 @@ class ApiDeps:
     """The ``/mail/*`` routes (``AIC_MAIL_WORKLOAD``); None = mail isn't set up (503)."""
     push: PushDeps | None = None
     """iPhone notifications: device registration and the owner's Apple key; None = not deployed (503)."""
+    speech: SpeechDeps | None = None
+    """AIC's voice through OpenAI text-to-speech (``/speech``, ``/voice/openai*``); None = not configured (503)."""
 
 
 def _action_deps(d: ApiDeps) -> CityDeps:
@@ -184,6 +199,16 @@ def reply(status: int, body: Any) -> dict[str, Any]:
 
 def problem(status: int, message: str, fix: str | None = None) -> dict[str, Any]:
     return reply(status, {"error": message, "fix": fix})
+
+
+def reply_binary(data: bytes, content_type: str) -> dict[str, Any]:
+    """A binary body through API Gateway (base64), never cached."""
+    return {
+        "statusCode": 200,
+        "headers": {"content-type": content_type, "cache-control": "no-store"},
+        "isBase64Encoded": True,
+        "body": base64.b64encode(data).decode("ascii"),
+    }
 
 
 def is_owner(event: dict[str, Any]) -> bool:
@@ -317,6 +342,56 @@ async def _costs(d: ApiDeps) -> dict[str, Any]:
 
 
 APNS_FLAG = ("NOTIFY#apns", "META")
+OPENAI_FLAG = ("VOICE#openai", "META")
+
+
+async def _speech_routes(method: str, path: str, event: dict[str, Any], d: ApiDeps) -> dict[str, Any] | None:
+    """AIC's voice through OpenAI: ``POST /speech`` (MP3 bytes), ``GET /voice/openai``, ``PUT /voice/openai-key``."""
+    if path not in ("/speech", "/voice/openai", "/voice/openai-key"):
+        return None
+    s = d.speech
+    if method == "GET" and path == "/voice/openai":
+        flag = await d.ledger.table.get(*OPENAI_FLAG)
+        return reply(
+            200,
+            {
+                "configured": bool(s and await s.key()),
+                "voices": list(VOICES),
+                "default": DEFAULT_VOICE,
+                "key_saved_at": flag.get("saved_at") if flag else None,
+            },
+        )
+    if method == "PUT" and path == "/voice/openai-key":
+        if s is None or s.secrets is None:
+            return reply(503, {"error": "not_deployed", "message": "The key can't be stored yet. Deploy first."})
+        try:
+            value = openai_key_secret(_body(event))
+        except ValueError as e:
+            return reply(400, {"error": "bad_request", "message": str(e)})
+        try:
+            await asyncio.to_thread(store_secret, s.secrets, s.secret_name, value, s.kms_key, s.tags)
+        except Exception as e:
+            log("warn", "speech.key_store_failed", error=type(e).__name__)
+            return reply(
+                502, {"error": "store_failed", "message": "The key couldn't be stored. Try again in a moment."}
+            )
+        s.forget_key()
+        at = now_iso(d.ledger.now())
+        await d.ledger.table.put({"pk": OPENAI_FLAG[0], "sk": OPENAI_FLAG[1], "saved_at": at})
+        log("info", "speech.key_saved")
+        return reply(200, {"ok": True, "saved_at": at})
+    if method == "POST" and path == "/speech":
+        b = _body(event)
+        try:
+            if s is None:
+                raise NotConfigured()
+            data = await synthesize(s, b.get("text"), b.get("voice"))
+        except ValueError as e:
+            return reply(400, {"error": "bad_request", "message": str(e)})
+        except SpeechError as e:
+            return reply(e.status, {"error": e.error, "message": e.message})
+        return reply_binary(data, "audio/mpeg")
+    return None
 
 
 async def _push_routes(method: str, path: str, event: dict[str, Any], d: ApiDeps) -> dict[str, Any] | None:
@@ -391,6 +466,9 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
     pushed = await _push_routes(method, path, event, d)
     if pushed is not None:
         return pushed
+    spoken = await _speech_routes(method, path, event, d)
+    if spoken is not None:
+        return spoken
     if is_("GET", r"/city"):
         return reply(200, await city_snapshot(d))
     if is_("GET", r"/city/agent"):
@@ -933,6 +1011,16 @@ def build_deps() -> ApiDeps:
         skills=SkillsApi(city.ledger, city.session.client("s3"), os.environ.get("AIC_SKILLS_BUCKET")),
         mail=_mail_from_env(city),
         push=_push_from_env(city),
+        speech=_speech_from_env(city),
+    )
+
+
+def _speech_from_env(city: Any) -> SpeechDeps:
+    return SpeechDeps(
+        secrets=client(city.session, "secretsmanager"),
+        secret_name=os.environ.get("AIC_OPENAI_SECRET", "aic/prod/openai"),
+        kms_key=os.environ.get("AIC_KMS_KEY_ARN"),
+        tags={"Project": "ai-city", "Component": "voice"},
     )
 
 
