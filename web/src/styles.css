@@ -883,8 +883,10 @@ main {
   border-top: 2px solid var(--ink);
 }
 .composer textarea {
-  min-height: 52px;
-  max-height: 200px;
+  /* One line to start; grows with the text (AceScreen sets the height) up to about eight lines. */
+  min-height: 0;
+  max-height: calc(8 * 1.45em + 2 * var(--s3) + 4px);
+  overflow-y: hidden;
   padding: var(--s3) var(--s4);
   border-radius: 14px;
   border: 2px solid var(--ink);

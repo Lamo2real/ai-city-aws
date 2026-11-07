@@ -1,7 +1,7 @@
 // The landing screen: AIC's eye with the voice strip on the left, the conversation on the right (stacked on a
 // phone). Everything else can be done by asking AIC ("AIC, pause everything", "what's the status?").
 import { ChatCards } from "./ConnectCard.tsx";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { sendMessage, setPaused } from "../lib/actions.ts";
 import { gateStatus } from "../city/city-state.js";
 import { store, useHud, waitingCount } from "../lib/store.ts";
@@ -67,6 +67,17 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
   });
 
   useEffect(() => input.current?.focus(), []);
+  // The message box is one line tall until the text needs more, then grows with it (typed or dictated) up to
+  // about eight lines and scrolls inside; it shrinks back as text is deleted or sent.
+  useLayoutEffect(() => {
+    const el = input.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const max = parseFloat(getComputedStyle(el).maxHeight) || Infinity;
+    const border = el.offsetHeight - el.clientHeight;
+    el.style.height = `${Math.min(el.scrollHeight + border, max)}px`;
+    el.style.overflowY = el.scrollHeight + border > max ? "auto" : "hidden";
+  }, [text]);
   useEffect(() => {
     try {
       localStorage.setItem(DRAFT, text); // a draft survives reloads and lost connections
@@ -226,7 +237,7 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
           <textarea
             id="say"
             ref={input}
-            rows={2}
+            rows={1}
             value={text}
             placeholder={
               voice.listening && voice.micMode === "dictate"
