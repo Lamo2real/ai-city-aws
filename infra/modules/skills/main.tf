@@ -91,13 +91,20 @@ resource "aws_iam_role_policy" "runtime_read" {
   })
 }
 
-resource "aws_iam_role_policy" "api" {
-  name = "skills"
-  role = var.api_role_name
+# A managed policy, not inline: the api role carries one inline policy per feature and IAM caps
+# a role's inline policies at 10,240 bytes in total (the connectors release hit it).
+resource "aws_iam_policy" "api" {
+  name = "${var.name}-api-skills"
+  tags = local.tags
   policy = jsonencode({
     Version   = "2012-10-17"
     Statement = [{ Sid = "OwnerSkillFiles", Effect = "Allow", Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], Resource = ["${aws_s3_bucket.skills.arn}/skills/*"] }]
   })
+}
+
+resource "aws_iam_role_policy_attachment" "api" {
+  role       = var.api_role_name
+  policy_arn = aws_iam_policy.api.arn
 }
 
 output "bucket" { value = aws_s3_bucket.skills.bucket }

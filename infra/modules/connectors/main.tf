@@ -448,9 +448,11 @@ resource "aws_iam_role_policy" "app_bridge_gateway" {
 
 # The api Lambda: start admin actions, sign the owner in, and store a key the owner typed into the secure field.
 # It never reads API keys (only the bridge and the connectors Lambda do).
-resource "aws_iam_role_policy" "api" {
-  name = "connectors"
-  role = var.api_role_name
+# A managed policy, not inline: the api role carries one inline policy per feature and IAM caps
+# a role's inline policies at 10,240 bytes in total (the connectors release hit it).
+resource "aws_iam_policy" "api" {
+  name = "${var.name}-api-connectors"
+  tags = local.tags
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -465,6 +467,11 @@ resource "aws_iam_role_policy" "api" {
       { Sid = "OAuthClientSecrets", Effect = "Allow", Action = ["secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue"], Resource = [local.managed_oauth] },
     ]
   })
+}
+
+resource "aws_iam_role_policy_attachment" "api" {
+  role       = var.api_role_name
+  policy_arn = aws_iam_policy.api.arn
 }
 
 output "gateway_url" { value = aws_bedrockagentcore_gateway.this.gateway_url }

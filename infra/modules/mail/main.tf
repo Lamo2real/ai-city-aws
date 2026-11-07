@@ -124,9 +124,11 @@ resource "aws_iam_role_policy" "app_bridge" {
 }
 
 # The api Lambda: the read path, plus finishing a sign-in and storing IMAP app passwords from the HUD's form.
-resource "aws_iam_role_policy" "api" {
-  name = "mail"
-  role = var.api_role_name
+# A managed policy, not inline: the api role carries one inline policy per feature and IAM caps
+# a role's inline policies at 10,240 bytes in total (the connectors release hit it).
+resource "aws_iam_policy" "api" {
+  name = "${var.name}-api-mail"
+  tags = local.tags
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = concat(local.read_path, [
@@ -142,6 +144,11 @@ resource "aws_iam_role_policy" "api" {
       { Sid = "EncryptAppPasswords", Effect = "Allow", Action = ["kms:Encrypt", "kms:GenerateDataKey"], Resource = var.kms_key_arn },
     ])
   })
+}
+
+resource "aws_iam_role_policy_attachment" "api" {
+  role       = var.api_role_name
+  policy_arn = aws_iam_policy.api.arn
 }
 
 output "workload_name" { value = aws_bedrockagentcore_workload_identity.mail.name }
