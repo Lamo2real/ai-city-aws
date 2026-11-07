@@ -122,33 +122,19 @@ export interface CityBuilding {
   h: number;
   [k: string]: unknown;
 }
-export interface CityBlock {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  floors: number;
-  cap: number;
-  from: number;
-}
 export interface CityWorld {
   buildings: CityBuilding[];
   streets: Array<{ y: number; x0: number; x1: number }>;
   avenue: number;
-  homes: { x: number; y: number; w: number; h: number; houses: CityPoint[]; blocks: CityBlock[] };
+  homes: { x: number; y: number; w: number; h: number; houses: CityPoint[] };
   [k: string]: unknown;
 }
 export const TILE: number;
 export function layout(
   state: CityState,
-  opts?: { portrait?: boolean; seats?: Record<string, number>; houses?: number; residents?: number },
+  opts?: { portrait?: boolean; seats?: Record<string, number>; houses?: number },
 ): CityWorld;
-export function managerSpot(building: CityBuilding): CityPoint;
-export function blockWindow(world: CityWorld, slot: number): { x: number; y: number; w: number; h: number } | null;
-export const BLOCK_PER_FLOOR: number;
-export const BLOCK_MAX_FLOORS: number;
 export function seatSpot(building: CityBuilding, seat: number): CityPoint;
-export function seatRows(building: CityBuilding): number;
 export function homeSpot(world: CityWorld, slot: number): CityPoint | null;
 export function doorOf(building: CityBuilding): CityPoint;
 export function walkRoute(world: CityWorld, from: CityPoint, to: CityPoint): CityPoint[];
