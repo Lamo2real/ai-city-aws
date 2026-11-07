@@ -182,9 +182,8 @@ Events: `{"type": "connector.updated", "id", "label", "status", "auth", "needs"?
 Published apps may read connector data the owner granted them at publish (manifest `connector.read`, stored as `grants` on the app record `APPS` / `APP#<app_id>`). The HUD's data bridge asks the api Lambda. The api Lambda checks the grant and parameters, then synchronously invokes the Lambda **`aic-prod-app-bridge`** (role `aic-prod-fn-app-bridge`, built by the apps work), which calls the Gateway. The api role has no Gateway access. **No token ever leaves AWS.** The connectors side provides:
 ```python
 # aic.shared.connector_calls (importable from Lambdas: no runtime-only imports)
-async def app_call(d: CityDeps, *, app_id: str, capability_id: str, connector_id: str,
-                   tool: str, args: dict[str, Any]) -> AppCallResult
-# capability_id = "connector.read:<connector_id>:<tool>" (must agree with connector_id and tool)
+async def app_call(d: CityDeps, *, app_id: str, connector_id: str, tool: str,
+                   args: dict[str, Any]) -> AppCallResult   # called only inside aic-prod-app-bridge
 # AppCallResult = {"ok": bool, "data": list[{"type": "text", "text": str} | {"type": "json", "json": Any}],
 #                  "truncated": bool, "error": str | None}
 ```
@@ -193,7 +192,7 @@ It checks, in order (the first that fails answers `ok: false` with a plain `erro
 2. The connector is `ready`, and the tool is **read-only** (`read_only: true` and `destructive: false`). **Outward or destructive tools are never callable this way**, whatever the grant says. Unknown counts as a write.
 3. `policy.gate(f"mcp__gateway__{connector_id}___{tool}", args, role="app", agent_id=f"app-{app_id}")` (the same name the agents use, so every `config/policy.json` rule applies). An "ask" is a deny here. Then `ledger.audit_tool` (name, decision and duration only).
 4. A rate limit of 60 calls per minute per app (a ledger counter).
-Then `GatewayClient` (in **`aic.shared.gateway`**, also used by the runtimes; SigV4 with whatever boto3 credentials the process has) calls `<id>___<tool>`. Results are capped at 200,000 characters, with no wrapping text. They are still **untrusted**, so apps render them as text only.
+The api Lambda also async-invokes `aic-prod-connectors` with `{"action": "policies"}` after every publish, removal or grant change (`docs/APPS.md`, origin/apps 6cc6ed9). Then `GatewayClient` (in **`aic.shared.gateway`**, also used by the runtimes; SigV4 with whatever boto3 credentials the process has) calls `<id>___<tool>`. Results are capped at 200,000 characters, with no wrapping text. They are still **untrusted**, so apps render them as text only.
 **Cedar:** the connectors Lambda's rewrite adds one `permit` for **`aic-prod-fn-app-bridge`**, listing exactly the `<id>___<tool>` pairs that appear in some app's `grants` and are still read-only and ready. The apps code invokes the connectors Lambda with `{"action": "policies"}` (async) after a publish, a removal or a grant change, and the connectors Lambda also runs it after every connector sync or removal. So AWS refuses anything that isn't granted, even if this code is bypassed.
 IAM (apps infra): `aic-prod-fn-app-bridge` gets `bedrock-agentcore:InvokeGateway` on the gateway, ledger read of `APPS` and `CONNECTORS`, and the rate-limit counter. Never Identity or Secrets Manager. The api role keeps `lambda:InvokeFunction` on the connectors Lambda (for `policies`) and on the app bridge. The api route has its own limit of 120 calls a minute across all capabilities; `app_call` adds 60 a minute per app for connector calls.
 
