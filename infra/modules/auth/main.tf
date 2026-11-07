@@ -4,7 +4,7 @@
 terraform {
   required_version = ">= 1.11.0"
   required_providers {
-    aws = { source = "hashicorp/aws", version = ">= 6.68.0, < 7.0.0" }
+    aws = { source = "hashicorp/aws", version = ">= 6.68.0, < 7.0.0", configuration_aliases = [aws.speech] }
   }
 }
 
@@ -188,7 +188,9 @@ resource "aws_cognito_identity_pool_roles_attachment" "voice" {
   roles            = { authenticated = aws_iam_role.voice.arn }
 }
 
-resource "aws_transcribe_vocabulary" "names" {
+# In the speech region (var.transcribe_region in prod), where the HUD runs Transcribe streaming.
+resource "aws_transcribe_vocabulary" "speech_names" {
+  provider        = aws.speech
   vocabulary_name = "${var.name}-names"
   language_code   = "en-US"
   phrases         = ["A.I.C.", "AI-City", "Orchestrator"]
@@ -201,4 +203,4 @@ output "user_pool_endpoint" { value = aws_cognito_user_pool.this.endpoint }
 output "client_id" { value = aws_cognito_user_pool_client.hud.id }
 output "domain" { value = "${aws_cognito_user_pool_domain.this.domain}.auth.${var.region}.amazoncognito.com" }
 output "identity_pool_id" { value = aws_cognito_identity_pool.voice.id }
-output "vocabulary_name" { value = aws_transcribe_vocabulary.names.vocabulary_name }
+output "vocabulary_name" { value = aws_transcribe_vocabulary.speech_names.vocabulary_name }
