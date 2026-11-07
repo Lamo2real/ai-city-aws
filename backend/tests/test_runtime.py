@@ -109,6 +109,8 @@ def test_aces_prompt_states_its_name_greetings_spoken_style_and_limits() -> None
         "can't",
     ):
         assert s in body
+    assert "buddy" in body and "informal" in body
+    assert "Never ask for a password or key in chat" in body  # access goes through the HUD, never chat
 
 
 def test_values_put_into_a_prompt_cannot_add_placeholders() -> None:
