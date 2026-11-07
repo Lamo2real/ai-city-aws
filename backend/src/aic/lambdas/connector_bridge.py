@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from aic.shared import connector_packages
+from aic.connectors import openapi_bridge
 from aic.shared.connectors import SEP, ConnectorStore, Record
 from aic.shared.log import log
 from aic.shared.mcp_http import McpError, McpHttp, Transport, urllib_transport
@@ -102,6 +103,8 @@ async def call(event: Mapping[str, Any], tool_name: str, d: BridgeDeps) -> dict[
         return _error("unknown_tool", f"{label} has no tool {tool}.")
     if rec.get("transport") == "package":  # §1.10: the city's MCP host runs it
         return await connector_packages.bridge_call(rec, tool, dict(event), d)
+    if rec.get("transport") == "openapi":  # §1.11 web APIs
+        return await openapi_bridge.call(rec, tool, dict(event), d)
     t0 = time.monotonic()
     try:
         headers = credential_headers(rec, d.identity, d.workload)

@@ -303,7 +303,11 @@ async def _key(c: ConnectorsApi, rec: Record, b: dict[str, Any]) -> Answer:
         except Exception as e:
             log("warn", "connector.client_failed", connector=id, error=type(e).__name__)
             return _err(502, "The client couldn't be stored.", "Try again in a moment.")
-        await _set(c, id, {"oauth": {**oauth, "registered": "owner"}, "status": "needs_login", "needs": None})
+        m2m = oauth.get("flow") == "client_credentials"  # §1.11: no sign-in, Identity runs the M2M flow
+        status = "syncing" if m2m else "needs_login"
+        await _set(c, id, {"oauth": {**oauth, "registered": "owner"}, "status": status, "needs": None})
+        if m2m:
+            await _invoke(c, "sync", id)
         return 200, {"ok": True}
     raise ValueError("Send api_key, or client_id and client_secret.")
 

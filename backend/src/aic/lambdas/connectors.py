@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from aic.shared import connector_packages
+from aic.connectors import openapi_admin
 from aic.shared.connectors import (
     LEVELS,
     ROLES,
@@ -526,6 +527,8 @@ async def remove(d: ConnectorsDeps, id: str) -> None:
 
 async def handle(event: Mapping[str, Any], d: ConnectorsDeps) -> dict[str, Any]:
     action, id = event.get("action"), str(event.get("id") or "")
+    if (done := await openapi_admin.dispatch(event, d)) is not None:  # §1.11 web APIs
+        return done
     try:
         if action == "provision":
             await provision(d, id)
