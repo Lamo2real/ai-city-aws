@@ -51,7 +51,7 @@ describe("IAM", () => {
       .flatMap((s) => s.Resource);
     expect(workerQueues).toEqual([expect.stringMatching(/aic-prod-manager$/)]);
   });
-  it("Fable roles may invoke their Opus fallback; AIC only Sonnet", () => {
+  it("Fable roles may invoke their Opus fallback; AIC only its own model (Opus for now)", () => {
     const models = (role: string) =>
       (rolePolicies(role) as Stmt[])
         .filter((s) => actions([s]).includes("bedrock:InvokeModel"))
@@ -59,8 +59,8 @@ describe("IAM", () => {
         .join(" ");
     expect(models("orchestrator")).toMatch(/fable-5-1/);
     expect(models("orchestrator")).toMatch(/opus-5-5/);
-    expect(models("ace")).toMatch(/sonnet-5-5/);
-    expect(models("ace")).not.toMatch(/opus|fable/);
+    expect(models("ace")).toMatch(/opus-5-5/);
+    expect(models("ace")).not.toMatch(/sonnet|fable/);
   });
   it("every role Terraform creates has a permission boundary", () => {
     expect(checkBoundaries()).toEqual([]);
