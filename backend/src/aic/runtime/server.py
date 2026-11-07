@@ -25,6 +25,7 @@ from aic.shared.clients import client
 from aic.shared.config import caps_config
 from aic.shared.guard import startup_guard
 from aic.shared.hierarchy.actions import CityDeps
+from aic.shared.hierarchy.factory import Factory, FactoryClient
 from aic.shared.knowledge.service import KnowledgeAccess, KnowledgeService
 from aic.shared.knowledge.wiring import knowledge_from_env
 from aic.shared.log import log
@@ -154,6 +155,15 @@ def _skills(city: Any, e: Mapping[str, str]) -> Any:
     return SkillStore(city.ledger.table, city.session.client("s3"), bucket) if bucket else None
 
 
+def factory_for(role: str, city: Any, e: Mapping[str, str]) -> FactoryClient:
+    """Managers hire through the Agent Factory Lambda (it holds the hiring logic and rights). AIC never hires;
+    it only sends workers home (`send_workers_home`, `cancel_task`), which is a ledger write and one event, so
+    it uses the in-process factory: no Lambda invoke, and nothing for IAM to refuse."""
+    if role == "ace":
+        return Factory(city.ledger, city.bus, city.settings)
+    return LambdaFactoryClient(client(city.session, "lambda"), e.get("AIC_FACTORY_FUNCTION", ""))
+
+
 def build_app(env: Mapping[str, str] | None = None) -> Starlette:
     """Production wiring inside the container."""
     from .direct import _bedrock
@@ -166,7 +176,7 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
     role = require_env("AIC_ROLE", e)
     city = aws_city(e)
     caps = caps_config()
-    factory = LambdaFactoryClient(client(city.session, "lambda"), e.get("AIC_FACTORY_FUNCTION", ""))
+    factory = factory_for(role, city, e)
     minutes = caps["async_job_soft_limit_minutes"] if role == "worker" else caps["turn_timeout_minutes"]
     host = AgentHost(
         CityDeps(

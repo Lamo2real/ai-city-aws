@@ -35,8 +35,10 @@ from aic.shared.caps import validate_caps
 from aic.shared.clients import client
 from aic.shared.config import caps_config
 from aic.shared.events import EventBus, now_iso
-from aic.shared.hierarchy.actions import CityDeps, answer_question
+from aic.shared.hierarchy.actions import CityDeps, answer_question, send_workers_home, workers_at_work
+from aic.shared.hierarchy.factory import Factory
 from aic.shared.hierarchy.queue import Queue, WorkMessage
+from aic.shared.hierarchy.tasks import DONE_OR_GONE, cancel_task
 from aic.shared.ids import department_key, new_id
 from aic.shared.knowledge.service import KnowledgeError, KnowledgeService, NotFound
 from aic.shared.knowledge.wiring import knowledge_from_env
@@ -79,6 +81,8 @@ ROUTES: list[tuple[str, str]] = [
     ("PUT", "/settings"),
     ("POST", "/city/pause"),
     ("POST", "/city/resume"),
+    ("POST", "/workers/home"),
+    ("POST", "/tasks/t-1/cancel"),
     ("GET", "/memory"),
     ("POST", "/notes"),
     ("GET", "/connectors"),
@@ -159,22 +163,14 @@ class ApiDeps:
     """iPhone notifications: device registration and the owner's Apple key; None = not deployed (503)."""
 
 
-class _NoFactory:
-    """The actions need the factory only for hiring, which the API never does."""
-
-    async def hire(self, spec: dict[str, Any], manager_id: str, department: str) -> Record:
-        raise RuntimeError("the API does not hire")
-
-    async def release(self, worker_id: str, manager_id: str) -> Record:
-        raise RuntimeError("the API does not release")
-
-
 def _action_deps(d: ApiDeps) -> CityDeps:
+    # The in-process factory: releasing a worker is a ledger write and one event, both of which the API may do.
+    # Hiring stays with the managers (the factory Lambda); the API never hires.
     return CityDeps(
         ledger=d.ledger,
         bus=d.bus,
         queue=d.queue,
-        factory=_NoFactory(),
+        factory=Factory(d.ledger, d.bus, d.settings),
         settings=d.settings,
         max_review_rounds=caps_config()["max_review_rounds"],
     )
@@ -633,6 +629,19 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         await d.ledger.update_settings({"paused": paused, "pause_reason": reason})
         await d.bus.put({"type": "city.state", "paused": paused, "reason": reason})
         return reply(200, {"paused": paused})
+    if is_("POST", r"/workers/home"):
+        # The owner's "send everyone home", straight from the HUD: no model in the loop, instant.
+        deps = _action_deps(d)
+        if not await workers_at_work(deps):
+            return reply(200, {"workers": 0, "parts": 0})
+        return reply(200, await send_workers_home(deps))
+    if is_("POST", r"/tasks/[\w-]+/cancel"):
+        task = await d.ledger.get_ticket(seg[1])
+        if not task or task.get("kind") != "task":
+            return problem(404, "That job does not exist.")
+        if task.get("status") in DONE_OR_GONE:
+            return problem(409, "That job is not running.")
+        return reply(200, await cancel_task(_action_deps(d), task))
     if is_("GET", r"/memory"):
         return reply(
             200, {"notes": await d.ledger.list_notes("note"), "reminders": await d.ledger.list_notes("reminder")}

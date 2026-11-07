@@ -72,12 +72,15 @@ async def warm_ace(invoker: AgentInvoker | None, env: Mapping[str, str]) -> dict
     return {"warmed": warmed, "failed": failed}
 
 
-async def _running_agents(ledger: Ledger) -> set[str]:
-    """Agents with a turn under a live lease right now."""
+async def _running_agents(ledger: Ledger, turn_timeout_minutes: int) -> set[str]:
+    """Agents with a turn under a live lease right now. A lease is live only while it is in the future and no
+    longer than a turn may take: anything stranger is a dead turn's leftover and must not keep a worker "busy"."""
     now = ledger.now_ms()
+    longest = turn_timeout_minutes * 60_000 + 60_000
     out: set[str] = set()
     for w in await ledger.table.query_index("gsi1", "WORK#started"):
-        if float(w.get("lease_until", 0)) > now:
+        until = float(w.get("lease_until", 0))
+        if now < until <= now + longest:
             m = w.get("message") or {}
             if isinstance(m, dict) and m.get("agentId"):
                 out.add(str(m["agentId"]))
@@ -85,41 +88,62 @@ async def _running_agents(ledger: Ledger) -> set[str]:
 
 
 async def release_idle_workers(
-    ledger: Ledger, queue: Queue, bus: EventBus, factory: FactoryClient, minutes: int
+    ledger: Ledger,
+    queue: Queue,
+    bus: EventBus,
+    factory: FactoryClient,
+    minutes: int,
+    turn_timeout_minutes: int = 15,
 ) -> int:
     """Workers with no turn for `minutes` and none running go home, paused city included. Their assignments
-    that were still open are cancelled with a note and their manager is told to hire again when work resumes."""
+    that were still open are cancelled with a note and their manager is told to hire again when work resumes.
+    One worker that cannot be released never stops the others: it is logged and skipped."""
     cutoff = now_iso(ledger.now() - timedelta(minutes=minutes))
-    running = await _running_agents(ledger)
+    running = await _running_agents(ledger, turn_timeout_minutes)
     d = CityDeps(ledger=ledger, bus=bus, queue=queue, factory=factory, settings=_no_settings, max_review_rounds=3)
-    n = 0
+    n = checked = failed = 0
     for w in await ledger.list_agents("active"):
-        if w.get("kind") != "worker" or w["id"] in running:
+        if w.get("kind") != "worker":
             continue
-        if str(w.get("last_active_at") or "") > cutoff:
+        checked += 1
+        if w["id"] in running:
             continue
-        stale = await ledger.tickets_of(w["id"], OPEN_ASSIGNMENT)
-        for t in stale:
-            await move(d, t["id"], "cancelled", f"{w['id']} went home after {minutes} idle minutes; needs a new worker")
-        await factory.release(w["id"], str(w.get("parent")))  # a no-op if the last cancel above sent it home
-        log("info", "worker.released_idle", worker=w["id"], department=w.get("department"), assignments=len(stale))
-        n += 1
-        if stale and w.get("parent"):
-            parts = "; ".join(f"{t['id']}: {t.get('goal', '')}" for t in stale)
-            await send(
-                d,
-                {
-                    "role": "manager",
-                    "agentId": str(w["parent"]),
-                    "department": w.get("department"),
-                    "ticketId": str(stale[0].get("parent_id") or stale[0]["id"]),
-                    "taskId": str(stale[0].get("task_id") or stale[0].get("parent_id") or stale[0]["id"]),
-                    "kind": "task",
-                    "from": "city",
-                    "body": f"{w['id']} went home after {minutes} idle minutes. Assign again when you are ready: {parts}",
-                },
-            )
+        # A worker that never had a turn has no last_active_at: its hire time counts instead.
+        seen = str(w.get("last_active_at") or w.get("hired_at") or "")
+        if seen > cutoff:
+            continue
+        try:
+            n += await _release_idle(d, w, minutes)
+        except Exception as e:
+            failed += 1
+            log("warn", "worker.release_failed", worker=w["id"], error=type(e).__name__)
+    log("info", "sweep.idle", checked=checked, running=len(running), sent_home=n, failed=failed)
     return n
+
+
+async def _release_idle(d: CityDeps, w: Record, minutes: int) -> int:
+    ledger, factory = d.ledger, d.factory
+    stale = await ledger.tickets_of(w["id"], OPEN_ASSIGNMENT)
+    for t in stale:
+        await move(d, t["id"], "cancelled", f"{w['id']} went home after {minutes} idle minutes; needs a new worker")
+    await factory.release(w["id"], str(w.get("parent")))  # a no-op if the last cancel above sent it home
+    log("info", "worker.released_idle", worker=w["id"], department=w.get("department"), assignments=len(stale))
+    if stale and w.get("parent"):
+        parts = "; ".join(f"{t['id']}: {t.get('goal', '')}" for t in stale)
+        await send(
+            d,
+            {
+                "role": "manager",
+                "agentId": str(w["parent"]),
+                "department": w.get("department"),
+                "ticketId": str(stale[0].get("parent_id") or stale[0]["id"]),
+                "taskId": str(stale[0].get("task_id") or stale[0].get("parent_id") or stale[0]["id"]),
+                "kind": "task",
+                "from": "city",
+                "body": f"{w['id']} went home after {minutes} idle minutes. Assign again when you are ready: {parts}",
+            },
+        )
+    return 1
 
 
 async def _no_settings() -> dict[str, Any]:
@@ -145,9 +169,12 @@ async def run_job(
             return settings
 
         f = factory or Factory(ledger, bus, current_settings)
-        sent_home = await release_idle_workers(ledger, queue, bus, f, minutes)
+        timeout = int(settings.get("turn_timeout_minutes") or 15)
+        # The crash sweep first: a dead turn's lease is abandoned before the idle pass judges who is busy.
+        resent = await resume_stale(ledger, queue) if job == "sweep" else 0
+        sent_home = await release_idle_workers(ledger, queue, bus, f, minutes, timeout)
     if job == "sweep":
-        return {"resent": await resume_stale(ledger, queue), "sent_home": sent_home}
+        return {"resent": resent, "sent_home": sent_home}
     if job == "retire_idle":
         n = 0
         open_ = await ledger.list_tickets(["open", "in_progress", "in_review", "waiting_on_owner"])

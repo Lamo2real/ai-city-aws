@@ -22,6 +22,7 @@ import { store, useHud, waitingCount } from "../lib/store.ts";
 import { useVoice } from "../voice/useVoice.ts";
 import { MicIcon } from "./ui.tsx";
 import { Banner, Button, Loading } from "./ui.tsx";
+import { SendHomeButton } from "./SendHome.tsx";
 
 const REGION_CITY: Record<string, string> = {
   "eu-north-1": "STOCKHOLM",
@@ -110,6 +111,7 @@ export function CityView({ go }: { go: (view: string) => void }) {
         <Stat k="PARKED" v={String(t.parked)} />
         <Stat k="TURNS" v={`${g.running ?? 0} running · ${g.waiting ?? 0} waiting`} />
         <Stat k={REGION_CITY[region] ?? region.toUpperCase()} v={stockholmTime(now)} />
+        <SendHomeButton city={city} className="citytop-action" />
       </div>
       <div className="cityalerts">
         {!loaded && !loadError ? <Loading what="the city" /> : null}

@@ -86,13 +86,20 @@ async def send_workers_home(d: CityDeps) -> dict[str, int]:
     manager is told once which parts need a new worker. The city itself is not paused: nothing else changes."""
     workers = await workers_at_work(d)
     by_manager: dict[str, list[Record]] = {}
-    parts = 0
+    parts = sent = failed = 0
     for w in workers:
-        stale = await d.ledger.tickets_of(w["id"], OPEN_ASSIGNMENT)
-        for t in stale:
-            await move(d, t["id"], "cancelled", f"{w['id']} {SENT_HOME_NOTE}")
+        # One worker that cannot be released never keeps the others at their desks.
+        try:
+            stale = await d.ledger.tickets_of(w["id"], OPEN_ASSIGNMENT)
+            for t in stale:
+                await move(d, t["id"], "cancelled", f"{w['id']} {SENT_HOME_NOTE}")
+            await d.factory.release(w["id"], str(w.get("parent")))  # a no-op if the last cancel above sent it home
+        except Exception as e:
+            failed += 1
+            log("warn", "worker.release_failed", worker=w["id"], error=type(e).__name__)
+            continue
         parts += len(stale)
-        await d.factory.release(w["id"], str(w.get("parent")))  # a no-op if the last cancel above sent it home
+        sent += 1
         log("info", "worker.sent_home", worker=w["id"], department=w.get("department"), assignments=len(stale))
         if stale and w.get("parent"):
             by_manager.setdefault(str(w["parent"]), []).extend(stale)
@@ -111,7 +118,7 @@ async def send_workers_home(d: CityDeps) -> dict[str, int]:
                 "body": f"The owner sent the workers home. Assign again when you are ready: {listed}",
             },
         )
-    return {"workers": len(workers), "parts": parts}
+    return {"workers": sent, "parts": parts, "failed": failed}
 
 
 async def move(d: CityDeps, id: str, status: str, note: str = "", patch: Record | None = None) -> Record:

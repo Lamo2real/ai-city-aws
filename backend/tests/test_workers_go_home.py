@@ -123,10 +123,61 @@ async def test_a_worker_whose_turn_is_running_is_not_idle() -> None:
     mgr = await manager(city)
     wid, _ = await hired_and_assigned(city, mgr, ["write it"])
     msg = next(m for m in city.queue.sent if m["agentId"] == wid)
-    assert await city.ledger.begin_work(msg["id"], 60 * MIN, msg)
-    city.advance(20 * MIN)
+    # Hired 20 minutes ago, but its turn started 2 minutes ago under the dispatcher's 16-minute lease.
+    city.advance(18 * MIN)
+    assert await city.ledger.begin_work(msg["id"], 16 * MIN, msg)
+    city.advance(2 * MIN)
     assert await run_job("sweep", city.ledger, city.queue, city.bus, {}) == {"resent": 0, "sent_home": 0}
     assert (await city.ledger.get_agent(wid) or {})["state"] == "active"
     await city.ledger.finish_work(msg["id"])
     city.advance(20 * MIN)
     assert (await run_job("sweep", city.ledger, city.queue, city.bus, {}))["sent_home"] == 1
+
+
+async def test_a_lease_longer_than_a_turn_may_take_does_not_keep_a_worker_at_its_desk() -> None:
+    """A dead turn's leftover (a lease far in the future) must not count as "busy"."""
+    city = make_city(scripted_engine({}))
+    mgr = await manager(city)
+    wid, _ = await hired_and_assigned(city, mgr, ["write it"])
+    msg = next(m for m in city.queue.sent if m["agentId"] == wid)
+    assert await city.ledger.begin_work(msg["id"], 8 * 60 * MIN, msg)  # 8 hours: not a turn, a leftover
+    city.advance(20 * MIN)
+    assert (await run_job("sweep", city.ledger, city.queue, city.bus, {}))["sent_home"] == 1
+    assert (await city.ledger.get_agent(wid) or {})["worker_state"] == "released"
+
+
+async def test_a_worker_that_never_had_a_turn_counts_from_its_hire_time() -> None:
+    city = make_city(scripted_engine({}))
+    mgr = await manager(city)
+    wid, _ = await hired_and_assigned(city, mgr, ["write it"])
+    a = dict(await city.ledger.get_agent(wid) or {})
+    del a["last_active_at"]
+    await city.ledger.put_agent(a)
+    assert "last_active_at" not in (await city.ledger.get_agent(wid) or {})
+    city.advance(10 * MIN)
+    assert (await run_job("sweep", city.ledger, city.queue, city.bus, {}))["sent_home"] == 0
+    city.advance(6 * MIN)
+    assert (await run_job("sweep", city.ledger, city.queue, city.bus, {}))["sent_home"] == 1
+
+
+async def test_one_worker_that_cannot_be_released_does_not_keep_the_others_at_work() -> None:
+    city = make_city(scripted_engine({}))
+    mgr = await manager(city)
+    good, _ = await hired_and_assigned(city, mgr, ["write it"])
+    bad, _ = await hired_and_assigned(city, mgr, ["draw it"])
+
+    class Flaky:
+        """The factory fails for one worker (a broken record, a lost write): the sweep logs it and goes on."""
+
+        async def hire(self, spec: Any, manager_id: str, department: str) -> Any:
+            return await city.factory.hire(spec, manager_id, department)
+
+        async def release(self, worker_id: str, manager_id: str) -> Any:
+            if worker_id == bad:
+                raise RuntimeError("lost write")
+            return await city.factory.release(worker_id, manager_id)
+
+    city.advance(20 * MIN)
+    assert (await run_job("sweep", city.ledger, city.queue, city.bus, {}, factory=Flaky()))["sent_home"] == 1
+    assert (await city.ledger.get_agent(good) or {})["worker_state"] == "released"
+    assert (await city.ledger.get_agent(bad) or {})["state"] == "active"

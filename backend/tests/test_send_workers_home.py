@@ -49,3 +49,30 @@ def test_the_prompt_keeps_pause_send_home_and_stop_apart() -> None:
     assert "send_workers_home" in load_prompt("ace.md").tools
     assert "Never pause for this" in body and "The four controls" in body
     assert body.index("`send_workers_home` with `confirm=false`") < body.index("## The four controls")
+
+
+def test_aic_releases_workers_in_process_never_through_the_factory_lambda() -> None:
+    """AIC's role may not invoke the Agent Factory Lambda (only managers hire), so its send-home and cancel
+    must not depend on it: the ace runtime gets the in-process factory, the other roles the Lambda client."""
+    from types import SimpleNamespace
+
+    from aic.runtime.server import factory_for
+    from aic.shared.aws import LambdaFactoryClient
+    from aic.shared.hierarchy.factory import Factory
+
+    class NeverCalled:
+        def client(self, *_: object, **__: object) -> object:
+            raise AssertionError("AIC must not build a Lambda client for releasing")
+
+    async def settings() -> dict[str, object]:
+        return {}
+
+    city = SimpleNamespace(ledger=object(), bus=object(), settings=settings, session=NeverCalled())
+    assert isinstance(factory_for("ace", city, {"AIC_FACTORY_FUNCTION": "aic-prod-factory"}), Factory)
+
+    class Session:
+        def client(self, name: str, **_: object) -> object:
+            return SimpleNamespace(name=name)
+
+    city.session = Session()
+    assert isinstance(factory_for("manager", city, {"AIC_FACTORY_FUNCTION": "aic-prod-factory"}), LambdaFactoryClient)

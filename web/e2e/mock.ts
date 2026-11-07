@@ -419,6 +419,12 @@ export async function mockBackend(
     }
     if (path === "/messages") return ok({ accepted: true, conversation: "main" }, 202);
     if (path === "/city/pause") return ok({ paused: true });
+    if (path === "/workers/home") {
+      const agents = (m.snapshot.agents ?? []) as { kind: string; state: string }[];
+      const n = agents.filter((a) => a.kind === "worker" && a.state === "active").length;
+      return ok({ workers: n, parts: n });
+    }
+    if (/^\/tasks\/[\w-]+\/cancel$/.test(path)) return ok({ jobs: 2, workers: 1 });
     if (path === "/city/resume") return ok({ paused: false });
     if (path.startsWith("/questions/"))
       return ok({ answered: true, answer: path.endsWith("/default") ? "SQLite" : body?.answer });

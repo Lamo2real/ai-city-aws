@@ -13,6 +13,7 @@ import { stepsRunning } from "../lib/steps.ts";
 import { StreamedText } from "./StreamedText.tsx";
 import { Banner, Button, ClearIcon, Confirm, SendIcon, toast } from "./ui.tsx";
 import { VoiceVisualizer } from "./VoiceVisualizer.tsx";
+import { SendHomeButton } from "./SendHome.tsx";
 
 export { MicIcon } from "./ui.tsx";
 
@@ -169,6 +170,7 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
               Stop all work
             </Button>
           ) : null}
+          <SendHomeButton city={city} />
           <button
             type="button"
             className="icon-btn"

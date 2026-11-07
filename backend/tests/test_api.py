@@ -323,3 +323,52 @@ async def test_stores_the_task_token_and_wakes_the_agent_with_the_owners_decisio
     m = d.queue.sent[0]
     assert (m["role"], m["agentId"], m["kind"]) == ("worker", "w1", "answer")
     assert "refused" in m["body"]
+
+
+# ---------- the owner's direct controls: no model in the loop ----------
+async def _office(d: Any) -> tuple[str, list[str]]:
+    """A job with two live workers on it, straight into the ledger (as the hierarchy would leave it)."""
+    await d.ledger.create_department("Writing", "Writing work.", "mgr-writing")
+    await d.ledger.put_agent({"id": "mgr-writing", "kind": "manager", "role": "Writing Manager", "department": "Writing",
+                              "model": "fable-5-1", "parent": "orchestrator", "state": "active", "total_cost_usd": 0})  # fmt: skip
+    task = await d.ledger.create_ticket({"goal": "50 sentences on engines", "from": "ace", "to": "orchestrator", "department": None,
+                                         "parent_id": None, "kind": "task", "owner_words": "the Porsche sentences", "status": "in_progress"})  # fmt: skip
+    goal = await d.ledger.create_ticket({"goal": "50 sentences", "from": "orchestrator", "to": "mgr-writing", "department": "Writing",
+                                         "parent_id": task["id"], "kind": "assignment", "status": "in_progress"})  # fmt: skip
+    workers = []
+    for i in (1, 2):
+        wid = f"wkr-{i}"
+        await d.ledger.put_agent({"id": wid, "kind": "worker", "role": "Writer", "department": "Writing", "model": "opus-5-5",
+                                  "parent": "mgr-writing", "state": "active", "worker_state": "working", "total_cost_usd": 0.1})  # fmt: skip
+        part = await d.ledger.create_ticket({"goal": f"part {i}", "from": "mgr-writing", "to": wid, "department": "Writing",
+                                             "parent_id": goal["id"], "kind": "assignment", "status": "in_progress"})  # fmt: skip
+        await d.ledger.update_agent(wid, {"ticket_id": part["id"]})
+        workers.append(wid)
+    return task["id"], workers
+
+
+async def test_post_workers_home_sends_everyone_home_at_once_without_pausing() -> None:
+    d = make()
+    _, workers = await _office(d)
+    r = await handle_http(ev("POST", "/workers/home"), d)
+    assert r["statusCode"] == 200 and js(r) == {"workers": 2, "parts": 2, "failed": 0}
+    for w in workers:
+        a = await d.ledger.get_agent(w)
+        assert a and a["state"] == "retired" and a["worker_state"] == "released"
+    assert sorted(e["id"] for e in d.bus.of_type("agent.retired")) == workers
+    assert not await d.ledger.is_paused() and d.bus.of_type("city.state") == []
+    # The manager hears once which parts need a new worker; nobody is at work afterwards.
+    assert len([m for m in d.queue.sent if m["agentId"] == "mgr-writing"]) == 1
+    assert js(await handle_http(ev("POST", "/workers/home"), d)) == {"workers": 0, "parts": 0}
+
+
+async def test_post_tasks_cancel_stops_one_job_and_knows_a_wrong_or_finished_one() -> None:
+    d = make()
+    task, workers = await _office(d)
+    assert (await handle_http(ev("POST", "/tasks/t-nope/cancel"), d))["statusCode"] == 404
+    r = await handle_http(ev("POST", f"/tasks/{task}/cancel"), d)
+    assert r["statusCode"] == 200 and js(r)["workers"] == 2
+    assert (await d.ledger.get_ticket(task) or {})["status"] == "cancelled"
+    for w in workers:
+        assert (await d.ledger.get_agent(w) or {})["state"] == "retired"
+    assert (await handle_http(ev("POST", f"/tasks/{task}/cancel"), d))["statusCode"] == 409
