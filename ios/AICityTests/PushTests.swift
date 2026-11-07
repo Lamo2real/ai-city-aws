@@ -24,6 +24,8 @@ final class PushTests: XCTestCase {
     final class Backend: @unchecked Sendable {
         var online = true
         var firstRunDone = true
+        /// False until the owner has pasted the Apple key: POST /devices answers 503.
+        var configured = true
         var devices: [String: String] = [:]  // id → token
         lazy var http = FakeHTTP { [weak self] s in
             guard let self else { throw URLError(.cancelled) }  // the test is over; a stray Task's call
@@ -32,6 +34,9 @@ final class PushTests: XCTestCase {
             }
             if !self.online { throw URLError(.notConnectedToInternet) }
             if s.method == "POST", s.url.hasSuffix("/devices") {
+                if !self.configured {
+                    return (["error": "iPhone notifications aren't turned on yet.", "fix": "Paste the Apple key in Settings and deploy once."], 503)
+                }
                 let token = s.body["token"].string ?? ""
                 let id = self.devices.first { $0.value == token }?.key ?? "dev-\(self.devices.count + 1)"
                 self.devices[id] = token
@@ -122,6 +127,24 @@ final class PushTests: XCTestCase {
         await model.push.received(token: token2)
         XCTAssertEqual(b.devices, ["dev-2": "0203"], "the old id is removed")
         XCTAssertEqual(model.push.deviceId, "dev-2")
+    }
+
+    /// The backend answers 503 until the owner has pasted the Apple key: not an error, just not yet.
+    func testNotSetUpYetIs503KeepTheTokenAndRetryLater() async {
+        let b = Backend(), sys = FakeSystem(), d = freshDefaults()
+        sys.status = .authorized
+        b.configured = false
+        let model = app(b, sys, defaults: d)
+        await model.start()
+        await model.push.received(token: token1)
+        XCTAssertFalse(model.push.registered)
+        XCTAssertNil(model.push.problem, "a 503 shows no error; notifications just aren't set up yet")
+        XCTAssertNil(model.push.deviceId)
+        b.configured = true
+        await model.becameActive()
+        await model.push.received(token: token1)  // iOS hands the token again on re-registration
+        XCTAssertTrue(model.push.registered)
+        XCTAssertEqual(b.devices, ["dev-1": "abcd01"])
     }
 
     func testOfflineRegistrationRetriesWhenTheAppComesBack() async {

@@ -47,7 +47,6 @@ struct TicketsScreen: View {
             }
         }
         .navigationTitle("Tickets")
-        .withSpendPill()
         .navigationDestination(for: String.self) { TicketDetail(id: $0) }
         .task(id: done) { await reload() }
         .refreshable { await reload() }
@@ -139,7 +138,6 @@ struct CostsScreen: View {
             }
         }
         .navigationTitle("Costs (estimates)")
-        .withSpendPill()
         .task { await load() }
         .refreshable { await load() }
     }
@@ -272,7 +270,6 @@ struct SettingsScreen: View {
             }
         }
         .navigationTitle("Settings")
-        .withSpendPill()
         .task { await load() }
         .safeAreaInset(edge: .bottom) {
             if loader.data != nil {
@@ -449,7 +446,7 @@ struct FirstRunGuide: View {
     private let steps = [
         ("Meet AIC", "AIC is the only one you talk to. Type or tap the mic and just ask: “yo AIC, what’s the status?”. AIC hands real work to the team and tells you when it is done."),
         ("See the City", "The City shows your organization live: the Orchestrator at HQ, one building per department, and workers who walk in when hired and leave when done. Tap anyone to see what they are doing."),
-        ("Where the money is", "The pill at the top always shows today’s spend against your daily cap. It turns amber near the cap and red at it. Figures are estimates; the AWS bill is the truth."),
+        ("Where the money is", "Costs stay out of the way: everything about spend lives under More → Costs, and nowhere else. Figures there are estimates; the AWS bill is the truth."),
     ]
 
     var body: some View {

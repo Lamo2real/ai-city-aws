@@ -112,6 +112,5 @@ struct MoreList: View {
             NavigationLink(value: s) { Label(s.title, systemImage: s.symbol).frame(minHeight: 44) }
         }
         .navigationTitle("More")
-        .withSpendPill()
     }
 }

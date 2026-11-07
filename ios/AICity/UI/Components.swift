@@ -55,44 +55,6 @@ struct Banner: View {
     }
 }
 
-/// "Today: $3.20 of $10" — always visible; amber at 80 %, red at 100 %; opens Costs.
-struct SpendPill: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        let spent = model.hud.city.usage?.usd ?? 0
-        let cap = model.hud.city.caps?.dailyGlobalUsd
-        let level = cap.map { Fmt.spendLevel(spent: spent, cap: $0) } ?? .ok
-        let text = cap.map { "Today: \(Fmt.money(spent)) of \(Fmt.money($0))" } ?? "Today: \(Fmt.money(spent))"
-        let words = Fmt.levelWords(level)
-        Button {
-            model.open(.costs)
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: level == .red ? "stop.fill" : level == .amber ? "exclamationmark.triangle.fill" : "circle.fill")
-                    .imageScale(.small)
-                Text(text).monospacedDigit().lineLimit(1).fixedSize()
-            }
-            .font(.footnote.weight(.semibold))
-            .padding(.horizontal, 10)
-            .frame(minHeight: 32)
-            .foregroundStyle(level == .ok ? Color.primary : .white)
-            .background(level == .red ? Color.red : level == .amber ? Color.orange : Color.secondary.opacity(0.15), in: Capsule())
-            .frame(minHeight: 44)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(text), estimate\(words.isEmpty ? "" : ", \(words)"). Open costs.")
-    }
-}
-
-extension View {
-    /// Every main screen shows the spend pill in its navigation bar.
-    func withSpendPill() -> some View {
-        toolbar { ToolbarItem(placement: .topBarTrailing) { SpendPill() } }
-    }
-}
-
 struct ToastView: View {
     @Environment(AppModel.self) private var model
     var body: some View {

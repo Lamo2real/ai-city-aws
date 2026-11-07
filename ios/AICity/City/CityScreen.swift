@@ -60,7 +60,6 @@ struct CityScreen: View {
         .navigationTitle("City")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.visible, for: .navigationBar)
-        .withSpendPill()
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button { showList = true } label: { Image(systemName: "list.bullet").frame(minWidth: 44, minHeight: 44) }
@@ -155,19 +154,6 @@ struct CityList: View {
 
 private struct Selection: Identifiable { let id: String }
 
-private struct Stat: View {
-    var value: String
-    var label: String
-    var body: some View {
-        VStack {
-            Text(value).font(.title3.bold().monospacedDigit())
-            Text(label).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .combine)
-    }
-}
-
 /// What a tapped building or figure is doing, in one plain sentence first.
 struct CityPanel: View {
     @Environment(AppModel.self) private var model
@@ -188,7 +174,6 @@ struct CityPanel: View {
                         LabeledContent("Where", value: City.deptOf(a))
                         if !a.model.isEmpty { LabeledContent("Model", value: City.modelName[a.model] ?? a.model) }
                         if let t = City.currentTicket(s, id) { LabeledContent("Working on", value: t.goal) }
-                        if let c = a.totalCostUsd { LabeledContent("Spent so far (estimate)", value: Fmt.money(c)) }
                     }
                     if a.state != "retired" && id != "ace" {
                         Section {
@@ -216,7 +201,6 @@ struct CityPanel: View {
                         LabeledContent("Manager", value: p.manager.map(City.displayName) ?? "None yet")
                         LabeledContent("Workers at work", value: "\(p.workers.count)")
                         if p.released > 0 { LabeledContent("Released", value: "\(p.released)") }
-                        if let u = p.todayUsd { LabeledContent("Today (estimate)", value: Fmt.money(u)) }
                     }
                     if !p.workers.isEmpty {
                         Section("Workers") { ForEach(p.workers, id: \.self) { w in Text("\(w): \(City.visuals[City.visualState(s, w)]?.label ?? "")") } }

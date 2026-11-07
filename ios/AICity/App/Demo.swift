@@ -103,11 +103,6 @@ enum Demo {
     - **App**: the iOS developer is *building the sign-in screens*; QA is reviewing.
     - **Marketing**: the copywriter needs your call on the tone (see Needs you).
 
-    | Department | Today |
-    |---|---|
-    | App | $2.10 |
-    | Marketing | $1.10 |
-
     Want me to push anything along?
     """
 }
