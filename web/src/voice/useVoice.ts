@@ -26,6 +26,7 @@ import {
 } from "./browserSpeech.ts";
 import { isStopPhrase, loopNext } from "./convo.ts";
 import { SpeechQueue } from "./speech.ts";
+import { loadOpenAi, onVoiceNote, withOpenAi } from "./openai.ts";
 import { toast } from "../components/ui.tsx";
 import { getVoice, logVoiceError, micProblem, speakProblem } from "./voice.ts";
 import { wakeMatch } from "./wake.ts";
@@ -54,7 +55,7 @@ interface Talk {
 const talk: { current: Talk | null } = { current: null };
 // The hands-free loop: armed by a spoken send; while armed, the mic reopens after each spoken reply.
 const loop = { current: false };
-const startRef: { current: ((wake: boolean) => void) | null } = { current: null };
+const startRef: { current: ((wake: boolean, reopened?: boolean) => void) | null } = { current: null };
 // Replies already in the chat when the page opens (restored after a reload) are never read aloud again.
 const spoken: { current: string | null | undefined } = { current: undefined };
 
@@ -85,6 +86,12 @@ export function useVoice(dictation?: DictationTarget) {
   micModeRef.current = micMode;
   if (spoken.current === undefined) spoken.current = store.get().chat.at(-1)?.id ?? null;
 
+  // OpenAI's voice: whether its key is in (once per page), and a one-time note if it fails and Polly takes over.
+  useEffect(() => {
+    void loadOpenAi();
+    return onVoiceNote(setProblem);
+  }, []);
+
   // Read a reply aloud when the speak mode says so for the message it answers. With a voice that can
   // synthesize sentence by sentence, speaking starts with the first complete sentence while the rest streams.
   useEffect(() => {
@@ -103,7 +110,7 @@ export function useVoice(dictation?: DictationTarget) {
       loop.current = next.on;
       if (next.reopen && micModeRef.current === "send" && !wakeMode && !dictating.current) {
         getVoice().prime?.(); // best effort outside a tap; Safari may still want one (noted in PRODUCT.md)
-        startRef.current?.(false);
+        startRef.current?.(false, true);
         return;
       }
       if (store.get().presence === "speaking") store.set({ presence: wakeMode ? "listening" : "idle" });
@@ -126,7 +133,7 @@ export function useVoice(dictation?: DictationTarget) {
         usingBrowserVoice() && browserVoiceAvailable()
           ? { synth: async (s: string) => s, play: (s: string, onBegin?: () => void) => browserSpeak(s, onBegin) }
           : v.synth && v.play
-            ? { synth: v.synth.bind(v), play: v.play.bind(v) }
+            ? { synth: withOpenAi(v.synth.bind(v)), play: v.play.bind(v) } // OpenAI when its key is in
             : null;
       if (say && engine)
         t.queue = new SpeechQueue(
@@ -203,8 +210,8 @@ export function useVoice(dictation?: DictationTarget) {
   }, []);
 
   const start = useCallback(
-    async (wake: boolean) => {
-      setProblem(null);
+    async (wake: boolean, reopened = false) => {
+      if (!reopened) setProblem(null); // the loop reopening the mic keeps what the voice line says
       stopTalking();
       const dictate = !wake && micMode === "dictate" && !!target.current;
       const failed = (where: string, e: unknown) => {
@@ -250,7 +257,7 @@ export function useVoice(dictation?: DictationTarget) {
     },
     [end, micMode],
   );
-  startRef.current = (wake: boolean) => void start(wake);
+  startRef.current = (wake: boolean, reopened?: boolean) => void start(wake, reopened);
 
   const setSpeakMode = (m: SpeakMode) => {
     setSpeakModeState(m);

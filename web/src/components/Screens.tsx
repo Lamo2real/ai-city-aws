@@ -12,6 +12,15 @@ import { SettingsApps } from "./Apps.tsx";
 import { config } from "../lib/config.ts";
 import { readVoiceId, saveVoiceId, VOICES } from "../voice/modes.ts";
 import { getVoice, logVoiceError, speakProblem } from "../voice/voice.ts";
+import {
+  loadOpenAi,
+  openAiStatus,
+  openAiSynth,
+  readOpenAiVoice,
+  resetOpenAi,
+  saveOpenAiVoice,
+  type OpenAiStatus,
+} from "../voice/openai.ts";
 
 function useApi<T>(path: string | null) {
   const [data, setData] = useState<T | null>(null);
@@ -439,10 +448,23 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
 }
 /** AIC's voice, chosen per device (no Save needed): Polly's generative voices, the most natural ones. */
 function VoiceSettings() {
+  const [openai, setOpenai] = useState<OpenAiStatus | null>(openAiStatus);
   const [id, setId] = useState(() => readVoiceId(config().pollyVoice));
+  const [oaVoice, setOaVoice] = useState(readOpenAiVoice);
   const [test, setTest] = useState<{ ok: boolean; words: string } | null>(null);
-  /** One sentence through exactly the reply path (synth, then play on the unlocked context), with the result
-   *  in plain words: "Played." or the precise failure. */
+  const [keyOpen, setKeyOpen] = useState(false);
+  const [key, setKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [keyProblem, setKeyProblem] = useState<string | null>(null);
+  useEffect(() => {
+    void loadOpenAi().then((st) => {
+      setOpenai(st);
+      setOaVoice(readOpenAiVoice());
+    });
+  }, []);
+  const onOpenAi = openai?.configured === true;
+  /** One sentence through exactly the reply path of the active voice (OpenAI when its key is in, else Polly),
+   *  then play on the unlocked context, with the result in plain words: "Played." or the precise failure. */
   const testVoice = async () => {
     setTest(null);
     const v = getVoice();
@@ -450,43 +472,125 @@ function VoiceSettings() {
     const sentence = "Hi, I'm AIC. This is how I'll sound when I answer you.";
     try {
       if (v.synth && v.play) {
-        const clip = await v.synth(sentence);
+        const clip = onOpenAi ? await openAiSynth(sentence) : await v.synth(sentence);
         if (!clip) throw Object.assign(new Error("the speech service returned no audio"), { name: "EmptyAudio" });
         let began = false;
         await v.play(clip, () => (began = true));
         if (!began) throw Object.assign(new Error("no sound ever started"), { name: "AudioPlayError" });
       } else await v.speak(sentence);
+      if (onOpenAi) resetOpenAi(); // it works again: replies use OpenAI
       setTest({ ok: true, words: "Played. If you heard nothing, check the device's volume." });
     } catch (e) {
       logVoiceError("the voice test failed", e);
       setTest({ ok: false, words: speakProblem(e) });
     }
   };
+  const saveKey = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (busy || !key.trim()) return;
+    setBusy(true);
+    setKeyProblem(null);
+    api<{ saved_at: string }>("/voice/openai-key", { method: "PUT", body: { key: key.trim() } })
+      .then(async () => {
+        setKey("");
+        setKeyOpen(false);
+        resetOpenAi();
+        const st = await loadOpenAi(true);
+        setOpenai(st);
+        setOaVoice(readOpenAiVoice());
+        toast({ tone: "good", text: "OpenAI key saved. AIC now speaks with OpenAI's voice." });
+      })
+      .catch((err: unknown) => setKeyProblem(err instanceof ApiError ? err.message : "The key could not be saved."))
+      .finally(() => setBusy(false));
+  };
   return (
     <>
       <h2>AIC's voice</h2>
-      <p className="mute">Natural, human-sounding voices. The choice is remembered on this device.</p>
+      <p className="mute">
+        {onOpenAi
+          ? "OpenAI's voice. The choice is remembered on this device."
+          : "Natural, human-sounding voices. The choice is remembered on this device."}
+      </p>
       <label className="field">
         Voice
-        <select
-          aria-label="AIC's voice"
-          value={id}
-          onChange={(e) => {
-            setId(e.target.value);
-            saveVoiceId(e.target.value);
-          }}
-        >
-          {VOICES.map((v) => (
-            <option key={v.id} value={v.id}>
-              {v.label}
-            </option>
-          ))}
-        </select>
+        {onOpenAi ? (
+          <select
+            aria-label="AIC's voice"
+            value={oaVoice}
+            onChange={(e) => {
+              setOaVoice(e.target.value);
+              saveOpenAiVoice(e.target.value);
+            }}
+          >
+            {openai.voices.map((v) => (
+              <option key={v} value={v}>
+                {v[0]!.toUpperCase() + v.slice(1) + (v === openai.default ? " (OpenAI's default)" : "")}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <select
+            aria-label="AIC's voice"
+            value={id}
+            onChange={(e) => {
+              setId(e.target.value);
+              saveVoiceId(e.target.value);
+            }}
+          >
+            {VOICES.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.label}
+              </option>
+            ))}
+          </select>
+        )}
       </label>
       <Button variant="quiet" onClick={testVoice}>
         Test voice
       </Button>
       {test ? <Banner tone={test.ok ? "good" : "bad"}>{test.words}</Banner> : null}
+      <h3>OpenAI key</h3>
+      <p className="mute">
+        {openai?.key_saved_at
+          ? `Saved ${ago(Date.parse(openai.key_saved_at))}. It is kept in AWS and never shown again.`
+          : "Paste an OpenAI API key to use OpenAI's voice. It goes straight to AWS and is never shown again."}
+      </p>
+      {!keyOpen ? (
+        <Button variant="quiet" onClick={() => setKeyOpen(true)}>
+          {openai?.key_saved_at ? "Replace the OpenAI key" : "Add an OpenAI key"}
+        </Button>
+      ) : (
+        <form onSubmit={saveKey} autoComplete="off">
+          {keyProblem ? <Banner tone="bad">{keyProblem}</Banner> : null}
+          <label className="field">
+            OpenAI key
+            <input
+              type="password"
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="sk-…"
+              required
+            />
+          </label>
+          <div className="actions">
+            <Button variant="primary" type="submit" label="Save the OpenAI key" disabled={busy}>
+              Save the OpenAI key
+            </Button>
+            <Button
+              variant="quiet"
+              onClick={() => {
+                setKey("");
+                setKeyOpen(false);
+              }}
+              label="Cancel"
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      )}
     </>
   );
 }

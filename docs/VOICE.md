@@ -30,7 +30,8 @@ three-sentence reply is well under a cent). Nothing is charged while the key is 
   stores the key.
 - Errors come back as `{"error": code, "message": plain words}`: `503 not_configured` (no key yet), `503 bad_key`
   (OpenAI rejected it: paste it again), `503 rate_limited`, `502 timeout`, `502 unreachable`, `502 openai_error`.
-  The HUD shows the message on the voice line and falls back to Polly for that reply.
+  The HUD shows the message on the voice line once and speaks with Polly for the rest of the visit; saving a key
+  or a working Test voice tries OpenAI again (`web/src/voice/openai.ts`).
 - Only the api function may read or write the secret (`infra/modules/voice`); the key never reaches the
   browser, the agents or the logs.
 

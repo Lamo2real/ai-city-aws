@@ -88,6 +88,8 @@ export interface Mock {
   knowledge: { items: Array<Record<string, unknown>>; puts: string[] };
   /** v3 per-app state, `<app_id>/<key>` → value. */
   state: Record<string, unknown>;
+  /** OpenAI's voice (docs/VOICE.md): the stored key, when it was saved, and an error /speech should answer. */
+  openai: { key: string | null; savedAt: string | null; error: { code: string; message: string } | null };
 }
 export const appRecord = (id: string, slug: string, title: string, extra: Record<string, unknown> = {}) => ({
   app_id: id,
@@ -191,6 +193,7 @@ export async function mockBackend(
     mail: [],
     apps: [...(opts.apps ?? [])],
     state: {},
+    openai: { key: null, savedAt: null, error: null },
     settings: {
       monthly_budget_usd: 150,
       daily_global_usd: 10,
@@ -416,6 +419,31 @@ export async function mockBackend(
         saved_at: "2026-11-07T12:00:00.000Z",
         next: "Turn on AIC_APNS_ENABLED in GitHub and deploy once.",
       });
+    if (path === "/voice/openai" && req.method() === "GET")
+      return ok({
+        configured: !!m.openai.key,
+        voices: ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse"],
+        default: "alloy",
+        key_saved_at: m.openai.savedAt,
+      });
+    if (path === "/voice/openai-key" && req.method() === "PUT") {
+      const key = String(body?.key ?? "");
+      if (!key.startsWith("sk-"))
+        return ok({ error: "bad_request", message: "That doesn't look like an OpenAI key (it starts with sk-)." }, 400);
+      m.openai.key = key;
+      m.openai.savedAt = "2026-11-07T12:00:00.000Z";
+      return ok({ ok: true, saved_at: m.openai.savedAt });
+    }
+    if (path === "/speech" && req.method() === "POST") {
+      if (!m.openai.key) return ok({ error: "not_configured", message: "OpenAI's voice isn't set up yet." }, 503);
+      if (m.openai.error) return ok({ error: m.openai.error.code, message: m.openai.error.message }, 503);
+      // A "clip" is the voice and the sentence, so the fake player records which engine spoke it.
+      return route.fulfill({
+        status: 200,
+        contentType: "audio/mpeg",
+        body: `openai:${String(body?.voice)}:${String(body?.text)}`,
+      });
+    }
     if (path === "/devices" && req.method() === "GET") return ok({ devices: [] });
     if (path === "/settings" && req.method() === "GET") return ok({ settings: m.settings });
     if (path === "/settings" && req.method() === "PUT") {
