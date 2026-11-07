@@ -92,6 +92,8 @@ export class SpeechQueue<Clip> {
     private synth: (text: string) => Promise<Clip | null>,
     private play: (clip: Clip) => Promise<void>,
     private onStart?: () => void,
+    /** A sentence failed to synthesize or play. The queue carries on with the rest; the caller decides. */
+    private onProblem?: (e: unknown) => void,
   ) {}
 
   /** More of the reply arrived. */
@@ -113,13 +115,15 @@ export class SpeechQueue<Clip> {
     if (!text) return;
     // One synthesis at a time, started as soon as the previous one finished: the next clip is usually ready
     // before the current one ends.
-    const clip = this.synthChain.then(() => (this.stopped ? null : this.synth(text).catch(() => null)));
+    const clip = this.synthChain.then(() =>
+      this.stopped ? null : this.synth(text).catch((e: unknown) => (this.onProblem?.(e), null)),
+    );
     this.synthChain = clip;
     this.playChain = this.playChain.then(async () => {
       const c = await clip;
       if (!c || this.stopped) return;
       this.onStart?.();
-      await this.play(c).catch(() => undefined);
+      await this.play(c).catch((e: unknown) => this.onProblem?.(e));
     });
   }
 }
