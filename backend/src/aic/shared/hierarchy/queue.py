@@ -41,6 +41,9 @@ WorkMessage = TypedDict(
 
 class Queue(Protocol):
     async def send(self, message: WorkMessage, delay_seconds: float = 0) -> None: ...
+    async def purge(self) -> None:
+        """Drops every waiting message on every level (the owner's "start over"); nothing else ever purges."""
+        ...
 
 
 class MemoryQueue:
@@ -49,11 +52,16 @@ class MemoryQueue:
     def __init__(self, now: Callable[[], float] | None = None) -> None:
         self.pending: list[tuple[WorkMessage, float]] = []
         self.sent: list[WorkMessage] = []
+        self.purged = 0
         self._now = now or (lambda: time.time() * 1000)
 
     async def send(self, message: WorkMessage, delay_seconds: float = 0) -> None:
         self.sent.append(message)
         self.pending.append((message, self._now() + delay_seconds * 1000))
+
+    async def purge(self) -> None:
+        self.pending = []
+        self.purged += 1
 
     def take_ready(self) -> list[WorkMessage]:
         """Takes every message available now, oldest first."""

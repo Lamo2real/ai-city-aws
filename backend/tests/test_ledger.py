@@ -230,3 +230,75 @@ async def test_dynamo_table_puts_with_attribute_not_exists_and_reports_duplicate
     fake = _FakeDynamo(always_fail=True)
     assert await DynamoTable(fake).put({"pk": "a", "sk": "b"}, if_not_exists=True) is False
     assert fake.calls[0]["ConditionExpression"] == "attribute_not_exists(pk)"
+
+
+class _FakeScanDynamo:
+    """Two pages of keys, and a batch writer that records the deletes."""
+
+    def __init__(self) -> None:
+        self.deleted: list[dict[str, str]] = []
+        self.scans: list[dict[str, Any]] = []
+
+    def scan(self, **kw: Any) -> dict[str, Any]:
+        self.scans.append(kw)
+        if "ExclusiveStartKey" not in kw:
+            return {"Items": [{"pk": "AGENT#a", "sk": "META"}], "LastEvaluatedKey": {"pk": "AGENT#a", "sk": "META"}}
+        return {"Items": [{"pk": "CONFIG", "sk": "city"}]}
+
+    def batch_writer(self) -> Any:
+        fake = self
+
+        class _Writer:
+            def __enter__(self) -> "_Writer":
+                return self
+
+            def __exit__(self, *a: Any) -> None:
+                return None
+
+            def delete_item(self, Key: dict[str, str]) -> None:
+                fake.deleted.append(Key)
+
+        return _Writer()
+
+
+async def test_dynamo_table_scans_every_page_of_keys_and_deletes_in_a_batch() -> None:
+    fake = _FakeScanDynamo()
+    t = DynamoTable(fake)
+    assert await t.scan_keys() == [("AGENT#a", "META"), ("CONFIG", "city")]
+    assert all(kw["ProjectionExpression"] == "pk, sk" for kw in fake.scans) and len(fake.scans) == 2
+    await t.delete_many([("AGENT#a", "META")])
+    assert fake.deleted == [{"pk": "AGENT#a", "sk": "META"}]
+
+
+async def test_reset_city_removes_the_work_and_keeps_what_the_owner_set_up() -> None:
+    table = MemoryTable()
+    led = Ledger(table)
+    await led.put_agent({"id": "ace", "kind": "core", "role": "AIC", "department": None, "model": "haiku-5-5",
+                         "parent": None, "state": "active", "total_cost_usd": 0})  # fmt: skip
+    await led.create_department("Writing", "Writing work.", "mgr-writing")
+    t = await led.create_ticket({"goal": "g", "from": "ace", "to": "orchestrator", "department": None, "parent_id": None,
+                                 "kind": "task", "status": "in_progress"})  # fmt: skip
+    await led.ask_question(
+        {"asked_by": "x", "path": "x", "ticket_id": t["id"], "text": "?", "options": [], "default_answer": "ok"}
+    )
+    await led.append_event(t["id"], {"type": "ticket.created", "at": "2026-11-07T00:00:00Z"})
+    await led.update_settings({"daily_global_usd": 5})
+    for keep in ({"pk": "DEVICE#1", "sk": "META"}, {"pk": "CONN#x", "sk": "META"}, {"pk": "SKILL#s", "sk": "META"},
+                 {"pk": "APP#a", "sk": "META"}, {"pk": "APPSTATE#a", "sk": "KEY#k"}, {"pk": "NOTE#n", "sk": "META"},
+                 {"pk": "SPEC#s", "sk": "META"}, {"pk": "SPEND#DAY#2026-11-07", "sk": "GLOBAL", "usd": 1},
+                 {"pk": "VOICE#openai", "sk": "META"}, {"pk": "NOTIFY#apns", "sk": "META"}):  # fmt: skip
+        await table.put(keep)
+    for gone in ({"pk": "SLOTS", "sk": "GLOBAL", "active": 3}, {"pk": "RATE", "sk": "1", "n": 1}, {"pk": "IDEMP#k", "sk": "META"},
+                 {"pk": "WORK#w", "sk": "META"}, {"pk": "TURN#t", "sk": "META"}, {"pk": "TOOL#c", "sk": "META"},
+                 {"pk": "CONV#ace", "sk": "1"}, {"pk": "APPROVAL#a", "sk": "META"}, {"pk": "APPDRAFTS", "sk": "DRAFT#d"}):  # fmt: skip
+        await table.put(gone)
+
+    counts = await led.reset_city()
+
+    assert counts == {"AGENT": 1, "APPDRAFTS": 1, "APPROVAL": 1, "CONV": 1, "DEPT": 1, "EVENT": 1, "IDEMP": 1, "Q": 1,
+                      "RATE": 1, "SLOTS": 1, "TICKET": 2, "TOOL": 1, "TURN": 1, "WORK": 1}  # fmt: skip
+    left = sorted(pk.split("#", 1)[0] for pk, _ in table.items)
+    assert left == ["APP", "APPSTATE", "CONFIG", "CONN", "DEVICE", "NOTE", "NOTIFY", "SKILL", "SPEC", "SPEND", "VOICE"]
+    assert await led.list_agents() == [] and await led.get_ticket(t["id"]) is None
+    assert (await led.settings({}))["daily_global_usd"] == 5  # settings survive
+    assert await led.reset_city() == {}  # a second time: nothing left to remove

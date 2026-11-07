@@ -6,8 +6,9 @@ import { saveSettings } from "../lib/actions.ts";
 import { api, ApiError } from "../lib/api.ts";
 import { ago, money, spendLevel } from "../lib/format.ts";
 import { store } from "../lib/store.ts";
-import { Banner, Button, Loading, toast } from "./ui.tsx";
+import { Banner, Button, Confirm, Loading, toast } from "./ui.tsx";
 import { signOutHere } from "../lib/auth.ts";
+import { startOver } from "../lib/reset.ts";
 import { SettingsApps } from "./Apps.tsx";
 import { config } from "../lib/config.ts";
 import { readVoiceId, saveVoiceId, VOICES } from "../voice/modes.ts";
@@ -342,6 +343,8 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
   const { data, error, retry } = useApi<{ settings: S }>("/settings");
   const [form, setForm] = useState<S | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetProblem, setResetProblem] = useState<string | null>(null);
   useEffect(() => {
     if (data) setForm(data.settings);
   }, [data]);
@@ -503,6 +506,35 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
       />
       <SettingsApps />
       <VoiceSettings />
+      <h2>Start over</h2>
+      <p className="mute">
+        Empties the city. Every agent, department, job and question goes, and nothing is running afterwards. Your
+        settings, phone, connectors, skills, knowledge and apps stay.
+      </p>
+      {resetProblem ? <Banner tone="bad">{resetProblem}</Banner> : null}
+      <Button variant="danger" onClick={() => setResetOpen(true)}>
+        Start over
+      </Button>
+      {resetOpen ? (
+        <Confirm
+          title="Start over?"
+          what="Every agent, department, job and question will be removed, and nothing will be running. Your settings, phone, connectors, skills, knowledge and apps stay."
+          cost="Nothing. Work in progress is lost."
+          confirmLabel="Start over"
+          hold
+          danger
+          onCancel={() => setResetOpen(false)}
+          onConfirm={async () => {
+            setResetProblem(null);
+            try {
+              await startOver();
+            } catch (e) {
+              setResetOpen(false);
+              setResetProblem(e instanceof ApiError ? e.message : "The city was not reset. Try again.");
+            }
+          }}
+        />
+      ) : null}
       <h2>Help</h2>
       <Button variant="quiet" onClick={reopenGuide}>
         Show the first-run guide again

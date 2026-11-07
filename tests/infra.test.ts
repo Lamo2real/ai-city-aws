@@ -715,3 +715,13 @@ describe("the owner's queue switch", () => {
     expect(wf).toContain('-var "queues_enabled=${QUEUES_ENABLED}"');
   });
 });
+
+describe("the owner's start over", () => {
+  it("POST /city/reset is routed, and the api role may scan, batch-delete and purge for it", async () => {
+    const { readFileSync } = await import("node:fs");
+    const api = readFileSync("infra/modules/api/main.tf", "utf8");
+    expect(api).toContain('"POST /city/reset"');
+    expect(api).toContain('"dynamodb:Scan", "dynamodb:BatchWriteItem"');
+    expect(api).toContain('"sqs:PurgeQueue"');
+  });
+});

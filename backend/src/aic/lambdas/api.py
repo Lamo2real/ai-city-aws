@@ -92,6 +92,7 @@ ROUTES: list[tuple[str, str]] = [
     ("PUT", "/settings"),
     ("POST", "/workers/home"),
     ("POST", "/tasks/t-1/cancel"),
+    ("POST", "/city/reset"),
     ("GET", "/memory"),
     ("POST", "/notes"),
     ("GET", "/connectors"),
@@ -714,6 +715,15 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
     if is_("POST", r"/workers/home"):
         # The owner's "send everyone home", straight from the HUD: no model in the loop, instant.
         return reply(200, await send_workers_home(_action_deps(d)))
+    if is_("POST", r"/city/reset"):
+        # The owner's "start over" (Settings): the city is emptied and nothing runs afterwards. No model in the
+        # loop; the HUD asks for a held button first and sends confirm=true, nothing else resets anything.
+        if _body(event).get("confirm") is not True:
+            return problem(400, "Nothing was reset.", "Hold the Start over button in Settings to confirm.")
+        gone = await d.ledger.reset_city()
+        await d.queue.purge()
+        log("info", "city.reset", records=sum(gone.values()), kinds=json.dumps(gone))
+        return reply(200, {"gone": gone, "records": sum(gone.values())})
     if is_("POST", r"/tasks/[\w-]+/cancel"):
         task = await d.ledger.get_ticket(seg[1])
         if not task or task.get("kind") != "task":

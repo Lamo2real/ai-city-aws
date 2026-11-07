@@ -386,3 +386,24 @@ async def test_the_city_snapshot_never_lists_questions_of_a_job_that_already_sto
                                  "default_answer": "ok"})  # fmt: skip
     assert js(await handle_http(ev("GET", "/city"), d))["questions"] == []
     assert js(await handle_http(ev("GET", "/questions"), d))["questions"] == []
+
+
+async def test_post_city_reset_empties_the_city_only_with_a_clear_confirm() -> None:
+    d = make()
+    task_id, _workers = await _office(d)
+    await d.queue.send({"role": "manager", "ticketId": task_id, "department": "Writing"})
+    refused = await handle_http(ev("POST", "/city/reset"), d)
+    assert refused["statusCode"] == 400 and "Nothing was reset" in js(refused)["error"]
+    refused = await handle_http(ev("POST", "/city/reset", {"confirm": "yes"}), d)
+    assert refused["statusCode"] == 400
+    assert await d.ledger.get_ticket(task_id) and d.queue.purged == 0
+
+    r = await handle_http(ev("POST", "/city/reset", {"confirm": True}), d)
+    assert r["statusCode"] == 200
+    body = js(r)
+    assert body["gone"]["AGENT"] == 3 and body["gone"]["TICKET"] >= 4 and body["records"] == sum(body["gone"].values())
+    assert await d.ledger.get_ticket(task_id) is None and await d.ledger.list_agents() == []
+    assert await d.ledger.get_department("Writing") is None
+    assert d.queue.purged == 1 and d.queue.pending == []
+    city = js(await handle_http(ev("GET", "/city"), d))
+    assert city["agents"] == [] and city["departments"] == [] and city["tickets"] == []

@@ -17,6 +17,26 @@ from .events import now_iso
 from .ids import department_key, new_id
 from .table import ABSENT, AddLimit, Item, Table, UpdateOptions
 
+RESET_KINDS = frozenset(
+    {
+        "AGENT",
+        "DEPT",
+        "TICKET",
+        "TURN",
+        "TOOL",
+        "EVENT",
+        "CONV",
+        "Q",
+        "APPROVAL",
+        "WORK",
+        "APPDRAFTS",
+        "SLOTS",
+        "IDEMP",
+        "RATE",
+    }
+)
+"""The key kinds (the part of ``pk`` before ``#``) that ``Ledger.reset_city`` removes. Anything else is kept."""
+
 Record = dict[str, Any]
 TurnKind = Literal["ace", "orchestrator", "manager", "worker", "utility", "compaction", "eval"]
 TURN_KINDS: tuple[TurnKind, ...] = ("ace", "orchestrator", "manager", "worker", "utility", "compaction", "eval")
@@ -424,6 +444,23 @@ class Ledger:
             "RATE", str(sec), UpdateOptions(add={"n": 1}, add_limit=AddLimit("n", per_second), set={"ttl": sec + 120})
         )
         return it is not None
+
+    # ---------- the owner's "start over" ----------
+    async def reset_city(self) -> dict[str, int]:
+        """Empties the city: every agent (AIC and the Orchestrator are recreated on the next message),
+        department, ticket with its history, turn, tool call, event, conversation line, question, approval,
+        work lease, app draft, worker-slot counter, idempotency key and rate record. Everything the owner set
+        up stays: settings (CONFIG), spend history, devices, connectors, skills, knowledge, apps and their
+        state, mail, notes, reminders, specialists, voice and notification flags. Returns what went, per kind."""
+        keys = await self.table.scan_keys()
+        gone = [(pk, sk) for pk, sk in keys if pk.split("#", 1)[0] in RESET_KINDS]
+        if gone:
+            await self.table.delete_many(gone)
+        counts: dict[str, int] = {}
+        for pk, _ in gone:
+            kind = pk.split("#", 1)[0]
+            counts[kind] = counts.get(kind, 0) + 1
+        return dict(sorted(counts.items()))
 
     # ---------- city settings ----------
     async def settings(self, defaults: Record) -> Record:

@@ -39,6 +39,14 @@ class SqsQueue:
             },
         )
 
+    async def purge(self) -> None:
+        for url in dict.fromkeys(u for u in self._urls.values() if u):
+            try:
+                await asyncio.to_thread(self._sqs.purge_queue, QueueUrl=url)
+            except Exception as e:  # SQS allows one purge a minute; a purge already running is as good as ours
+                if "PurgeQueueInProgress" not in type(e).__name__ + str(e):
+                    raise
+
 
 class LambdaFactoryClient:
     """The runtime calls the Agent Factory Lambda; the Lambda holds the logic and the ledger rights."""

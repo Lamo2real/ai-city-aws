@@ -64,6 +64,13 @@ class Table(Protocol):
         """Deletes the item if it exists; True when this call deleted it (so two callers can't both win)."""
         ...
 
+    async def scan_keys(self) -> list[tuple[str, str]]:
+        """Every ``(pk, sk)`` in the table. Only the owner's "start over" reads the whole table; everything
+        else queries one key."""
+        ...
+
+    async def delete_many(self, keys: list[tuple[str, str]]) -> None: ...
+
 
 class MemoryTable:
     def __init__(self) -> None:
@@ -134,6 +141,14 @@ class MemoryTable:
     async def delete_if_exists(self, pk: str, sk: str) -> bool:
         self._guard()
         return self.items.pop((pk, sk), None) is not None
+
+    async def scan_keys(self) -> list[tuple[str, str]]:
+        return sorted(self.items)
+
+    async def delete_many(self, keys: list[tuple[str, str]]) -> None:
+        self._guard()
+        for k in keys:
+            self.items.pop(k, None)
 
 
 # ---------- DynamoDB ----------
@@ -313,3 +328,24 @@ class DynamoTable:
             if self._is_condition_failure(e):
                 return False
             raise
+
+    async def scan_keys(self) -> list[tuple[str, str]]:
+        out: list[tuple[str, str]] = []
+        start: dict[str, Any] | None = None
+        while True:
+            args: dict[str, Any] = {"ProjectionExpression": "pk, sk", **({"ExclusiveStartKey": start} if start else {})}
+            r = await asyncio.to_thread(self._t.scan, **args)
+            out.extend((str(i["pk"]), str(i["sk"])) for i in r.get("Items", []))
+            start = r.get("LastEvaluatedKey")
+            if not start:
+                return out
+
+    async def delete_many(self, keys: list[tuple[str, str]]) -> None:
+        """BatchWriteItem in the resource's batch writer (25 a request, unprocessed ones retried)."""
+
+        def run() -> None:
+            with self._t.batch_writer() as batch:
+                for pk, sk in keys:
+                    batch.delete_item(Key={"pk": pk, "sk": sk})
+
+        await asyncio.to_thread(run)

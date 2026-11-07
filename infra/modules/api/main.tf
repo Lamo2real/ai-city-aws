@@ -127,6 +127,9 @@ locals {
       { Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] },
       { Action = ["events:PutEvents"], Resource = [var.bus_arn] },
       { Action = ["sqs:SendMessage"], Resource = values(var.queue_arns) },
+      # The owner's "start over" (POST /city/reset): read every key, delete the city's work in batches, purge the queues.
+      { Action = ["dynamodb:Scan", "dynamodb:BatchWriteItem"], Resource = [var.ledger_arn] },
+      { Action = ["sqs:PurgeQueue"], Resource = values(var.queue_arns) },
       { Action = ["states:SendTaskSuccess", "states:SendTaskFailure"], Resource = [aws_sfn_state_machine.approval.arn] },
       { Action = ["bedrock:InvokeModel"], Resource = var.utility_invoke_arns },
       # "Send me a new first-login email": re-sends the owner's invitation, nothing else.
@@ -194,7 +197,7 @@ locals {
     "GET /city", "GET /city/agent", "POST /city/instruct", "POST /messages", "POST /wake-check", "GET /tickets", "GET /tickets/{id}", "GET /jobs",
     "GET /departments", "GET /agents", "GET /workforce", "GET /costs", "GET /health", "GET /questions", "POST /questions/{id}/answer",
     "POST /questions/{id}/default", "POST /approvals/{id}", "GET /settings", "PUT /settings",
-    "POST /workers/home", "POST /tasks/{id}/cancel",
+    "POST /workers/home", "POST /tasks/{id}/cancel", "POST /city/reset",
     "GET /memory", "POST /notes", "GET /apps", "DELETE /apps/{id}", "PUT /apps/{id}",
     "POST /apps/{id}/bridge", "POST /apps/{id}/proposals", "POST /apps/{id}/rollback",
     "GET /knowledge", "GET /knowledge/{id}", "POST /knowledge/uploads", "POST /knowledge/uploads/{id}/complete", "POST /knowledge/links",
