@@ -25,6 +25,9 @@ export interface Mock {
   send: (event: Record<string, unknown>) => void;
   snapshot: Record<string, unknown>;
   settings: Record<string, unknown>;
+  connectors: Array<Record<string, unknown>>;
+  skills: Array<Record<string, unknown>>;
+  mail: Array<Record<string, unknown>>;
 }
 
 export const baseSnapshot = () => ({
@@ -77,6 +80,9 @@ export async function mockBackend(
     },
     send: (e) => pending.push(e),
     snapshot: { ...baseSnapshot(), ...(opts.snapshot ?? {}) },
+    connectors: [],
+    skills: [],
+    mail: [],
     settings: {
       paused: false,
       pause_reason: null,
@@ -219,6 +225,55 @@ export async function mockBackend(
       });
     if (path === "/workforce") return ok({ workers: [], specialists: [] });
     if (path === "/health") return ok({ paused: false, workers_busy: 0, worker_ceiling: 2450, stale_turns: 0 });
+    // ---------- connectors, skills, mail (CONNECTORS_SKILLS.md §1.7, §2.4; MAIL_CALENDAR.md §4) ----------
+    const method = req.method();
+    if (path === "/connectors" && method === "GET") return ok({ connectors: m.connectors });
+    if (/^\/connectors\/[\w-]+\/login$/.test(path))
+      return ok({ url: "https://auth.provider.test/authorize?x=1", state: "st-1" });
+    if (/^\/connectors\/[\w-]+\/login\/complete$/.test(path))
+      return ok({ connector: { id: path.split("/")[2], status: "syncing" } });
+    if (/^\/connectors\/[\w-]+\/key$/.test(path)) return ok({ ok: true });
+    if (/^\/connectors\/[\w-]+$/.test(path) && method === "PUT") {
+      const c = m.connectors.find((x) => x.id === path.split("/")[2])!;
+      Object.assign(c, body);
+      return ok({ connector: c });
+    }
+    if (path === "/skills" && method === "GET") return ok({ skills: m.skills });
+    if (path === "/skills" && method === "POST") {
+      const b = body as { roles: string[]; files: Array<{ path: string }> };
+      const skill = {
+        name: "pdf-report",
+        description: "Makes a PDF report",
+        roles: b.roles,
+        enabled: true,
+        version: "v1",
+        files: b.files.map((f) => ({ path: f.path, size: 10 })),
+        size_bytes: 10,
+        updated_at: at(),
+      };
+      m.skills = [skill];
+      return ok({ skill, removed_frontmatter: ["allowed-tools"] }, 201);
+    }
+    if (/^\/skills\/[\w-]+$/.test(path) && method === "PUT") {
+      Object.assign(m.skills[0]!, body);
+      return ok({ skill: m.skills[0] });
+    }
+    if (/^\/skills\/[\w-]+$/.test(path) && method === "DELETE") {
+      m.skills = [];
+      return ok({ ok: true });
+    }
+    if (path === "/mail/accounts" && method === "GET") return ok({ accounts: m.mail });
+    if (path === "/mail/rules") return ok({ rules: [] });
+    if (/^\/mail\/accounts\/[\w-]+\/signin$/.test(path))
+      return ok({ url: "https://accounts.provider.test/o/auth", state: "ms-1" });
+    if (/^\/mail\/accounts\/[\w-]+\/complete$/.test(path))
+      return ok({ account: { id: path.split("/")[3], status: "connected" } });
+    if (/^\/mail\/accounts\/[\w-]+\/imap$/.test(path)) {
+      const b = body as { password: string };
+      if (b.password !== "good-app-password")
+        return ok({ error: "The mail server refused the app password.", fix: "Check it." }, 400);
+      return ok({ account: { id: path.split("/")[3], status: "connected" } });
+    }
     return ok({ error: "There is nothing here." }, 404);
   });
   await page.routeWebSocket(`${CONFIG.wsUrl}**`, (ws) => {

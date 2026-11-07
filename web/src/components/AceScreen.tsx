@@ -1,5 +1,6 @@
 // The landing screen: AIC's eye with the voice strip on the left, the conversation on the right (stacked on a
 // phone). Everything else can be done by asking AIC ("AIC, pause everything", "what's the status?").
+import { ChatCards } from "./ConnectCard.tsx";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { sendMessage } from "../lib/actions.ts";
 import { store, useHud, waitingCount } from "../lib/store.ts";
@@ -23,6 +24,7 @@ const readDraft = () => {
 
 export function AceScreen({ go }: { go: (view: string) => void }) {
   const chat = useHud((s) => s.chat);
+  const cards = useHud((s) => s.cards);
   const presence = useHud((s) => s.presence);
   const waiting = useHud(waitingCount);
   const live = useHud((s) => s.live);
@@ -136,6 +138,7 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
               </div>
             </article>
           ))}
+          <ChatCards cards={cards} />
           {waitingForAic && turn ? (
             <article className="msg msg-ace msg-pending">
               <AicStatus turn={turn} />

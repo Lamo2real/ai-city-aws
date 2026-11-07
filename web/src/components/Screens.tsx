@@ -1,4 +1,5 @@
 // Tickets, Costs and Settings. Plain words in the main view; technical details behind "Details".
+import { ConnectorsSettings } from "./ConnectorsSettings.tsx";
 import { useEffect, useState } from "react";
 import { COST_NOTE, ticketWords } from "../city/city-state.js";
 import { saveSettings, setPaused } from "../lib/actions.ts";
@@ -404,6 +405,10 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
           {k.replace(/_/g, " ")}
         </label>
       ))}
+      <ConnectorsSettings
+        mailAccess={(form as unknown as { mail_access?: Record<string, string> }).mail_access ?? {}}
+        onMailAccess={(mail_access) => setForm({ ...form, mail_access } as S)}
+      />
       <h2>Help</h2>
       <Button variant="quiet" onClick={reopenGuide}>
         Show the first-run guide again

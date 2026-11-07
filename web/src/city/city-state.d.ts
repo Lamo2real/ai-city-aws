@@ -34,6 +34,9 @@ export interface CityApproval {
   agent: string;
   action: string;
   reason: string;
+  kind?: string;
+  /** An email or event shown in full before approving (MAIL_CALENDAR.md §5.5). */
+  preview?: { kind: string; [k: string]: unknown };
 }
 export interface FeedLine {
   at: number;

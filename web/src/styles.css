@@ -1625,3 +1625,94 @@ table.costs td {
 .signin-links .link {
   text-align: left;
 }
+
+/* ---------- connectors, mail accounts, skills (CONNECTORS_SKILLS.md §3) ---------- */
+.screen .card .field,
+.screen .card .switch,
+.screen .card legend,
+.connect-card .field,
+.connect-card .switch {
+  color: var(--text);
+}
+.connect-cards {
+  display: grid;
+  gap: var(--s3);
+  margin: var(--s3) 0;
+}
+.connect-card {
+  background: var(--sheet);
+  color: var(--text);
+  border: 2px solid var(--wood2);
+  border-radius: var(--r);
+  padding: var(--s3) var(--s4);
+  display: grid;
+  gap: var(--s2);
+  max-width: 34rem;
+}
+.connect-card.connect-done {
+  border-color: var(--good);
+  background: var(--good-bg);
+}
+.connect-card .field {
+  margin: 0;
+}
+.roles {
+  border: 0;
+  padding: 0;
+  margin: var(--s2) 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s4);
+}
+.roles legend {
+  font-weight: 700;
+  margin-bottom: var(--s1);
+}
+.field.inline {
+  display: inline-grid;
+  margin: 0;
+}
+.status-good,
+.good {
+  color: var(--good);
+}
+.status-warn {
+  color: var(--warn);
+}
+.status-bad {
+  color: var(--bad);
+}
+.status-info {
+  color: var(--soft);
+}
+.file-pick {
+  position: relative;
+  cursor: pointer;
+}
+.skill-preview,
+.preview-body {
+  white-space: pre-wrap;
+  max-height: 16rem;
+  overflow: auto;
+  background: var(--paper3);
+  padding: var(--s3);
+  border-radius: var(--r);
+  font-size: 0.95em;
+}
+.preview {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--s1) var(--s3);
+  margin: var(--s2) 0;
+}
+.preview dt {
+  font-weight: 700;
+}
+.preview dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.mail-accounts h3,
+.mail-accounts h4 {
+  margin-top: var(--s5);
+}
