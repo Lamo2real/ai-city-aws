@@ -164,6 +164,7 @@ Terraform (offline only): `fmt -check -recursive`, `init -backend=false`, `valid
 | Operating it | `docs/RUNBOOK.md` |
 | First deploy | `docs/DEPLOY_CHECKLIST.md` |
 | Costs | `docs/COST_ESTIMATE.md` |
+| Setting up connectors, mail and skills after the deploy | `docs/CONNECTORS_SETUP.md` |
 | What the Mac version had | `docs/CAPABILITY_GAPS.md` |
 | History of the build | `docs/PROGRESS.md`, `docs/MORNING_REPORT.md` |
 
