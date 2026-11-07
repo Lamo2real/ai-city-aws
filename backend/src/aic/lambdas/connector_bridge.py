@@ -16,6 +16,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from aic.shared import connector_packages
 from aic.shared.connectors import SEP, ConnectorStore, Record
 from aic.shared.log import log
 from aic.shared.mcp_http import McpError, McpHttp, Transport, urllib_transport
@@ -42,6 +43,9 @@ class BridgeDeps:
     """A boto3 ``bedrock-agentcore`` (data plane) client."""
     workload: str
     transport: Transport = urllib_transport
+    secrets: Any = None
+    """boto3 ``secretsmanager``: a package connector's env secret (§1.10)."""
+    mcp_host_arn: str = ""
 
 
 def credential_headers(rec: Mapping[str, Any], identity: Any, workload: str) -> dict[str, str]:
@@ -96,6 +100,8 @@ async def call(event: Mapping[str, Any], tool_name: str, d: BridgeDeps) -> dict[
     label = rec.get("label") or cid
     if not any(t.get("name") == tool for t in rec.get("tools") or []):
         return _error("unknown_tool", f"{label} has no tool {tool}.")
+    if rec.get("transport") == "package":  # §1.10: the city's MCP host runs it
+        return await connector_packages.bridge_call(rec, tool, dict(event), d)
     t0 = time.monotonic()
     try:
         headers = credential_headers(rec, d.identity, d.workload)
@@ -135,5 +141,7 @@ def handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]:
             store=ConnectorStore(DynamoTable(s.resource("dynamodb").Table(os.environ["AIC_LEDGER_TABLE"]))),
             identity=s.client("bedrock-agentcore"),
             workload=os.environ["AIC_CONNECTORS_WORKLOAD"],
+            secrets=s.client("secretsmanager"),
+            mcp_host_arn=os.environ.get("AIC_MCP_HOST_ARN", ""),
         )
     return run(call(event, _tool_name(context), _deps))

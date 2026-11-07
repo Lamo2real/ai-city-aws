@@ -12,6 +12,7 @@ import json
 import re
 from typing import Any
 
+from aic.shared import connector_packages
 from aic.shared.connectors import (
     DEFAULT_ROLES,
     ConnectorStore,
@@ -83,6 +84,16 @@ def add_connector_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
         if roles is None:
             return "roles must map ace, orchestrator, manager or worker to read or all."
         key_header: str | None = None
+        pkg_args: dict[str, Any] = {
+            "agent_id": c.agent_id,
+            "requested_by": c.message_id or c.ticket_id,
+            "query": query,
+            "label": label,
+            "roles": roles,
+            "net": net,
+        }
+        if connector_packages.is_spec(query):  # §1.10: npm:<name>@<ver> / pypi:<name>==<ver>
+            return await connector_packages.add_from_spec(d, store, **pkg_args)
         if query.lower().startswith(("http://", "https://")) or "://" in query:
             if bad := check_url(query, resolve):
                 return bad
@@ -93,6 +104,8 @@ def add_connector_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
             except Exception as e:
                 log("warn", "connector.registry_failed", error=type(e).__name__)
                 found = []
+            if not found and (answer := await connector_packages.add_from_registry(d, store, **pkg_args)):
+                return answer  # §1.10: no remote server, but an npm or PyPI package
             if not found:
                 return (
                     f"I couldn't find {query[:80]!r} in the MCP Registry. Ask the owner for the server's https URL, "
@@ -170,9 +183,9 @@ def add_connector_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
     roles_schema = {"type": "object", "additionalProperties": {"type": "string", "enum": ["read", "all"]}}
     return ToolSpec(
         "add_connector",
-        "Add an outside service (a remote MCP server) as a connector, only because the owner asked for it in "
-        "this message. query is its name (looked up in the MCP Registry) or its https URL. label names a second "
-        "account on the same server. The owner approves on a card before anything connects; keys are never "
+        "Add an outside service (an MCP server) as a connector, only because the owner asked for it in "
+        "this message. query is its name (looked up in the MCP Registry), its https URL, or a package as "
+        "npm:<name>@<version> or pypi:<name>==<version>. label names a second account on the same server. The owner approves on a card before anything connects; keys are never "
         "given in chat.",
         {**_obj({"query": _s(2, 2000), "label": _s(1, 40), "roles": roles_schema}, ("label", "roles"))},
         run,
