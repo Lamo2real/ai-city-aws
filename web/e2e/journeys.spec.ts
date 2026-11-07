@@ -212,19 +212,25 @@ test("a microphone failure names the real cause and logs it to the console", asy
   ).toBe(true);
 });
 
-test("AIC's reply: dots right after sending, then words flowing in smoothly, then the final text", async ({ page }) => {
+test("AIC's reply: its steps with a shimmering status first, then words flowing in, then the steps folded", async ({
+  page,
+}) => {
   const m = await mockBackend(page);
   await page.goto("/");
   const log = page.getByLabel("Conversation with AIC");
   await page.getByRole("textbox", { name: "Message to AIC" }).fill("tell me about the city");
   await page.keyboard.press("Enter");
-  const dots = log.getByRole("status", { name: "AIC is thinking" });
-  await expect(dots).toBeVisible(); // before any word has arrived
-  await shot(page, "ace-waiting-for-reply");
-
+  const status = log.getByRole("status", { name: /^AIC: / });
+  await expect(status).toHaveAccessibleName("AIC: Understanding your message"); // before any event arrives
+  await expect(status.locator(".shimmer")).toHaveCSS("animation-name", "shimmer-sweep");
+  m.send({ type: "activity", id: "ace", activity: "understanding" });
+  m.send({ type: "activity", id: "ace", activity: "working", detail: "get_status" });
+  await expect(status).toHaveAccessibleName("AIC: Checking the ledger");
+  await expect(status).toContainText(/\ds$/);
+  await shot(page, "ace-working");
   const words = Array.from({ length: 60 }, (_, i) => `word${i}`).join(" ");
   m.send({ type: "ace.reply", conversation: "main", text: `**City**: ${words}`, done: false });
-  await expect(dots).toHaveCount(0);
+  await expect(status).toHaveCount(0); // the status row goes once words arrive
   const reply = log.locator(".msg-ace").last();
   await expect(reply).toHaveAttribute("aria-busy", "true");
   // Revealed bit by bit, not in one jump.
@@ -241,6 +247,11 @@ test("AIC's reply: dots right after sending, then words flowing in smoothly, the
   await expect(reply).toContainText("all quiet. Final answer.");
   await expect(reply).not.toHaveAttribute("aria-busy", "true");
   await expect(reply).not.toContainText("word59");
+  const steps = reply.locator("details.aic-steps");
+  await expect(steps.locator("summary")).toHaveText(/^2 steps/);
+  await expect(steps.getByText("Checking the ledger")).toBeHidden(); // folded until opened
+  await steps.locator("summary").click();
+  await expect(steps.getByText("Checking the ledger")).toBeVisible();
 });
 
 test("with reduced motion the reply appears directly, without the typing effect", async ({ page }) => {
@@ -249,6 +260,8 @@ test("with reduced motion the reply appears directly, without the typing effect"
   await page.goto("/");
   await page.getByRole("textbox", { name: "Message to AIC" }).fill("status?");
   await page.keyboard.press("Enter");
+  await expect(page.locator(".shimmer")).toHaveCSS("animation-name", "none");
+  await expect(page.locator(".aic-status-eye")).toHaveCSS("animation-name", "none");
   const text = "One two three four five six seven eight nine ten eleven twelve.";
   m.send({ type: "ace.reply", conversation: "main", text, done: false });
   await expect(page.getByLabel("Conversation with AIC").locator(".msg-ace .msg-body").last()).toHaveText(text, {
