@@ -28,8 +28,9 @@ export async function api<T = unknown>(path: string, init: { method?: string; bo
   } catch {
     throw new ApiError("No connection to AI City right now.", 0, "Check your connection; we'll keep trying.");
   }
-  const j = (await r.json().catch(() => ({}))) as { error?: string; fix?: string | null };
-  if (!r.ok) throw new ApiError(j.error ?? "Something went wrong.", r.status, j.fix ?? null);
+  const j = (await r.json().catch(() => ({}))) as { error?: string; message?: string; fix?: string | null };
+  // Some routes answer {error: code, message: plain words}; the words are what the owner reads.
+  if (!r.ok) throw new ApiError(j.message || j.error || "Something went wrong.", r.status, j.fix ?? null);
   return j as T;
 }
 

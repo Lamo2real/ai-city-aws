@@ -115,6 +115,7 @@ export function speakProblem(e: unknown): string {
   if (name === "AudioSuspended") return "The browser kept sound paused. Tap the mic once, then ask again.";
   if (name === "EmptyAudio") return "The speech service returned no audio. Try another voice in Settings.";
   if (name === "DecodeError") return "The reply's audio arrived, but this browser could not decode it.";
+  if (name === "OpenAiVoice") return `OpenAI's voice could not speak: ${(e as Error).message}`;
   return `AIC's voice could not play (${name || "Error"}${awsSays(e)}). The text above is the answer; typing still works.`;
 }
 

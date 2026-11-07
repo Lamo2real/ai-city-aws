@@ -467,6 +467,72 @@ test("a three-sentence streamed reply plays three clips, in order, once each; Se
   expect((await w()).spoken).not.toContain("Six.");
 });
 
+test("Settings: an OpenAI key switches AIC to OpenAI's voice; the key is never shown back", async ({ page }) => {
+  const m = await mockBackend(page);
+  await page.goto("/#/settings");
+  await expect(page.getByLabel("AIC's voice")).toHaveValue("Ruth"); // Polly until a key is in
+  await page.getByRole("button", { name: "Add an OpenAI key" }).click();
+  const field = page.getByLabel("OpenAI key", { exact: true });
+  await expect(field).toHaveAttribute("type", "password");
+  await field.fill("not-a-key");
+  await page.getByRole("button", { name: "Save the OpenAI key" }).click();
+  await expect(page.getByText("That doesn't look like an OpenAI key (it starts with sk-).")).toBeVisible();
+  await field.fill("sk-test-123");
+  await page.getByRole("button", { name: "Save the OpenAI key" }).click();
+  await expect(page.getByText(/^Saved .*never shown again\.$/)).toBeVisible();
+  await expect(page.getByLabel("OpenAI key", { exact: true })).toHaveCount(0); // the field closes
+  expect(await page.content()).not.toContain("sk-test-123");
+  expect(m.calls.filter((c) => c.path === "/voice/openai-key").at(-1)?.body).toEqual({ key: "sk-test-123" });
+  const voice = page.getByLabel("AIC's voice");
+  await expect(voice).toHaveValue("alloy"); // OpenAI's default
+  await voice.selectOption("nova");
+  await page.getByRole("button", { name: "Test voice" }).click();
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []))
+    .toEqual(["openai:nova:Hi, I'm AIC. This is how I'll sound when I answer you."]);
+  await expect(page.getByText(/^Played\./)).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel("AIC's voice")).toHaveValue("nova");
+  await expect(page.getByRole("button", { name: "Replace the OpenAI key" })).toBeVisible();
+});
+
+test("with an OpenAI key, a spoken reply plays through OpenAI, sentence by sentence; a failure falls back to Polly once, said once", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  m.openai.key = "sk-test";
+  await page.goto("/");
+  const spoken = () => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []);
+  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
+  await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "stop listening"));
+  for (const text of ["Hi there. The ci", "ty is quiet. Research", " has two workers."])
+    m.send({ type: "ace.reply", conversation: "main", text, done: false });
+  m.send({
+    type: "ace.reply",
+    conversation: "main",
+    text: "Hi there. The city is quiet. Research has two workers.",
+    done: true,
+  });
+  await expect
+    .poll(spoken)
+    .toEqual(["openai:alloy:Hi there.", "openai:alloy:The city is quiet.", "openai:alloy:Research has two workers."]);
+  expect(m.calls.filter((c) => c.path === "/speech")).toHaveLength(3); // one request per sentence, once each
+
+  // OpenAI refuses: this reply and the rest of the visit speak with Polly, and the voice line says so once.
+  m.openai.error = { code: "rate_limited", message: "OpenAI is busy right now" };
+  await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "status?"));
+  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(2);
+  await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "stop listening"));
+  m.send({ type: "ace.reply", conversation: "main", text: "Still quiet. All good.", done: true });
+  await expect.poll(async () => (await spoken()).slice(3)).toEqual(["Still quiet.", "All good."]);
+  await expect(
+    page.getByText("OpenAI's voice failed (OpenAI is busy right now). Using the Polly voice for now."),
+  ).toBeVisible();
+  expect(m.calls.filter((c) => c.path === "/speech")).toHaveLength(4); // tried once, then Polly
+});
+
 test("Settings: pick AIC's voice; it is remembered on this device and can be heard", async ({ page }) => {
   await mockBackend(page);
   await page.goto("/#/settings");
