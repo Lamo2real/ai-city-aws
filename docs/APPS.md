@@ -242,10 +242,22 @@ HUD side (`web/src/lib/bridge.ts`, one `message` listener for the whole HUD):
   `mcp__app__connector___<id>___<tool>`), audited with `app_id` (name, decision, duration; never args or data,
   as for every tool). `config/policy.json` gets: `^mcp__app__(calendar\.read|calendar\.calendars|mail\.search|mail\.accounts|connector___.+)$`
   → allow for role `app`; every other `mcp__app__` name → deny. A test pins that no write tool name can pass.
-- Connector reads go through the connectors session's `GatewayClient` (`runtime/gateway.py`), with the api Lambda's
-  role as the caller; the Cedar policies (rewritten by the connectors Lambda) get one `permit` for the api role
-  limited to `read_only` tools of connectors that some app was granted. Mail/calendar reads call the
-  mail/calendar module in-process, as `GET /calendar/events` does.
+- The api Lambda checks the grant and params, then invokes the **app-bridge Lambda** `aic-prod-app-bridge`
+  (role `aic-prod-fn-app-bridge`) synchronously with `{app_id, cap, params}`. Only that Lambda can reach the
+  Gateway or the mail/calendar reads for apps, so the api role gets no Gateway access (agreed with the connectors
+  lead, `docs/CONNECTORS_SKILLS.md` §1.9 on `connectors-skills`, commit 8fb8d53).
+- Connector reads: the bridge Lambda calls `aic.shared.connector_calls.app_call(d, app_id=, capability_id=,
+  connector_id=, tool=, args=)` → `{ok, data: [{type: "text", text} | {type: "json", json}], truncated, error}`.
+  `capability_id` is `connector.read:<connector_id>:<tool>`. `app_call` re-checks the grant on the APP record
+  (below), that the connector is `ready` and the tool read-only and not destructive, runs `policy.gate` as role
+  `app` (agent `app-<app_id>`; "ask" counts as deny) and the audit, applies its own 60/min per-app limit for
+  connector calls, and calls the Gateway as the bridge role; a Cedar `permit` lets only that principal use
+  read-only tools of ready connectors. Output ≤ 200k characters, untrusted.
+- Grant record that `app_call` reads: the APP item itself (pk `APPS`, sk `APP#<app_id>`), field `grants`: a list of
+  `{id, connector?, tool?}` (for example `{id: "connector.read", connector: "github", tool: "list_issues"}`), plus
+  `granted_at`. A revoked grant is simply removed from the list; a removed app has no item.
+- Mail/calendar reads: the bridge Lambda calls the mail/calendar module's read functions (the code behind
+  `GET /calendar/events`, `calendar_list`, `mail_search`, `mail_accounts`), never their write tools.
 - Rate limit per app: 120 requests per minute, counted in the ledger (`RATE#app-<id>`) → 429 `rate_limited`.
 - Response ≤ 256 KB (cut lists with `truncated: true`). Data is returned as data; the app renders it inside
   its own sandbox, so hostile content in an email subject can at worst affect that one app's page.
@@ -280,15 +292,22 @@ invitations"), are limited to 10 per hour per app, and the app only learns `{ok:
   pin and grant controls on the app page / Settings → Apps; vitest for every drop rule (wrong source, wrong shape,
   not granted, rate limit, preview) and Playwright: a fake calendar app on the fake apps origin reads granted
   events, gets `not_granted` after a revoke, and a proposal lands in Needs you.
-- **infra:** routes `POST /apps/{id}/bridge`, `POST /apps/{id}/proposals`, `PUT /apps/{id}`; the api Lambda's
-  `bedrock-agentcore:InvokeGateway` on the connectors gateway (after `connectors-skills` merges); nothing for
-  workers or the apps origin. HUD CSP unchanged. Done (branch `apps-v2-infra`): the three routes (JWT
-  authorizer; CORS already allowed PUT); `RATE#app-*` needs no change (the api Lambda's ledger policy covers
-  the whole table, no key limit).
-  - TODO (infra, after `connectors-skills` merges): grant the api Lambda `bedrock-agentcore:InvokeGateway` on the
-    connectors gateway ARN only; until then connector reads answer `unavailable`.
-- **connectors session:** a Cedar `permit` for the api role on read-only tools of app-granted connectors, and
-  `GatewayClient` usable from the api Lambda.
+- **infra:** routes `POST /apps/{id}/bridge`, `POST /apps/{id}/proposals`, `PUT /apps/{id}`; Lambda
+  `aic-prod-app-bridge` (role `aic-prod-fn-app-bridge`, the shared zip, handler `aic.lambdas.app_bridge.handler`)
+  that only the api role may invoke, with ledger read on `APPS`/`CONNECTORS`/mail account rows, `RATE#app-*` and audit
+  writes, and `bedrock-agentcore:InvokeGateway` on the connectors gateway (after `connectors-skills` merges);
+  mail/calendar secret/vault reads as the mail design gives its read path (after `mail-calendar` merges). The api
+  role gets `lambda:InvokeFunction` on it and no Gateway access. Nothing for workers or the apps origin. HUD CSP unchanged.
+  Done (branch `apps-v2-infra`): the three routes (JWT authorizer; CORS already allowed PUT); the app-bridge Lambda
+  (timeout 25 s) with ledger `GetItem`/`Query` on `APPS`, `CONNECTORS`, `MAIL` and `GetItem`/`PutItem`/`UpdateItem` on
+  `RATE#app-*` and `TOOL#app-*` (the audit rows `audit_tool` writes for agent `app-<app_id>`); the api role's
+  `lambda:InvokeFunction` on it and env `AIC_APP_BRIDGE_FUNCTION` (`aic-prod-app-bridge`). The api Lambda's own ledger
+  policy has no key limit, so its `RATE#app-*` needs no change.
+  - TODO (infra, after `connectors-skills` merges): `bedrock-agentcore:InvokeGateway` on the connectors gateway ARN
+    only, for the app-bridge role (never the api role). Until then connector reads answer `unavailable`.
+  - TODO (infra, after `mail-calendar` merges): the app-bridge role's mail/calendar read path (secret/vault reads as
+    the mail design gives it), read only. Until then mail/calendar capabilities answer `unavailable`.
+- **connectors session:** `connector_calls.app_call` and the Cedar `permit` for `aic-prod-fn-app-bridge` (§1.9 of its contract).
 
 ## Not in v1 (suggested later)
 Updating an existing app in place (a new request makes a new app), saved high scores (a per-app storage capability would fit the v2 catalogue), a custom domain for exact `frame-ancestors`.
