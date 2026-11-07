@@ -439,9 +439,12 @@ main {
   max-width: 1240px;
   margin: 0 auto;
   padding: var(--s5);
-  min-height: 100%;
+  /* Exactly the area under the top bar: the chat panel runs from the top to the bottom of it. */
+  height: 100%;
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(300px, 400px) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: var(--s5);
   color: var(--text);
 }
@@ -596,9 +599,8 @@ main {
 .talk {
   display: flex;
   flex-direction: column;
+  height: 100%;
   min-height: 0;
-  height: calc(100dvh - 140px);
-  min-height: 460px;
   background: var(--sheet);
   border-radius: 20px;
   box-shadow:
@@ -619,29 +621,6 @@ main {
   margin: 0;
   font-size: 18px;
   font-weight: 800;
-}
-/* Quick replies under AIC's latest reply: big, obvious, one tap. */
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s2);
-  padding-left: 0;
-}
-.chip {
-  min-height: var(--tap);
-  padding: 0 var(--s4);
-  border: 2px solid var(--ink);
-  border-radius: 999px;
-  background: var(--sheet);
-  color: var(--text);
-  font-weight: 700;
-  cursor: pointer;
-}
-.chip:hover {
-  background: var(--paper);
-}
-.chip:active {
-  transform: translateY(1px);
 }
 .talk-head .stop-all {
   margin-left: auto;
@@ -960,6 +939,7 @@ main {
 @media (max-width: 899px) {
   .ace {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr); /* the eye and voice line, then the chat to the bottom */
     padding: var(--s3);
     gap: var(--s4);
   }
@@ -1000,8 +980,7 @@ main {
     padding: 0;
   }
   .talk {
-    height: calc(100dvh - 470px);
-    min-height: 360px;
+    min-height: 320px; /* very short screens scroll the page rather than squash the chat */
   }
   .chat {
     padding: var(--s4);

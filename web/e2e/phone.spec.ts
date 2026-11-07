@@ -29,7 +29,9 @@ test("phone: AIC and the City work at 412px wide", async ({ page }) => {
   expect(
     await page.evaluate(() => {
       const main = document.querySelector("main")!;
-      return main.scrollHeight <= main.clientHeight + 1; // nothing below the chat to scroll to
+      const talk = document.querySelector(".talk")!.getBoundingClientRect();
+      // Nothing below the chat to scroll to, and the chat reaches the bottom edge (only the page gutter).
+      return main.scrollHeight <= main.clientHeight + 1 && window.innerHeight - talk.bottom <= 20;
     }),
   ).toBe(true);
   await page.locator(".talk").screenshot({ path: `${SHOTS}/phone-ace-chat.png` });
