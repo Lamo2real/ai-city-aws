@@ -186,13 +186,16 @@ async def cancel_task(d: CityDeps, task: Record) -> dict[str, int]:
     and the dispatcher ignores anything still queued for it."""
     tree = await task_tree(d.ledger, task["id"])
     ids = {t["id"] for t in tree}
+    # The workers on the job before anything moves: cancelling a part sends its worker home on its own
+    # (`move`), so they are counted here and the explicit release below is a no-op for most of them.
+    workers = _workers_of(await d.ledger.list_agents("active"), ids)
     stopped = 0  # parts under the job; the job itself is not a part
     for t in tree:
         if t["status"] not in DONE_OR_GONE:
             await move(d, t["id"], "cancelled", "stopped by the owner")
             stopped += t["id"] != task["id"]
     released = 0
-    for w in _workers_of(await d.ledger.list_agents("active"), ids):
+    for w in workers:
         try:
             await d.factory.release(w["id"], str(w.get("parent")))
             released += 1

@@ -1,7 +1,13 @@
 """EventBridge Scheduler jobs. All are created DISABLED by Terraform; the owner enables them.
 
-- sweep: re-send work whose lease ran out (a crashed turn), and expire nothing silently.
-- retire_idle: managers with no open work go dormant (they cost nothing either way; this keeps the City tidy).
+- sweep: re-send work whose lease ran out (a crashed turn), and send idle workers home (see below).
+- retire_idle: managers with no open work go dormant (they cost nothing either way; this keeps the City tidy),
+  and idle workers go home.
+
+Idle workers go home: a worker with no turn for `worker_idle_release_minutes` (caps.json, 15) and no turn
+running is released, paused city included: it has nothing to do, and a released worker costs nothing. Its
+assignments that were still open are cancelled with a note and its manager is told, so the manager hires
+again (within the cap) when work resumes.
 - reminders: due reminders become notifications.
 - improve: the weekly self-improvement loop. Built, and refused here unless explicitly enabled.
 - warm_ace: keeps AIC's runtime container running (a "warm" ping every few minutes on the owner's conversation
@@ -12,13 +18,17 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
+from datetime import timedelta
 from typing import Any, Literal
 
 from aic.shared.aws import aws_city
+from aic.shared.caps import default_settings
 from aic.shared.events import EventBus, now_iso
+from aic.shared.hierarchy.actions import OPEN_ASSIGNMENT, CityDeps, move, send
 from aic.shared.hierarchy.dispatch import resume_stale
+from aic.shared.hierarchy.factory import Factory, FactoryClient
 from aic.shared.hierarchy.queue import Queue
-from aic.shared.ledger import Ledger
+from aic.shared.ledger import Ledger, Record
 from aic.shared.log import log
 from aic.shared.table import UpdateOptions
 
@@ -62,6 +72,60 @@ async def warm_ace(invoker: AgentInvoker | None, env: Mapping[str, str]) -> dict
     return {"warmed": warmed, "failed": failed}
 
 
+async def _running_agents(ledger: Ledger) -> set[str]:
+    """Agents with a turn under a live lease right now."""
+    now = ledger.now_ms()
+    out: set[str] = set()
+    for w in await ledger.table.query_index("gsi1", "WORK#started"):
+        if float(w.get("lease_until", 0)) > now:
+            m = w.get("message") or {}
+            if isinstance(m, dict) and m.get("agentId"):
+                out.add(str(m["agentId"]))
+    return out
+
+
+async def release_idle_workers(
+    ledger: Ledger, queue: Queue, bus: EventBus, factory: FactoryClient, minutes: int
+) -> int:
+    """Workers with no turn for `minutes` and none running go home, paused city included. Their assignments
+    that were still open are cancelled with a note and their manager is told to hire again when work resumes."""
+    cutoff = now_iso(ledger.now() - timedelta(minutes=minutes))
+    running = await _running_agents(ledger)
+    d = CityDeps(ledger=ledger, bus=bus, queue=queue, factory=factory, settings=_no_settings, max_review_rounds=3)
+    n = 0
+    for w in await ledger.list_agents("active"):
+        if w.get("kind") != "worker" or w["id"] in running:
+            continue
+        if str(w.get("last_active_at") or "") > cutoff:
+            continue
+        stale = await ledger.tickets_of(w["id"], OPEN_ASSIGNMENT)
+        for t in stale:
+            await move(d, t["id"], "cancelled", f"{w['id']} went home after {minutes} idle minutes; needs a new worker")
+        await factory.release(w["id"], str(w.get("parent")))  # a no-op if the last cancel above sent it home
+        log("info", "worker.released_idle", worker=w["id"], department=w.get("department"), assignments=len(stale))
+        n += 1
+        if stale and w.get("parent"):
+            parts = "; ".join(f"{t['id']}: {t.get('goal', '')}" for t in stale)
+            await send(
+                d,
+                {
+                    "role": "manager",
+                    "agentId": str(w["parent"]),
+                    "department": w.get("department"),
+                    "ticketId": str(stale[0].get("parent_id") or stale[0]["id"]),
+                    "taskId": str(stale[0].get("task_id") or stale[0].get("parent_id") or stale[0]["id"]),
+                    "kind": "task",
+                    "from": "city",
+                    "body": f"{w['id']} went home after {minutes} idle minutes. Assign again when you are ready: {parts}",
+                },
+            )
+    return n
+
+
+async def _no_settings() -> dict[str, Any]:
+    return {}
+
+
 async def run_job(
     job: str,
     ledger: Ledger,
@@ -69,11 +133,21 @@ async def run_job(
     bus: EventBus,
     env: Mapping[str, str] | None = None,
     invoker: AgentInvoker | None = None,
+    factory: FactoryClient | None = None,
 ) -> dict[str, int | str]:
     if job == "warm_ace":
         return await warm_ace(invoker, os.environ if env is None else env)
+    if job in ("sweep", "retire_idle"):
+        settings: Record = await ledger.settings(default_settings())
+        minutes = int(settings.get("worker_idle_release_minutes") or 15)
+
+        async def current_settings() -> dict[str, Any]:
+            return settings
+
+        f = factory or Factory(ledger, bus, current_settings)
+        sent_home = await release_idle_workers(ledger, queue, bus, f, minutes)
     if job == "sweep":
-        return {"resent": await resume_stale(ledger, queue)}
+        return {"resent": await resume_stale(ledger, queue), "sent_home": sent_home}
     if job == "retire_idle":
         n = 0
         open_ = await ledger.list_tickets(["open", "in_progress", "in_review", "waiting_on_owner"])
@@ -84,7 +158,7 @@ async def run_job(
                 continue
             await ledger.update_agent(a["id"], {"state": "dormant"})
             n += 1
-        return {"dormant": n}
+        return {"dormant": n, "sent_home": sent_home}
     if job == "reminders":
         now = now_iso(ledger.now())
         due = [r for r in await ledger.list_notes("reminder") if r.get("due_at") and r["due_at"] <= now]
