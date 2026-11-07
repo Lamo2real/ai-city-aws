@@ -313,8 +313,8 @@ invitations"), are limited to 10 per hour per app, and the app only learns `{ok:
 - The api checks a connector tool's `input_schema` (or `inputSchema`) from its `CONNECTORS` record against `args`
   before invoking; the bridge Lambda re-checks the grant on the APP item (a revoke between the two still refuses).
 - An approved proposal answers `{approval, result: {ok, result | error, message}}`; `aic.mail.approvals.execute` runs it.
-- Until `connectors-skills` merges, `mail_from_env`, `app_call_from_env` and `proposals_from_env` return the
-  `unavailable` stand-ins (the imports are optional).
+- `mail_from_env`, `app_call_from_env` and `proposals_from_env` are wired to the mail and connectors modules (merged
+  2026-11-07, commit 9e2d8e0); the `unavailable` stand-ins remain only as fallbacks when a module is not deployed.
 - Python's `$` also matches before a trailing newline; mail/calendar gate names come only from catalogue ids, so the
   `mcp__app__` regex can't be reached with a crafted name.
 
@@ -329,9 +329,8 @@ calendar `hidden` come with `calendars`. `approval.requested` for `app.publish` 
 - **backend:** `app_caps.py` (catalogue, params validation, labels), manifest checks in `stage_submission`,
   `aic-bridge.js` asset, grants on publish, `PUT /apps/<id>`, `POST /apps/<id>/bridge`, `POST /apps/<id>/proposals`,
   role `app` in the gate + policy rules, rate limit, `app.updated`, prompts (apps department: manifest, `aic.request`,
-  `aic.preview`, empty states, never assume data). Mail/calendar capabilities wire to the mail/calendar module once
-  branch `connectors-skills` merges; until then they answer `unavailable`. Connector reads wire to `GatewayClient` once
-  `connectors-skills` merges; same fallback.
+  `aic.preview`, empty states, never assume data). Mail/calendar capabilities are wired to the mail module and connector reads to `GatewayClient`
+  (since the connectors merge, 9e2d8e0); `unavailable` is only the fallback when a module is not deployed.
 - **web:** `lib/bridge.ts` (the listener above), grant switches on the publish card, pinned icons in the top bar,
   pin and grant controls on the app page / Settings → Apps; vitest for every drop rule (wrong source, wrong shape,
   not granted, rate limit, preview) and Playwright: a fake calendar app on the fake apps origin reads granted
@@ -339,23 +338,22 @@ calendar `hidden` come with `calendars`. `approval.requested` for `app.publish` 
 - **infra:** routes `POST /apps/{id}/bridge`, `POST /apps/{id}/proposals`, `PUT /apps/{id}`; Lambda
   `aic-prod-app-bridge` (role `aic-prod-fn-app-bridge`, the shared zip, handler `aic.lambdas.app_bridge.handler`)
   that only the api role may invoke, with ledger read on `APPS`/`CONNECTORS`/mail account rows, `RATE#app-*` and audit
-  writes, and `bedrock-agentcore:InvokeGateway` on the connectors gateway (after `connectors-skills` merges);
-  mail/calendar secret/vault reads as listed under "Mail/calendar reads" (after `connectors-skills` merges). The api
+  writes, and `bedrock-agentcore:InvokeGateway` on the connectors gateway (in place since the connectors merge);
+  mail/calendar secret/vault reads as listed under "Mail/calendar reads" (from the mail module's outputs). The api
   role gets `lambda:InvokeFunction` on it and no Gateway access. Nothing for workers or the apps origin. HUD CSP unchanged.
   Done (branch `apps-v2-infra`): the three routes (JWT authorizer; CORS already allowed PUT); the app-bridge Lambda
   (timeout 25 s) with ledger `GetItem`/`Query` on `APPS`, `CONNECTORS`, `MAIL` and `GetItem`/`PutItem`/`UpdateItem` on
   `RATE#app-*` and `TOOL#app-*` (the audit rows `audit_tool` writes for agent `app-<app_id>`); the api role's
   `lambda:InvokeFunction` on it and env `AIC_APP_BRIDGE_FUNCTION` (`aic-prod-app-bridge`). The api Lambda's own ledger
   policy has no key limit, so its `RATE#app-*` needs no change.
-  - TODO (infra, after `connectors-skills` merges): `bedrock-agentcore:InvokeGateway` on the connectors gateway ARN
-    only, for the app-bridge role (never the api role). Until then connector reads answer `unavailable`.
-  - Mail/calendar read IAM for the bridge is in now (ARNs for resources that exist once `mail-calendar` merges):
+  - Done at the connectors merge: `bedrock-agentcore:InvokeGateway` on the connectors gateway ARN only, for the
+    app-bridge role (`aws_iam_role_policy.app_bridge_gateway` in `infra/modules/connectors`); the api role has none.
+  - Mail/calendar read IAM for the bridge now comes from the mail module (`aws_iam_role_policy.app_bridge` there):
     `GetWorkloadAccessTokenForUserId` on workload `aic-prod-mail`, `GetResourceOauth2Token` on it, the default token
     vault and `aic-prod-google`/`aic-prod-microsoft`, `GetSecretValue` on `aic/prod/mail/*`, `kms:Decrypt` (every
-    function), ledger read on `MAIL`. TODO at that merge: swap the hand-written provider ARNs (both spellings,
-    `oauth2credentialprovider` and `oauth2-credential-provider`) for the mail module's provider ARN outputs.
-  - Merge note: `connectors-skills` gives the api role `lambda:InvokeFunction` on `aic-prod-connectors` (the api
-    async-invokes it with `{"action":"policies"}`); keep that statement next to the app-bridge one when merging.
+    function), ledger read on `MAIL`. The hand-written provider ARNs were replaced by the module's outputs at the merge.
+  - The api role keeps `lambda:InvokeFunction` on `aic-prod-connectors` (the api async-invokes it with
+    `{"action":"policies"}`), next to the app-bridge statement.
 - **connectors session:** `connector_calls.app_call` and the Cedar `permit` for `aic-prod-fn-app-bridge` (§1.9 of its contract).
 
 ## v3: app state and new versions (2026-11-07)
