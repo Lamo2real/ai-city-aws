@@ -15,10 +15,11 @@ describe("send everyone home", () => {
       },
     } as never;
     expect(workersAtWork(city)).toBe(2);
+    const base = city as unknown as { agents: Record<string, unknown> };
     const dormant = {
-      ...city,
+      ...base,
       agents: {
-        ...city.agents,
+        ...base.agents,
         d1: { id: "d1", kind: "worker", state: "dormant", worker_state: "idle" },
         r1: { id: "r1", kind: "worker", state: "active", worker_state: "released" },
       },
