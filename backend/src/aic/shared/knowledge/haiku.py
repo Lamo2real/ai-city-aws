@@ -8,12 +8,13 @@ stays far below Haiku's 100,000-token long-context tier.
 from __future__ import annotations
 
 import io
+import re
 from dataclasses import dataclass
 
 from ..models import resolve_role_from_env
 from ..turn import GateDeps, GatedTurn, run_gated_turn
 from ..utility import UTILITY_MAX_CHARS, UtilityDeps, agents_dir
-from .extract import Extraction, parse_extraction
+from .extract import SUMMARY_MAX_WORDS, Extraction, limit_words, parse_extraction
 
 MAX_IMAGE_BYTES = int(3.75 * 1024**2)
 MAX_IMAGE_EDGE = 1568
@@ -76,17 +77,24 @@ class KnowledgeModel:
         )
         return r.output.text.strip()
 
-    async def summarize(self, title: str, text: str) -> Extraction:
-        """Summary (≤ 150 words) + entities and relationships. One retry when the JSON doesn't validate."""
+    async def summarize(self, title: str, text: str) -> str:
+        """A plain summary of at most 150 words. Raises ``ValueError`` when the reply is empty."""
+        reply = await self._call(knowledge_prompt("summary"), f"Title: {title}\n\n{text}", max_tokens=1024)
+        summary = limit_words(re.sub(r"\s+", " ", reply), SUMMARY_MAX_WORDS)
+        if not summary:
+            raise ValueError("empty summary")
+        return summary
+
+    async def extract(self, title: str, text: str) -> Extraction:
+        """Entities and relationships (validated JSON, ≤ 50 entities). One retry when the JSON doesn't validate."""
         data = f"Title: {title}\n\n{text}"
-        reply = await self._call(knowledge_prompt("summary"), data, max_tokens=4096)
+        prompt = knowledge_prompt("entities")
         try:
-            return parse_extraction(reply)
+            return parse_extraction(await self._call(prompt, data, max_tokens=4096))
         except ValueError:
-            reply = await self._call(
-                knowledge_prompt("summary") + "\n\nReply with the JSON object only.", data, max_tokens=4096
+            return parse_extraction(
+                await self._call(prompt + "\n\nReply with the JSON object only.", data, max_tokens=4096)
             )
-            return parse_extraction(reply)
 
     async def describe_image(self, title: str, data: bytes) -> str:
         img, fmt = fit_image(data)

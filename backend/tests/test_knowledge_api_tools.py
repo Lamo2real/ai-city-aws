@@ -123,8 +123,11 @@ async def test_list_get_scope_change_and_delete() -> None:
     d, w = api()
     a = await ready_item(w, "A", "always", summary="s" * 400, entities=[("Ada", "person")])
     b = await ready_item(w, "B")
-    w.blobs.objects[f"normalized/{a['id']}/note.md"] = (b"x", "text/markdown")
-    await w.store.update_item(a["id"], {"normalized_keys": [f"normalized/{a['id']}/note.md"]})
+    key = f"normalized/{a['id']}/note.md"
+    uri = f"s3://{w.blobs.bucket}/{key}"
+    w.blobs.objects[key] = (b"x", "text/markdown")
+    await w.store.update_item(a["id"], {"normalized_keys": [key], "ingest_uris": [uri]})
+    await w.kb.ingest([(uri, {"item_id": a["id"], "scope": "always", "kind": "text"})])
     listed = js(await handle_http(ev("GET", "/knowledge"), d))
     assert [i["id"] for i in listed["items"]] == [b["id"], a["id"]]
     assert listed["always_tokens"] == 100 and listed["always_budget"] == 8000
@@ -136,16 +139,33 @@ async def test_list_get_scope_change_and_delete() -> None:
     assert js(r)["item"]["scope"] == "on_request"
     meta = json.loads(w.blobs.objects[f"normalized/{a['id']}/note.md.metadata.json"][0])
     assert meta["metadataAttributes"]["scope"] == "on_request"
-    assert w.kb.syncs == ["job-1"]
+    assert w.kb.docs[uri] == {"item_id": a["id"], "scope": "on_request", "kind": "text"}  # re-ingested
+    assert w.graph.items[a["id"]]["scope"] == "on_request"  # the Item node follows
     assert w.bus.of_type("knowledge.updated")[-1]["scope"] == "on_request"
     assert [i["id"] for i in await w.store.items_by_scope("on_request")] == [a["id"]]
     assert (await handle_http(ev("PUT", f"/knowledge/{a['id']}", {"scope": "public"}), d))["statusCode"] == 400
 
-    w.kb.busy = True  # a running sync doesn't fail the delete; search already follows the item record
+    w.kb.throttle = 1
+    r = await handle_http(ev("PUT", f"/knowledge/{a['id']}", {"scope": "relevant"}), d)
+    assert r["statusCode"] == 400 and "busy" in js(r)["error"]
+    assert (await w.store.require_item(a["id"]))["scope"] == "on_request"  # nothing half-changed
+    assert json.loads(w.blobs.objects[f"{key}.metadata.json"][0])["metadataAttributes"]["scope"] == "on_request"
+    w.kb.delete = _throttled  # type: ignore[method-assign]
+    r = await handle_http(ev("DELETE", f"/knowledge/{a['id']}"), d)
+    assert r["statusCode"] == 400 and await w.store.get_item(a["id"]) and key in w.blobs.objects
+    del w.kb.delete
+
     r = await handle_http(ev("DELETE", f"/knowledge/{a['id']}"), d)
     assert js(r) == {"ok": True}
+    assert w.kb.docs == {} and a["id"] not in w.graph.items
     assert not [k for k in w.blobs.objects if a["id"] in k]
     assert not [k for k in w.table.items if a["id"] in k[0] or a["id"] in k[1]]
+
+
+async def _throttled(uris: list[str]) -> None:
+    from aic.shared.knowledge.kb import ThrottlingException
+
+    raise ThrottlingException("busy")
 
 
 # ---------- tools ----------

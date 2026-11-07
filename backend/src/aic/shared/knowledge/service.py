@@ -8,14 +8,14 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from ..events import EventBus
 from ..log import log
 from .blobs import Blobs
 from .fetch import LinkRefused, check_url
-from .kb import ConflictException, KnowledgeBase
+from .kb import KnowledgeBase, ThrottlingException
 from .model import (
     ALWAYS_BUDGET_TOKENS,
     DEFAULT_SCOPE,
@@ -25,11 +25,12 @@ from .model import (
     SCOPES,
     SINGLE_PUT_MAX_BYTES,
     item_json,
-    metadata_doc,
+    kb_metadata,
     new_item_id,
     safe_file_name,
 )
 from .routing import route_file
+from .search import SearchCache
 from .store import KnowledgeStore
 
 
@@ -79,7 +80,7 @@ class KnowledgeService:
     blobs: Blobs
     bus: EventBus
     kb: KnowledgeBase | None = None
-    """Only the API needs it (re-syncs after a scope change or a delete); AIC only adds."""
+    """Only the API needs it (re-ingests after a scope change, deletes documents); AIC only adds."""
 
     async def _new(
         self, kind: str, title: str, source: str, content_type: str, size: int, scope: str, raw_key_name: str
@@ -213,22 +214,36 @@ class KnowledgeService:
             patch["scope"] = check_scope(b["scope"])
         if not patch:
             raise KnowledgeError("Nothing to change.")
-        new = await self.store.update_item(item_id, patch) or item
         if patch.get("scope") and patch["scope"] != item.get("scope"):
-            for key in new.get("normalized_keys") or []:
-                await self.blobs.put(
-                    f"{key}.metadata.json",
-                    json.dumps(metadata_doc(item_id, new["scope"], new["kind"])).encode(),
-                    "application/json",
-                )
-            if new.get("normalized_keys"):
-                await self._sync()
+            await self._reingest(item, str(patch["scope"]))
+        new = await self.store.update_item(item_id, patch) or item
         if new.get("scope") != item.get("scope") or new.get("title") != item.get("title"):
             await self.bus.put(updated_event(new))
         return item_json(new)
 
+    async def _reingest(self, item: dict[str, Any], scope: str) -> None:
+        """New scope: the item's documents are re-ingested with it, then the metadata files rewritten."""
+        meta = kb_metadata(item["id"], scope, item["kind"])
+        uris = list(item.get("ingest_uris") or [])
+        if uris and self.kb:
+            try:
+                await self.kb.ingest([(u, meta) for u in uris])
+            except ThrottlingException as e:
+                raise KnowledgeError("The knowledge base is busy. Try again in a moment.") from e
+        for key in item.get("normalized_keys") or []:
+            await self.blobs.put(
+                f"{key}.metadata.json", json.dumps({"metadataAttributes": meta}).encode(), "application/json"
+            )
+
     async def delete(self, item_id: str) -> None:
+        """KB documents first (so a busy KB leaves everything as it was), then files, graph and record."""
         item = await self._get(item_id)
+        uris = list(item.get("ingest_uris") or [])
+        if uris and self.kb:
+            try:
+                await self.kb.delete(uris)
+            except ThrottlingException as e:
+                raise KnowledgeError("The knowledge base is busy. Try again in a moment.") from e
         if item.get("upload_id"):
             try:
                 await self.blobs.abort_multipart(item["raw_key"], str(item["upload_id"]))
@@ -237,17 +252,6 @@ class KnowledgeService:
         for prefix in ("raw", "work", "normalized"):
             await self.blobs.delete_prefix(f"{prefix}/{item_id}/")
         await self.store.delete_item(item_id)
-        if item.get("normalized_keys"):
-            await self._sync()
-
-    async def _sync(self) -> None:
-        """Re-sync after a change. Search already follows the item record, so a busy data source can wait."""
-        if not self.kb:
-            return
-        try:
-            await self.kb.start_sync()
-        except ConflictException:
-            log("info", "knowledge.sync_busy")
 
 
 @dataclass
@@ -257,3 +261,5 @@ class KnowledgeAccess:
     store: KnowledgeStore
     kb: KnowledgeBase | None = None
     service: KnowledgeService | None = None
+    cache: SearchCache = field(default_factory=SearchCache)
+    """Search results per process (one ``KnowledgeAccess`` per runtime process)."""

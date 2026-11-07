@@ -1,4 +1,7 @@
-"""Production wiring of the knowledge base from the environment (§8). None when it is not configured."""
+"""Production wiring of the knowledge base from the environment (§8). None when it is not configured.
+
+Clients come from ``aic.shared.clients``: one per service per process, with the shared ``Config``.
+"""
 
 from __future__ import annotations
 
@@ -7,8 +10,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from ..clients import client, resource
 from ..table import DynamoTable
 from .blobs import S3Blobs
+from .graph import NeptuneGraph
 from .kb import BedrockKnowledgeBase
 from .store import KnowledgeStore
 
@@ -21,20 +26,20 @@ class KnowledgeAws:
 
 
 def knowledge_from_env(session: Any, env: Mapping[str, str] | None = None) -> KnowledgeAws | None:
-    """``session`` is a boto3 session. Only ``KNOWLEDGE_TABLE`` is required; bucket and KB are used when set."""
+    """``session`` is a boto3 session. Only ``KNOWLEDGE_TABLE`` is required; bucket, KB and graph when set."""
     e = os.environ if env is None else env
     table_name = e.get("KNOWLEDGE_TABLE")
     if not table_name:
         return None
-    from botocore.config import Config
-
-    store = KnowledgeStore(DynamoTable(session.resource("dynamodb").Table(table_name)))
+    graph_id = e.get("KNOWLEDGE_GRAPH_ID")
+    graph = NeptuneGraph(client(session, "neptune-graph"), graph_id) if graph_id else None
+    store = KnowledgeStore(DynamoTable(resource(session, "dynamodb").Table(table_name)), graph)
     bucket = e.get("KNOWLEDGE_BUCKET")
-    blobs = S3Blobs(session.client("s3", config=Config(signature_version="s3v4")), bucket) if bucket else None
+    blobs = S3Blobs(client(session, "s3"), bucket) if bucket else None
     kb_id, ds_id = e.get("KNOWLEDGE_BASE_ID"), e.get("KNOWLEDGE_DATA_SOURCE_ID")
     kb = (
         BedrockKnowledgeBase(
-            kb_id, ds_id, runtime=session.client("bedrock-agent-runtime"), agent=session.client("bedrock-agent")
+            kb_id, ds_id, runtime=client(session, "bedrock-agent-runtime"), agent=client(session, "bedrock-agent")
         )
         if kb_id and ds_id
         else None

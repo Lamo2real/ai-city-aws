@@ -14,6 +14,7 @@ from aic.shared.cost import Usage
 from aic.shared.events import MemoryBus
 from aic.shared.knowledge.blobs import MemoryBlobs
 from aic.shared.knowledge.extract import Entity, Extraction, Relationship
+from aic.shared.knowledge.graph import MemoryGraph
 from aic.shared.knowledge.haiku import KnowledgeModel
 from aic.shared.knowledge.kb import FakeKnowledgeBase
 from aic.shared.knowledge.service import KnowledgeService
@@ -47,7 +48,9 @@ class FakeHaiku:
         self.calls.append(t)
         kind = (
             "summary"
-            if '"summary"' in t.prompt
+            if "Reply with the summary only" in t.prompt
+            else "entities"
+            if '"entities"' in t.prompt
             else "image"
             if "describe one image" in t.prompt
             else "pages"
@@ -60,9 +63,9 @@ class FakeHaiku:
 
 
 _DEFAULT = {
-    "summary": json.dumps(
+    "summary": "A note about Ada Lovelace and the Analytical Engine.",
+    "entities": json.dumps(
         {
-            "summary": "A note about Ada Lovelace and the Analytical Engine.",
             "entities": [
                 {"name": "Ada Lovelace", "type": "person", "description": "Mathematician."},
                 {"name": "Analytical Engine", "type": "product", "description": "A machine."},
@@ -80,6 +83,7 @@ _DEFAULT = {
 class World:
     clock: Clock
     table: MemoryTable
+    graph: MemoryGraph
     store: KnowledgeStore
     blobs: MemoryBlobs
     kb: FakeKnowledgeBase
@@ -95,14 +99,17 @@ def world() -> World:
 
     clock = Clock()
     table = MemoryTable()
-    store = KnowledgeStore(table, clock)
+    graph = MemoryGraph()
+    store = KnowledgeStore(table, graph, clock)
     blobs = MemoryBlobs()
     kb = FakeKnowledgeBase()
     bus = MemoryBus(clock)
     ledger = Ledger(MemoryTable(), clock)
     haiku = FakeHaiku()
     model = KnowledgeModel(UtilityDeps(ledger=ledger, bus=bus, settings=default_settings(), runner=haiku, env={}))
-    return World(clock, table, store, blobs, kb, bus, ledger, haiku, KnowledgeService(store, blobs, bus, kb), model)
+    return World(
+        clock, table, graph, store, blobs, kb, bus, ledger, haiku, KnowledgeService(store, blobs, bus, kb), model
+    )
 
 
 async def ready_item(

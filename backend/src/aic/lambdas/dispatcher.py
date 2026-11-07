@@ -13,6 +13,7 @@ from collections.abc import Mapping
 from typing import Any, Protocol
 
 from aic.shared.aws import aws_city
+from aic.shared.clients import client
 from aic.shared.hierarchy.dispatch import AgentInvoker, Dispatcher, DispatcherDeps
 from aic.shared.hierarchy.queue import WorkMessage
 from aic.shared.ids import session_ids
@@ -101,7 +102,7 @@ def _dispatcher() -> Dispatcher:
     city = aws_city()
     env = os.environ
     invoker: AgentInvoker = AgentCoreInvoker(
-        city.session.client("bedrock-agentcore"),
+        client(city.session, "bedrock-agentcore"),
         {
             "ace": env.get("AIC_RUNTIME_ARN_ACE", ""),
             "orchestrator": env.get("AIC_RUNTIME_ARN_ORCHESTRATOR", ""),

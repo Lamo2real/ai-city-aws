@@ -19,6 +19,7 @@ from typing import Any, Literal, cast
 
 from aic.shared.aws import aws_city
 from aic.shared.caps import validate_caps
+from aic.shared.clients import client
 from aic.shared.config import caps_config
 from aic.shared.events import EventBus
 from aic.shared.hierarchy.actions import CityDeps, answer_question
@@ -571,20 +572,39 @@ def _knowledge_service(session: Any, bus: EventBus) -> KnowledgeService | None:
     return KnowledgeService(store=k.store, blobs=k.blobs, bus=bus, kb=k.kb)
 
 
+def build_deps() -> ApiDeps:
+    city = aws_city()
+    return ApiDeps(
+        ledger=city.ledger,
+        bus=city.bus,
+        queue=city.queue,
+        settings=city.settings,
+        sfn=client(city.session, "stepfunctions"),
+        utility_runner=bedrock_converse_runner(client(city.session, "bedrock-runtime")),
+        cognito=client(city.session, "cognito-idp"),
+        user_pool_id=os.environ.get("AIC_USER_POOL_ID"),
+        owner_email=os.environ.get("AIC_OWNER_EMAIL"),
+        knowledge=_knowledge_service(city.session, city.bus),
+    )
+
+
 def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
     global _deps
     if _deps is None:
-        city = aws_city()
-        _deps = ApiDeps(
-            ledger=city.ledger,
-            bus=city.bus,
-            queue=city.queue,
-            settings=city.settings,
-            sfn=city.session.client("stepfunctions"),
-            utility_runner=bedrock_converse_runner(city.session.client("bedrock-runtime")),
-            cognito=city.session.client("cognito-idp"),
-            user_pool_id=os.environ.get("AIC_USER_POOL_ID"),
-            owner_email=os.environ.get("AIC_OWNER_EMAIL"),
-            knowledge=_knowledge_service(city.session, city.bus),
-        )
+        _deps = build_deps()
     return run(handle_http(event, _deps))
+
+
+def _init_at_load() -> None:
+    """Inside Lambda, build the clients while the module loads, so the SnapStart snapshot already holds them.
+    If that fails (say, a missing variable), the first request tries again and reports it."""
+    global _deps
+    if not os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+        return
+    try:
+        _deps = build_deps()
+    except Exception as e:
+        log("warn", "api.init_deferred", error=type(e).__name__)
+
+
+_init_at_load()
