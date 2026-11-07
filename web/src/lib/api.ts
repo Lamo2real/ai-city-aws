@@ -32,3 +32,41 @@ export async function api<T = unknown>(path: string, init: { method?: string; bo
   if (!r.ok) throw new ApiError(j.error ?? "Something went wrong.", r.status, j.fix ?? null);
   return j as T;
 }
+
+// ---------- knowledge base (docs/KNOWLEDGE.md §5) ----------
+export type Scope = "always" | "relevant" | "on_request";
+export type KnowledgeKind = "text" | "document" | "image" | "audio" | "video" | "link" | "other";
+export type KnowledgeStatus = "uploading" | "processing" | "ready" | "failed" | "unsupported";
+export interface KnowledgeItem {
+  id: string;
+  kind: KnowledgeKind;
+  title: string;
+  scope: Scope;
+  status: KnowledgeStatus;
+  source?: string;
+  content_type?: string;
+  size_bytes?: number;
+  error?: string | null;
+  warning?: string | null;
+  summary?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+export type UploadTicket =
+  | { method: "PUT"; url: string; headers: Record<string, string> }
+  | { multipart: true; upload_id: string; part_size: number; part_urls: string[] };
+
+export const knowledgeApi = {
+  list: () => api<{ items: KnowledgeItem[]; always_tokens: number; always_budget: number }>("/knowledge"),
+  startUpload: (body: { file_name: string; content_type: string; size_bytes: number; title?: string; scope?: Scope }) =>
+    api<{ item: KnowledgeItem; upload: UploadTicket }>("/knowledge/uploads", { method: "POST", body }),
+  completeUpload: (id: string, body: { upload_id: string; parts: Array<{ part_number: number; etag: string }> }) =>
+    api<{ item: KnowledgeItem }>(`/knowledge/uploads/${id}/complete`, { method: "POST", body }),
+  addLink: (url: string, scope?: Scope) =>
+    api<{ item: KnowledgeItem }>("/knowledge/links", { method: "POST", body: { url, scope } }),
+  addText: (text: string, title: string, scope?: Scope) =>
+    api<{ item: KnowledgeItem }>("/knowledge/text", { method: "POST", body: { text, title, scope } }),
+  update: (id: string, patch: { scope?: Scope; title?: string }) =>
+    api<{ item: KnowledgeItem }>(`/knowledge/${id}`, { method: "PUT", body: patch }),
+  remove: (id: string) => api<{ ok: true }>(`/knowledge/${id}`, { method: "DELETE" }),
+};

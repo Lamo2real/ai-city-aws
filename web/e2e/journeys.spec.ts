@@ -338,3 +338,63 @@ test("tickets list and detail, with technical details behind a toggle", async ({
   await shot(page, "tickets");
   await noSeriousA11y(page, "Tickets");
 });
+
+test("knowledge: add files, paste a link, change how it's used, delete with Undo", async ({ page }) => {
+  const m = await mockBackend(page);
+  await page.goto("/#/knowledge");
+  await expect(page.getByRole("heading", { name: "Knowledge" })).toBeVisible();
+  await expect(page.getByText("Nothing stored yet. Drop a file or paste a link above.")).toBeVisible();
+  await expect(page.getByText("0 of 8,000 tokens")).toBeVisible();
+
+  // Two files at once, through the drop zone's file picker.
+  await page.locator(".drop input[type=file]").setInputFiles([
+    { name: "notes.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.7 hello") },
+    { name: "photo.png", mimeType: "image/png", buffer: Buffer.from("png") },
+  ]);
+  const row = (title: string) => page.getByRole("listitem").filter({ hasText: title });
+  await expect(row("notes.pdf").getByRole("status")).toHaveText("Ready");
+  await expect(row("photo.png").getByRole("status")).toHaveText("Ready");
+  expect(m.knowledge.puts).toHaveLength(2);
+
+  // A pasted link.
+  await page.getByLabel("Paste a link or text").fill("https://example.com/article");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(row("https://example.com/article").getByRole("status")).toHaveText(/Reading the page|Ready/);
+  await expect(row("https://example.com/article").getByRole("status")).toHaveText("Ready");
+  expect(m.calls.find((c) => c.path === "/knowledge/links")?.body).toEqual({ url: "https://example.com/article" });
+  await expect(page.getByLabel("Paste a link or text")).toHaveValue("");
+
+  // How the agents use it: three choices, saved at once; the budget follows.
+  await row("notes.pdf").getByText("Always include").click();
+  await expect(row("notes.pdf").getByLabel("Always include")).toBeChecked();
+  await expect
+    .poll(() => m.calls.find((c) => c.method === "PUT" && c.path.startsWith("/knowledge/"))?.body)
+    .toEqual({
+      scope: "always",
+    });
+  await expect(page.getByText("1,600 of 8,000 tokens")).toBeVisible();
+
+  expect(await primaries(page)).toBeLessThanOrEqual(1);
+  await noSeriousA11y(page, "Knowledge");
+  await shot(page, "knowledge");
+
+  // Delete asks first, then Undo brings it back and nothing is deleted.
+  const deletes = () => m.calls.filter((c) => c.method === "DELETE").length;
+  await page.getByRole("button", { name: "Delete “photo.png”" }).click();
+  await expect(page.getByRole("dialog", { name: "Delete “photo.png”?" })).toBeVisible();
+  await noSeriousA11y(page, "Knowledge delete");
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await expect(row("photo.png")).toHaveCount(0);
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(row("photo.png")).toHaveCount(1);
+  expect(deletes()).toBe(0);
+
+  // Deleted for real once the Undo time is over.
+  await page.getByRole("button", { name: "Delete “photo.png”" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await expect(row("photo.png")).toHaveCount(0);
+  expect(deletes()).toBe(0);
+  await expect.poll(deletes, { timeout: 16_000 }).toBe(1);
+  expect(m.calls.find((c) => c.method === "DELETE")?.path).toMatch(/^\/knowledge\/k-/);
+  await expect(row("photo.png")).toHaveCount(0);
+});

@@ -10,19 +10,22 @@ import { AceScreen } from "./components/AceScreen.tsx";
 import { CityView } from "./components/CityView.tsx";
 import { FirstRun } from "./components/FirstRun.tsx";
 import { Inbox } from "./components/Inbox.tsx";
+import { KnowledgeScreen } from "./components/Knowledge.tsx";
+import { knowledge } from "./lib/knowledge.ts";
 import { CostsScreen, SettingsScreen, Tickets } from "./components/Screens.tsx";
 import { SpendPill } from "./components/SpendPill.tsx";
 import { Banner, Button, Toaster } from "./components/ui.tsx";
 import { Eyes } from "./components/Eyes.tsx";
 import { SignIn } from "./components/SignIn.tsx";
 
-const VIEWS = ["ace", "city", "inbox", "tickets", "costs", "settings"] as const;
+const VIEWS = ["ace", "city", "inbox", "tickets", "knowledge", "costs", "settings"] as const;
 type View = (typeof VIEWS)[number];
 const LABEL: Record<View, string> = {
   ace: "Ace",
   city: "City",
   inbox: "Needs you",
   tickets: "Tickets",
+  knowledge: "Knowledge",
   costs: "Costs",
   settings: "Settings",
 };
@@ -60,6 +63,7 @@ export function App() {
       }
       setBoot("ready");
       live.onEvent((e) => store.event(e));
+      live.onEvent((e) => knowledge.event(e));
       live.onStatus((s) => {
         const was = store.get().live;
         store.set({ live: s });
@@ -148,6 +152,7 @@ export function App() {
         {view === "city" ? <CityView go={go} /> : null}
         {view === "inbox" ? <Inbox /> : null}
         {view === "tickets" ? <Tickets /> : null}
+        {view === "knowledge" ? <KnowledgeScreen /> : null}
         {view === "costs" ? <CostsScreen /> : null}
         {view === "settings" ? <SettingsScreen reopenGuide={() => setGuide(true)} /> : null}
       </main>
