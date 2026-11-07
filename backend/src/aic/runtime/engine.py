@@ -106,6 +106,9 @@ async def sdk_engine(req: EngineRequest) -> TurnOutput:
     region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or os.environ.get("AIC_REGION")
     if region:
         env["AWS_REGION"] = region
+    if not req.builtins:
+        # No shell tools, so nothing to scrub; with it set Claude Code demands bubblewrap and won't start.
+        env.pop("CLAUDE_CODE_SUBPROCESS_ENV_SCRUB", None)
     stderr_tail: list[str] = []
 
     def on_stderr(line: str) -> None:

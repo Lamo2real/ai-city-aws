@@ -150,6 +150,6 @@ def test_dockerfile_builds_for_arm64_serves_8080_runs_as_non_root_keeps_bedrock_
     assert "EXPOSE 8080" in text
     assert re.search(r"^USER aic$", text, re.M)
     assert "CLAUDE_CODE_USE_BEDROCK=1" in text
-    assert "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1" in text
+    assert "bubblewrap" in text  # workers' env scrubbing needs it; the flag itself is set per role
     assert "aic.runtime.server" in text
     assert not re.search(r"ANTHROPIC_API_KEY|awscli|aws-cli", text)

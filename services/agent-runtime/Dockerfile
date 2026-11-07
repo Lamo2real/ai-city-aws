@@ -11,9 +11,10 @@ COPY backend/src ./src
 RUN uv sync --frozen --no-dev --extra runtime --no-editable
 
 FROM --platform=linux/arm64 public.ecr.aws/docker/library/python:3.13-slim-bookworm
-# git for workers' branches; nothing else. No AWS CLI in the image: agents never change AWS.
+# git for workers' branches; bubblewrap so Claude Code can scrub the environment of workers' shell
+# commands (CLAUDE_CODE_SUBPROCESS_ENV_SCRUB, set for workers only in Terraform); nothing else. No AWS CLI in the image: agents never change AWS.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git ca-certificates \
+ && apt-get install -y --no-install-recommends git ca-certificates bubblewrap \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --create-home --uid 1000 aic
@@ -27,8 +28,7 @@ ENV PATH=/app/.venv/bin:$PATH \
     AIC_AGENTS_DIR=/app/agents \
     PORT=8080 \
     CLAUDE_CODE_USE_BEDROCK=1 \
-    CLAUDE_CODE_DISABLE_1M_CONTEXT=1 \
-    CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1
+    CLAUDE_CODE_DISABLE_1M_CONTEXT=1
 RUN mkdir -p /tmp/work && chown aic:aic /tmp/work
 USER aic
 EXPOSE 8080
