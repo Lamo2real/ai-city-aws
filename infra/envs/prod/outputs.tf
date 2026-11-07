@@ -17,3 +17,6 @@ output "apps_url" { value = module.apps.url }
 output "knowledge_bucket" { value = module.knowledge.bucket }
 output "knowledge_base_id" { value = module.knowledge.knowledge_base_id }
 output "knowledge_state_machine_arn" { value = module.knowledge.state_machine_arn }
+
+# The deploy warms AIC right after apply (deploy.yml), so the first message after a release is fast too.
+output "scheduler_function_name" { value = module.api.function_names["scheduler"] }

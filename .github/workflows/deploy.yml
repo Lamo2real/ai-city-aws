@@ -229,6 +229,12 @@ jobs:
             -backend-config="encrypt=true" \
             -backend-config="use_lockfile=true"
           terraform apply -input=false prod.tfplan
+      - name: warm AIC's runtime (the first message after a release should be fast too)
+        working-directory: infra/envs/prod
+        run: |
+          fn="$(terraform output -raw scheduler_function_name 2>/dev/null || echo aic-prod-scheduler)"
+          aws lambda invoke --function-name "$fn" --payload '{"job":"warm_ace"}' \
+            --cli-binary-format raw-in-base64-out /dev/null || echo "warm-up skipped"
       - name: outputs for the HUD upload
         id: out
         working-directory: infra/envs/prod

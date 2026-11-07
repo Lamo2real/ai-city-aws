@@ -549,3 +549,35 @@ describe("AIC's voice (Polly generative)", () => {
     expect(auth).toMatch(/Action = \["polly:SynthesizeSpeech"\], Resource = "\*"/);
   });
 });
+
+describe("AIC warm-keeper (the owner's under-3-seconds target)", () => {
+  const api = readFileSync("infra/modules/api/main.tf", "utf8");
+  const agents = readFileSync("infra/modules/agents/main.tf", "utf8");
+  const deploy = readFileSync(".github/workflows/deploy.yml", "utf8");
+  it("the scheduler pings AIC's runtime every 5 minutes, enabled from the start, and may invoke only that runtime", () => {
+    expect(api).toMatch(
+      /warm-ace\s*=\s*\{ schedule = "rate\(5 minutes\)", fn = "scheduler", input = \{ job = "warm_ace" \}, state = "ENABLED" \}/,
+    );
+    expect(api).toMatch(/state\s*=\s*lookup\(each\.value, "state", "DISABLED"\)/);
+    const scheduler = api.slice(
+      api.indexOf("    scheduler = ["),
+      api.indexOf("    ]", api.indexOf("    scheduler = [")),
+    );
+    expect(scheduler).toMatch(/bedrock-agentcore:InvokeAgentRuntime.*var\.runtime_arns\["ace"\]/);
+    expect(scheduler).not.toMatch(/values\(var\.runtime_arns\)/);
+    expect(api).toMatch(
+      /scheduler.*env = \{ AIC_RUNTIME_ARN_ACE = var\.runtime_arns\["ace"\], AIC_RUNTIME_VERSION = var\.runtime_version \}/,
+    );
+  });
+  it("AIC's session lives all day with a 30-minute idle window; the other coordinators keep an hour", () => {
+    expect(agents).toMatch(/idle_runtime_session_timeout = each\.key == "ace" \? 1800 : 900/);
+    expect(agents).toMatch(/max_lifetime\s*=\s*contains\(\["ace", "worker"\], each\.key\) \? 28800 : 3600/);
+  });
+  it("the deploy warms AIC right after apply, and a miss never fails the deploy", () => {
+    const i = deploy.indexOf("terraform apply -input=false prod.tfplan");
+    const after = deploy.slice(i, i + 900);
+    expect(after).toMatch(/warm AIC's runtime/);
+    expect(after).toMatch(/aws lambda invoke --function-name "\$fn" --payload '\{"job":"warm_ace"\}'/);
+    expect(after).toMatch(/\|\| echo "warm-up skipped"/);
+  });
+});
