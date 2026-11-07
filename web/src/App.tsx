@@ -12,11 +12,13 @@ import { FirstRun } from "./components/FirstRun.tsx";
 import { Inbox } from "./components/Inbox.tsx";
 import { CostsScreen, SettingsScreen, Tickets } from "./components/Screens.tsx";
 import { SpendPill } from "./components/SpendPill.tsx";
-import { Banner, Button, Toaster } from "./components/ui.tsx";
+import { SkillsScreen } from "./components/SkillsScreen.tsx";
+import { Banner, Button, Toaster, toast } from "./components/ui.tsx";
+import { connectReturn } from "./lib/connectReturn.ts";
 import { Eyes } from "./components/Eyes.tsx";
 import { SignIn } from "./components/SignIn.tsx";
 
-const VIEWS = ["ace", "city", "inbox", "tickets", "costs", "settings"] as const;
+const VIEWS = ["ace", "city", "inbox", "tickets", "costs", "skills", "settings"] as const;
 type View = (typeof VIEWS)[number];
 const LABEL: Record<View, string> = {
   ace: "AIC",
@@ -24,6 +26,7 @@ const LABEL: Record<View, string> = {
   inbox: "Needs you",
   tickets: "Tickets",
   costs: "Costs",
+  skills: "Skills",
   settings: "Settings",
 };
 const viewFromHash = (): View => {
@@ -69,6 +72,8 @@ export function App() {
         }
       });
       void live.start();
+      // Back from a provider's sign-in page (connectors and mail accounts share /?connect=return).
+      void connectReturn().then((r) => r && toast({ text: r.message, tone: r.ok ? "good" : "bad" }));
       const s = await api<{ settings: Record<string, unknown> }>("/settings").catch(() => null);
       let done = false;
       try {
@@ -149,6 +154,7 @@ export function App() {
         {view === "inbox" ? <Inbox /> : null}
         {view === "tickets" ? <Tickets /> : null}
         {view === "costs" ? <CostsScreen /> : null}
+        {view === "skills" ? <SkillsScreen /> : null}
         {view === "settings" ? <SettingsScreen reopenGuide={() => setGuide(true)} /> : null}
       </main>
       {guide ? <FirstRun onDone={finishGuide} /> : null}

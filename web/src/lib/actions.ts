@@ -1,7 +1,9 @@
 // What the owner can do, with instant feedback and an outbox: a message that can't be sent stays in
 // the chat marked "not sent yet" and goes out when the connection is back. Nothing is lost.
 import { api, ApiError } from "./api.ts";
+import { looksLikeKey } from "./connect.ts";
 import { store, type ChatLine } from "./store.ts";
+import { toast } from "../components/ui.tsx";
 
 const CONVERSATION = "main";
 const newLineId = () => `o${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -28,6 +30,14 @@ async function deliver(line: ChatLine) {
 export async function sendMessage(text: string) {
   const clean = text.trim();
   if (!clean) return;
+  if (looksLikeKey(clean)) {
+    // Keys never go through the chat (CONNECTORS_SKILLS.md §1.3.7): nothing is sent or stored.
+    toast({
+      text: "That looks like a key or password, so it wasn't sent. Use the safe field in the card or in Settings, Connectors. If it was a real key, revoke it.",
+      tone: "bad",
+    });
+    return;
+  }
   const line: ChatLine = { id: newLineId(), who: "owner", text: clean, state: "queued", at: Date.now() };
   store.set({ chat: [...store.get().chat, line], presence: "thinking" });
   store.beginTurn();

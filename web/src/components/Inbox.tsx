@@ -49,7 +49,7 @@ export function Inbox() {
           <p>
             <b>{a.agent}</b> wants to do exactly this, once:
           </p>
-          <p className="action">{a.action}</p>
+          {a.preview ? <Preview p={a.preview} /> : <p className="action">{a.action}</p>}
           <p className="mute">Why it needs you: {a.reason}</p>
           <div className="row-end">
             <Button
@@ -121,4 +121,116 @@ export function Inbox() {
       ) : null}
     </section>
   );
+}
+
+type PreviewData = {
+  kind: string;
+  account?: string;
+  to?: string[];
+  cc?: string[];
+  bcc?: string[];
+  subject?: string;
+  body?: string;
+  note?: string;
+  action?: string;
+  calendar?: string;
+  title?: string;
+  start?: string;
+  end?: string;
+  location?: string;
+  attendees?: Array<string | { email: string }>;
+  comment?: string;
+};
+const when = (iso?: string) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+};
+/** What leaves or changes, shown in full before the owner approves (MAIL_CALENDAR.md §5.5). Plain text only. */
+function Preview({ p }: { p: PreviewData }) {
+  if (p.kind === "email")
+    return (
+      <>
+        <dl className="preview" aria-label="The email">
+          <dt>From</dt>
+          <dd>{p.account}</dd>
+          {p.to?.length ? (
+            <>
+              <dt>To</dt>
+              <dd>{p.to.join(", ")}</dd>
+            </>
+          ) : null}
+          {p.cc?.length ? (
+            <>
+              <dt>Cc</dt>
+              <dd>{p.cc.join(", ")}</dd>
+            </>
+          ) : null}
+          {p.bcc?.length ? (
+            <>
+              <dt>Bcc</dt>
+              <dd>{p.bcc.join(", ")}</dd>
+            </>
+          ) : null}
+          {p.subject !== undefined ? (
+            <>
+              <dt>Subject</dt>
+              <dd>{p.subject}</dd>
+            </>
+          ) : null}
+          {p.action === "trash" ? (
+            <>
+              <dt>Action</dt>
+              <dd>Move to Trash</dd>
+            </>
+          ) : null}
+        </dl>
+        {p.note ? <p className="mute">{p.note}</p> : null}
+        {p.body !== undefined ? (
+          <pre className="preview-body" aria-label="The email's text">
+            {p.body}
+          </pre>
+        ) : null}
+      </>
+    );
+  if (p.kind === "event")
+    return (
+      <dl className="preview" aria-label="The event">
+        <dt>Action</dt>
+        <dd>{p.action}</dd>
+        <dt>Calendar</dt>
+        <dd>{p.calendar}</dd>
+        {p.title ? (
+          <>
+            <dt>Event</dt>
+            <dd>{p.title}</dd>
+          </>
+        ) : null}
+        {p.start ? (
+          <>
+            <dt>When</dt>
+            <dd>{`${when(p.start)} – ${when(p.end)}`}</dd>
+          </>
+        ) : null}
+        {p.location ? (
+          <>
+            <dt>Where</dt>
+            <dd>{p.location}</dd>
+          </>
+        ) : null}
+        {p.attendees?.length ? (
+          <>
+            <dt>Guests</dt>
+            <dd>{p.attendees.map((x) => (typeof x === "string" ? x : x.email)).join(", ")}</dd>
+          </>
+        ) : null}
+        {p.comment ? (
+          <>
+            <dt>Note</dt>
+            <dd>{p.comment}</dd>
+          </>
+        ) : null}
+      </dl>
+    );
+  return <p className="mute">{p.note ?? "Exactly the action shown is approved."}</p>;
 }

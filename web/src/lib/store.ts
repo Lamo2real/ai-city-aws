@@ -21,6 +21,19 @@ export interface AceTurn {
   started: number;
   steps: string[];
 }
+/** A connect card under AIC's chat: an add-connector approval, a sign-in button, a key field or an app-password form. */
+export type ConnectCardState =
+  | { kind: "approve"; id: string; approvalId: string; action: string; reason: string }
+  | {
+      kind: "signin";
+      id: string;
+      target: "mail" | "connector";
+      targetId: string;
+      title: string;
+      status: "pending" | "connected" | "failed";
+    }
+  | { kind: "key"; id: string; targetId: string; title: string; needs?: string; names?: string[] }
+  | { kind: "imap"; id: string; targetId: string; title: string; status: "pending" | "connected" };
 export type Presence = "idle" | "listening" | "thinking" | "speaking" | "waiting";
 
 export interface HudState {
@@ -32,6 +45,7 @@ export interface HudState {
   presence: Presence;
   settings: Record<string, unknown> | null;
   turn: AceTurn | null;
+  cards: ConnectCardState[];
 }
 
 type Listener = () => void;
@@ -54,6 +68,7 @@ class Store {
     presence: "idle",
     settings: null,
     turn: null,
+    cards: [],
   };
   private listeners = new Set<Listener>();
   /** Raw events for the City scene, which keeps its own animated copy. */
@@ -90,9 +105,87 @@ class Store {
     if (e.type === "ace.reply")
       return this.aceReply(e as unknown as { conversation: string; text: string; done: boolean });
     if (e.type === "activity" && e.id === "ace") this.aceStep(String(e.activity ?? ""), e.detail as string | null);
+    this.cardEvent(e);
     this.during?.push(e);
     this.set({ city: reduce(this.state.city, e) });
     for (const l of this.sceneEvents) l(e);
+  }
+  /** Adds a card, or updates it where it stands (so a card doesn't jump when its status changes). */
+  private putCard(c: ConnectCardState) {
+    const cards = this.state.cards;
+    this.set({ cards: cards.some((x) => x.id === c.id) ? cards.map((x) => (x.id === c.id ? c : x)) : [...cards, c] });
+  }
+  dropCard(id: string) {
+    this.set({ cards: this.state.cards.filter((x) => x.id !== id) });
+  }
+  /** Connect cards follow the city's events (CONNECTORS_SKILLS.md §3, MAIL_CALENDAR.md §6). */
+  private cardEvent(e: { type: string; [k: string]: unknown }) {
+    const s = (k: string) => String(e[k] ?? "");
+    if (e.type === "approval.requested" && e.kind === "connector.add")
+      return this.putCard({
+        kind: "approve",
+        id: `ap:${s("id")}`,
+        approvalId: s("id"),
+        action: s("action"),
+        reason: s("reason"),
+      });
+    if (e.type === "approval.decided") return this.dropCard(`ap:${s("id")}`);
+    if (e.type === "connect.signin") {
+      const label = s("label");
+      const title =
+        s("provider") === "imap"
+          ? `Add the app password for ${label}`
+          : `Sign in to ${s("provider") === "google" ? "Google" : "Microsoft"} (${label})`;
+      return this.putCard(
+        s("provider") === "imap"
+          ? { kind: "imap", id: `mail:${s("account_id")}`, targetId: s("account_id"), title, status: "pending" }
+          : {
+              kind: "signin",
+              id: `mail:${s("account_id")}`,
+              target: "mail",
+              targetId: s("account_id"),
+              title,
+              status: "pending",
+            },
+      );
+    }
+    if (e.type === "mail.account") {
+      const a = (e.account ?? {}) as { id?: string; status?: string };
+      const card = this.state.cards.find((c) => c.id === `mail:${a.id}`);
+      if (!card) return;
+      if (a.status === "removed") return this.dropCard(card.id);
+      if (a.status === "connected" && (card.kind === "signin" || card.kind === "imap"))
+        return this.putCard({ ...card, status: "connected" });
+      if (a.status === "error" && card.kind === "signin") return this.putCard({ ...card, status: "failed" });
+      return;
+    }
+    if (e.type === "connector.updated") {
+      const id = `conn:${s("id")}`;
+      const label = s("label") || s("id");
+      const status = s("status");
+      if (status === "removed") return this.dropCard(id);
+      if (status === "needs_login" || status === "login_expired")
+        return this.putCard({
+          kind: "signin",
+          id,
+          target: "connector",
+          targetId: s("id"),
+          title: `Sign in to ${label}`,
+          status: "pending",
+        });
+      if (status === "needs_key")
+        return this.putCard({
+          kind: "key",
+          id,
+          targetId: s("id"),
+          title: `Add the key for ${label}`,
+          needs: s("needs") || undefined,
+          names: (e.names as string[] | undefined) ?? undefined,
+        });
+      const card = this.state.cards.find((c) => c.id === id);
+      if (status === "ready" && card?.kind === "signin") return this.putCard({ ...card, status: "connected" });
+      if (status === "ready" || status === "syncing") return card?.kind === "key" ? this.dropCard(id) : undefined;
+    }
   }
   /** Starts AIC's turn: the status row shows from now until its first words. */
   beginTurn() {
