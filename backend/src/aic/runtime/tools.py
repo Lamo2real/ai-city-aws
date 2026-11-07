@@ -531,11 +531,37 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         return w if w and w.get("kind") == "worker" and w.get("parent") == c.agent_id else None
 
     async def hire(a: dict[str, Any]) -> str:
+        # Hard caps on hiring (the owner's choice after a 50-sentence request hired 21 workers): a manager
+        # may have at most max_workers_per_goal live workers on one goal, and a department at most
+        # max_concurrent_workers_per_department live workers. Workers hired before goal ids existed count
+        # against the goal, to be safe.
+        s = await d.settings()
+        goal_cap = int(s.get("max_workers_per_goal") or 3)
+        dept_cap = int(s.get("max_concurrent_workers_per_department") or 10)
+        live = [
+            w
+            for w in await d.ledger.department_agents(dept)
+            if w.get("kind") == "worker" and w.get("state") != "retired"
+        ]
+        on_goal = [w for w in live if w.get("parent") == c.agent_id and w.get("goal_id") in (None, c.ticket_id)]
+        if len(on_goal) >= goal_cap:
+            log("info", "hire.refused", department=dept, goal=c.ticket_id, on_goal=len(on_goal), cap=goal_cap)
+            return (
+                f"Hire refused: you already have {len(on_goal)} workers on this goal (the cap is {goal_cap}). "
+                "Wait for one to finish, or do it with the workers you have."
+            )
+        if len(live) >= dept_cap:
+            log("info", "hire.refused", department=dept, live=len(live), cap=dept_cap)
+            return (
+                f"Hire refused: the department already has {len(live)} workers at once (the ceiling is {dept_cap}). "
+                "Wait for one to finish."
+            )
         try:
             w = await d.factory.hire(a, c.agent_id, dept)
-            return f"Hired {w['id']} ({w['role']})."
         except Exception as e:
             return f"Hire refused: {e}"
+        await d.ledger.update_agent(w["id"], {"goal_id": c.ticket_id})
+        return f"Hired {w['id']} ({w['role']})."
 
     async def assign(a: dict[str, Any]) -> str:
         w = await mine(str(a["worker_id"]))

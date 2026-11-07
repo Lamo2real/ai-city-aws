@@ -28,6 +28,7 @@ def default_settings() -> dict[str, Any]:
         "daily_global_usd": c["daily_global_usd"],
         "daily_department_usd": c["daily_department_usd"],
         "department_caps": {},
+        "max_workers_per_goal": c["max_workers_per_goal"],
         "max_concurrent_workers_per_department": c["max_concurrent_workers_per_department"],
         "max_concurrent_workers_global": c["max_concurrent_workers_global"],
         "max_new_sessions_per_second": c["max_new_sessions_per_second"],

@@ -250,6 +250,7 @@ type S = Record<string, unknown> & {
   monthly_budget_usd: number | null;
   daily_global_usd: number | null;
   daily_department_usd: number | null;
+  max_workers_per_goal: number;
   max_concurrent_workers_per_department: number;
   max_concurrent_workers_global: number;
   max_new_sessions_per_second: number;
@@ -361,6 +362,12 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
       ) : null}
       <h2>How many workers at once</h2>
       <div className="fields">
+        <Field
+          label="Per goal (one manager's team)"
+          value={form.max_workers_per_goal}
+          onChange={(v) => num("max_workers_per_goal", v)}
+          step={1}
+        />
         <Field
           label="Per department"
           value={form.max_concurrent_workers_per_department}

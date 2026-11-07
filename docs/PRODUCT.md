@@ -53,7 +53,7 @@ Owner message → `POST /messages` → SQS (`ace` queue) → **dispatcher** Lamb
 |---|---|
 | Spend caps: daily all departments / per department / monthly | **none (no limit)**; optional in Settings |
 | AWS Budgets alert amount (whole account) | **$10,000 / month**, emails only at 50/80/100 % ($5k / $8k / $10k) + forecast; nothing is blocked |
-| Workers at once: per department / global | 100 / 2,450 (Stockholm quota 2,500 − 50) |
+| Workers per goal (one manager's team) / at once per department / global | **3** / 10 / 2,450 (Stockholm quota 2,500 − 50); `hire_worker` refuses above the first two |
 | New sessions per second | 20 (AgentCore limit 25) |
 | Turn timeout / worker async soft limit | 15 min / 7.5 h (hard 8 h) |
 | Review rounds before asking the owner | 3 |
@@ -171,6 +171,7 @@ Terraform (offline only): `fmt -check -recursive`, `init -backend=false`, `valid
 ## 10. Feature log (newest first)
 | Date | Feature | Notes |
 |---|---|---|
+| 2026-11-07 | Managers hire few | The owner saw ~21 workers on a 50-sentence request. New hard caps: `max_workers_per_goal` (3) and `max_concurrent_workers_per_department` lowered to 10, both owner-editable in Settings; `hire_worker` refuses above them (and records each worker's goal). The manager prompt says one worker per deliverable, never one per item; the Orchestrator never staffs a one-off question. |
 | 2026-11-07 | AIC answers simple requests itself | The owner's example (“50 sentences on how the GT3's flat-six differs from the GT3 RS's”) went to the team. Now AIC's prompt says to answer questions, lists, drafts and comparisons itself, and `delegate_to_orchestrator` first runs the Orchestrator's quick triage on the utility model (`agents/utility/triage.md`, one short Haiku call, cached per request, costed as a utility turn): `self` → no task, AIC answers in the same turn; `department`/`new_department` → delegated as before with the hint in the Orchestrator's brief (it keeps the final say). AIC's direct engine allows 4,096 output tokens. |
 | 2026-11-07 | AIC always on | The owner measured 8–9 s to the first word after a quiet spell, then 5, then 3 s steady: the warm ping kept the container up but the path still paid first-use costs. Now every warm ping (every 2 min, and right after a deploy) also readies the HUD WebSocket sender, reads the ledger once and asks AIC's model for one token in the background (`aic.runtime.warm`, logged as `aic.warm`); AIC's runtime creates its Bedrock client at start; and the dispatcher and ws-broadcast Lambdas are always on (published version, `live` alias, provisioned concurrency 1, every trigger on the alias; about $14/month). |
 | 2026-11-07 | AIC kept warm | The scheduler's `warm_ace` job (every 5 min, enabled) pings AIC's runtime on the owner's conversation session; the runtime answers `{"kind":"warm"}` at once; AIC's session lifetime is 8 h with a 30-min idle window; the deploy warms AIC right after apply. A message no longer pays the container's cold start (decision 83). |

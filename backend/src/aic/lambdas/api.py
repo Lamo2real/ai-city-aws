@@ -639,7 +639,12 @@ def _connectors(d: ApiDeps) -> ConnectorsApi:
 
 
 _CAP_KEYS = ("daily_global_usd", "monthly_budget_usd", "daily_department_usd")
-_WHOLE_KEYS = ("max_concurrent_workers_per_department", "max_concurrent_workers_global", "max_new_sessions_per_second")
+_WHOLE_KEYS = (
+    "max_workers_per_goal",
+    "max_concurrent_workers_per_department",
+    "max_concurrent_workers_global",
+    "max_new_sessions_per_second",
+)
 
 
 async def _put_settings(b: dict[str, Any], d: ApiDeps) -> dict[str, Any]:

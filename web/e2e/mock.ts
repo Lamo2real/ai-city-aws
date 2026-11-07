@@ -196,6 +196,7 @@ export async function mockBackend(
       daily_global_usd: 10,
       daily_department_usd: 5,
       department_caps: {},
+      max_workers_per_goal: 3,
       max_concurrent_workers_per_department: 100,
       max_concurrent_workers_global: 2450,
       max_new_sessions_per_second: 20,

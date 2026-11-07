@@ -92,6 +92,19 @@ def test_every_role_prompt_exists_and_lists_its_tools() -> None:
     assert "delegate_to_orchestrator" in load_prompt("ace.md").tools
     assert "sign_off" in load_prompt("orchestrator.md").tools
     assert "review" in load_prompt("manager.md", {"department": "Eng"}).tools
+
+
+def test_managers_hire_few_and_the_orchestrator_never_staffs_a_one_off() -> None:
+    manager = load_prompt(
+        "manager.md", {"id": "m", "department": "Eng", "mission": "x", "department_template": ""}
+    ).body
+    assert "fewest workers" in manager and "3 workers per goal" in manager
+    assert "Never one worker per item, sentence or section" in manager
+    assert "no limit" not in manager.lower()
+    orchestrator = load_prompt("orchestrator.md").body
+    assert "One department per goal" in orchestrator
+    assert "Never create a department for a one-off question or writing task" in orchestrator
+    assert "never more than three per goal" in orchestrator
     assert load_prompt("worker.md").tools == [
         "ask_manager",
         "report_to_manager",
