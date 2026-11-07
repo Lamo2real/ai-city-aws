@@ -327,7 +327,7 @@ resource "aws_bedrockagent_knowledge_base" "this" {
     }
   }
   tags       = local.tags
-  depends_on = [aws_iam_role_policy.kb, time_sleep.index]
+  depends_on = [aws_iam_role_policy.kb, opensearch_index.items, time_sleep.index]
 }
 
 resource "aws_bedrockagent_data_source" "normalized" {
