@@ -292,17 +292,6 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             "The city is still running."
         )
 
-    async def pause(a: dict[str, Any]) -> str:
-        reason = str(a["reason"]) if a.get("reason") else "Paused by the owner"
-        await d.ledger.update_settings({"paused": True, "pause_reason": reason})
-        await d.bus.put({"type": "city.state", "paused": True, "reason": reason})
-        return "The city is paused. Work already running will finish; nothing new starts."
-
-    async def resume(_: dict[str, Any]) -> str:
-        await d.ledger.update_settings({"paused": False, "pause_reason": None})
-        await d.bus.put({"type": "city.state", "paused": False, "reason": None})
-        return "The city is running again."
-
     return [
         ToolSpec(
             "delegate_to_orchestrator",
@@ -352,19 +341,11 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         ToolSpec(
             "send_workers_home",
             "Send every worker home now: they drop what they are doing and walk home; their unfinished parts wait "
-            "for a new worker. The city is NOT paused. First call with confirm=false to get the one-line question "
+            "for a new worker. The city keeps running. First call with confirm=false to get the one-line question "
             "to ask the owner; on their yes, call again with confirm=true.",
             _obj({"confirm": {"type": "boolean"}}, ()),
             everyone_home,
         ),
-        ToolSpec(
-            "pause_city",
-            "Pause the whole city: no new turns start; running turns finish. Only when the owner asks to pause or stop "
-            "everything, never for sending workers home or stopping one job.",
-            _obj({"reason": _s()}, ("reason",)),
-            pause,
-        ),
-        ToolSpec("resume_city", "Resume the city.", _obj({}), resume),
     ]
 
 

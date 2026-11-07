@@ -79,8 +79,7 @@ export function applySnapshot(state, snap, now = Date.now()) {
 export function applyLive(state, snap, now = Date.now()) {
   const parked = {};
   for (const t of snap.parked ?? []) parked[t.id] = t;
-  const reason = snap.city?.paused_until ? state.city?.reason ?? null : null; // the reason only comes with the event
-  return { ...state, now, parked, city: snap.city ? { ...snap.city, reason } : state.city, usage: snap.usage ?? state.usage, spend: snap.spend ?? state.spend };
+  return { ...state, now, parked, city: snap.city ?? state.city, usage: snap.usage ?? state.usage, spend: snap.spend ?? state.spend };
 }
 
 // A worker's move that is worth a line. hired/assigned/working/idle already show as hire and ticket lines.
@@ -176,8 +175,6 @@ export function reduce(state, event, now = Date.now()) {
     }
     case "spend.cap_reached":
       return { ...state, now, capHit: event, feed: feed(state, `Spend cap reached: ${event.cap.replace(/_/g, " ")} ($${event.limit})`, "fail", now) };
-    case "city.state":
-      return { ...state, now, city: { ...state.city, paused: event.paused, reason: event.reason }, feed: feed(state, event.paused ? `City paused: ${event.reason ?? ""}` : "City resumed", event.paused ? "fail" : "pass", now) };
     case "worker.merge_waiting": {
       const a = state.agents[event.id];
       if (!a) return state;
@@ -210,10 +207,6 @@ export function reduce(state, event, now = Date.now()) {
       const text = !old?.key ? `Department ${d.name} created` : old.name !== d.name ? `Department ${old.name} is now ${d.name}` : old.state !== d.state ? `Department ${d.name}: ${old.state} → ${d.state}` : `Department ${d.name} updated`;
       return { ...state, now, departments, agents, feed: feed(state, text, "department", now) };
     }
-    case "city.paused":
-      return { ...state, now, city: { turns_running: null, turns_waiting: null, ...state.city, paused_until: event.until, reason: event.reason ?? null }, feed: feed(state, `City paused until ${stockholmTime(Date.parse(event.until))}: ${String(event.reason ?? "").slice(0, 80)}`, "fail", now) };
-    case "city.resumed":
-      return { ...state, now, city: { turns_running: null, turns_waiting: null, ...state.city, paused_until: null, reason: null }, feed: feed(state, "City resumed", "pass", now) };
     case "tickets.parked": {
       const tickets = { ...state.tickets }, parked = { ...state.parked };
       for (const id of event.ids ?? []) if (tickets[id]) { parked[id] = { ...tickets[id], status: "parked" }; delete tickets[id]; }
@@ -288,7 +281,7 @@ export function visualState(state, id, now = Date.now()) {
   if (where.why === "merge") return "waiting_merge";
   // Finished and accepted: whatever its last turn was doing is over, even if nothing said so.
   if ((worker === "idle" || worker === "completed") && !mine.length) return "idle";
-  if (activity && activity !== "idle") return gateStatus(state, now).paused ? "paused" : VISUALS[activity] ? activity : "working"; // a paused city's turns wait, nobody is typing
+  if (activity && activity !== "idle") return VISUALS[activity] ? activity : "working";
   if (worker === "review" || mine.some((t) => t.status === "in_review")) return "in_review";
   if (mine.length) return "working";
   return Object.values(state.tickets).some((t) => t.from === id) ? "waiting_team" : "idle";
@@ -623,10 +616,9 @@ export function agentRows(state, now = Date.now()) {
 // ---------- The gate, parked tickets, and what the panels read ----------
 export const stockholmTime = (t) => new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Stockholm", hour: "2-digit", minute: "2-digit" }).format(t);
 
-// The server's gate lifts by itself when the reset passes, so a paused_until in the past is not a pause.
 export function gateStatus(state) {
   const c = state.city;
-  return { known: !!c, running: c?.running ?? null, waiting: c?.waiting ?? null, paused: c?.paused ? { reason: c.reason ?? null } : null };
+  return { known: !!c, running: c?.running ?? null, waiting: c?.waiting ?? null };
 }
 
 export function parkedRows(state, now = Date.now()) {

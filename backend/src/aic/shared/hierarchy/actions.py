@@ -87,7 +87,7 @@ SENT_HOME_NOTE = "sent home by the owner; needs a new worker"
 async def send_workers_home(d: CityDeps) -> dict[str, int]:
     """The owner's "send the workers home": every live worker drops what it is doing and goes home (released,
     one `agent.retired` each, so the City walks them out), its open parts are cancelled with a note, and each
-    manager is told once which parts need a new worker. The city itself is not paused: nothing else changes."""
+    manager is told once which parts need a new worker. Nothing else changes."""
     workers = await workers_at_work(d)
     by_manager: dict[str, list[Record]] = {}
     parts = sent = failed = 0
@@ -176,7 +176,6 @@ async def status_summary(d: CityDeps) -> dict[str, Any]:
     )
     daily = s.get("daily_global_usd")
     return {
-        "paused": await d.ledger.is_paused(),
         "jobs_running": sum(1 for t in tickets if t["status"] in ("in_progress", "in_review")),
         "jobs_waiting_for_owner": sum(1 for t in tickets if t["status"] == "waiting_on_owner"),
         "departments": [x["name"] for x in departments],

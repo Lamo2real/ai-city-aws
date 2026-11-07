@@ -2,11 +2,11 @@
 import { ConnectorsSettings } from "./ConnectorsSettings.tsx";
 import { useEffect, useState } from "react";
 import { COST_NOTE, ticketWords } from "../city/city-state.js";
-import { saveSettings, setPaused } from "../lib/actions.ts";
+import { saveSettings } from "../lib/actions.ts";
 import { api, ApiError } from "../lib/api.ts";
 import { ago, money, spendLevel } from "../lib/format.ts";
 import { store } from "../lib/store.ts";
-import { Banner, Button, Confirm, Loading, toast } from "./ui.tsx";
+import { Banner, Button, Loading, toast } from "./ui.tsx";
 import { signOutHere } from "../lib/auth.ts";
 import { SettingsApps } from "./Apps.tsx";
 import { config } from "../lib/config.ts";
@@ -253,7 +253,6 @@ function Table({ title, rows }: { title: string; rows: Record<string, Spend> }) 
 
 // ---------- Settings ----------
 type S = Record<string, unknown> & {
-  paused: boolean;
   monthly_budget_usd: number | null;
   daily_global_usd: number | null;
   daily_department_usd: number | null;
@@ -269,7 +268,6 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
   const { data, error, retry } = useApi<{ settings: S }>("/settings");
   const [form, setForm] = useState<S | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState<null | { kind: "pause" }>(null);
   useEffect(() => {
     if (data) setForm(data.settings);
   }, [data]);
@@ -316,28 +314,10 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
       setProblem(e instanceof ApiError ? e.message : "Not saved. Nothing changed. Try again.");
     }
   };
-  const togglePause = async () => {
-    const next = !form.paused;
-    await setPaused(next);
-    setForm({ ...form, paused: next });
-    toast({
-      text: next ? "The city is paused." : "The city is running again.",
-      undo: async () => {
-        await setPaused(!next);
-        setForm((f) => (f ? { ...f, paused: !next } : f));
-      },
-    });
-  };
-
   return (
     <section className="screen" aria-labelledby="set-title">
       <h1 id="set-title">Settings</h1>
       {problem ? <Banner tone="bad">{problem}</Banner> : null}
-      <h2>The city</h2>
-      <p>{form.paused ? "Paused: nothing new starts." : "Running."}</p>
-      <Button variant="secondary" onClick={() => (form.paused ? togglePause() : setConfirm({ kind: "pause" }))}>
-        {form.paused ? "Resume the city" : "Pause the city…"}
-      </Button>
       <h2>Spend caps (optional)</h2>
       <p className="mute">
         No limit by default. Leave a field empty for no limit, or enter dollars to stop new work there.
@@ -449,19 +429,6 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
           Save changes
         </Button>
       </div>
-      {confirm?.kind === "pause" ? (
-        <Confirm
-          title="Pause the city?"
-          what="No new work starts. Work already running finishes within 15 minutes. Questions and results still reach you."
-          cost="Pausing costs nothing. Storage, logs and the login page still cost a few cents a day."
-          confirmLabel="Pause"
-          onCancel={() => setConfirm(null)}
-          onConfirm={async () => {
-            setConfirm(null);
-            await togglePause();
-          }}
-        />
-      ) : null}
       <p className="mute signout">
         <button type="button" className="link" onClick={() => store.set({ chat: [] })}>
           Forget this device's conversation

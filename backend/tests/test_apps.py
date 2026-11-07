@@ -230,7 +230,7 @@ async def test_a_new_submission_replaces_the_hires_older_draft_and_ignores_other
     assert first and second
     assert (await get_draft(ledger, first["draft_id"]) or {})["reason"] == "replaced"
     assert (await get_draft(ledger, second["draft_id"]) or {})["status"] == "ready"
-    assert await on_submitted({"detail": {"type": "city.state", "at": "x", "paused": True, "reason": None}},
+    assert await on_submitted({"detail": {"type": "agent.retired", "at": "x", "id": "w-1", "worker_state": "released"}},
                               ledger, bus, origin(s3), s3, "ws") is None  # fmt: skip
     assert await on_submitted({"detail": {"type": "nope"}}, ledger, bus, origin(s3), s3, "ws") is None
 

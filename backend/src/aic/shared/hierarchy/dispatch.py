@@ -1,6 +1,6 @@
 """The dispatcher's decisions, without AWS.
 
-Before any turn starts it checks the pause flag, the spend caps, the concurrency ceilings and the new-session
+Before any turn starts it checks the spend caps, the concurrency ceilings and the new-session
 rate. Work above a ceiling waits in the queue and starts when a slot frees. Nothing is dropped.
 """
 
@@ -15,10 +15,8 @@ from ..events import EventBus
 from ..ledger import Ledger, day_key
 from .queue import Queue, WorkMessage
 
-DispatchOutcome = Literal[
-    "started", "duplicate", "cancelled", "deferred:paused", "deferred:cap", "deferred:ceiling", "deferred:rate"
-]
-DEFER_SECONDS = {"paused": 60, "cap": 900, "ceiling": 15, "rate": 1}
+DispatchOutcome = Literal["started", "duplicate", "cancelled", "deferred:cap", "deferred:ceiling", "deferred:rate"]
+DEFER_SECONDS = {"cap": 900, "ceiling": 15, "rate": 1}
 
 
 class AgentInvoker(Protocol):
@@ -57,9 +55,6 @@ class Dispatcher:
         if await self._cancelled(m):
             return "cancelled"
         s = await self.d.settings()
-        if await ledger.is_paused():
-            await self._defer(m, DEFER_SECONDS["paused"])
-            return "deferred:paused"
         cap = await check_caps(ledger, s, m["role"], m["department"])
         if not cap.ok:
             await self.d.bus.put(

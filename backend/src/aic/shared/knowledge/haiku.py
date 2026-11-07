@@ -1,6 +1,6 @@
 """The knowledge base's Haiku 5.5 calls: summary + graph, image description, scanned-PDF page reading.
 
-Each is a utility turn through the same gate as the other utility calls (pause flag, spend caps, cost row in
+Each is a utility turn through the same gate as the other utility calls (spend caps, cost row in
 the ledger, ``cost.update`` event), with the utility role's model from ``config/models.json``. Every prompt
 stays far below Haiku's 100,000-token long-context tier.
 """

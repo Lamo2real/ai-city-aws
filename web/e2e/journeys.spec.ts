@@ -544,28 +544,6 @@ test("a plain chat: nothing is suggested under AIC's replies, even after a quest
     await expect(page.getByRole("button", { name: label, exact: true })).toHaveCount(0);
 });
 
-test("Stop all work shows while something runs, asks once, then offers Resume", async ({ page }) => {
-  const m = await mockBackend(page);
-  await page.goto("/");
-  await expect(page.getByRole("button", { name: "Stop all work" })).toHaveCount(0); // nothing running
-  await page.getByRole("textbox", { name: "Message to AIC" }).fill("build me a budget app");
-  await page.keyboard.press("Enter");
-  const t = { id: "t-b", from: "ace", to: "orchestrator", goal: "Budget app", kind: "task", department: null };
-  m.send({ type: "ticket.status", previous: null, ticket: { ...t, status: "open" } });
-  m.send({ type: "ace.reply", conversation: "main", text: "On it.", done: true });
-  await page.getByRole("button", { name: "Stop all work" }).click();
-  const dialog = page.getByRole("dialog", { name: "Stop all work?" });
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: "Stop all work" }).click();
-  await expect.poll(() => m.calls.some((c) => c.path === "/city/pause")).toBe(true);
-  await expect(page.getByText("All work is stopped. Nothing new starts until you resume.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Stop all work" })).toHaveCount(0);
-  await shot(page, "ace-stopped");
-  await page.getByRole("button", { name: "Resume" }).click();
-  await expect.poll(() => m.calls.some((c) => c.path === "/city/resume")).toBe(true);
-  await expect(page.getByText("All work is stopped.")).toHaveCount(0);
-});
-
 test("plain words: Work in the menu, What I did under replies, today's spend without a far-away limit", async ({
   page,
 }) => {
@@ -814,23 +792,6 @@ test("approving an action needs holding the button and approves exactly that act
   await expect.poll(() => m.calls.find((c) => c.path === "/approvals/ap-1")?.body).toEqual({ approved: true });
 });
 
-test("pausing the city asks first, then offers Undo", async ({ page }) => {
-  const m = await mockBackend(page);
-  await page.goto("/#/settings");
-  await page.getByRole("button", { name: "Pause the city…" }).click();
-  const dialog = page.getByRole("dialog", { name: "Pause the city?" });
-  await expect(dialog).toContainText("No new work starts");
-  await expect(dialog).toContainText("Pausing costs nothing");
-  await shot(page, "pause-confirm");
-  await dialog.getByRole("button", { name: "Pause" }).click();
-  await expect.poll(() => m.calls.some((c) => c.path === "/city/pause")).toBe(true);
-  await expect(page.getByText("The city is paused.")).toBeVisible();
-  await page.getByRole("button", { name: "Undo" }).click();
-  await expect.poll(() => m.calls.some((c) => c.path === "/city/resume")).toBe(true);
-  await noSeriousA11y(page, "Settings");
-  expect(await primaries(page)).toBeLessThanOrEqual(1);
-});
-
 test("spend caps are optional: an impossible cap is refused, an empty field means no limit", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/#/settings");
@@ -973,9 +934,7 @@ test("Send everyone home is quiet when nobody is at work", async ({ page }) => {
   await expect(page.getByRole("button", { name: /Send everyone home/ })).toBeDisabled();
 });
 
-test("Send everyone home: one confirm, then every worker is sent home, and the city is never paused", async ({
-  page,
-}) => {
+test("Send everyone home: one confirm, then every worker is sent home", async ({ page }) => {
   const atWork = (id: string) => ({ ...hired(id, "Apps").agent, worker_state: "working", state: "active" });
   const m = await mockBackend(page, {
     snapshot: {
@@ -990,7 +949,6 @@ test("Send everyone home: one confirm, then every worker is sent home, and the c
   await expect(dialog.getByText("Send all 2 workers home? They'll drop what they're doing.")).toBeVisible();
   await dialog.getByRole("button", { name: "Send everyone home" }).click();
   await expect.poll(() => m.calls.some((c) => c.path === "/workers/home" && c.method === "POST")).toBe(true);
-  expect(m.calls.some((c) => c.path === "/city/pause")).toBe(false); // never a pause
   await expect(page.getByText(/Sent 2 workers home/)).toBeVisible();
   await shot(page, "ace-send-home");
   // The City view has the same button in its top bar.

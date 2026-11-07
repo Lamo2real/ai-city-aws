@@ -5,7 +5,7 @@
   and idle workers go home.
 
 Idle workers go home: a worker with no turn for `worker_idle_release_minutes` (caps.json, 15) and no turn
-running is released, paused city included: it has nothing to do, and a released worker costs nothing. Its
+running is released: it has nothing to do, and a released worker costs nothing. Its
 assignments that were still open are cancelled with a note and its manager is told, so the manager hires
 again (within the cap) when work resumes.
 - reminders: due reminders become notifications.
@@ -95,7 +95,7 @@ async def release_idle_workers(
     minutes: int,
     turn_timeout_minutes: int = 15,
 ) -> int:
-    """Workers with no turn for `minutes` and none running go home, paused city included. Their assignments
+    """Workers with no turn for `minutes` and none running go home. Their assignments
     that were still open are cancelled with a note and their manager is told to hire again when work resumes.
     One worker that cannot be released never stops the others: it is logged and skipped."""
     cutoff = now_iso(ledger.now() - timedelta(minutes=minutes))

@@ -662,3 +662,11 @@ describe("notifications: no email, one iPhone push per finished job (decision 90
       expect(api).toContain(`"${r}"`);
   });
 });
+
+describe("the city is always on", () => {
+  it("has no pause or resume route in the HTTP API", async () => {
+    const { readFileSync } = await import("node:fs");
+    const tf = readFileSync("infra/modules/api/main.tf", "utf8");
+    expect(tf).not.toMatch(/\/city\/(pause|resume)/);
+  });
+});

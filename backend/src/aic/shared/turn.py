@@ -1,4 +1,4 @@
-"""One gate for every model turn: pause flag, spend caps, throttling back-off, the Fable → Opus fallback
+"""One gate for every model turn: spend caps, throttling back-off, the Fable → Opus fallback
 (exactly once), and the ledger cost row.
 
 Model runners are injected, so tests use fakes and never call Bedrock.
@@ -14,7 +14,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, TypeVar
 
-from .caps import CityPaused, SpendCapReached, check_caps
+from .caps import SpendCapReached, check_caps
 from .cost import ZERO_USAGE, Usage, cache_savings_usd, estimate_usd
 from .events import EventBus
 from .ledger import Ledger
@@ -165,8 +165,6 @@ def parse_verdict(text: str) -> Verdict | None:
 
 
 async def run_gated_turn(t: GatedTurn, d: GateDeps) -> GatedResult:
-    if await d.ledger.is_paused():
-        raise CityPaused("The city is paused. No new turns start until the owner resumes it.")
     cap = await check_caps(d.ledger, d.settings, t.kind, t.department)
     if not cap.ok:
         await d.bus.put(

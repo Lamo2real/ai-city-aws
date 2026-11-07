@@ -79,8 +79,6 @@ ROUTES: list[tuple[str, str]] = [
     ("POST", "/approvals/a-1"),
     ("GET", "/settings"),
     ("PUT", "/settings"),
-    ("POST", "/city/pause"),
-    ("POST", "/city/resume"),
     ("POST", "/workers/home"),
     ("POST", "/tasks/t-1/cancel"),
     ("GET", "/memory"),
@@ -275,8 +273,6 @@ async def city_snapshot(d: ApiDeps) -> dict[str, Any]:
             "daily_department_usd": s.get("daily_department_usd"),
         },
         "city": {
-            "paused": s.get("paused"),
-            "reason": s.get("pause_reason"),
             "running": sum(1 for t in tickets if t["status"] == "in_progress"),
             "waiting": sum(1 for t in tickets if t["status"] == "open"),
         },
@@ -499,7 +495,6 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         return reply(
             200,
             {
-                "paused": s.get("paused"),
                 "workers_busy": await d.ledger.active_workers(),
                 "worker_ceiling": s.get("max_concurrent_workers_global"),
                 "stale_turns": len(await d.ledger.stale_work()),
@@ -623,12 +618,6 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         return reply(200, {"settings": await d.settings()})
     if is_("PUT", r"/settings"):
         return await _put_settings(_body(event), d)
-    if is_("POST", r"/city/(pause|resume)"):
-        paused = seg[1] == "pause"
-        reason = "Paused by the owner" if paused else None
-        await d.ledger.update_settings({"paused": paused, "pause_reason": reason})
-        await d.bus.put({"type": "city.state", "paused": paused, "reason": reason})
-        return reply(200, {"paused": paused})
     if is_("POST", r"/workers/home"):
         # The owner's "send everyone home", straight from the HUD: no model in the loop, instant.
         deps = _action_deps(d)

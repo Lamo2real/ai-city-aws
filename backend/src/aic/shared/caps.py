@@ -22,8 +22,6 @@ CapName = Literal["daily_global", "daily_department", "monthly"]
 def default_settings() -> dict[str, Any]:
     c = caps_config()
     return {
-        "paused": False,
-        "pause_reason": None,
         "monthly_budget_usd": c["monthly_budget_usd"],
         "daily_global_usd": c["daily_global_usd"],
         "daily_department_usd": c["daily_department_usd"],
@@ -70,10 +68,6 @@ class SpendCapReached(RuntimeError):
     def __init__(self, check: CapCheck) -> None:
         super().__init__(check.message)
         self.check = check
-
-
-class CityPaused(RuntimeError):
-    pass
 
 
 def _block(cap: CapName, spent: float, limit: float, department: str | None, message: str) -> CapCheck:

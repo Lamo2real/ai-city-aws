@@ -1,11 +1,10 @@
 """Workers go home: released the moment their last assignment passes (or is cancelled), and released by the
-sweep after sitting idle, paused city included. The City scene walks a released worker home."""
+sweep after sitting idle. The City scene walks a released worker home."""
 
 from typing import Any
 
 from aic.lambdas.scheduler import run_job
 from aic.runtime.tools import TurnCtx, tools_for
-from aic.shared.table import UpdateOptions
 from city_support import City, make_city, scripted_engine
 
 SPEC = {"specialty": "Writer", "instructions": "Write the piece.", "tools": ["Read"], "budget_hint_usd": 1}
@@ -93,12 +92,11 @@ async def test_a_cancelled_assignment_sends_its_worker_home_once() -> None:
     assert retired(city) == [wid]
 
 
-async def test_the_sweep_sends_an_idle_worker_home_after_15_minutes_paused_or_not() -> None:
+async def test_the_sweep_sends_an_idle_worker_home_after_15_minutes() -> None:
     city = make_city(scripted_engine({}))
     mgr = await manager(city)
     wid, (t,) = await hired_and_assigned(city, mgr, ["write it"])
     sent = len(city.queue.sent)
-    await city.table.update("CONFIG", "city", UpdateOptions(set={"paused": True}))
     city.advance(10 * MIN)
     assert await run_job("sweep", city.ledger, city.queue, city.bus, {}) == {"resent": 0, "sent_home": 0}
     assert (await city.ledger.get_agent(wid) or {})["state"] == "active"

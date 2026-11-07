@@ -121,9 +121,6 @@ export function CityView({ go }: { go: (view: string) => void }) {
         {live === "reconnecting" ? (
           <Banner tone="bad">Live updates stopped. Reconnecting… The map catches up when it is back.</Banner>
         ) : null}
-        {g.paused ? (
-          <Banner tone="warn">{`The city is paused${g.paused.reason ? `: ${g.paused.reason}` : ""}. Work already running finishes; nothing new starts.`}</Banner>
-        ) : null}
         {city.capHit ? (
           <Banner
             tone="bad"
@@ -555,7 +552,7 @@ function Remote({ what }: { what: "workforce" | "health" }) {
   if (what === "health")
     return (
       <div>
-        <Row k="City" v={data.paused ? "Paused" : "Running"} />
+        <Row k="City" v="Running" />
         <Row k="Workers busy" v={`${String(data.workers_busy)} of ${String(data.worker_ceiling)}`} />
         <Row k="Stuck turns" v={String(data.stale_turns)} />
       </div>

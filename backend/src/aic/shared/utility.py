@@ -1,6 +1,6 @@
 """Utility calls on Haiku 5.5: the wake-word check for unclear transcripts, ticket titles and compaction summaries.
 
-Each is a gated turn (pause, caps, cost row) and every prompt stays well under Haiku's 100,000-token
+Each is a gated turn (caps, cost row) and every prompt stays well under Haiku's 100,000-token
 long-context tier.
 """
 

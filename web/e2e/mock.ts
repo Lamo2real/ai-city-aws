@@ -162,7 +162,7 @@ export const baseSnapshot = () => ({
   month: { usd: 4.2 },
   spend: {},
   caps: { daily_global_usd: 10, monthly_budget_usd: 150, daily_department_usd: 5 },
-  city: { paused: false, reason: null, running: 0, waiting: 0 },
+  city: { running: 0, waiting: 0 },
   region: "eu-north-1",
 });
 
@@ -192,8 +192,6 @@ export async function mockBackend(
     apps: [...(opts.apps ?? [])],
     state: {},
     settings: {
-      paused: false,
-      pause_reason: null,
       monthly_budget_usd: 150,
       daily_global_usd: 10,
       daily_department_usd: 5,
@@ -424,14 +422,12 @@ export async function mockBackend(
       return ok({ settings: m.settings });
     }
     if (path === "/messages") return ok({ accepted: true, conversation: "main" }, 202);
-    if (path === "/city/pause") return ok({ paused: true });
     if (path === "/workers/home") {
       const agents = (m.snapshot.agents ?? []) as { kind: string; state: string }[];
       const n = agents.filter((a) => a.kind === "worker" && a.state === "active").length;
       return ok({ workers: n, parts: n });
     }
     if (/^\/tasks\/[\w-]+\/cancel$/.test(path)) return ok({ jobs: 2, workers: 1 });
-    if (path === "/city/resume") return ok({ paused: false });
     if (path.startsWith("/questions/"))
       return ok({ answered: true, answer: path.endsWith("/default") ? "SQLite" : body?.answer });
     const publish = (m.snapshot.approvals as Array<Record<string, unknown>>).find(
@@ -555,7 +551,7 @@ export async function mockBackend(
       }
     }
     if (path === "/workforce") return ok({ workers: [], specialists: [] });
-    if (path === "/health") return ok({ paused: false, workers_busy: 0, worker_ceiling: 2450, stale_turns: 0 });
+    if (path === "/health") return ok({ workers_busy: 0, worker_ceiling: 2450, stale_turns: 0 });
     // ---------- connectors, skills, mail (CONNECTORS_SKILLS.md §1.7, §2.4; MAIL_CALENDAR.md §4) ----------
     const method = req.method();
     if (path === "/connectors" && method === "GET") return ok({ connectors: m.connectors });

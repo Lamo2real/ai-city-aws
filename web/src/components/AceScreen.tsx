@@ -1,9 +1,8 @@
 // The landing screen: AIC's eye with the voice strip on the left, the conversation on the right (stacked on a
-// phone). Everything else can be done by asking AIC ("AIC, pause everything", "what's the status?").
+// phone). Everything else can be done by asking AIC ("send the workers home", "what's the status?").
 import { ChatCards } from "./ConnectCard.tsx";
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
-import { sendMessage, setPaused } from "../lib/actions.ts";
-import { gateStatus } from "../city/city-state.js";
+import { sendMessage } from "../lib/actions.ts";
 import { store, useHud, waitingCount } from "../lib/store.ts";
 import { appendDictation, type SpeakMode } from "../voice/modes.ts";
 import { useVoice } from "../voice/useVoice.ts";
@@ -11,7 +10,7 @@ import { Eyes } from "./Eyes.tsx";
 import { AicStatus, AicSteps } from "./AicStatus.tsx";
 import { stepsRunning } from "../lib/steps.ts";
 import { StreamedText } from "./StreamedText.tsx";
-import { Banner, Button, ClearIcon, Confirm, SendIcon, toast } from "./ui.tsx";
+import { Banner, ClearIcon, SendIcon } from "./ui.tsx";
 import { VoiceVisualizer } from "./VoiceVisualizer.tsx";
 import { SendHomeButton } from "./SendHome.tsx";
 
@@ -34,22 +33,6 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
   const live = useHud((s) => s.live);
   const turn = useHud((s) => s.turn);
   const city = useHud((s) => s.city);
-  const [confirmStop, setConfirmStop] = useState(false);
-  const paused = !!gateStatus(city).paused;
-  // Anything still going: open work in the city, or work AIC handed on that has not come back.
-  const running = Object.keys(city.tickets ?? {}).length > 0 || chat.some((l) => stepsRunning(l));
-  /** Stop (pause) or resume all work: the same route as Settings. */
-  const pauseAll = async (stop: boolean) => {
-    try {
-      await setPaused(stop);
-      const c = store.get().city;
-      store.set({
-        city: { ...c, city: { ...(c.city ?? {}), paused: stop, reason: stop ? "Paused by the owner" : null } },
-      });
-    } catch {
-      toast({ text: stop ? "Could not stop the work. Try again." : "Could not resume. Try again.", tone: "bad" });
-    }
-  };
   const [text, setText] = useState(readDraft);
   const input = useRef<HTMLTextAreaElement>(null);
   const log = useRef<HTMLDivElement>(null);
@@ -165,11 +148,6 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
       <div className="talk" role="region" aria-label="Chat with AIC">
         <header className="talk-head">
           <p className="talk-title">Chat with AIC</p>
-          {running && !paused ? (
-            <Button variant="danger" className="stop-all" onClick={() => setConfirmStop(true)}>
-              Stop all work
-            </Button>
-          ) : null}
           <SendHomeButton city={city} />
           <button
             type="button"
@@ -182,11 +160,6 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
             <ClearIcon />
           </button>
         </header>
-        {paused ? (
-          <Banner tone="warn" action={{ label: "Resume", onClick: () => void pauseAll(false) }}>
-            All work is stopped. Nothing new starts until you resume.
-          </Banner>
-        ) : null}
         {waiting ? (
           <Banner tone="warn" action={{ label: "Open", onClick: () => go("inbox") }}>
             {waiting === 1 ? "One thing needs you." : `${waiting} things need you.`}
@@ -263,20 +236,6 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
           </button>
         </form>
       </div>
-      {confirmStop ? (
-        <Confirm
-          title="Stop all work?"
-          what="Nothing new starts. Work that is already going finishes within a few minutes."
-          cost="Stopping costs nothing. You can resume any time."
-          confirmLabel="Stop all work"
-          danger
-          onCancel={() => setConfirmStop(false)}
-          onConfirm={async () => {
-            setConfirmStop(false);
-            await pauseAll(true);
-          }}
-        />
-      ) : null}
     </section>
   );
 }

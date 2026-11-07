@@ -90,7 +90,7 @@ export interface CityState {
     monthly_budget_usd: number | null;
     daily_department_usd: number | null;
   } | null;
-  city: { paused?: boolean; reason?: string | null; running?: number | null; waiting?: number | null } | null;
+  city: { running?: number | null; waiting?: number | null } | null;
   capHit: { cap: string; limit: number; spent: number } | null;
   costs: Record<string, { usd: number; tokens: number }>;
   feed: FeedLine[];
@@ -165,7 +165,6 @@ export function gateStatus(state: CityState): {
   known: boolean;
   running: number | null;
   waiting: number | null;
-  paused: { reason: string | null } | null;
 };
 export function stockholmTime(t: number): string;
 export function ticketWords(status: string): string;

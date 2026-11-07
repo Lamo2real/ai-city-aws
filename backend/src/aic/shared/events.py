@@ -286,12 +286,6 @@ class CalendarChanged(_E):
     calendar_ids: list[str]
 
 
-class CityState(_E):
-    type: Literal["city.state"]
-    paused: bool
-    reason: str | None
-
-
 class SpendCapReachedEvent(_E):
     type: Literal["spend.cap_reached"]
     cap: Literal["daily_global", "daily_department", "monthly"]
@@ -339,7 +333,6 @@ CityEventModel = Annotated[
     | ConnectSignin
     | MailAccountEvent
     | CalendarChanged
-    | CityState
     | SpendCapReachedEvent
     | AceReply
     | AppSubmitted

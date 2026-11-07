@@ -398,16 +398,13 @@ class Ledger:
         )
         return it is not None
 
-    # ---------- city settings and the pause flag ----------
+    # ---------- city settings ----------
     async def settings(self, defaults: Record) -> Record:
         it = strip(await self.table.get("CONFIG", "city"))
         return {**defaults, **(it or {})}
 
     async def update_settings(self, patch: Record) -> None:
         await self.table.update("CONFIG", "city", UpdateOptions(set=patch))
-
-    async def is_paused(self) -> bool:
-        return bool((await self.table.get("CONFIG", "city") or {}).get("paused"))
 
     # ---------- events (ticket trace), notes, reminders, idempotency ----------
     async def append_event(self, ticket_id: str, e: Record) -> None:

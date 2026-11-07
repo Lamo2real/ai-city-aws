@@ -91,7 +91,6 @@ async def test_get_city_returns_the_snapshot_the_city_view_starts_from() -> None
     r = js(await handle_http(ev("GET", "/city"), d))
     assert r["departments"][0]["name"] == "Engineering"
     assert r["usage"] == {"usd": 0, "turns": 0, "tokens": 0}
-    assert r["city"]["paused"] is False
     assert r["caps"] == {"daily_global_usd": None, "monthly_budget_usd": None, "daily_department_usd": None}
 
 
@@ -153,15 +152,6 @@ async def test_put_settings_caps_are_optional_impossible_values_refused_null_cle
     assert (await handle_http(ev("PUT", "/settings", {"max_new_sessions_per_second": 40}), d))["statusCode"] == 400
     assert (await handle_http(ev("PUT", "/settings", {"daily_global_usd": None}), d))["statusCode"] == 200
     assert (await d.settings())["daily_global_usd"] is None
-
-
-async def test_pauses_and_resumes_the_city() -> None:
-    d = make()
-    await handle_http(ev("POST", "/city/pause"), d)
-    assert await d.ledger.is_paused()
-    await handle_http(ev("POST", "/city/resume"), d)
-    assert not await d.ledger.is_paused()
-    assert [e["paused"] for e in d.bus.of_type("city.state")] == [True, False]
 
 
 async def test_costs_are_labelled_as_estimates_split_by_department_role_and_model() -> None:
@@ -356,7 +346,7 @@ async def test_post_workers_home_sends_everyone_home_at_once_without_pausing() -
         a = await d.ledger.get_agent(w)
         assert a and a["state"] == "retired" and a["worker_state"] == "released"
     assert sorted(e["id"] for e in d.bus.of_type("agent.retired")) == workers
-    assert not await d.ledger.is_paused() and d.bus.of_type("city.state") == []
+    assert d.bus.of_type("city.state") == []  # nothing else happens to the city
     # The manager hears once which parts need a new worker; nobody is at work afterwards.
     assert len([m for m in d.queue.sent if m["agentId"] == "mgr-writing"]) == 1
     assert js(await handle_http(ev("POST", "/workers/home"), d)) == {"workers": 0, "parts": 0}
@@ -372,3 +362,9 @@ async def test_post_tasks_cancel_stops_one_job_and_knows_a_wrong_or_finished_one
     for w in workers:
         assert (await d.ledger.get_agent(w) or {})["state"] == "retired"
     assert (await handle_http(ev("POST", f"/tasks/{task}/cancel"), d))["statusCode"] == 409
+
+
+def test_there_is_no_pause_route_the_city_is_always_on() -> None:
+    from aic.lambdas.api import ROUTES
+
+    assert not any("/city/pause" in r[1] or "/city/resume" in r[1] for r in ROUTES)

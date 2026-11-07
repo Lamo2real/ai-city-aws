@@ -1,4 +1,4 @@
-"""The owner's "send the workers home": every worker drops its work and walks home; the city is not paused."""
+"""The owner's "send the workers home": every worker drops its work and walks home; nothing else changes."""
 
 from aic.runtime.prompts import load_prompt
 from test_task_control import ace_tools, city, job
@@ -35,20 +35,22 @@ async def test_asks_first_then_sends_everyone_home_without_pausing() -> None:
     notes = [m for m in c.queue.sent if m.get("from") == "city" and "sent the workers home" in m["body"]]
     assert sorted(m["agentId"] for m in notes) == ["mgr-apps", "mgr-writing"]
     assert sum(m["body"].count(": part ") for m in notes) == 3
-    # Nothing paused.
+    # Nothing else changes in the settings.
     after = await c.ledger.settings({})
-    assert not after.get("paused") and after.get("paused") == before.get("paused")
+    assert after == before
     assert c.bus.of_type("city.state") == []
 
     assert await tools["send_workers_home"].handler({"confirm": True}) == "Nobody is at work right now."
     assert await tools["send_workers_home"].handler({"confirm": False}) == "Nobody is at work right now."
 
 
-def test_the_prompt_keeps_pause_send_home_and_stop_apart() -> None:
+def test_the_prompt_keeps_send_home_and_stop_apart_and_never_pauses() -> None:
     body = load_prompt("ace.md").body
     assert "send_workers_home" in load_prompt("ace.md").tools
-    assert "Never pause for this" in body and "The four controls" in body
-    assert body.index("`send_workers_home` with `confirm=false`") < body.index("## The four controls")
+    assert "The two controls" in body and "always on" in body
+    assert "pause_city" not in body and "resume_city" not in body
+    assert "pause_city" not in load_prompt("ace.md").tools and "resume_city" not in load_prompt("ace.md").tools
+    assert body.index("`send_workers_home` with `confirm=false`") < body.index("## The two controls")
 
 
 def test_aic_releases_workers_in_process_never_through_the_factory_lambda() -> None:

@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 
-from aic.shared.caps import DEFAULT_SETTINGS, CityPaused, SpendCapReached, check_caps, settings_with, validate_caps
+from aic.shared.caps import DEFAULT_SETTINGS, SpendCapReached, check_caps, settings_with, validate_caps
 from aic.shared.cost import Usage, cache_savings_usd, estimate_usd
 from aic.shared.events import MemoryBus
 from aic.shared.ledger import TURN_KINDS, Ledger
@@ -129,15 +129,6 @@ async def test_the_monthly_cap_and_the_department_cap_block_too() -> None:
     assert (await check_caps(l2, CAPPED, "worker", "Research")).ok
 
 
-async def test_a_paused_city_starts_no_turn() -> None:
-    runner = Runner(lambda _: reply("ok"))
-    ledger, _, deps = setup(runner)
-    await ledger.update_settings({"paused": True})
-    with pytest.raises(CityPaused):
-        await run_gated_turn(turn("ace"), deps)
-    assert runner.calls == []
-
-
 def test_accepts_any_cap_of_zero_or_more_or_none_and_rejects_impossible_values() -> None:
     assert "zero or more" in (validate_caps({"daily_global_usd": -1}) or "")
     assert "zero or more" in (validate_caps({"daily_global_usd": float("nan")}) or "")
@@ -161,13 +152,12 @@ async def test_retries_a_throttled_call_with_jittered_back_off_and_succeeds() ->
             raise RuntimeError("ThrottlingException: Rate exceeded")
         return reply("done")
 
-    ledger, _, deps = setup(fn)
+    _, _, deps = setup(fn)
     deps.backoff = BackoffOptions(sleep=_no_sleep, random=lambda: 0.5, on_retry=lambda _a, d: delays.append(d))
     r = await run_gated_turn(turn("worker"), deps)
     assert r.output.text == "done"
     assert calls == 3
     assert delays == [500, 1000]  # random 0.5 × 1s, 0.5 × 2s
-    assert not await ledger.is_paused()  # throttling never pauses
 
 
 async def test_gives_up_after_the_retry_budget() -> None:
