@@ -247,7 +247,7 @@ test("the voice strip shows clearly who is talking: the owner, then AIC", async 
   await page.getByRole("button", { name: "Stop listening" }).click();
   await expect(strip).toHaveAttribute("data-speaker", "idle");
 
-  await page.getByLabel("Speak replies").selectOption("always"); // typed messages are answered silently otherwise
+  await page.getByRole("radio", { name: "Always" }).check(); // typed messages are answered silently otherwise
   await page.getByRole("textbox", { name: "Message to AIC" }).fill("status?");
   await page.keyboard.press("Enter");
   await expect(strip).toHaveAttribute("data-speaker", "thinking");
@@ -337,7 +337,7 @@ test("AIC answers aloud only when it was asked by voice", async ({ page }) => {
   await page.addInitScript(() => ((window as unknown as { __heard: string }).__heard = "hey AIC, status?"));
   await page.goto("/");
   const spoken = () => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []);
-  await expect(page.getByLabel("Speak replies")).toHaveValue("auto"); // the default: only when I talk
+  await expect(page.getByRole("radio", { name: "When I talk" })).toBeChecked(); // the default: only when I talk
 
   // Typed: a text-only answer.
   await page.getByRole("textbox", { name: "Message to AIC" }).fill("status?");
@@ -365,14 +365,13 @@ test("Dictate: words land in the box live, nothing is sent until Send; an untouc
     w.__heard = "remind me to call the bank";
   });
   await page.goto("/");
-  await page.getByLabel("Dictate into the box").check();
   const box = page.getByRole("textbox", { name: "Message to AIC" });
-  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await page.getByRole("button", { name: "Dictate into the box" }).click(); // the icon beside Send
   await expect(box).toHaveValue("remind me to call"); // a live partial
   await expect(box).toHaveValue("remind me to call the bank");
   await expect(page.locator(".voice")).toHaveAttribute("data-speaker", "you"); // still listening: tap to stop
   await shot(page, "ace-dictating");
-  await page.getByRole("button", { name: "Stop listening" }).click();
+  await page.getByRole("button", { name: "Stop dictating" }).click();
   expect(m.calls.filter((c) => c.path === "/messages")).toHaveLength(0); // nothing sent by itself
   await page.getByRole("button", { name: "Send to AIC" }).click();
   await expect
@@ -383,12 +382,11 @@ test("Dictate: words land in the box live, nothing is sent until Send; an untouc
     .poll(() => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []))
     .toEqual(["I'll remind you."]);
 
-  // The choice is remembered; an edited dictation is a typed message, answered silently.
+  // An edited dictation is a typed message, answered silently.
   await page.reload();
-  await expect(page.getByLabel("Dictate into the box")).toBeChecked();
-  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await page.getByRole("button", { name: "Dictate into the box" }).click();
   await expect(box).toHaveValue("remind me to call the bank");
-  await page.getByRole("button", { name: "Stop listening" }).click();
+  await page.getByRole("button", { name: "Stop dictating" }).click();
   await box.press("End");
   await box.pressSequentially(" tomorrow");
   await page.getByRole("button", { name: "Send to AIC" }).click();
@@ -453,7 +451,7 @@ test("a three-sentence streamed reply plays three clips, in order, once each; Se
   expect(await w()).toEqual({ spoken: all, overlaps: 0 });
 
   // A long reply to a typed "always" ask: the owner types and sends while AIC talks, and AIC stops.
-  await page.getByLabel("Speak replies").selectOption("always");
+  await page.getByRole("radio", { name: "Always" }).check();
   await page.getByRole("textbox", { name: "Message to AIC" }).fill("status?");
   await page.keyboard.press("Enter");
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(2);
@@ -800,7 +798,7 @@ test("watching the City: a department goes up and workers appear when hired", as
   await page.goto("/#/city");
   const city = page.locator("section.city");
   await expect(city).toHaveAttribute("data-city-ready", "1");
-  await expect(page.getByText("Nothing waiting.")).toBeVisible();
+  await expect(page.locator(".inboxbar")).toHaveCount(0); // nothing needs the owner: no box at all
   await expect(page.getByText(/No departments yet/)).toBeVisible();
   await shot(page, "city-empty");
   m.send({
@@ -831,9 +829,13 @@ test("watching the City: a department goes up and workers appear when hired", as
   m.send({ type: "activity", id: "wkr-engineering-a1", activity: "coding" });
   const depts = page.getByRole("navigation", { name: "Departments" });
   await expect(depts.getByRole("button", { name: /Engineering/ })).toBeVisible();
-  await expect(depts.getByLabel("3 workers")).toBeVisible();
-  await expect(page.locator(".feed")).toContainText("Department Engineering created");
-  await expect(page.locator(".feed")).toContainText("wkr-engineering-a1 got a ticket from mgr-engineering");
+  await expect(depts.getByRole("button", { name: "Engineering · 3 working" })).toBeVisible();
+  const feed = page.locator(".feed");
+  await expect(feed).toContainText("New department: Engineering");
+  await expect(feed).toContainText("Engineering hired 3 workers"); // a burst is one line
+  await expect(feed).toContainText("Engineering started a part");
+  await expect(feed).not.toContainText("wkr-"); // no ids
+  await expect(feed).not.toContainText("→");
   await expect.poll(async () => Number(await city.getAttribute("data-people"))).toBeGreaterThanOrEqual(6); // AIC, Orchestrator, manager, 3 workers
   await page.waitForTimeout(800); // let the walk-in finish for the picture
   await shot(page, "city-workers");
@@ -843,10 +845,41 @@ test("watching the City: a department goes up and workers appear when hired", as
   expect(await primaries(page)).toBeLessThanOrEqual(1);
 });
 
-test("a question waits: 'Open: needs you', then one tap on the default answers it", async ({ page }) => {
+test("a question waits: '1 thing needs you · Open', then one tap answers it and the card is gone", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/#/city");
   await expect(page.locator("section.city")).toHaveAttribute("data-city-ready", "1");
+  m.send({
+    type: "ticket.status",
+    ticket: {
+      id: "t-2",
+      goal: "Build the demo",
+      owner_words: "the demo app",
+      from: "ace",
+      to: "orchestrator",
+      status: "waiting_on_owner",
+      department: null,
+      parent_id: null,
+      kind: "task",
+      created_at: at(),
+      updated_at: at(),
+    },
+    previous: null,
+  });
+  m.send({
+    type: "question.asked",
+    question: {
+      id: "q-stale",
+      asked_by: "wkr-engineering-a1",
+      path: "x",
+      ticket_id: "t-finished-long-ago",
+      text: "A question nobody can answer any more",
+      options: [],
+      default_answer: "ok",
+      status: "open",
+      created_at: at(),
+    },
+  });
   m.send({
     type: "question.asked",
     question: {
@@ -861,20 +894,28 @@ test("a question waits: 'Open: needs you', then one tap on the default answers i
       created_at: at(),
     },
   });
-  await page.getByRole("button", { name: "Open: needs you" }).click();
+  await expect(page.locator(".inboxbar")).toContainText("1 thing needs you"); // the stale one is not counted
+  await expect(page.locator(".citytop")).toContainText("Need you1");
+  await page.getByRole("button", { name: "Open Needs you: 1 thing needs you" }).click();
   await expect(page.getByRole("heading", { name: "Needs you" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "the demo app" })).toBeVisible(); // grouped by job
+  await expect(page.getByText("A question nobody can answer any more")).toHaveCount(0);
   await shot(page, "needs-you");
   await noSeriousA11y(page, "Needs you");
   expect(await primaries(page)).toBe(1);
-  await page.getByRole("button", { name: "Use default: SQLite" }).click();
-  await expect.poll(() => m.calls.some((c) => c.method === "POST" && c.path === "/questions/q1/default")).toBe(true);
-  await expect(page.getByText("Answered with the default: SQLite")).toBeVisible();
+  await page.getByRole("button", { name: "Write my own answer" }).click();
+  await expect(page.getByRole("textbox", { name: "Your answer" })).toBeFocused();
+  await page.getByRole("button", { name: "SQLite" }).click(); // the default, first and biggest
+  await expect(page.getByText("Which database should the demo use?")).toHaveCount(0); // gone at once
+  await expect(page.getByRole("link", { name: /Needs you/ }).first()).not.toContainText("1");
+  await expect.poll(() => m.calls.find((c) => c.path === "/questions/q1/answer")?.body).toEqual({ answer: "SQLite" });
+  await expect(page.getByText("Answered: SQLite")).toBeVisible();
 });
 
 test("approving an action needs holding the button and approves exactly that action", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/#/inbox");
-  await expect(page.getByText(/Nothing is waiting for you/)).toBeVisible();
+  await expect(page.getByText(/Nothing needs you right now/)).toBeVisible();
   m.send({
     type: "approval.requested",
     id: "ap-1",
@@ -882,7 +923,9 @@ test("approving an action needs holding the button and approves exactly that act
     action: "npm publish --access public",
     reason: "Publishing needs the owner.",
   });
-  await page.getByRole("button", { name: "Approve…" }).click();
+  await expect(page.getByText("The worker wants your OK")).toHaveCount(0); // never an id, never vague
+  await expect(page.getByText("Run a command on its work computer.")).toBeVisible();
+  await page.getByRole("button", { name: "Yes…" }).click();
   const dialog = page.getByRole("dialog", { name: "Approve this action?" });
   await expect(dialog).toContainText("npm publish --access public");
   await expect(dialog).toContainText("Cost:");
@@ -965,12 +1008,28 @@ test("a lost connection says what happened and that nothing was lost", async ({ 
   await expect(page.getByText("Connection lost. Your messages are saved. Reconnecting…")).toBeVisible();
 });
 
-test("tickets list and detail, with technical details behind a toggle", async ({ page }) => {
+test("Work: one row per job in plain words; details, long notes and technical ids only on request", async ({
+  page,
+}) => {
   await mockBackend(page);
   await page.goto("/#/tickets");
-  await expect(page.getByText("Add a power(a, b) function to add.js")).toBeVisible();
+  const row = page.getByRole("button", { name: /Add a power\(a, b\) function to add\.js/ });
+  await expect(row).toContainText("Being checked");
+  await expect(row).toContainText("2 of 3 parts done");
+  await expect(row).not.toContainText("orchestrator"); // no ids or agent names on the list
   await shot(page, "tickets");
-  await noSeriousA11y(page, "Tickets");
+  await noSeriousA11y(page, "Work");
+  await row.click();
+  await expect(page.getByRole("heading", { name: "Add a power(a, b) function to add.js" })).toBeVisible();
+  await expect(
+    page.getByText(/The reviewer is reading the new power function.*…/), // one line, cut at a word
+  ).toBeVisible();
+  await page.getByRole("button", { name: "more" }).click(); // the long note, whole
+  await expect(page.getByText(/line by line before it goes back to the owner\./)).toBeVisible();
+  await expect(page.getByText('"id": "t-1"')).toHaveCount(0);
+  await page.getByRole("button", { name: "Technical details" }).click();
+  await expect(page.getByText(/"id": "t-1"/)).toBeVisible();
+  await noSeriousA11y(page, "Work detail");
 });
 
 test("knowledge: add files, paste a link, change how it's used, delete with Undo", async ({ page }) => {
@@ -978,7 +1037,7 @@ test("knowledge: add files, paste a link, change how it's used, delete with Undo
   await page.goto("/#/knowledge");
   await expect(page.getByRole("heading", { name: "Knowledge" })).toBeVisible();
   await expect(page.getByText("Nothing stored yet. Drop a file or paste a link above.")).toBeVisible();
-  await expect(page.getByText("0 of 8,000 tokens")).toBeVisible();
+  await expect(page.getByText("0% of its space is used")).toBeVisible();
 
   // Two files at once, through the drop zone's file picker.
   await page.locator(".drop input[type=file]").setInputFiles([
@@ -1006,7 +1065,7 @@ test("knowledge: add files, paste a link, change how it's used, delete with Undo
     .toEqual({
       scope: "always",
     });
-  await expect(page.getByText("1,600 of 8,000 tokens")).toBeVisible();
+  await expect(page.getByText("20% of its space is used")).toBeVisible();
 
   expect(await primaries(page)).toBeLessThanOrEqual(1);
   await noSeriousA11y(page, "Knowledge");

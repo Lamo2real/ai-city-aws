@@ -215,7 +215,7 @@ describe("the Knowledge screen", () => {
     });
     render(<KnowledgeScreen />);
     expect(await screen.findByText("Lease.pdf")).toBeTruthy();
-    expect(screen.getByText(/3,200 of 8,000 tokens/)).toBeTruthy();
+    expect(screen.getByText(/40% of its space is used/)).toBeTruthy();
     expect(screen.getByText("Transcribing")).toBeTruthy();
     const group = screen.getByRole("group", { name: "How the agents use “Lease.pdf”" });
     expect((within(group).getByLabelText("When relevant") as HTMLInputElement).checked).toBe(true);

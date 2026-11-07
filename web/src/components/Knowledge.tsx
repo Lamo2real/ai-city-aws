@@ -27,7 +27,6 @@ const KIND: Record<KnowledgeKind, { icon: string; word: string }> = {
   link: { icon: "🔗", word: "Link" },
   other: { icon: "📦", word: "File" },
 };
-const fmt = (n: number) => n.toLocaleString("en-US");
 
 /** The status in plain words, with progress while this browser uploads. */
 export function statusWords(item: KnowledgeItem, percent?: number, localError?: string): string {
@@ -105,7 +104,7 @@ export function KnowledgeScreen() {
   return (
     <section className="screen knowledge" aria-labelledby="kn-title">
       <h1 id="kn-title">Knowledge</h1>
-      <p>Store anything the agents should know. They use it as you choose for each item.</p>
+      <p className="lede">What your agents should know. Add a file or a link; you choose how each one is used.</p>
 
       <label
         className={`drop${dragging ? " drop-over" : ""}`}
@@ -149,7 +148,8 @@ export function KnowledgeScreen() {
       {error ? <Banner tone="bad">{error}</Banner> : null}
 
       <p className="budget" aria-live="polite">
-        <b>Always include:</b> {`${fmt(s.alwaysTokens)} of ${fmt(s.alwaysBudget)} tokens`}
+        <b>Always include:</b>{" "}
+        {`${Math.min(100, Math.round((100 * s.alwaysTokens) / Math.max(1, s.alwaysBudget)))}% of its space is used`}
         {over ? (
           <span className="mute">
             {" "}

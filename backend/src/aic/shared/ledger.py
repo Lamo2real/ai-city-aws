@@ -260,6 +260,15 @@ class Ledger:
         )
         return strip(it)
 
+    async def withdraw_question(self, id: str) -> Record | None:
+        """Closes an open question nobody needs answered any more (its job stopped or finished)."""
+        it = await self.table.update(
+            f"Q#{id}",
+            "META",
+            UpdateOptions(set={"status": "withdrawn", "gsi1pk": "Q#withdrawn"}, expect={"status": "open"}),
+        )
+        return strip(it)
+
     async def get_question(self, id: str) -> Record | None:
         return strip(await self.table.get(f"Q#{id}", "META"))
 
@@ -302,6 +311,15 @@ class Ledger:
                 {"pk": f"APPROVED#{cur['hash']}", "sk": id, "at": self._iso(), "ttl": self.now_ms() // 1000 + 86_400}
             )
         return r
+
+    async def withdraw_approval(self, id: str) -> Record | None:
+        """Closes a pending approval whose job stopped or finished: the action will never run."""
+        it = await self.table.update(
+            f"APPROVAL#{id}",
+            "META",
+            UpdateOptions(set={"status": "withdrawn", "gsi1pk": "APPROVAL#withdrawn"}, expect={"status": "pending"}),
+        )
+        return strip(it)
 
     async def pending_approvals(self) -> list[Record]:
         return [_strip(i) for i in await self.table.query_index("gsi1", "APPROVAL#pending")]

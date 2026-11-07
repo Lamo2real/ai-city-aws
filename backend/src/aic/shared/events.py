@@ -126,6 +126,13 @@ class QuestionAnswered(_E):
     answered_by: str
 
 
+class QuestionWithdrawn(_E):
+    """The job the question belonged to stopped or finished: nobody needs the answer any more."""
+
+    type: Literal["question.withdrawn"]
+    id: str
+
+
 class ReviewResult(_E):
     type: Literal["review.result"]
     ticket_id: str
@@ -201,6 +208,13 @@ class ApprovalDecided(_E):
     type: Literal["approval.decided"]
     id: str
     approved: bool
+
+
+class ApprovalWithdrawn(_E):
+    """The job the approval belonged to stopped or finished: the action will never run."""
+
+    type: Literal["approval.withdrawn"]
+    id: str
 
 
 class AppFile(_M):
@@ -322,6 +336,7 @@ CityEventModel = Annotated[
     | DepartmentCreated
     | QuestionAsked
     | QuestionAnswered
+    | QuestionWithdrawn
     | ReviewResult
     | SignoffResult
     | CostUpdate
@@ -329,6 +344,7 @@ CityEventModel = Annotated[
     | Instruction
     | ApprovalRequested
     | ApprovalDecided
+    | ApprovalWithdrawn
     | ConnectorUpdated
     | ConnectSignin
     | MailAccountEvent

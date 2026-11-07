@@ -9,7 +9,7 @@ export const MODEL_NAME = { "haiku-5-5": "Haiku 5.5", "opus-5-5": "Opus 5.5", "s
 export const DEPT_COLOR = { HQ: "#3b82ff", IT: "#4cc9f0", App: "#ff7a45", Cloud: "#8ecae6", Marketing: "#f72585", Video: "#b5179e", Travel: "#06d6a0", other: "#9aa0a6" };
 export const CORE = new Set(["ace", "orchestrator"]);
 export const TOOL_PROP = [["ios|swift|app", "laptop"], ["video|film|camera", "camera"], ["market|ads|growth", "chart"], ["cloud|infra|terraform|devops", "wrench"], ["travel|flight|hotel", "ticket"], ["qa|test", "clipboard"], [".", "laptop"]];
-export const FEED_MAX = 40;
+export const FEED_MAX = 120;
 // Every dollar figure in the HUD is this: a value at list prices, not money that moved.
 export const COST_NOTE = "Estimate from token counts at list prices. The AWS bill is the truth.";
 export const estUsd = (v, digits = 2) => (v === null || v === undefined || Number.isNaN(v) ? "—" : `est. $${Number(v).toFixed(digits)}`);
@@ -86,8 +86,110 @@ export function applyLive(state, snap, now = Date.now()) {
 const WORKER_LINE = { review: "worker", completed: "done", released: "worker", blocked: "fail", failed: "fail", paused: "worker", cancelled: "worker" };
 const asked = (state, event, now) => ({ ...state, now, questions: { ...state.questions, [event.question.id]: event.question }, feed: feed(state, `${event.question.path} asks: ${event.question.text}`, "question", now) });
 
-// One event in, a new state out. Unknown events change nothing.
+// One event in, a new state out. Unknown events change nothing. A line it adds to the feed also carries the
+// event's story in plain words (or none, for bookkeeping nobody needs to read), which the Activity panel shows.
 export function reduce(state, event, now = Date.now()) {
+  const next = reduceEvent(state, event, now);
+  if (next.feed === state.feed || !next.feed.length) return next;
+  const story = storyOf(event, state);
+  return story ? { ...next, feed: [{ ...next.feed[0], story }, ...next.feed.slice(1)] } : next;
+}
+
+const an = (w) => (/^[aeiou]/i.test(w) ? "an" : "a");
+// "Writer" → "writer" inside a sentence; a name like "JavaScript developer" or "QA tester" keeps its capitals.
+const inSentence = (role) => (/^[A-Z][a-z]+(\s|$)/.test(role) ? role.charAt(0).toLowerCase() + role.slice(1) : role);
+const shortGoal = (text) => plainText(text, 60).short;
+
+/** Who someone is, in words the owner knows: never an id. */
+export function plainWho(state, id) {
+  if (id === "ace") return "AIC";
+  if (id === "orchestrator") return "The planner";
+  const a = state.agents?.[id];
+  if (!a) return "Someone on the team";
+  if (a.kind === "manager") return `The ${deptOf(a)} manager`;
+  return a.role ? `The ${inSentence(a.role)} in ${deptOf(a)}` : `A worker in ${deptOf(a)}`;
+}
+
+// What happened, for the owner: `one` for a single event, `many` (with {n}) when a burst of the same `key` is
+// grouped into one line. Null: bookkeeping (status moves, colleagues talking, retries) that stays off the panel.
+function storyOf(event, s) {
+  switch (event.type) {
+    case "agent.hired": {
+      const a = event.agent, d = deptOf(a);
+      if (a.kind === "manager") return { key: `mgr:${d}`, one: `${d} got a manager` };
+      if (a.kind !== "worker") return null;
+      const role = a.role ? inSentence(a.role) : "worker";
+      return { key: `hire:${d}`, one: `${d} hired ${an(role)} ${role}`, many: `${d} hired {n} workers` };
+    }
+    case "agent.retired": {
+      const a = s.agents[event.id];
+      if (!a || a.kind !== "worker") return null;
+      const d = deptOf(a);
+      return { key: `home:${d}`, one: `A worker in ${d} went home`, many: `{n} workers in ${d} went home` };
+    }
+    case "ticket.status": {
+      const t = event.ticket, d = t.department || "The team";
+      const job = t.kind === "task" || (!t.parent_id && t.from === "ace");
+      if (event.previous === null || event.previous === undefined)
+        return job ? { key: `job:${t.id}`, one: `New job: ${shortGoal(t.goal)}` } : { key: `start:${d}`, one: `${d} started a part`, many: `${d} started {n} parts` };
+      if (t.status === "done") return job ? { key: `fin:${t.id}`, one: `Job finished: ${shortGoal(t.goal)}` } : { key: `done:${d}`, one: `${d} finished a part`, many: `${d} finished {n} parts` };
+      if (t.status === "failed") return { key: `failed:${d}`, one: `A part did not finish in ${d}`, many: `{n} parts did not finish in ${d}` };
+      if (t.status === "cancelled") return job ? { key: `stop:${t.id}`, one: `Job stopped: ${shortGoal(t.goal)}` } : { key: "stopped", one: "A part was stopped", many: "{n} parts were stopped" };
+      return null;
+    }
+    case "question.asked":
+      return { key: "ask", one: `${plainWho(s, event.question.asked_by)} has a question for you`, many: "{n} questions for you" };
+    case "question.answered":
+      return { key: "answered", one: "A question was answered", many: "{n} questions were answered" };
+    case "review.result":
+      return event.verdict === "PASS" ? { key: "passed", one: "A part passed its check", many: "{n} parts passed their check" } : { key: "fix", one: "A part needs fixing after its check", many: "{n} parts need fixing after their check" };
+    case "result":
+      return { key: `result:${event.summary}`, one: `Finished: ${shortGoal(event.summary)}` };
+    case "approval.requested":
+      return event.kind === "app.publish" ? { key: "app-ready", one: "A new app is ready to try", many: "{n} new apps are ready to try" } : { key: "ok", one: "Something needs your OK", many: "{n} things need your OK" };
+    case "approval.decided":
+      return { key: `decided:${event.id}`, one: event.approved ? "You said yes" : "You said no" };
+    case "app.published":
+      return { key: `app:${event.app_id}`, one: `New app: ${String(event.title ?? "").slice(0, 40)}` };
+    case "app.updated":
+      return { key: `appv:${event.app?.app_id}`, one: `${String(event.app?.title ?? "An app").slice(0, 40)} has a new version` };
+    case "app.removed":
+      return { key: `appx:${event.app_id}`, one: "An app was removed" };
+    case "spend.cap_reached":
+      return { key: "cap", one: "The spending limit was reached; new work waits" };
+    case "department.created":
+      return { key: `dept:${event.name}`, one: `New department: ${event.name}` };
+    case "tickets.parked":
+      return { key: "parked", one: `${event.ids?.length ?? 0} old jobs were put aside for you` };
+    case "turn.failed":
+      return event.retrying ? null : { key: "went-wrong", one: "A step went wrong", many: "{n} steps went wrong" };
+    case "instruction":
+      return { key: `told:${event.to}`, one: `You sent a note to ${plainWho(s, event.to).replace(/^The /, "the ")}` };
+    default:
+      return null;
+  }
+}
+
+/** The Activity panel: plain lines, newest first; a burst of the same thing within five minutes is one line. */
+export function stories(feedLines, limit = 8) {
+  const out = [];
+  for (const f of feedLines) {
+    const st = f.story;
+    if (!st) continue;
+    const last = out[out.length - 1];
+    if (last && !st.many && last.key === st.key && last.oldest - f.at <= 5 * 60_000) continue; // the same thing twice
+    if (last && st.many && last.key === st.key && last.oldest - f.at <= 5 * 60_000) {
+      last.n += 1;
+      last.oldest = f.at;
+      last.text = st.many.replace("{n}", String(last.n));
+      continue;
+    }
+    out.push({ key: st.key, at: f.at, oldest: f.at, n: 1, text: st.one, kind: f.kind });
+  }
+  return out.slice(0, limit).map(({ at, text, kind }) => ({ at, text, kind }));
+}
+
+function reduceEvent(state, event, now) {
   switch (event.type) {
     case "agent.hired": {
       const a = filed(state.departments, event.agent);
@@ -167,6 +269,18 @@ export function reduce(state, event, now = Date.now()) {
       const apps = { ...state.apps };
       delete apps[event.app_id];
       return { ...state, now, apps, feed: feed(state, `App removed: ${String(gone.title ?? event.slug ?? "").slice(0, 40)}`, "worker", now) };
+    }
+    case "question.withdrawn": {
+      if (!state.questions[event.id]) return state;
+      const questions = { ...state.questions };
+      delete questions[event.id];
+      return { ...state, now, questions };
+    }
+    case "approval.withdrawn": {
+      if (!state.approvals[event.id]) return state;
+      const approvals = { ...state.approvals };
+      delete approvals[event.id];
+      return { ...state, now, approvals };
     }
     case "approval.decided": {
       const approvals = { ...state.approvals };

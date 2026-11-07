@@ -4,13 +4,14 @@ import { ChatCards } from "./ConnectCard.tsx";
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { sendMessage } from "../lib/actions.ts";
 import { store, useHud, waitingCount } from "../lib/store.ts";
+import { needsWords } from "../lib/needs.ts";
 import { appendDictation, type SpeakMode } from "../voice/modes.ts";
 import { useVoice } from "../voice/useVoice.ts";
 import { Eyes } from "./Eyes.tsx";
 import { AicStatus, AicSteps } from "./AicStatus.tsx";
 import { stepsRunning } from "../lib/steps.ts";
 import { StreamedText } from "./StreamedText.tsx";
-import { Banner, ClearIcon, SendIcon } from "./ui.tsx";
+import { Banner, ClearIcon, DictateIcon, SendIcon } from "./ui.tsx";
 import { VoiceVisualizer } from "./VoiceVisualizer.tsx";
 
 export { MicIcon } from "./ui.tsx";
@@ -80,7 +81,7 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
     e?.preventDefault();
     const t = text.trim();
     if (!t) return;
-    if (voice.listening && voice.micMode === "dictate") voice.pushToTalk(); // stop dictating; send what is shown
+    if (voice.dictating) voice.toggleDictate(); // stop dictating; send what is shown
     // A dictated message counts as voice (AIC may answer aloud) only if the keyboard never touched it.
     const byVoice = dictated.current && !typed.current;
     setText("");
@@ -105,41 +106,35 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
       <div className="ace-stage">
         <Eyes presence={shown} word={false} />
         <VoiceVisualizer presence={presence} listening={voice.listening} onMic={voice.pushToTalk} />
-        <fieldset className="mic-mode">
-          <legend className="sr">What the mic does</legend>
-          <label className="switch">
-            <input
-              type="radio"
-              name="mic-mode"
-              checked={voice.micMode === "send"}
-              onChange={() => voice.setMicMode("send")}
-            />{" "}
-            Talk and send
-          </label>
-          <label className="switch">
-            <input
-              type="radio"
-              name="mic-mode"
-              checked={voice.micMode === "dictate"}
-              onChange={() => voice.setMicMode("dictate")}
-            />{" "}
-            Dictate into the box
-          </label>
-        </fieldset>
         {voice.problem ? <Banner tone="bad">{voice.problem}</Banner> : null}
         <div className="toggles">
           <label className="switch">
             <input type="checkbox" checked={voice.wakeMode} onChange={voice.toggleWake} /> Hands-free: listen for “hey
             AIC”
           </label>
-          <label className="switch speak-mode">
-            Speak replies
-            <select value={voice.speakMode} onChange={(e) => voice.setSpeakMode(e.target.value as SpeakMode)}>
-              <option value="auto">Only when I talk</option>
-              <option value="always">Always</option>
-              <option value="never">Never</option>
-            </select>
-          </label>
+          <fieldset className="speak-mode">
+            <legend>Speak replies</legend>
+            <div className="seg">
+              {(
+                [
+                  ["auto", "When I talk"],
+                  ["always", "Always"],
+                  ["never", "Never"],
+                ] as Array<[SpeakMode, string]>
+              ).map(([m, label]) => (
+                <label key={m} className={voice.speakMode === m ? "on" : ""}>
+                  <input
+                    type="radio"
+                    name="speak-mode"
+                    value={m}
+                    checked={voice.speakMode === m}
+                    onChange={() => voice.setSpeakMode(m)}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
         </div>
       </div>
 
@@ -159,7 +154,7 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
         </header>
         {waiting ? (
           <Banner tone="warn" action={{ label: "Open", onClick: () => go("inbox") }}>
-            {waiting === 1 ? "One thing needs you." : `${waiting} things need you.`}
+            {`${needsWords(waiting)}.`}
           </Banner>
         ) : null}
         {live === "reconnecting" ? (
@@ -211,11 +206,7 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
             ref={input}
             rows={1}
             value={text}
-            placeholder={
-              voice.listening && voice.micMode === "dictate"
-                ? "Listening… your words appear here"
-                : "Type your message…"
-            }
+            placeholder={voice.dictating ? "Listening… your words appear here" : "Type your message…"}
             onChange={(e) => {
               typed.current = true;
               base.current = e.target.value;
@@ -228,6 +219,16 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
               }
             }}
           />
+          <button
+            type="button"
+            className={`dictate ${voice.dictating ? "on" : ""}`}
+            onClick={voice.toggleDictate}
+            aria-pressed={voice.dictating}
+            aria-label={voice.dictating ? "Stop dictating" : "Dictate into the box"}
+            title={voice.dictating ? "Stop dictating" : "Dictate into the box"}
+          >
+            <DictateIcon />
+          </button>
           <button type="submit" className="send" aria-label="Send to AIC" disabled={!text.trim()}>
             <SendIcon />
           </button>

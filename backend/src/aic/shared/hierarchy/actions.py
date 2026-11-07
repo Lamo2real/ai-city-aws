@@ -146,6 +146,8 @@ async def move(d: CityDeps, id: str, status: str, note: str = "", patch: Record 
     if r:
         ticket, previous = r
         await d.bus.put({"type": "ticket.status", "ticket": ticket, "previous": previous})
+        if status in FINAL:  # nobody needs the owner's answer for a stopped or finished part
+            await withdraw_asks(d.ledger, d.bus, {id})
         if status in FINAL and ticket.get("kind") == "assignment" and ticket.get("to"):
             try:
                 await release_if_finished(d, str(ticket["to"]), str(ticket.get("from") or ""))
@@ -155,6 +157,36 @@ async def move(d: CityDeps, id: str, status: str, note: str = "", patch: Record 
     t = await d.ledger.get_ticket(id)
     assert t is not None
     return t
+
+
+async def withdraw_asks(ledger: Ledger, bus: EventBus, ticket_ids: set[str]) -> int:
+    """Withdraws the open questions and pending approvals of these tickets; the HUD drops them quietly."""
+    gone = 0
+    for q in await ledger.open_questions():
+        if q.get("ticket_id") in ticket_ids and await ledger.withdraw_question(str(q["id"])):
+            await bus.put({"type": "question.withdrawn", "id": q["id"]})
+            gone += 1
+    for a in await ledger.pending_approvals():
+        if a.get("ticket_id") in ticket_ids and await ledger.withdraw_approval(str(a["id"])):
+            await bus.put({"type": "approval.withdrawn", "id": a["id"]})
+            gone += 1
+    return gone
+
+
+async def sweep_stale_asks(ledger: Ledger, bus: EventBus) -> int:
+    """Withdraws questions and approvals left behind by jobs that already stopped or finished (or vanished).
+    Asks that belong to no ticket (an app's or a connector's approval) stay."""
+    ids = {
+        str(r["ticket_id"])
+        for r in [*await ledger.open_questions(), *await ledger.pending_approvals()]
+        if r.get("ticket_id")
+    }
+    stale: set[str] = set()
+    for tid in ids:
+        t = await ledger.get_ticket(tid)
+        if t is None or t.get("status") in FINAL:
+            stale.add(tid)
+    return await withdraw_asks(ledger, bus, stale) if stale else 0
 
 
 async def new_ticket(d: CityDeps, t: Record) -> Record:

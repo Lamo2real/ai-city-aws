@@ -128,9 +128,22 @@ export function AppsScreen() {
           ))}
         </ul>
       ) : (
-        <p className="empty">
-          No apps yet. Ask AIC for a game: the city builds it, you try it in Needs you, and it lands here.
-        </p>
+        <div className="emptystate">
+          <p className="empty">No apps yet. Ask AIC for a game or a tool, and it lands here when it's ready.</p>
+          <a
+            className="btn btn-primary"
+            href="#/"
+            onClick={() => {
+              try {
+                if (!localStorage.getItem("aic.draft")) localStorage.setItem("aic.draft", "Build me a small app that ");
+              } catch {
+                /* the link still opens AIC */
+              }
+            }}
+          >
+            Ask AIC for an app
+          </a>
+        </div>
       )}
     </section>
   );

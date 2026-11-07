@@ -1,22 +1,14 @@
 // Push-to-talk, dictation, the optional wake-word mode, and spoken replies, shared by the AIC screen and the
 // City view's big mic button. Typed and spoken turns go into the same conversation.
-//   mic mode "send":    tap, talk; what was said is sent when you stop talking (counts as voice).
-//   mic mode "dictate": tap, talk; the words go to the message box (live partials too) until you tap again;
-//                       nothing is sent automatically. Only screens that pass a dictation target offer it.
+//   the mic button:     tap, talk; what was said is sent when you stop talking (counts as voice).
+//   dictate (the box):  tap the dictate icon beside Send, talk; the words go to the message box (live partials
+//                       too) until you tap again; nothing is sent automatically. Only the AIC screen offers it.
 //   speaking:           "auto" reads a reply aloud only when the message it answers came in by voice.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { sendMessage } from "../lib/actions.ts";
 import { api } from "../lib/api.ts";
 import { store, useHud } from "../lib/store.ts";
-import {
-  readMicMode,
-  readSpeakMode,
-  saveMicMode,
-  saveSpeakMode,
-  shouldSpeak,
-  type MicMode,
-  type SpeakMode,
-} from "./modes.ts";
+import { readSpeakMode, saveSpeakMode, shouldSpeak, type SpeakMode } from "./modes.ts";
 import {
   browserSpeak,
   browserStopSpeaking,
@@ -75,15 +67,13 @@ export function useVoice(dictation?: DictationTarget) {
   const [listening, setListening] = useState(false);
   const [wakeMode, setWakeMode] = useState(false);
   const [speakMode, setSpeakModeState] = useState<SpeakMode>(readSpeakMode);
-  const [micMode, setMicModeState] = useState<MicMode>(readMicMode);
+  const [dictatingNow, setDictatingNow] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const stop = useRef<(() => void) | null>(null);
   const dictating = useRef(false);
   const target = useRef(dictation);
   target.current = dictation;
   const chat = useHud((s) => s.chat);
-  const micModeRef = useRef(micMode);
-  micModeRef.current = micMode;
   if (spoken.current === undefined) spoken.current = store.get().chat.at(-1)?.id ?? null;
 
   // OpenAI's voice: whether its key is in (once per page), and a one-time note if it fails and Polly takes over.
@@ -108,7 +98,7 @@ export function useVoice(dictation?: DictationTarget) {
       if (t.cancelled || talk.current !== t) return; // cut off: whoever cut it off decides what's next
       const next = loopNext(loop.current, spokenAloud && askedVoice ? "reply_spoken" : "reply_silent");
       loop.current = next.on;
-      if (next.reopen && micModeRef.current === "send" && !wakeMode && !dictating.current) {
+      if (next.reopen && !wakeMode && !dictating.current) {
         getVoice().prime?.(); // best effort outside a tap; Safari may still want one (noted in PRODUCT.md)
         startRef.current?.(false, true);
         return;
@@ -205,15 +195,16 @@ export function useVoice(dictation?: DictationTarget) {
     stop.current = null;
     if (dictating.current) target.current?.onStop();
     dictating.current = false;
+    setDictatingNow(false);
     setListening(false);
     if (store.get().presence === "listening") store.set({ presence: "idle" });
   }, []);
 
   const start = useCallback(
-    async (wake: boolean, reopened = false) => {
+    async (wake: boolean, reopened = false, intoBox = false) => {
       if (!reopened) setProblem(null); // the loop reopening the mic keeps what the voice line says
       stopTalking();
-      const dictate = !wake && micMode === "dictate" && !!target.current;
+      const dictate = !wake && intoBox && !!target.current;
       const failed = (where: string, e: unknown) => {
         logVoiceError(where, e);
         setProblem(micProblem(e));
@@ -249,13 +240,14 @@ export function useVoice(dictation?: DictationTarget) {
           (e) => failed("listening stopped", e),
         );
         dictating.current = dictate;
+        setDictatingNow(dictate);
         setListening(true);
         store.set({ presence: "listening" });
       } catch (e) {
         failed("the microphone could not start", e);
       }
     },
-    [end, micMode],
+    [end],
   );
   startRef.current = (wake: boolean, reopened?: boolean) => void start(wake, reopened);
 
@@ -269,7 +261,8 @@ export function useVoice(dictation?: DictationTarget) {
     listening,
     wakeMode,
     speakMode,
-    micMode,
+    /** Listening into the message box (the dictate icon), not to send. */
+    dictating: listening && dictatingNow,
     /** For the City view's sound tile: anything but "never". */
     sound: speakMode !== "never",
     problem,
@@ -280,6 +273,16 @@ export function useVoice(dictation?: DictationTarget) {
       }
       getVoice().prime?.(); // synchronously, inside the tap (Safari)
       void start(false);
+    },
+    /** The dictate icon in the message box: words go into the box until tapped again. */
+    toggleDictate: () => {
+      if (listening) {
+        loop.current = false;
+        return end();
+      }
+      loop.current = false; // dictation never arms the hands-free loop
+      getVoice().prime?.();
+      void start(false, false, true);
     },
     toggleWake: () => {
       if (wakeMode) {
@@ -293,12 +296,6 @@ export function useVoice(dictation?: DictationTarget) {
       }
     },
     setSpeakMode,
-    setMicMode: (m: MicMode) => {
-      if (listening && !wakeMode) end(); // a change takes effect on the next tap
-      loop.current = false;
-      setMicModeState(m);
-      saveMicMode(m);
-    },
     /** The City view's sound tile: mute, or back to "only when I talk". */
     toggleSound: () => setSpeakMode(speakMode === "never" ? "auto" : "never"),
   };

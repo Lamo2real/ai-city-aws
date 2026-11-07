@@ -70,7 +70,7 @@ test("approve a publish from Needs you: the preview runs sandboxed, then it is u
   await expect.poll(() => m.calls.find((c) => c.path === "/approvals/apr-app-1")?.body).toEqual({ approved: true });
   await expect(page.getByText("Approved. Star Sweeper is under Apps now.")).toBeVisible();
   m.send({ type: "approval.decided", id: "apr-app-1", approved: true });
-  await expect(page.getByText(/Nothing is waiting for you/)).toBeVisible();
+  await expect(page.getByText(/Nothing needs you right now/)).toBeVisible();
   await page.getByRole("link", { name: "Apps", exact: true }).click();
   await expect(page.getByRole("link", { name: /Star Sweeper/ })).toBeVisible();
 });
@@ -152,12 +152,12 @@ test("the City shows the build: the Apps building, the waiting sign, a cabinet p
   m.send(hired("mgr-apps", "Apps", "manager"));
   m.send(hired("wkr-apps-g1", "Apps"));
   m.send({ type: "activity", id: "wkr-apps-g1", activity: "editing", detail: "app/index.html", at: at() });
-  await expect(page.locator(".feed")).toContainText("Department Apps created");
-  await expect(page.locator(".feed")).toContainText("hired in Apps");
+  await expect(page.locator(".feed")).toContainText("New department: Apps");
+  await expect(page.locator(".feed")).toContainText("Apps hired a JavaScript developer");
   m.send({ type: "app.draft", draft_id: "drf-0000000000aa", title: "Star Sweeper", status: "ready" });
   m.send({ type: "approval.requested", ...PUBLISH });
   await expect(city).toHaveAttribute("data-apps-waiting", "1");
-  await expect(page.locator(".feed")).toContainText("A new app is ready for you to try: Star Sweeper");
+  await expect(page.locator(".feed")).toContainText("A new app is ready to try");
   await page.waitForTimeout(400);
   await page.screenshot({ path: `${SHOTS}/city-app-waiting.png` });
   m.send({ type: "approval.decided", id: PUBLISH.id, approved: true });
@@ -165,7 +165,7 @@ test("the City shows the build: the Apps building, the waiting sign, a cabinet p
   m.send({ type: "app.published", app_id, slug, title, url, task_id: "t-apps", department: "Apps" });
   await expect(city).toHaveAttribute("data-apps", "1");
   await expect(city).toHaveAttribute("data-apps-waiting", "0");
-  await expect(page.locator(".feed")).toContainText("New app under Apps: Star Sweeper");
+  await expect(page.locator(".feed")).toContainText("New app: Star Sweeper");
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${SHOTS}/city-app-published.png` });
   // The building's panel lists the app too (the cabinet's keyboard twin) and opens it.

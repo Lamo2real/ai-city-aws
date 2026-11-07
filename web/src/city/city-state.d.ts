@@ -14,6 +14,10 @@ export interface CityAgent {
 export interface CityTicket {
   id: string;
   goal: string;
+  kind?: string;
+  parent_id?: string | null;
+  owner_words?: string;
+  created_at?: string;
   from: string;
   to: string;
   status: string;
@@ -22,6 +26,7 @@ export interface CityTicket {
 }
 export interface CityQuestion {
   id: string;
+  ticket_id?: string;
   asked_by: string;
   path: string;
   text: string;
@@ -31,6 +36,7 @@ export interface CityQuestion {
 }
 export interface CityApproval {
   id: string;
+  ticket_id?: string;
   agent: string;
   action: string;
   reason: string;
@@ -51,6 +57,7 @@ export interface CityApproval {
   /** app.publish, v3: set when this is a new version of an existing app. */
   replaces?: string;
   version?: number;
+  created_at?: string;
 }
 /** An app the city built and the owner published (docs/APPS.md). Title and description are agent text. */
 export interface CityApp {
@@ -75,7 +82,11 @@ export interface FeedLine {
   at: number;
   text: string;
   kind: string;
+  /** The event in plain words for the Activity panel; `many` has {n} for a grouped burst. */
+  story?: { key: string; one: string; many?: string };
 }
+export function stories(feed: FeedLine[], limit?: number): Array<{ at: number; text: string; kind: string }>;
+export function plainWho(state: CityState, id: string): string;
 export interface CityState {
   agents: Record<string, CityAgent>;
   tickets: Record<string, CityTicket>;
