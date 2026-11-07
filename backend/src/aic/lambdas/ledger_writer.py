@@ -20,7 +20,7 @@ def ticket_of(e: CityEvent) -> str | None:
     t = e["type"]
     if t == "ticket.status":
         return str(e["ticket"]["id"])
-    if t in ("review.result", "signoff.result", "result", "instruction"):
+    if t in ("review.result", "signoff.result", "result", "instruction", "app.submitted", "app.draft"):
         return str(e["ticket_id"])
     if t == "question.asked":
         tid = e["question"].get("ticket_id")

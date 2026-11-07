@@ -181,12 +181,63 @@ class ApprovalRequested(_E):
     action: str
     reason: str
     cost_hint: str | None = None
+    kind: Literal["tool", "app.publish"] = "tool"
+    draft_id: str | None = None
+    preview_url: str | None = None
+    title: str | None = None
+    description: str | None = None
 
 
 class ApprovalDecided(_E):
     type: Literal["approval.decided"]
     id: str
     approved: bool
+
+
+class AppFile(_M):
+    path: str
+    size: float
+
+
+class AppSubmitted(_E):
+    type: Literal["app.submitted"]
+    hire_id: str
+    ticket_id: str
+    task_id: str
+    department: str
+    title: str
+    description: str
+    icon: str | None = None
+    files: list[AppFile]
+
+
+class AppDraft(_E):
+    type: Literal["app.draft"]
+    draft_id: str
+    ticket_id: str
+    task_id: str
+    department: str
+    title: str
+    status: Literal["staging", "ready", "rejected", "awaiting_owner", "published", "refused"]
+    reason: str | None = None
+    preview_url: str | None = None
+
+
+class AppPublished(_E):
+    type: Literal["app.published"]
+    app_id: str
+    slug: str
+    title: str
+    icon_url: str | None = None
+    url: str
+    task_id: str
+    department: str
+
+
+class AppRemoved(_E):
+    type: Literal["app.removed"]
+    app_id: str
+    slug: str
 
 
 class CityState(_E):
@@ -228,7 +279,11 @@ CityEventModel = Annotated[
     | ApprovalDecided
     | CityState
     | SpendCapReachedEvent
-    | AceReply,
+    | AceReply
+    | AppSubmitted
+    | AppDraft
+    | AppPublished
+    | AppRemoved,
     Field(discriminator="type"),
 ]
 _ADAPTER: TypeAdapter[Any] = TypeAdapter(CityEventModel)
@@ -248,6 +303,8 @@ def _dump(m: BaseModel) -> dict[str, Any]:
             continue
         if isinstance(val, BaseModel):
             out[key] = _dump(val)
+        elif isinstance(val, list):
+            out[key] = [_dump(v) if isinstance(v, BaseModel) else v for v in val]
         elif isinstance(val, float) and val.is_integer():
             out[key] = int(val)
         else:
