@@ -16,7 +16,7 @@ async function deliver(line: ChatLine) {
   try {
     await api("/messages", {
       method: "POST",
-      body: { text: line.text, conversation: CONVERSATION, client_id: line.id },
+      body: { text: line.text, conversation: CONVERSATION, client_id: line.id, ...(line.voice ? { voice: true } : {}) },
     });
     patchLine(line.id, { state: "sent" });
     // Only if AIC has not answered yet: its reply can arrive before this request returns (it is always warm),

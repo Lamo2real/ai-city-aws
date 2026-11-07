@@ -52,6 +52,7 @@ describe("GitHub workflows", () => {
     expect([...vars].sort()).toEqual(
       [
         "AIC_APNS_ENABLED",
+        "AIC_QUEUES_ENABLED",
         "AIC_DEPLOY_ROLE_ARN",
         "AIC_MAIL_PROVIDERS",
         "AIC_MONTHLY_BUDGET_USD",

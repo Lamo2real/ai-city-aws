@@ -79,7 +79,7 @@ variable "mail_providers" {
 variable "polly_voice" {
   description = "The default Polly generative voice for AIC (the owner can pick another per device in Settings)."
   type        = string
-  default     = "Matthew"
+  default     = "Ruth"
 }
 
 variable "transcribe_region" {
@@ -98,4 +98,10 @@ variable "apns_enabled" {
   type        = bool
   default     = false
   description = "Create the APNs platform applications for iPhone notifications from the key the owner pasted into aic/prod/apns (GitHub variable AIC_APNS_ENABLED)."
+}
+
+variable "queues_enabled" {
+  type        = bool
+  default     = true
+  description = "The owner's switch for the four queue triggers (GitHub variable AIC_QUEUES_ENABLED). false = the city is off."
 }

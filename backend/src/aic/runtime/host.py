@@ -307,6 +307,12 @@ class AgentHost:
         ledger = self.d.ledger
         role = inv["role"]
         lines = [f"Message ({inv['kind']}) from {inv.get('from')}:", inv["body"], "", "Current state from the ledger:"]
+        if role == "ace" and inv.get("voice") is True:
+            lines[2:2] = [
+                "",
+                "The owner said this out loud and will hear your answer spoken: reply in one to three short, "
+                "conversational sentences, with no lists, tables, headings or code.",
+            ]
         if role == "ace":
             conns = await ConnectorStore(ledger.table).list()
             if conns:

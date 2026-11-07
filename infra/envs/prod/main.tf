@@ -191,6 +191,7 @@ module "api" {
   client_id             = module.auth.client_id
   app_origin            = module.frontend.url
   runtime_arns          = module.agents.runtime_arns
+  queues_enabled        = var.queues_enabled
   runtime_version       = var.agent_image_tag
   ace_role_name         = module.agents.role_names["ace"]
   utility_invoke_arns   = module.agents.utility_invoke_arns
@@ -223,6 +224,7 @@ module "api" {
     AIC_SKILLS_BUCKET       = "${local.name}-skills"
     AIC_MAIL_WORKLOAD       = "${local.name}-mail"
     AIC_MAIL_PROVIDERS      = join(",", [for k, p in var.mail_providers : k if p.enabled])
+    AIC_OPENAI_SECRET       = "aic/prod/openai" # module.voice creates it; a literal here avoids an api ↔ voice cycle
   }
   # Apps' granted connector reads run in the app-bridge Lambda, through the connectors Gateway (docs/APPS.md v2).
   app_bridge_env = { AIC_GATEWAY_URL = module.connectors.gateway_url }
@@ -300,6 +302,14 @@ module "notifications" {
   apns_enabled       = var.apns_enabled
   api_role_name      = module.api.role_names["api"]
   notifier_role_name = module.api.role_names["notifier"]
+}
+
+# AIC's voice through OpenAI text-to-speech (docs/VOICE.md): the owner's key as a secret only the api may use.
+module "voice" {
+  source        = "../../modules/voice"
+  name          = local.name
+  kms_key_arn   = module.security.kms_key_arn
+  api_role_name = module.api.role_names["api"]
 }
 
 # Owner-uploaded skills (docs/CONNECTORS_SKILLS.md §2).

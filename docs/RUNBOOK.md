@@ -33,7 +33,7 @@ AWS_PROFILE=aic ./scripts/city-on.sh
 1. DynamoDB → Tables → `aic-prod-ledger` → Backups → **Restore to point in time** → choose a time → new table name `aic-prod-ledger-restored` (same KMS key).
 2. Pause the city (`city-off.sh`).
 3. Point the stack at the restored table: in the console rename is not possible, so either copy items back (AWS Glue/Step Functions export–import) or set Terraform to import the restored table: `terraform state rm module.ledger.aws_dynamodb_table.ledger`, delete the old table (disable deletion protection first), restore again *as* `aic-prod-ledger`, then `terraform import module.ledger.aws_dynamodb_table.ledger aic-prod-ledger`.
-4. Resume the city. Messages whose lease was mid-flight are re-sent by the `sweep` job (enable it in EventBridge Scheduler if it's off).
+4. Resume the city. Messages whose lease was mid-flight are re-sent by the `sweep` job (an EventBridge rule, enabled by Terraform).
 
 ## Rotate secrets
 Secrets Manager → `aic/prod/github` (or `google`, `spotify`, `oauth-google`, `oauth-microsoft`; connector keys are replaced through **Settings → Connectors → Add key**) → **Retrieve secret value → Edit** → paste the new token → Save. Revoke the old token at the provider. Runtimes read secrets by name at runtime, so no deploy is needed.
@@ -52,7 +52,7 @@ Secrets Manager → `aic/prod/github` (or `google`, `spotify`, `oauth-google`, `
 5. IMAP accounts need nothing up front: AIC asks for the app password in the HUD's secure form.
 
 ## Turn on scheduled jobs
-EventBridge → Scheduler → schedule group `aic-prod` → enable `aic-prod-sweep` (recommended), `aic-prod-nudge` (question reminders), `aic-prod-reminders`, `aic-prod-retire-idle`. Leave `aic-prod-improve` disabled.
+EventBridge → Rules → `aic-prod-sweep`, `aic-prod-reminders`, `aic-prod-retire-idle` and `aic-prod-warm-ace` are enabled by Terraform; `aic-prod-improve` stays disabled.
 
 ## Something is stuck
 - HUD **Records → Health** shows stuck turns and busy workers.

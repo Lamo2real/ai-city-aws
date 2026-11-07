@@ -591,6 +591,20 @@ describe("AIC warm-keeper (the owner's under-3-seconds target)", () => {
       /scheduler.*env = \{ AIC_RUNTIME_ARN_ACE = var\.runtime_arns\["ace"\], AIC_RUNTIME_VERSION = var\.runtime_version, AIC_WS_ENDPOINT = "https:\/\/\$\{aws_apigatewayv2_api\.ws\.id\}\.execute-api\.\$\{var\.region\}\.amazonaws\.com\/prod", AIC_CONNECTIONS_TABLE = var\.connections_table \}/,
     );
   });
+  it("every scheduled job is an EventBridge rule with a resource-policy permission, not an EventBridge Scheduler schedule", () => {
+    expect(api).toMatch(/resource "aws_cloudwatch_event_rule" "job" \{\n {2}for_each\s+= local\.jobs/);
+    expect(api).toMatch(/schedule_expression = each\.value\.schedule/);
+    expect(api).toMatch(
+      /resource "aws_cloudwatch_event_target" "job"[\s\S]*?input\s+= jsonencode\(each\.value\.input\)/,
+    );
+    expect(api).toMatch(
+      /resource "aws_lambda_permission" "job"[\s\S]*?principal\s+= "events\.amazonaws\.com"[\s\S]*?source_arn\s+= aws_cloudwatch_event_rule\.job\[each\.key\]\.arn/,
+    );
+    expect(api).not.toMatch(/aws_scheduler_schedule|scheduler\.amazonaws\.com|aws_iam_role" "scheduler"/);
+    expect(api).toMatch(
+      /improve\s*=\s*\{ schedule = "cron\(0 3 \? \* SUN \*\)", fn = "scheduler", input = \{ job = "improve" \} \}/,
+    ); // stays DISABLED
+  });
   it("the dispatcher and ws-broadcast are always on: published, a live alias, provisioned concurrency 1, and every trigger uses the alias", () => {
     expect(api).toMatch(/publish = contains\(\["api", "dispatcher", "ws-broadcast"\], each\.key\)/);
     expect(api).toMatch(
@@ -663,10 +677,41 @@ describe("notifications: no email, one iPhone push per finished job (decision 90
   });
 });
 
+describe("voice: OpenAI text-to-speech (decision 96)", () => {
+  const voice = readFileSync("infra/modules/voice/main.tf", "utf8");
+  const prodTf = readFileSync("infra/envs/prod/main.tf", "utf8");
+  const apiTf = readFileSync("infra/modules/api/main.tf", "utf8");
+  it("the OpenAI key is a secret only the api function may read or store", () => {
+    expect(voice).toMatch(/secret_name = "aic\/prod\/openai"/);
+    expect(voice).toMatch(/kms_key_id\s*=\s*var\.kms_key_arn/);
+    expect(voice).toMatch(
+      /Action = \["secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue", "secretsmanager:DescribeSecret"\], Resource = \[aws_secretsmanager_secret\.openai\.arn\]/,
+    );
+    expect(voice).toMatch(/role\s*=\s*var\.api_role_name/);
+    expect(prodTf).toMatch(/module "voice"/);
+    expect(prodTf).toMatch(/AIC_OPENAI_SECRET\s*=\s*"aic\/prod\/openai"/);
+  });
+  it("the speech and key routes exist", () => {
+    for (const r of ["POST /speech", "GET /voice/openai", "PUT /voice/openai-key"]) expect(apiTf).toContain(`"${r}"`);
+  });
+});
+
 describe("the city is always on", () => {
   it("has no pause or resume route in the HTTP API", async () => {
     const { readFileSync } = await import("node:fs");
     const tf = readFileSync("infra/modules/api/main.tf", "utf8");
     expect(tf).not.toMatch(/\/city\/(pause|resume)/);
+  });
+});
+
+describe("the owner's queue switch", () => {
+  it("every SQS trigger follows queues_enabled, passed from the deploy variable AIC_QUEUES_ENABLED", async () => {
+    const { readFileSync } = await import("node:fs");
+    const api = readFileSync("infra/modules/api/main.tf", "utf8");
+    expect(api).toMatch(/resource "aws_lambda_event_source_mapping" "queue" \{[^}]*enabled\s*=\s*var\.queues_enabled/s);
+    expect(readFileSync("infra/envs/prod/main.tf", "utf8")).toMatch(/queues_enabled\s*=\s*var\.queues_enabled/);
+    const wf = readFileSync(".github/workflows/deploy.yml", "utf8");
+    expect(wf).toContain("vars.AIC_QUEUES_ENABLED");
+    expect(wf).toContain('-var "queues_enabled=${QUEUES_ENABLED}"');
   });
 });

@@ -14,7 +14,7 @@ export const CONFIG = {
   userPoolId: "eu-north-1_TEST",
   identityPoolId: "eu-north-1:00000000-0000-0000-0000-000000000000",
   redirectUri: "",
-  pollyVoice: "Matthew",
+  pollyVoice: "Ruth",
   budgetAlertUsd: 10000,
   transcribeRegion: "eu-central-1",
   transcribeVocabulary: "aic-names",
@@ -328,6 +328,7 @@ export async function mockBackend(
           return new Blob([text], { type: "text/plain" });
         },
         async play(clip: Blob, onBegin?: () => void) {
+          if (talking) (w as unknown as { __overlaps?: number }).__overlaps = 1; // two clips at once: a bug
           onBegin?.();
           (w.__spoken ??= []).push(await clip.text());
           talking = true;
