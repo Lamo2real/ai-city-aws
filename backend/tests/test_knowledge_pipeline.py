@@ -6,8 +6,8 @@ from typing import Any
 import pytest
 
 from aic.shared.knowledge.fetch import Fetched, LinkRefused
-from aic.shared.knowledge.kb import ConflictException
-from aic.shared.knowledge.pipeline import ACTIONS, MediaClients, MediaJobFailed, Pipeline, SyncFailed, plain_error
+from aic.shared.knowledge.kb import FakeKnowledgeBase, ThrottlingException
+from aic.shared.knowledge.pipeline import ACTIONS, IngestFailed, MediaClients, MediaJobFailed, Pipeline, plain_error
 from knowledge_support import World, pdf_with_text, png, world
 
 
@@ -74,9 +74,15 @@ async def step(p: Pipeline, action: str, item_id: str, **extra: Any) -> dict[str
 
 
 async def finish(p: Pipeline, item_id: str) -> None:
+    """The Parallel branches: ingest first here; the order must not matter (see the test below)."""
+    await step(p, "ingest", item_id)
+    assert (await step(p, "check_ingest", item_id))["done"] is False
+    kb = p.kb
+    assert isinstance(kb, FakeKnowledgeBase)
+    for u in kb.docs:
+        kb.status[u] = "INDEXED"
     await step(p, "enrich", item_id)
-    assert (await step(p, "start_sync", item_id))["job_id"]
-    assert (await step(p, "check_sync", item_id))["done"]
+    assert (await step(p, "check_ingest", item_id))["done"] is True
     assert (await step(p, "finish", item_id))["status"] == "ready"
 
 
@@ -117,7 +123,8 @@ async def test_haiku_calls_use_the_utility_model_record_their_cost_and_stay_smal
     assert call.role == "utility" and call.model.name == "haiku-5-5"
     assert len(call.prompt) < 100_000 * 4 / 2  # far below the 100,000-token tier
     turns = await w.ledger.turns_of("utility")
-    assert len(turns) == 1 and turns[0]["kind"] == "utility" and turns[0]["usd"] > 0
+    assert len(turns) == 2 and all(t["kind"] == "utility" and t["usd"] > 0 for t in turns)  # summary + entities
+    assert all(len(c.prompt) < 200_000 for c in w.haiku.calls)
     assert w.bus.of_type("cost.update")
 
 
@@ -228,7 +235,7 @@ async def test_a_web_page_link_becomes_readable_text() -> None:
     item = await w.service.add_link("https://example.com/post")
     i = item["id"]
     assert (await step(p, "route", i))["kind"] == "link"
-    assert await step(p, "fetch_link", i) == {"item_id": i, "kind": "link", "convert": False, "normalized": True}
+    assert await step(p, "fetch_link", i) == {"item_id": i, "kind": "text", "convert": False, "normalized": True}
     text = w.blobs.objects[f"normalized/{i}/page.md"][0].decode()
     assert text.startswith("# Big Post") and "Body text." in text and "x()" not in text
     assert (await w.store.require_item(i))["title"] == "Big Post"
@@ -282,20 +289,95 @@ async def test_other_files_are_marked_unsupported() -> None:
     assert item["status"] == "unsupported" and "can't be searched" in item["error"]
 
 
-async def test_start_sync_raises_conflict_by_name_and_a_failed_sync_raises() -> None:
+async def test_ingest_sends_the_items_documents_with_inline_metadata() -> None:
     w = world()
     p, _, _ = pipeline(w)
-    i = await upload(w, "a.txt", b"hello", "text/plain")
-    w.kb.busy = True
-    with pytest.raises(ConflictException):
-        await step(p, "start_sync", i)
-    w.kb.busy = False
-    await step(p, "start_sync", i)
-    w.kb.status = "IN_PROGRESS"
-    assert (await step(p, "check_sync", i))["done"] is False
-    w.kb.status = "FAILED"
-    with pytest.raises(SyncFailed):
-        await step(p, "check_sync", i)
+    i = await upload(w, "a.txt", b"hello", "text/plain", "always")
+    await step(p, "route", i)
+    await step(p, "prepare_document", i)
+    assert await step(p, "ingest", i) == {"item_id": i, "documents": 1}
+    uri = f"s3://{w.blobs.bucket}/normalized/{i}/a.txt"
+    assert w.kb.docs == {uri: {"item_id": i, "scope": "always", "kind": "text"}}
+    assert (await w.store.require_item(i))["ingest_uris"] == [uri]
+
+
+async def test_ingest_goes_25_documents_per_call_and_throttling_raises_by_name() -> None:
+    w = world()
+    p, _, _ = pipeline(w)
+    i = await upload(w, "a.txt", b"x", "text/plain")
+    keys = [f"normalized/{i}/part{n}.md" for n in range(60)]
+    await w.store.update_item(i, {"normalized_keys": keys})
+    w.kb.throttle = 1
+    with pytest.raises(ThrottlingException) as err:
+        await step(p, "ingest", i)
+    assert type(err.value).__name__ == "ThrottlingException"
+    await step(p, "ingest", i)
+    assert [len(c) for c in w.kb.ingest_calls] == [25, 25, 10]
+
+
+async def test_check_ingest_waits_for_every_document_and_raises_on_a_failed_one() -> None:
+    w = world()
+    p, _, _ = pipeline(w)
+    i = await upload(w, "a.txt", b"x", "text/plain")
+    await w.store.update_item(i, {"normalized_keys": [f"normalized/{i}/a.md", f"normalized/{i}/b.md"]})
+    await step(p, "ingest", i)
+    uris = list(w.kb.docs)
+    w.kb.status[uris[0]] = "INDEXED"
+    w.kb.status[uris[1]] = "IN_PROGRESS"
+    assert (await step(p, "check_ingest", i))["done"] is False
+    w.kb.status[uris[1]] = "FAILED"
+    with pytest.raises(IngestFailed):
+        await step(p, "check_ingest", i)
+
+
+async def test_an_item_with_nothing_normalized_cannot_be_ingested() -> None:
+    w = world()
+    p, _, _ = pipeline(w)
+    i = await upload(w, "a.txt", b"x", "text/plain")
+    with pytest.raises(Exception, match="Nothing in this item"):
+        await step(p, "ingest", i)
+
+
+async def test_enrich_and_ingest_can_finish_in_either_order() -> None:
+    for enrich_first in (True, False):
+        w = world()
+        p, _, _ = pipeline(w)
+        i = await upload(w, "notes.md", b"Ada Lovelace and the Analytical Engine.", "text/markdown")
+        await step(p, "route", i)
+        await step(p, "prepare_document", i)
+        order = ["enrich", "ingest"] if enrich_first else ["ingest", "enrich"]
+        for a in order:
+            await step(p, a, i)
+        for u in w.kb.docs:
+            w.kb.status[u] = "INDEXED"
+        assert (await step(p, "check_ingest", i))["done"]
+        await step(p, "finish", i)
+        item = await w.store.require_item(i)
+        assert item["status"] == "ready" and item["summary"] and item["entity_count"] == 2
+        assert item["ingest_uris"] and w.graph.items[i]["status"] == "ready"
+
+
+async def test_enrich_makes_the_summary_and_the_extraction_as_two_concurrent_calls() -> None:
+    import asyncio
+
+    w = world()
+    p, _, _ = pipeline(w)
+    i = await upload(w, "a.txt", b"Ada met Babbage.", "text/plain")
+    await step(p, "prepare_document", i)
+    started: list[str] = []
+    both = asyncio.Event()
+    inner = w.haiku
+
+    async def runner(t: Any) -> Any:
+        started.append("summary" if "summary only" in t.prompt else "entities")
+        if len(started) == 2:
+            both.set()
+        await asyncio.wait_for(both.wait(), 1)  # would time out if the calls ran one after the other
+        return await inner(t)
+
+    w.model.deps.runner = runner
+    await step(p, "enrich", i)
+    assert sorted(started) == ["entities", "summary"]
 
 
 async def test_enrich_survives_bad_json_twice_with_a_warning_and_retries_once() -> None:
@@ -303,11 +385,12 @@ async def test_enrich_survives_bad_json_twice_with_a_warning_and_retries_once() 
     p, _, _ = pipeline(w)
     i = await upload(w, "a.txt", b"hello world", "text/plain")
     await step(p, "prepare_document", i)
-    w.haiku.replies["summary"] = ["not json", "still not json"]
+    w.haiku.replies["entities"] = ["not json", "still not json"]
     await step(p, "enrich", i)
     item = await w.store.require_item(i)
-    assert "summary could not be made" in item["warning"] and not item.get("summary")
-    assert len(w.haiku.calls) == 2
+    assert item["summary"].startswith("A note about Ada")
+    assert "links between names could not be found" in item["warning"] and item["entity_count"] == 0
+    assert len(w.haiku.calls) == 3  # summary + two extraction tries
 
 
 async def test_unknown_actions_and_items_are_refused() -> None:
@@ -335,7 +418,7 @@ def test_the_lambda_handler_dispatches_every_action_name_and_refuses_others(monk
         lam.handler({"action": "_set", "item_id": i})
     assert set(ACTIONS) == {
         "route", "fetch_link", "prepare_document", "describe_image", "start_mediaconvert", "check_mediaconvert",
-        "start_transcribe", "check_transcribe", "transcript_to_text", "enrich", "start_sync", "check_sync",
+        "start_transcribe", "check_transcribe", "transcript_to_text", "enrich", "ingest", "check_ingest",
         "finish", "fail", "mark_unsupported",
     }  # fmt: skip
 
@@ -374,3 +457,11 @@ def test_start_lets_other_errors_through() -> None:
 
     with pytest.raises(RuntimeError):
         start_run({"key": "raw/k-abcDEF123_-x/a.txt"}, Broken(), "arn:sm")
+
+
+async def test_fail_never_raises_even_when_storage_breaks() -> None:
+    w = world()
+    p, _, _ = pipeline(w)
+    i = await upload(w, "a.txt", b"x", "text/plain")
+    w.table.fail_writes = 5
+    assert (await step(p, "fail", i, error={"Error": "X"}))["status"] == "failed"

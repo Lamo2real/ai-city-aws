@@ -53,9 +53,14 @@ def estimate_tokens(text: str) -> int:
     return math.ceil(len(text) / CHARS_PER_TOKEN)
 
 
+def kb_metadata(item_id: str, scope: str, kind: str) -> dict[str, str]:
+    """The filterable attributes: in the ``.metadata.json`` file and inline with direct ingestion."""
+    return {"item_id": item_id, "scope": scope, "kind": kind}
+
+
 def metadata_doc(item_id: str, scope: str, kind: str) -> dict[str, Any]:
     """The ``<name>.metadata.json`` next to each normalized file; the title is not in vector metadata."""
-    return {"metadataAttributes": {"item_id": item_id, "scope": scope, "kind": kind}}
+    return {"metadataAttributes": kb_metadata(item_id, scope, kind)}
 
 
 def safe_file_name(name: str) -> str:

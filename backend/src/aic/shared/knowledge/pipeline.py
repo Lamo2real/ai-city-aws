@@ -24,10 +24,13 @@ from .documents import (
     pdf_page_texts,
     split_text,
 )
+from .extract import Extraction
 from .fetch import Fetched, decode_text, fetch_link, html_to_text
 from .haiku import KnowledgeModel
+from .kb import FAILED as KB_FAILED
+from .kb import INDEXED as KB_INDEXED
 from .kb import KnowledgeBase
-from .model import metadata_doc
+from .model import kb_metadata, metadata_doc
 from .routing import TRANSCRIBE_FORMAT, extension, name_for_download, route_file, route_key
 from .service import updated_event
 from .store import KnowledgeStore
@@ -45,8 +48,8 @@ ACTIONS = (
     "check_transcribe",
     "transcript_to_text",
     "enrich",
-    "start_sync",
-    "check_sync",
+    "ingest",
+    "check_ingest",
     "finish",
     "fail",
     "mark_unsupported",
@@ -57,7 +60,7 @@ class MediaJobFailed(RuntimeError):
     pass
 
 
-class SyncFailed(RuntimeError):
+class IngestFailed(RuntimeError):
     pass
 
 
@@ -92,7 +95,11 @@ class Pipeline:
         step: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]] = getattr(self, f"_{action}")
         item_id = str(event.get("item_id", ""))
         if action == "fail":
-            return await self._fail_item(item_id, event.get("error"))
+            try:
+                return await self._fail_item(item_id, event.get("error"))
+            except Exception as err:  # fail must not raise: the run would end without a record of why
+                log("error", "knowledge.fail_failed", item=item_id, error=type(err).__name__)
+                return {"item_id": item_id, "status": "failed"}
         item = await self.store.require_item(item_id)
         out = await step({**event, "item": item})
         return {"item_id": item_id, **out}
@@ -158,7 +165,7 @@ class Pipeline:
             new_title = item["title"] if item["title"] != url or not title else title[:200]
             item = await self._set(item["id"], {"title": new_title, "content_type": ct or "text/html"})
             await self._write_text(item, "page", f"# {new_title}\n\nSource: {got.url}\n\n{text}")
-            return {"kind": "link", "convert": False, "normalized": True}
+            return {"kind": "text", "convert": False, "normalized": True}
         key = f"work/{item['id']}/fetched/{name}"
         await self.blobs.put(key, got.body, ct or "application/octet-stream")
         await self._set(item["id"], {"work_key": key, "content_type": ct, "size_bytes": len(got.body)})
@@ -337,6 +344,7 @@ class Pipeline:
         return joined[:TEXT_FOR_SUMMARY_CHARS] or None
 
     async def _enrich(self, e: dict[str, Any]) -> dict[str, Any]:
+        """Summary and graph. Runs beside ``ingest`` (Parallel), so it touches only its own fields."""
         item = e["item"]
         text = await self._item_text(item)
         if not text:
@@ -344,26 +352,54 @@ class Pipeline:
                 item["id"], {"warning": "No summary: this format can't be read for one. It is still searchable."}
             )
             return {}
-        try:
-            ex = await self._need_model().summarize(item["title"], text)
-        except ValueError:
-            await self._set(item["id"], {"warning": "The summary could not be made. The item is still searchable."})
-            return {}
-        await self._set(item["id"], {"summary": ex.summary})
-        await self.store.write_graph(item["id"], ex)
+        model = self._need_model()
+        summary, ex = await asyncio.gather(
+            model.summarize(item["title"], text), model.extract(item["title"], text), return_exceptions=True
+        )
+        warnings: list[str] = []
+        if isinstance(summary, str) and summary:
+            await self._set(item["id"], {"summary": summary})
+        else:
+            if isinstance(summary, BaseException) and not isinstance(summary, ValueError):
+                raise summary
+            warnings.append("The summary could not be made.")
+        if isinstance(ex, Extraction):
+            await self.store.write_graph(item["id"], ex)
+        else:
+            if isinstance(ex, BaseException) and not isinstance(ex, ValueError):
+                raise ex
+            warnings.append("The links between names could not be found.")
+        if warnings:
+            await self._set(item["id"], {"warning": " ".join([*warnings, "The item is still searchable."])})
         return {}
 
-    # ---------- sync and end ----------
-    async def _start_sync(self, e: dict[str, Any]) -> dict[str, Any]:
-        job_id = await self.kb.start_sync()  # ConflictException propagates by name; the pipeline retries it
-        await self._set(e["item"]["id"], {"sync_job": job_id})
-        return {"job_id": job_id}
+    # ---------- direct ingestion and end ----------
+    async def _ingest(self, e: dict[str, Any]) -> dict[str, Any]:
+        """``IngestKnowledgeBaseDocuments`` for the item's normalized files, with the metadata inline.
 
-    async def _check_sync(self, e: dict[str, Any]) -> dict[str, Any]:
-        status = await self.kb.sync_status(str(e["item"]["sync_job"]))
-        if status in ("FAILED", "STOPPED", "STOPPING"):
-            raise SyncFailed("The knowledge base could not take this item in.")
-        return {"done": status == "COMPLETE"}
+        Throttling propagates as ``ThrottlingException`` (the exact name the pipeline retries).
+        """
+        item = e["item"]
+        uris = [f"s3://{self.blobs.bucket}/{k}" for k in item.get("normalized_keys") or []]
+        if not uris:
+            raise Unsupported("Nothing in this item could be prepared for search.")
+        await self._set(item["id"], {"ingest_uris": uris})
+        meta = kb_metadata(item["id"], item["scope"], item["kind"])
+        await self.kb.ingest([(u, meta) for u in uris])
+        return {"documents": len(uris)}
+
+    async def _check_ingest(self, e: dict[str, Any]) -> dict[str, Any]:
+        uris = list(e["item"].get("ingest_uris") or [])
+        statuses = await self.kb.statuses(uris)
+        if any(statuses.get(u) in KB_FAILED for u in uris):
+            log(
+                "warn",
+                "knowledge.ingest_failed",
+                item=e["item"]["id"],
+                statuses=",".join(sorted(set(statuses.values()))),
+            )
+            raise IngestFailed("The knowledge base could not take this item in.")
+        return {"done": all(statuses.get(u) in KB_INDEXED for u in uris)}
 
     async def _finish(self, e: dict[str, Any]) -> dict[str, Any]:
         await self._set(e["item"]["id"], {"status": "ready", "error": None}, announce=True)
@@ -387,7 +423,7 @@ class Pipeline:
         return {"item_id": item_id, "status": "failed"}
 
 
-_OURS = ("LinkRefused", "MediaJobFailed", "SyncFailed", "Unsupported")
+_OURS = ("LinkRefused", "MediaJobFailed", "IngestFailed", "Unsupported")
 
 
 def plain_error(error: Any) -> str:
@@ -408,6 +444,6 @@ def plain_error(error: Any) -> str:
         return msg[:300]
     if name == "States.Timeout":
         return "Processing took too long."
-    if name == "ConflictException":
+    if name == "ThrottlingException":
         return "The knowledge base was busy for too long. Add the item again."
     return "Something went wrong while processing this item."

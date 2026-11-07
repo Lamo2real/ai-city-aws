@@ -2,9 +2,9 @@
 
 Step Functions ``aic-prod-knowledge-ingest`` calls it once per step with ``{"action": …, "item_id": …}``:
 route, fetch_link, prepare_document, describe_image, start_mediaconvert, check_mediaconvert,
-start_transcribe, check_transcribe, transcript_to_text, enrich, start_sync, check_sync, finish, fail,
+start_transcribe, check_transcribe, transcript_to_text, enrich, ingest, check_ingest, finish, fail,
 mark_unsupported. The S3 ``raw/`` rule calls it with ``{"action": "start", "bucket", "key"}``, which starts the
-run named after the item (EventBridge cannot name a run). Errors propagate by class name so the state machine can retry ``ConflictException`` and
+run named after the item (EventBridge cannot name a run). Errors propagate by class name so the state machine can retry ``ThrottlingException`` and
 send everything else to ``fail``, which stores plain words and tells the HUD.
 """
 
@@ -16,6 +16,7 @@ from typing import Any
 
 from aic.shared.aws import aws_city, require_env
 from aic.shared.caps import default_settings
+from aic.shared.clients import client
 from aic.shared.knowledge.haiku import KnowledgeModel
 from aic.shared.knowledge.pipeline import MediaClients, Pipeline
 from aic.shared.knowledge.wiring import knowledge_from_env
@@ -53,7 +54,7 @@ async def _build() -> Pipeline:
             ledger=city.ledger,
             bus=city.bus,
             settings=await city.settings(),
-            runner=bedrock_converse_runner(city.session.client("bedrock-runtime")),
+            runner=bedrock_converse_runner(client(city.session, "bedrock-runtime")),
         )
     )
     return Pipeline(
@@ -63,8 +64,8 @@ async def _build() -> Pipeline:
         bus=city.bus,
         model=model,
         media=MediaClients(
-            mediaconvert=city.session.client("mediaconvert"),
-            transcribe=city.session.client("transcribe"),
+            mediaconvert=client(city.session, "mediaconvert"),
+            transcribe=client(city.session, "transcribe"),
             mediaconvert_role_arn=require_env("MEDIACONVERT_ROLE_ARN"),
         ),
     )
@@ -85,6 +86,6 @@ def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
     if event.get("action") == "start":
         global _sfn
         if _sfn is None:
-            _sfn = aws_city().session.client("stepfunctions")
+            _sfn = client(aws_city().session, "stepfunctions")
         return start_run(event, _sfn, require_env("KNOWLEDGE_STATE_MACHINE_ARN"))
     return run(_handle(event))

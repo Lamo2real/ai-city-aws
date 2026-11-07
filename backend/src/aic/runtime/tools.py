@@ -731,6 +731,7 @@ def _search_tool(d: CityDeps) -> ToolSpec:
             str(a["query"]),
             int(a.get("max_results") or 5),
             bool(a.get("include_on_request", False)),
+            cache=k.cache,
         )
         return r.text()
 

@@ -19,6 +19,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from aic.shared.aws import LambdaFactoryClient, aws_city, require_env
+from aic.shared.clients import client
 from aic.shared.config import caps_config
 from aic.shared.guard import startup_guard
 from aic.shared.hierarchy.actions import CityDeps
@@ -101,7 +102,7 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
     role = require_env("AIC_ROLE", e)
     city = aws_city(e)
     caps = caps_config()
-    factory = LambdaFactoryClient(city.session.client("lambda"), e.get("AIC_FACTORY_FUNCTION", ""))
+    factory = LambdaFactoryClient(client(city.session, "lambda"), e.get("AIC_FACTORY_FUNCTION", ""))
     minutes = caps["async_job_soft_limit_minutes"] if role == "worker" else caps["turn_timeout_minutes"]
     host = AgentHost(
         CityDeps(

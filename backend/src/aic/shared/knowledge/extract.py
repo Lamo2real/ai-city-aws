@@ -77,7 +77,7 @@ class Extraction(BaseModel):
     relationships: list[Relationship] = Field(default_factory=list)
 
 
-def _limit_words(text: str, n: int) -> str:
+def limit_words(text: str, n: int) -> str:
     words = text.split()
     return text.strip() if len(words) <= n else " ".join(words[:n]) + " …"
 
@@ -112,5 +112,5 @@ def parse_extraction(text: str) -> Extraction:
         and r.target.lower() in names
         and r.source.lower() != r.target.lower()
     ][: MAX_ENTITIES * 3]
-    summary = _limit_words(re.sub(r"\s+", " ", ex.summary), SUMMARY_MAX_WORDS)
+    summary = limit_words(re.sub(r"\s+", " ", ex.summary), SUMMARY_MAX_WORDS)
     return Extraction(summary=summary, entities=entities, relationships=rels)

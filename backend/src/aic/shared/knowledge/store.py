@@ -1,8 +1,11 @@
-"""Items, entities, mentions and relationships in the ``aic-prod-knowledge`` table (§4), over ``Table``."""
+"""Knowledge items: records in the ``aic-prod-knowledge`` table, the entity graph in Neptune (§4).
+
+DynamoDB holds the item records only. Every status or scope change is mirrored onto the graph's ``Item``
+node, so the graph expansion can filter on them in the query itself.
+"""
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -10,12 +13,14 @@ from typing import Any
 from ..events import now_iso
 from ..table import Table, UpdateOptions
 from .extract import Extraction
-from .model import ALWAYS_BUDGET_TOKENS, CHARS_PER_TOKEN, entity_key, estimate_tokens, item_pk
+from .graph import Graph, NoGraph
+from .model import ALWAYS_BUDGET_TOKENS, estimate_tokens, item_pk
 
 
 class KnowledgeStore:
-    def __init__(self, table: Table, now: Callable[[], datetime] | None = None) -> None:
+    def __init__(self, table: Table, graph: Graph | None = None, now: Callable[[], datetime] | None = None) -> None:
         self.table = table
+        self.graph: Graph = graph or NoGraph()
         self._now = now or (lambda: datetime.now(UTC))
 
     def now_iso(self) -> str:
@@ -23,12 +28,12 @@ class KnowledgeStore:
 
     # ---------- items ----------
     async def create_item(self, item: dict[str, Any]) -> dict[str, Any]:
+        """The record only: the graph node appears when the pipeline starts (AIC may not write the graph)."""
         at = self.now_iso()
         rec = {
             "status": "uploading",
             "entity_count": 0,
             "normalized_keys": [],
-            "graph_keys": [],
             **item,
             "pk": item_pk(item["id"]),
             "sk": "META",
@@ -56,7 +61,10 @@ class KnowledgeStore:
         s = {**patch, "updated_at": self.now_iso()}
         if "scope" in patch:
             s["gsi2pk"] = f"SCOPE#{patch['scope']}"
-        return await self.table.update(item_pk(item_id), "META", UpdateOptions(set=s, must_exist=True))
+        new = await self.table.update(item_pk(item_id), "META", UpdateOptions(set=s, must_exist=True))
+        if new is not None and ("scope" in patch or "status" in patch):
+            await self.graph.upsert_item(item_id, str(new["scope"]), str(new["status"]))
+        return new
 
     async def list_items(self, limit: int | None = None) -> list[dict[str, Any]]:
         """Newest first."""
@@ -68,12 +76,15 @@ class KnowledgeStore:
         return await self.table.query_index("gsi2", f"SCOPE#{scope}")
 
     async def delete_item(self, item_id: str) -> None:
-        await self.clear_graph(item_id)
+        await self.graph.delete_item(item_id)
         await self.table.delete(item_pk(item_id), "META")
 
     async def get_items(self, ids: list[str]) -> dict[str, dict[str, Any]]:
-        got = await asyncio.gather(*(self.get_item(i) for i in dict.fromkeys(ids)))
-        return {g["id"]: g for g in got if g}
+        """One BatchGetItem for all of them (consistent reads)."""
+        if not ids:
+            return {}
+        got = await self.table.batch_get([(item_pk(i), "META") for i in dict.fromkeys(ids)])
+        return {g["id"]: g for g in got}
 
     # ---------- always-include budget (§2) ----------
     async def always_items(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -97,74 +108,12 @@ class KnowledgeStore:
         return sum(estimate_tokens(str(i["summary"])) for i in inside)
 
     # ---------- graph ----------
-    async def clear_graph(self, item_id: str) -> None:
-        """Removes this item's mentions and relationships, and entities nothing mentions any more."""
-        it = await self.get_item(item_id)
-        keys = [tuple(k) for k in (it or {}).get("graph_keys") or []]
-        for m in await self.table.query_index("gsi2", f"MENTION#{item_id}"):
-            keys.append((m["pk"], m["sk"]))
-        entities = {pk for pk, _ in keys if pk.startswith("ENT#")}
-        for pk, sk in dict.fromkeys(keys):
-            await self.table.delete(pk, sk)
-        for pk in entities:
-            if not await self.table.query(pk, "ITEM#"):
-                for rest in await self.table.query(pk):
-                    await self.table.delete(rest["pk"], rest["sk"])
-        if it:
-            await self.update_item(item_id, {"graph_keys": [], "entity_count": 0})
+    async def write_graph(self, item_id: str, ex: Extraction) -> int:
+        """Replaces the item's entities and relationships in the graph; the record keeps the count."""
+        item = await self.require_item(item_id)
+        n = await self.graph.write_item_graph(item_id, str(item["scope"]), str(item["status"]), ex)
+        await self.update_item(item_id, {"entity_count": n})
+        return n
 
-    async def write_graph(self, item_id: str, ex: Extraction) -> list[list[str]]:
-        """Writes the entities, mentions and both directions of each relationship; returns the item's keys."""
-        await self.clear_graph(item_id)
-        keys: list[list[str]] = []
-        names: dict[str, str] = {}
-        for e in ex.entities:
-            k = entity_key(e.name)
-            if not k or k in names:
-                continue
-            names[k] = e.name
-            await self.table.update(
-                f"ENT#{k}", "META", UpdateOptions(set={"name": e.name, "type": e.type, "description": e.description})
-            )
-            await self.table.put(
-                {
-                    "pk": f"ENT#{k}",
-                    "sk": f"ITEM#{item_id}",
-                    "gsi2pk": f"MENTION#{item_id}",
-                    "gsi2sk": f"ENT#{k}",
-                    "item_id": item_id,
-                }
-            )
-            keys.append([f"ENT#{k}", f"ITEM#{item_id}"])
-        for r in ex.relationships:
-            a, b = entity_key(r.source), entity_key(r.target)
-            if a not in names or b not in names or a == b:
-                continue
-            common = {"relation": r.relation, "item_id": item_id}
-            fwd = {"pk": f"ENT#{a}", "sk": f"REL#{r.relation}#{b}#{item_id}", "other": b, **common}
-            rev = {"pk": f"ENT#{b}", "sk": f"REL#~{r.relation}#{a}#{item_id}", "other": a, **common}
-            fwd |= {"from_name": names[a], "to_name": names[b]}
-            rev |= {"from_name": names[a], "to_name": names[b]}
-            for rec in (fwd, rev):
-                await self.table.put(rec)
-                keys.append([rec["pk"], rec["sk"]])
-        await self.update_item(item_id, {"graph_keys": keys, "entity_count": len(names)})
-        return keys
-
-    async def entities_of(self, item_id: str) -> list[dict[str, Any]]:
-        mentions = await self.table.query_index("gsi2", f"MENTION#{item_id}")
-        metas = await asyncio.gather(*(self.table.get(m["pk"], "META") for m in mentions))
-        return [
-            {"key": m["pk"][4:], "name": e["name"], "type": e.get("type", "concept")}
-            for m, e in zip(mentions, metas, strict=True)
-            if e
-        ]
-
-    async def relationships_of(self, key: str) -> list[dict[str, Any]]:
-        return await self.table.query(f"ENT#{key}", "REL#")
-
-    async def items_mentioning(self, key: str) -> list[str]:
-        return [str(m["item_id"]) for m in await self.table.query(f"ENT#{key}", "ITEM#")]
-
-
-ALWAYS_BUDGET_CHARS = ALWAYS_BUDGET_TOKENS * CHARS_PER_TOKEN
+    async def entities_of(self, item_id: str) -> list[dict[str, str]]:
+        return await self.graph.entities_of(item_id)

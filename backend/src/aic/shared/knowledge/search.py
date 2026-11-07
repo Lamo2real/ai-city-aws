@@ -1,18 +1,21 @@
-"""``search_knowledge`` (§7) and the ``<owner-knowledge>`` block for every prompt (§2).
+"""``search_knowledge`` (§7, §14) and the ``<owner-knowledge>`` block for every prompt (§2).
 
-Retrieve with the scope filter → group by item → graph expansion (entities of the hit items → 1-hop related
-entities → up to 3 more ready items as summaries). Hits are checked against the item's *current* record, so
-a scope change or a delete counts at once, before the next sync. Everything returned is marked as data.
+Hybrid Retrieve with the scope filter → group by item → one openCypher expansion query (entities of the hit
+items → 1-hop related entities → ready items in the allowed scopes). The Retrieve hits and the expansion are
+cached per process (LRU, 256 entries, 60 s); the item records are re-read on every call with one
+BatchGetItem, so a scope change or a delete counts at once. Everything returned is marked as data.
 """
 
 from __future__ import annotations
 
-import asyncio
 import html
-from collections import Counter
+import time
+from collections import OrderedDict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from .graph import Expansion
 from .kb import Hit, KnowledgeBase
 from .model import DATA_HEADER, Scope
 from .store import KnowledgeStore
@@ -21,6 +24,8 @@ MAX_RELATED_ITEMS = 3
 MAX_RELATED_LINES = 15
 SNIPPETS_PER_ITEM = 2
 SNIPPET_CHARS = 1500
+CACHE_SIZE = 256
+CACHE_TTL_S = 60.0
 
 
 def allowed_scopes(include_on_request: bool) -> list[Scope]:
@@ -41,6 +46,42 @@ def knowledge_block(item: dict[str, Any], text: str) -> str:
         f'<knowledge item="{_attr(item["id"])}" title="{_attr(item.get("title"))}" '
         f'source="{_attr(item.get("source"))}" scope="{_attr(item.get("scope"))}">\n{_body(text)}\n</knowledge>'
     )
+
+
+@dataclass(frozen=True)
+class _Cached:
+    groups: list[tuple[str, list[Hit]]]
+    expansion: Expansion
+
+
+class SearchCache:
+    """A small LRU with a time limit, keyed by ``(query, include_on_request, max_results)``."""
+
+    def __init__(self, size: int = CACHE_SIZE, ttl_s: float = CACHE_TTL_S, clock: Callable[[], float] = time.monotonic):
+        self.size = size
+        self.ttl_s = ttl_s
+        self._clock = clock
+        self._d: OrderedDict[tuple[str, bool, int], tuple[float, _Cached]] = OrderedDict()
+
+    def get(self, key: tuple[str, bool, int]) -> _Cached | None:
+        hit = self._d.get(key)
+        if not hit:
+            return None
+        at, value = hit
+        if self._clock() - at > self.ttl_s:
+            del self._d[key]
+            return None
+        self._d.move_to_end(key)
+        return value
+
+    def put(self, key: tuple[str, bool, int], value: _Cached) -> None:
+        self._d[key] = (self._clock(), value)
+        self._d.move_to_end(key)
+        while len(self._d) > self.size:
+            self._d.popitem(last=False)
+
+    def __len__(self) -> int:
+        return len(self._d)
 
 
 @dataclass
@@ -65,64 +106,63 @@ def _usable(item: dict[str, Any] | None, scopes: list[Scope]) -> bool:
     return item is not None and item.get("status") == "ready" and item.get("scope") in scopes
 
 
+async def _fetch(
+    kb: KnowledgeBase, store: KnowledgeStore, query: str, max_results: int, scopes: list[Scope]
+) -> _Cached:
+    hits = await kb.retrieve(query, min(30, max_results * 4), list(scopes))
+    grouped: dict[str, list[Hit]] = {}
+    for h in sorted(hits, key=lambda h: h.score, reverse=True):
+        grouped.setdefault(h.item_id, []).append(h)
+    ids = list(grouped)[: max_results * 2]
+    expansion = await store.graph.expand(ids, list(scopes))
+    return _Cached(groups=[(i, grouped[i]) for i in ids], expansion=expansion)
+
+
 async def search(
     kb: KnowledgeBase,
     store: KnowledgeStore,
     query: str,
     max_results: int = 5,
     include_on_request: bool = False,
+    cache: SearchCache | None = None,
 ) -> SearchResult:
     scopes = allowed_scopes(include_on_request)
-    hits = await kb.retrieve(query, min(30, max_results * 4), list(scopes))
-    grouped: dict[str, list[Hit]] = {}
-    for h in sorted(hits, key=lambda h: h.score, reverse=True):
-        grouped.setdefault(h.item_id, []).append(h)
-    records = await store.get_items(list(grouped))
+    key = (query.strip(), include_on_request, max_results)
+    cached = cache.get(key) if cache is not None else None
+    if cached is None:
+        cached = await _fetch(kb, store, query, max_results, scopes)
+        if cache is not None:
+            cache.put(key, cached)
+    ex = cached.expansion
+    candidates = [i for i, _ in ex.items[: MAX_RELATED_ITEMS * 4]]
+    rel_items = [r["item"] for r in ex.rels]
+    records = await store.get_items([*(i for i, _ in cached.groups), *candidates, *rel_items])
     out = SearchResult()
-    for item_id, hs in grouped.items():
+    for item_id, hs in cached.groups:
         item = records.get(item_id)
-        if not _usable(item, scopes):
-            continue
-        assert item is not None
-        out.items.append((item, [h.text[:SNIPPET_CHARS] for h in hs[:SNIPPETS_PER_ITEM]]))
-        if len(out.items) >= max_results:
-            break
-    await _expand(store, out, scopes)
-    return out
-
-
-async def _expand(store: KnowledgeStore, out: SearchResult, scopes: list[Scope]) -> None:
+        if _usable(item, scopes):
+            assert item is not None
+            out.items.append((item, [h.text[:SNIPPET_CHARS] for h in hs[:SNIPPETS_PER_ITEM]]))
+            if len(out.items) >= max_results:
+                break
     hit_ids = {item["id"] for item, _ in out.items}
-    if not hit_ids:
-        return
-    entity_lists = await asyncio.gather(*(store.entities_of(i) for i in hit_ids))
-    keys = list(dict.fromkeys(e["key"] for es in entity_lists for e in es))
-    rel_lists = await asyncio.gather(*(store.relationships_of(k) for k in keys))
-    neighbours: list[str] = []
-    seen_lines: set[str] = set()
-    for rels in rel_lists:
-        for r in rels:
-            neighbours.append(str(r["other"]))
-            line = (
-                f"related: {_attr(r.get('from_name'))} —{_attr(r.get('relation'))}→ "
-                f"{_attr(r.get('to_name'))} (item {_attr(r.get('item_id'))})"
-            )
-            if line not in seen_lines and len(out.related_lines) < MAX_RELATED_LINES:
-                seen_lines.add(line)
-                out.related_lines.append(line)
-    linked = list(dict.fromkeys([*keys, *neighbours]))
-    mention_lists = await asyncio.gather(*(store.items_mentioning(k) for k in linked))
-    votes = Counter(i for ids in mention_lists for i in ids if i not in hit_ids)
-    if not votes:
-        return
-    candidates = [i for i, _ in votes.most_common(MAX_RELATED_ITEMS * 4)]
-    records = await store.get_items(candidates)
     for i in candidates:
         item = records.get(i)
-        if _usable(item, scopes) and item and item.get("summary"):
+        if i not in hit_ids and _usable(item, scopes) and item and item.get("summary"):
             out.related_items.append(item)
             if len(out.related_items) >= MAX_RELATED_ITEMS:
                 break
+    if hit_ids:
+        for r in ex.rels:
+            # A relationship is shown only when the item it came from may be shown now.
+            if not _usable(records.get(r["item"]), scopes):
+                continue
+            line = f"related: {_attr(r['from'])} —{_attr(r['rel'])}→ {_attr(r['to'])} (item {_attr(r['item'])})"
+            if line not in out.related_lines:
+                out.related_lines.append(line)
+            if len(out.related_lines) >= MAX_RELATED_LINES:
+                break
+    return out
 
 
 async def always_block(store: KnowledgeStore) -> str:

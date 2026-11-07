@@ -54,6 +54,10 @@ class Table(Protocol):
         ...
 
     async def query(self, pk: str, sk_prefix: str = "") -> list[Item]: ...
+    async def batch_get(self, keys: list[tuple[str, str]]) -> list[Item]:
+        """The items that exist among ``keys`` (any order)."""
+        ...
+
     async def query_index(self, index: Index, pk: str, sk_prefix: str = "") -> list[Item]: ...
     async def delete(self, pk: str, sk: str) -> None: ...
     async def delete_if_exists(self, pk: str, sk: str) -> bool:
@@ -115,6 +119,9 @@ class MemoryTable:
         out = [i for i in self.items.values() if i["pk"] == pk and i["sk"].startswith(sk_prefix)]
         return [copy.deepcopy(i) for i in sorted(out, key=lambda i: i["sk"])]
 
+    async def batch_get(self, keys: list[tuple[str, str]]) -> list[Item]:
+        return [copy.deepcopy(self.items[k]) for k in dict.fromkeys(keys) if k in self.items]
+
     async def query_index(self, index: Index, pk: str, sk_prefix: str = "") -> list[Item]:
         pk_a, sk_a = f"{index}pk", f"{index}sk"
         out = [i for i in self.items.values() if i.get(pk_a) == pk and str(i.get(sk_a, "")).startswith(sk_prefix)]
@@ -152,6 +159,14 @@ def _from_dynamo(v: Any) -> Any:
     if isinstance(v, list):
         return [_from_dynamo(x) for x in v]
     return v
+
+
+def _deserialize(item: dict[str, Any]) -> dict[str, Any]:
+    """The low-level client answers in typed form ({"S": "x"})."""
+    from boto3.dynamodb.types import TypeDeserializer
+
+    d = TypeDeserializer()
+    return {k: d.deserialize(v) for k, v in item.items()}
 
 
 class DynamoTable:
@@ -254,6 +269,27 @@ class DynamoTable:
             ExpressionAttributeValues={":pk": pk, ":sk": sk_prefix} if sk_prefix else {":pk": pk},
             ConsistentRead=True,
         )
+
+    async def batch_get(self, keys: list[tuple[str, str]]) -> list[Item]:
+        """BatchGetItem in chunks of 100, consistent reads, retrying unprocessed keys."""
+        out: list[Item] = []
+        unique = list(dict.fromkeys(keys))
+        name = self._t.name
+        client = self._t.meta.client
+        for i in range(0, len(unique), 100):
+            request: dict[str, Any] = {
+                name: {
+                    "Keys": [{"pk": {"S": pk}, "sk": {"S": sk}} for pk, sk in unique[i : i + 100]],
+                    "ConsistentRead": True,
+                }
+            }
+            for _ in range(5):
+                r = await asyncio.to_thread(client.batch_get_item, RequestItems=request)
+                out.extend(_from_dynamo(_deserialize(x)) for x in r.get("Responses", {}).get(name, []))
+                request = r.get("UnprocessedKeys") or {}
+                if not request:
+                    break
+        return out
 
     async def query_index(self, index: Index, pk: str, sk_prefix: str = "") -> list[Item]:
         return await self._query_all(
