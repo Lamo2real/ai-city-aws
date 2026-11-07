@@ -145,6 +145,27 @@ export async function onMessage(ev: MessageEvent): Promise<void> {
   }
 }
 
+/** The only city events an app ever sees, and the grants that let it see each one. */
+const APP_EVENTS: Record<string, readonly string[]> = {
+  "calendar.changed": ["calendar.read", "calendar.calendars"],
+};
+
+/**
+ * Called for every live event: tells each mounted published app about it, only if it is an app event and
+ * that app's grants (read now) cover it. The app gets the event's name, nothing from its body. Previews
+ * get nothing.
+ */
+export function forwardEvent(e: { type?: unknown; [k: string]: unknown }) {
+  const needs = typeof e?.type === "string" && Object.hasOwn(APP_EVENTS, e.type) ? APP_EVENTS[e.type] : undefined;
+  if (!needs) return;
+  const apps = store.get().city.apps ?? {};
+  for (const f of frames) {
+    if (f.appId === null || !f.el.contentWindow) continue;
+    const grants = (apps[f.appId]?.grants ?? []) as AppCapability[];
+    if (grants.some((g) => needs.includes(g.id))) f.el.contentWindow.postMessage({ aic: 1, event: e.type }, "*");
+  }
+}
+
 /** Tests only: forget every frame and stop listening. */
 export function resetBridge() {
   frames.clear();

@@ -15,7 +15,7 @@ vi.mock("../src/lib/api.ts", () => {
   return { api: (...a: unknown[]) => apiMock(...a), ApiError };
 });
 const { ApiError } = await import("../src/lib/api.ts");
-const { LIMITS, onMessage, registerFrame, resetBridge } = await import("../src/lib/bridge.ts");
+const { forwardEvent, LIMITS, onMessage, registerFrame, resetBridge } = await import("../src/lib/bridge.ts");
 const { store } = await import("../src/lib/store.ts");
 
 const APP = "app-0000000000aa";
@@ -206,6 +206,55 @@ describe("throttle", () => {
     vi.setSystemTime(new Date("2026-11-07T10:01:01Z"));
     await send(req("calendar.read", {}, "r31"));
     expect(lastReply()).toMatchObject({ id: "r31", ok: true });
+  });
+});
+
+describe("events to apps", () => {
+  const CHANGED = { aic: 1, event: "calendar.changed" };
+  it("calendar.changed reaches an app granted calendar.read, as the event name only", () => {
+    forwardEvent({ type: "calendar.changed", at: "x", account_id: "acc-1", secret: "s" });
+    expect(post).toHaveBeenCalledWith(CHANGED, "*");
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+  it("calendar.calendars alone is enough", () => {
+    store.event({ type: "app.updated", app: { app_id: APP, grants: [{ id: "calendar.calendars" }] } });
+    forwardEvent({ type: "calendar.changed" });
+    expect(post).toHaveBeenCalledWith(CHANGED, "*");
+  });
+  it("an app without a calendar grant gets nothing, and a revoke counts at once", () => {
+    store.event({ type: "app.updated", app: { app_id: APP, grants: [{ id: "mail.search" }, { id: "propose" }] } });
+    forwardEvent({ type: "calendar.changed" });
+    expect(post).not.toHaveBeenCalled();
+  });
+  it("a preview frame gets nothing", () => {
+    resetBridge();
+    mount(null);
+    forwardEvent({ type: "calendar.changed" });
+    expect(post).not.toHaveBeenCalled();
+  });
+  it("an unmounted frame gets nothing", () => {
+    unregister();
+    forwardEvent({ type: "calendar.changed" });
+    expect(post).not.toHaveBeenCalled();
+  });
+  it.each(["app.updated", "approval.requested", "ace.reply", "mail.received", "activity", "toString", "__proto__", ""])(
+    "no other event reaches an app: %s",
+    (type) => {
+      forwardEvent({ type });
+      expect(post).not.toHaveBeenCalled();
+    },
+  );
+  it("only the apps granted it, when two are mounted", () => {
+    const first = post;
+    store.setApps([
+      { app_id: APP, slug: "a", title: "A", url: "https://apps.aic.test/a", grants: [{ id: "calendar.read" }] },
+      { app_id: "app-game", slug: "g", title: "G", url: "https://apps.aic.test/g", grants: [] },
+    ]);
+    mount("app-game");
+    const second = post;
+    forwardEvent({ type: "calendar.changed" });
+    expect(first).toHaveBeenCalledWith(CHANGED, "*");
+    expect(second).not.toHaveBeenCalled();
   });
 });
 
