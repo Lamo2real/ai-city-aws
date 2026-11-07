@@ -88,11 +88,12 @@ module "bus" {
 }
 
 module "frontend" {
-  source    = "../../modules/frontend"
-  providers = { aws = aws, aws.us_east_1 = aws.us_east_1 }
-  name      = local.name
-  region    = var.region
-  apps_url  = module.apps.url
+  source       = "../../modules/frontend"
+  providers    = { aws = aws, aws.us_east_1 = aws.us_east_1 }
+  name         = local.name
+  region       = var.region
+  polly_region = var.polly_region
+  apps_url     = module.apps.url
 }
 
 # Apps the city builds, on their own origin (docs/APPS.md). It reuses the HUD's WAF web ACL; the HUD's
@@ -320,6 +321,7 @@ resource "aws_s3_object" "config" {
     identityPoolId       = module.auth.identity_pool_id
     redirectUri          = "${module.frontend.url}/"
     pollyVoice           = var.polly_voice
+    pollyRegion          = var.polly_region
     transcribeVocabulary = module.auth.vocabulary_name
     appsUrl              = module.apps.url
   })

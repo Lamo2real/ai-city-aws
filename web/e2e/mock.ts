@@ -304,6 +304,16 @@ export async function mockBackend(
           await new Promise((r) => setTimeout(r, w.__speakMs ?? 0));
           talking = false;
         },
+        // Sentence by sentence, like Polly: a "clip" is the sentence's text; playing it records it in __spoken.
+        async synth(text: string) {
+          return new Blob([text], { type: "text/plain" });
+        },
+        async play(clip: Blob) {
+          (w.__spoken ??= []).push(await clip.text());
+          talking = true;
+          await new Promise((r) => setTimeout(r, w.__speakMs ?? 0));
+          talking = false;
+        },
         stopSpeaking() {
           talking = false;
         },

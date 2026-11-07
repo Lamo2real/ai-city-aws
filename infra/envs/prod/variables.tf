@@ -77,6 +77,13 @@ variable "mail_providers" {
 }
 
 variable "polly_voice" {
-  type    = string
-  default = "Matthew"
+  description = "The default Polly generative voice for AIC (the owner can pick another per device in Settings)."
+  type        = string
+  default     = "Matthew"
+}
+
+variable "polly_region" {
+  description = "Where the HUD calls Polly: the generative engine is not offered in eu-north-1, so the nearest region that has it. Transcribe stays in var.region."
+  type        = string
+  default     = "eu-central-1"
 }

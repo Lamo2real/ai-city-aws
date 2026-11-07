@@ -5,6 +5,8 @@
 // services, not language models.
 import { config } from "../lib/config.ts";
 import { idToken } from "../lib/auth.ts";
+import { readVoiceId } from "./modes.ts";
+import { speakable } from "./speech.ts";
 
 export interface Voice {
   /** Starts listening; calls onText with each final transcript and onError if the stream breaks later.
@@ -14,7 +16,11 @@ export interface Voice {
     onPartial?: (text: string) => void,
     onError?: (error: unknown) => void,
   ): Promise<() => void>;
+  /** Says a whole text at once (fakes; and the fallback when synth/play are missing). */
   speak(text: string): Promise<void>;
+  /** One sentence to audio, and playing a clip: AIC's replies are spoken sentence by sentence with these. */
+  synth?(text: string): Promise<Blob | null>;
+  play?(clip: Blob): Promise<void>;
   stopSpeaking(): void;
   /** Loudness right now, 0..1: the owner's microphone and AIC's spoken reply. Drives the voice visualizer. */
   levels?(): { input: number; output: number };
@@ -143,6 +149,7 @@ function loudness(a: AnalyserNode | null, buf: Float32Array<ArrayBuffer> | null)
 
 class AwsVoice implements Voice {
   private audio: HTMLAudioElement | null = null;
+  private polly: import("@aws-sdk/client-polly").PollyClient | null = null;
   private inMeter: AnalyserNode | null = null;
   private inBuf: Float32Array<ArrayBuffer> | null = null;
   private outCtx: AudioContext | null = null;
@@ -271,29 +278,41 @@ class AwsVoice implements Voice {
     }
   }
 
-  async speak(text: string) {
+  /** Polly's generative engine (the most human-sounding), in the region that offers it (config.pollyRegion). */
+  async synth(text: string): Promise<Blob | null> {
     const { PollyClient, SynthesizeSpeechCommand } = await import("@aws-sdk/client-polly");
     const c = config();
-    const client = new PollyClient({ region: c.region, credentials: await credentials() });
-    const r = await client.send(
+    this.polly ??= new PollyClient({ region: c.pollyRegion || c.region, credentials: await credentials() });
+    const r = await this.polly.send(
       new SynthesizeSpeechCommand({
-        Engine: "neural",
+        Engine: "generative",
         OutputFormat: "mp3",
-        // Said as letters: "A.I.C.", never a word like "Ace" or "Aick".
-        Text: text.replace(/\bAIC\b/g, "A.I.C.").slice(0, 2900),
-        VoiceId: (c.pollyVoice || "Matthew") as never,
+        Text: text.slice(0, 2900),
+        VoiceId: readVoiceId(c.pollyVoice) as never,
       }),
     );
     const bytes = await r.AudioStream?.transformToByteArray();
-    if (!bytes) return;
+    return bytes ? new Blob([bytes as BlobPart], { type: "audio/mpeg" }) : null;
+  }
+
+  async play(clip: Blob) {
     this.stopSpeaking();
-    this.audio = new Audio(URL.createObjectURL(new Blob([bytes as BlobPart], { type: "audio/mpeg" })));
-    this.meterOutput(this.audio);
+    const url = URL.createObjectURL(clip);
+    const audio = new Audio(url);
+    this.audio = audio;
+    this.meterOutput(audio);
     await new Promise<void>((resolve) => {
-      this.audio!.onended = () => resolve();
-      this.audio!.onerror = () => resolve();
-      void this.audio!.play().catch(() => resolve());
+      audio.onended = () => resolve();
+      audio.onerror = () => resolve();
+      audio.onpause = () => resolve(); // stopSpeaking() pauses it
+      void audio.play().catch(() => resolve());
     });
+    URL.revokeObjectURL(url);
+  }
+
+  async speak(text: string) {
+    const clip = await this.synth(speakable(text));
+    if (clip) await this.play(clip);
   }
 
   stopSpeaking() {
