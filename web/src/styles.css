@@ -560,6 +560,25 @@ main {
   align-items: flex-start;
   padding: 0 var(--s2);
 }
+/* What the mic does: two radios in one row, in the same style as the switches below. */
+.mic-mode {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--s4);
+  margin: 0;
+  padding: 0 var(--s2);
+  border: 0;
+  min-width: 0;
+}
+.speak-mode select {
+  min-height: 36px;
+  padding: 0 var(--s2);
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+}
 .switch {
   display: inline-flex;
   align-items: center;
@@ -943,7 +962,7 @@ main {
     padding: 0;
   }
   .talk {
-    height: calc(100dvh - 390px);
+    height: calc(100dvh - 470px);
     min-height: 360px;
   }
   .chat {

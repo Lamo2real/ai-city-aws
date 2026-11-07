@@ -12,6 +12,8 @@ export interface ChatLine {
   /** Owner lines: queued (not sent yet), sent, or failed. AIC lines: streaming until done. */
   state: "queued" | "sent" | "failed" | "streaming" | "done";
   at: number;
+  /** Owner lines: said by voice (the mic or the wake word, or dictated and not edited by keyboard). */
+  voice?: boolean;
   /** AIC lines: the steps AIC took before answering, and how long until its first words (ms). */
   steps?: string[];
   tookMs?: number;

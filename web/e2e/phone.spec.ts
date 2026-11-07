@@ -13,7 +13,7 @@ test("phone: AIC and the City work at 412px wide", async ({ page }) => {
   const box = (await mic.boundingBox())!;
   expect(box.height).toBeGreaterThanOrEqual(44);
   await expect(page.locator(".voice")).toBeInViewport(); // the eye's voice strip and the composer both fit
-  await expect(page.getByRole("button", { name: "Send to AIC" })).toBeInViewport();
+  await expect(page.getByRole("button", { name: "Send to AIC" })).toBeInViewport({ ratio: 1 }); // wholly on screen
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: `${SHOTS}/phone-ace.png` });
   await page.getByRole("textbox", { name: "Message to AIC" }).fill("what's going on in the city today?");

@@ -275,20 +275,31 @@ export async function mockBackend(
       // A fake voice: the mic "hears" whatever the test puts in window.__heard (or nothing when __micHold is set,
       // so the screen stays in "listening"); window.__micError makes the mic fail with that DOMException name;
       // window.__speakMs keeps AIC "talking" that long. levels() wobbles so the voice strip moves.
-      const w = window as unknown as { __heard?: string; __micHold?: boolean; __micError?: string; __speakMs?: number };
+      const w = window as unknown as {
+        __heard?: string;
+        __micHold?: boolean;
+        __micError?: string;
+        __speakMs?: number;
+        __partials?: string[];
+        __spoken?: string[];
+      };
       let hearing = false;
       let talking = false;
       (window as unknown as { __aicVoice: unknown }).__aicVoice = {
-        async listen(onText: (t: string) => void) {
+        async listen(onText: (t: string) => void, onPartial?: (t: string) => void) {
           if (w.__micError) throw new DOMException("fake failure", w.__micError);
           hearing = true;
-          const t = w.__micHold ? undefined : setTimeout(() => onText(w.__heard ?? "yo AIC, status?"), 300);
+          // Live partials first (window.__partials, 100 ms apart), then the final transcript.
+          const timers = (w.__partials ?? []).map((p, i) => setTimeout(() => onPartial?.(p), 100 * (i + 1)));
+          const delay = 100 * ((w.__partials ?? []).length + 1) + 200;
+          if (!w.__micHold) timers.push(setTimeout(() => onText(w.__heard ?? "yo AIC, status?"), delay));
           return () => {
             hearing = false;
-            clearTimeout(t);
+            timers.forEach(clearTimeout);
           };
         },
-        async speak() {
+        async speak(text: string) {
+          (w.__spoken ??= []).push(text);
           talking = true;
           await new Promise((r) => setTimeout(r, w.__speakMs ?? 0));
           talking = false;
