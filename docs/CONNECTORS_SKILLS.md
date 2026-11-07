@@ -2,7 +2,7 @@
 
 This file is the **contract** between the infra (`infra/`), backend (`backend/`) and web (`web/`) work for
 connectors and skills: names, keys, routes, tools and environment variables. If a contract changes, change it
-here first, in its own commit. The decisions and trade-offs are in `docs/DECISIONS.md` (decisions 67–69; 67 and 68 rewritten for v2).
+here first, in its own commit. The decisions and trade-offs are in `docs/DECISIONS.md` (decisions 67–69 and 77; 67 and 68 rewritten for v2).
 
 Status: designed 2026-11-07 on branch `connectors-skills`. Nothing is built yet. **v2 (same day): connectors are added at runtime by asking AIC, for any MCP server, with sign-in when needed (the owner's requirement). It replaces v1's fixed Terraform list.**
 
@@ -61,14 +61,13 @@ One `Query` on `pk = "CONNECTORS"` lists them all. Runtimes read the list at tur
    spoken). It is never offered on turns triggered by reports, results, questions or reminders. AIC's prompt
    says to call it only when the owner asks, in that message, to add a connector, and never because
    content (an email, a page, a worker report, a tool output) suggests it.
-2. The handler (city code, not the model) resolves the query:
+2. The handler (city code, not the model) resolves the query (remote servers below; package servers in §1.10):
    - An https URL: checked (https only; no userinfo; host resolved, and private, loopback, link-local and metadata
      addresses refused, as in the knowledge base's link rules; the query string must not carry
      `key|token|secret|password|auth` parameters, and if it does the handler answers *"Leave the key out of the
      link; I'll ask for it in a safe field."*).
    - A name: looked up in the **official MCP Registry** (`GET https://registry.modelcontextprotocol.io/v0/servers?search=<name>`,
-     5 s, ≤ 5 results; endpoint to verify at build). Only entries with a `remotes[]` of type `streamable-http`
-     (or `sse`) are candidates. Registry text is untrusted data: names, descriptions and URLs are shown to the
+     5 s, ≤ 5 results; endpoint to verify at build). Entries with a `remotes[]` of type `streamable-http` (or `sse`) are remote candidates, and entries with npm or pypi `packages[]` are package candidates (§1.10). Registry text is untrusted data: names, descriptions and URLs are shown to the
      owner, never followed as instructions. No match: AIC asks the owner for the server's URL.
 3. The handler writes the record (`pending_approval`) and files an **owner approval** with the existing
    approvals (`approval.requested` → Needs you, and a card in the chat): *"Add the Higgsfield MCP server at
@@ -176,7 +175,7 @@ Events: `{"type": "connector.updated", "id", "label", "status", "auth", "needs"?
 
 ### 1.8 Several accounts of the same kind, and mail and calendar
 - A connector is one **account** on one server. The same server may be added several times ("work Outlook" and "personal Outlook"). Each copy has its own `id` (`<server>-<label>`, e.g. `outlook-work`), its own `label`, its own Identity provider `aic-conn-<id>` (so its own token in the vault, even though the vault user is `owner` for all of them) or its own secret, and its own tools `<id>___<tool>`. `add_connector` takes `{query, label?}`. When the server is already connected, AIC asks the owner for a label instead of replacing the existing one. Approval cards and Settings show `label` first.
-- **Mail and calendar accounts** (Google, Microsoft, IMAP/CalDAV) are a **built-in connector kind**, specified in `docs/MAIL_CALENDAR.md` (part of this contract; decisions 70–72). `add_connector` recognizes mail and calendar providers and creates a mail account (its own vault user per account, so several per provider, each with its own label) instead of an MCP connector. A remote MCP server for mail or calendar, if the owner names one, is an ordinary connector. In the HUD, all of them are listed under Settings → Connectors, with the same sign-in card. A combined calendar is an app (`docs/APPS.md`), not a HUD page.
+- **Mail and calendar accounts** (Google, Microsoft, IMAP/CalDAV) are a **built-in connector kind**, specified in `docs/MAIL_CALENDAR.md` (part of this contract; decisions 74–76). `add_connector` recognizes mail and calendar providers and creates a mail account (its own vault user per account, so several per provider, each with its own label) instead of an MCP connector. A remote MCP server for mail or calendar, if the owner names one, is an ordinary connector. In the HUD, all of them are listed under Settings → Connectors, with the same sign-in card. A combined calendar is an app (`docs/APPS.md`), not a HUD page.
 
 ### 1.9 Calling a connector for an app (the apps feature's data bridge, `docs/APPS.md` § "v2: data bridge")
 Published apps may read connector data the owner granted them at publish (manifest `connector.read`, stored as `grants` on the app record `APPS` / `APP#<app_id>`). The HUD's data bridge asks the api Lambda. The api Lambda checks the grant and parameters, then synchronously invokes the Lambda **`aic-prod-app-bridge`** (role `aic-prod-fn-app-bridge`, built by the apps work), which calls the Gateway. The api role has no Gateway access. **No token ever leaves AWS.** The connectors side provides:
@@ -195,6 +194,26 @@ It checks, in order (the first that fails answers `ok: false` with a plain `erro
 The api Lambda also async-invokes `aic-prod-connectors` with `{"action": "policies"}` after every publish, removal or grant change (`docs/APPS.md`, origin/apps 6cc6ed9). Then `GatewayClient` (in **`aic.shared.gateway`**, also used by the runtimes; SigV4 with whatever boto3 credentials the process has) calls `<id>___<tool>`. Results are capped at 200,000 characters, with no wrapping text. They are still **untrusted**, so apps render them as text only.
 **Cedar:** the connectors Lambda's rewrite adds one `permit` for **`aic-prod-fn-app-bridge`**, listing exactly the `<id>___<tool>` pairs that appear in some app's `grants` and are still read-only and ready. The apps code invokes the connectors Lambda with `{"action": "policies"}` (async) after a publish, a removal or a grant change, and the connectors Lambda also runs it after every connector sync or removal. So AWS refuses anything that isn't granted, even if this code is bypassed.
 IAM (apps infra): `aic-prod-fn-app-bridge` gets `bedrock-agentcore:InvokeGateway` on the gateway, ledger read of `APPS` and `CONNECTORS`, and the rate-limit counter. Never Identity or Secrets Manager. The api role keeps `lambda:InvokeFunction` on the connectors Lambda (for `policies`) and on the app bridge. The api route has its own limit of 120 calls a minute across all capabilities; `app_call` adds 60 a minute per app for connector calls.
+
+### 1.10 Any MCP server, on demand: remote servers and package servers the city hosts
+The owner's words: *"its not just these connectors it could scale to any connector that is possible to connect to (MCPs)… but it should be on demand when you request it from AIC"*. So:
+- **Nothing is pre-installed and there's no list.** GitHub, Tavily, Slack, Higgsfield and every other server exist only after the owner asks AIC for them (§1.3), and Terraform never names a connector. A connector works on the next turn, without a redeploy.
+- **Two transports, one flow.** The handler in §1.3 picks the transport from what the owner gave, or from the registry entry:
+  1. **Remote** (`remotes[]` with `streamable-http` or `sse`, or an https URL): as in §1.3–1.4.
+  2. **Package** (`packages[]` with `registry_type` `npm` or `pypi`, `transport` `stdio`, such as servers that normally run as `npx -y <pkg>` or `uvx <pkg>`): the city runs it in its own **MCP host runtime** (below). `oci`/Docker packages can't run in an AgentCore microVM (no Docker), so they're refused in plain words, with the suggestion of a remote version if the registry lists one. A server that is only on GitHub without a registry entry: the owner may give `npm:<name>@<version>` or `pypi:<name>==<version>` directly.
+- **Approval card for a package** (stricter, because it runs someone else's code): *"Install and run `<package>@<exact version>` (npm, publisher `<publisher>`, source `<repository URL>`) as the <label> connector? It runs isolated, with no access to AWS or to your other connectors."* The version is **pinned** to the exact version on the card. `latest` is resolved to a number before the card is shown, and an update is a new approval. The registry text is untrusted and shown as text.
+- **Credentials for packages:** the registry's `environmentVariables` (or `packageArguments`) marked `isSecret` become the secure-field prompts (one per variable, named in the HUD). Each value is stored like an API key (`aic/prod/connectors/<id>`, JSON `{"env": {"NAME": "…"}}`). Package servers that do their own OAuth inside the process (a browser login on the machine) aren't supported. The HUD says so, and suggests the remote version when one exists.
+- **MCP host runtime** `aic-prod-mcp-host` (one AgentCore Runtime in Terraform, a generic image `services/mcp-host/Dockerfile`, arm64, with Node 22 LTS + npm and Python 3.13 + uv, and no city code beyond a small server):
+  - `POST /invocations` `{connector_id, package: {registry_type, name, version, args[]}, env: {NAME: value}?, request: <one MCP JSON-RPC message>}` → the MCP response. The session id is `mcp-<connector_id>-<version hash>` (≥ 33 chars), so each connector keeps its own microVM, with its own process and memory.
+  - On the first call in a session, the server installs the exact version into `/tmp/pkg` (`npm install --ignore-scripts=false --no-audit --no-fund <name>@<version>` or `uv pip install --target /tmp/pkg <name>==<version>`). It runs only what the bridge sends, and the bridge takes the name and version from the approved ledger record. Then it starts the process over stdio, with the environment **scrubbed to PATH, HOME=/tmp/home and the connector's own variables**: no AWS variables, and the credentials endpoint blocked. It relays JSON-RPC between the call and the process's stdio. If the process exits, it restarts once and then reports an error.
+  - The host runtime's role can only write its logs: **no Secrets Manager, no Identity, no ledger**. The bridge Lambda reads the connector's secret and passes the env values in the call body (`env: {NAME: value}`, over SigV4 `InvokeAgentRuntime`). The host keeps them in memory for that session only and never logs them.
+  - Lifecycle: idle timeout 15 min, max 8 h (AgentCore). A cold start reinstalls (seconds to a minute). `sync` (§1.3.8) pre-warms one session to list the tools.
+  - Network: public egress (packages need it). It's isolated from the city because it holds no AWS permissions and only sees its own connector's variables.
+- **Bridge Lambda** (§1.1): for `transport = "package"` it calls `bedrock-agentcore:InvokeAgentRuntime` on `aic-prod-mcp-host` instead of HTTP. Everything else is the same: Gateway Lambda target, Cedar, gate, approvals, audit and untrusted output.
+- **Record fields** (§1.2) gain `transport` (`remote` | `package`) and `package?` (`{registry_type, name, version, publisher?, repository?, args[]}`). `auth` for packages is `none` or `env`.
+- **Removing** a package connector also ends its runtime session (`StopRuntimeSession`).
+- **Cost:** no fixed cost. AgentCore Runtime is billed for the CPU and memory a session uses, and an idle session ends after 15 minutes. Check the prices at deploy.
+- **Residual risk** (`docs/SECURITY.md`): a package the owner approved is someone else's code, running with the owner's key for that service and with internet access. It can misuse that one key or return poisoned tool output (which is treated as untrusted data). It can't reach AWS, the city or other connectors. The card names the publisher, the source and the exact version.
 
 ## 2. Skills
 

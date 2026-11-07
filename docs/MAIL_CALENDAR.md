@@ -2,7 +2,7 @@
 
 This file is the **mail and calendar part of the connectors contract** (`docs/CONNECTORS_SKILLS.md`): names, keys,
 routes, tools, events and environment variables for the infra, backend and web work. If a contract changes, change it
-here first, in its own commit. The decisions are in `docs/DECISIONS.md` (decisions 70–72).
+here first, in its own commit. The decisions are in `docs/DECISIONS.md` (decisions 74–76).
 
 Status: designed on 2026-11-07 on branch `mail-calendar`, then **folded into `connectors-skills`** the same day, when the
 owner shelved the separate mail and calendar feature. **Mail and calendar accounts are connectors added on demand**
@@ -23,7 +23,7 @@ schema from `terraform providers schema -json`):
 
 ## 1. Shape
 
-- **A built-in connector kind (`mail`), same auth system as MCP connectors, different transport.** OAuth tokens live in the AgentCore Identity token vault. AI City never stores them, and AgentCore refreshes them. App passwords for IMAP/CalDAV live in Secrets Manager. Mail and calendar are **city tools** (`mcp__city__mail_*`, `mcp__city__calendar_*`) that the runtime and the api Lambda carry out by calling the providers directly. They are not Gateway targets, because IMAP/SMTP aren't HTTP, and because a Gateway target keeps one token per inbound identity, while the owner may have two Gmail addresses (decision 70). If the owner names a remote **MCP** server for mail or calendar instead, it's an ordinary MCP connector (`CONNECTORS_SKILLS.md` §1).
+- **A built-in connector kind (`mail`), same auth system as MCP connectors, different transport.** OAuth tokens live in the AgentCore Identity token vault. AI City never stores them, and AgentCore refreshes them. App passwords for IMAP/CalDAV live in Secrets Manager. Mail and calendar are **city tools** (`mcp__city__mail_*`, `mcp__city__calendar_*`) that the runtime and the api Lambda carry out by calling the providers directly. They are not Gateway targets, because IMAP/SMTP aren't HTTP, and because a Gateway target keeps one token per inbound identity, while the owner may have two Gmail addresses (decision 74). If the owner names a remote **MCP** server for mail or calendar instead, it's an ordinary MCP connector (`CONNECTORS_SKILLS.md` §1).
 - **One vault user per account.** Every connected account has an id `ma-<8 hex>`, which is also the `userId` for `GetWorkloadAccessTokenForUserId`. So each address keeps its own tokens.
 - **Package** `backend/src/aic/mail/`:
   - `accounts.py`: the account rows (§2).
@@ -105,7 +105,7 @@ There are no `/calendar/*` HUD routes: there's no Calendar page. A combined cale
 ### 5.1 Who gets which tools
 - **AIC:** all of them, plus `add_connector` (which covers mail accounts).
 - **Orchestrator and managers:** none by default. The owner can turn on `"read"` in Settings → Mail & calendar (`mail_access`), which gives `mail_accounts`, `mail_search`, `mail_read`, `calendar_list`, `calendar_events`.
-- **Workers: never** (no tools, and no IAM on the worker role). A manager that needs mail content quotes it into the task text. The worker runtime role is shared by every hire and can run shell commands, so a token reachable from it would be a token for every worker (decision 71).
+- **Workers: never** (no tools, and no IAM on the worker role). A manager that needs mail content quotes it into the task text. The worker runtime role is shared by every hire and can run shell commands, so a token reachable from it would be a token for every worker (decision 75).
 - A role's runtime gets the tools only when at least one account is `connected` (one ledger Query at turn start).
 
 ### 5.2 Tools (`backend/src/aic/runtime/tools.py`, `_mail_tools(d, c, level)`, wrapped by `gate_tools`)
