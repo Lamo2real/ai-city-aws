@@ -339,6 +339,48 @@ test("Dictate: words land in the box live, nothing is sent until Send; an untouc
   expect(await page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? [])).toEqual([]);
 });
 
+test("a spoken reply starts with its first sentence while the rest still streams, without Markdown or emoji", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  await page.goto("/");
+  const spoken = () => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []);
+  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click(); // asked by voice
+  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
+  m.send({ type: "ace.reply", conversation: "main", text: "All **quiet** in the city 🎉. Research", done: false });
+  await expect.poll(spoken).toEqual(["All quiet in the city."]); // talking before the reply is complete
+  await expect(page.locator(".voice")).toHaveAttribute("data-speaker", "aic");
+  m.send({
+    type: "ace.reply",
+    conversation: "main",
+    text: " has three workers.\n```\nnpm test\n```\nSee [the plan](https://x.y).",
+    done: false,
+  });
+  m.send({
+    type: "ace.reply",
+    conversation: "main",
+    text: "All **quiet** in the city 🎉. Research has three workers.\n```\nnpm test\n```\nSee [the plan](https://x.y).",
+    done: true,
+  });
+  await expect.poll(spoken).toEqual(["All quiet in the city.", "Research has three workers.", "See the plan."]); // no code read out
+  await expect(page.locator(".voice")).toHaveAttribute("data-speaker", "idle");
+});
+
+test("Settings: pick AIC's voice; it is remembered on this device and can be heard", async ({ page }) => {
+  await mockBackend(page);
+  await page.goto("/#/settings");
+  const voice = page.getByLabel("AIC's voice");
+  await expect(voice).toHaveValue("Matthew"); // the deploy's default
+  await voice.selectOption("Ruth");
+  await page.getByRole("button", { name: "Hear this voice" }).click();
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []))
+    .toEqual(["Hi, I'm AIC. This is how I'll sound when I answer you."]);
+  await page.reload();
+  await expect(page.getByLabel("AIC's voice")).toHaveValue("Ruth");
+  expect(await page.evaluate(() => localStorage.getItem("aic.voice"))).toBe("Ruth");
+});
+
 test("a draft survives a reload", async ({ page }) => {
   await mockBackend(page);
   await page.goto("/");

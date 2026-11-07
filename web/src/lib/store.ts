@@ -226,7 +226,9 @@ class Store {
         at: Date.now(),
         ...(this.state.turn ? { steps: this.state.turn.steps, tookMs: Date.now() - this.state.turn.started } : {}),
       });
-    this.set({ chat, presence: e.done ? "speaking" : "thinking", ...(e.done ? { turn: null } : {}) });
+    // While AIC already speaks its first sentences, more pieces arriving must not flip it back to "thinking".
+    const presence = e.done || this.state.presence === "speaking" ? "speaking" : "thinking";
+    this.set({ chat, presence, ...(e.done ? { turn: null } : {}) });
   }
 }
 

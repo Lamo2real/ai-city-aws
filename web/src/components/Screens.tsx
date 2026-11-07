@@ -9,6 +9,9 @@ import { store } from "../lib/store.ts";
 import { Banner, Button, Confirm, Loading, toast } from "./ui.tsx";
 import { auth } from "../lib/auth.ts";
 import { SettingsApps } from "./Apps.tsx";
+import { config } from "../lib/config.ts";
+import { readVoiceId, saveVoiceId, VOICES } from "../voice/modes.ts";
+import { getVoice, logVoiceError, micProblem } from "../voice/voice.ts";
 
 function useApi<T>(path: string | null) {
   const [data, setData] = useState<T | null>(null);
@@ -411,6 +414,7 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
         onMailAccess={(mail_access) => setForm({ ...form, mail_access } as S)}
       />
       <SettingsApps />
+      <VoiceSettings />
       <h2>Help</h2>
       <Button variant="quiet" onClick={reopenGuide}>
         Show the first-run guide again
@@ -448,6 +452,46 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
         </button>
       </p>
     </section>
+  );
+}
+/** AIC's voice, chosen per device (no Save needed): Polly's generative voices, the most natural ones. */
+function VoiceSettings() {
+  const [id, setId] = useState(() => readVoiceId(config().pollyVoice));
+  return (
+    <>
+      <h2>AIC's voice</h2>
+      <p className="mute">Natural, human-sounding voices. The choice is remembered on this device.</p>
+      <label className="field">
+        Voice
+        <select
+          aria-label="AIC's voice"
+          value={id}
+          onChange={(e) => {
+            setId(e.target.value);
+            saveVoiceId(e.target.value);
+          }}
+        >
+          {VOICES.map((v) => (
+            <option key={v.id} value={v.id}>
+              {v.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <Button
+        variant="quiet"
+        onClick={() =>
+          getVoice()
+            .speak("Hi, I'm AIC. This is how I'll sound when I answer you.")
+            .catch((e: unknown) => {
+              logVoiceError("the voice sample could not play", e);
+              toast({ text: micProblem(e), tone: "bad" });
+            })
+        }
+      >
+        Hear this voice
+      </Button>
+    </>
   );
 }
 function Field({

@@ -48,3 +48,23 @@ export function appendDictation(box: string, words: string): string {
   const b = box.replace(/\s+$/, "");
   return b ? `${b} ${w}` : w;
 }
+
+/** Polly generative English voices offered in Settings (all available in eu-central-1). */
+export const VOICES = [
+  { id: "Matthew", label: "Matthew (American, male)" },
+  { id: "Stephen", label: "Stephen (American, male)" },
+  { id: "Ruth", label: "Ruth (American, female)" },
+  { id: "Danielle", label: "Danielle (American, female)" },
+  { id: "Joanna", label: "Joanna (American, female)" },
+  { id: "Brian", label: "Brian (British, male)" },
+  { id: "Amy", label: "Amy (British, female)" },
+] as const;
+const VOICE_KEY = "aic.voice";
+
+/** The voice chosen on this device, else the deploy's default, else Matthew. */
+export function readVoiceId(fallback?: string): string {
+  const v = read(VOICE_KEY);
+  if (v && VOICES.some((x) => x.id === v)) return v;
+  return fallback && VOICES.some((x) => x.id === fallback) ? fallback : "Matthew";
+}
+export const saveVoiceId = (id: string) => write(VOICE_KEY, id);

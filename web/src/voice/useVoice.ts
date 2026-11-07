@@ -17,6 +17,7 @@ import {
   type MicMode,
   type SpeakMode,
 } from "./modes.ts";
+import { SpeechQueue } from "./speech.ts";
 import { getVoice, logVoiceError, micProblem } from "./voice.ts";
 import { wakeMatch } from "./wake.ts";
 
@@ -42,18 +43,48 @@ export function useVoice(dictation?: DictationTarget) {
   // Replies already in the chat when the screen opens (restored after a reload) are never read aloud again.
   const spoken = useRef<string | null>(store.get().chat.at(-1)?.id ?? null);
 
-  // Read each finished reply aloud once, when the speak mode says so for the message it answers.
+  // AIC's reply being spoken: which line, how much of its text went into the queue, and the queue.
+  const talk = useRef<{ id: string; fed: number; queue: SpeechQueue<Blob> | null } | null>(null);
+  const stopTalking = useCallback(() => {
+    talk.current?.queue?.stop();
+    getVoice().stopSpeaking();
+  }, []);
+
+  // Read a reply aloud when the speak mode says so for the message it answers. With a voice that can
+  // synthesize sentence by sentence, speaking starts with the first complete sentence while the rest streams.
   useEffect(() => {
     const last = chat.at(-1);
-    if (!last || last.who !== "ace" || last.state !== "done" || spoken.current === last.id) return;
+    if (!last || last.who !== "ace" || spoken.current === last.id) return;
+    // Done talking (or never started): back to idle, unless the owner has already started talking again.
+    const after = () => {
+      if (store.get().presence === "speaking") store.set({ presence: wakeMode ? "listening" : "idle" });
+    };
+    if (talk.current?.id !== last.id) {
+      const asked = chat.findLast((l) => l.who === "owner" && l.at <= last.at);
+      const v = getVoice();
+      const say = shouldSpeak(speakMode, asked?.voice);
+      const queue =
+        say && v.synth && v.play
+          ? new SpeechQueue<Blob>(v.synth.bind(v), v.play.bind(v), () => store.set({ presence: "speaking" }))
+          : null;
+      talk.current = { id: last.id, fed: 0, queue };
+      if (say && !queue && last.state !== "done") return; // a voice without synth: speak it whole when done
+    }
+    const t = talk.current!;
+    if (t.queue && last.text.length > t.fed) {
+      t.queue.push(last.text.slice(t.fed));
+      t.fed = last.text.length;
+    }
+    if (last.state !== "done") return;
     spoken.current = last.id;
+    if (t.queue) return void t.queue.end().finally(after);
     const asked = chat.findLast((l) => l.who === "owner" && l.at <= last.at);
-    if (!shouldSpeak(speakMode, asked?.voice)) return void store.set({ presence: wakeMode ? "listening" : "idle" });
+    if (!shouldSpeak(speakMode, asked?.voice)) return void after();
     store.set({ presence: "speaking" });
     void getVoice()
       .speak(last.text)
       .catch(() => undefined)
-      .finally(() => store.set({ presence: wakeMode ? "listening" : "idle" }));
+      .finally(after);
   }, [chat, speakMode, wakeMode]);
 
   const end = useCallback(() => {
@@ -68,7 +99,7 @@ export function useVoice(dictation?: DictationTarget) {
   const start = useCallback(
     async (wake: boolean) => {
       setProblem(null);
-      getVoice().stopSpeaking();
+      stopTalking();
       const dictate = !wake && micMode === "dictate" && !!target.current;
       const failed = (where: string, e: unknown) => {
         logVoiceError(where, e);
@@ -104,13 +135,13 @@ export function useVoice(dictation?: DictationTarget) {
         failed("the microphone could not start", e);
       }
     },
-    [end, micMode],
+    [end, micMode, stopTalking],
   );
 
   const setSpeakMode = (m: SpeakMode) => {
     setSpeakModeState(m);
     saveSpeakMode(m);
-    if (m === "never") getVoice().stopSpeaking();
+    if (m === "never") stopTalking();
   };
 
   return {
