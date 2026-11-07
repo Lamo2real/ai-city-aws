@@ -262,7 +262,7 @@ type S = Record<string, unknown> & {
   max_concurrent_workers_global: number;
   max_new_sessions_per_second: number;
   profile_prefix: string;
-  notify_email: boolean;
+  notify_push: boolean;
   integrations: Record<string, boolean>;
 };
 export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
@@ -403,14 +403,16 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
         </select>
       </label>
       <h2>Notifications</h2>
+      <p className="mute">No emails. One message to your iPhone when a whole job is finished, nothing for its parts.</p>
       <label className="switch">
         <input
           type="checkbox"
-          checked={form.notify_email}
-          onChange={(e) => setForm({ ...form, notify_email: e.target.checked })}
+          checked={form.notify_push}
+          onChange={(e) => setForm({ ...form, notify_push: e.target.checked })}
         />{" "}
-        Email me when a task is done, a question waits, or spend nears a cap you set
+        Tell my iPhone when a job is finished
       </label>
+      <ApnsCard />
       <h2>Integrations</h2>
       <p className="mute">Built but off. Each needs its sign-in set up in AWS first (see the deploy checklist).</p>
       {Object.entries(form.integrations).map(([k, v]) => (
@@ -534,5 +536,118 @@ function Field({
         onChange={(e) => onChange(e.target.value)}
       />
     </label>
+  );
+}
+
+type ApnsStatus = {
+  key_saved_at: string | null;
+  enabled: boolean;
+  devices: { id: string; platform: string; sandbox: boolean; created_at: string }[];
+};
+
+/** The owner's Apple push key, typed only here (never in chat), and the phones that get the messages. */
+function ApnsCard() {
+  const { data, error, retry } = useApi<ApnsStatus>("/notifications/apns");
+  const [open, setOpen] = useState(false);
+  const [keyId, setKeyId] = useState("");
+  const [teamId, setTeamId] = useState("");
+  const [bundleId, setBundleId] = useState("");
+  const [p8, setP8] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  if (error)
+    return (
+      <Banner
+        tone="bad"
+        action={{ label: "Try again", onClick: retry }}
+      >{`iPhone setup did not load: ${error}`}</Banner>
+    );
+  if (!data) return <Loading what="iPhone setup" />;
+  const state = data.enabled
+    ? "On: your phone gets a message when a job is finished."
+    : data.key_saved_at || saved
+      ? "Key saved. One more step: turn on AIC_APNS_ENABLED in GitHub and deploy once."
+      : "Not set up yet: paste the Apple key from Apple Developer → Keys → Apple Push Notifications.";
+  return (
+    <article className="card" aria-label="iPhone notifications">
+      <h3>iPhone</h3>
+      <p className="mute">{state}</p>
+      {data.devices.length > 0 ? (
+        <p className="small">{`${data.devices.length} phone${data.devices.length === 1 ? "" : "s"} registered.`}</p>
+      ) : null}
+      {!open ? (
+        <Button
+          variant="quiet"
+          onClick={() => setOpen(true)}
+          label={data.key_saved_at ? "Replace the Apple key" : "Add the Apple key"}
+        >
+          {data.key_saved_at ? "Replace the Apple key" : "Add the Apple key"}
+        </Button>
+      ) : (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (busy) return;
+            setBusy(true);
+            setProblem(null);
+            api<{ saved_at: string }>("/notifications/apns", {
+              method: "PUT",
+              body: { key_id: keyId, team_id: teamId, bundle_id: bundleId, p8 },
+            })
+              .then((r) => {
+                setSaved(r.saved_at);
+                setOpen(false);
+                setP8("");
+                toast({ tone: "good", text: "Apple key saved. Deploy once with AIC_APNS_ENABLED on." });
+              })
+              .catch((err: unknown) =>
+                setProblem(err instanceof ApiError ? err.message : "The key could not be saved."),
+              )
+              .finally(() => setBusy(false));
+          }}
+        >
+          {problem ? <Banner tone="bad">{problem}</Banner> : null}
+          <label className="field">
+            Key ID
+            <input value={keyId} onChange={(e) => setKeyId(e.target.value)} autoComplete="off" required />
+          </label>
+          <label className="field">
+            Team ID
+            <input value={teamId} onChange={(e) => setTeamId(e.target.value)} autoComplete="off" required />
+          </label>
+          <label className="field">
+            Bundle ID
+            <input
+              value={bundleId}
+              onChange={(e) => setBundleId(e.target.value)}
+              autoComplete="off"
+              required
+              placeholder="com.example.aicity"
+            />
+          </label>
+          <label className="field">
+            The .p8 key file
+            <textarea
+              value={p8}
+              onChange={(e) => setP8(e.target.value)}
+              rows={4}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="-----BEGIN PRIVATE KEY----- …"
+              required
+            />
+          </label>
+          <div className="actions">
+            <Button variant="primary" type="submit" label="Save the Apple key" disabled={busy}>
+              Save the Apple key
+            </Button>
+            <Button variant="quiet" onClick={() => setOpen(false)} label="Cancel">
+              Cancel
+            </Button>
+          </div>
+        </form>
+      )}
+    </article>
   );
 }

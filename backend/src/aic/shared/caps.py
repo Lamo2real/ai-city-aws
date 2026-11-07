@@ -33,7 +33,7 @@ def default_settings() -> dict[str, Any]:
         "max_concurrent_workers_global": c["max_concurrent_workers_global"],
         "max_new_sessions_per_second": c["max_new_sessions_per_second"],
         "profile_prefix": "global",
-        "notify_email": True,
+        "notify_push": True,
         "integrations": {"github": False, "google_calendar": False, "gmail": False, "spotify": False},
         "first_run_done": False,
     }

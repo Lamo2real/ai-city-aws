@@ -176,7 +176,7 @@ test("lands on AIC with the input focused; asking something shows AIC's streamed
   const box = page.getByRole("textbox", { name: "Message to AIC" });
   await expect(box).toBeFocused();
   await expect(page.getByRole("button", { name: "Talk to AIC", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Today: \$0.42, estimate/ })).toBeVisible();
+  await expect(page.getByText(/Today: \$/)).toHaveCount(0); // costs live on the Costs screen only
   expect(await primaries(page)).toBeLessThanOrEqual(1);
   await box.fill("yo AIC, what's 9 + 9?");
   await page.getByRole("button", { name: "Send to AIC" }).click();
@@ -761,20 +761,22 @@ test("spend caps are optional: an impossible cap is refused, an empty field mean
     .toBeNull();
 });
 
-test("with no spend limit the money pill shows only what was spent", async ({ page }) => {
-  await mockBackend(page, {
-    snapshot: { caps: { daily_global_usd: null, monthly_budget_usd: null, daily_department_usd: null } },
-  });
+test("costs show nowhere but the Costs screen", async ({ page }) => {
+  await mockBackend(page, { snapshot: { usage: { usd: 3.2, turns: 40, tokens: 900000 } } });
   await page.goto("/#/city");
-  const pill = page.getByRole("button", { name: /^Today: \$[\d.]+, estimate\. Open costs\.$/ });
-  await expect(pill).toHaveAttribute("data-level", "ok");
+  await expect(page.locator("section.city")).toHaveAttribute("data-city-ready", "1");
+  await expect(page.getByText(/Today: \$/)).toHaveCount(0); // no money pill
+  await expect(page.getByText(/est\. \$/)).toHaveCount(0); // no estimates on the map
+  await expect(page.getByText(/tokens/)).toHaveCount(0); // no token counts
+  await page.getByRole("link", { name: "Costs" }).click();
+  await expect(page.getByRole("heading", { name: "Costs (estimates)" })).toBeVisible();
+  await expect(page.getByText(/\$3\.20/).first()).toBeVisible(); // the one place money lives
 });
 
-test("hitting the spend cap: the money pill turns red and the City says so plainly", async ({ page }) => {
+test("hitting the spend cap: the City says so plainly and points at Costs", async ({ page }) => {
   const m = await mockBackend(page, { snapshot: { usage: { usd: 10, turns: 300, tokens: 9e6 } } });
   await page.goto("/#/city");
-  const pill = page.getByRole("button", { name: /Today: \$10 of \$10, estimate, limit reached/ });
-  await expect(pill).toHaveAttribute("data-level", "red");
+  await expect(page.locator("section.city")).toHaveAttribute("data-city-ready", "1");
   m.send({ type: "spend.cap_reached", cap: "daily_global", department: null, spent: 10.02, limit: 10 });
   await expect(
     page.getByText(
@@ -782,7 +784,7 @@ test("hitting the spend cap: the money pill turns red and the City says so plain
     ),
   ).toBeVisible();
   await shot(page, "spend-cap");
-  await pill.click();
+  await page.getByRole("button", { name: "See costs" }).click();
   await expect(page.getByRole("heading", { name: "Costs (estimates)" })).toBeVisible();
   await expect(page.getByText("Limit reached: no new work starts.")).toBeVisible();
   // The AWS budget is an alert, named as one, never as a limit.

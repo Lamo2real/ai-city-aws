@@ -93,3 +93,9 @@ variable "polly_region" {
   type        = string
   default     = "eu-central-1"
 }
+
+variable "apns_enabled" {
+  type        = bool
+  default     = false
+  description = "Create the APNs platform applications for iPhone notifications from the key the owner pasted into aic/prod/apns (GitHub variable AIC_APNS_ENABLED)."
+}
