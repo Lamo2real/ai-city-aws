@@ -167,11 +167,20 @@ test("the voice strip shows clearly who is talking: the owner, then AIC", async 
   await page.goto("/");
   const strip = page.locator(".voice");
   await expect(strip).toHaveAttribute("data-speaker", "idle");
+  // The eye is the owner's plain drawing: one ink colour, no motion, whatever the state.
+  const eye = () =>
+    page.locator("section.ace .eye-shape").evaluate((e) => {
+      const look = (n: Element) => getComputedStyle(n);
+      return [look(e).backgroundColor, look(e).animationName, look(e.parentElement!).animationName, look(e).transform];
+    });
+  const plain = await eye();
+  expect(plain.slice(1)).toEqual(["none", "none", "none"]);
   await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
   await expect(strip).toHaveAttribute("data-speaker", "you");
   await expect(strip.getByRole("status")).toHaveText("Listening to you");
   await expect(strip.getByText("You’re talking")).toBeVisible(); // the fake mic is loud
   await expect(page.getByRole("button", { name: "Stop listening" })).toHaveAttribute("aria-pressed", "true");
+  expect(await eye()).toEqual(plain);
   await shot(page, "ace-you-talking");
   await page.getByRole("button", { name: "Stop listening" }).click();
   await expect(strip).toHaveAttribute("data-speaker", "idle");
@@ -184,6 +193,7 @@ test("the voice strip shows clearly who is talking: the owner, then AIC", async 
   m.send({ type: "ace.reply", conversation: "main", text: "All quiet. Nothing needs you.", done: true });
   await expect(strip).toHaveAttribute("data-speaker", "aic");
   await expect(strip.getByRole("status")).toHaveText("AIC is talking");
+  expect(await eye()).toEqual(plain);
   await shot(page, "ace-aic-talking");
   await noSeriousA11y(page, "AIC talking");
 });

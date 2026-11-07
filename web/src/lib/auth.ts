@@ -23,8 +23,8 @@ export interface AuthClient {
   /** Sends a reset code by email. */
   forgotPassword(email: string): Promise<void>;
   confirmForgotPassword(email: string, code: string, password: string): Promise<void>;
-  /** A valid ID token (refreshed when needed), or null: sign in again. */
-  idToken(): Promise<string | null>;
+  /** A valid ID token (refreshed when needed, or always with fresh=true), or null: sign in again. */
+  idToken(fresh?: boolean): Promise<string | null>;
   signOut(): Promise<void>;
 }
 
@@ -133,9 +133,9 @@ function amplifyClient(): AuthClient {
         newPassword: password,
       });
     },
-    async idToken() {
+    async idToken(fresh = false) {
       try {
-        const s = await (await auth()).fetchAuthSession();
+        const s = await (await auth()).fetchAuthSession({ forceRefresh: fresh });
         return s.tokens?.idToken?.toString() ?? null;
       } catch {
         return null;
@@ -156,4 +156,4 @@ export function auth(): AuthClient {
 }
 
 /** A valid ID token for API calls, WebSocket and voice. Null means: sign in again. */
-export const idToken = (): Promise<string | null> => auth().idToken();
+export const idToken = (fresh = false): Promise<string | null> => auth().idToken(fresh);

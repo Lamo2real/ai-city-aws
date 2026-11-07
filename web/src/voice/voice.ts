@@ -20,6 +20,11 @@ export interface Voice {
   levels?(): { input: number; output: number };
 }
 
+const awsSays = (e: unknown) => {
+  const m = ((e as { message?: string } | null)?.message ?? "").trim();
+  return m ? `: ${m.slice(0, 140)}` : "";
+};
+
 /** Plain words for why the microphone or the speech service failed, with what to do next. */
 export function micProblem(e: unknown): string {
   const name = (e as { name?: string } | null)?.name ?? "";
@@ -45,7 +50,7 @@ export function micProblem(e: unknown): string {
     case "AccessDeniedException":
     case "UnrecognizedClientException":
     case "ExpiredTokenException":
-      return `The speech service turned AI City down (${name}). The microphone itself is fine. Typing works meanwhile.`;
+      return `The speech service turned AI City down (${name}${awsSays(e)}). The microphone itself is fine. Typing works meanwhile.`;
     case "BadRequestException":
       return "The speech service refused the request (BadRequestException), for example while its word list is still updating. Try again in a minute.";
     case "StreamEnded":
@@ -74,16 +79,47 @@ declare global {
 
 const PCM_RATE = 16_000;
 
-async function credentials() {
+type Creds = { accessKeyId: string; secretAccessKey: string; sessionToken?: string; expiration?: Date };
+type CredsProvider = () => Promise<Creds>;
+
+/** Voice credentials from the identity pool, using the signed-in owner's ID token. If the identity pool
+ *  refuses the token (NotAuthorizedException), it asks Cognito for a fresh token once and tries again. */
+export function voiceCredentials(
+  token: (fresh: boolean) => Promise<string | null>,
+  provider: (token: string) => CredsProvider,
+): CredsProvider {
+  let current: Promise<CredsProvider> | null = null;
+  const make = async (fresh: boolean) => {
+    const t = await token(fresh);
+    if (!t) throw named("SignedOut", "Voice needs you to be signed in.");
+    return provider(t);
+  };
+  return async () => {
+    current ??= make(false);
+    try {
+      return await (
+        await current
+      )();
+    } catch (e) {
+      if ((e as { name?: string })?.name !== "NotAuthorizedException") throw e;
+      logVoiceError("the identity pool refused the sign-in token; retrying with a fresh one", e);
+      current = make(true);
+      return (await current)();
+    }
+  };
+}
+
+async function credentials(): Promise<CredsProvider> {
   const { fromCognitoIdentityPool } = await import("@aws-sdk/credential-providers");
   const c = config();
-  const token = await idToken();
-  if (!token || !c.userPoolId) throw named("SignedOut", "Voice needs you to be signed in.");
-  return fromCognitoIdentityPool({
-    clientConfig: { region: c.region },
-    identityPoolId: c.identityPoolId,
-    logins: { [`cognito-idp.${c.region}.amazonaws.com/${c.userPoolId}`]: token },
-  });
+  if (!c.userPoolId || !c.identityPoolId) throw named("SignedOut", "Voice is not set up for this site.");
+  return voiceCredentials(idToken, (token) =>
+    fromCognitoIdentityPool({
+      clientConfig: { region: c.region },
+      identityPoolId: c.identityPoolId,
+      logins: { [`cognito-idp.${c.region}.amazonaws.com/${c.userPoolId}`]: token },
+    }),
+  );
 }
 
 function toPcm16(input: Float32Array, fromRate: number): Uint8Array {
