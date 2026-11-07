@@ -60,10 +60,20 @@ variable "deletion_protection" {
   description = "Deletion protection on Cognito and DynamoDB. Set false (and apply) before terraform destroy."
 }
 
-variable "enable_gateway" {
-  type        = bool
-  default     = false
-  description = "AgentCore Gateway for external tools (built, off)."
+variable "mail_providers" {
+  type = object({
+    google    = object({ enabled = bool, client_id = string })
+    microsoft = object({ enabled = bool, client_id = string, tenant_id = string })
+  })
+  default = {
+    google    = { enabled = false, client_id = "" }
+    microsoft = { enabled = false, client_id = "", tenant_id = "common" }
+  }
+  description = "Google and Microsoft OAuth clients for mail and calendar (client ids are not secret; the client secrets go into aic/prod/oauth-google / aic/prod/oauth-microsoft). IMAP needs no flag."
+  validation {
+    condition     = alltrue([for p in values(var.mail_providers) : !p.enabled || length(p.client_id) > 0])
+    error_message = "An enabled mail provider needs its client_id."
+  }
 }
 
 variable "polly_voice" {

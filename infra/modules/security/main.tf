@@ -52,7 +52,7 @@ resource "aws_kms_alias" "data" {
 resource "aws_iam_policy" "boundary" {
   #checkov:skip=CKV_AWS_288:A permission boundary is a ceiling, not a grant; each role's own policy scopes resources.
   #checkov:skip=CKV_AWS_290:A permission boundary is a ceiling, not a grant; each role's own policy scopes resources.
-  #checkov:skip=CKV_AWS_287:A permission boundary is a ceiling, not a grant; only the worker role grants one named secret.
+  #checkov:skip=CKV_AWS_287:A permission boundary is a ceiling, not a grant; each role names its own secrets (check-iam.mjs).
   #checkov:skip=CKV_AWS_289:A permission boundary is a ceiling, not a grant; it allows no IAM writes at all.
   #checkov:skip=CKV_AWS_355:A permission boundary is a ceiling, not a grant; each role's own policy scopes resources.
   name        = "${var.name}-boundary"
@@ -67,7 +67,7 @@ resource "aws_iam_policy" "boundary" {
           "bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream", "bedrock:GetInferenceProfile", "bedrock:ListInferenceProfiles",
           "bedrock-agentcore:*", "dynamodb:*", "sqs:*", "events:PutEvents", "s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket",
           "logs:*", "xray:*", "cloudwatch:PutMetricData", "kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey*", "kms:DescribeKey",
-          "secretsmanager:GetSecretValue", "sns:Publish", "states:*", "lambda:InvokeFunction", "execute-api:ManageConnections",
+          "secretsmanager:GetSecretValue", "secretsmanager:CreateSecret", "secretsmanager:PutSecretValue", "secretsmanager:DeleteSecret", "secretsmanager:TagResource", "sns:Publish", "states:*", "lambda:InvokeFunction", "execute-api:ManageConnections",
           "ecr:GetAuthorizationToken", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer", "sts:AssumeRole", "sts:TagSession",
           "transcribe:StartStreamTranscription", "transcribe:StartStreamTranscriptionWebSocket", "polly:SynthesizeSpeech",
         ]

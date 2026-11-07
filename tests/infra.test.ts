@@ -1,13 +1,16 @@
 // Phase 7 gate, in the unit suite: the tag check and the IAM check over the real Terraform, plus
 // negative cases proving each check actually fails on a bad input.
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error plain .mjs scripts without type declarations
-import { checkTags } from "../scripts/check-tags.mjs";
+import { checkRuntimeTagConditions, checkTags } from "../scripts/check-tags.mjs";
 // @ts-expect-error plain .mjs scripts without type declarations
-import { checkBoundaries, checkWorker, rolePolicies } from "../scripts/check-iam.mjs";
+import { checkBoundaries, checkInline, checkWorker, rolePolicies } from "../scripts/check-iam.mjs";
+
+const moduleText = (m: string) =>
+  readFileSync(join(import.meta.dirname, "..", "infra", "modules", m, "main.tf"), "utf8");
 
 type Stmt = { Sid?: string; Action: string | string[]; Resource: string | string[] };
 const actions = (s: Stmt[]) => s.flatMap((x) => (Array.isArray(x.Action) ? x.Action : [x.Action]));
@@ -64,6 +67,59 @@ describe("IAM", () => {
   });
   it("every role Terraform creates has a permission boundary", () => {
     expect(checkBoundaries()).toEqual([]);
+  });
+});
+
+describe("IAM: connectors, mail and skills (inline Terraform policies)", () => {
+  it("pass on the real Terraform", () => {
+    expect(checkInline()).toEqual([]);
+  });
+  it("fails when the MCP host role gets anything beyond logs and its image", () => {
+    const read = (m: string) =>
+      m === "connectors"
+        ? moduleText(m).replace(
+            'Sid = "Logs", Effect = "Allow", Action = [',
+            'Sid = "Logs", Effect = "Allow", Action = ["secretsmanager:GetSecretValue", ',
+          )
+        : moduleText(m);
+    expect(checkInline({ read, modules: ["connectors"] })).toContain(
+      "MCP host role has secretsmanager:GetSecretValue; it may only write logs and pull its image",
+    );
+  });
+  it("fails when a role other than the bridge reads connector secrets", () => {
+    const read = (m: string) =>
+      m === "mail"
+        ? moduleText(m).replace(
+            'Action = ["kms:Decrypt"], Resource = var.kms_key_arn }',
+            'Action = ["secretsmanager:GetSecretValue"], Resource = ["arn:aws:secretsmanager:r:1:secret:aic/prod/connectors/*"] }',
+          )
+        : moduleText(m);
+    expect(checkInline({ read, modules: ["connectors", "mail"] })).toContain(
+      "mail: a statement outside the bridge reads connector secrets",
+    );
+  });
+  it("fails when runtime roles (the worker included) get Identity credentials, or the worker gets mail", () => {
+    const read = (m: string) =>
+      m === "skills"
+        ? moduleText(m).replace(
+            'Sid = "ReadSkillFiles", Effect = "Allow", Action = ["s3:GetObject"]',
+            'Sid = "ReadSkillFiles", Effect = "Allow", Action = ["s3:GetObject", "bedrock-agentcore:GetResourceApiKey"]',
+          )
+        : moduleText(m);
+    expect(checkInline({ read, modules: ["skills"] })).toContain(
+      "skills: runtime roles (the worker too) get bedrock-agentcore:GetResourceApiKey",
+    );
+    expect(checkInline({ modules: [], prod: "reader_role_names = module.agents.role_names" })).toContain(
+      "envs/prod: the mail read path must leave out the worker role",
+    );
+  });
+  it("runtime-created secrets and providers must be tag-conditioned", () => {
+    const f = join(mkdtempSync(join(tmpdir(), "tagcond-")), "main.tf");
+    writeFileSync(
+      f,
+      `resource "aws_iam_role_policy" "p" {\n  policy = jsonencode({ Statement = [{ Effect = "Allow", Action = ["secretsmanager:CreateSecret"], Resource = ["arn:aws:secretsmanager:r:1:secret:aic/prod/connectors/*"] }] })\n}\n`,
+    );
+    expect(checkRuntimeTagConditions([f])).toHaveLength(2);
   });
 });
 

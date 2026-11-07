@@ -50,6 +50,11 @@ variable "log_retention_days" {
   type    = number
   default = 30
 }
+variable "api_env" {
+  type        = map(string)
+  default     = {}
+  description = "Extra environment for the api Lambda (connectors, skills, mail)."
+}
 variable "worker_queue_concurrency" {
   type    = number
   default = 50
@@ -69,7 +74,7 @@ locals {
   }
   # name => bundle, handler, timeout, memory, extra env
   functions = {
-    api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 512, env = { AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_USER_POOL_ID = var.user_pool_id, AIC_OWNER_EMAIL = var.owner_email } }
+    api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 512, env = merge({ AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_USER_POOL_ID = var.user_pool_id, AIC_OWNER_EMAIL = var.owner_email }, var.api_env) }
     dispatcher    = { bundle = "app", handler = "aic.lambdas.dispatcher.handler", timeout = 120, memory = 1024, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_ARN_ORCHESTRATOR = var.runtime_arns["orchestrator"], AIC_RUNTIME_ARN_MANAGER = var.runtime_arns["manager"], AIC_RUNTIME_ARN_WORKER = var.runtime_arns["worker"], AIC_RUNTIME_VERSION = var.runtime_version, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod", AIC_CONNECTIONS_TABLE = var.connections_table } }
     factory       = { bundle = "app", handler = "aic.lambdas.factory.handler", timeout = 30, memory = 256, env = {} }
     ledger-writer = { bundle = "app", handler = "aic.lambdas.ledger_writer.handler", timeout = 30, memory = 256, env = {} }
@@ -119,6 +124,13 @@ locals {
     "GET /departments", "GET /agents", "GET /workforce", "GET /costs", "GET /health", "GET /questions", "POST /questions/{id}/answer",
     "POST /questions/{id}/default", "POST /approvals/{id}", "GET /settings", "PUT /settings", "POST /city/pause", "POST /city/resume",
     "GET /memory", "POST /notes",
+    # Connectors (docs/CONNECTORS_SKILLS.md §1.7), skills (§2.4) and mail accounts (docs/MAIL_CALENDAR.md §4).
+    "GET /connectors", "POST /connectors", "PUT /connectors/{id}", "DELETE /connectors/{id}", "POST /connectors/{id}/login",
+    "POST /connectors/{id}/login/complete", "PUT /connectors/{id}/key", "POST /connectors/{id}/refresh",
+    "GET /skills", "POST /skills", "GET /skills/{name}", "PUT /skills/{name}", "DELETE /skills/{name}",
+    "GET /mail/accounts", "POST /mail/accounts", "PUT /mail/accounts/{id}", "DELETE /mail/accounts/{id}",
+    "POST /mail/accounts/{id}/signin", "POST /mail/accounts/{id}/complete", "POST /mail/accounts/{id}/imap",
+    "GET /mail/rules", "POST /mail/rules", "DELETE /mail/rules/{id}",
   ]
   queue_batch = { ace = 1, orchestrator = 5, manager = 5, worker = 10 }
   queue_conc  = { ace = 5, orchestrator = 10, manager = 20, worker = var.worker_queue_concurrency }
@@ -231,7 +243,7 @@ resource "aws_apigatewayv2_api" "http" {
   protocol_type = "HTTP"
   cors_configuration {
     allow_origins = [var.app_origin]
-    allow_methods = ["GET", "POST", "PUT"]
+    allow_methods = ["GET", "POST", "PUT", "DELETE"]
     allow_headers = ["authorization", "content-type"]
     max_age       = 600
   }
@@ -562,3 +574,7 @@ output "ws_url" { value = "${aws_apigatewayv2_api.ws.api_endpoint}/prod" }
 output "function_arns" { value = { for k, f in aws_lambda_function.fn : k => f.arn } }
 output "function_names" { value = { for k, f in aws_lambda_function.fn : k => f.function_name } }
 output "event_source_mapping_uuids" { value = { for k, m in aws_lambda_event_source_mapping.queue : k => m.uuid } }
+output "role_names" { value = { for k, r in aws_iam_role.fn : k => r.name } }
+# The one Python package, shared with the connectors Lambdas (infra/modules/connectors).
+output "bundle_path" { value = data.archive_file.bundle["app"].output_path }
+output "bundle_hash" { value = data.archive_file.bundle["app"].output_base64sha256 }

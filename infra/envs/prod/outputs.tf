@@ -8,3 +8,8 @@ output "ledger_table" { value = module.ledger.ledger_table }
 output "event_source_mapping_uuids" { value = module.api.event_source_mapping_uuids }
 output "budget_name" { value = module.budgets.budget_name }
 output "agent_role_names" { value = module.agents.role_names }
+output "connectors_gateway_url" { value = module.connectors.gateway_url }
+output "mcp_host_image_tag" { value = module.connectors.mcp_host_image_tag }
+output "skills_bucket" { value = module.skills.bucket }
+# Register these as the redirect URIs in Google Cloud and Microsoft Entra (docs/RUNBOOK.md). Printed by deploy.yml.
+output "mail_callback_urls" { value = module.mail.callback_urls }

@@ -147,6 +147,8 @@ jobs:
           OWNER_EMAIL: ${{ secrets.AIC_OWNER_EMAIL }}
           BUDGET: ${{ vars.AIC_MONTHLY_BUDGET_USD || '10000' }}
           IMAGE_TAG: ${{ needs.backend.outputs.image_tag }}
+          # Optional JSON, e.g. {"google":{"enabled":true,"client_id":"…"},"microsoft":{"enabled":false,"client_id":"","tenant_id":"common"}}
+          MAIL_PROVIDERS: ${{ vars.AIC_MAIL_PROVIDERS }}
         run: |
           terraform init -input=false \
             -backend-config="bucket=${STATE_BUCKET}" \
@@ -154,11 +156,14 @@ jobs:
             -backend-config="region=${STATE_REGION}" \
             -backend-config="encrypt=true" \
             -backend-config="use_lockfile=true"
+          extra=()
+          [ -z "$MAIL_PROVIDERS" ] || extra+=(-var "mail_providers=${MAIL_PROVIDERS}")
           terraform plan -input=false -out=prod.tfplan \
             -var "region=${AWS_REGION}" \
             -var "owner_email=${OWNER_EMAIL}" \
             -var "agent_image_tag=${IMAGE_TAG}" \
-            -var "monthly_budget_usd=${BUDGET}"
+            -var "monthly_budget_usd=${BUDGET}" \
+            "${extra[@]}"
           # The full plan goes to this log (where the owner email is masked), not to a downloadable file.
           terraform show -no-color prod.tfplan | tee /tmp/plan.txt
           {
@@ -230,6 +235,12 @@ jobs:
           echo "hud_bucket=$(terraform output -raw hud_bucket)" >> "$GITHUB_OUTPUT"
           echo "distribution_id=$(terraform output -raw cloudfront_distribution_id)" >> "$GITHUB_OUTPUT"
           echo "hud_url=$(terraform output -raw hud_url)" >> "$GITHUB_OUTPUT"
+      - name: mail sign-in redirect URIs (register them in Google Cloud / Microsoft Entra)
+        working-directory: infra/envs/prod
+        run: |
+          urls="$(terraform output -json mail_callback_urls)"
+          echo "Mail callback URLs: ${urls}"
+          { echo "## Mail sign-in redirect URIs"; echo '```'; echo "${urls}"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------- stage 4: the HUD ----------
   frontend:
