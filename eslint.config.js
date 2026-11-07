@@ -2,7 +2,7 @@ import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["**/node_modules/**", "**/.venv/**", "**/.pytest_cache/**", "**/.mypy_cache/**", "**/.ruff_cache/**", "**/dist/**", "**/.terraform/**", "web/src/city/*.js", "web/test-results/**", "web/playwright-report/**", "coverage/**"] },
+  { ignores: ["**/node_modules/**", "**/.venv/**", "**/.pytest_cache/**", "**/.mypy_cache/**", "**/.ruff_cache/**", "**/dist/**", "**/.terraform/**", "web/src/city/*.js", "ios/AICity/CityWeb/**", "web/test-results/**", "web/playwright-report/**", "coverage/**"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
