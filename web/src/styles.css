@@ -1625,3 +1625,102 @@ table.costs td {
 .signin-links .link {
   text-align: left;
 }
+
+/* ---------- apps the city built (docs/APPS.md) ---------- */
+.appgrid {
+  list-style: none;
+  padding: 0;
+  margin: var(--s4) 0;
+  display: grid;
+  gap: var(--s4);
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+.screen a.apptile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s2);
+  height: 100%;
+  padding: var(--s4);
+  background: var(--paper);
+  color: var(--text);
+  text-decoration: none;
+  text-align: center;
+  border-radius: var(--r);
+  box-shadow:
+    0 0 0 3px var(--wood),
+    0 5px 0 3px var(--ink);
+  overflow-wrap: anywhere;
+}
+.screen a.apptile:hover {
+  background: var(--paper2);
+}
+.screen .apptile .mute {
+  font-size: 14px;
+  color: var(--soft);
+}
+.appicon {
+  width: 64px;
+  height: 64px;
+  image-rendering: pixelated;
+}
+.apppage {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.apphead {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s2) var(--s4);
+  background: var(--night);
+  color: var(--paper3);
+  border-bottom: 3px solid var(--ink);
+}
+.apphead h1 {
+  flex: 1;
+  margin: 0;
+  font-family: var(--pixel);
+  font-weight: 400;
+  font-size: 20px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+a.back {
+  color: #ffd88a;
+  min-height: var(--tap);
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--s2);
+  white-space: nowrap;
+}
+.appframe {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: #fff;
+}
+.apppage .appframe {
+  flex: 1;
+  min-height: 0;
+}
+.appframe.preview {
+  height: min(60vh, 480px);
+  margin: var(--s3) 0;
+  border-radius: var(--r);
+  box-shadow: 0 0 0 2px var(--ink);
+}
+.apppage .appframe-none {
+  padding: var(--s4);
+}
+.card .apptitle {
+  margin: var(--s2) 0;
+  font-family: var(--pixel);
+  font-weight: 400;
+}
+.view-app main {
+  overflow: hidden;
+}

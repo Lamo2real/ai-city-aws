@@ -176,6 +176,21 @@ const DESK_ITEM = {
   none: () => {},
 };
 const desks = new Map();
+// An arcade cabinet for each app the owner published: original pixel art, tinted per app.
+const CABINET_W = 10, CABINET_H = 16;
+const CABINET_TINTS = ["#e0625a", "#4f8fd6", "#49ad7c", "#9a6bd0", "#f4c63c", "#d2699e"];
+const cabinets = new Map();
+function cabinet(tint) {
+  if (cabinets.has(tint)) return cabinets.get(tint);
+  const [c, g] = newCanvas(CABINET_W, CABINET_H);
+  R(g, 0, 0, 10, 16, INK);
+  R(g, 1, 1, 8, 3, tint); R(g, 1, 1, 8, 1, "rgba(255,255,255,.35)"); // the marquee
+  R(g, 1, 5, 8, 5, "#3a4660"); R(g, 2, 6, 2, 2, "#8fdcff"); R(g, 6, 7, 2, 2, "#f4c63c"); // the screen
+  R(g, 1, 11, 8, 4, "#5a4a6e"); R(g, 3, 11, 1, 2, "#fff6e0"); R(g, 6, 12, 2, 1, "#49ad7c"); // stick and button
+  R(g, 0, 15, 10, 1, "rgba(20,18,40,.5)");
+  cabinets.set(tint, c);
+  return c;
+}
 function desk(item = "none") {
   if (!desks.has(item)) desks.set(item, outlined(24, 16, (g) => {
     g.translate(0, 1);
@@ -393,7 +408,7 @@ function bake(world) {
 const DASH_MS = 320, WALK_SPEED = 46, SCENERY_MS = 125, ZOOMS = [1, 1.5, 2, 3, 4, 5, 6];
 
 // `insets()` says how much of the root the HUD's own bars cover, so the map is fitted into the free part.
-export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0, r: 0, b: 0 }), onSelectAgent = () => {}, onSelectBuilding = () => {}, onState = () => {} } = {}) {
+export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0, r: 0, b: 0 }), onSelectAgent = () => {}, onSelectBuilding = () => {}, onOpenApp = () => {}, onState = () => {} } = {}) {
   const canvas = canvasEl ?? root.querySelector("canvas");
   const ctx = canvas.getContext("2d", { alpha: false });
   const el = (tag) => document.createElement(tag);
@@ -479,17 +494,45 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   }
   function refreshVisuals() { const now = Date.now(); for (const p of people.values()) p.visual = visualState(state, p.id, now); }
 
+  // ---------- Apps (docs/APPS.md): cabinets at the Apps building, and a sign while one waits for the owner ----------
+  const appsDept = (x) => x?.department || "Apps";
+  const buildingOf = (name) => world?.buildings.find((x) => x.dept === name) ?? world?.buildings.find((x) => x.dept.toLowerCase() === String(name).toLowerCase());
+  // Where each published app's cabinet stands: in a row on the pavement left of the door, at most four per building.
+  function appMarkers() {
+    const out = [], byB = new Map();
+    for (const a of Object.values(state.apps ?? {}).sort((p, q) => String(p.published_at ?? "").localeCompare(String(q.published_at ?? "")))) {
+      const b = buildingOf(appsDept(a));
+      if (!b || b.archived) continue;
+      if (!byB.has(b)) byB.set(b, []);
+      byB.get(b).push(a);
+    }
+    for (const [b, list] of byB) {
+      const X = b.x * TILE, top = b.y * TILE + 2 + 72 - CABINET_H + 6;
+      list.slice(-4).forEach((a, i) => out.push({ app: a, x: X + 12 + i * 12, y: top, tint: CABINET_TINTS[hashOf(a.app_id) % CABINET_TINTS.length] }));
+      if (list.length > 4) out.push({ more: list.length - 4, x: X + 12, y: top - 11 });
+    }
+    return out;
+  }
+  const waitingBuildings = () => { const out = new Set(); for (const a of Object.values(state.approvals)) if (a.kind === "app.publish") { const b = buildingOf(appsDept(a)); if (b) out.add(b); } return out; };
+  function pickApp(ev, slack = 0) {
+    const { x, y } = toArt(ev), extra = slack / cam.zoom;
+    return appMarkers().find((m) => m.app && x >= m.x - extra && x < m.x + CABINET_W + extra && y >= m.y - extra && y < m.y + CABINET_H + extra)?.app ?? null;
+  }
+  function markApps() { const m = appMarkers().filter((x) => x.app); root.dataset.apps = String(m.length); root.dataset.appsWaiting = String(waitingBuildings().size); }
+
   // ---------- Live events ----------
   const PLACEMENT_EVENTS = new Set(["agent.hired", "agent.retired", "department.created", "department.updated", "ticket.status", "worker.state", "worker.merge_waiting", "worker.merged", "tickets.parked"]);
   function onEvent(e) {
     const feedBefore = state.feed;
     state = reduce(state, e);
-    if (PLACEMENT_EVENTS.has(e.type)) sync(); else refreshVisuals();
+    if (PLACEMENT_EVENTS.has(e.type)) { sync(); markApps(); } else refreshVisuals();
     const hop = courierFor(e); if (hop) courier(hop);
     if (e.type === "ace.visit") aceVisit(e);
     if (e.type === "review.result" && e.verdict === "FAIL") { const t = state.tickets[e.ticket_id], p = t && people.get(t.to); if (p) dust(p.x, p.y - 20, 14, ["#55525e", "#77747f", "#99969f"], 18, 1.2); }
     if (e.type === "ticket.status" && e.ticket.status === "done") { const p = people.get(e.ticket.to); if (p) dust(p.x, p.y - 22, 28, CONFETTI, 70, 1); }
-    if (e.type === "department.created" || e.type === "agent.hired") { const b = world.buildings.find((x) => x.dept === (e.department?.name ?? "")); if (b) dust((b.x + b.w / 2) * TILE, (b.y + 3) * TILE, 40, POOF, 70, 0.8); }
+    if (e.type === "agent.hired" && e.agent) { const b = buildingOf(deptOf(e.agent)); if (b) dust((b.x + b.w / 2) * TILE, (b.y + 3) * TILE, 24, POOF, 60, 0.7); } // someone new walks in
+    if (e.type === "app.published") { const b = buildingOf(appsDept(e)); if (b) { dust((b.x + b.w / 2) * TILE, (b.y + 1) * TILE, 90, CONFETTI, 90, 1.4); wake(); } }
+    if (e.type.startsWith("app.") || e.type.startsWith("approval.")) { markApps(); wake(); }
     if (e.type === "department.created") { const b = world.buildings.find((x) => x.dept === e.name); if (b) dust((b.x + b.w / 2) * TILE, (b.y + 3) * TILE, 40, POOF, 70, 0.8); }
     void feedBefore;
     onState(state);
@@ -603,7 +646,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   });
   canvas.addEventListener("pointermove", (ev) => {
     if (!pointers.has(ev.pointerId)) {
-      if (ev.pointerType !== "touch") { const p = pickAgent(ev); const next = p?.id ?? null; if (next !== hover) { hover = next; wake(); } canvas.style.cursor = next || pickBuilding(ev) ? "pointer" : "grab"; }
+      if (ev.pointerType !== "touch") { const p = pickAgent(ev); const next = p?.id ?? null; if (next !== hover) { hover = next; wake(); } canvas.style.cursor = next || pickApp(ev) || pickBuilding(ev) ? "pointer" : "grab"; }
       return;
     }
     pointers.set(ev.pointerId, ev);
@@ -624,7 +667,8 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     if (pointers.size < 2) pinchDist = 0;
     if (drag && !drag.moved && ev.type === "pointerup") {
       const p = pickAgent(ev, drag.touch ? 14 : 0);
-      if (p) selectAgent(p.id); else { const dept = pickBuilding(ev); if (dept) onSelectBuilding(dept); else { selected = null; onSelectAgent(null); wake(); } }
+      const app = !p && pickApp(ev, drag.touch ? 6 : 0);
+      if (p) selectAgent(p.id); else if (app) onOpenApp(app.slug); else { const dept = pickBuilding(ev); if (dept) onSelectBuilding(dept); else { selected = null; onSelectAgent(null); wake(); } }
     }
     if (!pointers.size) drag = null;
   };
@@ -716,6 +760,11 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     for (const [d, m] of seats) { const b = world.buildings.find((x) => x.dept === d); if (!b) continue; for (const seat of m.values()) { const q = windowRect(seatSpot(b, seat), b); litWin.push(q); R(ctx, q.x - ox, q.y - oy, q.w, q.h, "#ffdf94"); R(ctx, q.x - ox, q.y - oy, q.w, 4, "#ffefc0"); } }
     // A count badge on each department with people at their desks.
     for (const [d, m] of seats) { const b = world.buildings.find((x) => x.dept === d); if (b && m.size) label(`${m.size}`, (b.x + b.w) * TILE - 18, b.y * TILE + 2, INK, "#ffd84a"); }
+    // The apps' cabinets stand in front of the Apps building; the people walk in front of them.
+    const marks = appMarkers();
+    for (const m of marks) { if (m.app) { ctx.drawImage(cabinet(m.tint), Math.round(m.x - cam.x), Math.round(m.y - cam.y)); } else label(`+${m.more}`, m.x + 10, m.y, INK, "#ffd84a"); }
+    const first = marks.find((m) => m.app); // where the first cabinet is on screen, for tests and tooling
+    root.dataset.appSpot = first ? `${Math.round((first.x + CABINET_W / 2 - cam.x) * cam.zoom)},${Math.round((first.y + CABINET_H / 2 - cam.y) * cam.zoom)}` : "";
     // Everyone, back to front.
     const order = [...people.values()].sort((a, b) => a.y - b.y);
     for (const p of order) drawPerson(p, now, f);
@@ -735,6 +784,8 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       const a = state.agents[p.id];
       if (a) label(p.id === hover && p.visual && p.visual !== "idle" ? `${p.id === "ace" ? "AIC" : p.id}: ${VISUALS[p.visual].label}` : p.id === "ace" ? "AIC" : p.id, p.x, p.y + 4, p.id === selected ? INK : "#fff6e0", p.id === selected ? "#ffd84a" : INK);
     }
+    // A publish approval is open: the Apps building waits for the owner.
+    for (const b of waitingBuildings()) { const k = reduced() ? 1 : f % 2, cx = (b.x + b.w / 2) * TILE, y = b.y * TILE - 12; if (k) { ctx.fillStyle = "rgba(255,216,74,.35)"; ctx.fillRect(Math.round(cx - 50 - cam.x), Math.round(y - 3 - cam.y), 100, 15); } label("WAITING FOR YOU", cx, y, INK, "#ffd84a"); }
     for (const p of order) if (p.say && p.say.until > performance.now()) label(p.say.text, p.x, p.y - 46, INK, "#8fdcff"); // AIC's word stays on top of every mark
     const s = selected && people.get(selected);
     if (s) { const bob = reduced() ? 0 : [0, 1, 2, 1][f]; const x = Math.round(s.x - cam.x), y = Math.round(s.y - cam.y) - (s.visual && s.visual !== "idle" ? 46 : 32) + bob; R(ctx, x - 4, y, 8, 2, INK); R(ctx, x - 3, y, 6, 2, "#ffd84a"); R(ctx, x - 3, y + 2, 6, 2, INK); R(ctx, x - 2, y + 2, 4, 1, "#ffd84a"); R(ctx, x - 1, y + 4, 2, 2, INK); }
@@ -789,7 +840,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   function load(snap) {
     state = applySnapshot(state, snap ?? { agents: [], tickets: [], questions: [] });
     people.clear(); parcels = []; effects = [];
-    if (ctx) { sync(true); fitView(); needDraw = true; resume(); }
+    if (ctx) { sync(true); fitView(); markApps(); needDraw = true; resume(); }
     onState(state);
   }
   if (typeof ResizeObserver === "undefined") window.addEventListener("resize", () => { if (world) { fitView(); wake(); } });

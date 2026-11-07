@@ -11,6 +11,8 @@ export interface AppConfig {
   redirectUri: string;
   pollyVoice: string;
   transcribeVocabulary: string;
+  /** The isolated origin that serves the apps the city builds (docs/APPS.md). Empty: no app is shown. */
+  appsUrl?: string;
 }
 
 let cached: AppConfig | null = null;
