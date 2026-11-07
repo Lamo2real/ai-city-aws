@@ -20,6 +20,8 @@ export function mountCity(
     insets?: () => { l: number; t: number; r: number; b: number };
     onSelectAgent?: (id: string | null) => void;
     onSelectBuilding?: (dept: string) => void;
+    /** A published app's arcade cabinet was clicked. */
+    onOpenApp?: (slug: string) => void;
     onState?: (state: CityState) => void;
   },
 ): CityScene;

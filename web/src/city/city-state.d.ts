@@ -34,6 +34,25 @@ export interface CityApproval {
   agent: string;
   action: string;
   reason: string;
+  /** "app.publish" for an app waiting to be published; then the fields below are set. */
+  kind?: string;
+  draft_id?: string;
+  preview_url?: string;
+  title?: string;
+  description?: string;
+  department?: string;
+}
+/** An app the city built and the owner published (docs/APPS.md). Title and description are agent text. */
+export interface CityApp {
+  app_id: string;
+  slug: string;
+  title: string;
+  description?: string;
+  icon_url?: string | null;
+  url: string;
+  department?: string;
+  task_id?: string;
+  published_at?: string;
 }
 export interface FeedLine {
   at: number;
@@ -58,6 +77,7 @@ export interface CityState {
   capHit: { cap: string; limit: number; spent: number } | null;
   costs: Record<string, { usd: number; tokens: number }>;
   feed: FeedLine[];
+  apps: Record<string, CityApp>;
   now: number;
 }
 export const CORE: Set<string>;

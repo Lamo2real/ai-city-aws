@@ -16,7 +16,7 @@ export const estUsd = (v, digits = 2) => (v === null || v === undefined || Numbe
 const RECENT_MS = { done: 6000, review_fail: 20000, hired: 4000, retired: 4000 };
 
 export function initialState(now = Date.now()) {
-  return { agents: {}, activities: {}, tickets: {}, questions: {}, approvals: {}, departments: {}, reviews: {}, costs: {}, usage: null, spend: {}, caps: null, parked: {}, city: null, capHit: null, feed: [], recent: {}, now };
+  return { agents: {}, activities: {}, tickets: {}, questions: {}, approvals: {}, departments: {}, reviews: {}, costs: {}, usage: null, spend: {}, caps: null, parked: {}, city: null, capHit: null, feed: [], recent: {}, apps: {}, now };
 }
 
 export const deptOf = (agent) => (CORE.has(agent.id) ? "HQ" : agent.department || "other");
@@ -68,6 +68,7 @@ export function applySnapshot(state, snap, now = Date.now()) {
   next.region = snap.region ?? null;
   for (const q of snap.questions ?? []) next.questions[q.id] = q;
   for (const a of snap.approvals ?? []) next.approvals[a.id] = a;
+  for (const a of snap.apps ?? []) if (a?.app_id) next.apps[a.app_id] = a;
   next.usage = snap.usage ?? null;
   next.spend = snap.spend ?? {};
   next.caps = snap.caps ?? null; // the limits the server enforces; null when the server did not send them
@@ -144,7 +145,22 @@ export function reduce(state, event, now = Date.now()) {
     case "instruction":
       return { ...state, now, feed: feed(state, `You told ${event.to}: ${event.text.slice(0, 60)}`, "answer", now) };
     case "approval.requested":
-      return { ...state, now, approvals: { ...state.approvals, [event.id]: event }, feed: feed(state, `${event.agent} needs your approval: ${event.action.slice(0, 60)}`, "question", now) };
+      return { ...state, now, approvals: { ...state.approvals, [event.id]: event }, feed: feed(state, event.kind === "app.publish" ? `A new app is ready for you to try: ${String(event.title ?? "").slice(0, 40)}` : `${event.agent} needs your approval: ${String(event.action ?? "").slice(0, 60)}`, "question", now) };
+    case "app.draft":
+      return { ...state, now, feed: feed(state, event.status === "rejected" ? `App ${String(event.title ?? "").slice(0, 40)} sent back: ${String(event.reason ?? "").slice(0, 60)}` : `App ${String(event.title ?? "").slice(0, 40)} built, checked: ${event.status}`, event.status === "rejected" ? "fail" : "worker", now) };
+    case "app.published": {
+      if (!event.app_id) return state;
+      const app = { ...state.apps[event.app_id], ...event };
+      delete app.type; delete app.at;
+      return { ...state, now, apps: { ...state.apps, [event.app_id]: app }, feed: feed(state, `New app under Apps: ${String(event.title ?? "").slice(0, 40)}`, "pass", now) };
+    }
+    case "app.removed": {
+      const gone = state.apps[event.app_id];
+      if (!gone) return state; // already gone (the HUD removes it at once; the event follows)
+      const apps = { ...state.apps };
+      delete apps[event.app_id];
+      return { ...state, now, apps, feed: feed(state, `App removed: ${String(gone.title ?? event.slug ?? "").slice(0, 40)}`, "worker", now) };
+    }
     case "approval.decided": {
       const approvals = { ...state.approvals };
       delete approvals[event.id];

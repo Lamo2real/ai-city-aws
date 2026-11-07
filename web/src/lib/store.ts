@@ -1,7 +1,7 @@
 // One store for the whole HUD: the city (via the ported reducer), AIC's chat, connection status and
 // the owner's outbox. Every screen reads from here; the WebSocket and API write to it.
 import { useSyncExternalStore } from "react";
-import { applySnapshot, initialState, reduce, type CityState } from "../city/city-state.js";
+import { applySnapshot, initialState, reduce, type CityApp, type CityState } from "../city/city-state.js";
 import { FIRST_STEP, stepWords } from "./steps.ts";
 import type { LiveStatus } from "./ws.ts";
 
@@ -93,6 +93,12 @@ class Store {
     this.during?.push(e);
     this.set({ city: reduce(this.state.city, e) });
     for (const l of this.sceneEvents) l(e);
+  }
+  /** The published apps from `GET /apps` (the snapshot and the app events keep them current too). */
+  setApps(list: CityApp[]) {
+    const apps: Record<string, CityApp> = {};
+    for (const a of list) if (a?.app_id) apps[a.app_id] = a;
+    this.set({ city: { ...this.state.city, apps } });
   }
   /** Starts AIC's turn: the status row shows from now until its first words. */
   beginTurn() {

@@ -16,7 +16,24 @@ export const CONFIG = {
   redirectUri: "",
   pollyVoice: "Matthew",
   transcribeVocabulary: "aic-names",
+  appsUrl: "https://apps.aic.test",
 };
+// A tiny original game served by the fake apps origin: it proves scripts run in the sandbox and that the
+// frame has an opaque origin (no storage, no access to the HUD).
+export const GAME_HTML = `<!doctype html><meta charset="utf-8"><title>Star Sweeper</title>
+<body style="font-family:sans-serif;background:#123;color:#fff">
+<h1>Star Sweeper</h1><p>Click the button to sweep a star.</p>
+<button id="b">Sweep</button> <output id="n">0 stars</output>
+<p id="iso"></p>
+<script>
+let n = 0;
+document.getElementById("b").onclick = () => { n++; document.getElementById("n").textContent = n + " stars"; };
+let storage = "no storage";
+try { localStorage.length; storage = "storage open"; } catch { /* opaque origin */ }
+let parentDoc = "no HUD access";
+try { parent.document.title; parentDoc = "HUD reachable"; } catch { /* sandboxed */ }
+document.getElementById("iso").textContent = storage + ", " + parentDoc;
+</script></body>`;
 export const at = () => new Date().toISOString();
 
 export interface Mock {
@@ -25,7 +42,20 @@ export interface Mock {
   send: (event: Record<string, unknown>) => void;
   snapshot: Record<string, unknown>;
   settings: Record<string, unknown>;
+  apps: Array<Record<string, unknown>>;
 }
+export const appRecord = (id: string, slug: string, title: string, extra: Record<string, unknown> = {}) => ({
+  app_id: id,
+  slug,
+  title,
+  description: `${title}: a small original game the city built.`,
+  icon_url: null,
+  url: `${CONFIG.appsUrl}/live/${id}/index.html`,
+  draft_id: `drf-${id.slice(4)}`,
+  task_id: "t-apps",
+  published_at: at(),
+  ...extra,
+});
 
 export const baseSnapshot = () => ({
   agents: [
@@ -66,7 +96,12 @@ export const baseSnapshot = () => ({
 
 export async function mockBackend(
   page: Page,
-  opts: { signedIn?: boolean; snapshot?: Record<string, unknown>; firstRunDone?: boolean } = {},
+  opts: {
+    signedIn?: boolean;
+    snapshot?: Record<string, unknown>;
+    firstRunDone?: boolean;
+    apps?: Array<Record<string, unknown>>;
+  } = {},
 ): Promise<Mock> {
   // Events sent before the page's WebSocket connects are held and delivered on connect.
   const pending: Array<Record<string, unknown>> = [];
@@ -77,6 +112,7 @@ export async function mockBackend(
     },
     send: (e) => pending.push(e),
     snapshot: { ...baseSnapshot(), ...(opts.snapshot ?? {}) },
+    apps: [...(opts.apps ?? [])],
     settings: {
       paused: false,
       pause_reason: null,
@@ -171,7 +207,15 @@ export async function mockBackend(
         { accepted: true, message: "If this is the owner's email, a new first-login email is on its way." },
         202,
       );
-    if (path === "/city") return ok(m.snapshot);
+    if (path === "/city") return ok({ ...m.snapshot, apps: m.apps });
+    if (path === "/apps" && req.method() === "GET") return ok({ apps: m.apps });
+    if (path.startsWith("/apps/") && req.method() === "DELETE") {
+      const id = decodeURIComponent(path.split("/")[2] ?? "");
+      const i = m.apps.findIndex((a) => a.app_id === id);
+      if (i < 0) return ok({ error: "There is no such app." }, 404);
+      m.apps.splice(i, 1);
+      return ok({ removed: id });
+    }
     if (path === "/settings" && req.method() === "GET") return ok({ settings: m.settings });
     if (path === "/settings" && req.method() === "PUT") {
       Object.assign(m.settings, body);
@@ -182,6 +226,17 @@ export async function mockBackend(
     if (path === "/city/resume") return ok({ paused: false });
     if (path.startsWith("/questions/"))
       return ok({ answered: true, answer: path.endsWith("/default") ? "SQLite" : body?.answer });
+    const publish = (m.snapshot.approvals as Array<Record<string, unknown>>).find(
+      (a) => a.id === path.split("/")[2] && a.kind === "app.publish",
+    );
+    if (path.startsWith("/approvals/") && publish) {
+      const app = body?.approved ? appRecord("app-0000000000aa", "star-sweeper", String(publish.title)) : null;
+      if (app) m.apps.unshift(app);
+      return ok({
+        approval: { id: publish.id, status: body?.approved ? "approved" : "denied" },
+        ...(app ? { app } : {}),
+      });
+    }
     if (path.startsWith("/approvals/"))
       return ok({ approval: { id: path.split("/")[2], status: body?.approved ? "approved" : "denied" } });
     if (path.startsWith("/city/agent"))
@@ -221,6 +276,15 @@ export async function mockBackend(
     if (path === "/health") return ok({ paused: false, workers_busy: 0, worker_ceiling: 2450, stale_turns: 0 });
     return ok({ error: "There is nothing here." }, 404);
   });
+  // The isolated apps origin: live apps and drafts are the same little game.
+  await page.route(`${CONFIG.appsUrl}/**`, (r) =>
+    r.fulfill({
+      status: 200,
+      contentType: "text/html",
+      body: GAME_HTML,
+      headers: { "access-control-allow-origin": "*" },
+    }),
+  );
   await page.routeWebSocket(`${CONFIG.wsUrl}**`, (ws) => {
     m.ws = () => ws;
     m.send = (e) => ws.send(JSON.stringify({ at: at(), ...e }));

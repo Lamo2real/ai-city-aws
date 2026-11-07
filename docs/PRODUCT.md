@@ -8,7 +8,7 @@
 - If this file and the code disagree, the code wins: fix this file.
 - New larger features: add a row under §6 and an entry in §10.
 
-Last updated: 2026-11-07 (apps the city builds: contract).
+Last updated: 2026-11-07 (apps the city builds: HUD).
 
 ---
 
@@ -95,7 +95,7 @@ Owner message → `POST /messages` → SQS (`ace` queue) → **dispatcher** Lamb
 | Infra | AWS Budgets 50/80/100 + forecast, email alerts only (no deny action, no pause) | 🟡 | `infra/modules/budgets` |
 | Ops | `city-off.sh` / `city-on.sh`, `build-images.sh` (no push) | 🟡 not run | `scripts/` |
 | CI/CD | `ci.yml`, `deploy.yml`: needs only the variable `AIC_DEPLOY_ROLE_ARN` + the secret `AIC_OWNER_EMAIL`; creates the state bucket if missing; runs on every push to `main` (no approval; docs-only pushes skipped); one plan builds + pushes the image (tag = hash of the runtime sources) and deploys from nothing | 🟡 never run | `.github/workflows/`, `scripts/ensure-state-bucket.sh`, `scripts/push-image.sh` |
-| Apps | The owner asks AIC for a game or small feature; the Apps department builds it as a self-contained web app; after sign-off the owner approves it in Needs you with a preview; it opens under **Apps** as its own page in a sandboxed iframe on an isolated origin (`connect-src 'none'`); the owner can remove it; the City view shows the build and a finished marker | ❌ contract only | `docs/APPS.md` |
+| Apps | The owner asks AIC for a game or small feature; the Apps department builds it as a self-contained web app; after sign-off the owner approves it in Needs you with a preview; it opens under **Apps** as its own page in a sandboxed iframe on an isolated origin (`connect-src 'none'`); the owner can remove it; the City view shows the build and a finished marker | 🟡 HUD built and tested against a mock API and a fake apps origin (`web/e2e/apps.spec.ts`); backend and infra in progress | `docs/APPS.md`, `web/src/components/Apps.tsx`, `web/src/lib/apps.ts` |
 | Gap | Worker S3 workspace sync (IAM ready) | ❌ | — |
 | Gap | Runtime use of AgentCore Memory | ❌ | — |
 | Gap | Self-improvement runner (switch + fence exist) | ❌ | `backend/src/aic/lambdas/improve.py` |
@@ -149,6 +149,7 @@ Terraform (offline only): `fmt -check -recursive`, `init -backend=false`, `valid
 ## 10. Feature log (newest first)
 | Date | Feature | Notes |
 |---|---|---|
+| 2026-11-07 | Apps the city builds (HUD) | Apps nav item after Tickets; `#/apps` grid with empty state; `#/apps/<slug>` page with ← Apps, Remove (confirm, `DELETE /apps/<id>`) and the app in `<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" allow="">`, framed only when its URL is on `appsUrl` (no `message` listener, no `postMessage`). Needs you shows `app.publish` approvals with a live preview, Approve (primary) / Refuse (no hold: publishing can be undone by Remove). City: "WAITING FOR YOU" sign on the Apps building while a publish waits, confetti and an arcade cabinet per published app (clickable; also listed in the building's panel), rebuilt from the snapshot's `apps`. Fixed: the building puff on `agent.hired` never fired. |
 | 2026-11-07 | Apps the city builds (contract) | The owner's request: "if the user is bored he should be able to talk to AIC and create a game", opened from an icon as its own page inside AI City, with the city showing the work. Contract in `docs/APPS.md` (decisions 70–71): own bucket and CloudFront origin, sandboxed iframe, strict CSP, publish only with the owner's approval. Not built yet. |
 | 2026-11-07 | Voice sign-in fix, plain eye | After tapping the mic the live site showed "The speech service turned AI City down (NotAuthorizedException)": the voice identity pool refused the HUD's ID token while the HTTP API accepted the same token (same app client), which points at the pool's server-side token check (on since the start; sign-in moved to SRP with refresh-token rotation and revocation). The check is now off (ID tokens live 15 minutes; the credentials allow only Transcribe streaming and Polly), the HUD retries once with a freshly refreshed token, and the banner shows AWS's own message. The owner's choice: the eye no longer changes colour or moves with the state; the voice line under it shows the state. |
 | 2026-11-07 | AIC screen redesign, real mic errors | The owner's request: eye and voice strip on the left, chat on the right, a bright theme in the City's palette (WCAG AA, axe-checked). The voice module measures loudness with Web Audio analysers on the mic and on Polly's audio (played straight, without the meter, when Safari keeps Web Audio suspended, so replies are never muted). The mic is now requested first, inside the tap, before loading the speech SDK. The old catch-all "The microphone could not start…" hid the cause; each failure now has its own message and a console log. The live site's headers were checked: `Permissions-Policy: microphone=(self)` and the CSP (Transcribe WebSocket on :8443, Cognito Identity, Polly) allow voice, and the Transcribe endpoint answers in eu-north-1. |

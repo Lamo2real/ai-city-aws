@@ -17,6 +17,7 @@ import {
 } from "../city/city-state.js";
 import { mountCity, type CityScene } from "../city/scene.js";
 import { instruct } from "../lib/actions.ts";
+import { appList, appsDepartment, capped, isPublish } from "../lib/apps.ts";
 import { api, ApiError } from "../lib/api.ts";
 import { money, tokensK } from "../lib/format.ts";
 import { store, useHud, waitingCount } from "../lib/store.ts";
@@ -76,6 +77,7 @@ export function CityView({ go }: { go: (view: string) => void }) {
       insets: wide,
       onSelectAgent: (id) => setOpen(id ? { agent: id } : null),
       onSelectBuilding: (dept) => setOpen({ dept }),
+      onOpenApp: (slug) => go(`apps/${encodeURIComponent(slug)}`),
     });
     scene.current = s;
     s.load(snapshotOf(store.get().city));
@@ -285,6 +287,7 @@ function snapshotOf(city: CityState) {
     parked: Object.values(city.parked),
     questions: Object.values(city.questions),
     approvals: Object.values(city.approvals),
+    apps: Object.values(city.apps ?? {}),
     usage: city.usage,
     spend: city.spend,
     caps: city.caps,
@@ -349,6 +352,7 @@ function CityPanel({
       </header>
       {"agent" in open ? <AgentPanel id={open.agent} city={city} /> : null}
       {"dept" in open ? <DeptPanel name={open.dept} city={city} onZoom={onZoom} /> : null}
+      {"dept" in open ? <DeptApps name={open.dept} city={city} /> : null}
       {"record" in open && open.record === "legend" ? <Legend /> : null}
       {"record" in open && open.record === "parked" ? <Parked city={city} /> : null}
       {"record" in open && (open.record === "workforce" || open.record === "health") ? (
@@ -463,6 +467,37 @@ function DeptPanel({ name, city, onZoom }: { name: string; city: CityState; onZo
   );
 }
 
+// The Apps building's own part of its panel: what waits for the owner, and every app it built (the
+// same as the cabinets on the map, for keyboards and screen readers).
+function DeptApps({ name, city }: { name: string; city: CityState }) {
+  const mine = (x: { department?: string | null }) => appsDepartment(x).toLowerCase() === name.toLowerCase();
+  const apps = appList(city.apps).filter(mine);
+  const waiting = Object.values(city.approvals).filter((a) => isPublish(a) && mine(a));
+  if (!apps.length && !waiting.length) return null;
+  return (
+    <div>
+      {waiting.length ? (
+        <p className="doing">
+          <b>Waiting for you.</b> {`${waiting.map((a) => capped(a.title, 40)).join(", ")} is ready to try in `}
+          <a href="#/inbox">Needs you</a>.
+        </p>
+      ) : null}
+      {apps.length ? (
+        <>
+          <h4>{`Apps built here (${apps.length})`}</h4>
+          <ul className="recent">
+            {apps.map((a) => (
+              <li key={a.app_id}>
+                <a href={`#/apps/${encodeURIComponent(a.slug)}`}>{capped(a.title, 40)}</a>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 function Legend() {
   return (
     <ul className="legend">
@@ -483,6 +518,12 @@ function Legend() {
       </li>
       <li>
         <span className="mark">Number badge on a roof</span> how many people are at their desks
+      </li>
+      <li>
+        <span className="mark">Arcade cabinet by a door</span> an app you published; tap it to open it
+      </li>
+      <li>
+        <span className="mark">“Waiting for you” sign</span> a new app is ready to try in Needs you
       </li>
       {Object.entries(VISUALS).map(([k, v]) => (
         <li key={k}>
