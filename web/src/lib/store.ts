@@ -278,8 +278,16 @@ class Store {
             }
           : {}),
       });
-    // While AIC already speaks its first sentences, more pieces arriving must not flip it back to "thinking".
-    const presence = e.done || this.state.presence === "speaking" ? "speaking" : "thinking";
+    // "speaking" comes only from audio really playing (the voice sets it when a clip starts). A finished reply
+    // ends "thinking"; while AIC already speaks its first sentences, more pieces must not flip it back.
+    const presence =
+      this.state.presence === "speaking"
+        ? "speaking"
+        : e.done
+          ? this.state.presence === "listening"
+            ? "listening"
+            : "idle"
+          : "thinking";
     this.set({ chat, presence, ...(e.done ? { turn: null } : {}) });
   }
 }

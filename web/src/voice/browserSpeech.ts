@@ -185,10 +185,11 @@ export function rememberBrowserVoice() {
 }
 
 /** Says one cleaned sentence with the browser's voice; resolves when it ends (or cannot start). */
-export function browserSpeak(text: string): Promise<void> {
+export function browserSpeak(text: string, onBegin?: () => void): Promise<void> {
   return new Promise((resolve) => {
     try {
       const u = new SpeechSynthesisUtterance(text);
+      u.onstart = () => onBegin?.();
       u.onend = () => resolve();
       u.onerror = () => resolve();
       window.speechSynthesis.speak(u);

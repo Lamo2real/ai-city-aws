@@ -28,9 +28,10 @@ export interface Voice {
   prime?(): void;
   /** Says a whole text at once (fakes; and the fallback when synth/play are missing). */
   speak(text: string): Promise<void>;
-  /** One sentence to audio, and playing a clip: AIC's replies are spoken sentence by sentence with these. */
+  /** One sentence to audio, and playing a clip: AIC's replies are spoken sentence by sentence with these.
+   *  `onBegin` fires when sound really starts, so the HUD can show "speaking" only while audio plays. */
   synth?(text: string): Promise<Blob | null>;
-  play?(clip: Blob): Promise<void>;
+  play?(clip: Blob, onBegin?: () => void): Promise<void>;
   stopSpeaking(): void;
   /** Loudness right now, 0..1: the owner's microphone and AIC's spoken reply. Drives the voice visualizer. */
   levels?(): { input: number; output: number };
@@ -111,6 +112,9 @@ export function speakProblem(e: unknown): string {
   if (name === "AudioPlayError" || name === "NotAllowedError")
     return "The browser blocked the sound until you tap something. Tap the mic and ask again.";
   if (name === "SignedOut") return "AIC's voice needs a fresh sign-in. Sign out and in again.";
+  if (name === "AudioSuspended") return "The browser kept sound paused. Tap the mic once, then ask again.";
+  if (name === "EmptyAudio") return "The speech service returned no audio. Try another voice in Settings.";
+  if (name === "DecodeError") return "The reply's audio arrived, but this browser could not decode it.";
   return `AIC's voice could not play (${name || "Error"}${awsSays(e)}). The text above is the answer; typing still works.`;
 }
 
@@ -184,12 +188,10 @@ function loudness(a: AnalyserNode | null, buf: Float32Array<ArrayBuffer> | null)
   return Math.min(1, Math.sqrt(sum / buf.length) * 5);
 }
 
-// A short silent clip: playing it inside the tap unlocks the one reusable audio element in Safari.
-const SILENCE = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=";
-
 class AwsVoice implements Voice {
-  private audio: HTMLAudioElement | null = null;
-  private metered = false;
+  /** The clip playing right now: an AudioBufferSourceNode on the tap-unlocked output context. */
+  private current: AudioBufferSourceNode | null = null;
+  private playing = false;
   private meterNode: AnalyserNode | null = null;
   private polly: import("@aws-sdk/client-polly").PollyClient | null = null;
   private inMeter: AnalyserNode | null = null;
@@ -202,8 +204,10 @@ class AwsVoice implements Voice {
   levels() {
     let output = loudness(this.outMeter, this.outBuf);
     // When the reply cannot be routed through Web Audio, an envelope stands in so the visualizer still moves.
-    if (this.outFallback && this.audio && !this.audio.paused)
-      output = 0.35 + 0.3 * Math.abs(Math.sin(this.audio.currentTime * 9) * Math.sin(this.audio.currentTime * 2.3));
+    if (this.outFallback && this.playing) {
+      const t = performance.now() / 1000;
+      output = 0.35 + 0.3 * Math.abs(Math.sin(t * 9) * Math.sin(t * 2.3));
+    }
     return { input: loudness(this.inMeter, this.inBuf), output };
   }
 
@@ -216,22 +220,10 @@ class AwsVoice implements Voice {
       this.primed?.close().catch(() => undefined);
       this.primed = new AudioContext();
       void this.primed.resume().catch(() => undefined);
+      // The output context is created and resumed inside the tap: Safari then lets clips decoded on it
+      // play at any later moment, which a fresh, un-gestured element would not be allowed to do.
       this.outCtx ??= new AudioContext();
       void this.outCtx.resume().catch(() => undefined);
-      // Unlock the one reusable audio element inside the tap: Safari only lets an element play later
-      // (AIC's reply, long after this gesture) if it has already played, even silently, during one.
-      const a = (this.audio ??= new Audio());
-      if (a.paused) {
-        a.muted = true;
-        a.src = SILENCE;
-        void a
-          .play()
-          .then(() => {
-            a.pause();
-            a.muted = false;
-          })
-          .catch(() => (a.muted = false));
-      }
     } catch {
       this.primed = null; // listen() reports the real problem
     }
@@ -385,27 +377,22 @@ class AwsVoice implements Voice {
     };
   }
 
-  /** Routes the reply through an analyser when Web Audio is running; otherwise plays it directly.
-   *  The element is wired to Web Audio at most once (createMediaElementSource allows no second call). */
-  private meterOutput(audio: HTMLAudioElement) {
-    try {
-      this.outCtx ??= new AudioContext();
-      if (this.outCtx.state !== "running") void this.outCtx.resume().catch(() => undefined);
-      if (this.outCtx.state !== "running") return void (this.outFallback = true); // never route into a muted context
-      if (!this.metered) {
-        const src = this.outCtx.createMediaElementSource(audio);
-        this.meterNode = this.outCtx.createAnalyser();
-        this.meterNode.fftSize = 1024;
-        this.outBuf = new Float32Array(this.meterNode.fftSize);
-        src.connect(this.meterNode);
-        this.meterNode.connect(this.outCtx.destination);
-        this.metered = true;
+  /** The analyser every clip plays through, so the voice line can follow AIC's loudness. Built once. */
+  private ensureMeter(ctx: AudioContext): AudioNode {
+    if (!this.meterNode) {
+      try {
+        const m = ctx.createAnalyser();
+        m.fftSize = 1024;
+        this.outBuf = new Float32Array(m.fftSize);
+        m.connect(ctx.destination);
+        this.meterNode = m;
+        this.outFallback = false;
+      } catch {
+        this.outFallback = true; // the clip still plays; the wave uses a stand-in envelope
+        return ctx.destination;
       }
-      this.outMeter = this.meterNode;
-      this.outFallback = false;
-    } catch {
-      this.outFallback = true;
     }
+    return this.meterNode;
   }
 
   /** Polly's generative engine (the most human-sounding), in the region that offers it (config.pollyRegion). */
@@ -415,6 +402,8 @@ class AwsVoice implements Voice {
     this.polly ??= new PollyClient({ region: c.pollyRegion || c.region, credentials: await credentials() });
     const r = await this.polly.send(
       new SynthesizeSpeechCommand({
+        // Every voice in VOICES has a generative variant, and eu-central-1 offers the generative engine for
+        // all of them (docs: generative-voices, feature and region compatibility). MP3 decodes everywhere.
         Engine: "generative",
         OutputFormat: "mp3",
         Text: text.slice(0, 2900),
@@ -425,21 +414,43 @@ class AwsVoice implements Voice {
     return bytes ? new Blob([bytes as BlobPart], { type: "audio/mpeg" }) : null;
   }
 
-  async play(clip: Blob) {
-    this.stopSpeaking();
-    const url = URL.createObjectURL(clip);
-    const audio = (this.audio ??= new Audio()); // one element, unlocked by prime() inside the owner's tap
-    audio.src = url;
-    this.meterOutput(audio);
+  /** Plays one Polly clip through the AudioContext the owner's tap unlocked, decoded with decodeAudioData
+   *  (Safari blocks play() on fresh, un-gestured elements, and used to do so silently here). `onBegin` fires
+   *  at the moment sound really starts; the promise resolves when the clip ends or is stopped. Every way this
+   *  can fail throws with a name speakProblem() knows. */
+  async play(clip: Blob, onBegin?: () => void) {
+    const ctx = (this.outCtx ??= new AudioContext());
+    if (ctx.state !== "running") await ctx.resume().catch(() => undefined);
+    if (ctx.state !== "running") throw named("AudioSuspended", `the sound context is ${ctx.state}`);
+    const bytes = await clip.arrayBuffer();
+    if (!bytes.byteLength) throw named("EmptyAudio", "the speech service returned no audio");
+    let buffer: AudioBuffer;
     try {
-      await new Promise<void>((resolve, reject) => {
-        audio.onended = () => resolve();
-        audio.onpause = () => resolve(); // stopSpeaking() pauses it
-        audio.onerror = () => reject(named("AudioPlayError", "the reply's audio clip could not play"));
-        audio.play().catch(reject); // a blocked autoplay surfaces instead of failing silently
-      });
-    } finally {
-      URL.revokeObjectURL(url);
+      buffer = await ctx.decodeAudioData(bytes);
+    } catch (e) {
+      throw named("DecodeError", `the clip could not be decoded (${(e as Error)?.message ?? String(e)})`);
+    }
+    this.stopSpeaking();
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.connect(this.ensureMeter(ctx));
+    this.current = src;
+    await new Promise<void>((resolve, reject) => {
+      src.onended = () => resolve(); // fires on the natural end and on stopSpeaking()
+      try {
+        src.start();
+      } catch (e) {
+        reject(named("AudioPlayError", `the clip could not start (${(e as Error)?.message ?? String(e)})`));
+        return;
+      }
+      this.playing = true;
+      this.outMeter = this.meterNode;
+      onBegin?.();
+    });
+    this.playing = false;
+    if (this.current === src) {
+      this.current = null;
+      this.outMeter = null;
     }
   }
 
@@ -449,8 +460,14 @@ class AwsVoice implements Voice {
   }
 
   stopSpeaking() {
-    this.audio?.pause();
-    this.outMeter = null; // the element is kept: it stays unlocked for the next reply
+    try {
+      this.current?.stop();
+    } catch {
+      /* already stopped */
+    }
+    this.current = null;
+    this.playing = false;
+    this.outMeter = null;
   }
 }
 
