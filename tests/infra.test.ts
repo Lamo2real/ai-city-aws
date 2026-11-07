@@ -182,7 +182,12 @@ describe("apps API routes", () => {
 
 describe("app-bridge Lambda (docs/APPS.md v2)", () => {
   const api = () => readFileSync("infra/modules/api/main.tf", "utf8");
-  const block = (tf: string, start: string) => tf.slice(tf.indexOf(start), tf.indexOf("    ]", tf.indexOf(start)));
+  const block = (tf: string, start: string) =>
+    tf
+      .slice(tf.indexOf(start), tf.indexOf("    ]", tf.indexOf(start)))
+      .split("\n")
+      .filter((l) => !l.trim().startsWith("#"))
+      .join("\n");
   it("runs the shared zip with its own handler", () => {
     expect(api()).toMatch(/app-bridge\s+= \{ bundle = "app", handler = "aic\.lambdas\.app_bridge\.handler"/);
     expect(api()).toMatch(/app_bridge_name = "\$\{var\.name\}-app-bridge"/);
@@ -202,8 +207,26 @@ describe("app-bridge Lambda (docs/APPS.md v2)", () => {
     const perms = block(api(), "    app-bridge = [");
     expect(perms).toContain('"dynamodb:LeadingKeys" = ["APPS", "CONNECTORS", "MAIL"]');
     expect(perms).toContain('"dynamodb:LeadingKeys" = ["RATE#app-*", "TOOL#app-*"]');
-    expect(perms).not.toMatch(/DeleteItem|s3:|secretsmanager|bedrock-agentcore|events:|sqs:/);
+    expect(perms).not.toMatch(
+      /DeleteItem|s3:|events:|sqs:|InvokeGateway|CompleteResourceTokenAuth|CreateSecret|PutSecretValue/,
+    );
     const reads = perms.split("\n").find((l) => l.includes('"APPS", "CONNECTORS", "MAIL"')) ?? "";
     expect(reads).not.toMatch(/PutItem|UpdateItem/);
+  });
+  it("mail reads: workload aic-prod-mail, the two providers and the vault, aic/prod/mail/* secrets only", () => {
+    const tf = api();
+    const perms = block(tf, "    app-bridge = [");
+    expect(perms).toMatch(
+      /"bedrock-agentcore:GetWorkloadAccessTokenForUserId"\], Resource = local\.mail_workload_arns/,
+    );
+    expect(perms).toMatch(
+      /"bedrock-agentcore:GetResourceOauth2Token"\], Resource = concat\(local\.mail_workload_arns, \["\$\{local\.agentcore_arn\}:token-vault\/default"\], local\.mail_provider_arns\)/,
+    );
+    expect(perms).toContain(
+      '"secretsmanager:GetSecretValue"], Resource = ["arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:aic/prod/mail/*"]',
+    );
+    expect(tf).toMatch(/workload-identity\/\$\{var\.name\}-mail"\]/);
+    expect(tf).toMatch(/for p in \["google", "microsoft"\]/);
+    expect(block(tf, "    api = [")).not.toMatch(/bedrock-agentcore/);
   });
 });

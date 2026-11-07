@@ -320,8 +320,13 @@ invitations"), are limited to 10 per hour per app, and the app only learns `{ok:
   policy has no key limit, so its `RATE#app-*` needs no change.
   - TODO (infra, after `connectors-skills` merges): `bedrock-agentcore:InvokeGateway` on the connectors gateway ARN
     only, for the app-bridge role (never the api role). Until then connector reads answer `unavailable`.
-  - TODO (infra, after `mail-calendar` merges): the app-bridge role's mail/calendar read path (secret/vault reads as
-    the mail design gives it), read only. Until then mail/calendar capabilities answer `unavailable`.
+  - Mail/calendar read IAM for the bridge is in now (ARNs for resources that exist once `mail-calendar` merges):
+    `GetWorkloadAccessTokenForUserId` on workload `aic-prod-mail`, `GetResourceOauth2Token` on it, the default token
+    vault and `aic-prod-google`/`aic-prod-microsoft`, `GetSecretValue` on `aic/prod/mail/*`, `kms:Decrypt` (every
+    function), ledger read on `MAIL`. TODO at that merge: swap the hand-written provider ARNs (both spellings,
+    `oauth2credentialprovider` and `oauth2-credential-provider`) for the mail module's provider ARN outputs.
+  - Merge note: `connectors-skills` gives the api role `lambda:InvokeFunction` on `aic-prod-connectors` (the api
+    async-invokes it with `{"action":"policies"}`); keep that statement next to the app-bridge one when merging.
 - **connectors session:** `connector_calls.app_call` and the Cedar `permit` for `aic-prod-fn-app-bridge` (§1.9 of its contract).
 
 ## Not in v1 (suggested later)

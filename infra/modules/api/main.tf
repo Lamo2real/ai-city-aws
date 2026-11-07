@@ -92,7 +92,14 @@ locals {
   # Named, not referenced: the api function's env and policy name it, and both live in the same for_each.
   app_bridge_name = "${var.name}-app-bridge"
   apps_tagged     = ["apps", "app-bridge"]
-  ledger_rw       = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:ConditionCheckItem"]
+  # AgentCore Identity for the mail module (docs/MAIL_CALENDAR.md §8, §11). These exist once mail-calendar
+  # merges; IAM accepts ARNs of resources that don't exist yet. AWS docs spell the provider path
+  # oauth2-credential-provider, the API returns oauth2credentialprovider: both are listed until the mail
+  # module's credential_provider_arn outputs replace them.
+  agentcore_arn      = "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}"
+  mail_workload_arns = ["${local.agentcore_arn}:workload-identity-directory/default", "${local.agentcore_arn}:workload-identity-directory/default/workload-identity/${var.name}-mail"]
+  mail_provider_arns = flatten([for p in ["google", "microsoft"] : ["${local.agentcore_arn}:token-vault/default/oauth2credentialprovider/${var.name}-${p}", "${local.agentcore_arn}:token-vault/default/oauth2-credential-provider/${var.name}-${p}"]])
+  ledger_rw          = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:ConditionCheckItem"]
   # What each function may do, beyond logs, tracing and the KMS key.
   permissions = {
     api = [
@@ -114,10 +121,15 @@ locals {
     # Runs an app's granted read (docs/APPS.md v2). Invoked only by the api role. Reads the app's grants, the
     # connector list and the mail account rows; writes only its rate counters and the audit rows of agent app-<id>.
     # TODO after connectors-skills merges: bedrock-agentcore:InvokeGateway on the connectors gateway ARN only.
-    # TODO after mail-calendar merges: the mail/calendar read path (read only).
     app-bridge = [
       { Action = ["dynamodb:GetItem", "dynamodb:Query"], Resource = [var.ledger_arn], Condition = { "ForAllValues:StringEquals" = { "dynamodb:LeadingKeys" = ["APPS", "CONNECTORS", "MAIL"] } } },
       { Action = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"], Resource = [var.ledger_arn], Condition = { "ForAllValues:StringLike" = { "dynamodb:LeadingKeys" = ["RATE#app-*", "TOOL#app-*"] } } },
+      # Mail/calendar reads (MailService read methods only): a token per account (vault user ma-…), the IMAP
+      # app passwords, the MAIL rows above. No CompleteResourceTokenAuth, no secret writes. kms:Decrypt on the
+      # project key comes with every function.
+      { Action = ["bedrock-agentcore:GetWorkloadAccessTokenForUserId"], Resource = local.mail_workload_arns },
+      { Action = ["bedrock-agentcore:GetResourceOauth2Token"], Resource = concat(local.mail_workload_arns, ["${local.agentcore_arn}:token-vault/default"], local.mail_provider_arns) },
+      { Action = ["secretsmanager:GetSecretValue"], Resource = ["arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:aic/prod/mail/*"] },
     ]
     # Checks a worker's submission and stages it as a draft. Never live/, never another ledger key.
     apps = [
