@@ -86,7 +86,7 @@ async def sdk_engine(req: EngineRequest) -> TurnOutput:
         PermissionResultAllow,
         PermissionResultDeny,
         ResultMessage,
-        TextBlock,
+        StreamEvent,
         create_sdk_mcp_server,
         query,
         tool,
@@ -144,6 +144,7 @@ async def sdk_engine(req: EngineRequest) -> TurnOutput:
         env=env,
         cwd=req.cwd,
         can_use_tool=can_use_tool,
+        include_partial_messages=bool(req.on_text),  # token deltas, so the reply streams as it is written
         stderr=on_stderr,  # kept so a failed turn says why (the SDK drops it otherwise)
     )
     text = ""
@@ -151,10 +152,12 @@ async def sdk_engine(req: EngineRequest) -> TurnOutput:
     usage = Usage()
     try:
         async for msg in query(prompt=prompt(), options=options):
-            if isinstance(msg, AssistantMessage):
-                for block in msg.content:
-                    if isinstance(block, TextBlock) and req.on_text:
-                        await req.on_text(block.text)
+            if isinstance(msg, StreamEvent):
+                ev = msg.event
+                delta = ev.get("delta") or {}
+                if req.on_text and ev.get("type") == "content_block_delta" and delta.get("type") == "text_delta":
+                    await req.on_text(str(delta.get("text", "")))
+            elif isinstance(msg, AssistantMessage):
                 if getattr(msg, "stop_reason", None) == "refusal":
                     stop = "refusal"
             elif isinstance(msg, ResultMessage):

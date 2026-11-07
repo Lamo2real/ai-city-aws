@@ -34,6 +34,10 @@ variable "user_pool_endpoint" { type = string }
 variable "client_id" { type = string }
 variable "app_origin" { type = string }
 variable "runtime_arns" { type = map(string) }
+variable "ace_role_name" {
+  type        = string
+  description = "AIC's runtime role: it streams its reply straight to the HUD's WebSocket connections."
+}
 variable "runtime_version" {
   type        = string
   default     = ""
@@ -66,7 +70,7 @@ locals {
   # name => bundle, handler, timeout, memory, extra env
   functions = {
     api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 512, env = { AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_USER_POOL_ID = var.user_pool_id, AIC_OWNER_EMAIL = var.owner_email } }
-    dispatcher    = { bundle = "app", handler = "aic.lambdas.dispatcher.handler", timeout = 120, memory = 256, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_ARN_ORCHESTRATOR = var.runtime_arns["orchestrator"], AIC_RUNTIME_ARN_MANAGER = var.runtime_arns["manager"], AIC_RUNTIME_ARN_WORKER = var.runtime_arns["worker"], AIC_RUNTIME_VERSION = var.runtime_version } }
+    dispatcher    = { bundle = "app", handler = "aic.lambdas.dispatcher.handler", timeout = 120, memory = 256, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_ARN_ORCHESTRATOR = var.runtime_arns["orchestrator"], AIC_RUNTIME_ARN_MANAGER = var.runtime_arns["manager"], AIC_RUNTIME_ARN_WORKER = var.runtime_arns["worker"], AIC_RUNTIME_VERSION = var.runtime_version, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod", AIC_CONNECTIONS_TABLE = var.connections_table } }
     factory       = { bundle = "app", handler = "aic.lambdas.factory.handler", timeout = 30, memory = 256, env = {} }
     ledger-writer = { bundle = "app", handler = "aic.lambdas.ledger_writer.handler", timeout = 30, memory = 256, env = {} }
     scheduler     = { bundle = "app", handler = "aic.lambdas.scheduler.handler", timeout = 120, memory = 256, env = {} }
@@ -537,6 +541,20 @@ resource "aws_scheduler_schedule" "job" {
     role_arn = aws_iam_role.scheduler.arn
     input    = jsonencode(each.value.input)
   }
+}
+
+# AIC streams its reply straight to the open HUDs (no EventBridge → Lambda hop per piece): it reads the
+# connection list and posts to those connections, the same two things ws-broadcast may do.
+resource "aws_iam_role_policy" "ace_live_reply" {
+  name = "live-reply"
+  role = var.ace_role_name
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      { Effect = "Allow", Action = ["dynamodb:Query", "dynamodb:DeleteItem"], Resource = [var.connections_arn, "${var.connections_arn}/index/*"] },
+      { Effect = "Allow", Action = ["execute-api:ManageConnections"], Resource = ["arn:aws:execute-api:${var.region}:${var.account_id}:${aws_apigatewayv2_api.ws.id}/prod/POST/@connections/*"] },
+    ]
+  })
 }
 
 output "http_api_url" { value = aws_apigatewayv2_api.http.api_endpoint }

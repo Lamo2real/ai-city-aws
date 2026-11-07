@@ -105,6 +105,7 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
     """Production wiring inside the container."""
     from .engine import sdk_engine
     from .host import AgentHost, HostOptions
+    from .live import websocket_sender
 
     e = os.environ if env is None else env
     startup_guard(e)  # refuse to start without Bedrock, or with any other credential
@@ -122,7 +123,16 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
             settings=city.settings,
             max_review_rounds=caps["max_review_rounds"],
         ),
-        HostOptions(engine=sdk_engine, role=role, timeout_ms=minutes * 60_000),
+        HostOptions(
+            engine=sdk_engine,
+            role=role,
+            timeout_ms=minutes * 60_000,
+            live_sender=lambda inv: (
+                websocket_sender(inv["wsEndpoint"], inv["connectionsTable"], city.region)
+                if inv.get("wsEndpoint") and inv.get("connectionsTable")
+                else None
+            ),
+        ),
     )
     log("info", "runtime.started", role=role)
     return create_app(host)

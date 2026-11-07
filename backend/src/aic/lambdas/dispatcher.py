@@ -40,14 +40,19 @@ def session_id_for(m: WorkMessage, owner: str = "owner", version: str = "") -> s
 class AgentCoreInvoker:
     """``client`` is a boto3 ``bedrock-agentcore`` client."""
 
-    def __init__(self, client: Any, arns: Mapping[str, str]) -> None:
+    def __init__(self, client: Any, arns: Mapping[str, str], live: Mapping[str, str] | None = None) -> None:
         self._client = client
         self._arns = arns
+        # Where AIC streams its reply straight to the HUD (the WebSocket endpoint and connections table).
+        # Passed per invocation because the runtime is created before the WebSocket API.
+        self._live = dict(live or {})
 
     async def invoke(self, inv: dict[str, Any]) -> None:
         arn = self._arns.get(inv["role"])
         if not arn:
             raise RuntimeError(f"no runtime for {inv['role']}")
+        if inv["role"] == "ace" and self._live.get("wsEndpoint") and self._live.get("connectionsTable"):
+            inv = {**inv, **self._live}
         r = await asyncio.to_thread(
             self._client.invoke_agent_runtime,
             agentRuntimeArn=arn,
@@ -113,6 +118,7 @@ def _dispatcher() -> Dispatcher:
             "manager": env.get("AIC_RUNTIME_ARN_MANAGER", ""),
             "worker": env.get("AIC_RUNTIME_ARN_WORKER", ""),
         },
+        {"wsEndpoint": env.get("AIC_WS_ENDPOINT", ""), "connectionsTable": env.get("AIC_CONNECTIONS_TABLE", "")},
     )
     owner = env.get("AIC_OWNER_ID", "owner")
     version = env.get("AIC_RUNTIME_VERSION", "")
