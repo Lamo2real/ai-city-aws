@@ -148,6 +148,7 @@ jobs:
           OWNER_EMAIL: ${{ secrets.AIC_OWNER_EMAIL }}
           BUDGET: ${{ vars.AIC_MONTHLY_BUDGET_USD || '10000' }}
           IMAGE_TAG: ${{ needs.backend.outputs.image_tag }}
+          QUEUES_ENABLED: ${{ vars.AIC_QUEUES_ENABLED || 'true' }}
           # Optional JSON, e.g. {"google":{"enabled":true,"client_id":"…"},"microsoft":{"enabled":false,"client_id":"","tenant_id":"common"}}
           MAIL_PROVIDERS: ${{ vars.AIC_MAIL_PROVIDERS }}
           # "true" once the owner has pasted the Apple APNs key in Settings (docs/NOTIFICATIONS.md).
@@ -165,6 +166,7 @@ jobs:
             -var "region=${AWS_REGION}" \
             -var "owner_email=${OWNER_EMAIL}" \
             -var "agent_image_tag=${IMAGE_TAG}" \
+            -var "queues_enabled=${QUEUES_ENABLED}" \
             -var "monthly_budget_usd=${BUDGET}" \
             -var "apns_enabled=${APNS_ENABLED}" \
             "${extra[@]}"

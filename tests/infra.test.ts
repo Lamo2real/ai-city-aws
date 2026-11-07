@@ -703,3 +703,15 @@ describe("the city is always on", () => {
     expect(tf).not.toMatch(/\/city\/(pause|resume)/);
   });
 });
+
+describe("the owner's queue switch", () => {
+  it("every SQS trigger follows queues_enabled, passed from the deploy variable AIC_QUEUES_ENABLED", async () => {
+    const { readFileSync } = await import("node:fs");
+    const api = readFileSync("infra/modules/api/main.tf", "utf8");
+    expect(api).toMatch(/resource "aws_lambda_event_source_mapping" "queue" \{[^}]*enabled\s*=\s*var\.queues_enabled/s);
+    expect(readFileSync("infra/envs/prod/main.tf", "utf8")).toMatch(/queues_enabled\s*=\s*var\.queues_enabled/);
+    const wf = readFileSync(".github/workflows/deploy.yml", "utf8");
+    expect(wf).toContain("vars.AIC_QUEUES_ENABLED");
+    expect(wf).toContain('-var "queues_enabled=${QUEUES_ENABLED}"');
+  });
+});

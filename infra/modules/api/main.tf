@@ -38,6 +38,11 @@ variable "user_pool_endpoint" { type = string }
 variable "client_id" { type = string }
 variable "app_origin" { type = string }
 variable "runtime_arns" { type = map(string) }
+variable "queues_enabled" {
+  type        = bool
+  default     = true
+  description = "Whether the four SQS triggers run. false = the city is switched off until the owner turns it on."
+}
 variable "ace_role_name" {
   type        = string
   description = "AIC's runtime role: it streams its reply straight to the HUD's WebSocket connections."
@@ -320,9 +325,12 @@ resource "aws_lambda_function" "fn" {
 }
 
 # ---------- SQS → dispatcher ----------
+# The owner's switch: with queues_enabled = false the four triggers stay off across deploys (nothing is
+# picked up; queued work waits). The emergency brake turns them off by hand; this keeps them off.
 resource "aws_lambda_event_source_mapping" "queue" {
   for_each                = var.queue_arns
   event_source_arn        = each.value
+  enabled                 = var.queues_enabled
   function_name           = aws_lambda_alias.always_on["dispatcher"].arn # the always-on alias, never $LATEST
   batch_size              = local.queue_batch[each.key]
   function_response_types = ["ReportBatchItemFailures"]

@@ -191,6 +191,7 @@ module "api" {
   client_id             = module.auth.client_id
   app_origin            = module.frontend.url
   runtime_arns          = module.agents.runtime_arns
+  queues_enabled        = var.queues_enabled
   runtime_version       = var.agent_image_tag
   ace_role_name         = module.agents.role_names["ace"]
   utility_invoke_arns   = module.agents.utility_invoke_arns
