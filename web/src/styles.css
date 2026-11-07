@@ -840,6 +840,15 @@ main {
 .aic-steps li + li {
   margin-top: 2px;
 }
+/* Work AIC handed on is still running: the summary shimmers like the live status row, the clock counts. */
+.aic-steps.is-running summary {
+  gap: var(--s3);
+  font-weight: 600;
+}
+.aic-steps li.current {
+  color: var(--text);
+  font-weight: 700;
+}
 /* A thin caret at the end of the words while AIC's reply is still coming in. */
 .msg-ace.is-streaming .msg-body > :is(p, h3, h4, h5, h6):last-child::after,
 .msg-ace.is-streaming .msg-body > :is(ul, ol):last-child > li:last-child::after {

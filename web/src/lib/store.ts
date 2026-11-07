@@ -17,11 +17,16 @@ export interface ChatLine {
   /** AIC lines: the steps AIC took before answering, and how long until its first words (ms). */
   steps?: string[];
   tookMs?: number;
+  /** AIC lines: when the owner sent, and the work AIC handed on (tickets) and whether each has settled. */
+  started?: number;
+  tasks?: { id: string; done: boolean }[];
 }
 /** AIC's turn in progress: when the owner sent, and the steps so far. */
 export interface AceTurn {
   started: number;
   steps: string[];
+  /** Tickets AIC opened in this turn before its reply line existed. */
+  tasks?: string[];
 }
 /** A connect card under AIC's chat: an add-connector approval, a sign-in button, a key field or an app-password form. */
 export type ConnectCardState =
@@ -102,11 +107,46 @@ class Store {
     for (const e of this.during ?? []) city = reduce(city, e);
     this.during = null;
     this.set({ city, loaded: true, loadError: null });
+    // Work that finished while this page was closed or offline: no longer open in the city, so settled.
+    const open = new Set([...Object.keys(city.tickets ?? {}), ...Object.keys(city.parked ?? {})]);
+    this.settleTasks((id) => !open.has(id));
+  }
+
+  /** Links the ticket AIC opens to its reply, and settles it when it finishes or its result comes back. */
+  private taskEvent(e: { type: string; [k: string]: unknown }) {
+    if (e.type === "result" && typeof e.ticket_id === "string") return this.settleTasks((id) => id === e.ticket_id);
+    if (e.type !== "ticket.status") return;
+    const t = e.ticket as { id: string; from: string; status: string } | undefined;
+    if (!t) return;
+    if (["done", "failed", "cancelled"].includes(t.status)) return this.settleTasks((id) => id === t.id);
+    if (e.previous !== null || t.from !== "ace") return;
+    const turn = this.state.turn;
+    const chat = this.state.chat;
+    const i = chat.findLastIndex((l) => l.who === "ace");
+    const line = chat[i];
+    if (turn && (!line || line.at < turn.started))
+      return this.set({ turn: { ...turn, tasks: [...(turn.tasks ?? []), t.id] } }); // the reply has not started yet
+    if (!line || line.tasks?.some((x) => x.id === t.id)) return;
+    const next = [...chat];
+    next[i] = { ...line, tasks: [...(line.tasks ?? []), { id: t.id, done: false }] };
+    this.set({ chat: next });
+  }
+  private settleTasks(match: (id: string) => boolean) {
+    const chat = this.state.chat;
+    if (!chat.some((l) => l.tasks?.some((t) => !t.done && match(t.id)))) return;
+    this.set({
+      chat: chat.map((l) =>
+        l.tasks?.some((t) => !t.done && match(t.id))
+          ? { ...l, tasks: l.tasks.map((t) => (match(t.id) ? { ...t, done: true } : t)) }
+          : l,
+      ),
+    });
   }
   event(e: { type: string; [k: string]: unknown }) {
     if (e.type === "ace.reply")
       return this.aceReply(e as unknown as { conversation: string; text: string; done: boolean });
     if (e.type === "activity" && e.id === "ace") this.aceStep(String(e.activity ?? ""), e.detail as string | null);
+    this.taskEvent(e);
     this.cardEvent(e);
     this.during?.push(e);
     this.set({ city: reduce(this.state.city, e) });
@@ -224,7 +264,16 @@ class Store {
         text: e.text,
         state: e.done ? "done" : "streaming",
         at: Date.now(),
-        ...(this.state.turn ? { steps: this.state.turn.steps, tookMs: Date.now() - this.state.turn.started } : {}),
+        ...(this.state.turn
+          ? {
+              steps: this.state.turn.steps,
+              tookMs: Date.now() - this.state.turn.started,
+              started: this.state.turn.started,
+              ...(this.state.turn.tasks?.length
+                ? { tasks: this.state.turn.tasks.map((id) => ({ id, done: false })) }
+                : {}),
+            }
+          : {}),
       });
     // While AIC already speaks its first sentences, more pieces arriving must not flip it back to "thinking".
     const presence = e.done || this.state.presence === "speaking" ? "speaking" : "thinking";

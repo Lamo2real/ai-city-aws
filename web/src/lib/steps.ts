@@ -33,3 +33,8 @@ export function stepWords(activity: string, detail?: string | null): string | nu
   const tool = (detail ?? "").replace(/^mcp__city__/, "");
   return BY_TOOL[tool] ?? BY_ACTIVITY[activity] ?? "Working on it";
 }
+
+/** AIC's reply is "still running" while work it handed on (its tickets) has not finished or reported back. */
+export function stepsRunning(line: { tasks?: { done: boolean }[] }): boolean {
+  return !!line.tasks?.some((t) => !t.done);
+}
