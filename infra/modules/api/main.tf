@@ -203,6 +203,8 @@ locals {
     "GET /mail/rules", "POST /mail/rules", "DELETE /mail/rules/{id}",
     # iPhone notifications (docs/NOTIFICATIONS.md): the owner's phones and the Apple key.
     "GET /devices", "POST /devices", "DELETE /devices/{id}", "GET /notifications/apns", "PUT /notifications/apns",
+    # AIC's voice through OpenAI text-to-speech (docs/VOICE.md): the key the owner pastes, and the speech itself.
+    "POST /speech", "GET /voice/openai", "PUT /voice/openai-key",
   ]
   queue_batch = { ace = 1, orchestrator = 5, manager = 5, worker = 10 }
   queue_conc  = { ace = 5, orchestrator = 10, manager = 20, worker = var.worker_queue_concurrency }
