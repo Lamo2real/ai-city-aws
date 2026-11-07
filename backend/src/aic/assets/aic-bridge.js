@@ -4,6 +4,7 @@
      // r = { ok: true, data } | { ok: false, error, message }
      await aic.propose("calendar.respond", { id, response: "accept" }); // the owner approves it in Needs you
      aic.on("calendar.changed", reload);                                 // the owner's calendars changed
+     await aic.state.set("best", 42); (await aic.state.get("best")).data.value  // with the "state" grant
    aic.preview is true in the publish preview, which never gets data. */
 /* global window, location, crypto */
 (function () {
@@ -75,6 +76,14 @@
     propose: function (kind, params) {
       return send("propose", { kind: String(kind), params: params || {} });
     },
+    state: Object.freeze({
+      get: function (key) {
+        return send("state.get", { key: String(key) });
+      },
+      set: function (key, value) {
+        return send("state.set", { key: String(key), value: value === undefined ? null : value });
+      },
+    }),
     on: function (name, fn) {
       if (typeof fn === "function" && Object.prototype.hasOwnProperty.call(EVENTS, name)) EVENTS[name].push(fn);
     },

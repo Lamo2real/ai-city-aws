@@ -17,10 +17,15 @@ from typing import Any
 from aic.shared.apps import (
     MAX_FILE_BYTES,
     MAX_FILES,
+    MAX_TOTAL_BYTES,
     delete_prefix,
+    get_app,
+    get_draft,
+    list_apps,
     request_publish_approvals,
     submission_prefix,
     validate_files,
+    version_files,
 )
 from aic.shared.events import now_iso
 from aic.shared.hierarchy.actions import (
@@ -114,6 +119,9 @@ def validate_args(schema: dict[str, Any], args: dict[str, Any]) -> str | None:
 def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
     async def delegate(a: dict[str, Any]) -> str:
         cons = a.get("constraints")
+        target = await get_app(d.ledger, str(a["app_id"])) if a.get("app_id") else None
+        if a.get("app_id") and not target:
+            return "There is no app with that id. Check get_status for the apps and their ids."
         t = await new_ticket(
             d,
             {
@@ -125,9 +133,15 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 "kind": "task",
                 **({"acceptance": str(cons)} if cons else {}),
                 **({"conversation": c.conversation} if c.conversation else {}),
+                **({"app_id": target["app_id"]} if target else {}),
             },
         )
         body = f"New task from the owner.\nGoal: {a['goal']}\nOwner's words: {a.get('owner_words', '')}"
+        if target:
+            body += (
+                f"\nThis changes the existing app “{target['title']}” ({target['app_id']}, version "
+                f"{target.get('version') or 1}). Send it to the Apps department; the result is a new version of it."
+            )
         if cons:
             body += f"\nConstraints: {cons}"
         msg: dict[str, Any] = {
@@ -148,7 +162,11 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
     async def get_status(_: dict[str, Any]) -> str:
         import json
 
-        return json.dumps(await status_summary(d))
+        apps = [
+            {"app_id": x["app_id"], "title": x["title"], "slug": x["slug"], "version": x.get("version") or 1}
+            for x in await list_apps(d.ledger)
+        ]
+        return json.dumps({**await status_summary(d), "apps": apps})
 
     async def answer(a: dict[str, Any]) -> str:
         r = await answer_question(d, str(a["question_id"]), str(a["answer"]), "owner")
@@ -188,8 +206,12 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
     return [
         ToolSpec(
             "delegate_to_orchestrator",
-            "Hand real work to the Orchestrator. Use for anything beyond a quick answer.",
-            _obj({"goal": _s(3), "owner_words": _s(), "constraints": _s()}, ("constraints",)),
+            "Hand real work to the Orchestrator. Use for anything beyond a quick answer. To change one of the "
+            "owner's apps, pass its app_id (from get_status).",
+            _obj(
+                {"goal": _s(3), "owner_words": _s(), "constraints": _s(), "app_id": _s(1, 40)},
+                ("constraints", "app_id"),
+            ),
             delegate,
         ),
         ToolSpec("get_status", "Tickets, departments, live agents and spend, in one summary.", _obj({}), get_status),
@@ -291,6 +313,7 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 "department": dept["name"],
                 "parent_id": c.task_id,
                 "kind": "assignment",
+                **({"app_id": task_app} if (task_app := await _task_app(d, c.task_id)) else {}),
             },
         )
         task = await d.ledger.get_ticket(c.task_id)
@@ -306,7 +329,12 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 "taskId": c.task_id,
                 "kind": "task",
                 "from": "orchestrator",
-                "body": f"Goal for {dept['name']}: {a['goal']}\nAcceptance: {a['acceptance']}",
+                "body": f"Goal for {dept['name']}: {a['goal']}\nAcceptance: {a['acceptance']}"
+                + (
+                    f"\nThis changes the existing app {task_app}: workers start from its current version with load_app."
+                    if task_app
+                    else ""
+                ),
             },
         )
         return f"Sent to {dept['name']} as {t['id']}."
@@ -744,6 +772,24 @@ def _worker_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         )
         return f"Submitted {len(files)} files; the city is checking them."
 
+    async def load_app(_: dict[str, Any]) -> str:
+        ws = d.workspace
+        app_id = await _task_app(d, c.task_id)
+        if ws is None or not ws.apps_url:
+            return "Apps cannot be loaded from here."
+        app = await get_app(d.ledger, app_id) if app_id else None
+        if not app:
+            return "This task does not change an existing app; build a new one."
+        files = version_files(app, await get_draft(d.ledger, str(app.get("draft_id") or "")))
+        if not files or not all(u.startswith(ws.apps_url.rstrip("/") + "/live/") for _, u in files):
+            return "The app's files could not be found."
+        dest = Path(ws.root) / c.agent_id / "app"
+        try:
+            n = await asyncio.to_thread(_download_app, files, dest, d.fetch)
+        except ValueError as e:
+            return f"Not loaded: {e}."
+        return f"Loaded {n} files of “{app['title']}” version {app.get('version') or 1} into app/. Edit them, then submit_app."
+
     return [
         ToolSpec(
             "ask_manager",
@@ -767,7 +813,38 @@ def _worker_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             ),
             submit_app,
         ),
+        ToolSpec(
+            "load_app",
+            "Apps work only, when the task changes an existing app: copies its current version into your app/ folder.",
+            _obj({}),
+            load_app,
+        ),
     ]
+
+
+async def _task_app(d: CityDeps, task_id: str) -> str | None:
+    t = await d.ledger.get_ticket(task_id) if task_id else None
+    return str(t["app_id"]) if t and t.get("app_id") else None
+
+
+def _download_app(files: list[tuple[str, str]], dest: Path, fetch: Callable[[str], bytes]) -> int:
+    """Writes the app's files under ``dest`` (replacing what is there), within the submission limits."""
+    import shutil
+
+    if dest.exists():
+        shutil.rmtree(dest)
+    total = 0
+    for path, url in files:
+        body = fetch(url)
+        total += len(body)
+        if len(body) > MAX_FILE_BYTES or total > MAX_TOTAL_BYTES:
+            raise ValueError("the app is bigger than the submission limits")
+        target = (dest / path).resolve()
+        if dest.resolve() not in target.parents:
+            raise ValueError("a file path leaves the app folder")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(body)
+    return len(files)
 
 
 def _collect_app(home: Path, rel: str) -> list[tuple[str, bytes]]:

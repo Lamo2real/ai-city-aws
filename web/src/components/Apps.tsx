@@ -16,6 +16,7 @@ import {
   onAppsOrigin,
   pinnedApps,
   removeApp,
+  rollbackApp,
   updateApp,
   type Capability,
 } from "../lib/apps.ts";
@@ -140,6 +141,7 @@ export function AppPage({ slug, go }: { slug: string; go: (view: string) => void
   const loaded = useHud((s) => s.loaded);
   const app = Object.values(appsMap).find((a) => a.slug === slug);
   const [asking, setAsking] = useState(false);
+  const [goingBack, setGoingBack] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     if (!app) loadApps().catch(() => undefined); // maybe published after the last snapshot
@@ -159,11 +161,14 @@ export function AppPage({ slug, go }: { slug: string; go: (view: string) => void
       </section>
     );
   const title = capped(app.title, 40);
+  const version = app.version ?? 1;
+  const previous = app.history?.[0];
   return (
     <section className="apppage" aria-labelledby="app-title">
       <header className="apphead">
         {back}
         <h1 id="app-title">{title}</h1>
+        {version > 1 ? <span className="mute appversion">{`Version ${version}`}</span> : null}
         <PinButton app={app} />
         <details className="appperms">
           <summary>{`Allowed (${(app.grants ?? []).length})`}</summary>
@@ -171,12 +176,36 @@ export function AppPage({ slug, go }: { slug: string; go: (view: string) => void
             <GrantList app={app} />
           </div>
         </details>
+        {previous ? (
+          <Button variant="quiet" onClick={() => setGoingBack(true)}>
+            {`Back to version ${previous.version ?? version - 1}`}
+          </Button>
+        ) : null}
         <Button variant="quiet" onClick={() => setAsking(true)}>
           Remove
         </Button>
       </header>
       {error ? <Banner tone="bad">{error}</Banner> : null}
       <AppFrame src={app.url} title={`${title} (app built by the city)`} appId={app.app_id} />
+      {goingBack && previous ? (
+        <Confirm
+          title={`Go back to version ${previous.version ?? version - 1}?`}
+          what={`Version ${version} is deleted and ${title} opens as it was before. Its saved data (such as scores) stays.`}
+          cost={`Nothing to pay. Version ${version} can't be brought back, but you can ask AIC for the change again.`}
+          confirmLabel="Go back"
+          onCancel={() => setGoingBack(false)}
+          onConfirm={async () => {
+            setGoingBack(false);
+            setError(null);
+            try {
+              await rollbackApp(app.app_id);
+              toast({ text: `${title} is back to version ${previous.version ?? version - 1}.`, tone: "good" });
+            } catch (e) {
+              setError(problem(e));
+            }
+          }}
+        />
+      ) : null}
       {asking ? (
         <Confirm
           title={`Remove ${title}?`}

@@ -42,6 +42,7 @@ from .app_caps import (
     no_app_call,
     plain,
 )
+from .app_state import STATE_CAPS, serve_state
 from .apps import get_app
 from .events import EventBus
 from .ledger import Ledger, Record
@@ -103,6 +104,8 @@ def granted(app: Record, cap_name: str, params: Any) -> Capability | None:
     if cap_name == "connector.read":
         p = params if isinstance(params, dict) else {}
         want = cap_key({"id": "connector.read", "connector": p.get("connector"), "tool": p.get("tool")})
+    elif cap_name in STATE_CAPS:
+        want = "state"
     else:
         want = cap_name
     return next((g for g in app.get("grants") or [] if cap_key(g) == want and g.get("id") != "propose"), None)
@@ -116,6 +119,12 @@ async def api_bridge(ledger: Ledger, app: Record, cap_name: Any, params: Any, in
     cap = granted(app, cap_name, params)
     if cap is None:
         return Answer(403, _err("not_granted", "You haven't given this app that permission."))
+    if cap["id"] == "state":  # the app's own keys: served here, in the ledger, without the app-bridge Lambda
+        if cap_name not in STATE_CAPS:
+            return Answer(400, _err("invalid", "Ask for state.get or state.set."))
+        if not await _take(ledger, f"app-{app['app_id']}", 60, BRIDGE_PER_MINUTE):
+            return Answer(429, _err("rate_limited", "Too many requests; try again in a minute."))
+        return _answer(await serve_state(ledger, app, cap_name, params))
     try:
         p = check_params(cap, params)
         if cap["id"] == "connector.read":

@@ -159,9 +159,14 @@ function PublishCard({
   const unknown = caps.length - known.length;
   const [on, setOn] = useState<Record<string, boolean>>(() => Object.fromEntries(known.map((c) => [capKey(c), true])));
   const [pin, setPin] = useState(a.pin === true);
+  const update = Boolean(a.replaces);
   return (
-    <article className="card publish" aria-label={`New app: ${title}`}>
-      <p className="mute">The city built this. Try it here; approve it and it appears under Apps.</p>
+    <article className="card publish" aria-label={update ? `Update of ${title}` : `New app: ${title}`}>
+      <p className="mute">
+        {update
+          ? `A new version${a.version ? ` (version ${a.version})` : ""} of one of your apps. Try it here; approve it and it replaces the current one, which is kept so you can go back.`
+          : "The city built this. Try it here; approve it and it appears under Apps."}
+      </p>
       <h3 className="apptitle">{title}</h3>
       {a.description ? <p>{capped(a.description, 200)}</p> : null}
       <AppFrame src={a.preview_url} title={`Preview of ${title}`} className="preview" />
@@ -188,9 +193,11 @@ function PublishCard({
       {unknown ? (
         <p className="mute">{`${unknown} other request${unknown > 1 ? "s" : ""} AI City doesn't know stay off.`}</p>
       ) : null}
-      <label className="switch">
-        <input type="checkbox" checked={pin} onChange={(e) => setPin(e.target.checked)} /> Put its icon in the top bar
-      </label>
+      {update ? null : (
+        <label className="switch">
+          <input type="checkbox" checked={pin} onChange={(e) => setPin(e.target.checked)} /> Put its icon in the top bar
+        </label>
+      )}
       <div className="row-end">
         <Button
           variant="quiet"

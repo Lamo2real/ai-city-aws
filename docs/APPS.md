@@ -358,5 +358,45 @@ calendar `hidden` come with `calendars`. `approval.requested` for `app.publish` 
     async-invokes it with `{"action":"policies"}`); keep that statement next to the app-bridge one when merging.
 - **connectors session:** `connector_calls.app_call` and the Cedar `permit` for `aic-prod-fn-app-bridge` (§1.9 of its contract).
 
+## v3: app state and new versions (2026-11-07)
+Two things the owner's "make me a game… a new feature" needs: a game must keep high scores and settings, and
+"make my snake game harder" must change that app, not make a second one.
+
+### Per-app state (capability `state`)
+- Manifest: `{ "id": "state" }`, listed on the publish card as "Remember its own data, such as high scores and
+  settings (up to 64 KB)" and granted or revoked like any other capability.
+- Bridge requests: `state.get {key}` → `{value}` (`null` when unset) and `state.set {key, value}` (`value: null`
+  deletes the key) → `{ok: true}`. `aic-bridge.js` wraps them as `aic.state.get(key)` and `aic.state.set(key, value)`.
+  The HUD's grant check maps `state.get` / `state.set` to the grant `state`; previews get `preview` as for everything.
+- Limits: key `[A-Za-z0-9_.-]{1,64}`; value any JSON ≤ 4 KB; at most 50 keys and 64 KB per app (`invalid` above them).
+- Stored in the ledger: pk `APPSTATE#<app_id>`, sk `KEY#<key>`, `{value (JSON text), size, updated_at}`. The api
+  Lambda handles these two requests itself (it already writes the ledger): grant, params, the 120/min limit, then
+  `policy.gate` as role `app` with `mcp__app__state.get` / `mcp__app__state.set` (both allowed in `config/policy.json`)
+  and the audit. The app-bridge Lambda is not involved, and no other app's state can be named (the app id comes
+  from the route). State survives new versions and rollbacks; removing the app deletes it.
+
+### Changing an existing app (new versions)
+- AIC: `delegate_to_orchestrator` takes an optional `app_id`. AIC finds it in `get_status`, which now lists
+  `apps: [{app_id, title, slug, version}]`. An unknown id is refused. The task ticket stores `app_id`; the
+  Orchestrator's goal for the department and every child ticket carry it.
+- Worker: a new tool `load_app` (no input) copies the current version's files (the published draft's file list,
+  without `aic-bridge.js`) from the apps origin into `/tmp/work/<hire_id>/app/`, using the task's `app_id`. It only
+  reads the public apps URL (`AIC_APPS_URL` on the runtimes); workers get no new permission. Then the worker edits
+  and calls `submit_app` as usual.
+- Staging: the apps Lambda reads the task ticket's `app_id`; when that app exists the draft gets `replaces: app_id`.
+- Needs you: the approval says "Update the app “<title>” to version <n+1>" and carries `replaces` and `version`.
+  The capabilities of the new version are listed and granted as at a first publish.
+- Publish of an update: files go to `live/<app_id>/<draft_id>/` (each version under its own path, so no CDN
+  invalidation is needed and the old one stays intact); the APP record keeps its `app_id`, `slug`, `pinned` and state,
+  and gets the new `url`, `icon_url`, `title`, `description`, `capabilities`, `grants`, `draft_id`, `version + 1`;
+  the version it replaced goes to the front of `history` (at most 5 kept; older ones' files are deleted). Event
+  `app.updated {app}`. Version 1 of an app stays at `live/<app_id>/index.html`.
+- Rollback: `POST /apps/<app_id>/rollback` (owner only) → the newest `history` entry becomes current again;
+  the version rolled back from is deleted with its files; grants are that entry's grants minus anything the owner
+  revoked since (`revoked` keys kept on the record). 409 when there is no earlier version. Event `app.updated`.
+- HUD: the app page shows "Version n" and, when there is history, "Back to version n-1" (confirm dialog). The publish
+  card for an update says "Update of <title>" and shows the version.
+- Remove still deletes the whole `live/<app_id>/` prefix (all versions), the record and the state.
+
 ## Not in v1 (suggested later)
-Updating an existing app in place (a new request makes a new app), saved high scores (a per-app storage capability would fit the v2 catalogue), a custom domain for exact `frame-ancestors`.
+A custom domain for exact `frame-ancestors`.

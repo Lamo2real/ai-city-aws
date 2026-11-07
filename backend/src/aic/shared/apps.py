@@ -18,10 +18,13 @@ from pathlib import Path
 from typing import Any
 
 from .app_caps import MANIFEST, Capability, Invalid, cap_key, check_manifest, clean_cap, labelled, subset
+from .app_state import delete_state
 from .events import EventBus, now_iso
 from .ids import new_id
 from .ledger import Ledger, Record, strip
 from .table import UpdateOptions
+
+MAX_HISTORY = 5
 
 MAX_FILES = 300
 MAX_TOTAL_BYTES = 10 * 1024 * 1024
@@ -224,6 +227,8 @@ class Workspace:
     s3_for: Callable[[str], Any]
     """hire_id → an S3 client on the workspace role, assumed with the session tag ``hire_id``."""
     root: str = "/tmp/work"  # noqa: S108
+    apps_url: str | None = None
+    """The public apps origin (``AIC_APPS_URL``), read by ``load_app`` to fetch an app's current version."""
 
 
 def workspace_from_env(session: Any, env: dict[str, str] | Any) -> Workspace | None:
@@ -247,7 +252,7 @@ def workspace_from_env(session: Any, env: dict[str, str] | Any) -> Workspace | N
             aws_session_token=c["SessionToken"],
         )
 
-    return Workspace(bucket=bucket, s3_for=s3_for)
+    return Workspace(bucket=bucket, s3_for=s3_for, apps_url=env.get("AIC_APPS_URL") or None)
 
 
 def submission_prefix(hire_id: str) -> str:
@@ -299,8 +304,14 @@ async def stage_submission(
         "approval_id": None,
         "capabilities": [],
         "pin": False,
+        "replaces": None,
         "created_at": now_iso(ledger.now()),
     }
+    # A task about an existing app (AIC passed its app_id) makes a new version of that app.
+    task = await ledger.get_ticket(draft["task_id"]) if draft["task_id"] else None
+    target = str((task or {}).get("app_id") or "")
+    if target and await get_app(ledger, target):
+        draft["replaces"] = target
     await put_draft(ledger, draft)
     # A new submission replaces the hire's older drafts that are not yet with the owner.
     for old in await list_drafts(ledger):
@@ -407,7 +418,14 @@ async def request_publish_approvals(ledger: Ledger, bus: EventBus, task_id: str,
         claimed = await update_draft(ledger, dr["draft_id"], {"status": "awaiting_owner"}, expect={"status": "ready"})
         if claimed is None:
             continue
-        action = f"Publish the app “{dr['title']}” under Apps"
+        old = await get_app(ledger, str(dr.get("replaces"))) if dr.get("replaces") else None
+        version = int((old or {}).get("version") or 1) + 1 if old else 1
+        action = (
+            f"Update the app “{old['title']}” to version {version}"
+            if old
+            else f"Publish the app “{dr['title']}” under Apps"
+        )
+        update = {"replaces": old["app_id"], "version": version} if old else {}
         reason = "Apps run in AI City only after the owner approves them."
         a = await ledger.request_approval(
             {
@@ -424,6 +442,7 @@ async def request_publish_approvals(ledger: Ledger, bus: EventBus, task_id: str,
                 "description": dr.get("description", ""),
                 "capabilities": dr.get("capabilities") or [],
                 "pin": bool(dr.get("pin")),
+                **update,
             }
         )
         await update_draft(ledger, dr["draft_id"], {"approval_id": a["id"]})
@@ -441,6 +460,7 @@ async def request_publish_approvals(ledger: Ledger, bus: EventBus, task_id: str,
                 "description": dr.get("description", ""),
                 "capabilities": dr.get("capabilities") or [],
                 "pin": bool(dr.get("pin")),
+                **update,
             }
         )
         filed.append(a)
@@ -471,6 +491,9 @@ async def publish_draft(
         raise Invalid("An app can only be granted what it asked for.")
     # Grants keep exactly {id, connector?, tool?}: app_call and the Cedar rewrite read this list.
     chosen = [clean_cap(c) for c in {cap_key(c): c for c in chosen}.values()]
+    old = await get_app(ledger, str(dr.get("replaces"))) if dr.get("replaces") else None
+    if old:
+        return await _publish_version(ledger, bus, origin, dr, old, asked, chosen)
     apps_now = await list_apps(ledger)
     want_pin = bool(dr.get("pin")) if pinned is None else pinned
     if want_pin and sum(1 for a in apps_now if a.get("pinned")) >= MAX_PINNED:
@@ -504,6 +527,9 @@ async def publish_draft(
         "grants": chosen,
         "granted_at": now_iso(ledger.now()),
         "pinned": want_pin,
+        "version": 1,
+        "history": [],
+        "revoked": [],
         "published_at": now_iso(ledger.now()),
     }
     await ledger.table.put({"pk": APPS_PK, "sk": f"APP#{app_id}", **app})
@@ -546,6 +572,7 @@ async def remove_app(ledger: Ledger, bus: EventBus, origin: AppsOrigin, app_id: 
             },
         )
     await ledger.table.delete(APPS_PK, f"APP#{app_id}")
+    await delete_state(ledger, app_id)
     await bus.put({"type": "app.removed", "app_id": app_id, "slug": app["slug"]})
     return app
 
@@ -570,6 +597,8 @@ async def update_app(ledger: Ledger, bus: EventBus, app_id: str, patch: dict[str
             raise ValueError("Grants can only be taken away here. Ask for a new version of the app to add one.")
         keep = {cap_key(c) for c in wanted}
         sets["grants"] = [clean_cap(c) for c in current if cap_key(c) in keep]
+        gone = {cap_key(c) for c in current} - keep
+        sets["revoked"] = sorted(set(app.get("revoked") or []) | gone)
     if "pinned" in patch:
         if not isinstance(patch["pinned"], bool):
             raise ValueError("pinned must be true or false.")
@@ -585,3 +614,101 @@ async def update_app(ledger: Ledger, bus: EventBus, app_id: str, patch: dict[str
         return None
     await bus.put({"type": "app.updated", "app": out})
     return out
+
+
+# ---------- new versions of an existing app (docs/APPS.md § v3) ----------
+def _version_of(app: Record) -> Record:
+    """What ``history`` keeps of a version, enough to make it current again."""
+    keys = ("draft_id", "url", "icon_url", "title", "description", "capabilities", "grants", "version", "published_at")
+    return {k: app.get(k) for k in keys}
+
+
+def _version_prefix(app_id: str, draft_id: str | None, version: int) -> str | None:
+    """A version's own S3 prefix; version 1 lives at the app's root, which only removing the app deletes."""
+    return f"live/{app_id}/{draft_id}/" if version > 1 and draft_id else None
+
+
+async def _publish_version(
+    ledger: Ledger,
+    bus: EventBus,
+    origin: AppsOrigin,
+    dr: Record,
+    old: Record,
+    asked: list[Capability],
+    chosen: list[Capability],
+) -> Record:
+    app_id, draft_id = str(old["app_id"]), str(dr["draft_id"])
+    base = f"live/{app_id}/{draft_id}/"
+    for f in dr.get("files") or []:
+        await asyncio.to_thread(
+            origin.s3.copy_object,
+            Bucket=origin.bucket,
+            Key=base + str(f["path"]),
+            CopySource={"Bucket": origin.bucket, "Key": f"drafts/{draft_id}/{f['path']}"},
+            MetadataDirective="REPLACE",
+            ContentType=content_type(str(f["path"])),
+            CacheControl=cache_control(str(f["path"])),
+        )
+    history = [_version_of(old), *(old.get("history") or [])]
+    for gone in history[MAX_HISTORY:]:
+        prefix = _version_prefix(app_id, gone.get("draft_id"), int(gone.get("version") or 1))
+        if prefix:
+            await delete_prefix(origin.s3, origin.bucket, prefix)
+    icon = dr.get("icon")
+    url = f"{origin.url.rstrip('/')}/{base}"
+    sets: Record = {
+        "url": url + "index.html",
+        "icon_url": url + str(icon) if icon else None,
+        "title": dr["title"],
+        "description": dr.get("description", ""),
+        "capabilities": asked,
+        "grants": chosen,
+        "granted_at": now_iso(ledger.now()),
+        "draft_id": draft_id,
+        "task_id": dr.get("task_id"),
+        "version": int(old.get("version") or 1) + 1,
+        "history": history[:MAX_HISTORY],
+        "revoked": [],
+        "published_at": now_iso(ledger.now()),
+    }
+    out = strip(await ledger.table.update(APPS_PK, f"APP#{app_id}", UpdateOptions(set=sets, must_exist=True)))
+    if out is None:
+        raise ValueError("That app was removed meanwhile.")
+    await update_draft(ledger, draft_id, {"status": "published"})
+    await bus.put({"type": "app.updated", "app": out})
+    return out
+
+
+async def rollback_app(ledger: Ledger, bus: EventBus, origin: AppsOrigin, app_id: str) -> Record | None:
+    """``POST /apps/<id>/rollback``: the newest earlier version becomes current again; the one rolled back from is
+    deleted. Grants are that version's minus what the owner revoked since. None if there is no such app;
+    ValueError when there is no earlier version."""
+    app = await get_app(ledger, app_id)
+    if not app:
+        return None
+    history = list(app.get("history") or [])
+    if not history:
+        raise ValueError("There is no earlier version of this app.")
+    prev, rest = history[0], history[1:]
+    revoked = set(app.get("revoked") or [])
+    grants = [clean_cap(g) for g in prev.get("grants") or [] if cap_key(g) not in revoked]
+    sets: Record = {**{k: v for k, v in prev.items() if k != "grants"}, "grants": grants, "history": rest}
+    sets["version"] = int(prev.get("version") or 1)
+    out = strip(await ledger.table.update(APPS_PK, f"APP#{app_id}", UpdateOptions(set=sets, must_exist=True)))
+    if out is None:
+        return None
+    prefix = _version_prefix(app_id, app.get("draft_id"), int(app.get("version") or 1))
+    if prefix:
+        await delete_prefix(origin.s3, origin.bucket, prefix)
+    await bus.put({"type": "app.updated", "app": out})
+    return out
+
+
+def version_files(app: Record, draft: Record | None) -> list[tuple[str, str]]:
+    """(path, URL) of the current version's own files, for ``load_app``; the city's bridge file is left out."""
+    base = str(app.get("url") or "").rsplit("/", 1)[0] + "/"
+    return [
+        (str(f["path"]), base + str(f["path"]))
+        for f in (draft or {}).get("files") or []
+        if f.get("path") != BRIDGE and path_problem(str(f.get("path"))) is None
+    ]

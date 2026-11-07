@@ -1,11 +1,14 @@
 ## Apps guidance
-Apps are small, self-contained web apps and games for AI City itself. The owner opens them under **Apps** in the HUD; each runs in a sandboxed iframe on its own origin with no network, no storage and no popups.
+Apps are small, self-contained web apps and games for AI City itself. The owner opens them under **Apps** in the HUD; each runs in a sandboxed iframe on its own origin with no network, no browser storage and no popups.
 
 ### What a worker builds (put this in every hire's instructions)
 - One folder `app/` in the workspace with `index.html` at its top. Plain HTML, CSS and JavaScript; no build step, no package installs needed to run it.
 - Fully offline: no CDN, no fonts or images from the web, no `fetch`/XHR/WebSocket. Anything not in `app/` is blocked.
 - No `alert`, `confirm` or `prompt`, no popups or new windows, no forms that submit. Show messages inside the page.
-- No storage: keep state in memory. If you touch `localStorage`, wrap it in `try/catch` and keep working without it.
+- No browser storage (`localStorage` throws there). To keep high scores or settings, add `{"id": "state"}` to the
+  manifest and use `await aic.state.set(key, value)` / `(await aic.state.get(key)).data.value` (keys of letters, digits,
+  `.-_`; each value ≤ 4 KB of JSON; at most 50 keys, 64 KB). It answers `preview` in the publish preview and
+  `not_granted` if the owner didn't allow it: the app must still work then, keeping state in memory.
 - Keyboard, mouse and touch all work. It fits any size (it runs in an iframe that fills the page) and resizes cleanly.
 - Controls and the goal are explained on screen. A restart is always possible without reloading.
 - An `icon.svg` (simple, readable at 64×64) in `app/`.
@@ -14,7 +17,7 @@ Apps are small, self-contained web apps and games for AI City itself. The owner 
 - **The owner's data (only when the assignment needs it, e.g. a calendar page).** Add `app/aic-app.json`:
   `{"capabilities": [{"id": "calendar.read"}], "pin": true}`. Ids that exist: `calendar.read`, `calendar.calendars`,
   `mail.search` (subjects and senders, never bodies), `mail.accounts`, `connector.read` (with `connector` and `tool`;
-  only read-only tools of a connector that exists), `propose`. Nothing else exists; never ask for more than the app uses.
+  only read-only tools of a connector that exists), `propose`, `state` (the app's own saved data). Nothing else exists; never ask for more than the app uses.
   `pin: true` suggests a top-bar icon (the owner decides).
 - Load `<script src="aic-bridge.js"></script>` (the city adds that file; don't write your own) and ask with
   `const r = await aic.request("calendar.read", {from, to})`. `r` is `{ok: true, data}` or `{ok: false, error, message}`
@@ -27,6 +30,12 @@ Apps are small, self-contained web apps and games for AI City itself. The owner 
   `aic.propose("calendar.respond" | "calendar.create" | "mail.draft", params)` (needs `propose` in the manifest); it
   only puts the action in the owner's Needs you and answers `{ok: true, status: "waiting_for_you"}`. Say so on screen.
 - When it works, call `submit_app` with a title (3–40 characters), a one-sentence description (10–200) and `icon: "icon.svg"`, then `report_to_manager`. The city checks the files; its verdict on the draft (`ready` or `rejected` with the reason) appears in your state on the next turn. Fix and submit again if rejected.
+
+### Changing an existing app
+When the goal says it changes an existing app, the worker first calls `load_app`, which copies the current version
+into `app/`, then edits those files (keep its title unless asked, keep the same state keys so saved scores still
+load) and calls `submit_app` as usual. The result becomes a new version of the same app after the owner approves it;
+the old version is kept for a rollback.
 
 ### Review checklist (the manager, before PASS)
 - The worker's draft is `ready` in your state (an `app draft … [ready]` line under the assignment). `rejected` is an automatic FAIL with the city's reason.

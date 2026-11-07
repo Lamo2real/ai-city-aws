@@ -27,6 +27,7 @@ from aic.shared.apps import (
     publish_draft,
     refuse_draft,
     remove_app,
+    rollback_app,
     update_app,
 )
 from aic.shared.aws import aws_city
@@ -75,6 +76,7 @@ ROUTES: list[tuple[str, str]] = [
     ("PUT", "/apps/app-1"),
     ("POST", "/apps/app-1/bridge"),
     ("POST", "/apps/app-1/proposals"),
+    ("POST", "/apps/app-1/rollback"),
 ]
 
 
@@ -474,6 +476,17 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         if "grants" in b:
             await _grants_changed(d)
         return reply(200, {"app": updated})
+    if is_("POST", r"/apps/[\w-]+/rollback"):
+        if d.apps is None:
+            return problem(503, "Apps are not set up yet.")
+        try:
+            back = await rollback_app(d.ledger, d.bus, d.apps, seg[1])
+        except ValueError as e:
+            return problem(409, str(e))
+        if not back:
+            return problem(404, "That app does not exist.")
+        await _grants_changed(d)
+        return reply(200, {"app": back})
     if is_("POST", r"/apps/[\w-]+/(bridge|proposals)"):
         if len(str(event.get("body") or "")) > 32_000:
             raise BadRequest("That request is too big.")

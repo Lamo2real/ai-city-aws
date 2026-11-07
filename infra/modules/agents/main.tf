@@ -28,6 +28,11 @@ variable "factory_function_name" { type = string }
 variable "workspaces_bucket" { type = string }
 variable "workspaces_arn" { type = string }
 variable "github_secret_arn" { type = string }
+variable "apps_url" {
+  description = "The public apps origin; workers read an app's current version from it (load_app, docs/APPS.md § v3)."
+  type        = string
+  default     = ""
+}
 variable "enable_gateway" {
   type    = bool
   default = false
@@ -245,6 +250,7 @@ resource "aws_bedrockagentcore_agent_runtime" "role" {
     # Only workers run shell commands, so only they scrub their environment (needs bubblewrap, in the image).
     # On the other roles Claude Code refuses to start with it set and nothing to sandbox.
     each.key == "worker" ? { CLAUDE_CODE_SUBPROCESS_ENV_SCRUB = "1" } : {},
+    each.key == "worker" && var.apps_url != "" ? { AIC_APPS_URL = var.apps_url } : {},
     var.use_application_inference_profiles ? { "AIC_APP_PROFILE_${upper(each.key)}" = aws_bedrock_inference_profile.role[each.key].arn } : {},
   )
   tags = merge(local.tags, { AgentRole = each.key })

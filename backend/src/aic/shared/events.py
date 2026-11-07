@@ -188,6 +188,9 @@ class ApprovalRequested(_E):
     description: str | None = None
     capabilities: list[dict[str, Any]] | None = None
     pin: bool | None = None
+    replaces: str | None = None
+    """app.publish, v3: the app this is a new version of."""
+    version: int | None = None
 
 
 class ApprovalDecided(_E):

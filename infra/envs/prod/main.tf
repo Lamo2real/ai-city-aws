@@ -115,6 +115,7 @@ module "agents" {
   workspaces_arn        = module.storage.workspaces_arn
   github_secret_arn     = module.storage.secret_arns["github"]
   enable_gateway        = var.enable_gateway
+  apps_url              = module.apps.url
 }
 
 module "api" {

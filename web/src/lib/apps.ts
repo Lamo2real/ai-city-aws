@@ -69,6 +69,7 @@ const KNOWN: Record<string, string> = {
   "mail.search": "Search your mail (subjects and senders, not bodies)",
   "mail.accounts": "See which mail accounts you have",
   propose: "Ask you to approve actions such as answering invitations",
+  state: "Remember its own data, such as high scores and settings (up to 64 KB)",
 };
 /** Plain words for a capability; null for one the HUD doesn't know (never offered as a switch). */
 export function capLabel(c: Capability): string | null {
@@ -94,6 +95,12 @@ export async function updateApp(appId: string, patch: { pinned?: boolean; grants
   const now = store.get().city.apps[appId];
   // The app.updated event does the same; doing it now means the switch moves at once.
   if (now) store.event({ type: "app.updated", app: { ...now, ...patch, ...(r?.app ?? {}) } });
+}
+
+/** Go back to the app's previous version (`POST /apps/<id>/rollback`); the version left is deleted. */
+export async function rollbackApp(appId: string) {
+  const r = await api<{ app?: CityApp }>(`/apps/${encodeURIComponent(appId)}/rollback`, { method: "POST" });
+  if (r?.app) store.event({ type: "app.updated", app: r.app });
 }
 
 /**
