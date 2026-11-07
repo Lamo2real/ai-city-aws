@@ -175,6 +175,7 @@ def test_self_improvement_is_off_unless_explicitly_enabled() -> None:
         "infra/envs/prod/main.tf",
         "config/policy.json",
         "config/caps.json",
+        "config/mail.json",
         "backend/src/aic/shared/policy.py",
         "backend/src/aic/shared/caps.py",
         ".github/workflows/deploy.yml",

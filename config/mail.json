@@ -1,0 +1,13 @@
+{
+  "$comment": "Mail and calendar connectors (docs/MAIL_CALENDAR.md). Only the owner changes this file, by a commit; the self-improvement loop may never change it.",
+  "scopes": {
+    "google": ["openid", "email", "https://www.googleapis.com/auth/gmail.modify", "https://www.googleapis.com/auth/calendar"],
+    "microsoft": ["openid", "email", "offline_access", "User.Read", "Mail.ReadWrite", "Mail.Send", "Calendars.ReadWrite"]
+  },
+  "providers": {
+    "google": "aic-prod-google",
+    "microsoft": "aic-prod-microsoft"
+  },
+  "access_defaults": { "orchestrator": "none", "manager": "none" },
+  "palette": ["ink-blue", "moss", "brick", "plum", "ochre", "teal", "rose", "slate"]
+}

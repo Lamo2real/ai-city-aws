@@ -33,6 +33,8 @@ from aic.shared.utility import UtilityDeps, bedrock_converse_runner, is_addresse
 from ._runtime import run
 from .connectors_api import ConnectorsApi, on_connector_approval
 from .connectors_api import route as connectors_route
+from .mail_api import MailApi
+from .mail_api import route as mail_route
 from .skills_api import SkillsApi
 from .skills_api import route as skills_route
 
@@ -75,6 +77,16 @@ ROUTES: list[tuple[str, str]] = [
     ("GET", "/skills/pdf-report"),
     ("PUT", "/skills/pdf-report"),
     ("DELETE", "/skills/pdf-report"),
+    ("GET", "/mail/accounts"),
+    ("POST", "/mail/accounts"),
+    ("PUT", "/mail/accounts/ma-0000aaaa"),
+    ("DELETE", "/mail/accounts/ma-0000aaaa"),
+    ("POST", "/mail/accounts/ma-0000aaaa/signin"),
+    ("POST", "/mail/accounts/ma-0000aaaa/complete"),
+    ("POST", "/mail/accounts/ma-0000aaaa/imap"),
+    ("GET", "/mail/rules"),
+    ("POST", "/mail/rules"),
+    ("DELETE", "/mail/rules/rule-1"),
 ]
 
 
@@ -95,6 +107,8 @@ class ApiDeps:
     connectors: ConnectorsApi | None = None
     """The ``/connectors*`` routes and the add-connector approval hook; None = built from ledger and bus."""
     skills: SkillsApi | None = None
+    mail: MailApi | None = None
+    """The ``/mail/*`` routes (``AIC_MAIL_WORKLOAD``); None = mail isn't set up (503)."""
 
 
 class _NoFactory:
@@ -436,6 +450,12 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         ans = await connectors_route(_connectors(d), method, seg, lambda: _body(event))
         if ans:
             return reply(*ans)
+    if seg and seg[0] == "mail":
+        if d.mail is None:
+            return problem(503, "Mail and calendar aren't set up yet.", "The owner turns them on with a deploy.")
+        ans = await mail_route(d.mail, method, seg, lambda: _body(event))
+        if ans:
+            return reply(*ans)
     if seg and seg[0] == "skills":
         ans = await skills_route(d.skills or SkillsApi(d.ledger), method, seg, lambda: _body(event))
         if ans:
@@ -463,6 +483,12 @@ async def _put_settings(b: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         patch["notify_email"] = b["notify_email"]
     if isinstance(b.get("first_run_done"), bool):
         patch["first_run_done"] = b["first_run_done"]
+    if isinstance(b.get("mail_access"), dict):
+        # Orchestrator and managers may read mail when the owner turns it on; workers never (decision 75).
+        ma = b["mail_access"]
+        if any(k not in ("orchestrator", "manager") or v not in ("none", "read") for k, v in ma.items()):
+            raise BadRequest("mail_access takes orchestrator and manager, each none or read.")
+        patch["mail_access"] = dict(ma)
     if isinstance(b.get("integrations"), dict):
         patch["integrations"] = {k: bool(v) for k, v in b["integrations"].items()}
     if isinstance(b.get("department_caps"), dict):
@@ -573,6 +599,20 @@ def _connectors_from_env(city: Any) -> ConnectorsApi:
     )
 
 
+def _mail_from_env(city: Any) -> MailApi | None:
+    if not os.environ.get("AIC_MAIL_WORKLOAD"):
+        return None
+    from aic.mail.service import MailService
+
+    return MailApi(
+        service=MailService.from_env(city.ledger, city.session),
+        secrets=city.session.client("secretsmanager"),
+        hud_origin=os.environ.get("AIC_HUD_ORIGIN"),
+        kms_key=os.environ.get("AIC_KMS_KEY_ARN"),
+        bus_put=city.bus.put,
+    )
+
+
 def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
     global _deps
     if _deps is None:
@@ -589,5 +629,6 @@ def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
             owner_email=os.environ.get("AIC_OWNER_EMAIL"),
             connectors=_connectors_from_env(city),
             skills=SkillsApi(city.ledger, city.session.client("s3"), os.environ.get("AIC_SKILLS_BUCKET")),
+            mail=_mail_from_env(city),
         )
     return run(handle_http(event, _deps))

@@ -723,8 +723,13 @@ async def test_mail_and_calendar_providers_go_to_connect_account_not_the_mcp_flo
     assert mail_provider(query) == provider
     d, _city = _deps()
     out = await add_connector_tool(d, _ctx()).handler({"query": query, "label": "Work"})
-    assert "aren't set up" in out  # aic.mail isn't on this branch yet: the stub answers
+    # A mail account waiting for the owner's own sign-in (or app password), never an MCP connector or approval.
+    assert ("Sign in to" in out) if provider != "imap" else ("app password" in out)
     assert await ConnectorStore(d.ledger.table).list() == [] and await d.ledger.pending_approvals() == []
+    from aic.mail.accounts import AccountStore
+
+    (acct,) = await AccountStore(d.ledger.table).all()
+    assert acct["provider"] == provider and acct["label"] == "Work" and acct["status"] == "signing_in"
 
 
 def test_links_and_other_names_are_not_mistaken_for_mail() -> None:

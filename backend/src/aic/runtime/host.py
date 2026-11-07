@@ -12,6 +12,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from aic.mail.service import MailService
 from aic.shared.connectors import ConnectorStore
 from aic.shared.events import now_iso
 from aic.shared.hierarchy.actions import CityDeps, move
@@ -24,6 +25,7 @@ from .connector_tool import add_connector_tool
 from .engine import AgentEngine, EngineRequest
 from .gateway import GatewayClient, turn_connector_tools
 from .live import LiveReply, Send
+from .mail_tools import mail_level, mail_tools
 from .prompts import department_template, load_prompt
 from .skills import SkillStore, empty_home, use_skill_tool
 from .tools import ToolSpec, TurnCtx, file_approval, gate_tools, tools_for
@@ -57,6 +59,8 @@ class HostOptions:
     """The connectors Gateway (``AIC_GATEWAY_URL``), or None: no connector tools."""
     skills: SkillStore | None = None
     """Owner-added skills (``AIC_SKILLS_BUCKET``), or None: no skills."""
+    mail: MailService | None = None
+    """Mail and calendar accounts (``AIC_MAIL_WORKLOAD``), or None: no mail tools."""
 
 
 class AgentHost:
@@ -123,6 +127,10 @@ class AgentHost:
             skill_rows = await self._skills(ctx.role)
             if ctx.role == "ace" and skill_rows and self.o.skills:
                 city_tools.append(use_skill_tool(self.o.skills, skill_rows))
+            if self.o.mail is not None:
+                level = mail_level(ctx.role, await self.d.settings())
+                if level and await self.o.mail.store.connected():
+                    city_tools += mail_tools(self.d, ctx, self.o.mail, level)
             tools: list[ToolSpec] = gate_tools(self.d, ctx, city_tools)
             hire = await self._hire_connectors(agent) if ctx.role == "worker" else None
             tools += await turn_connector_tools(

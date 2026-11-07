@@ -148,6 +148,7 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
             ),
             gateway=_gateway(city, e),
             skills=_skills(city, e),
+            mail=_mail(city, e, role),
         ),
     )
     log("info", "runtime.started", role=role)
@@ -162,3 +163,19 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def _mail(city: Any, e: Mapping[str, str], role: str | None) -> Any:
+    """Mail and calendar for the roles that may have it (never workers, decision 75)."""
+    if role == "worker" or not e.get("AIC_MAIL_WORKLOAD"):
+        return None
+    from aic.mail.service import MailService
+
+    async def on_status(a: dict[str, Any]) -> None:
+        from aic.mail.accounts import public
+
+        await city.bus.put({"type": "mail.account", "account": public(a)})
+
+    s = MailService.from_env(city.ledger.table, city.session, city.ledger.now)
+    s.on_status = on_status
+    return s

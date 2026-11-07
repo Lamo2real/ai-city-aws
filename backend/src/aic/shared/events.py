@@ -203,6 +203,27 @@ class ConnectorUpdated(_E):
     error: str | None = None
 
 
+class ConnectSignin(_E):
+    """A mail or calendar account waits for the owner's sign-in (or app password): the HUD shows a card.
+    No URL here: the HUD fetches it when the owner taps (``docs/MAIL_CALENDAR.md`` §6)."""
+
+    type: Literal["connect.signin"]
+    account_id: str
+    provider: str
+    label: str
+
+
+class MailAccountEvent(_E):
+    type: Literal["mail.account"]
+    account: dict[str, Any]
+    """The public account (no session URI, no secret name); status ``removed`` when it was disconnected."""
+
+
+class CalendarChanged(_E):
+    type: Literal["calendar.changed"]
+    calendar_ids: list[str]
+
+
 class CityState(_E):
     type: Literal["city.state"]
     paused: bool
@@ -241,6 +262,9 @@ CityEventModel = Annotated[
     | ApprovalRequested
     | ApprovalDecided
     | ConnectorUpdated
+    | ConnectSignin
+    | MailAccountEvent
+    | CalendarChanged
     | CityState
     | SpendCapReachedEvent
     | AceReply,

@@ -4,7 +4,7 @@ This file is the **mail and calendar part of the connectors contract** (`docs/CO
 routes, tools, events and environment variables for the infra, backend and web work. If a contract changes, change it
 here first, in its own commit. The decisions are in `docs/DECISIONS.md` (decisions 74–76).
 
-Status: designed on 2026-11-07 on branch `mail-calendar`, then **folded into `connectors-skills`** the same day, when the
+Status: backend built 2026-11-07 on branch `connectors-mail` (tests with fakes only; no real account tried). Designed on branch `mail-calendar`, then **folded into `connectors-skills`** the same day, when the
 owner shelved the separate mail and calendar feature. **Mail and calendar accounts are connectors added on demand**
 (they're listed and added like the others), and **a combined calendar is an app** that AIC builds when asked
 (`docs/APPS.md`), reading through §11. There's no hardcoded Calendar page in the HUD. Nothing is built yet.
@@ -29,7 +29,8 @@ schema from `terraform providers schema -json`):
   - `accounts.py`: the account rows (§2).
   - `tokens.py`: AgentCore Identity calls and Secrets Manager reads, with a 5-minute in-memory cache. A token is never logged and never returned to a model.
   - `providers/base.py`: the `MailProvider` and `CalendarProvider` protocols plus the normalized types (§3).
-  - `providers/google.py` (Gmail REST v1 + Calendar v3, `httpx`), `providers/microsoft.py` (Graph v1.0, `httpx`), `providers/imap.py` (stdlib `imaplib`/`smtplib` in `asyncio.to_thread`, TLS only), `providers/caldav.py` (raw WebDAV REPORT over `httpx` + `icalendar`).
+  - `providers/google.py` (Gmail REST v1 + Calendar v3), `providers/microsoft.py` (Graph v1.0), `providers/imap.py` (stdlib `imaplib`/`smtplib` in `asyncio.to_thread`, TLS only), `providers/caldav.py` (WebDAV PROPFIND/REPORT plus a small built-in iCalendar reader/writer). HTTP goes through `aic/mail/http.py` (stdlib `urllib`, HTTPS only, no redirects followed, behind an injectable transport), so the Lambda zip needs no new package.
+  - `actions.py` (what each tool does after the gate), `preview.py` (§5.5), `approvals.py` (§11), `connect.py` (`connect_account`), and `runtime/mail_tools.py` (the tools, which run the gate themselves: `ToolSpec.self_gated`, so standing rules and previews come first).
   - `service.py`: works across accounts (fans out with a per-account timeout of 8 s, merges and sorts, and returns `errors: [{account_id, message}]` for accounts that failed instead of failing the whole call).
   - `rules.py`: standing rules (§5.3).
   - `wrap.py`: wraps outside content (§5.4).
@@ -69,7 +70,7 @@ Ledger rows (`aic-prod-ledger`): `pk = "MAIL"`, `sk = "ACCT#<id>"`.
 3. The password exists only in that request body (over TLS to API Gateway) and in Secrets Manager. It is not in the chat, the ledger, logs, the bus or a prompt. The api Lambda logs no request bodies for `/mail/` routes (a test checks this).
 4. Disconnecting (`DELETE /mail/accounts/<id>`) deletes the row and, for IMAP, the secret (7-day recovery window). For Google and Microsoft, the HUD also says where to revoke the app's access at the provider.
 
-## 3. Normalized types (Python dataclasses, the same JSON on the wire)
+## 3. Normalized types (plain JSON dicts, the same on the wire)
 
 ```
 MailSummary { id, account_id, thread_id, from: Addr, to: [Addr], cc: [Addr], subject, date (ISO), snippet (≤200),
@@ -132,7 +133,7 @@ New rules in `config/policy.json`:
 | `^mcp__city__mail_send$` | `.*` | ask | "Sending an email speaks for the owner." |
 | `^mcp__city__mail_trash$` | `.*` | ask | "Deleting mail needs the owner." |
 | `^mcp__city__calendar_(respond\|delete)$` | `.*` | ask | "Answering invitations and deleting events need the owner." |
-| `^mcp__city__calendar_(create\|update)$` | `"attendees": \[\{` | ask | "Inviting people speaks for the owner." |
+| `^mcp__city__calendar_(create\|update)$` | `"attendees": \[[^\]]` (a non-empty list of addresses) | ask | "Inviting people speaks for the owner." |
 | `^mcp__city__calendar_update$` | `"_has_attendees": true` | ask | the tool adds `_has_attendees` from the stored event before it gates (a test pins this) |
 
 `test_policy.py` gets one case per row, plus the allow cases.

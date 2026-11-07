@@ -12,7 +12,7 @@ from collections.abc import Mapping
 _FORBIDDEN = [
     re.compile(r"^infra/"),
     re.compile(r"^\.github/"),
-    re.compile(r"^config/(policy|caps)\.json$"),
+    re.compile(r"^config/(policy|caps|mail)\.json$"),
     re.compile(r"(^|/)iam[^/]*\.(tf|json)$"),
     re.compile(r"(^|/)package(-lock)?\.json$"),
     re.compile(r"(^|/)(pyproject\.toml|uv\.lock)$"),

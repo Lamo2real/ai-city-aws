@@ -131,6 +131,31 @@
       "reason": "The owner merges and owns secrets."
     },
     {
+      "tool": "^mcp__city__mail_send$",
+      "match": ".*",
+      "decision": "ask",
+      "reason": "Sending an email speaks for the owner."
+    },
+    { "tool": "^mcp__city__mail_trash$", "match": ".*", "decision": "ask", "reason": "Deleting mail needs the owner." },
+    {
+      "tool": "^mcp__city__calendar_(respond|delete)$",
+      "match": ".*",
+      "decision": "ask",
+      "reason": "Answering invitations and deleting events need the owner."
+    },
+    {
+      "tool": "^mcp__city__calendar_(create|update)$",
+      "match": "\"attendees\": \\[[^\\]]",
+      "decision": "ask",
+      "reason": "Inviting people speaks for the owner."
+    },
+    {
+      "tool": "^mcp__city__calendar_update$",
+      "match": "\"_has_attendees\": true",
+      "decision": "ask",
+      "reason": "Changing an event with guests sends them updates."
+    },
+    {
       "tool": "^mcp__meta-ads__",
       "match": "\"status\"\\s*:\\s*\"ACTIVE\"",
       "decision": "ask",

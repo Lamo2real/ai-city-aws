@@ -59,6 +59,8 @@ class ToolSpec:
     """``city`` (gated by ``gate_tools``) or ``gateway`` (connector tools, gated by the engine)."""
     ask: str | None = None
     """An extra reason to ask the owner first (a connector's approval level)."""
+    self_gated: bool = False
+    """The handler runs the gate itself (the mail tools: standing rules and previews come before it)."""
 
     @property
     def full_name(self) -> str:
@@ -729,15 +731,31 @@ def tools_for(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
     }[c.role](d, c)
 
 
-async def file_approval(d: CityDeps, c: TurnCtx, tool: str, input: dict[str, Any], hash: str, reason: str) -> None:
+async def file_approval(
+    d: CityDeps,
+    c: TurnCtx,
+    tool: str,
+    input: dict[str, Any],
+    hash: str,
+    reason: str,
+    preview: dict[str, Any] | None = None,
+) -> None:
     """Files an owner approval bound to this exact action (once per action while it is pending)."""
     if any(a.get("hash") == hash for a in await d.ledger.pending_approvals()):
         return
     cmd = input.get("command")
     action = cmd[:200] if isinstance(cmd, str) else f"{tool} {', '.join(input)}"
-    a = await d.ledger.request_approval(
-        {"agent": c.agent_id, "ticket_id": c.ticket_id, "tool": tool, "action": action, "hash": hash, "reason": reason}
-    )
+    rec: dict[str, Any] = {
+        "agent": c.agent_id,
+        "ticket_id": c.ticket_id,
+        "tool": tool,
+        "action": action,
+        "hash": hash,
+        "reason": reason,
+    }
+    if preview:
+        rec["preview"] = preview  # what Needs you shows (an email or an event), MAIL_CALENDAR.md §5.5
+    a = await d.ledger.request_approval(rec)
     await d.bus.put(
         {"type": "approval.requested", "id": a["id"], "agent": c.agent_id, "action": action, "reason": reason}
     )
@@ -747,6 +765,9 @@ def gate_tools(d: CityDeps, c: TurnCtx, specs: list[ToolSpec]) -> list[ToolSpec]
     """Every custom tool call passes the policy gate and is written to the ledger."""
 
     def wrap(s: ToolSpec) -> ToolSpec:
+        if s.self_gated:
+            return s
+
         async def handler(args: dict[str, Any]) -> str:
             name = mcp_name(s.name)
             r = await gate(name, args, c.role, c.agent_id, consume_approval=d.ledger.consume_approval)
