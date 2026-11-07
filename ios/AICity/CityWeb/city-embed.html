@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- The iPhone app's City: the web HUD's own scene, no network at all (the app feeds it data). -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'"
+    />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="color-scheme" content="light" />
+    <title>AI City — City</title>
+    <style>html,body{overscroll-behavior:none;background:#8cc66d;height:100%;margin:0;overflow:hidden}#city{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;position:absolute;inset:0}#city canvas{touch-action:none;width:100%;height:100%;display:block}</style>
+    <script type="module" crossorigin src="./city-embed.js"></script>
+  </head>
+  <body>
+    <div id="city" aria-hidden="true"><canvas></canvas></div>
+  </body>
+</html>
