@@ -166,3 +166,13 @@ describe("apps origin (docs/APPS.md)", () => {
     expect(api).toMatch(/cloudfront:CreateInvalidation"\], Resource = \[var\.apps_distribution_arn\]/);
   });
 });
+
+describe("apps API routes", () => {
+  it("GET /apps and DELETE /apps/{id} sit behind the JWT authorizer, and CORS allows DELETE", async () => {
+    const api = (await import("node:fs")).readFileSync("infra/modules/api/main.tf", "utf8");
+    const routes = api.slice(api.indexOf("routes = ["), api.indexOf("]", api.indexOf("routes = [")));
+    expect(routes).toContain('"GET /apps"');
+    expect(routes).toContain('"DELETE /apps/{id}"');
+    expect(api).toMatch(/allow_methods = \["GET", "POST", "PUT", "DELETE"\]/);
+  });
+});
