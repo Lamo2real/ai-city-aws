@@ -7,15 +7,16 @@ Prices: Bedrock global profiles from `docs/FACTS_CHECKED.md` (USD per million to
 | Item | Monthly |
 |---|---|
 | KMS: 1 data key + 1 state key | $2.00 |
-| Secrets Manager: 3 empty containers | $1.20 |
+| Secrets Manager: 5 empty containers (GitHub, Google, Spotify, and the mail OAuth clients `aic/prod/oauth-google` / `-microsoft`) | $2.00 |
 | AWS WAF: web ACL + 4 rules (requests negligible) | $9.00 |
 | CloudWatch: dashboard $3, 4 alarms $0.40, logs (small) ~$1 | $4.40 |
 | DynamoDB on demand: storage + PITR, near-empty | $0.50 |
 | S3 (HUD, workspaces, state) + ECR image storage (~1 GB) | $0.40 |
 | CloudFront, API Gateway, Lambda, SQS, EventBridge, SNS, Step Functions | ~$0.50 (free tiers cover most) |
 | Cognito Essentials (1 user; first 10,000 MAU free) | $0.00 |
-| AgentCore runtimes and memory with no sessions | $0.00 |
-| **Total at idle** | **≈ $18 / month** |
+| AgentCore runtimes and memory with no sessions (the MCP host included) | $0.00 |
+| Connectors Gateway, policy engine, workload identities, specs and skills buckets (billed per request or GB, near zero) | ~$0.05 |
+| **Total at idle** | **≈ $19 / month** |
 
 ## 2. One typical task, end to end
 Computed with `estimateUsd()` from `packages/shared/src/cost.ts` (the same function the ledger uses). "Without caching" sends every cached token as plain input.
@@ -42,6 +43,21 @@ Prompt caching roughly halves the cost because agent turns resend long, stable s
 | Heavy | 150 (5 a day) | 600 | $525 + $6 | **≈ $549** | below (no first email until $5,000) |
 
 There is no spend cap by default (the owner's choice) and the AWS Budgets alert is $10,000 a month, so the first email comes at $5,000. Heavy use of Fable (coordinators) and Opus (workers) is what drives the bill; Fable is 2.5× Opus per token, so a cheaper option is `eu.` or switching coordinators to Opus 5.5 in `config/models.json` (owner's call).
+
+## 4. Connectors, mail and skills (per use; checked 2026-11-07 on the public AgentCore pricing page, which names no region: verify for eu-north-1 at deploy)
+
+| Item | Price | Typical month |
+|---|---|---|
+| Gateway API calls (`tools/list`, `tools/call`) | $0.005 per 1,000 | 5,000 calls ≈ $0.03 |
+| Gateway tool indexing (only if search is used; it isn't) | $0.02 per 100 tools a month | $0 |
+| Policy (Cedar) authorization requests | $0.000025 each | 5,000 ≈ $0.13 |
+| Identity token or API-key requests outside Runtime/Gateway (the bridge, the api, mail) | $0.010 per 1,000 | < $0.05 |
+| Secrets Manager per API-key connector or IMAP account | $0.40 a month each | 3 ≈ $1.20 |
+| MCP host runtime (package servers) | $0.0895 per vCPU-hour + $0.00945 per GB-hour of use; idle sessions end after 15 min | a few hours ≈ $0.10–$0.50 |
+| Lambda (bridge, connectors), S3 (specs, skills), ECR (MCP host image ~0.5 GB) | list prices | < $0.10 |
+| Tavily (if the owner adds it) | free up to 1,000 searches a month | $0 |
+
+So connectors add well under $5 a month at normal use; the model tokens their output adds to agent turns cost more than the plumbing.
 
 ## What moves the number most
 1. Worker job length (output tokens at $20/M and uncached input).

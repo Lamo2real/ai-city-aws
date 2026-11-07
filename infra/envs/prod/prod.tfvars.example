@@ -7,4 +7,8 @@ profile_prefix     = "global"
 # Set to false if creating application inference profiles from global profiles is refused.
 use_application_inference_profiles = true
 deletion_protection                = true
-enable_gateway                     = false
+# Mail and calendar OAuth clients (docs/RUNBOOK.md). Client ids only; the secrets go into Secrets Manager.
+mail_providers = {
+  google    = { enabled = false, client_id = "" }
+  microsoft = { enabled = false, client_id = "", tenant_id = "common" }
+}

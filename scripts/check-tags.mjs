@@ -2,9 +2,12 @@
 // Static tag check over the Terraform HCL: every taggable resource carries the Component tag (and
 // AgentRole on runtimes, inference profiles and agent memory), and every provider sets the six
 // default cost-allocation tags. Taggable types come from the provider schema (taggable-resources.json).
+// Secrets and Identity providers the city creates at runtime can't carry Terraform tags, so the IAM statements
+// that allow creating them must require the tags (aws:RequestTag/Project and /Component); checked here too.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { hclStatements, resolveLocals } from "./check-iam.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const INFRA = join(ROOT, "infra");
@@ -19,7 +22,38 @@ export const COMPONENTS = [
   "security",
   "storage",
   "budgets",
+  "connectors",
+  "mail",
+  "skills",
 ];
+// Creating these at runtime must be tag-conditioned. AgentCore's own MANAGED secrets
+// (bedrock-agentcore-identity!…) are created by the service for a provider and are exempt.
+const RUNTIME_CREATES = /^(secretsmanager:CreateSecret|bedrock-agentcore:Create\w*CredentialProvider)$/;
+
+/** Problems: IAM statements that let a role create secrets or providers without requiring the tags. */
+export function checkRuntimeTagConditions(files = tfFiles()) {
+  const problems = [];
+  for (const f of files) {
+    const text = readFileSync(f, "utf8");
+    for (const s of hclStatements(text)) {
+      if (!s.actions.some((a) => RUNTIME_CREATES.test(a))) continue;
+      // The permission boundary is a ceiling, not a grant.
+      if (/infra\/modules\/security\//.test(f)) continue;
+      const raw = /Resource\s*=\s*(\[[^\]]*\]|\S+)/.exec(s.rest)?.[1] ?? "";
+      const items = raw
+        .replace(/^\[|\]$/g, "")
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean);
+      if (items.length && items.every((x) => /local\.managed_|bedrock-agentcore-identity!/.test(x))) continue;
+      const res = resolveLocals(text, s.rest);
+      for (const k of ["aws:RequestTag/Project", "aws:RequestTag/Component"])
+        if (!res.includes(k))
+          problems.push(`${relative(ROOT, f)}: a statement allows ${s.actions.join(",")} without requiring ${k}`);
+    }
+  }
+  return problems;
+}
 export const AGENT_ROLE_TYPES = [
   "aws_bedrockagentcore_agent_runtime",
   "aws_bedrock_inference_profile",
@@ -95,13 +129,11 @@ export function checkTags({
     }
   }
   // The six base tags must come from somewhere for every resource: the prod root's providers.
-  const envs = files
-    .filter((f) => /envs\/prod\/main\.tf$/.test(f))
-    .map((f) => readFileSync(f, "utf8"));
+  const envs = files.filter((f) => /envs\/prod\/main\.tf$/.test(f)).map((f) => readFileSync(f, "utf8"));
   for (const t of BASE_TAGS)
     if (!envs.every((e) => new RegExp(`\\b${t}\\s*=`).test(e)))
       problems.push(`default tag ${t} is not set in every root`);
-  return { problems, checked };
+  return { problems: [...problems, ...checkRuntimeTagConditions(files)], checked };
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

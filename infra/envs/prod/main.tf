@@ -10,7 +10,8 @@ terraform {
 }
 
 locals {
-  name = "aic-prod"
+  name  = "aic-prod"
+  roles = ["ace", "orchestrator", "manager", "worker"]
   base_tags = {
     Project     = "ai-city"
     App         = "aic"
@@ -105,7 +106,13 @@ module "agents" {
   workspaces_bucket     = module.storage.workspaces_bucket
   workspaces_arn        = module.storage.workspaces_arn
   github_secret_arn     = module.storage.secret_arns["github"]
-  enable_gateway        = var.enable_gateway
+  # Connectors, skills and mail are read at turn start, so new ones work without a redeploy.
+  runtime_env = {
+    for r in local.roles : r => merge(
+      { AIC_GATEWAY_URL = module.connectors.gateway_url, AIC_SKILLS_BUCKET = module.skills.bucket },
+      r == "worker" ? {} : { AIC_MAIL_WORKLOAD = module.mail.workload_name, AIC_MAIL_PROVIDERS = module.mail.providers, AIC_HUD_ORIGIN = module.frontend.url },
+    )
+  }
 }
 
 module "api" {
@@ -138,6 +145,60 @@ module "api" {
   utility_profile_arn = module.agents.utility_profile_arn
   profile_prefix      = var.profile_prefix
   log_retention_days  = var.log_retention_days
+  api_env = {
+    AIC_CONNECTORS_FUNCTION = "${local.name}-connectors"
+    AIC_CONNECTORS_WORKLOAD = "${local.name}-connectors"
+    AIC_HUD_ORIGIN          = module.frontend.url
+    AIC_KMS_KEY_ARN         = module.security.kms_key_arn
+    AIC_DEFAULT_TAGS        = jsonencode(local.base_tags) # the code adds Component (connectors or mail)
+    AIC_SKILLS_BUCKET       = "${local.name}-skills"
+    AIC_MAIL_WORKLOAD       = "${local.name}-mail"
+    AIC_MAIL_PROVIDERS      = join(",", [for k, p in var.mail_providers : k if p.enabled])
+  }
+}
+
+# Connectors: any MCP server, added at runtime by asking AIC (docs/CONNECTORS_SKILLS.md). Terraform names none.
+module "connectors" {
+  source             = "../../modules/connectors"
+  name               = local.name
+  region             = var.region
+  account_id         = data.aws_caller_identity.me.account_id
+  kms_key_arn        = module.security.kms_key_arn
+  boundary_arn       = module.security.boundary_arn
+  ledger_arn         = module.ledger.ledger_arn
+  ledger_table       = module.ledger.ledger_table
+  bus_arn            = module.bus.bus_arn
+  bus_name           = module.bus.bus_name
+  hud_origin         = module.frontend.url
+  bundle_path        = module.api.bundle_path
+  bundle_hash        = module.api.bundle_hash
+  agent_role_names   = module.agents.role_names
+  api_role_name      = module.api.role_names["api"]
+  default_tags       = local.base_tags
+  log_retention_days = var.log_retention_days
+}
+
+# Mail and calendar accounts (docs/MAIL_CALENDAR.md §8). Workers get none of it.
+module "mail" {
+  source            = "../../modules/mail"
+  name              = local.name
+  region            = var.region
+  account_id        = data.aws_caller_identity.me.account_id
+  kms_key_arn       = module.security.kms_key_arn
+  hud_origin        = module.frontend.url
+  default_tags      = local.base_tags
+  providers_config  = var.mail_providers
+  api_role_name     = module.api.role_names["api"]
+  reader_role_names = { for r, n in module.agents.role_names : r => n if r != "worker" }
+}
+
+# Owner-uploaded skills (docs/CONNECTORS_SKILLS.md §2).
+module "skills" {
+  source           = "../../modules/skills"
+  name             = local.name
+  kms_key_arn      = module.security.kms_key_arn
+  agent_role_names = module.agents.role_names
+  api_role_name    = module.api.role_names["api"]
 }
 
 module "budgets" {

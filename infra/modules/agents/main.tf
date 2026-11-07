@@ -28,9 +28,10 @@ variable "factory_function_name" { type = string }
 variable "workspaces_bucket" { type = string }
 variable "workspaces_arn" { type = string }
 variable "github_secret_arn" { type = string }
-variable "enable_gateway" {
-  type    = bool
-  default = false
+variable "runtime_env" {
+  type        = map(map(string))
+  default     = {}
+  description = "Extra environment per role (connectors, skills, mail), keyed by role."
 }
 
 locals {
@@ -246,29 +247,9 @@ resource "aws_bedrockagentcore_agent_runtime" "role" {
     # On the other roles Claude Code refuses to start with it set and nothing to sandbox.
     each.key == "worker" ? { CLAUDE_CODE_SUBPROCESS_ENV_SCRUB = "1" } : {},
     var.use_application_inference_profiles ? { "AIC_APP_PROFILE_${upper(each.key)}" = aws_bedrock_inference_profile.role[each.key].arn } : {},
+    lookup(var.runtime_env, each.key, {}),
   )
   tags = merge(local.tags, { AgentRole = each.key })
-}
-
-# AgentCore Gateway for external tools (GitHub; Google and Spotify built but off). Off by default.
-resource "aws_iam_role" "gateway" {
-  count                = var.enable_gateway ? 1 : 0
-  name                 = "${var.name}-gateway"
-  permissions_boundary = var.boundary_arn
-  assume_role_policy = jsonencode({
-    Version   = "2012-10-17"
-    Statement = [{ Effect = "Allow", Principal = { Service = "bedrock-agentcore.amazonaws.com" }, Action = "sts:AssumeRole", Condition = { StringEquals = { "aws:SourceAccount" = var.account_id } } }]
-  })
-  tags = local.tags
-}
-
-resource "aws_bedrockagentcore_gateway" "tools" {
-  count           = var.enable_gateway ? 1 : 0
-  name            = "${var.name}-tools"
-  role_arn        = aws_iam_role.gateway[0].arn
-  authorizer_type = "AWS_IAM"
-  protocol_type   = "MCP"
-  tags            = local.tags
 }
 
 output "role_arns" { value = { for r, x in aws_iam_role.agent : r => x.arn } }

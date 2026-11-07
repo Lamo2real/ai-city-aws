@@ -2,7 +2,11 @@
 // IAM check: renders each agent role's policy templates (infra/modules/agents/policies) the way
 // Terraform's templatefile does, with sample values, and asserts the worker's limits:
 // no IAM actions, no wildcard GetSecretValue, no resource-creation actions, and Bedrock invoke only
-// on the worker's own model profile. It also checks that every role has a permission boundary.
+// on the worker's own model profile. It also checks that every role has a permission boundary, and the
+// connectors/mail/skills policies written inline in Terraform (jsonencode statements, read from the HCL):
+// no Identity credential or Secrets Manager access for the worker or the MCP host, the MCP host role only
+// writes logs (and pulls its image), only the bridge and the connectors Lambda read connector secrets, only
+// the gateway role invokes the bridge, and the mail read path is never given to the worker.
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -160,13 +164,163 @@ export function checkBoundaries() {
   return problems;
 }
 
+// ---------- inline Terraform policies (connectors, mail, skills) ----------
+const MODULES = join(ROOT, "infra", "modules");
+const tf = (m) => readFileSync(join(MODULES, m, "main.tf"), "utf8");
+
+/** Matching close brace/bracket for the opener at i (strings respected). */
+function close(text, i) {
+  const open = text[i];
+  const shut = open === "{" ? "}" : "]";
+  let depth = 0;
+  for (let j = i, inStr = false; j < text.length; j++) {
+    const c = text[j];
+    if (inStr) {
+      if (c === "\\") j++;
+      else if (c === '"') inStr = false;
+    } else if (c === '"') inStr = true;
+    else if (c === open) depth++;
+    else if (c === shut && --depth === 0) return j;
+  }
+  return -1;
+}
+
+/** Every `{ … Action = … }` object in HCL text, with its actions, the rest of its text, and its offset. */
+export function hclStatements(text) {
+  const out = [];
+  const seen = new Set();
+  for (const m of text.matchAll(/\bAction\s*=/g)) {
+    let depth = 0,
+      start = -1;
+    for (let i = m.index; i >= 0; i--) {
+      const c = text[i];
+      if (c === "}" || c === "]") depth++;
+      else if (c === "{" || c === "[") {
+        if (depth === 0 && c === "{") {
+          start = i;
+          break;
+        }
+        if (depth > 0) depth--;
+      }
+    }
+    if (start < 0 || seen.has(start)) continue;
+    seen.add(start);
+    const end = close(text, start);
+    const body = text.slice(start, end + 1);
+    const a = /\bAction\s*=\s*(\[[^\]]*\]|"[^"]*")/.exec(body);
+    const actions = a ? [...a[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]) : [];
+    out.push({ start, body, actions, rest: a ? body.replace(a[0], "") : body });
+  }
+  return out;
+}
+
+/** Resolve `local.x` names in a statement to the text of their definitions (one-line locals). */
+export function resolveLocals(text, body) {
+  return body.replace(/local\.(\w+)/g, (all, k) => {
+    const d = new RegExp(`^\\s*${k}\\s*=\\s*(.+)$`, "m").exec(text);
+    return d ? `${all}(${d[1]})` : all;
+  });
+}
+
+const IDENTITY_CREDENTIALS =
+  /^bedrock-agentcore:(GetResource|CompleteResourceTokenAuth|GetWorkloadAccessToken|\w*CredentialProvider|\w*TokenVault)/;
+
+/** The ranges of one function's list inside a module's `permissions = { … }` map. */
+function permissionRange(text, fn) {
+  const m = new RegExp(`^\\s*${fn}\\s*=\\s*\\[`, "m").exec(text.slice(text.indexOf("permissions = {")));
+  if (!m) return [-1, -1];
+  const s = text.indexOf("permissions = {") + m.index + m[0].length - 1;
+  return [s, close(text, s)];
+}
+const inRange = (st, [a, b]) => st.start > a && st.start < b;
+
+export function checkInline({
+  read = tf,
+  modules = readdirSync(MODULES),
+  prod = readFileSync(join(ROOT, "infra", "envs", "prod", "main.tf"), "utf8"),
+} = {}) {
+  const problems = [];
+  const conn = read("connectors");
+  const mail = read("mail");
+
+  // The MCP host role: its own log group and image, nothing else.
+  const hostPolicy = blocks(conn, "aws_iam_role_policy", "mcp_host");
+  if (!hostPolicy) problems.push("connectors: aws_iam_role_policy.mcp_host is missing");
+  for (const s of hclStatements(hostPolicy ?? ""))
+    for (const a of s.actions)
+      if (!/^(logs:|ecr:(BatchGetImage|GetDownloadUrlForLayer|GetAuthorizationToken)$|kms:Decrypt$)/.test(a))
+        problems.push(`MCP host role has ${a}; it may only write logs and pull its image`);
+
+  // Only the bridge (and the connectors Lambda, which runs the same code at sync) read connector secrets.
+  const allowed = [permissionRange(conn, "connector-bridge"), permissionRange(conn, "connectors")];
+  for (const m of modules) {
+    let text;
+    try {
+      text = read(m);
+    } catch {
+      continue;
+    }
+    for (const s of hclStatements(text)) {
+      const res = resolveLocals(text, s.rest);
+      const readsConnectorSecrets =
+        s.actions.includes("secretsmanager:GetSecretValue") &&
+        /aic\/prod\/connectors|!default\/apikey\/aic-conn/.test(res);
+      if (readsConnectorSecrets && !(m === "connectors" && allowed.some((r) => inRange(s, r))))
+        problems.push(`${m}: a statement outside the bridge reads connector secrets`);
+      const invokesBridge = s.actions.includes("lambda:InvokeFunction") && /connector-bridge|bridge_arn/.test(res);
+      if (invokesBridge && !(m === "connectors" && blocks(conn, "aws_iam_role_policy", "gateway")?.includes(s.body)))
+        problems.push(`${m}: a role other than the gateway role may invoke the bridge`);
+      if (
+        ["connectors", "mail", "skills"].includes(m) &&
+        !/Effect\s*=\s*"Deny"/.test(s.body) &&
+        s.actions.some((a) => a === "*" || a.endsWith(":*"))
+      )
+        problems.push(`${m}: wildcard action in ${s.actions.join(",")}`);
+    }
+  }
+
+  // The worker: nothing from the mail module, and nothing but InvokeGateway / skill reads from the others.
+  if (!/!contains\(keys\(var\.reader_role_names\), "worker"\)/.test(mail))
+    problems.push("mail: reader_role_names must refuse the worker role (validation)");
+  if (!/reader_role_names\s*=\s*\{[^}]*if r != "worker"/.test(prod))
+    problems.push("envs/prod: the mail read path must leave out the worker role");
+  for (const [m, name] of [
+    ["connectors", "runtime_gateway"],
+    ["skills", "runtime_read"],
+  ]) {
+    for (const s of hclStatements(blocks(read(m), "aws_iam_role_policy", name) ?? ""))
+      for (const a of s.actions)
+        if (IDENTITY_CREDENTIALS.test(a) || a.startsWith("secretsmanager:"))
+          problems.push(`${m}: runtime roles (the worker too) get ${a}`);
+  }
+  // And the worker's own templates: no Identity credentials, and workload tokens only for the runtimes' identities.
+  for (const s of rolePolicies("worker"))
+    for (const a of list(s.Action))
+      if (IDENTITY_CREDENTIALS.test(a) && !/^bedrock-agentcore:GetWorkloadAccessToken/.test(a))
+        problems.push(`worker has Identity credential action ${a}`);
+      else if (
+        /GetWorkloadAccessToken/.test(a) &&
+        list(s.Resource).some((r) => /workload-identity\/(\*|aic-prod)/.test(r))
+      )
+        problems.push("worker may mint workload tokens for the connectors or mail identities");
+  return problems;
+}
+
+/** The body of one `resource "<type>" "<name>"` block in HCL text. */
+function blocks(text, type, name) {
+  const m = new RegExp(`^resource "${type}" "${name}" \\{`, "m").exec(text);
+  if (!m) return null;
+  const s = m.index + m[0].length - 1;
+  return text.slice(s, close(text, s) + 1);
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const problems = [...checkWorker(), ...checkBoundaries()];
+  const problems = [...checkWorker(), ...checkBoundaries(), ...checkInline()];
   if (problems.length) {
     console.error(`IAM check failed (${problems.length}):\n${problems.join("\n")}`);
     process.exit(1);
   }
   console.log(
-    "IAM check passed: workers have no IAM, no wildcard secrets, no resource-creating actions, Bedrock only on the worker profile; every role has a permission boundary.",
+    "IAM check passed: workers have no IAM, no wildcard secrets, no resource-creating actions, Bedrock only on the worker profile; every role has a permission boundary; the MCP host only logs, only the bridge reads connector secrets and only the gateway invokes it, and the worker gets no mail, Identity credentials or connector secrets.",
   );
 }
