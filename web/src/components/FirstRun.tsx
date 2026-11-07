@@ -13,8 +13,8 @@ const STEPS = [
     text: "The City shows your helpers at work. Tap anyone to see what they are doing.",
   },
   {
-    title: "Watch the money",
-    text: "The pill at the top shows what today cost so far. Tap it to see more.",
+    title: "Costs stay out of the way",
+    text: "Chat and the City never show prices. The Costs tab has all of it when you want a look.",
   },
 ];
 

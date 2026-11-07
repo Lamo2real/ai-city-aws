@@ -16,7 +16,6 @@ import { Inbox } from "./components/Inbox.tsx";
 import { KnowledgeScreen } from "./components/Knowledge.tsx";
 import { knowledge } from "./lib/knowledge.ts";
 import { CostsScreen, SettingsScreen, Tickets } from "./components/Screens.tsx";
-import { SpendPill } from "./components/SpendPill.tsx";
 import { SkillsScreen } from "./components/SkillsScreen.tsx";
 import { Banner, Button, Toaster, toast } from "./components/ui.tsx";
 import { connectReturn } from "./lib/connectReturn.ts";
@@ -160,7 +159,6 @@ export function App() {
           <PinnedApps inNav />
         </nav>
         <PinnedApps />
-        <SpendPill onOpen={() => go("costs")} />
       </header>
       <main id="main" tabIndex={-1}>
         {view === "ace" ? <AceScreen go={go} /> : null}
