@@ -125,9 +125,12 @@ class AgentHost:
             async def send(event: dict[str, Any]) -> None:
                 if direct:
                     try:
-                        return await direct(event)
+                        await direct(event)
+                        if not event.get("done"):
+                            return
                     except Exception as e:  # the reply still arrives through the bus
                         log("warn", "live.send_failed", error=type(e).__name__)
+                # The final reply always also goes the reliable way (the HUD ignores a repeat).
                 await bus.put(event)
 
             live = LiveReply(send, conversation or "")

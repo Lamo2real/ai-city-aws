@@ -7,9 +7,6 @@ the one Fable → Opus retry.
 
 from __future__ import annotations
 
-import asyncio
-import hashlib
-import json
 import os
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -18,7 +15,6 @@ from typing import Any, Protocol
 
 from aic.shared.cost import Usage
 from aic.shared.ledger import Ledger
-from aic.shared.log import log
 from aic.shared.policy import gate
 from aic.shared.turn import StopReason, TurnInput, TurnOutput
 
@@ -194,10 +190,12 @@ async def _consume(messages: AsyncIterator[Any], req: EngineRequest, b: _Binding
 
 
 async def sdk_engine(req: EngineRequest) -> TurnOutput:
-    """The production engine: the Claude Agent SDK, on Bedrock, with the city tools in-process.
-    AIC's turns use a Claude process started in advance (see ``WarmEngine``); other roles start one per turn."""
-    if req.ctx.role == "ace":
-        return await _warm.run(req)
+    """The production engine: the Claude Agent SDK, on Bedrock, with the city tools in-process. AIC, which has
+    only city tools and must answer within seconds, talks to Bedrock directly instead (see ``direct``)."""
+    if req.ctx.role == "ace" and not req.builtins:
+        from .direct import direct_engine
+
+        return await direct_engine(req)
     return await _cold(req)
 
 
@@ -211,82 +209,3 @@ async def _cold(req: EngineRequest) -> TurnOutput:
         yield {"type": "user", "message": {"role": "user", "content": req.turn.prompt}}
 
     return await _consume(query(prompt=prompt(), options=_options(req, b)), req, b, [False])
-
-
-def _shape(req: EngineRequest) -> str:
-    """Turns with the same shape can share a pre-started process: same model, prompt, tools and folder."""
-    tools = [(t.name, t.description, json.dumps(t.schema, sort_keys=True)) for t in req.tools]
-    raw = json.dumps([req.system, req.turn.model.invoke_id, req.turn.cache_ttl, req.cwd, req.builtins, tools])
-    return hashlib.sha256(raw.encode()).hexdigest()
-
-
-class WarmEngine:
-    """Keeps one Claude process started and waiting, so a turn skips the CLI's start-up (1–3 s).
-
-    Each turn takes the waiting process (a fresh context, exactly like a cold start), and a new one starts
-    in the background for the next turn. If the waiting process fails before answering, the turn runs cold.
-    """
-
-    def __init__(self, start: Callable[[Any], Any] | None = None) -> None:
-        self._start = start  # tests pass a fake client factory
-        self._spare: tuple[str, Any, _Binding] | None = None
-        self._lock = asyncio.Lock()
-        self._tasks: set[asyncio.Task[Any]] = set()
-
-    def _bg(self, coro: Any) -> None:
-        t = asyncio.ensure_future(coro)
-        self._tasks.add(t)
-        t.add_done_callback(self._tasks.discard)
-
-    def _client(self, options: Any) -> Any:
-        if self._start:
-            return self._start(options)
-        from claude_agent_sdk import ClaudeSDKClient
-
-        return ClaudeSDKClient(options)
-
-    async def _warm(self, req: EngineRequest) -> None:
-        b = _Binding()
-        client = self._client(_options(req, b))
-        try:
-            await client.connect()
-        except Exception as e:
-            log("warn", "engine.warm_failed", error=type(e).__name__)
-            return
-        async with self._lock:
-            old, self._spare = self._spare, (_shape(req), client, b)
-        if old:
-            self._bg(_close(old[1]))
-
-    async def run(self, req: EngineRequest) -> TurnOutput:
-        shape = _shape(req)
-        async with self._lock:
-            spare = self._spare if self._spare and self._spare[0] == shape else None
-            if spare:
-                self._spare = None
-        self._bg(self._warm(req))  # the next turn's process starts now, while this one runs
-        if not spare:
-            return await _cold(req)
-        _, client, b = spare
-        b.req = req
-        seen = [False]
-        try:
-            await client.query(req.turn.prompt)
-            return await _consume(client.receive_response(), req, b, seen)
-        except Exception as e:
-            if seen[0]:
-                raise
-            log("warn", "engine.warm_unusable", error=type(e).__name__)
-            return await _cold(req)
-        finally:
-            self._bg(_close(client))
-
-
-async def _close(client: Any) -> None:
-    try:
-        await client.disconnect()
-    except Exception as e:  # a process that already died is fine
-        log("info", "engine.close_failed", error=type(e).__name__)
-
-
-_warm = WarmEngine()

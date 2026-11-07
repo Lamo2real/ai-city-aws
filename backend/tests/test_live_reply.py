@@ -87,5 +87,6 @@ async def test_aics_reply_goes_straight_to_the_hud_when_the_runtime_knows_the_we
     await city.run()
     assert direct[0] == {"type": "ace.reply", "conversation": "c1", "text": "Eight", "done": False}
     assert direct[-1]["done"] and direct[-1]["text"] == "Eighteen."
-    assert city.bus.of_type("ace.reply") == []  # nothing went the slow way
+    # Pieces only went the fast way; the final reply also went through the bus as a safety net.
+    assert [(e["done"], e["text"]) for e in city.bus.of_type("ace.reply")] == [(True, "Eighteen.")]
     assert seen and seen[0]["role"] == "ace"

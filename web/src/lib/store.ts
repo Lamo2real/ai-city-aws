@@ -85,6 +85,8 @@ class Store {
   private aceReply(e: { text: string; done: boolean }) {
     const chat = [...this.state.chat];
     const last = chat.at(-1);
+    // The final reply arrives twice (straight from AIC, and through the event bus as a safety net).
+    if (e.done && last?.who === "ace" && last.state === "done" && last.text === e.text) return;
     if (last?.who === "ace" && last.state === "streaming")
       chat[chat.length - 1] = {
         ...last,
