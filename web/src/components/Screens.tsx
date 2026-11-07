@@ -50,7 +50,7 @@ export function Tickets() {
   if (open) return <TicketDetail id={open} back={() => setOpen(null)} />;
   return (
     <section className="screen" aria-labelledby="tk-title">
-      <h1 id="tk-title">Tickets</h1>
+      <h1 id="tk-title">Work</h1>
       <div className="segmented" role="tablist">
         <button role="tab" aria-selected={which === "live"} onClick={() => setWhich("live")}>
           Working now
@@ -60,12 +60,14 @@ export function Tickets() {
         </button>
       </div>
       {error ? (
-        <Banner tone="bad" action={{ label: "Try again", onClick: retry }}>{`Tickets did not load: ${error}`}</Banner>
+        <Banner tone="bad" action={{ label: "Try again", onClick: retry }}>
+          Your work list did not load. Check the connection.
+        </Banner>
       ) : null}
-      {!data && !error ? <Loading what="tickets" /> : null}
+      {!data && !error ? <Loading what="your work" /> : null}
       {data && !data.tickets.length ? (
         <p className="empty">
-          {which === "live" ? "Nothing is being worked on. Ask AIC for something." : "Nothing finished yet."}
+          {which === "live" ? "Nothing is being worked on. Ask AIC for something." : "Nothing is finished yet."}
         </p>
       ) : null}
       <ul className="list">
@@ -93,10 +95,10 @@ function TicketDetail({ id, back }: { id: string; back: () => void }) {
   return (
     <section className="screen" aria-labelledby="td-title">
       <Button variant="quiet" onClick={back}>
-        ← All tickets
+        ← All work
       </Button>
       {error ? <Banner tone="bad">{error}</Banner> : null}
-      {!data && !error ? <Loading what="the ticket" /> : null}
+      {!data && !error ? <Loading what="this piece of work" /> : null}
       {data ? (
         <>
           <h1 id="td-title">{data.ticket.goal}</h1>
@@ -156,7 +158,9 @@ export function CostsScreen() {
       <h1 id="cost-title">Costs (estimates)</h1>
       <p className="mute">{COST_NOTE}</p>
       {error ? (
-        <Banner tone="bad" action={{ label: "Try again", onClick: retry }}>{`Costs did not load: ${error}`}</Banner>
+        <Banner tone="bad" action={{ label: "Try again", onClick: retry }}>
+          Costs did not load. Check the connection.
+        </Banner>
       ) : null}
       {!data && !error ? <Loading what="costs" /> : null}
       {data ? (
@@ -165,6 +169,9 @@ export function CostsScreen() {
             <Meter label="Today" spent={data.today.usd} cap={data.caps.daily_global_usd} />
             <Meter label="This month" spent={data.month.usd} cap={data.caps.monthly_budget_usd} />
           </div>
+          {config().budgetAlertUsd ? (
+            <p>{`Alert at ${money(config().budgetAlertUsd)} a month: AWS emails you. It never stops anything.`}</p>
+          ) : null}
           <p>{`Prompt caching saved about ${money(data.month.cache_savings_usd)} this month.`}</p>
           <Table title="This month by department" rows={data.by_department} />
           <Table title="This month by role" rows={data.by_role} />
@@ -185,7 +192,7 @@ function Meter({ label, spent, cap }: { label: string; spent: number; cap: numbe
       <div className="meter meter-ok">
         <div className="meter-head">
           <b>{label}</b>
-          <span>{`${money(spent)} (estimate, no limit)`}</span>
+          <span>{`${money(spent)} (estimate, no limit set)`}</span>
         </div>
       </div>
     );
@@ -195,7 +202,7 @@ function Meter({ label, spent, cap }: { label: string; spent: number; cap: numbe
     <div className={`meter meter-${level}`}>
       <div className="meter-head">
         <b>{label}</b>
-        <span>{`${money(spent)} of ${money(cap)} (estimate)`}</span>
+        <span>{`${money(spent)} of your ${money(cap)} limit (estimate)`}</span>
       </div>
       <div
         className="bar"
@@ -208,7 +215,7 @@ function Meter({ label, spent, cap }: { label: string; spent: number; cap: numbe
         <span style={{ width: `${pct}%` }} />
       </div>
       {level !== "ok" ? (
-        <p className="meter-word">{level === "red" ? "Cap reached: no new work starts." : "Close to the cap."}</p>
+        <p className="meter-word">{level === "red" ? "Limit reached: no new work starts." : "Close to your limit."}</p>
       ) : null}
     </div>
   );

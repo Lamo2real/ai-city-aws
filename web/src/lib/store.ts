@@ -52,6 +52,8 @@ export interface HudState {
   presence: Presence;
   settings: Record<string, unknown> | null;
   turn: AceTurn | null;
+  /** When the latest result of handed-on work came back (drives the "Show me" / "Thanks" quick replies). */
+  lastResultAt: number | null;
   cards: ConnectCardState[];
 }
 
@@ -75,6 +77,7 @@ class Store {
     presence: "idle",
     settings: null,
     turn: null,
+    lastResultAt: null,
     cards: [],
   };
   private listeners = new Set<Listener>();
@@ -114,7 +117,10 @@ class Store {
 
   /** Links the ticket AIC opens to its reply, and settles it when it finishes or its result comes back. */
   private taskEvent(e: { type: string; [k: string]: unknown }) {
-    if (e.type === "result" && typeof e.ticket_id === "string") return this.settleTasks((id) => id === e.ticket_id);
+    if (e.type === "result" && typeof e.ticket_id === "string") {
+      this.set({ lastResultAt: Date.now() });
+      return this.settleTasks((id) => id === e.ticket_id);
+    }
     if (e.type !== "ticket.status") return;
     const t = e.ticket as { id: string; from: string; status: string } | undefined;
     if (!t) return;

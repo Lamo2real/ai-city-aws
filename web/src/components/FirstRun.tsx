@@ -6,15 +6,15 @@ import { Button } from "./ui.tsx";
 const STEPS = [
   {
     title: "Meet AIC",
-    text: "AIC is the only one you talk to. Type or tap the mic and just ask: “yo AIC, what’s the status?”. AIC hands real work to the team and tells you when it is done.",
+    text: "Talk to AIC like a friend. Type, or tap the mic and speak. Ask for anything. AIC tells you when it is done.",
   },
   {
     title: "See the City",
-    text: "The City shows your organization live: the Orchestrator at HQ, one building per department, and workers who walk in when hired and leave when done. Tap anyone to see what they are doing.",
+    text: "The City shows your helpers at work. Tap anyone to see what they are doing.",
   },
   {
-    title: "Where the money is",
-    text: "The pill at the top always shows today’s spend against your daily cap. It turns amber near the cap and red at it. Figures are estimates; the AWS bill is the truth.",
+    title: "Watch the money",
+    text: "The pill at the top shows what today cost so far. Tap it to see more.",
   },
 ];
 

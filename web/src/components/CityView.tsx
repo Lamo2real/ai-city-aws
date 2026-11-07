@@ -129,7 +129,7 @@ export function CityView({ go }: { go: (view: string) => void }) {
           <Banner
             tone="bad"
             action={{ label: "See costs", onClick: () => go("costs") }}
-          >{`Spend cap reached (${city.capHit.cap.replace(/_/g, " ")}, $${city.capHit.limit}). No new work starts until you raise it.`}</Banner>
+          >{`You reached your ${city.capHit.cap === "daily_global" ? "daily" : city.capHit.cap.replace(/_/g, " ")} spending limit ($${city.capHit.limit}). No new work starts until you raise it in Settings.`}</Banner>
         ) : null}
         {loaded && !names.length ? (
           <p className="cityui empty">
@@ -406,8 +406,8 @@ function AgentPanel({ id, city }: { id: string; city: CityState }) {
       <Row k="Model" v={MODEL_NAME[a.model] ?? a.model} />
       <Row k="Reports to" v={a.parent ?? "the owner"} />
       <Row k="Cost so far" v={`est. ${money(live?.cost_usd ?? a.total_cost_usd ?? 0)}`} />
-      <h4>Ticket</h4>
-      <p>{ticket ? `${ticketWords(ticket.status)}: ${plainText(ticket.goal).short}` : "No open ticket."}</p>
+      <h4>Working on</h4>
+      <p>{ticket ? `${ticketWords(ticket.status)}: ${plainText(ticket.goal).short}` : "Nothing right now."}</p>
       {live?.recent.length ? (
         <>
           <h4>Recent activity</h4>
@@ -447,12 +447,12 @@ function DeptPanel({ name, city, onZoom }: { name: string; city: CityState; onZo
     <div>
       <p className="doing">
         {name === "HQ"
-          ? "AIC and the Orchestrator work here."
+          ? "AIC and the team lead work here."
           : `${workers.length ? `${workers.length} workers at their desks.` : "Nobody hired right now."} ${d?.mission ?? ""}`}
       </p>
       {name !== "HQ" ? <Row k="Manager" v={d?.manager_id ?? "—"} /> : null}
       {name !== "HQ" ? <Row k="Today, estimate" v={money(city.spend[name] ?? 0)} /> : null}
-      <h4>{`Open tickets (${open.length})`}</h4>
+      <h4>{`Work in progress (${open.length})`}</h4>
       <ul className="recent">
         {open.length ? (
           open.map((t) => <li key={t.id}>{`${t.to}: ${ticketWords(t.status)} — ${plainText(t.goal, 90).short}`}</li>)

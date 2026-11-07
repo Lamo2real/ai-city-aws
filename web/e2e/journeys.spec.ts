@@ -176,7 +176,7 @@ test("lands on AIC with the input focused; asking something shows AIC's streamed
   const box = page.getByRole("textbox", { name: "Message to AIC" });
   await expect(box).toBeFocused();
   await expect(page.getByRole("button", { name: "Talk to AIC", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Today: \$0.42 of \$10/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Today: \$0.42, estimate/ })).toBeVisible();
   expect(await primaries(page)).toBeLessThanOrEqual(1);
   await box.fill("yo AIC, what's 9 + 9?");
   await page.getByRole("button", { name: "Send to AIC" }).click();
@@ -288,7 +288,7 @@ test("AIC's reply: its steps with a shimmering status first, then words flowing 
   await expect(status.locator(".shimmer")).toHaveCSS("animation-name", "shimmer-sweep");
   m.send({ type: "activity", id: "ace", activity: "understanding" });
   m.send({ type: "activity", id: "ace", activity: "working", detail: "get_status" });
-  await expect(status).toHaveAccessibleName("AIC: Checking the ledger");
+  await expect(status).toHaveAccessibleName("AIC: Checking how things are going");
   await expect(status).toContainText(/\ds$/);
   await shot(page, "ace-working");
   const words = Array.from({ length: 60 }, (_, i) => `word${i}`).join(" ");
@@ -311,10 +311,10 @@ test("AIC's reply: its steps with a shimmering status first, then words flowing 
   await expect(reply).not.toHaveAttribute("aria-busy", "true");
   await expect(reply).not.toContainText("word59");
   const steps = reply.locator("details.aic-steps");
-  await expect(steps.locator("summary")).toHaveText(/^2 steps/);
-  await expect(steps.getByText("Checking the ledger")).toBeHidden(); // folded until opened
+  await expect(steps.locator("summary")).toHaveText(/^What I did/);
+  await expect(steps.getByText("Checking how things are going")).toBeHidden(); // folded until opened
   await steps.locator("summary").click();
-  await expect(steps.getByText("Checking the ledger")).toBeVisible();
+  await expect(steps.getByText("Checking how things are going")).toBeVisible();
 });
 
 test("with reduced motion the reply appears directly, without the typing effect", async ({ page }) => {
@@ -459,7 +459,7 @@ test("while the work AIC handed on runs, its steps shimmer with a live clock; th
 
   const steps = page.getByLabel("Conversation with AIC").locator("details.aic-steps").last();
   await expect(steps).toHaveClass(/is-running/);
-  await expect(steps.locator(".shimmer")).toHaveText("2 steps · Handing this to the Orchestrator…");
+  await expect(steps.locator(".shimmer")).toHaveText("Working on it: Passing this to my team…");
   await expect(steps.locator(".shimmer")).toHaveCSS("animation-name", "shimmer-sweep");
   const clock = steps.locator(".aic-status-time");
   const first = Number((await clock.textContent())?.replace("s", ""));
@@ -467,7 +467,7 @@ test("while the work AIC handed on runs, its steps shimmer with a live clock; th
     .poll(async () => Number((await clock.textContent())?.replace("s", "")), { timeout: 3000 })
     .toBeGreaterThan(first);
   await steps.locator("summary").click();
-  await expect(steps.locator("li.current")).toHaveText("Handing this to the Orchestrator");
+  await expect(steps.locator("li.current")).toHaveText("Passing this to my team");
   await shot(page, "ace-work-running");
 
   m.send({ type: "ticket.status", previous: "open", ticket: { ...t, status: "in_progress" } });
@@ -475,7 +475,7 @@ test("while the work AIC handed on runs, its steps shimmer with a live clock; th
   m.send({ type: "result", ticket_id: "t-budget", summary: "Budget app published." });
   await expect(steps).not.toHaveClass(/is-running/);
   await expect(steps.locator(".shimmer")).toHaveCount(0);
-  await expect(steps.locator("summary")).toHaveText(/^2 steps · \d+s$/);
+  await expect(steps.locator("summary")).toHaveText(/^What I did · \d+ s$/);
 });
 
 test("after a long conversation the AIC screen still fits the window: only the chat scrolls, inside its panel", async ({
@@ -513,6 +513,77 @@ test("after a long conversation the AIC screen still fits the window: only the c
     });
     expect(fit).toEqual({ page: true, main: true, chatScrolls: true, composerOnScreen: true });
   }
+});
+
+test("quick replies: one tap answers AIC's question, asks how work is going, or stops it", async ({ page }) => {
+  const m = await mockBackend(page);
+  await page.goto("/");
+  await page.getByRole("textbox", { name: "Message to AIC" }).fill("check the GT3 sentences");
+  await page.keyboard.press("Enter");
+  const t = { id: "t-gt3", from: "ace", to: "orchestrator", goal: "GT3 sentences", kind: "task", department: null };
+  m.send({ type: "ticket.status", previous: null, ticket: { ...t, status: "open" } });
+  m.send({ type: "ace.reply", conversation: "main", text: "On it. Want me to tell you when it's done?", done: true });
+  const chips = page.getByRole("group", { name: "Quick replies" });
+  await expect(chips.getByRole("button")).toHaveText(["Yes", "No", "How's it going?", "Stop it"]);
+  await shot(page, "ace-quick-replies");
+  await chips.getByRole("button", { name: "Yes" }).click();
+  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").at(-1)?.body).toMatchObject({ text: "Yes" });
+  await expect(chips).toHaveCount(0); // gone until AIC answers
+  m.send({ type: "ace.reply", conversation: "main", text: "Will do.", done: true });
+  await chips.getByRole("button", { name: "Stop it" }).click();
+  await expect
+    .poll(() => m.calls.filter((c) => c.path === "/messages").at(-1)?.body)
+    .toMatchObject({ text: "Stop it" });
+
+  // The result comes back: Show me opens the finished work.
+  m.send({ type: "ace.reply", conversation: "main", text: "Stopped.", done: true });
+  m.send({ type: "result", ticket_id: "t-gt3", summary: "GT3 sentences checked." });
+  m.send({ type: "ace.reply", conversation: "main", text: "The GT3 sentences are checked.", done: true });
+  await expect(chips.getByRole("button")).toHaveText(["Show me", "Thanks"]);
+  await chips.getByRole("button", { name: "Show me" }).click();
+  await expect(page.getByRole("heading", { name: "Work" })).toBeVisible();
+});
+
+test("Stop all work shows while something runs, asks once, then offers Resume", async ({ page }) => {
+  const m = await mockBackend(page);
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Stop all work" })).toHaveCount(0); // nothing running
+  await page.getByRole("textbox", { name: "Message to AIC" }).fill("build me a budget app");
+  await page.keyboard.press("Enter");
+  const t = { id: "t-b", from: "ace", to: "orchestrator", goal: "Budget app", kind: "task", department: null };
+  m.send({ type: "ticket.status", previous: null, ticket: { ...t, status: "open" } });
+  m.send({ type: "ace.reply", conversation: "main", text: "On it.", done: true });
+  await page.getByRole("button", { name: "Stop all work" }).click();
+  const dialog = page.getByRole("dialog", { name: "Stop all work?" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Stop all work" }).click();
+  await expect.poll(() => m.calls.some((c) => c.path === "/city/pause")).toBe(true);
+  await expect(page.getByText("All work is stopped. Nothing new starts until you resume.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Stop all work" })).toHaveCount(0);
+  await shot(page, "ace-stopped");
+  await page.getByRole("button", { name: "Resume" }).click();
+  await expect.poll(() => m.calls.some((c) => c.path === "/city/resume")).toBe(true);
+  await expect(page.getByText("All work is stopped.")).toHaveCount(0);
+});
+
+test("plain words: Work in the menu, What I did under replies, today's spend without a far-away limit", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  await page.goto("/");
+  const nav = page.getByRole("navigation", { name: "Screens" });
+  await expect(nav.getByRole("link", { name: "Work" })).toBeVisible();
+  await expect(nav.getByText("Tickets")).toHaveCount(0);
+  await page.getByRole("textbox", { name: "Message to AIC" }).fill("status?");
+  await page.keyboard.press("Enter");
+  m.send({ type: "activity", id: "ace", activity: "working", detail: "get_status" });
+  m.send({ type: "ace.reply", conversation: "main", text: "All quiet.", done: true });
+  const steps = page.locator("details.aic-steps").last();
+  await expect(steps.locator("summary")).toHaveText(/^What I did · \d+ s$/);
+  await steps.locator("summary").click();
+  await expect(steps).toContainText("Checking how things are going");
+  for (const word of ["ledger", "Orchestrator", "ticket"])
+    await expect(page.locator("section.ace")).not.toContainText(word);
 });
 
 test("a draft survives a reload", async ({ page }) => {
@@ -672,16 +743,20 @@ test("with no spend limit the money pill shows only what was spent", async ({ pa
 test("hitting the spend cap: the money pill turns red and the City says so plainly", async ({ page }) => {
   const m = await mockBackend(page, { snapshot: { usage: { usd: 10, turns: 300, tokens: 9e6 } } });
   await page.goto("/#/city");
-  const pill = page.getByRole("button", { name: /Today: \$10 of \$10, estimate, cap reached/ });
+  const pill = page.getByRole("button", { name: /Today: \$10 of \$10, estimate, limit reached/ });
   await expect(pill).toHaveAttribute("data-level", "red");
   m.send({ type: "spend.cap_reached", cap: "daily_global", department: null, spent: 10.02, limit: 10 });
   await expect(
-    page.getByText(/Spend cap reached \(daily global, \$10\)\. No new work starts until you raise it\./),
+    page.getByText(
+      /You reached your daily spending limit \(\$10\)\. No new work starts until you raise it in Settings\./,
+    ),
   ).toBeVisible();
   await shot(page, "spend-cap");
   await pill.click();
   await expect(page.getByRole("heading", { name: "Costs (estimates)" })).toBeVisible();
-  await expect(page.getByText("Cap reached: no new work starts.")).toBeVisible();
+  await expect(page.getByText("Limit reached: no new work starts.")).toBeVisible();
+  // The AWS budget is an alert, named as one, never as a limit.
+  await expect(page.getByText("Alert at $10,000 a month: AWS emails you. It never stops anything.")).toBeVisible();
   await shot(page, "costs");
   await noSeriousA11y(page, "Costs");
 });
