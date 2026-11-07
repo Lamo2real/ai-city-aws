@@ -92,7 +92,13 @@ def test_every_role_prompt_exists_and_lists_its_tools() -> None:
     assert "delegate_to_orchestrator" in load_prompt("ace.md").tools
     assert "sign_off" in load_prompt("orchestrator.md").tools
     assert "review" in load_prompt("manager.md", {"department": "Eng"}).tools
-    assert load_prompt("worker.md").tools == ["ask_manager", "report_to_manager", "submit_app", "search_knowledge"]
+    assert load_prompt("worker.md").tools == [
+        "ask_manager",
+        "report_to_manager",
+        "submit_app",
+        "search_knowledge",
+        "load_app",
+    ]
 
 
 def test_aces_prompt_states_its_name_greetings_spoken_style_and_limits() -> None:

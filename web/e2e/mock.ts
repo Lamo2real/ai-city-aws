@@ -41,6 +41,21 @@ document.getElementById("rsvp").onclick = async () => {
   out(r.ok ? "Proposal: " + r.status : "Error: " + r.error);
 };
 </script></body>`;
+// A tiny original game that keeps its best score with the v3 `state` grant (docs/APPS.md "v3").
+export const SCORE_HTML = `<!doctype html><meta charset="utf-8"><title>Pebble Hop</title>
+<body style="font-family:sans-serif;background:#fff;color:#111">
+<h1>Pebble Hop</h1><button id="hop">Hop</button> <output id="n">0 hops</output> <p id="best">Best: …</p>
+<script>
+const waiting = new Map(); let k = 0, n = 0, best = 0;
+addEventListener("message", (e) => { const m = e.data; if (e.source === parent && m && m.aic === 1 && waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); } });
+const ask = (cap, params) => new Promise((r) => { const id = "s" + (++k); waiting.set(id, r); parent.postMessage({ aic: 1, id, cap, params }, "*"); });
+const show = () => { document.getElementById("best").textContent = "Best: " + best; };
+ask("state.get", { key: "best" }).then((r) => { best = r.ok && typeof r.data.value === "number" ? r.data.value : 0; show(); });
+document.getElementById("hop").onclick = async () => {
+  n++; document.getElementById("n").textContent = n + " hops";
+  if (n > best) { best = n; show(); await ask("state.set", { key: "best", value: best }); }
+};
+</script></body>`;
 export const GAME_HTML = `<!doctype html><meta charset="utf-8"><title>Star Sweeper</title>
 <body style="font-family:sans-serif;background:#123;color:#fff">
 <h1>Star Sweeper</h1><p>Click the button to sweep a star.</p>
@@ -66,6 +81,8 @@ export interface Mock {
   apps: Array<Record<string, unknown>>;
   /** The knowledge base: stored items (newest first) and the S3 PUTs the HUD made. */
   knowledge: { items: Array<Record<string, unknown>>; puts: string[] };
+  /** v3 per-app state, `<app_id>/<key>` → value. */
+  state: Record<string, unknown>;
 }
 export const appRecord = (id: string, slug: string, title: string, extra: Record<string, unknown> = {}) => ({
   app_id: id,
@@ -163,6 +180,7 @@ export async function mockBackend(
     send: (e) => pending.push(e),
     snapshot: { ...baseSnapshot(), ...(opts.snapshot ?? {}) },
     apps: [...(opts.apps ?? [])],
+    state: {},
     settings: {
       paused: false,
       pause_reason: null,
@@ -299,9 +317,24 @@ export async function mockBackend(
     if (/^\/apps\/[^/]+\/bridge$/.test(path)) {
       const a = appAt();
       const cap = String(body?.cap);
-      if (!a || !((a.grants as Array<{ id: string }>) ?? []).some((g) => g.id === cap))
+      const grant = cap.startsWith("state.") ? "state" : cap;
+      if (!a || !((a.grants as Array<{ id: string }>) ?? []).some((g) => g.id === grant))
         return ok({ error: "not_granted" }, 403);
+      const sp = (body?.params ?? {}) as { key?: string; value?: unknown };
+      if (cap === "state.get")
+        return ok({ ok: true, data: { value: m.state[`${String(a.app_id)}/${sp.key}`] ?? null } });
+      if (cap === "state.set") {
+        m.state[`${String(a.app_id)}/${sp.key}`] = sp.value;
+        return ok({ ok: true, data: {} });
+      }
       return ok({ data: { events: [{ title: "Dentist" }, { title: "Team sync" }], calendars: [], errors: [] } });
+    }
+    if (/^\/apps\/[^/]+\/rollback$/.test(path)) {
+      const a = appAt();
+      const prev = (a?.history as Array<Record<string, unknown>> | undefined)?.[0];
+      if (!a || !prev) return ok({ error: "There is no earlier version of this app." }, 409);
+      Object.assign(a, prev, { history: (a.history as unknown[]).slice(1) });
+      return ok({ app: a });
     }
     if (/^\/apps\/[^/]+\/proposals$/.test(path)) {
       const a = appAt()!;
@@ -469,7 +502,11 @@ export async function mockBackend(
     r.fulfill({
       status: 200,
       contentType: "text/html",
-      body: /\/(live\/app-cal|drafts\/drf-cal)/.test(r.request().url()) ? CALENDAR_HTML : GAME_HTML,
+      body: /\/(live\/app-cal|drafts\/drf-cal)/.test(r.request().url())
+        ? CALENDAR_HTML
+        : /\/live\/app-score/.test(r.request().url())
+          ? SCORE_HTML
+          : GAME_HTML,
       headers: { "access-control-allow-origin": "*" },
     }),
   );

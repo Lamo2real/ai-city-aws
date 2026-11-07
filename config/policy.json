@@ -137,10 +137,10 @@
       "reason": "Publishing a video publicly can't be undone; upload private or unlisted first."
     },
     {
-      "tool": "^mcp__app__(?!(calendar\\.read|calendar\\.calendars|mail\\.search|mail\\.accounts)$)",
+      "tool": "^mcp__app__(?!(calendar\\.read|calendar\\.calendars|mail\\.search|mail\\.accounts|state\\.get|state\\.set)$)",
       "match": ".*",
       "decision": "deny",
-      "reason": "Apps can only read what the owner granted: calendars and mail search. Connector reads are gated as mcp__gateway__."
+      "reason": "Apps can only read what the owner granted: calendars, mail search and their own state. Connector reads are gated as mcp__gateway__."
     }
   ]
 }

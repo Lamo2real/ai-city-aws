@@ -77,7 +77,8 @@ export function granted(
     return grants.some((g) => g.id === "connector.read" && g.connector === params.connector && g.tool === params.tool);
   if (cap === "propose")
     return grants.some((g) => g.id === "propose") && (PROPOSE_KINDS as readonly string[]).includes(String(params.kind));
-  return grants.some((g) => g.id === cap && g.id !== "connector.read" && g.id !== "propose");
+  if (cap === "state.get" || cap === "state.set") return grants.some((g) => g.id === "state");
+  return grants.some((g) => g.id === cap && !["connector.read", "propose", "state"].includes(g.id));
 }
 
 const ERROR_BY_STATUS: Record<number, BridgeError> = { 400: "invalid", 403: "not_granted", 429: "rate_limited" };

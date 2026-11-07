@@ -45,6 +45,9 @@ export interface CityApproval {
   capabilities?: Array<{ id: string; connector?: string; tool?: string; label?: string }>;
   pin?: boolean;
   requested_by?: string;
+  /** app.publish, v3: set when this is a new version of an existing app. */
+  replaces?: string;
+  version?: number;
 }
 /** An app the city built and the owner published (docs/APPS.md). Title and description are agent text. */
 export interface CityApp {
@@ -61,6 +64,9 @@ export interface CityApp {
   grants?: Array<{ id: string; connector?: string; tool?: string }>;
   granted_at?: string;
   pinned?: boolean;
+  /** v3: the current version (1 when never updated) and the earlier ones kept for a rollback, newest first. */
+  version?: number;
+  history?: Array<{ version?: number; title?: string; published_at?: string }>;
 }
 export interface FeedLine {
   at: number;

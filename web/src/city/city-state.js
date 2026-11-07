@@ -157,7 +157,10 @@ export function reduce(state, event, now = Date.now()) {
     case "app.updated": {
       const a = event.app;
       if (!a?.app_id || !state.apps[a.app_id]) return state; // an app this HUD doesn't have: GET /apps brings it
-      return { ...state, now, apps: { ...state.apps, [a.app_id]: { ...state.apps[a.app_id], ...a } } };
+      const was = state.apps[a.app_id];
+      const next = { ...state, now, apps: { ...state.apps, [a.app_id]: { ...was, ...a } } };
+      if (a.version === undefined || a.version === (was.version ?? 1)) return next;
+      return { ...next, feed: feed(state, `${String(a.title ?? was.title ?? "An app").slice(0, 40)} is now version ${Number(a.version)}`, "pass", now) };
     }
     case "app.removed": {
       const gone = state.apps[event.app_id];

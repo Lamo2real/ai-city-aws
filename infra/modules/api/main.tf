@@ -186,7 +186,7 @@ locals {
     "GET /departments", "GET /agents", "GET /workforce", "GET /costs", "GET /health", "GET /questions", "POST /questions/{id}/answer",
     "POST /questions/{id}/default", "POST /approvals/{id}", "GET /settings", "PUT /settings", "POST /city/pause", "POST /city/resume",
     "GET /memory", "POST /notes", "GET /apps", "DELETE /apps/{id}", "PUT /apps/{id}",
-    "POST /apps/{id}/bridge", "POST /apps/{id}/proposals",
+    "POST /apps/{id}/bridge", "POST /apps/{id}/proposals", "POST /apps/{id}/rollback",
     "GET /knowledge", "GET /knowledge/{id}", "POST /knowledge/uploads", "POST /knowledge/uploads/{id}/complete", "POST /knowledge/links",
     "POST /knowledge/text", "PUT /knowledge/{id}", "DELETE /knowledge/{id}",
   ]

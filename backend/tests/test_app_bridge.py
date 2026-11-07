@@ -158,7 +158,7 @@ def bridge(app: dict[str, Any], cap: str, params: Any = None) -> dict[str, Any]:
 
 
 # ---------- catalogue and params ----------
-def test_the_catalogue_holds_only_reads_and_propose() -> None:
+def test_the_catalogue_holds_only_reads_propose_and_own_state() -> None:
     assert set(CATALOGUE) == {
         "calendar.read",
         "calendar.calendars",
@@ -166,6 +166,7 @@ def test_the_catalogue_holds_only_reads_and_propose() -> None:
         "mail.accounts",
         "connector.read",
         "propose",
+        "state",
     }
     for bad in ({"id": "mail.send"}, {"id": "calendar.delete"}, {"id": "settings"}, "calendar.read", {"x": 1}):
         with pytest.raises(Invalid):

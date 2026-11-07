@@ -67,6 +67,7 @@ CATALOGUE: dict[str, CapSpec] = {
         CapSpec("mail.accounts", "See which mail accounts you have"),
         CapSpec("connector.read", "Read from a connector"),
         CapSpec("propose", "Ask you to approve actions such as answering invitations", bridge=False),
+        CapSpec("state", "Remember its own data, such as high scores and settings (up to 64 KB)"),
     )
 }
 

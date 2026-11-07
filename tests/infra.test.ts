@@ -395,9 +395,22 @@ describe("apps API routes", () => {
     const routes = api.slice(api.indexOf("routes = ["), api.indexOf("]", api.indexOf("routes = [")));
     expect(routes).toContain('"GET /apps"');
     expect(routes).toContain('"DELETE /apps/{id}"');
-    for (const r of ['"PUT /apps/{id}"', '"POST /apps/{id}/bridge"', '"POST /apps/{id}/proposals"'])
+    for (const r of [
+      '"PUT /apps/{id}"',
+      '"POST /apps/{id}/bridge"',
+      '"POST /apps/{id}/proposals"',
+      '"POST /apps/{id}/rollback"',
+    ])
       expect(routes).toContain(r);
     expect(api).toMatch(/allow_methods = \["GET", "POST", "PUT", "DELETE"\]/);
+  });
+});
+
+describe("apps v3: workers read an app's current version from the public apps origin", () => {
+  it("only the worker runtime gets AIC_APPS_URL, and no runtime role names the apps bucket", () => {
+    const agents = readFileSync("infra/modules/agents/main.tf", "utf8");
+    expect(agents).toMatch(/each\.key == "worker" && var\.apps_url != "" \? \{ AIC_APPS_URL = var\.apps_url \}/);
+    expect(readFileSync("infra/envs/prod/main.tf", "utf8")).toMatch(/apps_url\s+= module\.apps\.url/);
   });
 });
 

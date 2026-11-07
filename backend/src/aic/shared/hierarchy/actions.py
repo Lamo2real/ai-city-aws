@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, cast
 
 from ..apps import Workspace
@@ -22,6 +22,15 @@ from .queue import AgentRole, Queue, WorkMessage
 LIVE = ("open", "in_progress", "in_review", "waiting_on_owner", "parked")
 
 
+def _https_get(url: str, max_bytes: int = 2 * 1024 * 1024 + 1) -> bytes:
+    import urllib.request
+
+    if not url.startswith("https://"):
+        raise ValueError("only https URLs")
+    with urllib.request.urlopen(url, timeout=20) as r:  # noqa: S310 (https only, checked above)
+        return bytes(r.read(max_bytes))
+
+
 @dataclass
 class CityDeps:
     ledger: Ledger
@@ -34,6 +43,8 @@ class CityDeps:
     """Workers' S3 workspace (for ``submit_app``); None outside the worker runtime."""
     knowledge: KnowledgeAccess | None = None
     """The owner's knowledge base; None until it is deployed."""
+    fetch: Callable[[str], bytes] = field(default_factory=lambda: _https_get)
+    """GETs one public URL (``load_app`` reads an app's files from the apps origin); fakes in tests."""
 
 
 async def move(d: CityDeps, id: str, status: str, note: str = "", patch: Record | None = None) -> Record:
