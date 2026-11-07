@@ -2,8 +2,10 @@
 terraform {
   required_version = ">= 1.11.0"
   required_providers {
-    aws     = { source = "hashicorp/aws", version = ">= 6.68.0, < 7.0.0" }
-    archive = { source = "hashicorp/archive", version = ">= 2.7.0, < 3.0.0" }
+    aws        = { source = "hashicorp/aws", version = ">= 6.68.0, < 7.0.0" }
+    archive    = { source = "hashicorp/archive", version = ">= 2.7.0, < 3.0.0" }
+    opensearch = { source = "opensearch-project/opensearch", version = ">= 2.6.0, < 3.0.0" }
+    time       = { source = "hashicorp/time", version = ">= 0.13.0, < 1.0.0" }
   }
   # Filled in at init time: terraform init -backend-config=backend.hcl (see backend.hcl.example).
   backend "s3" {}
@@ -39,6 +41,24 @@ provider "aws" {
 
 data "aws_caller_identity" "me" {}
 
+# The role behind the deploy session (OpenSearch data-access policies name roles, not sessions).
+data "aws_iam_session_context" "me" {
+  arn = data.aws_caller_identity.me.arn
+}
+
+# Creates the knowledge index inside the OpenSearch Serverless collection (no hashicorp/aws resource exists for
+# an index; decision 67). Signs with the deploy role's credentials (SigV4, service aoss).
+provider "opensearch" {
+  url                   = module.knowledge.collection_endpoint
+  aws_region            = var.region
+  sign_aws_requests     = true
+  aws_signature_service = "aoss"
+  healthcheck           = false
+  opensearch_version    = "2.17" # skips the version ping, which OpenSearch Serverless doesn't answer
+}
+
+provider "time" {}
+
 module "security" {
   source     = "../../modules/security"
   name       = local.name
@@ -72,6 +92,15 @@ module "frontend" {
   providers = { aws = aws, aws.us_east_1 = aws.us_east_1 }
   name      = local.name
   region    = var.region
+  apps_url  = module.apps.url
+}
+
+# Apps the city builds, on their own origin (docs/APPS.md). It reuses the HUD's WAF web ACL; the HUD's
+# CSP names this origin, never the other way round (no cycle).
+module "apps" {
+  source      = "../../modules/apps"
+  name        = local.name
+  waf_acl_arn = module.frontend.waf_acl_arn
 }
 
 module "auth" {
@@ -113,38 +142,67 @@ module "agents" {
       r == "worker" ? {} : { AIC_MAIL_WORKLOAD = module.mail.workload_name, AIC_MAIL_PROVIDERS = module.mail.providers, AIC_HUD_ORIGIN = module.frontend.url },
     )
   }
+  enable_gateway        = var.enable_gateway
+  # The knowledge base: every runtime searches it; AIC (ace) may add to it.
+  knowledge_table          = module.knowledge.table
+  knowledge_table_arn      = module.knowledge.table_arn
+  knowledge_bucket         = module.knowledge.bucket
+  knowledge_bucket_arn     = module.knowledge.bucket_arn
+  knowledge_base_id        = module.knowledge.knowledge_base_id
+  knowledge_base_arn       = module.knowledge.knowledge_base_arn
+  knowledge_data_source_id = module.knowledge.data_source_id
+  knowledge_graph_id       = module.knowledge.graph_id
+  knowledge_graph_arn      = module.knowledge.graph_arn
+  apps_url                 = module.apps.url
 }
 
 module "api" {
-  source              = "../../modules/api"
-  name                = local.name
-  region              = var.region
-  account_id          = data.aws_caller_identity.me.account_id
-  kms_key_arn         = module.security.kms_key_arn
-  boundary_arn        = module.security.boundary_arn
-  lambda_dist         = "${path.root}/../../../backend/dist/lambda"
-  ledger_table        = module.ledger.ledger_table
-  ledger_arn          = module.ledger.ledger_arn
-  connections_table   = module.ledger.connections_table
-  connections_arn     = module.ledger.connections_arn
-  bus_name            = module.bus.bus_name
-  bus_arn             = module.bus.bus_arn
-  queue_urls          = module.bus.queue_urls
-  queue_arns          = module.bus.queue_arns
-  notify_topic_arn    = module.bus.notify_topic_arn
-  user_pool_id        = module.auth.user_pool_id
-  user_pool_arn       = module.auth.user_pool_arn
-  owner_email         = var.owner_email
-  user_pool_endpoint  = module.auth.user_pool_endpoint
-  client_id           = module.auth.client_id
-  app_origin          = module.frontend.url
-  runtime_arns        = module.agents.runtime_arns
-  runtime_version     = var.agent_image_tag
-  ace_role_name       = module.agents.role_names["ace"]
-  utility_invoke_arns = module.agents.utility_invoke_arns
-  utility_profile_arn = module.agents.utility_profile_arn
-  profile_prefix      = var.profile_prefix
-  log_retention_days  = var.log_retention_days
+  source                = "../../modules/api"
+  name                  = local.name
+  region                = var.region
+  account_id            = data.aws_caller_identity.me.account_id
+  kms_key_arn           = module.security.kms_key_arn
+  boundary_arn          = module.security.boundary_arn
+  lambda_dist           = "${path.root}/../../../backend/dist/lambda"
+  ledger_table          = module.ledger.ledger_table
+  ledger_arn            = module.ledger.ledger_arn
+  connections_table     = module.ledger.connections_table
+  connections_arn       = module.ledger.connections_arn
+  bus_name              = module.bus.bus_name
+  bus_arn               = module.bus.bus_arn
+  queue_urls            = module.bus.queue_urls
+  queue_arns            = module.bus.queue_arns
+  notify_topic_arn      = module.bus.notify_topic_arn
+  user_pool_id          = module.auth.user_pool_id
+  user_pool_arn         = module.auth.user_pool_arn
+  owner_email           = var.owner_email
+  user_pool_endpoint    = module.auth.user_pool_endpoint
+  client_id             = module.auth.client_id
+  app_origin            = module.frontend.url
+  runtime_arns          = module.agents.runtime_arns
+  runtime_version       = var.agent_image_tag
+  ace_role_name         = module.agents.role_names["ace"]
+  utility_invoke_arns   = module.agents.utility_invoke_arns
+  utility_profile_arn   = module.agents.utility_profile_arn
+  profile_prefix        = var.profile_prefix
+  log_retention_days    = var.log_retention_days
+  workspaces_bucket     = module.storage.workspaces_bucket
+  workspaces_arn        = module.storage.workspaces_arn
+  apps_bucket           = module.apps.bucket
+  apps_bucket_arn       = module.apps.bucket_arn
+  apps_url              = module.apps.url
+  apps_distribution_id  = module.apps.distribution_id
+  apps_distribution_arn = module.apps.distribution_arn
+  # The knowledge routes (docs/KNOWLEDGE.md section 5).
+  knowledge_table          = module.knowledge.table
+  knowledge_table_arn      = module.knowledge.table_arn
+  knowledge_bucket         = module.knowledge.bucket
+  knowledge_bucket_arn     = module.knowledge.bucket_arn
+  knowledge_base_id        = module.knowledge.knowledge_base_id
+  knowledge_base_arn       = module.knowledge.knowledge_base_arn
+  knowledge_data_source_id = module.knowledge.data_source_id
+  knowledge_graph_id       = module.knowledge.graph_id
+  knowledge_graph_arn      = module.knowledge.graph_arn
   api_env = {
     AIC_CONNECTORS_FUNCTION = "${local.name}-connectors"
     AIC_CONNECTORS_WORKLOAD = "${local.name}-connectors"
@@ -155,6 +213,31 @@ module "api" {
     AIC_MAIL_WORKLOAD       = "${local.name}-mail"
     AIC_MAIL_PROVIDERS      = join(",", [for k, p in var.mail_providers : k if p.enabled])
   }
+}
+
+# The owner's knowledge base (docs/KNOWLEDGE.md): bucket, S3 Vectors + Bedrock Knowledge Base, graph table,
+# the knowledge Lambda and the ingest workflow.
+module "knowledge" {
+  source              = "../../modules/knowledge"
+  providers           = { aws = aws, opensearch = opensearch, time = time }
+  name                = local.name
+  region              = var.region
+  account_id          = data.aws_caller_identity.me.account_id
+  kms_key_arn         = module.security.kms_key_arn
+  boundary_arn        = module.security.boundary_arn
+  app_origin          = module.frontend.url
+  lambda_zip_path     = module.api.lambda_zip_path
+  lambda_zip_hash     = module.api.lambda_zip_hash
+  ledger_table        = module.ledger.ledger_table
+  ledger_arn          = module.ledger.ledger_arn
+  bus_name            = module.bus.bus_name
+  bus_arn             = module.bus.bus_arn
+  utility_invoke_arns = module.agents.utility_invoke_arns
+  utility_profile_arn = module.agents.utility_profile_arn
+  profile_prefix      = var.profile_prefix
+  deletion_protection = var.deletion_protection
+  log_retention_days  = var.log_retention_days
+  deployer_arn        = data.aws_iam_session_context.me.issuer_arn
 }
 
 # Connectors: any MCP server, added at runtime by asking AIC (docs/CONNECTORS_SKILLS.md). Terraform names none.
@@ -212,7 +295,7 @@ module "observability" {
   source           = "../../modules/observability"
   name             = local.name
   region           = var.region
-  dlq_names        = module.bus.dlq_names
+  dlq_names        = merge(module.bus.dlq_names, { apps = module.api.apps_dlq_name, knowledge-start = module.knowledge.start_dlq_name })
   queue_names      = [for k in ["ace", "orchestrator", "manager", "worker"] : "${local.name}-${k}"]
   function_names   = module.api.function_names
   notify_topic_arn = module.bus.notify_topic_arn
@@ -235,6 +318,7 @@ resource "aws_s3_object" "config" {
     redirectUri          = "${module.frontend.url}/"
     pollyVoice           = var.polly_voice
     transcribeVocabulary = module.auth.vocabulary_name
+    appsUrl              = module.apps.url
   })
   tags = { Component = "frontend" }
 }

@@ -7,7 +7,9 @@ import { describe, expect, it } from "vitest";
 // @ts-expect-error plain .mjs scripts without type declarations
 import { checkRuntimeTagConditions, checkTags } from "../scripts/check-tags.mjs";
 // @ts-expect-error plain .mjs scripts without type declarations
-import { checkBoundaries, checkInline, checkWorker, rolePolicies } from "../scripts/check-iam.mjs";
+import * as iam from "../scripts/check-iam.mjs";
+
+const { checkBoundaries, checkInline, checkKnowledge, checkWorker, knowledgeStatements, rolePolicies, workspacePolicy } = iam;
 
 const moduleText = (m: string) =>
   readFileSync(join(import.meta.dirname, "..", "infra", "modules", m, "main.tf"), "utf8");
@@ -124,11 +126,230 @@ describe("IAM: connectors, mail and skills (inline Terraform policies)", () => {
 });
 
 describe("HUD content security policy", () => {
-  it("lets the browser reach Cognito's sign-in API (our own sign-in screens use it directly)", async () => {
-    const { readFileSync } = await import("node:fs");
+  it("lets the browser reach Cognito's sign-in API (our own sign-in screens use it directly)", () => {
     const tf = readFileSync("infra/modules/frontend/main.tf", "utf8");
     const connect = tf.split("\n").find((l) => l.includes('"connect-src'));
     expect(connect).toContain("https://cognito-idp.${var.region}.amazonaws.com");
+  });
+});
+
+describe("knowledge base (docs/KNOWLEDGE.md)", () => {
+  const tf = readFileSync("infra/modules/knowledge/main.tf", "utf8");
+  const api = readFileSync("infra/modules/api/main.tf", "utf8");
+  const agents = readFileSync("infra/modules/agents/main.tf", "utf8");
+  const prod = readFileSync("infra/envs/prod/main.tf", "utf8");
+  type State = {
+    Type: string;
+    Parameters?: { Payload?: { action?: string } };
+    Retry?: { ErrorEquals: string[]; MaxAttempts: number }[];
+    Catch?: unknown[];
+    Next?: string;
+    Default?: string;
+    Choices?: { Next: string }[];
+    End?: boolean;
+    Branches?: { StartAt: string; States: Record<string, State> }[];
+  };
+  const asl = JSON.parse(
+    readFileSync("infra/modules/knowledge/pipeline.asl.json.tftpl", "utf8")
+      .replaceAll("${function_arn}", "arn:aws:lambda:eu-north-1:1:function:aic-prod-knowledge")
+      .replaceAll("${lambda_errors}", JSON.stringify(["Lambda.ServiceException"])),
+  ) as { StartAt: string; States: Record<string, State> };
+  // Every state, including those inside Parallel branches, with the scope (state names) it may jump to.
+  const scopes: Record<string, State>[] = [asl.States];
+  for (const st of Object.values(asl.States)) for (const b of st.Branches ?? []) scopes.push(b.States);
+  const allStates = scopes.flatMap((sc) => Object.entries(sc));
+
+  it("IAM: no IAM beyond passing the MediaConvert role, Bedrock only on Titan/Haiku, only AIC adds knowledge", () => {
+    expect(checkKnowledge()).toEqual([]);
+    for (const r of ["ace", "orchestrator", "manager", "worker"])
+      expect(actions(rolePolicies(r) as Stmt[])).toContain("bedrock:Retrieve");
+    expect(actions(rolePolicies("worker") as Stmt[])).not.toContain("s3:PutObject");
+  });
+  it("IAM check fails a wide PassRole, a KB role that invokes another model, and a boundary without the deny", () => {
+    const wide = knowledgeStatements(
+      `resource "aws_iam_role_policy" "fn" {\n  policy = jsonencode({\n      { Sid = "P", Effect = "Allow", Action = ["iam:PassRole"], Resource = "*" },\n  })\n}\n` +
+        `resource "aws_iam_role_policy" "kb" {\n  policy = jsonencode({\n      { Sid = "E", Effect = "Allow", Action = ["bedrock:InvokeModel"], Resource = var.utility_invoke_arns },\n  })\n}\n`,
+    );
+    const p = checkKnowledge({ statements: wide, boundary: "" });
+    expect(p.some((x: string) => /IAM action iam:PassRole/.test(x))).toBe(true);
+    expect(p.some((x: string) => /kb\/E may invoke/.test(x))).toBe(true);
+    expect(p.some((x: string) => /boundary does not deny/.test(x))).toBe(true);
+    const wideDeployer = checkKnowledge({
+      text: `Rules = [{ ResourceType = "index", Resource = ["index/x/items"], Permission = ["aoss:*"] }]\n      Principal = [var.deployer_arn]`,
+    });
+    expect(wideDeployer.some((x: string) => /deploy role may do more/.test(x))).toBe(true);
+  });
+  it("bucket: KMS, versioned, private, EventBridge on, CORS PUT from the HUD with ETag, work/ expires after 7 days", () => {
+    expect(tf).toMatch(/resource "aws_s3_bucket" "this" \{[\s\S]*?bucket\s+= local\.base/);
+    expect(tf).toContain('base      = "${var.name}-knowledge"');
+    expect(tf).toMatch(/sse_algorithm\s+= "aws:kms"/);
+    expect(tf).toMatch(/status = "Enabled"/);
+    expect(tf).toMatch(/restrict_public_buckets = true/);
+    expect(tf).toMatch(/eventbridge = true/);
+    expect(tf).toMatch(/allowed_methods = \["PUT"\]/);
+    expect(tf).toMatch(/allowed_origins = \[var\.app_origin\]/);
+    expect(tf).toMatch(/expose_headers\s+= \["ETag"\]/);
+    expect(tf).toMatch(/prefix = "work\/"\s*\}\s*expiration \{\s*days = 7/);
+  });
+  it("vectors: OpenSearch Serverless VECTORSEARCH (no standby, KMS, IAM-only), index items per section 14, KB on it", () => {
+    expect(tf).toMatch(
+      /jsondecode\(file\("\$\{path\.module\}\/\.\.\/\.\.\/\.\.\/config\/models\.json"\)\)\.embeddings\.knowledge/,
+    );
+    expect(tf).toMatch(/type\s+= "VECTORSEARCH"/);
+    expect(tf).toMatch(/standby_replicas = "DISABLED"/);
+    expect(tf).toMatch(/AWSOwnedKey = false\s+KmsARN\s+= var\.kms_key_arn/);
+    expect(tf).not.toMatch(/s3vectors/);
+    const mapping = /mappings = jsonencode\(([\s\S]*?)\n {2}\}\)/.exec(tf)![1];
+    for (const want of [
+      'type      = "knn_vector"',
+      "dimension = local.embedding.dimensions",
+      'engine = "faiss"',
+      'space_type = "innerproduct"',
+      "m = 16, ef_construction = 512",
+      'metadata = { type = "text", index = false }',
+      'item_id  = { type = "keyword" }',
+      'scope    = { type = "keyword" }',
+      'kind     = { type = "keyword" }',
+    ])
+      expect(mapping).toContain(want);
+    expect(tf).toMatch(/index_knn_algo_param_ef_search = "512"/);
+    expect(tf).toMatch(/type = "OPENSEARCH_SERVERLESS"/);
+    expect(tf).toMatch(/vector_index_name = opensearch_index\.items\.name/);
+    // The KB waits for the index, and a minute more: a fresh index isn't visible to Bedrock at once.
+    expect(tf).toMatch(/depends_on = \[aws_iam_role_policy\.kb, opensearch_index\.items, time_sleep\.index\]/);
+    expect(tf).toMatch(/resource "time_sleep" "index"[\s\S]*?create_duration = "60s"/);
+    expect(tf).toMatch(/inclusion_prefixes\s+= \["normalized\/"\]/);
+    expect(prod).toMatch(/aws_signature_service = "aoss"/);
+    expect(tf).not.toMatch(/amazon\.titan|titan-embed/);
+    const models = JSON.parse(readFileSync("config/models.json", "utf8"));
+    expect(models.embeddings.knowledge.dimensions).toBe(1024);
+  });
+  it("graph: Neptune Analytics 16 m-NCU, no replica, public (IAM), KMS, deletion protection, no vector index", () => {
+    const g = /resource "aws_neptunegraph_graph" "this" \{([\s\S]*?)\n\}/.exec(tf)![1];
+    expect(g).toMatch(/graph_name\s+= "\$\{local\.base\}-graph"/);
+    expect(g).toMatch(/provisioned_memory\s+= 16/);
+    expect(g).toMatch(/replica_count\s+= 0/);
+    expect(g).toMatch(/public_connectivity = true/);
+    expect(g).toMatch(/kms_key_identifier\s+= var\.kms_key_arn/);
+    expect(g).toMatch(/deletion_protection = var\.deletion_protection/);
+    expect(g).not.toMatch(/vector_search_configuration/);
+    for (const r of ["ace", "orchestrator", "manager", "worker"])
+      expect(actions(rolePolicies(r) as Stmt[])).toContain("neptune-graph:ReadDataViaQuery");
+  });
+  it("lambdas: api 1024 MB with SnapStart behind the live alias; knowledge 2048 MB, reserved 50", () => {
+    expect(api).toMatch(/handler = "aic\.lambdas\.api\.handler", timeout = 30, memory = 1024/);
+    expect(api).toMatch(/publish = each\.key == "api"/);
+    expect(api).toMatch(/apply_on = "PublishedVersions"/);
+    expect(api).toMatch(/resource "aws_lambda_alias" "api_live" \{\s*name\s+= "live"/);
+    expect(api).toContain("integration_uri        = aws_lambda_alias.api_live.invoke_arn");
+    expect(api).toMatch(/qualifier\s+= aws_lambda_alias\.api_live\.name/);
+    expect(tf).toMatch(/memory_size\s+= 2048/);
+    expect(tf).toMatch(/reserved_concurrent_executions = 50/);
+  });
+  it("table: pk/sk, gsi1, gsi2, PITR, KMS", () => {
+    const t = /resource "aws_dynamodb_table" "this" \{([\s\S]*?)\n\}/.exec(tf)![1];
+    for (const k of ["pk", "sk", "gsi1pk", "gsi1sk", "gsi2pk", "gsi2sk"]) expect(t).toContain(`name = "${k}"`);
+    expect(t).toMatch(/name\s+= "gsi1"/);
+    expect(t).toMatch(/name\s+= "gsi2"/);
+    expect(t).toMatch(/point_in_time_recovery \{\s*enabled = true/);
+    expect(t).toMatch(/kms_key_arn = var\.kms_key_arn/);
+  });
+  it("pipeline: every section-10 action, Lambda retries 3x, ThrottlingException on ingest 10x, enrich and ingest in parallel", () => {
+    const tasks = allStates.filter(([, s]) => s.Type === "Task");
+    const acts = tasks.map(([, s]) => s.Parameters!.Payload!.action).sort();
+    expect(acts).toEqual(
+      [
+        "route",
+        "prepare_document",
+        "describe_image",
+        "fetch_link",
+        "start_mediaconvert",
+        "check_mediaconvert",
+        "start_transcribe",
+        "check_transcribe",
+        "transcript_to_text",
+        "mark_unsupported",
+        "enrich",
+        "ingest",
+        "check_ingest",
+        "finish",
+        "fail",
+      ].sort(),
+    );
+    const top = new Set(Object.keys(asl.States));
+    for (const [name, s] of tasks) {
+      expect(s.Retry![0]).toMatchObject({ ErrorEquals: ["Lambda.ServiceException"], MaxAttempts: 3 });
+      // top-level tasks catch into fail; tasks inside the Parallel branches fail the Parallel, which catches.
+      if (top.has(name) && name !== "Fail")
+        expect(s.Catch).toEqual([{ ErrorEquals: ["States.ALL"], ResultPath: "$.error", Next: "Fail" }]);
+    }
+    const par = asl.States.EnrichAndIngest!;
+    expect(par.Type).toBe("Parallel");
+    expect(par.Branches!.map((b) => b.StartAt)).toEqual(["Enrich", "Ingest"]);
+    expect(par.Catch).toEqual([{ ErrorEquals: ["States.ALL"], ResultPath: "$.error", Next: "Fail" }]);
+    expect(par.Next).toBe("Finish");
+    expect(par.Branches![1]!.States.Ingest?.Retry?.[1]).toMatchObject({
+      ErrorEquals: ["ThrottlingException"],
+      MaxAttempts: 10,
+    });
+    expect(JSON.stringify(asl)).not.toMatch(/start_sync|check_sync|ConflictException/);
+    // every transition points at a real state in its own scope
+    for (const sc of scopes) {
+      const names = new Set(Object.keys(sc));
+      for (const s of Object.values(sc))
+        for (const n of [s.Next, s.Default, ...(s.Choices ?? []).map((c) => c.Next)].filter(Boolean))
+          expect(names).toContain(n);
+    }
+    expect(top).toContain(asl.StartAt);
+    expect(tf).toMatch(/templatefile\("\$\{path\.module\}\/pipeline\.asl\.json\.tftpl"/);
+    expect(tf).toMatch(/type\s+= "STANDARD"/);
+    expect(asl.States.AfterLink?.Choices?.[0]?.Next).toBe("EnrichAndIngest");
+    expect(tf).toMatch(/AIC_LEDGER_TABLE\s+= var\.ledger_table/);
+  });
+  it("start: raw/ object-created rule invokes the knowledge Lambda's start action (it names the run after the item)", () => {
+    expect(tf).toMatch(/object = \{ key = \[\{ prefix = "raw\/" \}\] \}/);
+    expect(tf).toMatch(/"detail-type" = \["Object Created"\]/);
+    expect(tf).toContain('\\"action\\": \\"start\\"');
+    expect(tf).toMatch(/handler\s+= "aic\.lambdas\.knowledge\.handler"/);
+    expect(tf).toMatch(/states:StartExecution"\], Resource = \[local\.state_machine_arn\]/);
+  });
+  it("environment variables from section 8 reach the api, the knowledge Lambda and the runtimes", () => {
+    for (const v of [
+      "KNOWLEDGE_TABLE",
+      "KNOWLEDGE_BUCKET",
+      "KNOWLEDGE_BASE_ID",
+      "KNOWLEDGE_DATA_SOURCE_ID",
+      "KNOWLEDGE_GRAPH_ID",
+      "KNOWLEDGE_STATE_MACHINE_ARN",
+      "MEDIACONVERT_ROLE_ARN",
+    ])
+      expect(tf).toMatch(new RegExp(`\\b${v}\\s+=`));
+    for (const v of [
+      "KNOWLEDGE_TABLE",
+      "KNOWLEDGE_BUCKET",
+      "KNOWLEDGE_BASE_ID",
+      "KNOWLEDGE_DATA_SOURCE_ID",
+      "KNOWLEDGE_GRAPH_ID",
+    ])
+      expect(api).toContain(`${v} = var.`);
+    for (const v of ["KNOWLEDGE_TABLE", "KNOWLEDGE_BASE_ID", "KNOWLEDGE_DATA_SOURCE_ID", "KNOWLEDGE_GRAPH_ID"])
+      expect(agents).toMatch(new RegExp(`${v}\\s+= var\\.`));
+    expect(agents).toContain('each.key == "ace" ? { KNOWLEDGE_BUCKET = var.knowledge_bucket } : {}');
+    expect(prod).toMatch(/module "knowledge" \{/);
+  });
+  it("the HTTP API has every knowledge route behind the owner's JWT, and CORS allows DELETE", () => {
+    for (const r of [
+      "GET /knowledge",
+      "GET /knowledge/{id}",
+      "POST /knowledge/uploads",
+      "POST /knowledge/uploads/{id}/complete",
+      "POST /knowledge/links",
+      "POST /knowledge/text",
+      "PUT /knowledge/{id}",
+      "DELETE /knowledge/{id}",
+    ])
+      expect(api).toContain(`"${r}"`);
+    expect(api).toContain('allow_methods = ["GET", "POST", "PUT", "DELETE"]');
   });
 });
 
@@ -142,5 +363,160 @@ describe("voice credentials", () => {
     expect(block).toMatch(/provider_name\s+= aws_cognito_user_pool\.this\.endpoint/);
     expect(block).toMatch(/allow_unauthenticated_identities\s+= false/);
     expect(block).toMatch(/server_side_token_check\s+= false/);
+  });
+});
+
+describe("apps origin (docs/APPS.md)", () => {
+  const read = async (p: string) => (await import("node:fs")).readFileSync(p, "utf8");
+  const cspOf = (tf: string) => {
+    const start = tf.indexOf("csp = join(");
+    return tf.slice(start, tf.indexOf("])", start));
+  };
+  const directives = (csp: string) =>
+    Object.fromEntries(
+      [...csp.matchAll(/^\s*"([a-z-]+)\s*([^"]*)",?$/gm)].map((m) => [m[1], (m[2] ?? "").trim()]),
+    ) as Record<string, string>;
+
+  it("the apps CSP blocks the network, workers, frames and forms, and lets only CloudFront sites frame it", async () => {
+    const d = directives(cspOf(await read("infra/modules/apps/main.tf")));
+    expect(d["default-src"]).toBe("'none'");
+    expect(d["connect-src"]).toBe("'none'");
+    for (const k of ["worker-src", "frame-src", "form-action", "base-uri", "object-src"]) expect(d[k]).toBe("'none'");
+    expect(d["script-src"]).toBe("'self' 'unsafe-inline'");
+    expect(d["frame-ancestors"]).toBe("https://*.cloudfront.net");
+  });
+
+  it("the apps distribution has its own bucket, the HUD's WAF, no SPA rewrite, CORS GET/HEAD only", async () => {
+    const tf = await read("infra/modules/apps/main.tf");
+    expect(tf).toMatch(/bucket = "\$\{var\.name\}-apps"/);
+    expect(tf).toMatch(/web_acl_id\s+= var\.waf_acl_arn/);
+    expect(tf).not.toMatch(/custom_error_response/);
+    expect(tf).not.toMatch(/frame_options/);
+    expect(tf).toMatch(/items = \["GET", "HEAD"\]/);
+    expect(tf).toMatch(/content_security_policy = local\.csp\s+override\s+= true/);
+    expect(tf).toMatch(/prefix = "drafts\/"/);
+    const prod = await read("infra/envs/prod/main.tf");
+    expect(prod).toMatch(/waf_acl_arn = module\.frontend\.waf_acl_arn/);
+    expect(prod).toMatch(/appsUrl\s+= module\.apps\.url/);
+  });
+
+  it("the HUD CSP frames only the apps origin and adds it to img-src, never to connect-src", async () => {
+    const d = directives(cspOf(await read("infra/modules/frontend/main.tf")));
+    expect(d["frame-src"]).toBe("${var.apps_url}");
+    expect(d["img-src"]).toBe("'self' data: blob: ${var.apps_url}");
+    expect(d["connect-src"]).not.toContain("apps_url");
+    expect(d["frame-ancestors"]).toBe("'none'");
+  });
+
+  it("apps resources carry Component = apps", async () => {
+    expect(await read("infra/modules/apps/main.tf")).toMatch(/tags = \{ Component = "apps" \}/);
+    const api = await read("infra/modules/api/main.tf");
+    expect(api).toMatch(/resource "aws_sqs_queue" "apps_dlq" \{[\s\S]*?tags\s+= \{ Component = "apps" \}/);
+    expect(api).toMatch(
+      /resource "aws_cloudwatch_event_rule" "app_submitted" \{[\s\S]*?tags\s+= \{ Component = "apps" \}/,
+    );
+    expect(api).toMatch(/tags = contains\(local\.apps_tagged, each\.key\) \? \{ Component = "apps" \} : local\.tags/);
+    expect(api).toMatch(/apps_tagged\s+= \["apps", "app-bridge"\]/);
+  });
+
+  it("no worker or Orchestrator policy names the apps bucket", async () => {
+    for (const role of ["worker", "orchestrator", "manager", "ace"]) {
+      const text = JSON.stringify(rolePolicies(role));
+      expect(text).not.toMatch(/aic-prod-apps|apps_bucket|live\//);
+    }
+    expect(JSON.stringify(workspacePolicy())).not.toMatch(/apps/);
+    const { readdirSync } = await import("node:fs");
+    for (const f of readdirSync("infra/modules/agents/policies"))
+      expect(await read(`infra/modules/agents/policies/${f}`)).not.toMatch(/apps_bucket|-apps|cloudfront/);
+    expect(await read("infra/modules/agents/main.tf")).not.toMatch(/apps_bucket|module\.apps|cloudfront/);
+  });
+
+  it("the apps Lambda: EventBridge on app.submitted, drafts/ only, APPDRAFTS only; only the API writes live/", async () => {
+    const api = await read("infra/modules/api/main.tf");
+    expect(api).toMatch(/apps\s+= \{ bundle = "app", handler = "aic\.lambdas\.apps\.handler"/);
+    expect(api).toMatch(/"detail-type" = \["app\.submitted"\]/);
+    const appsPerms = api.slice(api.indexOf("    apps = ["), api.indexOf("    ]", api.indexOf("    apps = [")));
+    expect(appsPerms).toContain('"${var.apps_bucket_arn}/drafts/*"');
+    expect(appsPerms).not.toContain("live/");
+    expect(appsPerms).toContain('"dynamodb:LeadingKeys" = ["APPDRAFTS"]');
+    expect(appsPerms).toContain('"${var.workspaces_arn}/hires/*/app/*"');
+    expect(api.match(/live\/\*/g)?.length).toBe(2); // the API's ListBucket prefix and its Put/Delete
+    expect(api).toMatch(/cloudfront:CreateInvalidation"\], Resource = \[var\.apps_distribution_arn\]/);
+  });
+});
+
+describe("apps API routes", () => {
+  it("the apps routes (v1 and the v2 bridge, proposals, PUT) sit behind the JWT authorizer, and CORS allows DELETE", async () => {
+    const api = (await import("node:fs")).readFileSync("infra/modules/api/main.tf", "utf8");
+    const routes = api.slice(api.indexOf("routes = ["), api.indexOf("]", api.indexOf("routes = [")));
+    expect(routes).toContain('"GET /apps"');
+    expect(routes).toContain('"DELETE /apps/{id}"');
+    for (const r of [
+      '"PUT /apps/{id}"',
+      '"POST /apps/{id}/bridge"',
+      '"POST /apps/{id}/proposals"',
+      '"POST /apps/{id}/rollback"',
+    ])
+      expect(routes).toContain(r);
+    expect(api).toMatch(/allow_methods = \["GET", "POST", "PUT", "DELETE"\]/);
+  });
+});
+
+describe("apps v3: workers read an app's current version from the public apps origin", () => {
+  it("only the worker runtime gets AIC_APPS_URL, and no runtime role names the apps bucket", () => {
+    const agents = readFileSync("infra/modules/agents/main.tf", "utf8");
+    expect(agents).toMatch(/each\.key == "worker" && var\.apps_url != "" \? \{ AIC_APPS_URL = var\.apps_url \}/);
+    expect(readFileSync("infra/envs/prod/main.tf", "utf8")).toMatch(/apps_url\s+= module\.apps\.url/);
+  });
+});
+
+describe("app-bridge Lambda (docs/APPS.md v2)", () => {
+  const api = () => readFileSync("infra/modules/api/main.tf", "utf8");
+  const block = (tf: string, start: string) =>
+    tf
+      .slice(tf.indexOf(start), tf.indexOf("    ]", tf.indexOf(start)))
+      .split("\n")
+      .filter((l) => !l.trim().startsWith("#"))
+      .join("\n");
+  it("runs the shared zip with its own handler", () => {
+    expect(api()).toMatch(/app-bridge\s+= \{ bundle = "app", handler = "aic\.lambdas\.app_bridge\.handler"/);
+    expect(api()).toMatch(/app_bridge_name = "\$\{var\.name\}-app-bridge"/);
+  });
+  it("only the api role may invoke it, and the api role has no Gateway access", () => {
+    const tf = api();
+    const apiPerms = block(tf, "    api = [");
+    expect(apiPerms).toContain('function:${local.app_bridge_name}"');
+    expect(apiPerms).not.toMatch(/bedrock-agentcore/);
+    const invokes = [...tf.matchAll(/app_bridge_name\}"\]/g)].length;
+    expect(invokes).toBe(1);
+    expect(tf).not.toMatch(/aws_lambda_permission"[^{]*\{[^}]*app-bridge/);
+    for (const role of ["worker", "orchestrator", "manager", "ace"])
+      expect(JSON.stringify(rolePolicies(role))).not.toMatch(/app-bridge/);
+  });
+  it("reads only APPS, CONNECTORS and MAIL; writes only rate counters and app audit rows; no Gateway yet", () => {
+    const perms = block(api(), "    app-bridge = [");
+    expect(perms).toContain('"dynamodb:LeadingKeys" = ["APPS", "CONNECTORS", "MAIL"]');
+    expect(perms).toContain('"dynamodb:LeadingKeys" = ["RATE#app-*", "TOOL#app-*"]');
+    expect(perms).not.toMatch(
+      /DeleteItem|s3:|events:|sqs:|InvokeGateway|CompleteResourceTokenAuth|CreateSecret|PutSecretValue/,
+    );
+    const reads = perms.split("\n").find((l) => l.includes('"APPS", "CONNECTORS", "MAIL"')) ?? "";
+    expect(reads).not.toMatch(/PutItem|UpdateItem/);
+  });
+  it("mail reads: workload aic-prod-mail, the two providers and the vault, aic/prod/mail/* secrets only", () => {
+    const tf = api();
+    const perms = block(tf, "    app-bridge = [");
+    expect(perms).toMatch(
+      /"bedrock-agentcore:GetWorkloadAccessTokenForUserId"\], Resource = local\.mail_workload_arns/,
+    );
+    expect(perms).toMatch(
+      /"bedrock-agentcore:GetResourceOauth2Token"\], Resource = concat\(local\.mail_workload_arns, \["\$\{local\.agentcore_arn\}:token-vault\/default"\], local\.mail_provider_arns\)/,
+    );
+    expect(perms).toContain(
+      '"secretsmanager:GetSecretValue"], Resource = ["arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:aic/prod/mail/*"]',
+    );
+    expect(tf).toMatch(/workload-identity\/\$\{var\.name\}-mail"\]/);
+    expect(tf).toMatch(/for p in \["google", "microsoft"\]/);
+    expect(block(tf, "    api = [")).not.toMatch(/bedrock-agentcore/);
   });
 });

@@ -1,4 +1,4 @@
-"""Package MCP servers the city hosts on demand (``docs/CONNECTORS_SKILLS.md`` §1.10, decision 77).
+"""Package MCP servers the city hosts on demand (``docs/CONNECTORS_SKILLS.md`` §1.10, decision 81).
 
 npm and PyPI servers that normally run over stdio (``npx -y <pkg>``, ``uvx <pkg>``) run in the AgentCore Runtime
 ``aic-prod-mcp-host``, one microVM session per connector, at the exact version the owner approved. This module is

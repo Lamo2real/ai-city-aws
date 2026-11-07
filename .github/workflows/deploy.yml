@@ -22,6 +22,7 @@ on:
     paths-ignore:
       - "docs/**"
       - "**/*.md"
+      - "ios/**" # the iPhone app is built in Xcode, nothing in it deploys
   workflow_dispatch:
 
 permissions:

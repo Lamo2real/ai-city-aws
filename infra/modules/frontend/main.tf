@@ -10,6 +10,10 @@ terraform {
 
 variable "name" { type = string }
 variable "region" { type = string }
+variable "apps_url" {
+  type        = string
+  description = "The apps origin (https://<id>.cloudfront.net). The HUD may frame it and load icons from it, nothing else."
+}
 variable "rate_limit_per_5min" {
   type    = number
   default = 1000
@@ -18,14 +22,16 @@ variable "rate_limit_per_5min" {
 locals {
   tags = { Component = "frontend" }
   # The browser talks only to: itself, the API and WebSocket, Cognito, and the voice services.
+  # It frames (and loads icons from) the apps origin only; connect-src never names it.
   csp = join("; ", [
     "default-src 'self'",
     "script-src 'self'",
     "style-src 'self'",
     "font-src 'self'",
-    "img-src 'self' data: blob:",
+    "img-src 'self' data: blob: ${var.apps_url}",
     "media-src 'self' blob:",
-    "connect-src 'self' https://*.execute-api.${var.region}.amazonaws.com wss://*.execute-api.${var.region}.amazonaws.com https://*.auth.${var.region}.amazoncognito.com https://cognito-idp.${var.region}.amazonaws.com https://cognito-identity.${var.region}.amazonaws.com https://transcribestreaming.${var.region}.amazonaws.com wss://transcribestreaming.${var.region}.amazonaws.com:8443 https://polly.${var.region}.amazonaws.com",
+    "connect-src 'self' https://*.execute-api.${var.region}.amazonaws.com wss://*.execute-api.${var.region}.amazonaws.com https://*.auth.${var.region}.amazoncognito.com https://cognito-idp.${var.region}.amazonaws.com https://cognito-identity.${var.region}.amazonaws.com https://transcribestreaming.${var.region}.amazonaws.com wss://transcribestreaming.${var.region}.amazonaws.com:8443 https://polly.${var.region}.amazonaws.com https://${var.name}-knowledge.s3.${var.region}.amazonaws.com https://${var.name}-knowledge.s3.amazonaws.com",
+    "frame-src ${var.apps_url}",
     "frame-ancestors 'none'",
     "base-uri 'none'",
     "form-action 'self' https://*.auth.${var.region}.amazoncognito.com",
@@ -307,4 +313,5 @@ resource "aws_s3_bucket_policy" "site" {
 
 output "bucket" { value = aws_s3_bucket.site.bucket }
 output "distribution_id" { value = aws_cloudfront_distribution.site.id }
+output "waf_acl_arn" { value = aws_wafv2_web_acl.site.arn }
 output "url" { value = "https://${aws_cloudfront_distribution.site.domain_name}" }

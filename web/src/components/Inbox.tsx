@@ -4,15 +4,21 @@ import { useState } from "react";
 import { answerQuestion, decideApproval, applyDefault } from "../lib/actions.ts";
 import { ApiError } from "../lib/api.ts";
 import { ago } from "../lib/format.ts";
+import { capKey, capLabel, capped, isPublish, publishApp, type Capability } from "../lib/apps.ts";
 import { useHud } from "../lib/store.ts";
+import type { CityApp, CityApproval } from "../city/city-state.js";
+import { AppFrame } from "./Apps.tsx";
 import { Banner, Button, Confirm, toast } from "./ui.tsx";
 
 export function Inbox() {
   // Select the stored objects (stable references) and derive lists while rendering.
   const questionMap = useHud((s) => s.city.questions);
   const approvalMap = useHud((s) => s.city.approvals);
+  const appsMap = useHud((s) => s.city.apps);
   const questions = Object.values(questionMap).sort((a, b) => a.created_at.localeCompare(b.created_at));
-  const approvals = Object.values(approvalMap);
+  const all = Object.values(approvalMap);
+  const publishes = all.filter(isPublish);
+  const approvals = all.filter((a) => !isPublish(a));
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<{ id: string; action: string; reason: string } | null>(null);
   const [own, setOwn] = useState<Record<string, string>>({});
@@ -31,7 +37,7 @@ export function Inbox() {
     }
   };
 
-  if (!questions.length && !approvals.length)
+  if (!questions.length && !all.length)
     return (
       <section className="screen" aria-labelledby="inbox-title">
         <h1 id="inbox-title">Needs you</h1>
@@ -43,11 +49,15 @@ export function Inbox() {
     <section className="screen" aria-labelledby="inbox-title">
       <h1 id="inbox-title">Needs you</h1>
       {error ? <Banner tone="bad">{error}</Banner> : null}
+      {publishes.length ? <h2>New apps</h2> : null}
+      {publishes.map((a, i) => (
+        <PublishCard key={a.id} a={a} primary={i === 0} run={run} />
+      ))}
       {approvals.length ? <h2>Approvals</h2> : null}
       {approvals.map((a) => (
         <article key={a.id} className="card">
           <p>
-            <b>{a.agent}</b> wants to do exactly this, once:
+            <b>{askedBy(a, appsMap)}</b> wants to do exactly this, once:
           </p>
           {a.preview ? <Preview p={a.preview} /> : <p className="action">{a.action}</p>}
           <p className="mute">Why it needs you: {a.reason}</p>
@@ -73,7 +83,7 @@ export function Inbox() {
           <p className="question">{q.text}</p>
           <div className="choices">
             <Button
-              variant={i === 0 ? "primary" : "secondary"}
+              variant={i === 0 && !publishes.length ? "primary" : "secondary"}
               onClick={() => run(() => applyDefault(q.id), `Answered with the default: ${q.default_answer}`)}
             >
               Use default: {q.default_answer}
@@ -233,4 +243,90 @@ function Preview({ p }: { p: PreviewData }) {
       </dl>
     );
   return <p className="mute">{p.note ?? "Exactly the action shown is approved."}</p>;
+/** "Star Calendar (an app)" for a proposal an app made; the agent otherwise. */
+function askedBy(a: CityApproval, apps: Record<string, CityApp>) {
+  const appId = a.requested_by?.startsWith("app:") ? a.requested_by.slice(4) : null;
+  if (!appId) return a.agent;
+  return `${capped(apps[appId]?.title, 40) || "One of your apps"} (an app)`;
+}
+
+/**
+ * A new app: its preview (no data: every request gets `preview`), a switch per thing it wants to read
+ * (on by default; only known capabilities are offered), a pin box, then Approve / Refuse.
+ */
+function PublishCard({
+  a,
+  primary,
+  run,
+}: {
+  a: CityApproval;
+  primary: boolean;
+  run: (fn: () => Promise<unknown>, done: string) => Promise<void>;
+}) {
+  const title = capped(a.title, 40) || "An app";
+  const caps = (a.capabilities ?? []) as Capability[];
+  const known = caps.filter((c) => capLabel(c));
+  const unknown = caps.length - known.length;
+  const [on, setOn] = useState<Record<string, boolean>>(() => Object.fromEntries(known.map((c) => [capKey(c), true])));
+  const [pin, setPin] = useState(a.pin === true);
+  const update = Boolean(a.replaces);
+  return (
+    <article className="card publish" aria-label={update ? `Update of ${title}` : `New app: ${title}`}>
+      <p className="mute">
+        {update
+          ? `A new version${a.version ? ` (version ${a.version})` : ""} of one of your apps. Try it here; approve it and it replaces the current one, which is kept so you can go back.`
+          : "The city built this. Try it here; approve it and it appears under Apps."}
+      </p>
+      <h3 className="apptitle">{title}</h3>
+      {a.description ? <p>{capped(a.description, 200)}</p> : null}
+      <AppFrame src={a.preview_url} title={`Preview of ${title}`} className="preview" />
+      {known.length ? (
+        <fieldset className="grants-pick">
+          <legend>It asks to (the preview shows none of your data)</legend>
+          {known.map((c) => (
+            <label key={capKey(c)} className="switch">
+              <input
+                type="checkbox"
+                checked={on[capKey(c)] ?? false}
+                onChange={(e) => setOn({ ...on, [capKey(c)]: e.target.checked })}
+              />{" "}
+              {capLabel(c)}
+            </label>
+          ))}
+          <p className="mute">
+            Read only: it can never send, change or delete anything. You can stop any of these later.
+          </p>
+        </fieldset>
+      ) : (
+        <p className="mute">It reads none of your data.</p>
+      )}
+      {unknown ? (
+        <p className="mute">{`${unknown} other request${unknown > 1 ? "s" : ""} AI City doesn't know stay off.`}</p>
+      ) : null}
+      {update ? null : (
+        <label className="switch">
+          <input type="checkbox" checked={pin} onChange={(e) => setPin(e.target.checked)} /> Put its icon in the top bar
+        </label>
+      )}
+      <div className="row-end">
+        <Button
+          variant="quiet"
+          onClick={() => run(() => decideApproval(a.id, false), `Refused. ${title} won't be published.`)}
+        >
+          Refuse
+        </Button>
+        <Button
+          variant={primary ? "primary" : "secondary"}
+          onClick={() =>
+            run(
+              () => publishApp(a.id, caps.length ? known.filter((c) => on[capKey(c)]) : null, pin),
+              `Approved. ${title} is under Apps now.`,
+            )
+          }
+        >
+          Approve
+        </Button>
+      </div>
+    </article>
+  );
 }

@@ -7,6 +7,8 @@
 // no Identity credential or Secrets Manager access for the worker or the MCP host, the MCP host role only
 // writes logs (and pulls its image), only the bridge and the connectors Lambda read connector secrets, only
 // the gateway role invokes the bridge, and the mail read path is never given to the worker.
+// knowledge base's roles (infra/modules/knowledge): no IAM beyond passing the MediaConvert role to
+// MediaConvert, Bedrock only on Titan (KB role) or Haiku (knowledge Lambda), and only AIC may add knowledge.
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,7 +49,20 @@ export function rolePolicies(role) {
   const queues = ["ace", "orchestrator", "manager", "worker"].map(
     (q) => `arn:aws:sqs:${REGION}:${ACCOUNT}:aic-prod-${q}`,
   );
-  const docs = [common];
+  const kb = `arn:aws:bedrock:${REGION}:${ACCOUNT}:knowledge-base/KB1`;
+  const ktable = `arn:aws:dynamodb:${REGION}:${ACCOUNT}:table/aic-prod-knowledge`;
+  const graph = `arn:aws:neptune-graph:${REGION}:${ACCOUNT}:graph/g-abc`;
+  const docs = [
+    common,
+    render("knowledge.json.tftpl", { knowledge_base_arn: kb, knowledge_table_arn: ktable, knowledge_graph_arn: graph }),
+  ];
+  if (role === "ace")
+    docs.push(
+      render("knowledge-aic.json.tftpl", {
+        knowledge_table_arn: ktable,
+        knowledge_bucket_arn: "arn:aws:s3:::aic-prod-knowledge",
+      }),
+    );
   if (role === "worker") {
     docs.push(
       render("worker.json.tftpl", {
@@ -314,13 +329,91 @@ function blocks(text, type, name) {
   return text.slice(s, close(text, s) + 1);
 }
 
+/** The inline policy statements of infra/modules/knowledge/main.tf, one per `{ Sid = "…", … }` line. */
+export function knowledgeStatements(
+  text = readFileSync(join(ROOT, "infra", "modules", "knowledge", "main.tf"), "utf8"),
+) {
+  const out = [];
+  for (const r of text.matchAll(/resource "aws_iam_role_policy" "(\w+)" \{([\s\S]*?)\n\}/g))
+    for (const line of r[2].split("\n")) {
+      if (!/^\s*\{.*Action\s*=/.test(line)) continue;
+      const sid = /Sid\s*=\s*"(\w+)"/.exec(line)?.[1] ?? "";
+      const act = /Action\s*=\s*(\[[^\]]*\]|[\w.]+)/.exec(line)[1];
+      const actions = act.startsWith("[") ? [...act.matchAll(/"([^"]+)"/g)].map((m) => m[1]) : [act];
+      const resource = /Resource\s*=\s*(\[[^\]]*\]|[^,}]+)/.exec(line)?.[1].trim() ?? "";
+      out.push({ policy: r[1], sid, actions, resource, line });
+    }
+  return out;
+}
+
+export function checkKnowledge({ statements = knowledgeStatements(), boundary, text } = {}) {
+  const problems = [];
+  if (!statements.length) problems.push("knowledge: no IAM statements found");
+  for (const s of statements) {
+    const where = `knowledge ${s.policy}${s.sid ? `/${s.sid}` : ""}`;
+    for (const a of s.actions) {
+      if (a === "*" || a.endsWith(":*")) problems.push(`${where} has wildcard action ${a}`);
+      if (/^iam:/.test(a)) {
+        const ok =
+          a === "iam:PassRole" &&
+          s.policy === "fn" &&
+          s.resource === "[aws_iam_role.mediaconvert.arn]" &&
+          /"iam:PassedToService"\s*=\s*"mediaconvert\.amazonaws\.com"/.test(s.line);
+        if (!ok) problems.push(`${where} has IAM action ${a} beyond passing the MediaConvert role to MediaConvert`);
+      }
+      if (/^bedrock:Invoke/.test(a)) {
+        const want = { kb: "[local.embedding_model_arn]", fn: "var.utility_invoke_arns" }[s.policy];
+        if (s.resource !== want) problems.push(`${where} may invoke ${s.resource}, not only ${want ?? "nothing"}`);
+      }
+      if (s.policy === "kb" && /^s3:(Put|Delete)/.test(a)) problems.push(`${where}: the KB role may only read files`);
+      if (/^aoss:/.test(a) && s.policy !== "kb") problems.push(`${where}: only the KB role may reach OpenSearch`);
+      if (/^neptune-graph:/.test(a) && s.policy !== "fn")
+        problems.push(`${where}: only the knowledge Lambda may query the graph here`);
+      if (s.policy === "mediaconvert" && /^s3:/.test(a) && !/\/(raw|work)\/\*/.test(s.resource))
+        problems.push(`${where}: MediaConvert may only read raw/ and write work/`);
+    }
+    if (s.resource === '"*"' && s.actions.some((a) => !/^(xray|logs):/.test(a)))
+      problems.push(`${where} allows * on ${s.actions.join(",")}`);
+  }
+  // The boundary lets a role pass exactly one role (MediaConvert's) and denies passing any other.
+  const b = boundary ?? readFileSync(join(ROOT, "infra", "modules", "security", "main.tf"), "utf8");
+  const pass = [...b.matchAll(/\{[^{}]*"iam:PassRole"[^{}]*\}/g)].map((m) => m[0]);
+  if (!pass.some((p) => /Effect\s*=\s*"Deny"/.test(p) && /NotResource\s*=\s*local\.mediaconvert_role_arn/.test(p)))
+    problems.push("boundary does not deny passing roles other than the MediaConvert role");
+  if (pass.some((p) => /Effect\s*=\s*"Allow"/.test(p) && !/mediaconvert\.amazonaws\.com/.test(p)))
+    problems.push("boundary allows iam:PassRole to a service other than MediaConvert");
+  // OpenSearch data access: the KB role reads and writes documents; the deploy role only creates/updates/describes the index.
+  const tf = text ?? readFileSync(join(ROOT, "infra", "modules", "knowledge", "main.tf"), "utf8");
+  const deployer = /Permission = (\[[^\]]*\]) \}\]\s*Principal = \[var\.deployer_arn\]/.exec(tf)?.[1] ?? "";
+  if (!deployer) problems.push("knowledge: no data-access rule for the deploy role");
+  if (/Document|DeleteIndex|\*/.test(deployer))
+    problems.push(`the deploy role may do more than manage the index: ${deployer}`);
+  // Every runtime may search; only AIC (ace) may add items or files.
+  for (const role of ["ace", "orchestrator", "manager", "worker"]) {
+    const stmts = rolePolicies(role);
+    if (!stmts.some((s) => list(s.Action).includes("bedrock:Retrieve")))
+      problems.push(`${role} cannot search knowledge`);
+    if (stmts.some((s) => list(s.Action).some((a) => /^neptune-graph:(Write|Delete)/.test(a))))
+      problems.push(`${role} can change the knowledge graph`);
+    const adds = stmts.filter(
+      (s) =>
+        list(s.Resource).some((r) => /aic-prod-knowledge/.test(r)) &&
+        list(s.Action).some((a) => /^(dynamodb:(Put|Update|Delete|BatchWrite)|s3:(Put|Delete))/.test(a)),
+    );
+    if (role !== "ace" && adds.length) problems.push(`${role} can write to the knowledge base`);
+    if (role === "ace" && !adds.every((s) => list(s.Resource).every((r) => /raw\/\*$/.test(r)) || s.Condition))
+      problems.push("AIC's knowledge writes are not limited to raw/ files and ITEM# records");
+  }
+  return problems;
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const problems = [...checkWorker(), ...checkBoundaries(), ...checkInline()];
+  const problems = [...checkWorker(), ...checkBoundaries(), ...checkInline(), ...checkKnowledge()];
   if (problems.length) {
     console.error(`IAM check failed (${problems.length}):\n${problems.join("\n")}`);
     process.exit(1);
   }
   console.log(
-    "IAM check passed: workers have no IAM, no wildcard secrets, no resource-creating actions, Bedrock only on the worker profile; every role has a permission boundary; the MCP host only logs, only the bridge reads connector secrets and only the gateway invokes it, and the worker gets no mail, Identity credentials or connector secrets.",
+    "IAM check passed: workers have no IAM, no wildcard secrets, no resource-creating actions, Bedrock only on the worker profile; every role has a permission boundary; knowledge roles pass only the MediaConvert role, invoke only Titan/Haiku, and only AIC adds knowledge.; the MCP host only logs, only the bridge reads connector secrets and only the gateway invokes it, and the worker gets no mail, Identity credentials or connector secrets.",
   );
 }

@@ -22,6 +22,8 @@ export const COMPONENTS = [
   "security",
   "storage",
   "budgets",
+  "apps",
+  "knowledge",
   "connectors",
   "mail",
   "skills",

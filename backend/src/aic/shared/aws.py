@@ -11,6 +11,7 @@ from typing import Any
 
 from .bus import EventBridgeBus
 from .caps import default_settings
+from .clients import client, resource
 from .hierarchy.queue import WorkMessage
 from .ledger import Ledger, Record
 from .table import DynamoTable
@@ -79,18 +80,31 @@ class AwsCity:
     """The boto3 session, for other clients."""
 
 
+_CITY: AwsCity | None = None
+
+
 def aws_city(env: Mapping[str, str] | None = None) -> AwsCity:
-    """Production wiring shared by Lambdas and the runtime."""
+    """Production wiring shared by Lambdas and the runtime: built once per process (for the real environment)."""
+    global _CITY
+    if env is None and _CITY is not None:
+        return _CITY
+    city = _build_city(env)
+    if env is None:
+        _CITY = city
+    return city
+
+
+def _build_city(env: Mapping[str, str] | None) -> AwsCity:
     import boto3
 
     e = os.environ if env is None else env
     region = e.get("AWS_REGION") or e.get("AWS_DEFAULT_REGION") or require_env("AIC_REGION", e)
     session = boto3.session.Session(region_name=region)
-    table = session.resource("dynamodb").Table(require_env("AIC_LEDGER_TABLE", e))
+    table = resource(session, "dynamodb").Table(require_env("AIC_LEDGER_TABLE", e))
     ledger = Ledger(DynamoTable(table))
-    bus = EventBridgeBus(session.client("events"), require_env("AIC_EVENT_BUS", e))
+    bus = EventBridgeBus(client(session, "events"), require_env("AIC_EVENT_BUS", e))
     queue = SqsQueue(
-        session.client("sqs"),
+        client(session, "sqs"),
         {
             "ace": e.get("AIC_QUEUE_ACE", ""),
             "orchestrator": e.get("AIC_QUEUE_ORCHESTRATOR", ""),

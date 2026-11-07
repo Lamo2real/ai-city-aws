@@ -6,10 +6,15 @@ import { idToken } from "./lib/auth.ts";
 import { loadConfig } from "./lib/config.ts";
 import { store, useHud, waitingCount } from "./lib/store.ts";
 import { live } from "./lib/ws.ts";
+import { route } from "./lib/apps.ts";
+import { forwardEvent } from "./lib/bridge.ts";
+import { AppPage, AppsScreen, PinnedApps } from "./components/Apps.tsx";
 import { AceScreen } from "./components/AceScreen.tsx";
 import { CityView } from "./components/CityView.tsx";
 import { FirstRun } from "./components/FirstRun.tsx";
 import { Inbox } from "./components/Inbox.tsx";
+import { KnowledgeScreen } from "./components/Knowledge.tsx";
+import { knowledge } from "./lib/knowledge.ts";
 import { CostsScreen, SettingsScreen, Tickets } from "./components/Screens.tsx";
 import { SpendPill } from "./components/SpendPill.tsx";
 import { SkillsScreen } from "./components/SkillsScreen.tsx";
@@ -18,20 +23,18 @@ import { connectReturn } from "./lib/connectReturn.ts";
 import { Eyes } from "./components/Eyes.tsx";
 import { SignIn } from "./components/SignIn.tsx";
 
-const VIEWS = ["ace", "city", "inbox", "tickets", "costs", "skills", "settings"] as const;
+const VIEWS = ["ace", "city", "inbox", "tickets", "apps", "knowledge", "skills", "costs", "settings"] as const;
 type View = (typeof VIEWS)[number];
 const LABEL: Record<View, string> = {
   ace: "AIC",
   city: "City",
   inbox: "Needs you",
   tickets: "Tickets",
+  apps: "Apps",
+  knowledge: "Knowledge",
   costs: "Costs",
   skills: "Skills",
   settings: "Settings",
-};
-const viewFromHash = (): View => {
-  const v = location.hash.replace(/^#\/?/, "") as View;
-  return VIEWS.includes(v) ? v : "ace";
 };
 const GUIDE = "aic.guide.done";
 
@@ -40,7 +43,7 @@ type Boot = "starting" | "signed_out" | "ready" | "failed";
 export function App() {
   const [boot, setBoot] = useState<Boot>("starting");
   const [bootError, setBootError] = useState<string | null>(null);
-  const [view, setView] = useState<View>(viewFromHash);
+  const [{ view, slug }, setRoute] = useState<{ view: View; slug: string | null }>(() => route(location.hash, VIEWS));
   const [guide, setGuide] = useState(false);
   const waiting = useHud(waitingCount);
   const presence = useHud((s) => s.presence);
@@ -49,7 +52,7 @@ export function App() {
     location.hash = `/${v}`;
   }, []);
   useEffect(() => {
-    const on = () => setView(viewFromHash());
+    const on = () => setRoute(route(location.hash, VIEWS));
     window.addEventListener("hashchange", on);
     return () => window.removeEventListener("hashchange", on);
   }, []);
@@ -62,7 +65,11 @@ export function App() {
         return;
       }
       setBoot("ready");
-      live.onEvent((e) => store.event(e));
+      live.onEvent((e) => {
+        store.event(e);
+        knowledge.event(e);
+        forwardEvent(e); // only calendar.changed, only to apps granted the calendar
+      });
       live.onStatus((s) => {
         const was = store.get().live;
         store.set({ live: s });
@@ -120,7 +127,7 @@ export function App() {
     );
 
   return (
-    <div className={`app view-${view}`}>
+    <div className={`app view-${view}${slug ? " view-app" : ""}`}>
       <a className="skip" href="#main">
         Skip to content
       </a>
@@ -145,7 +152,9 @@ export function App() {
               ) : null}
             </a>
           ))}
+          <PinnedApps inNav />
         </nav>
+        <PinnedApps />
         <SpendPill onOpen={() => go("costs")} />
       </header>
       <main id="main" tabIndex={-1}>
@@ -153,13 +162,16 @@ export function App() {
         {view === "city" ? <CityView go={go} /> : null}
         {view === "inbox" ? <Inbox /> : null}
         {view === "tickets" ? <Tickets /> : null}
+        {view === "apps" && !slug ? <AppsScreen /> : null}
+        {view === "apps" && slug ? <AppPage key={slug} slug={slug} go={go} /> : null}
+        {view === "knowledge" ? <KnowledgeScreen /> : null}
         {view === "costs" ? <CostsScreen /> : null}
         {view === "skills" ? <SkillsScreen /> : null}
         {view === "settings" ? <SettingsScreen reopenGuide={() => setGuide(true)} /> : null}
       </main>
       {guide ? <FirstRun onDone={finishGuide} /> : null}
       <Toaster />
-      {view !== "ace" && view !== "city" ? (
+      {view !== "ace" && view !== "city" && !slug ? (
         <div className="fab">
           <Button variant="quiet" onClick={() => go("ace")} label="Talk to AIC">
             Talk to AIC

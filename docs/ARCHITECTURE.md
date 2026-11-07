@@ -43,6 +43,16 @@ flowchart LR
     sch[Scheduler jobs: DISABLED]
   end
   bud[AWS Budgets: email alerts only]
+  subgraph knowledge[Knowledge base]
+    ks3[(S3 aic-prod-knowledge: raw/, work/, normalized/)]
+    kfn[knowledge Lambda]
+    ksfn[Step Functions: knowledge ingest]
+    kmc[MediaConvert + Transcribe batch]
+    kb[Bedrock Knowledge Base, Titan V2 embeddings, direct ingestion]
+    kvec[(OpenSearch Serverless aic-prod-knowledge: index items, hybrid)]
+    kddb[(DynamoDB aic-prod-knowledge: item records)]
+    kgr[(Neptune Analytics aic-prod-knowledge-graph: openCypher)]
+  end
 
   owner --> cf --> s3h
   owner --> cog
@@ -64,6 +74,19 @@ flowchart LR
   eb --> sns
   eb --> sfn --> q
   sch -.-> disp
+  owner -->|presigned PUT| ks3
+  api --> kddb & ks3
+  ks3 -->|raw/ object created, default bus| kfn
+  kfn -->|start, name = item id| ksfn --> kfn
+  kfn --> kmc & kddb & br & eb
+  kfn -->|ingest per item| kb
+  kb --> ks3
+  kb --> kvec
+  kfn --> kgr
+  api --> kgr
+  rA & rO & rM & rW -->|openCypher read| kgr
+  rA & rO & rM & rW -->|Retrieve| kb
+  rA & rO & rM & rW --> kddb
 ```
 
 ## The hierarchy as code
@@ -89,7 +112,7 @@ Departments and workers are data and sessions, never new runtimes, so the accoun
 ## Shared code
 - `backend/src/aic/shared` (Python): model map (`config/models.json` is the only place model IDs live), startup guard, policy gate, single-table ledger (one implementation over a `Table` interface with in-memory and DynamoDB backends), cost math (5-minute vs 1-hour cache writes, geo surcharge, Haiku long-context tier), spend caps, event schemas (Pydantic), the turn gate, the dispatcher's decisions, the Agent Factory, the actions shared by tools and API, utility (Haiku) calls and the wake word.
 - `backend/src/aic/runtime` (Python): the AgentCore container (Starlette on 8080, arm64; image built from `services/agent-runtime/Dockerfile`), role tools, the Claude Agent SDK engine.
-- `backend/src/aic/lambdas` (Python 3.13, one zip for all functions): api, dispatcher, factory, ledger writer, ws (authorizer, connections, broadcast), notifier, approvals, scheduler (+ the fenced, disabled self-improvement check).
+- `backend/src/aic/lambdas` (Python 3.13, one zip for all functions): api, dispatcher, factory, ledger writer, ws (authorizer, connections, broadcast), notifier, approvals, apps (stages a worker's `app.submitted` as a checked draft), app bridge (an app's granted read-only data reads, invoked by the api), scheduler (+ the fenced, disabled self-improvement check).
 - `web`: React HUD; the City view is ported from the owner's Mac HUD (`web/src/city/`).
 
 ## Data model (DynamoDB, one table)
@@ -101,6 +124,7 @@ Departments and workers are data and sessions, never new runtimes, so the accoun
 | Specialist | `SPEC#id` / `META` | gsi1 `SPEC` |
 | Question | `Q#id` / `META` | gsi1 `Q#open|answered` |
 | Approval / owner approval | `APPROVAL#id` / `META`; `APPROVED#<hash>` / id | gsi1 `APPROVAL#<status>` |
+| App draft / published app | `APPDRAFTS` / `DRAFT#<draft_id>`; `APPS` / `APP#<app_id>` | — |
 | Turn (cost row) | `TURN#agent` / `<at>#…` | gsi1 `TURNDAY#<day>` |
 | Spend counters | `SPEND#DAY#<date>` or `SPEND#MONTH#<month>` / `GLOBAL`, `DEPT#…`, `ROLE#…`, `MODEL#…` | — |
 | Worker slots, session rate | `SLOTS` / `GLOBAL`, `DEPT#…`; `RATE` / `<second>` | — |
@@ -108,5 +132,17 @@ Departments and workers are data and sessions, never new runtimes, so the accoun
 | Settings, pause flag | `CONFIG` / `city` | — |
 | Event trace, tool audit, notes, reminders | `EVENT#ticket`, `TOOL#agent`, `NOTE#…`, `REMINDER#…` | gsi1 |
 
+## Knowledge base (contract in `docs/KNOWLEDGE.md`, v2: decision 66)
+DynamoDB `aic-prod-knowledge` holds item records only:
+| Item | pk / sk | Index |
+|---|---|---|
+| Knowledge item | `ITEM#<id>` / `META` | gsi1 `ITEM` / `<created_at>`; gsi2 `SCOPE#<scope>` / `<created_at>` |
+
+Neptune Analytics graph `aic-prod-knowledge-graph` (openCypher, parameterised queries only): `(:Item {id, scope, status})`, `(:Entity {key, name, type, description})`, `(:Item)-[:MENTIONS]->(:Entity)`, `(:Entity)-[:REL {relation, item_id}]->(:Entity)`. Public endpoint, IAM SigV4 only.
+
+OpenSearch Serverless collection `aic-prod-knowledge` (VECTORSEARCH, no standby, KMS), index `items`: `embedding` (knn_vector 1,024, faiss HNSW, inner product), `text` (BM25, hybrid search), `metadata` (not indexed), `item_id` / `scope` / `kind` (keyword filters). Created by Terraform (opensearch provider, SigV4) before the KB.
+
+Files: `raw/<id>/…` (uploads; a new object starts the pipeline), `work/<id>/…` (MediaConvert and Transcribe output, 7 days), `normalized/<id>/…` + `.metadata.json` (the Knowledge Base data source; each item is sent by direct ingestion, no data-source syncs).
+
 ## Infrastructure
-Terraform in `infra/`: `envs/prod` (the only root; `deploy.yml` creates its state bucket on the first run and the owner provides the OIDC deploy role), modules `security`, `auth`, `storage`, `ledger`, `bus`, `agents`, `api`, `frontend`, `budgets`, `observability`. Every taggable resource carries `Project`, `App`, `Environment`, `Owner`, `ManagedBy`, `CostCenter` (provider default tags) and `Component`; runtimes, inference profiles and memories also carry `AgentRole` (checked by `scripts/check-tags.mjs`).
+Terraform in `infra/`: `envs/prod` (the only root; `deploy.yml` creates its state bucket on the first run and the owner provides the OIDC deploy role), modules `security`, `auth`, `storage`, `ledger`, `bus`, `agents`, `api`, `frontend`, `budgets`, `observability`, `knowledge`. Every taggable resource carries `Project`, `App`, `Environment`, `Owner`, `ManagedBy`, `CostCenter` (provider default tags) and `Component`; runtimes, inference profiles and memories also carry `AgentRole` (checked by `scripts/check-tags.mjs`).

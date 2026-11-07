@@ -2,7 +2,7 @@
 # Cedar policy engine in ENFORCE mode, one workload identity for the token vault, the bridge Lambda every Gateway
 # target points at, the connectors admin Lambda, a bucket for OpenAPI specs, and the generic MCP host runtime for
 # package servers. Terraform names no connector: targets, credential providers, secrets and Cedar policies are
-# city data, created at runtime after the owner's approval (decisions 67, 68 and 77).
+# city data, created at runtime after the owner's approval (decisions 75, 76 and 81).
 terraform {
   required_version = ">= 1.11.0"
   required_providers {
@@ -133,7 +133,7 @@ locals {
 resource "aws_bedrockagentcore_policy_engine" "this" {
   # AgentCore's own encryption: a customer key would need forward-access grants for every caller, and Cedar holds no secret.
   name        = replace("${var.name}-connectors", "-", "_")
-  description = "AI City connectors. Policies are city data, rewritten by the connectors Lambda (decision 68)."
+  description = "AI City connectors. Policies are city data, rewritten by the connectors Lambda (decision 76)."
   tags        = local.tags
 }
 

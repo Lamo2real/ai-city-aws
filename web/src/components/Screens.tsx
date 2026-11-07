@@ -8,6 +8,7 @@ import { ago, money, spendLevel } from "../lib/format.ts";
 import { store } from "../lib/store.ts";
 import { Banner, Button, Confirm, Loading, toast } from "./ui.tsx";
 import { auth } from "../lib/auth.ts";
+import { SettingsApps } from "./Apps.tsx";
 
 function useApi<T>(path: string | null) {
   const [data, setData] = useState<T | null>(null);
@@ -409,6 +410,7 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
         mailAccess={(form as unknown as { mail_access?: Record<string, string> }).mail_access ?? {}}
         onMailAccess={(mail_access) => setForm({ ...form, mail_access } as S)}
       />
+      <SettingsApps />
       <h2>Help</h2>
       <Button variant="quiet" onClick={reopenGuide}>
         Show the first-run guide again

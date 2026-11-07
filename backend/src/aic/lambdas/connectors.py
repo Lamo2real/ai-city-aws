@@ -478,7 +478,7 @@ async def rewrite_policies(d: ConnectorsDeps) -> None:
                 policyEngineId=d.policy_engine_id,
                 name=name,
                 definition=definition,
-                description="Written by the city's connectors Lambda (decision 68).",
+                description="Written by the city's connectors Lambda (decision 76).",
             )
     for name, pid in have.items():
         if name not in want:

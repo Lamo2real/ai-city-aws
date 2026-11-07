@@ -17,13 +17,29 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal, cast
 
+from aic.shared.app_bridge import Invoke, api_bridge, file_proposal, run_proposal
+from aic.shared.app_caps import Invalid, MailProposals, proposals_from_env
+from aic.shared.apps import (
+    AppsOrigin,
+    get_app,
+    get_draft,
+    list_apps,
+    publish_draft,
+    refuse_draft,
+    remove_app,
+    rollback_app,
+    update_app,
+)
 from aic.shared.aws import aws_city
 from aic.shared.caps import validate_caps
+from aic.shared.clients import client
 from aic.shared.config import caps_config
 from aic.shared.events import EventBus
 from aic.shared.hierarchy.actions import CityDeps, answer_question
 from aic.shared.hierarchy.queue import Queue, WorkMessage
 from aic.shared.ids import department_key, new_id
+from aic.shared.knowledge.service import KnowledgeError, KnowledgeService, NotFound
+from aic.shared.knowledge.wiring import knowledge_from_env
 from aic.shared.ledger import Ledger, Record
 from aic.shared.log import log
 from aic.shared.models import model_label
@@ -87,6 +103,20 @@ ROUTES: list[tuple[str, str]] = [
     ("GET", "/mail/rules"),
     ("POST", "/mail/rules"),
     ("DELETE", "/mail/rules/rule-1"),
+    ("GET", "/apps"),
+    ("DELETE", "/apps/app-1"),
+    ("PUT", "/apps/app-1"),
+    ("POST", "/apps/app-1/bridge"),
+    ("POST", "/apps/app-1/proposals"),
+    ("POST", "/apps/app-1/rollback"),
+    ("GET", "/knowledge"),
+    ("GET", "/knowledge/k-aaaaaaaaaaaa"),
+    ("POST", "/knowledge/uploads"),
+    ("POST", "/knowledge/uploads/k-aaaaaaaaaaaa/complete"),
+    ("POST", "/knowledge/links"),
+    ("POST", "/knowledge/text"),
+    ("PUT", "/knowledge/k-aaaaaaaaaaaa"),
+    ("DELETE", "/knowledge/k-aaaaaaaaaaaa"),
 ]
 
 
@@ -104,6 +134,16 @@ class ApiDeps:
     """A boto3 ``cognito-idp`` client, for re-sending the owner's first-login email."""
     user_pool_id: str | None = None
     owner_email: str | None = None
+    apps: AppsOrigin | None = None
+    """The apps bucket and distribution, for publishing and removing apps."""
+    bridge_invoke: Invoke | None = None
+    """Synchronous call to the app-bridge Lambda (``{app_id, cap, params}``); None answers "unavailable"."""
+    proposals: MailProposals | None = None
+    """The mail module's approvals (file / execute) for app proposals; None answers "unavailable"."""
+    grants_changed: Callable[[], Awaitable[None]] | None = None
+    """Asks the connectors Lambda to rewrite the Cedar policies after a publish, removal or grant change."""
+    knowledge: KnowledgeService | None = None
+    """None until the knowledge base is deployed (``KNOWLEDGE_*`` variables)."""
     connectors: ConnectorsApi | None = None
     """The ``/connectors*`` routes and the add-connector approval hook; None = built from ledger and bus."""
     skills: SkillsApi | None = None
@@ -159,12 +199,12 @@ class BadRequest(ValueError):
     pass
 
 
-def _body(event: dict[str, Any]) -> dict[str, Any]:
+def _body(event: dict[str, Any], max_len: int = 64_000) -> dict[str, Any]:
     raw = event.get("body")
     if not raw:
         return {}
     text = base64.b64decode(raw).decode("utf-8") if event.get("isBase64Encoded") else str(raw)
-    if len(text) > 64_000:
+    if len(text) > max_len:
         raise BadRequest("That message is too long.")
     try:
         v = json.loads(text)
@@ -209,8 +249,9 @@ async def city_snapshot(d: ApiDeps) -> dict[str, Any]:
         d.ledger.spend("month", "GLOBAL"),
         d.ledger.spend_breakdown("day"),
         d.ledger.list_specialists(),
+        list_apps(d.ledger),
     )
-    agents, departments, tickets, parked, questions, approvals, today, month, day_breakdown, specialists = results
+    agents, departments, tickets, parked, questions, approvals, today, month, day_breakdown, specialists, apps = results
     spend = {dep["name"]: day_breakdown.get(f"DEPT#{dep['key']}", {}).get("usd", 0) for dep in departments}
     return {
         "agents": [{**a, "model_label": model_label(a["model"])} for a in agents],
@@ -220,6 +261,7 @@ async def city_snapshot(d: ApiDeps) -> dict[str, Any]:
         "questions": questions,
         "approvals": approvals,
         "specialists": specialists,
+        "apps": apps,
         "usage": {"usd": today["usd"], "turns": today["turns"], "tokens": today["tokens"]},
         "month": {"usd": month["usd"]},
         "spend": spend,
@@ -236,6 +278,16 @@ async def city_snapshot(d: ApiDeps) -> dict[str, Any]:
         },
         "region": os.environ.get("AWS_REGION", "eu-north-1"),
     }
+
+
+async def _grants_changed(d: ApiDeps) -> None:
+    """Best effort: the owner's action already happened; ``app_call`` re-checks grants until Cedar catches up."""
+    if d.grants_changed is None:
+        return
+    try:
+        await d.grants_changed()
+    except Exception as e:
+        log("warn", "apps.policies_refresh_failed", error=type(e).__name__)
 
 
 async def _costs(d: ApiDeps) -> dict[str, Any]:
@@ -404,8 +456,33 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
             return problem(404, "That approval does not exist.")
         if cur.get("status") != "pending":
             return problem(409, "That approval was already decided.")
+        app: Record | None = None
+        if cur.get("kind") == "app.publish":
+            draft_id = str(cur.get("draft_id") or "")
+            if approved:
+                if d.apps is None:
+                    return problem(503, "Apps are not set up yet.", "Deploy the apps origin, then try again.")
+                dr = await get_draft(d.ledger, draft_id)
+                if not dr:
+                    return problem(404, "That app draft is gone.")
+                grants = b.get("grants")
+                if grants is not None and not isinstance(grants, list):
+                    raise BadRequest("grants must be a list.")
+                pinned = b.get("pinned")
+                if pinned is not None and not isinstance(pinned, bool):
+                    raise BadRequest("pinned must be true or false.")
+                # Publish first: if it fails, the approval stays pending and the owner can try again.
+                try:
+                    app = await publish_draft(d.ledger, d.bus, d.apps, draft_id, grants, pinned)
+                except Invalid as e:
+                    return problem(400, str(e))
+                except ValueError as e:
+                    return problem(409, str(e))
+            else:
+                await refuse_draft(d.ledger, draft_id)
         a = await d.ledger.decide_approval(cur["id"], approved)
-        assert a is not None
+        if a is None:  # decided by someone else meanwhile
+            return problem(409, "That approval was already decided.")
         if cur.get("kind") == "connector.add":
             # Only the owner's yes moves an add-connector request on (§1.3.4); a no deletes the record.
             await on_connector_approval(_connectors(d), cur, approved)
@@ -421,7 +498,57 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
                     d.sfn.send_task_failure, taskToken=cur["task_token"], error="Refused", cause="The owner refused."
                 )
         await d.bus.put({"type": "approval.decided", "id": a["id"], "approved": approved})
+        if approved and str(cur.get("requested_by", "")).startswith("app:"):
+            # An app's proposal: run that one tool once, exactly as the owner saw it.
+            return reply(200, {"approval": a, "result": await run_proposal(cur, d.proposals)})
+        if app:
+            await _grants_changed(d)
+            return reply(200, {"approval": a, "app": app})
         return reply(200, {"approval": a})
+    if is_("GET", r"/apps"):
+        return reply(200, {"apps": await list_apps(d.ledger)})
+    if is_("DELETE", r"/apps/[\w-]+"):
+        if d.apps is None:
+            return problem(503, "Apps are not set up yet.")
+        gone = await remove_app(d.ledger, d.bus, d.apps, seg[1])
+        if not gone:
+            return problem(404, "That app does not exist.")
+        await _grants_changed(d)
+        return reply(200, {"removed": seg[1]})
+    if is_("PUT", r"/apps/[\w-]+"):
+        b = _body(event)
+        try:
+            updated = await update_app(d.ledger, d.bus, seg[1], {k: b[k] for k in ("grants", "pinned") if k in b})
+        except ValueError as e:
+            return problem(400, str(e))
+        if not updated:
+            return problem(404, "That app does not exist.")
+        if "grants" in b:
+            await _grants_changed(d)
+        return reply(200, {"app": updated})
+    if is_("POST", r"/apps/[\w-]+/rollback"):
+        if d.apps is None:
+            return problem(503, "Apps are not set up yet.")
+        try:
+            back = await rollback_app(d.ledger, d.bus, d.apps, seg[1])
+        except ValueError as e:
+            return problem(409, str(e))
+        if not back:
+            return problem(404, "That app does not exist.")
+        await _grants_changed(d)
+        return reply(200, {"app": back})
+    if is_("POST", r"/apps/[\w-]+/(bridge|proposals)"):
+        if len(str(event.get("body") or "")) > 32_000:
+            raise BadRequest("That request is too big.")
+        b = _body(event)
+        target = await get_app(d.ledger, seg[1])
+        if not target:
+            return reply(404, {"ok": False, "error": "unavailable", "message": "That app does not exist."})
+        if seg[2] == "bridge":
+            ans = await api_bridge(d.ledger, target, b.get("cap"), b.get("params"), d.bridge_invoke)
+        else:
+            ans = await file_proposal(d.ledger, d.bus, target, b, d.proposals)
+        return reply(ans.status, ans.body)
     if is_("GET", r"/settings"):
         return reply(200, {"settings": await d.settings()})
     if is_("PUT", r"/settings"):
@@ -460,6 +587,48 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         ans = await skills_route(d.skills or SkillsApi(d.ledger), method, seg, lambda: _body(event))
         if ans:
             return reply(*ans)
+    if path == "/knowledge" or path.startswith("/knowledge/"):
+        return await _knowledge(event, method, path, d)
+    return problem(404, "There is nothing here.")
+
+
+_ITEM = r"k-[\w-]{12}"
+
+
+async def _knowledge(event: dict[str, Any], method: str, path: str, d: ApiDeps) -> dict[str, Any]:
+    """The knowledge routes (``docs/KNOWLEDGE.md`` §5). The owner check already ran in ``handle_http``."""
+    k = d.knowledge
+    if k is None:
+        return problem(503, "The knowledge base is not set up yet.", "Deploy it first, then try again.")
+
+    def is_(m: str, pattern: str) -> bool:
+        return method == m and re.fullmatch(pattern, path) is not None
+
+    item_id = path.rsplit("/", maxsplit=1)[-1] if re.fullmatch(rf"/knowledge/{_ITEM}", path) else ""
+    try:
+        if is_("GET", r"/knowledge"):
+            return reply(200, await k.list())
+        if is_("GET", rf"/knowledge/{_ITEM}"):
+            return reply(200, await k.get(item_id))
+        if is_("POST", r"/knowledge/uploads"):
+            return reply(201, await k.create_upload(_body(event)))
+        if is_("POST", rf"/knowledge/uploads/{_ITEM}/complete"):
+            return reply(200, {"item": await k.complete_upload(path.split("/")[3], _body(event))})
+        if is_("POST", r"/knowledge/links"):
+            b = _body(event)
+            return reply(201, {"item": await k.add_link(b.get("url"), b.get("title"), b.get("scope"))})
+        if is_("POST", r"/knowledge/text"):
+            b = _body(event, 1_200_000)
+            return reply(201, {"item": await k.add_text(b.get("text"), b.get("title"), b.get("scope"))})
+        if is_("PUT", rf"/knowledge/{_ITEM}"):
+            return reply(200, {"item": await k.update(item_id, _body(event))})
+        if is_("DELETE", rf"/knowledge/{_ITEM}"):
+            await k.delete(item_id)
+            return reply(200, {"ok": True})
+    except NotFound as e:
+        return problem(404, str(e))
+    except KnowledgeError as e:
+        return problem(400, str(e))
     return problem(404, "There is nothing here.")
 
 
@@ -484,7 +653,7 @@ async def _put_settings(b: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
     if isinstance(b.get("first_run_done"), bool):
         patch["first_run_done"] = b["first_run_done"]
     if isinstance(b.get("mail_access"), dict):
-        # Orchestrator and managers may read mail when the owner turns it on; workers never (decision 75).
+        # Orchestrator and managers may read mail when the owner turns it on; workers never (decision 79).
         ma = b["mail_access"]
         if any(k not in ("orchestrator", "manager") or v not in ("none", "read") for k, v in ma.items()):
             raise BadRequest("mail_access takes orchestrator and manager, each none or read.")
@@ -613,22 +782,97 @@ def _mail_from_env(city: Any) -> MailApi | None:
     )
 
 
+def _bridge_invoke(session: Any, fn: str | None) -> Invoke | None:
+    if not fn:
+        return None
+    client = session.client("lambda")
+
+    async def invoke(payload: dict[str, Any]) -> dict[str, Any]:
+        r = await asyncio.to_thread(
+            client.invoke, FunctionName=fn, InvocationType="RequestResponse", Payload=json.dumps(payload).encode()
+        )
+        if r.get("FunctionError"):
+            raise RuntimeError("the app bridge failed")
+        out = json.loads(r["Payload"].read())
+        return out if isinstance(out, dict) else {}
+
+    return invoke
+
+
+def _policies_refresh(session: Any, fn: str | None) -> Callable[[], Awaitable[None]] | None:
+    """Async-invokes the connectors Lambda with ``{"action": "policies"}``; nothing when it isn't deployed."""
+    if not fn:
+        return None
+    client = session.client("lambda")
+
+    async def refresh() -> None:
+        await asyncio.to_thread(
+            client.invoke, FunctionName=fn, InvocationType="Event", Payload=json.dumps({"action": "policies"}).encode()
+        )
+
+    return refresh
+
+
+def _apps_origin(session: Any) -> AppsOrigin | None:
+    bucket, url = os.environ.get("AIC_APPS_BUCKET"), os.environ.get("AIC_APPS_URL")
+    if not bucket or not url:
+        return None
+    return AppsOrigin(
+        s3=session.client("s3"),
+        bucket=bucket,
+        url=url,
+        cloudfront=session.client("cloudfront"),
+        distribution_id=os.environ.get("AIC_APPS_DISTRIBUTION_ID"),
+    )
+
+
+def _knowledge_service(session: Any, bus: EventBus) -> KnowledgeService | None:
+    k = knowledge_from_env(session)
+    if not k or not k.blobs:
+        return None
+    return KnowledgeService(store=k.store, blobs=k.blobs, bus=bus, kb=k.kb)
+
+
+def build_deps() -> ApiDeps:
+    city = aws_city()
+    return ApiDeps(
+        ledger=city.ledger,
+        bus=city.bus,
+        queue=city.queue,
+        settings=city.settings,
+        sfn=client(city.session, "stepfunctions"),
+        utility_runner=bedrock_converse_runner(client(city.session, "bedrock-runtime")),
+        cognito=client(city.session, "cognito-idp"),
+        user_pool_id=os.environ.get("AIC_USER_POOL_ID"),
+        owner_email=os.environ.get("AIC_OWNER_EMAIL"),
+        knowledge=_knowledge_service(city.session, city.bus),
+        apps=_apps_origin(city.session),
+        bridge_invoke=_bridge_invoke(city.session, os.environ.get("AIC_APP_BRIDGE_FUNCTION")),
+        proposals=proposals_from_env(city.ledger),
+        grants_changed=_policies_refresh(city.session, os.environ.get("AIC_CONNECTORS_FUNCTION")),
+        connectors=_connectors_from_env(city),
+        skills=SkillsApi(city.ledger, city.session.client("s3"), os.environ.get("AIC_SKILLS_BUCKET")),
+        mail=_mail_from_env(city),
+    )
+
+
 def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
     global _deps
     if _deps is None:
-        city = aws_city()
-        _deps = ApiDeps(
-            ledger=city.ledger,
-            bus=city.bus,
-            queue=city.queue,
-            settings=city.settings,
-            sfn=city.session.client("stepfunctions"),
-            utility_runner=bedrock_converse_runner(city.session.client("bedrock-runtime")),
-            cognito=city.session.client("cognito-idp"),
-            user_pool_id=os.environ.get("AIC_USER_POOL_ID"),
-            owner_email=os.environ.get("AIC_OWNER_EMAIL"),
-            connectors=_connectors_from_env(city),
-            skills=SkillsApi(city.ledger, city.session.client("s3"), os.environ.get("AIC_SKILLS_BUCKET")),
-            mail=_mail_from_env(city),
-        )
+        _deps = build_deps()
     return run(handle_http(event, _deps))
+
+
+def _init_at_load() -> None:
+    """Inside Lambda, build the clients while the module loads, so the SnapStart snapshot already holds them.
+    If that fails (say, a missing variable), the first request tries again and reports it."""
+    global _deps
+    if not os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+        return
+    try:
+        _deps = build_deps()
+    except Exception as e:
+        log("warn", "api.init_deferred", error=type(e).__name__)
+
+
+_init_at_load()

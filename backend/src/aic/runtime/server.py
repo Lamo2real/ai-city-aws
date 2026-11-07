@@ -18,10 +18,14 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from aic.shared.apps import workspace_from_env
 from aic.shared.aws import LambdaFactoryClient, aws_city, require_env
+from aic.shared.clients import client
 from aic.shared.config import caps_config
 from aic.shared.guard import startup_guard
 from aic.shared.hierarchy.actions import CityDeps
+from aic.shared.knowledge.service import KnowledgeAccess, KnowledgeService
+from aic.shared.knowledge.wiring import knowledge_from_env
 from aic.shared.log import log
 
 MAX_BODY = 1_000_000
@@ -126,7 +130,7 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
     role = require_env("AIC_ROLE", e)
     city = aws_city(e)
     caps = caps_config()
-    factory = LambdaFactoryClient(city.session.client("lambda"), e.get("AIC_FACTORY_FUNCTION", ""))
+    factory = LambdaFactoryClient(client(city.session, "lambda"), e.get("AIC_FACTORY_FUNCTION", ""))
     minutes = caps["async_job_soft_limit_minutes"] if role == "worker" else caps["turn_timeout_minutes"]
     host = AgentHost(
         CityDeps(
@@ -136,6 +140,8 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
             factory=factory,
             settings=city.settings,
             max_review_rounds=caps["max_review_rounds"],
+            workspace=workspace_from_env(city.session, e) if role == "worker" else None,
+            knowledge=_knowledge(city.session, city.bus, role, e),
         ),
         HostOptions(
             engine=sdk_engine,
@@ -155,6 +161,15 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
     return create_app(host)
 
 
+def _knowledge(session: Any, bus: Any, role: str, env: Mapping[str, str]) -> KnowledgeAccess | None:
+    """Search for every role; AIC also adds links and texts (it may write ``raw/*`` and ``ITEM#*``)."""
+    k = knowledge_from_env(session, env)
+    if not k:
+        return None
+    service = KnowledgeService(store=k.store, blobs=k.blobs, bus=bus) if role == "ace" and k.blobs else None
+    return KnowledgeAccess(store=k.store, kb=k.kb, service=service)
+
+
 def main() -> None:
     import uvicorn
 
@@ -166,7 +181,7 @@ if __name__ == "__main__":
 
 
 def _mail(city: Any, e: Mapping[str, str], role: str | None) -> Any:
-    """Mail and calendar for the roles that may have it (never workers, decision 75)."""
+    """Mail and calendar for the roles that may have it (never workers, decision 79)."""
     if role == "worker" or not e.get("AIC_MAIL_WORKLOAD"):
         return None
     from aic.mail.service import MailService

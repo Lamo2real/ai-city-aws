@@ -56,7 +56,7 @@ _SKIP = {
     ".venv", "__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache", "build",
 }  # fmt: skip
 _EXT = re.compile(r"\.(ts|tsx|js|mjs|json|tf|md|yml|sh|py|toml)$")
-_ID = re.compile(r"anthropic\.claude-|claude-(opus|sonnet|haiku|fable)-\d")
+_ID = re.compile(r"anthropic\.claude-|claude-(opus|sonnet|haiku|fable)-\d|amazon\.titan-embed")
 
 
 def _files() -> list[Path]:

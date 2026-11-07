@@ -46,6 +46,15 @@ variable "runtime_version" {
 variable "utility_invoke_arns" { type = list(string) }
 variable "utility_profile_arn" { type = string }
 variable "profile_prefix" { type = string }
+variable "knowledge_table" { type = string }
+variable "knowledge_table_arn" { type = string }
+variable "knowledge_bucket" { type = string }
+variable "knowledge_bucket_arn" { type = string }
+variable "knowledge_base_id" { type = string }
+variable "knowledge_base_arn" { type = string }
+variable "knowledge_data_source_id" { type = string }
+variable "knowledge_graph_id" { type = string }
+variable "knowledge_graph_arn" { type = string }
 variable "log_retention_days" {
   type    = number
   default = 30
@@ -55,6 +64,13 @@ variable "api_env" {
   default     = {}
   description = "Extra environment for the api Lambda (connectors, skills, mail)."
 }
+variable "workspaces_bucket" { type = string }
+variable "workspaces_arn" { type = string }
+variable "apps_bucket" { type = string }
+variable "apps_bucket_arn" { type = string }
+variable "apps_url" { type = string }
+variable "apps_distribution_id" { type = string }
+variable "apps_distribution_arn" { type = string }
 variable "worker_queue_concurrency" {
   type    = number
   default = 50
@@ -74,7 +90,7 @@ locals {
   }
   # name => bundle, handler, timeout, memory, extra env
   functions = {
-    api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 512, env = merge({ AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_USER_POOL_ID = var.user_pool_id, AIC_OWNER_EMAIL = var.owner_email }, var.api_env) }
+    api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 1024, env = merge({ AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_USER_POOL_ID = var.user_pool_id, AIC_OWNER_EMAIL = var.owner_email, KNOWLEDGE_TABLE = var.knowledge_table, KNOWLEDGE_BUCKET = var.knowledge_bucket, KNOWLEDGE_BASE_ID = var.knowledge_base_id, KNOWLEDGE_DATA_SOURCE_ID = var.knowledge_data_source_id, KNOWLEDGE_GRAPH_ID = var.knowledge_graph_id, AIC_APPS_BUCKET = var.apps_bucket, AIC_APPS_URL = var.apps_url, AIC_APPS_DISTRIBUTION_ID = var.apps_distribution_id, AIC_APP_BRIDGE_FUNCTION = local.app_bridge_name }, var.api_env) }
     dispatcher    = { bundle = "app", handler = "aic.lambdas.dispatcher.handler", timeout = 120, memory = 1024, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_ARN_ORCHESTRATOR = var.runtime_arns["orchestrator"], AIC_RUNTIME_ARN_MANAGER = var.runtime_arns["manager"], AIC_RUNTIME_ARN_WORKER = var.runtime_arns["worker"], AIC_RUNTIME_VERSION = var.runtime_version, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod", AIC_CONNECTIONS_TABLE = var.connections_table } }
     factory       = { bundle = "app", handler = "aic.lambdas.factory.handler", timeout = 30, memory = 256, env = {} }
     ledger-writer = { bundle = "app", handler = "aic.lambdas.ledger_writer.handler", timeout = 30, memory = 256, env = {} }
@@ -83,9 +99,21 @@ locals {
     approvals     = { bundle = "app", handler = "aic.lambdas.approvals.handler", timeout = 30, memory = 256, env = {} }
     ws-authorizer = { bundle = "app", handler = "aic.lambdas.ws.authorizer_handler", timeout = 10, memory = 256, env = { AIC_USER_POOL_ID = var.user_pool_id, AIC_USER_POOL_CLIENT_ID = var.client_id } }
     ws-connection = { bundle = "app", handler = "aic.lambdas.ws.connection_handler", timeout = 10, memory = 256, env = { AIC_CONNECTIONS_TABLE = var.connections_table } }
+    apps          = { bundle = "app", handler = "aic.lambdas.apps.handler", timeout = 120, memory = 512, env = { AIC_APPS_BUCKET = var.apps_bucket, AIC_APPS_URL = var.apps_url, AIC_WORKSPACES_BUCKET = var.workspaces_bucket } }
+    app-bridge    = { bundle = "app", handler = "aic.lambdas.app_bridge.handler", timeout = 25, memory = 512, env = {} }
     ws-broadcast  = { bundle = "app", handler = "aic.lambdas.ws.broadcast_handler", timeout = 30, memory = 256, env = { AIC_CONNECTIONS_TABLE = var.connections_table, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod" } }
   }
-  ledger_rw = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:ConditionCheckItem"]
+  # Named, not referenced: the api function's env and policy name it, and both live in the same for_each.
+  app_bridge_name = "${var.name}-app-bridge"
+  apps_tagged     = ["apps", "app-bridge"]
+  # AgentCore Identity for the mail module (docs/MAIL_CALENDAR.md §8, §11). These exist once mail-calendar
+  # merges; IAM accepts ARNs of resources that don't exist yet. AWS docs spell the provider path
+  # oauth2-credential-provider, the API returns oauth2credentialprovider: both are listed until the mail
+  # module's credential_provider_arn outputs replace them.
+  agentcore_arn      = "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}"
+  mail_workload_arns = ["${local.agentcore_arn}:workload-identity-directory/default", "${local.agentcore_arn}:workload-identity-directory/default/workload-identity/${var.name}-mail"]
+  mail_provider_arns = flatten([for p in ["google", "microsoft"] : ["${local.agentcore_arn}:token-vault/default/oauth2credentialprovider/${var.name}-${p}", "${local.agentcore_arn}:token-vault/default/oauth2-credential-provider/${var.name}-${p}"]])
+  ledger_rw          = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:ConditionCheckItem"]
   # What each function may do, beyond logs, tracing and the KMS key.
   permissions = {
     api = [
@@ -96,6 +124,45 @@ locals {
       { Action = ["bedrock:InvokeModel"], Resource = var.utility_invoke_arns },
       # "Send me a new first-login email": re-sends the owner's invitation, nothing else.
       { Action = ["cognito-idp:AdminCreateUser"], Resource = [var.user_pool_arn] },
+      # The knowledge base (docs/KNOWLEDGE.md section 9): items, presigned uploads (single and multipart) under raw/,
+      # scope changes rewrite normalized/…metadata.json, deletes remove the item's files, then a re-sync.
+      { Action = local.ledger_rw, Resource = [var.knowledge_table_arn, "${var.knowledge_table_arn}/index/*"] },
+      { Action = ["dynamodb:BatchWriteItem", "dynamodb:BatchGetItem"], Resource = [var.knowledge_table_arn] },
+      { Action = ["s3:PutObject", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts", "s3:DeleteObject"], Resource = ["${var.knowledge_bucket_arn}/raw/*"] },
+      { Action = ["s3:PutObject", "s3:DeleteObject"], Resource = ["${var.knowledge_bucket_arn}/normalized/*"] },
+      { Action = ["s3:DeleteObject"], Resource = ["${var.knowledge_bucket_arn}/work/*"] },
+      { Action = ["s3:ListBucket"], Resource = [var.knowledge_bucket_arn], Condition = { StringLike = { "s3:prefix" = ["raw/*", "work/*", "normalized/*"] } } },
+      { Action = ["bedrock:IngestKnowledgeBaseDocuments", "bedrock:DeleteKnowledgeBaseDocuments"], Resource = [var.knowledge_base_arn] },
+      { Action = ["neptune-graph:ReadDataViaQuery", "neptune-graph:WriteDataViaQuery", "neptune-graph:DeleteDataViaQuery"], Resource = [var.knowledge_graph_arn] },
+      # Publishing an approved app (drafts/ → live/) and removing one; only the owner reaches these routes.
+      { Action = ["s3:GetObject"], Resource = ["${var.apps_bucket_arn}/drafts/*"] },
+      { Action = ["s3:ListBucket"], Resource = [var.apps_bucket_arn], Condition = { StringLike = { "s3:prefix" = ["drafts/*", "live/*"] } } },
+      { Action = ["s3:PutObject", "s3:DeleteObject"], Resource = ["${var.apps_bucket_arn}/live/*"] },
+      { Action = ["cloudfront:CreateInvalidation"], Resource = [var.apps_distribution_arn] },
+      # Apps' data reads run only in the app-bridge Lambda; the api role itself gets no Gateway access.
+      { Action = ["lambda:InvokeFunction"], Resource = ["arn:aws:lambda:${var.region}:${var.account_id}:function:${local.app_bridge_name}"] },
+    ]
+    # Runs an app's granted read (docs/APPS.md v2). Invoked only by the api role. Reads the app's grants, the
+    # connector list and the mail account rows; writes only its rate counters and the audit rows of agent app-<id>.
+    # TODO after connectors-skills merges: bedrock-agentcore:InvokeGateway on the connectors gateway ARN only.
+    app-bridge = [
+      { Action = ["dynamodb:GetItem", "dynamodb:Query"], Resource = [var.ledger_arn], Condition = { "ForAllValues:StringEquals" = { "dynamodb:LeadingKeys" = ["APPS", "CONNECTORS", "MAIL"] } } },
+      { Action = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"], Resource = [var.ledger_arn], Condition = { "ForAllValues:StringLike" = { "dynamodb:LeadingKeys" = ["RATE#app-*", "TOOL#app-*"] } } },
+      # Mail/calendar reads (MailService read methods only): a token per account (vault user ma-…), the IMAP
+      # app passwords, the MAIL rows above. No CompleteResourceTokenAuth, no secret writes. kms:Decrypt on the
+      # project key comes with every function.
+      { Action = ["bedrock-agentcore:GetWorkloadAccessTokenForUserId"], Resource = local.mail_workload_arns },
+      { Action = ["bedrock-agentcore:GetResourceOauth2Token"], Resource = concat(local.mail_workload_arns, ["${local.agentcore_arn}:token-vault/default"], local.mail_provider_arns) },
+      { Action = ["secretsmanager:GetSecretValue"], Resource = ["arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:aic/prod/mail/*"] },
+    ]
+    # Checks a worker's submission and stages it as a draft. Never live/, never another ledger key.
+    apps = [
+      { Action = ["s3:GetObject"], Resource = ["${var.workspaces_arn}/hires/*/app/*"] },
+      { Action = ["s3:ListBucket"], Resource = [var.workspaces_arn], Condition = { StringLike = { "s3:prefix" = ["hires/*/app/*"] } } },
+      { Action = ["s3:PutObject"], Resource = ["${var.apps_bucket_arn}/drafts/*"] },
+      { Action = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query"], Resource = [var.ledger_arn], Condition = { "ForAllValues:StringEquals" = { "dynamodb:LeadingKeys" = ["APPDRAFTS"] } } },
+      { Action = ["events:PutEvents"], Resource = [var.bus_arn] },
+      { Action = ["sqs:SendMessage"], Resource = [aws_sqs_queue.apps_dlq.arn] },
     ]
     dispatcher = [
       { Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] },
@@ -123,7 +190,10 @@ locals {
     "GET /city", "GET /city/agent", "POST /city/instruct", "POST /messages", "POST /wake-check", "GET /tickets", "GET /tickets/{id}",
     "GET /departments", "GET /agents", "GET /workforce", "GET /costs", "GET /health", "GET /questions", "POST /questions/{id}/answer",
     "POST /questions/{id}/default", "POST /approvals/{id}", "GET /settings", "PUT /settings", "POST /city/pause", "POST /city/resume",
-    "GET /memory", "POST /notes",
+    "GET /memory", "POST /notes", "GET /apps", "DELETE /apps/{id}", "PUT /apps/{id}",
+    "POST /apps/{id}/bridge", "POST /apps/{id}/proposals", "POST /apps/{id}/rollback",
+    "GET /knowledge", "GET /knowledge/{id}", "POST /knowledge/uploads", "POST /knowledge/uploads/{id}/complete", "POST /knowledge/links",
+    "POST /knowledge/text", "PUT /knowledge/{id}", "DELETE /knowledge/{id}",
     # Connectors (docs/CONNECTORS_SKILLS.md §1.7), skills (§2.4) and mail accounts (docs/MAIL_CALENDAR.md §4).
     "GET /connectors", "POST /connectors", "PUT /connectors/{id}", "DELETE /connectors/{id}", "POST /connectors/{id}/login",
     "POST /connectors/{id}/login/complete", "PUT /connectors/{id}/key", "POST /connectors/{id}/refresh",
@@ -156,7 +226,7 @@ resource "aws_cloudwatch_log_group" "fn" {
   name              = "/aws/lambda/${var.name}-${each.key}"
   retention_in_days = var.log_retention_days
   kms_key_id        = var.kms_key_arn
-  tags              = local.tags
+  tags              = contains(local.apps_tagged, each.key) ? { Component = "apps" } : local.tags
 }
 
 resource "aws_iam_role" "fn" {
@@ -167,7 +237,7 @@ resource "aws_iam_role" "fn" {
     Version   = "2012-10-17"
     Statement = [{ Effect = "Allow", Principal = { Service = "lambda.amazonaws.com" }, Action = "sts:AssumeRole" }]
   })
-  tags = local.tags
+  tags = contains(local.apps_tagged, each.key) ? { Component = "apps" } : local.tags
 }
 
 resource "aws_iam_role_policy" "fn" {
@@ -191,20 +261,36 @@ resource "aws_lambda_function" "fn" {
   #checkov:skip=CKV_AWS_117:No VPC: the functions call only AWS APIs, and a VPC would add NAT cost.
   #checkov:skip=CKV_AWS_272:Code signing is not set up for a single-owner project; deploys run from the owner's approved workflow.
   #checkov:skip=CKV_AWS_116:Synchronous and SQS/EventBridge-invoked functions; failed SQS work goes to the queues' DLQs.
-  for_each                       = local.functions
-  function_name                  = "${var.name}-${each.key}"
-  role                           = aws_iam_role.fn[each.key].arn
-  runtime                        = "python3.13"
-  architectures                  = ["arm64"]
-  handler                        = each.value.handler
-  filename                       = data.archive_file.bundle[each.value.bundle].output_path
-  source_code_hash               = data.archive_file.bundle[each.value.bundle].output_base64sha256
-  timeout                        = each.value.timeout
-  memory_size                    = each.value.memory
+  for_each         = local.functions
+  function_name    = "${var.name}-${each.key}"
+  role             = aws_iam_role.fn[each.key].arn
+  runtime          = "python3.13"
+  architectures    = ["arm64"]
+  handler          = each.value.handler
+  filename         = data.archive_file.bundle[each.value.bundle].output_path
+  source_code_hash = data.archive_file.bundle[each.value.bundle].output_base64sha256
+  timeout          = each.value.timeout
+  memory_size      = each.value.memory
+  # SnapStart (api only, docs/KNOWLEDGE.md section 14): each deploy publishes a version and snapshots its init;
+  # API Gateway calls the `live` alias. Python 3.12+ SnapStart supports arm64.
+  publish = each.key == "api"
+  dynamic "snap_start" {
+    for_each = each.key == "api" ? [1] : []
+    content {
+      apply_on = "PublishedVersions"
+    }
+  }
   kms_key_arn                    = var.kms_key_arn
   reserved_concurrent_executions = each.key == "dispatcher" ? 200 : (each.key == "api" ? 50 : 20)
   tracing_config {
     mode = "Active"
+  }
+  # The apps function is invoked asynchronously by EventBridge; what still fails after retries lands here.
+  dynamic "dead_letter_config" {
+    for_each = each.key == "apps" ? [aws_sqs_queue.apps_dlq.arn] : []
+    content {
+      target_arn = dead_letter_config.value
+    }
   }
   logging_config {
     log_format = "JSON"
@@ -213,7 +299,7 @@ resource "aws_lambda_function" "fn" {
   environment {
     variables = merge(local.common_env, each.value.env)
   }
-  tags = local.tags
+  tags = contains(local.apps_tagged, each.key) ? { Component = "apps" } : local.tags
 }
 
 # ---------- SQS → dispatcher ----------
@@ -264,7 +350,7 @@ resource "aws_apigatewayv2_authorizer" "jwt" {
 resource "aws_apigatewayv2_integration" "api" {
   api_id                 = aws_apigatewayv2_api.http.id
   integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.fn["api"].invoke_arn
+  integration_uri        = aws_lambda_alias.api_live.invoke_arn
   payload_format_version = "2.0"
   timeout_milliseconds   = 29000
 }
@@ -303,10 +389,19 @@ resource "aws_apigatewayv2_stage" "http" {
   tags = local.tags
 }
 
+# The HTTP API calls this alias, so it always runs the latest published (snapshotted) version.
+resource "aws_lambda_alias" "api_live" {
+  name             = "live"
+  description      = "Latest published api version (SnapStart)"
+  function_name    = aws_lambda_function.fn["api"].function_name
+  function_version = aws_lambda_function.fn["api"].version
+}
+
 resource "aws_lambda_permission" "http" {
   statement_id  = "http-api"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.fn["api"].function_name
+  qualifier     = aws_lambda_alias.api_live.name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
 }
@@ -404,8 +499,70 @@ resource "aws_cloudwatch_event_target" "notify" {
   arn            = aws_lambda_function.fn["notifier"].arn
 }
 
+# A worker's submit_app → the apps function (validate, stage drafts/, write the draft, put app.draft).
+resource "aws_cloudwatch_event_rule" "app_submitted" {
+  name           = "${var.name}-app-submitted"
+  event_bus_name = var.bus_name
+  event_pattern  = jsonencode({ source = ["aic.city"], "detail-type" = ["app.submitted"] })
+  tags           = { Component = "apps" }
+}
+
+resource "aws_cloudwatch_event_target" "app_submitted" {
+  rule           = aws_cloudwatch_event_rule.app_submitted.name
+  event_bus_name = var.bus_name
+  target_id      = "apps"
+  arn            = aws_lambda_function.fn["apps"].arn
+  retry_policy {
+    maximum_retry_attempts       = 3
+    maximum_event_age_in_seconds = 3600
+  }
+  dead_letter_config {
+    arn = aws_sqs_queue.apps_dlq.arn
+  }
+}
+
+resource "aws_sqs_queue" "apps_dlq" {
+  # SSE-SQS rather than the data key: EventBridge delivers failed events here, and the events carry
+  # only file names and sizes, no owner data.
+  name                      = "${var.name}-apps-dlq"
+  message_retention_seconds = 1209600
+  sqs_managed_sse_enabled   = true
+  tags                      = { Component = "apps" }
+}
+
+resource "aws_sqs_queue_policy" "apps_dlq" {
+  queue_url = aws_sqs_queue.apps_dlq.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "EventBridgeDeadLetters"
+        Effect    = "Allow"
+        Principal = { Service = "events.amazonaws.com" }
+        Action    = "sqs:SendMessage"
+        Resource  = aws_sqs_queue.apps_dlq.arn
+        Condition = { ArnEquals = { "aws:SourceArn" = aws_cloudwatch_event_rule.app_submitted.arn } }
+      },
+      {
+        Sid       = "TlsOnly"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "sqs:*"
+        Resource  = aws_sqs_queue.apps_dlq.arn
+        Condition = { Bool = { "aws:SecureTransport" = "false" } }
+      },
+    ]
+  })
+}
+
+resource "aws_lambda_function_event_invoke_config" "apps" {
+  function_name                = aws_lambda_function.fn["apps"].function_name
+  maximum_retry_attempts       = 2
+  maximum_event_age_in_seconds = 3600
+}
+
 resource "aws_lambda_permission" "events" {
-  for_each      = { ws-broadcast = aws_cloudwatch_event_rule.all.arn, ledger-writer = aws_cloudwatch_event_rule.all.arn, notifier = aws_cloudwatch_event_rule.notify.arn }
+  for_each      = { ws-broadcast = aws_cloudwatch_event_rule.all.arn, ledger-writer = aws_cloudwatch_event_rule.all.arn, notifier = aws_cloudwatch_event_rule.notify.arn, apps = aws_cloudwatch_event_rule.app_submitted.arn }
   statement_id  = "events"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.fn[each.key].function_name
@@ -555,6 +712,10 @@ resource "aws_scheduler_schedule" "job" {
   }
 }
 
+# The one Lambda bundle, reused by the knowledge module's function.
+output "lambda_zip_path" { value = data.archive_file.bundle["app"].output_path }
+output "lambda_zip_hash" { value = data.archive_file.bundle["app"].output_base64sha256 }
+
 # AIC streams its reply straight to the open HUDs (no EventBridge → Lambda hop per piece): it reads the
 # connection list and posts to those connections, the same two things ws-broadcast may do.
 resource "aws_iam_role_policy" "ace_live_reply" {
@@ -573,6 +734,7 @@ output "http_api_url" { value = aws_apigatewayv2_api.http.api_endpoint }
 output "ws_url" { value = "${aws_apigatewayv2_api.ws.api_endpoint}/prod" }
 output "function_arns" { value = { for k, f in aws_lambda_function.fn : k => f.arn } }
 output "function_names" { value = { for k, f in aws_lambda_function.fn : k => f.function_name } }
+output "apps_dlq_name" { value = aws_sqs_queue.apps_dlq.name }
 output "event_source_mapping_uuids" { value = { for k, m in aws_lambda_event_source_mapping.queue : k => m.uuid } }
 output "role_names" { value = { for k, r in aws_iam_role.fn : k => r.name } }
 # The one Python package, shared with the connectors Lambdas (infra/modules/connectors).

@@ -1,0 +1,18 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AddKnowledgeItems",
+      "Effect": "Allow",
+      "Action": ["dynamodb:PutItem", "dynamodb:UpdateItem"],
+      "Resource": "${knowledge_table_arn}",
+      "Condition": { "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["ITEM#*"] } }
+    },
+    {
+      "Sid": "AddKnowledgeFiles",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject"],
+      "Resource": "${knowledge_bucket_arn}/raw/*"
+    }
+  ]
+}

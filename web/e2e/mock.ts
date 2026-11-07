@@ -16,7 +16,60 @@ export const CONFIG = {
   redirectUri: "",
   pollyVoice: "Matthew",
   transcribeVocabulary: "aic-names",
+  appsUrl: "https://apps.aic.test",
 };
+// A tiny original game served by the fake apps origin: it proves scripts run in the sandbox and that the
+// frame has an opaque origin (no storage, no access to the HUD).
+// A tiny original calendar app that talks to the HUD the v2 way (docs/APPS.md "v2: data bridge"): it posts
+// {aic: 1, id, cap, params} to its parent and shows the reply. The fake apps origin serves it for app-cal….
+export const CALENDAR_HTML = `<!doctype html><meta charset="utf-8"><title>Star Calendar</title>
+<body style="font-family:sans-serif;background:#fff;color:#111">
+<h1>Star Calendar</h1>
+<button id="load">Load my week</button> <button id="rsvp">Accept the team sync</button>
+<p id="out">Nothing loaded.</p>
+<script>
+const waiting = new Map(); let n = 0;
+addEventListener("message", (e) => { const m = e.data; if (e.source === parent && m && m.aic === 1 && waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); } });
+const ask = (cap, params) => new Promise((r) => { const id = "q" + (++n); waiting.set(id, r); parent.postMessage({ aic: 1, id, cap, params }, "*"); });
+const out = (t) => { document.getElementById("out").textContent = t; };
+document.getElementById("load").onclick = async () => {
+  const r = await ask("calendar.read", { from: "2026-11-02T00:00:00Z", to: "2026-11-09T00:00:00Z" });
+  out(r.ok ? "Events: " + r.data.events.map((e) => e.title).join(", ") : "Error: " + r.error);
+};
+document.getElementById("rsvp").onclick = async () => {
+  const r = await ask("propose", { kind: "calendar.respond", params: { event_id: "evt-1", response: "accepted" } });
+  out(r.ok ? "Proposal: " + r.status : "Error: " + r.error);
+};
+</script></body>`;
+// A tiny original game that keeps its best score with the v3 `state` grant (docs/APPS.md "v3").
+export const SCORE_HTML = `<!doctype html><meta charset="utf-8"><title>Pebble Hop</title>
+<body style="font-family:sans-serif;background:#fff;color:#111">
+<h1>Pebble Hop</h1><button id="hop">Hop</button> <output id="n">0 hops</output> <p id="best">Best: …</p>
+<script>
+const waiting = new Map(); let k = 0, n = 0, best = 0;
+addEventListener("message", (e) => { const m = e.data; if (e.source === parent && m && m.aic === 1 && waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); } });
+const ask = (cap, params) => new Promise((r) => { const id = "s" + (++k); waiting.set(id, r); parent.postMessage({ aic: 1, id, cap, params }, "*"); });
+const show = () => { document.getElementById("best").textContent = "Best: " + best; };
+ask("state.get", { key: "best" }).then((r) => { best = r.ok && typeof r.data.value === "number" ? r.data.value : 0; show(); });
+document.getElementById("hop").onclick = async () => {
+  n++; document.getElementById("n").textContent = n + " hops";
+  if (n > best) { best = n; show(); await ask("state.set", { key: "best", value: best }); }
+};
+</script></body>`;
+export const GAME_HTML = `<!doctype html><meta charset="utf-8"><title>Star Sweeper</title>
+<body style="font-family:sans-serif;background:#123;color:#fff">
+<h1>Star Sweeper</h1><p>Click the button to sweep a star.</p>
+<button id="b">Sweep</button> <output id="n">0 stars</output>
+<p id="iso"></p>
+<script>
+let n = 0;
+document.getElementById("b").onclick = () => { n++; document.getElementById("n").textContent = n + " stars"; };
+let storage = "no storage";
+try { localStorage.length; storage = "storage open"; } catch { /* opaque origin */ }
+let parentDoc = "no HUD access";
+try { parent.document.title; parentDoc = "HUD reachable"; } catch { /* sandboxed */ }
+document.getElementById("iso").textContent = storage + ", " + parentDoc;
+</script></body>`;
 export const at = () => new Date().toISOString();
 
 export interface Mock {
@@ -28,7 +81,51 @@ export interface Mock {
   connectors: Array<Record<string, unknown>>;
   skills: Array<Record<string, unknown>>;
   mail: Array<Record<string, unknown>>;
+  apps: Array<Record<string, unknown>>;
+  /** The knowledge base: stored items (newest first) and the S3 PUTs the HUD made. */
+  knowledge: { items: Array<Record<string, unknown>>; puts: string[] };
+  /** v3 per-app state, `<app_id>/<key>` → value. */
+  state: Record<string, unknown>;
 }
+export const appRecord = (id: string, slug: string, title: string, extra: Record<string, unknown> = {}) => ({
+  app_id: id,
+  slug,
+  title,
+  description: `${title}: a small original game the city built.`,
+  icon_url: null,
+  url: `${CONFIG.appsUrl}/live/${id}/index.html`,
+  draft_id: `drf-${id.slice(4)}`,
+  task_id: "t-apps",
+  published_at: at(),
+  ...extra,
+});
+
+export const S3_URL = "https://s3.aic.test";
+const KIND_BY_EXT: Record<string, string> = {
+  pdf: "document",
+  docx: "document",
+  doc: "document",
+  xlsx: "document",
+  csv: "document",
+  html: "document",
+  txt: "text",
+  md: "text",
+  png: "image",
+  jpg: "image",
+  jpeg: "image",
+  webp: "image",
+  gif: "image",
+  mp3: "audio",
+  m4a: "audio",
+  wav: "audio",
+  flac: "audio",
+  ogg: "audio",
+  mp4: "video",
+  mov: "video",
+  m4v: "video",
+  mkv: "video",
+  avi: "video",
+};
 
 export const baseSnapshot = () => ({
   agents: [
@@ -69,7 +166,12 @@ export const baseSnapshot = () => ({
 
 export async function mockBackend(
   page: Page,
-  opts: { signedIn?: boolean; snapshot?: Record<string, unknown>; firstRunDone?: boolean } = {},
+  opts: {
+    signedIn?: boolean;
+    snapshot?: Record<string, unknown>;
+    firstRunDone?: boolean;
+    apps?: Array<Record<string, unknown>>;
+  } = {},
 ): Promise<Mock> {
   // Events sent before the page's WebSocket connects are held and delivered on connect.
   const pending: Array<Record<string, unknown>> = [];
@@ -83,6 +185,8 @@ export async function mockBackend(
     connectors: [],
     skills: [],
     mail: [],
+    apps: [...(opts.apps ?? [])],
+    state: {},
     settings: {
       paused: false,
       pause_reason: null,
@@ -98,6 +202,42 @@ export async function mockBackend(
       integrations: { github: false, google_calendar: false, gmail: false, spotify: false },
       first_run_done: opts.firstRunDone ?? true,
     },
+    knowledge: { items: [], puts: [] },
+  };
+  let kn = 0;
+  const kItem = (id: string) => m.knowledge.items.find((x) => x.id === id);
+  const kEvent = (i: Record<string, unknown>) =>
+    m.send({ type: "knowledge.updated", id: i.id, status: i.status, title: i.title, scope: i.scope, kind: i.kind });
+  const alwaysTokens = () => m.knowledge.items.filter((x) => x.scope === "always").length * 1600;
+  /** The pipeline, faked: processing at once, ready a moment later (unsupported for odd files). */
+  const pipeline = (i: Record<string, unknown>) => {
+    i.status = "processing";
+    kEvent(i);
+    setTimeout(() => {
+      if (!kItem(i.id as string)) return;
+      i.status = i.kind === "other" ? "unsupported" : "ready";
+      kEvent(i);
+    }, 1200);
+  };
+  const newItem = (
+    kind: string,
+    title: string,
+    scope: unknown,
+    status: string,
+    extra: Record<string, unknown> = {},
+  ) => {
+    const i = {
+      id: `k-test${String(++kn).padStart(8, "0")}`,
+      kind,
+      title,
+      scope: (scope as string) ?? "relevant",
+      status,
+      created_at: at(),
+      updated_at: at(),
+      ...extra,
+    };
+    m.knowledge.items.unshift(i);
+    return i;
   };
   await page.addInitScript(
     ({ signedIn }) => {
@@ -177,7 +317,58 @@ export async function mockBackend(
         { accepted: true, message: "If this is the owner's email, a new first-login email is on its way." },
         202,
       );
-    if (path === "/city") return ok(m.snapshot);
+    if (path === "/city") return ok({ ...m.snapshot, apps: m.apps });
+    if (path === "/apps" && req.method() === "GET") return ok({ apps: m.apps });
+    const appAt = () => m.apps.find((a) => a.app_id === decodeURIComponent(path.split("/")[2] ?? ""));
+    if (/^\/apps\/[^/]+\/bridge$/.test(path)) {
+      const a = appAt();
+      const cap = String(body?.cap);
+      const grant = cap.startsWith("state.") ? "state" : cap;
+      if (!a || !((a.grants as Array<{ id: string }>) ?? []).some((g) => g.id === grant))
+        return ok({ error: "not_granted" }, 403);
+      const sp = (body?.params ?? {}) as { key?: string; value?: unknown };
+      if (cap === "state.get")
+        return ok({ ok: true, data: { value: m.state[`${String(a.app_id)}/${sp.key}`] ?? null } });
+      if (cap === "state.set") {
+        m.state[`${String(a.app_id)}/${sp.key}`] = sp.value;
+        return ok({ ok: true, data: {} });
+      }
+      return ok({ data: { events: [{ title: "Dentist" }, { title: "Team sync" }], calendars: [], errors: [] } });
+    }
+    if (/^\/apps\/[^/]+\/rollback$/.test(path)) {
+      const a = appAt();
+      const prev = (a?.history as Array<Record<string, unknown>> | undefined)?.[0];
+      if (!a || !prev) return ok({ error: "There is no earlier version of this app." }, 409);
+      Object.assign(a, prev, { history: (a.history as unknown[]).slice(1) });
+      return ok({ app: a });
+    }
+    if (/^\/apps\/[^/]+\/proposals$/.test(path)) {
+      const a = appAt()!;
+      const approval = {
+        id: `apr-prop-${m.calls.length}`,
+        kind: "tool",
+        agent: "calendar",
+        action: "Accept the invitation: Team sync (Mon 10:00)",
+        reason: "An app asked; answering an invitation acts for you.",
+        requested_by: `app:${String(a.app_id)}`,
+      };
+      (m.snapshot.approvals as unknown[]).push(approval);
+      m.send({ type: "approval.requested", ...approval });
+      return ok({ approval: { id: approval.id, status: "pending" } }, 202);
+    }
+    if (/^\/apps\/[^/]+$/.test(path) && req.method() === "PUT") {
+      const a = appAt();
+      if (!a) return ok({ error: "There is no such app." }, 404);
+      Object.assign(a, body);
+      return ok({ app: a });
+    }
+    if (path.startsWith("/apps/") && req.method() === "DELETE") {
+      const id = decodeURIComponent(path.split("/")[2] ?? "");
+      const i = m.apps.findIndex((a) => a.app_id === id);
+      if (i < 0) return ok({ error: "There is no such app." }, 404);
+      m.apps.splice(i, 1);
+      return ok({ removed: id });
+    }
     if (path === "/settings" && req.method() === "GET") return ok({ settings: m.settings });
     if (path === "/settings" && req.method() === "PUT") {
       Object.assign(m.settings, body);
@@ -188,6 +379,27 @@ export async function mockBackend(
     if (path === "/city/resume") return ok({ paused: false });
     if (path.startsWith("/questions/"))
       return ok({ answered: true, answer: path.endsWith("/default") ? "SQLite" : body?.answer });
+    const publish = (m.snapshot.approvals as Array<Record<string, unknown>>).find(
+      (a) => a.id === path.split("/")[2] && a.kind === "app.publish",
+    );
+    if (path.startsWith("/approvals/") && publish) {
+      const cal = String(publish.draft_id).startsWith("drf-cal");
+      const app = body?.approved
+        ? appRecord(
+            cal ? "app-cal000000001" : "app-0000000000aa",
+            cal ? "star-calendar" : "star-sweeper",
+            String(publish.title),
+            {
+              grants: body.grants ?? publish.capabilities ?? [],
+            },
+          )
+        : null;
+      if (app) m.apps.unshift(app);
+      return ok({
+        approval: { id: publish.id, status: body?.approved ? "approved" : "denied" },
+        ...(app ? { app } : {}),
+      });
+    }
     if (path.startsWith("/approvals/"))
       return ok({ approval: { id: path.split("/")[2], status: body?.approved ? "approved" : "denied" } });
     if (path.startsWith("/city/agent"))
@@ -223,6 +435,70 @@ export async function mockBackend(
         caps: { daily_global_usd: 10, monthly_budget_usd: 150, daily_department_usd: 5 },
         cost_explorer_url: "https://console.aws.amazon.com/costmanagement/home#/cost-explorer",
       });
+    if (path === "/knowledge" && req.method() === "GET")
+      return ok({ items: m.knowledge.items, always_tokens: alwaysTokens(), always_budget: 8000 });
+    if (path === "/knowledge/uploads" && req.method() === "POST") {
+      const name = String(body?.file_name);
+      const size = Number(body?.size_bytes);
+      const kind = KIND_BY_EXT[name.split(".").pop()!.toLowerCase()] ?? "other";
+      const i = newItem(kind, (body?.title as string) ?? name, body?.scope, "uploading", {
+        source: name,
+        content_type: body?.content_type,
+        size_bytes: size,
+      });
+      const partSize = 16 * 1024 * 1024;
+      const upload =
+        size <= 100 * 1024 * 1024
+          ? {
+              method: "PUT",
+              url: `${S3_URL}/raw/${i.id}/${encodeURIComponent(name)}`,
+              headers: { "content-type": body?.content_type },
+            }
+          : {
+              multipart: true,
+              upload_id: `up-${i.id}`,
+              part_size: partSize,
+              part_urls: Array.from(
+                { length: Math.ceil(size / partSize) },
+                (_, n) => `${S3_URL}/raw/${i.id}/${encodeURIComponent(name)}?partNumber=${n + 1}&uploadId=up-${i.id}`,
+              ),
+            };
+      return ok({ item: i, upload });
+    }
+    const complete = /^\/knowledge\/uploads\/([\w-]+)\/complete$/.exec(path);
+    if (complete && req.method() === "POST") {
+      const i = kItem(complete[1]!);
+      if (!i) return ok({ error: "That item is gone." }, 404);
+      pipeline(i);
+      return ok({ item: i });
+    }
+    if (path === "/knowledge/links" && req.method() === "POST") {
+      const i = newItem("link", (body?.title as string) ?? String(body?.url), body?.scope, "processing", {
+        source: body?.url,
+      });
+      pipeline(i);
+      return ok({ item: i });
+    }
+    if (path === "/knowledge/text" && req.method() === "POST") {
+      const i = newItem("text", String(body?.title), body?.scope, "processing");
+      pipeline(i);
+      return ok({ item: i });
+    }
+    const one = /^\/knowledge\/(k-[\w-]+)$/.exec(path);
+    if (one) {
+      const i = kItem(one[1]!);
+      if (!i) return ok({ error: "That item is gone." }, 404);
+      if (req.method() === "GET") return ok({ ...i, entities: [] });
+      if (req.method() === "PUT") {
+        Object.assign(i, body, { updated_at: at() });
+        kEvent(i);
+        return ok({ item: i });
+      }
+      if (req.method() === "DELETE") {
+        m.knowledge.items = m.knowledge.items.filter((x) => x !== i);
+        return ok({ ok: true });
+      }
+    }
     if (path === "/workforce") return ok({ workers: [], specialists: [] });
     if (path === "/health") return ok({ paused: false, workers_busy: 0, worker_ceiling: 2450, stale_turns: 0 });
     // ---------- connectors, skills, mail (CONNECTORS_SKILLS.md §1.7, §2.4; MAIL_CALENDAR.md §4) ----------
@@ -275,6 +551,38 @@ export async function mockBackend(
       return ok({ account: { id: path.split("/")[3], status: "connected" } });
     }
     return ok({ error: "There is nothing here." }, 404);
+  });
+  // The isolated apps origin: live apps and drafts are the same little game.
+  await page.route(`${CONFIG.appsUrl}/**`, (r) =>
+    r.fulfill({
+      status: 200,
+      contentType: "text/html",
+      body: /\/(live\/app-cal|drafts\/drf-cal)/.test(r.request().url())
+        ? CALENDAR_HTML
+        : /\/live\/app-score/.test(r.request().url())
+          ? SCORE_HTML
+          : GAME_HTML,
+      headers: { "access-control-allow-origin": "*" },
+    }),
+  );
+  // The knowledge bucket's presigned PUTs: answer with an ETag (exposed, as the bucket's CORS does).
+  await page.route(`${S3_URL}/**`, async (route) => {
+    const req = route.request();
+    const headers = {
+      "access-control-allow-origin": "*",
+      "access-control-allow-methods": "PUT",
+      "access-control-allow-headers": "*",
+      "access-control-expose-headers": "ETag",
+    };
+    if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers });
+    const url = new URL(req.url());
+    m.knowledge.puts.push(url.pathname + url.search);
+    const part = url.searchParams.get("partNumber");
+    if (!part) {
+      const i = kItem(url.pathname.split("/")[2]!);
+      if (i) pipeline(i);
+    }
+    return route.fulfill({ status: 200, headers: { ...headers, etag: `"etag-${part ?? "single"}"` }, body: "" });
   });
   await page.routeWebSocket(`${CONFIG.wsUrl}**`, (ws) => {
     m.ws = () => ws;

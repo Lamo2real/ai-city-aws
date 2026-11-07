@@ -13,3 +13,7 @@ output "mcp_host_image_tag" { value = module.connectors.mcp_host_image_tag }
 output "skills_bucket" { value = module.skills.bucket }
 # Register these as the redirect URIs in Google Cloud and Microsoft Entra (docs/RUNBOOK.md). Printed by deploy.yml.
 output "mail_callback_urls" { value = module.mail.callback_urls }
+output "apps_url" { value = module.apps.url }
+output "knowledge_bucket" { value = module.knowledge.bucket }
+output "knowledge_base_id" { value = module.knowledge.knowledge_base_id }
+output "knowledge_state_machine_arn" { value = module.knowledge.state_machine_arn }

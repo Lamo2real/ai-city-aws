@@ -14,9 +14,11 @@ from typing import Any
 
 from aic.mail.service import MailService
 from aic.shared.connectors import ConnectorStore
+from aic.shared.apps import drafts_of_ticket
 from aic.shared.events import now_iso
 from aic.shared.hierarchy.actions import CityDeps, move
 from aic.shared.ids import manager_id
+from aic.shared.knowledge.search import always_block
 from aic.shared.log import log, metric
 from aic.shared.models import resolve_role_from_env
 from aic.shared.turn import BackoffOptions, GateDeps, GatedTurn, TurnInput, TurnOutput, run_gated_turn
@@ -121,6 +123,7 @@ class AgentHost:
                 from_owner=inv.get("from") == "owner" and inv.get("kind") == "task",
             )
             system, builtins = await self._system(agent, inv)
+            system += await self._owner_knowledge()
             city_tools = tools_for(self.d, ctx)
             if ctx.role == "ace" and ctx.from_owner:
                 city_tools.append(add_connector_tool(self.d, ctx))
@@ -234,6 +237,18 @@ class AgentHost:
             if inv["role"] == "worker" and inv.get("department"):
                 await ledger.release_worker_slot(inv["department"])
 
+    async def _owner_knowledge(self) -> str:
+        """The ``always`` summaries, after the stable system prompt so the cached prefix stays the same."""
+        k = self.d.knowledge
+        if not k:
+            return ""
+        try:
+            block = await always_block(k.store)
+        except Exception as e:
+            log("warn", "knowledge.always_failed", error=type(e).__name__)
+            return ""
+        return f"\n\n{block}" if block else ""
+
     async def _skills(self, role: str) -> list[dict[str, Any]]:
         if not self.o.skills:
             return []
@@ -329,6 +344,7 @@ class AgentHost:
                     lines.append(
                         f"- assignment {k['id']} to {k['to']} [{k['status']}], review rounds {k.get('review_rounds', 0)}"
                     )
+                    lines += [_draft_line(dr, "  ") for dr in await drafts_of_ticket(ledger, k["id"])]
             for_workers = [
                 c
                 for c in await ConnectorStore(ledger.table).list()
@@ -347,4 +363,11 @@ class AgentHost:
             lines.append(
                 f"Your assignment {inv['ticketId']}: {t.get('goal', '')}\nAcceptance: {t.get('acceptance', '')} [{t.get('status', '?')}]"
             )
+            lines += [_draft_line(dr, "") for dr in await drafts_of_ticket(ledger, inv["ticketId"])]
         return "\n".join(lines)
+
+
+def _draft_line(dr: dict[str, Any], indent: str) -> str:
+    """An app draft as the city checked it (the reason is the city's own words, not the worker's)."""
+    reason = f": {dr['reason']}" if dr.get("reason") else ""
+    return f"{indent}- app draft {dr['draft_id']} [{dr.get('status')}]{reason}"

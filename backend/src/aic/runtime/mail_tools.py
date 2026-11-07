@@ -217,7 +217,7 @@ def mail_tools(d: CityDeps, c: TurnCtx, s: MailService, level: str) -> list[Tool
 
 def mail_level(role: str, settings: dict[str, Any]) -> str | None:
     """Which mail tools a role gets: AIC all, the Orchestrator and managers read when the owner turned it on,
-    workers never (decision 75)."""
+    workers never (decision 79)."""
     if role == "ace":
         return "all"
     if role in ("orchestrator", "manager"):

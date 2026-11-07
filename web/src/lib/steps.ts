@@ -11,6 +11,9 @@ const BY_TOOL: Record<string, string> = {
   answer_question: "Answering a question from the team",
   pause_city: "Pausing the City",
   resume_city: "Resuming the City",
+  search_knowledge: "Searching your knowledge base",
+  add_to_knowledge: "Saving to your knowledge base",
+  list_knowledge: "Looking through your knowledge base",
 };
 const BY_ACTIVITY: Record<string, string> = {
   understanding: "Understanding your message",

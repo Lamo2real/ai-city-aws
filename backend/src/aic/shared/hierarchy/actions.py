@@ -7,17 +7,28 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, cast
 
+from ..apps import Workspace
 from ..cost import format_usd
 from ..events import EventBus, now_iso
 from ..ids import new_id
+from ..knowledge.service import KnowledgeAccess
 from ..ledger import Ledger, Record
 from .factory import FactoryClient
 from .queue import AgentRole, Queue, WorkMessage
 
 LIVE = ("open", "in_progress", "in_review", "waiting_on_owner", "parked")
+
+
+def _https_get(url: str, max_bytes: int = 2 * 1024 * 1024 + 1) -> bytes:
+    import urllib.request
+
+    if not url.startswith("https://"):
+        raise ValueError("only https URLs")
+    with urllib.request.urlopen(url, timeout=20) as r:  # noqa: S310 (https only, checked above)
+        return bytes(r.read(max_bytes))
 
 
 @dataclass
@@ -28,6 +39,12 @@ class CityDeps:
     factory: FactoryClient
     settings: Callable[[], Awaitable[dict[str, Any]]]
     max_review_rounds: int
+    workspace: Workspace | None = None
+    """Workers' S3 workspace (for ``submit_app``); None outside the worker runtime."""
+    knowledge: KnowledgeAccess | None = None
+    """The owner's knowledge base; None until it is deployed."""
+    fetch: Callable[[str], bytes] = field(default_factory=lambda: _https_get)
+    """GETs one public URL (``load_app`` reads an app's files from the apps origin); fakes in tests."""
     net: Any = None
     """Outbound HTTP for ``add_connector`` (an ``aic.shared.mcp_http.Transport``); None = urllib."""
     resolve: Any = None

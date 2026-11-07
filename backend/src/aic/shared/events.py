@@ -181,17 +181,77 @@ class ApprovalRequested(_E):
     action: str
     reason: str
     cost_hint: str | None = None
-    kind: str | None = None
+    kind: Literal["tool", "app.publish", "connector.add"] = "tool"
     """``connector.add`` for an add-connector approval (the chat shows a connector card)."""
     connector_id: str | None = None
     preview: dict[str, Any] | None = None
     """An email or event the owner sees before approving (``docs/MAIL_CALENDAR.md`` §5.5)."""
+    draft_id: str | None = None
+    preview_url: str | None = None
+    title: str | None = None
+    description: str | None = None
+    capabilities: list[dict[str, Any]] | None = None
+    pin: bool | None = None
+    replaces: str | None = None
+    """app.publish, v3: the app this is a new version of."""
+    version: int | None = None
 
 
 class ApprovalDecided(_E):
     type: Literal["approval.decided"]
     id: str
     approved: bool
+
+
+class AppFile(_M):
+    path: str
+    size: float
+
+
+class AppSubmitted(_E):
+    type: Literal["app.submitted"]
+    hire_id: str
+    ticket_id: str
+    task_id: str
+    department: str
+    title: str
+    description: str
+    icon: str | None = None
+    files: list[AppFile]
+
+
+class AppDraft(_E):
+    type: Literal["app.draft"]
+    draft_id: str
+    ticket_id: str
+    task_id: str
+    department: str
+    title: str
+    status: Literal["staging", "ready", "rejected", "awaiting_owner", "published", "refused"]
+    reason: str | None = None
+    preview_url: str | None = None
+
+
+class AppPublished(_E):
+    type: Literal["app.published"]
+    app_id: str
+    slug: str
+    title: str
+    icon_url: str | None = None
+    url: str
+    task_id: str
+    department: str
+
+
+class AppUpdated(_E):
+    type: Literal["app.updated"]
+    app: dict[str, Any]
+
+
+class AppRemoved(_E):
+    type: Literal["app.removed"]
+    app_id: str
+    slug: str
 
 
 class ConnectorUpdated(_E):
@@ -247,6 +307,18 @@ class AceReply(_E):
     done: bool
 
 
+class KnowledgeUpdated(_E):
+    """A knowledge item's status or scope changed (``docs/KNOWLEDGE.md`` §6)."""
+
+    type: Literal["knowledge.updated"]
+    id: str
+    status: Literal["uploading", "processing", "ready", "failed", "unsupported"]
+    title: str
+    scope: Literal["always", "relevant", "on_request"]
+    kind: Literal["text", "document", "image", "audio", "video", "link", "other"]
+    error: str | None = None
+
+
 CityEventModel = Annotated[
     AgentHired
     | AgentRetired
@@ -269,7 +341,13 @@ CityEventModel = Annotated[
     | CalendarChanged
     | CityState
     | SpendCapReachedEvent
-    | AceReply,
+    | AceReply
+    | AppSubmitted
+    | AppDraft
+    | AppPublished
+    | AppUpdated
+    | AppRemoved
+    | KnowledgeUpdated,
     Field(discriminator="type"),
 ]
 _ADAPTER: TypeAdapter[Any] = TypeAdapter(CityEventModel)
@@ -289,6 +367,8 @@ def _dump(m: BaseModel) -> dict[str, Any]:
             continue
         if isinstance(val, BaseModel):
             out[key] = _dump(val)
+        elif isinstance(val, list):
+            out[key] = [_dump(v) if isinstance(v, BaseModel) else v for v in val]
         elif isinstance(val, float) and val.is_integer():
             out[key] = int(val)
         else:
