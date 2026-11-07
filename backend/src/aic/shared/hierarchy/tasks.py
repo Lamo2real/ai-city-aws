@@ -115,6 +115,13 @@ def _workers_of(agents: list[Record], ids: set[str]) -> list[Record]:
     return [a for a in agents if a.get("kind") == "worker" and (a.get("ticket_id") in ids or a.get("goal_id") in ids)]
 
 
+async def job_cost(ledger: Ledger, task: Record) -> float:
+    """What a job has cost so far: every worker that was hired for any part of it."""
+    tree = await task_tree(ledger, task["id"])
+    ids = {t["id"] for t in tree}
+    return sum(float(w.get("total_cost_usd") or 0) for w in _workers_of(await ledger.list_agents(), ids))
+
+
 async def describe_task(ledger: Ledger, task: Record) -> str:
     """Plain-language progress of one job, for AIC to say as it is."""
     now = ledger.now()

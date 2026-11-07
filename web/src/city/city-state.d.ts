@@ -110,6 +110,45 @@ export function deptOf(agent: CityAgent): string;
 export function deptColor(name: string): string;
 export function visualState(state: CityState, id: string, now?: number): string;
 export function agentStatus(state: CityState, id: string, now?: number): string;
+export interface CityPoint {
+  x: number;
+  y: number;
+}
+export interface CityBuilding {
+  dept: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  [k: string]: unknown;
+}
+export interface CityWorld {
+  buildings: CityBuilding[];
+  streets: Array<{ y: number; x0: number; x1: number }>;
+  avenue: number;
+  homes: { x: number; y: number; w: number; h: number; houses: CityPoint[] };
+  [k: string]: unknown;
+}
+export const TILE: number;
+export function layout(
+  state: CityState,
+  opts?: { portrait?: boolean; seats?: Record<string, number>; houses?: number },
+): CityWorld;
+export function seatSpot(building: CityBuilding, seat: number): CityPoint;
+export function homeSpot(world: CityWorld, slot: number): CityPoint | null;
+export function doorOf(building: CityBuilding): CityPoint;
+export function walkRoute(world: CityWorld, from: CityPoint, to: CityPoint): CityPoint[];
+export function commuteRoute(
+  world: CityWorld,
+  from: CityPoint,
+  to: CityPoint,
+  opts?: { leaving?: CityBuilding | null; entering?: CityBuilding | null },
+): CityPoint[];
+export function walkSpeed(route: CityPoint[], from: CityPoint): number;
+export const WALK_PX_S: number;
+export const COMMUTE_MS: number;
+export function staggerMs(i: number): number;
+export function walksOut(state: CityState, id: string, walked: Set<string>): boolean;
 export function placement(
   state: CityState,
   id: string,

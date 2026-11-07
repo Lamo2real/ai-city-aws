@@ -4,7 +4,7 @@
 // Reviewer; each department's manager stands at its door; panels are React (see CityView.tsx).
 // The City View: a small game world of the agents, drawn pixel by pixel on a canvas from city-state.js.
 // All of the art is drawn here in code. Every person on screen is a real agent; only the scenery moves on its own.
-import { BUILDING_H, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatRows, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups } from "./city-state.js";
+import { BUILDING_H, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatRows, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, commuteRoute, doorOf, staggerMs, walkSpeed } from "./city-state.js";
 
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const INK = "#1d1c36";
@@ -418,8 +418,11 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   const seats = new Map(); // dept → Map(id → seat)
   let homes = new Map();
   let effects = [], parcels = [];
+  const doorQueue = new Map(); // door key → when it is next free, so walkers take turns instead of overlapping
+  const lights = new Map(); // house index → lit until (performance.now() ms)
   const cam = { x: 0, y: 0, wantX: 0, wantY: 0, zoom: 2, userMoved: false };
   const walked = new Set(); // ids that already walked home for good
+  root._people = people; // a read-only test hook: e2e/commute.spec.ts watches who stands where
   const winBox = document.createElement("div"); winBox.id = "citywindows"; winBox.hidden = true; winBox.setAttribute("aria-hidden", "true"); root.append(winBox);
   let selected = null, hover = null, lastVisit = 0, hiddenHomes = 0;
 
@@ -473,12 +476,30 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       if (p.visiting) continue; // AIC is out; it comes back by itself
       p.seated = to.seated;
       if (p.key === to.key) { if (!p.move && !p.route) { p.x = to.x; p.y = to.y; } else if (p.route) p.route[p.route.length - 1] = to; else if (p.move) p.move.to = to; continue; } // a new layout only shifts them
+      const fromKey = p.key;
       p.key = to.key;
-      const walk = to.key === "home" && walksOut(state, id, walked);
-      if (still) { p.x = to.x; p.y = to.y; p.move = null; p.route = null; continue; }
-      if (walk) { p.move = null; p.route = walkRoute(world, p, to).slice(); }
-      else if (to.key === "home") { p.x = to.x; p.y = to.y; p.move = null; p.route = null; } // any other move home is instant
-      else dashTo(p, to);
+      const walkHome = to.key === "home" && walksOut(state, id, walked);
+      if (still) { p.x = to.x; p.y = to.y; p.move = null; p.route = null; p.waitUntil = null; p.speed = null; p.homecoming = false; continue; }
+      if (walkHome) {
+        // Checking out: stand up, say so, take a turn at the door, and walk the streets home.
+        const b = buildingOfKey(fromKey);
+        p.move = null;
+        p.route = commuteRoute(world, p, to, { leaving: fromKey.startsWith("desk:") ? b : null });
+        p.speed = walkSpeed(p.route, p);
+        p.waitUntil = b ? queueAt(`door:${b.dept}`, 150) : performance.now();
+        p.homecoming = true; // lights the house on arrival (step() clears it)
+        p.say = { text: "CHECKED OUT", until: performance.now() + 1800 };
+      } else if (to.key === "home") { p.x = to.x; p.y = to.y; p.move = null; p.route = null; } // any other move home is instant
+      else if (to.key.startsWith("desk:") && (fresh || fromKey === "home") && buildingOfKey(to.key)) {
+        // Hired: the house lights up, then the worker walks out, along the streets and in through the door.
+        const b = buildingOfKey(to.key);
+        const from = { x: p.x, y: p.y };
+        p.move = null;
+        p.route = commuteRoute(world, from, to, { entering: b });
+        p.speed = walkSpeed(p.route, from);
+        p.waitUntil = queueAt(`door:${b.dept}`, 700);
+        lightHouse(id, p.waitUntil - performance.now() + 500);
+      } else dashTo(p, to);
     }
     const lit = [];
     for (const [d, m] of seats) for (const id of m.keys()) { const i = el("i"); i.dataset.lit = id; i.dataset.dept = d; lit.push(i); }
@@ -486,7 +507,24 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     refreshVisuals();
     root.dataset.people = String(people.size);
   }
+  const buildingOfKey = (key) => {
+    const m = /^(?:desk|door):([^:]+)/.exec(key ?? "");
+    return m ? world.buildings.find((b) => b.dept === m[1]) : null;
+  };
+  /** A turn at a door: at the earliest `lead` ms from now, later if someone else just took it. */
+  function queueAt(key, lead) {
+    const at = Math.max(performance.now() + lead, doorQueue.get(key) ?? 0);
+    doorQueue.set(key, at + staggerMs(1));
+    return at;
+  }
+  /** Lights a house window for a while (a worker about to leave, or just home). */
+  function lightHouse(id, ms) {
+    const i = Math.floor((homes.get(id) ?? 0) / 2);
+    lights.set(i, Math.max(lights.get(i) ?? 0, performance.now() + ms));
+    setTimeout(() => wake(), ms + 150);
+  }
   function dashTo(p, to, then) {
+    p.waitUntil = null;
     p.route = null;
     p.flip = to.x < p.x;
     p.move = { from: { x: p.x, y: p.y }, to, at: performance.now(), then };
@@ -750,10 +788,12 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     R(ctx, fx - 1, fy - 10 - jet, 2, jet, "#bfe6ff"); R(ctx, fx - 3, fy - 10 - jet, 6, 1, "#d7f1ff");
     for (const [dx, dy] of [[-3, -8 - jet + (f * 3) % 6], [3, -8 - jet + ((f + 2) * 3) % 6], [-5, -4 - ((f * 2) % 4)], [5, -6 + ((f * 2) % 4)]]) R(ctx, fx + dx, fy + dy - 2, 1, 2, "#a8dcff");
     R(ctx, fx - 12 + f * 2, fy - 1, 6, 1, "#8ab2d6"); R(ctx, fx + 6 - f * 2, fy + 2, 7, 1, "#8ab2d6");
-    // A house with someone home has its light on.
-    const occupied = new Set();
-    for (const p of people.values()) if (!p.move && !p.route && p.key === "home") occupied.add(Math.floor((homes.get(p.id) ?? 0) / 2));
-    for (const i of occupied) { const hh = world.homes.houses[i]; if (hh) { const win = houseWindows(hh); R(ctx, win.x - ox, win.y - oy, win.w, win.h, "#ffdf94"); R(ctx, win.x - ox, win.y - oy, win.w, 2, "#ffefc0"); } }
+    // A lit window marks a house with movement: someone called in to work, or just home after checking out.
+    for (const [i, until] of lights) {
+      if (until <= now) { lights.delete(i); continue; }
+      const hh = world.homes.houses[i];
+      if (hh) { const win = houseWindows(hh); R(ctx, win.x - ox, win.y - oy, win.w, win.h, "#ffdf94"); R(ctx, win.x - ox, win.y - oy, win.w, 2, "#ffefc0"); }
+    }
     if (hiddenHomes) label(`+${hiddenHomes} MORE IN WORKFORCE`, world.homes.x * TILE + 60, (world.homes.y + world.homes.h) * TILE - 12);
     // Lit glass behind the desks: one window per occupied seat.
     const litWin = [];
@@ -798,6 +838,10 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     let busy = false;
     for (const p of people.values()) {
       if (p.hop > 0) { p.hop = Math.max(0, p.hop - dt * 2.6); busy = true; }
+      if (p.waitUntil) {
+        if (now < p.waitUntil) { busy = true; continue; }
+        p.waitUntil = null;
+      }
       if (p.move) {
         busy = true;
         const t = Math.max(0, Math.min(1, (now - p.move.at) / DASH_MS)); // by the clock: a slow machine still gets there on time
@@ -808,9 +852,15 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
         if (t >= 1) { const then = p.move.then; p.move = null; dust(p.x, p.y - 4, 12, ["#ffe9a0", "#fff6e0", "#f4c63c"], 50, 0.45); then?.(); }
       } else if (p.route) {
         busy = true;
-        const to = p.route[0], dx = to.x - p.x, dy = to.y - p.y, d = Math.hypot(dx, dy), s = WALK_SPEED * dt;
+        const to = p.route[0], dx = to.x - p.x, dy = to.y - p.y, d = Math.hypot(dx, dy), s = (p.speed ?? WALK_SPEED) * dt;
         if (Math.abs(dx) > 0.5) p.flip = dx < 0;
-        if (d <= s) { p.x = to.x; p.y = to.y; p.route.shift(); if (!p.route.length) p.route = null; } else { p.x += (dx / d) * s; p.y += (dy / d) * s; }
+        if (d <= s) {
+          p.x = to.x; p.y = to.y; p.route.shift();
+          if (!p.route.length) {
+            p.route = null; p.speed = null;
+            if (p.homecoming) { p.homecoming = false; lightHouse(p.id, 1500); dust(p.x, p.y - 8, 10, POOF, 28, 0.5); } // home: the light goes on, then out
+          }
+        } else { p.x += (dx / d) * s; p.y += (dy / d) * s; }
       }
     }
     if (effects.length) { busy = true; effects = effects.filter((e) => { e.life -= dt; e.vy += e.g * dt; e.x += e.vx * dt; e.y += e.vy * dt; return e.life > 0; }); }
@@ -839,8 +889,11 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   // ---------- Data in: a snapshot, then events (from the HUD's WebSocket) ----------
   function load(snap) {
     state = applySnapshot(state, snap ?? { agents: [], tickets: [], questions: [] });
-    people.clear(); parcels = []; effects = [];
-    if (ctx) { sync(true); fitView(); markApps(); needDraw = true; resume(); }
+    parcels = []; effects = [];
+    // The people stay: a later snapshot (a reconnect, or one racing live events) converges by walking anyone
+    // whose place changed in the meantime, instead of clearing the town and teleporting everyone. Only the
+    // very first load, before there is a world, places people instantly.
+    if (ctx) { sync(!world); fitView(); markApps(); needDraw = true; resume(); }
     onState(state);
   }
   if (typeof ResizeObserver === "undefined") window.addEventListener("resize", () => { if (world) { fitView(); wake(); } });

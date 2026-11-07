@@ -64,6 +64,7 @@
     "aws_lambda_function_event_invoke_config",
     "aws_lambda_permission",
     "aws_lambda_provisioned_concurrency_config",
+    "aws_sns_platform_application",
     "aws_opensearchserverless_access_policy",
     "aws_opensearchserverless_security_policy",
     "aws_s3_bucket_cors_configuration",

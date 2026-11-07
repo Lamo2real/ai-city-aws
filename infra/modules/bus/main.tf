@@ -9,7 +9,6 @@ terraform {
 
 variable "name" { type = string }
 variable "kms_key_arn" { type = string }
-variable "owner_email" { type = string }
 variable "turn_timeout_seconds" {
   type    = number
   default = 900
@@ -47,16 +46,12 @@ resource "aws_sqs_queue" "work" {
   tags = local.tags
 }
 
+# Alarm actions only (observability). No subscription: the owner gets no email from the city; finished jobs
+# reach the owner's iPhone through modules/notifications instead.
 resource "aws_sns_topic" "notify" {
   name              = "${var.name}-notify"
   kms_master_key_id = var.kms_key_arn
   tags              = local.tags
-}
-
-resource "aws_sns_topic_subscription" "owner" {
-  topic_arn = aws_sns_topic.notify.arn
-  protocol  = "email"
-  endpoint  = var.owner_email
 }
 
 output "bus_name" { value = aws_cloudwatch_event_bus.this.name }

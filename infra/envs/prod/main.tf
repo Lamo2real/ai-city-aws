@@ -93,7 +93,6 @@ module "bus" {
   source               = "../../modules/bus"
   name                 = local.name
   kms_key_arn          = module.security.kms_key_arn
-  owner_email          = var.owner_email
   turn_timeout_seconds = var.turn_timeout_minutes * 60
 }
 
@@ -184,7 +183,7 @@ module "api" {
   bus_arn               = module.bus.bus_arn
   queue_urls            = module.bus.queue_urls
   queue_arns            = module.bus.queue_arns
-  notify_topic_arn      = module.bus.notify_topic_arn
+  apns_enabled          = var.apns_enabled
   user_pool_id          = module.auth.user_pool_id
   user_pool_arn         = module.auth.user_pool_arn
   owner_email           = var.owner_email
@@ -289,6 +288,18 @@ module "mail" {
   api_role_name        = module.api.role_names["api"]
   app_bridge_role_name = module.api.role_names["app-bridge"]
   reader_role_names    = { for r, n in module.agents.role_names : r => n if r != "worker" }
+}
+
+# iPhone push notifications (docs/NOTIFICATIONS.md): one per finished job, no email.
+module "notifications" {
+  source             = "../../modules/notifications"
+  name               = local.name
+  region             = var.region
+  account_id         = data.aws_caller_identity.me.account_id
+  kms_key_arn        = module.security.kms_key_arn
+  apns_enabled       = var.apns_enabled
+  api_role_name      = module.api.role_names["api"]
+  notifier_role_name = module.api.role_names["notifier"]
 }
 
 # Owner-uploaded skills (docs/CONNECTORS_SKILLS.md §2).

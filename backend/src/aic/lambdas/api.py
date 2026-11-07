@@ -34,7 +34,7 @@ from aic.shared.aws import aws_city
 from aic.shared.caps import validate_caps
 from aic.shared.clients import client
 from aic.shared.config import caps_config
-from aic.shared.events import EventBus
+from aic.shared.events import EventBus, now_iso
 from aic.shared.hierarchy.actions import CityDeps, answer_question
 from aic.shared.hierarchy.queue import Queue, WorkMessage
 from aic.shared.ids import department_key, new_id
@@ -43,6 +43,7 @@ from aic.shared.knowledge.wiring import knowledge_from_env
 from aic.shared.ledger import Ledger, Record
 from aic.shared.log import log
 from aic.shared.models import model_label
+from aic.shared.push import DeviceStore, PushApps, PushDeps, apns_key_secret, store_apns_secret
 from aic.shared.turn import ModelRunner
 from aic.shared.utility import UtilityDeps, bedrock_converse_runner, is_addressed_to_ace
 
@@ -117,6 +118,11 @@ ROUTES: list[tuple[str, str]] = [
     ("POST", "/knowledge/text"),
     ("PUT", "/knowledge/k-aaaaaaaaaaaa"),
     ("DELETE", "/knowledge/k-aaaaaaaaaaaa"),
+    ("GET", "/devices"),
+    ("POST", "/devices"),
+    ("DELETE", "/devices/d-aaaaaaaaaaaaaaaaaaaaaaaa"),
+    ("GET", "/notifications/apns"),
+    ("PUT", "/notifications/apns"),
 ]
 
 
@@ -149,6 +155,8 @@ class ApiDeps:
     skills: SkillsApi | None = None
     mail: MailApi | None = None
     """The ``/mail/*`` routes (``AIC_MAIL_WORKLOAD``); None = mail isn't set up (503)."""
+    push: PushDeps | None = None
+    """iPhone notifications: device registration and the owner's Apple key; None = not deployed (503)."""
 
 
 class _NoFactory:
@@ -316,6 +324,69 @@ async def _costs(d: ApiDeps) -> dict[str, Any]:
     }
 
 
+APNS_FLAG = ("NOTIFY#apns", "META")
+
+
+async def _push_routes(method: str, path: str, event: dict[str, Any], d: ApiDeps) -> dict[str, Any] | None:
+    """iPhone notifications: the owner's phones (``/devices``) and the Apple key (``/notifications/apns``)."""
+    if not (path == "/devices" or path.startswith("/devices/") or path == "/notifications/apns"):
+        return None
+    p = d.push
+    if method == "GET" and path == "/notifications/apns":
+        flag = await d.ledger.table.get(*APNS_FLAG)
+        return reply(
+            200,
+            {
+                "key_saved_at": flag.get("saved_at") if flag else None,
+                "enabled": bool(p and p.apps.configured),
+                "devices": await p.store.list() if p else [],
+                "secret_name": p.secret_name if p else None,
+            },
+        )
+    if p is None:
+        return problem(
+            503, "iPhone notifications aren't deployed yet.", "Deploy first, then paste the Apple key in Settings."
+        )
+    if method == "PUT" and path == "/notifications/apns":
+        if p.secrets is None:
+            return problem(503, "The Apple key can't be stored yet.", "Deploy first.")
+        try:
+            value = apns_key_secret(_body(event))
+        except ValueError as e:
+            return problem(400, str(e))
+        try:
+            await asyncio.to_thread(store_apns_secret, p.secrets, p.secret_name, value, p.kms_key, p.tags)
+        except Exception as e:
+            log("warn", "push.key_failed", error=type(e).__name__)
+            return problem(502, "The key couldn't be stored.", "Try again in a moment.")
+        at = now_iso(d.ledger.now())
+        await d.ledger.table.put({"pk": APNS_FLAG[0], "sk": APNS_FLAG[1], "saved_at": at})
+        log("info", "push.key_saved")
+        return reply(200, {"ok": True, "saved_at": at, "next": "Turn on AIC_APNS_ENABLED in GitHub and deploy once."})
+    if method == "GET" and path == "/devices":
+        return reply(200, {"devices": await p.store.list()})
+    if method == "POST" and path == "/devices":
+        if not p.apps.configured:
+            return problem(
+                503, "iPhone notifications aren't turned on yet.", "Paste the Apple key in Settings and deploy once."
+            )
+        b = _body(event)
+        sandbox = bool(b.get("sandbox", False))
+        if not p.apps.for_build(sandbox):
+            return problem(503, "That build's notifications aren't turned on.", "Deploy with the Apple key first.")
+        try:
+            device = await p.store.register(
+                p.sns, p.apps, str(b.get("token") or ""), str(b.get("platform") or "ios"), sandbox
+            )
+        except ValueError as e:
+            return problem(400, str(e))
+        return reply(200, {"device": device})
+    m = re.fullmatch(r"/devices/(d-[0-9a-f]{24})", path)
+    if method == "DELETE" and m:
+        return reply(200, {"removed": await p.store.remove(p.sns, m.group(1))})
+    return problem(404, "No such route.")
+
+
 async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
     method = event["requestContext"]["http"]["method"].upper()
     path = event.get("rawPath", "/").rstrip("/") or "/"
@@ -325,6 +396,9 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
     def is_(m: str, pattern: str) -> bool:
         return method == m and re.fullmatch(pattern, path) is not None
 
+    pushed = await _push_routes(method, path, event, d)
+    if pushed is not None:
+        return pushed
     if is_("GET", r"/city"):
         return reply(200, await city_snapshot(d))
     if is_("GET", r"/city/agent"):
@@ -653,8 +727,8 @@ async def _put_settings(b: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         if str(b["profile_prefix"]) not in ("global", "eu", "us"):
             raise BadRequest("Pick global, eu or us.")
         patch["profile_prefix"] = b["profile_prefix"]
-    if isinstance(b.get("notify_email"), bool):
-        patch["notify_email"] = b["notify_email"]
+    if isinstance(b.get("notify_push"), bool):
+        patch["notify_push"] = b["notify_push"]
     if isinstance(b.get("first_run_done"), bool):
         patch["first_run_done"] = b["first_run_done"]
     if isinstance(b.get("mail_access"), dict):
@@ -858,6 +932,20 @@ def build_deps() -> ApiDeps:
         connectors=_connectors_from_env(city),
         skills=SkillsApi(city.ledger, city.session.client("s3"), os.environ.get("AIC_SKILLS_BUCKET")),
         mail=_mail_from_env(city),
+        push=_push_from_env(city),
+    )
+
+
+def _push_from_env(city: Any) -> PushDeps:
+    apps = PushApps(os.environ.get("AIC_APNS_ARN", ""), os.environ.get("AIC_APNS_SANDBOX_ARN", ""))
+    return PushDeps(
+        store=DeviceStore(city.ledger.table, city.ledger.now),
+        sns=client(city.session, "sns"),
+        apps=apps,
+        secrets=client(city.session, "secretsmanager"),
+        secret_name=os.environ.get("AIC_APNS_SECRET", "aic/prod/apns"),
+        kms_key=os.environ.get("AIC_KMS_KEY_ARN"),
+        tags={"Project": "ai-city", "Component": "notifications"},
     )
 
 

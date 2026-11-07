@@ -203,7 +203,7 @@ export async function mockBackend(
       max_concurrent_workers_global: 2450,
       max_new_sessions_per_second: 20,
       profile_prefix: "global",
-      notify_email: true,
+      notify_push: true,
       integrations: { github: false, google_calendar: false, gmail: false, spotify: false },
       first_run_done: opts.firstRunDone ?? true,
     },
@@ -403,6 +403,15 @@ export async function mockBackend(
       m.apps.splice(i, 1);
       return ok({ removed: id });
     }
+    if (path === "/notifications/apns" && req.method() === "GET")
+      return ok({ key_saved_at: null, enabled: false, devices: [], secret_name: "aic/prod/apns" });
+    if (path === "/notifications/apns" && req.method() === "PUT")
+      return ok({
+        ok: true,
+        saved_at: "2026-11-07T12:00:00.000Z",
+        next: "Turn on AIC_APNS_ENABLED in GitHub and deploy once.",
+      });
+    if (path === "/devices" && req.method() === "GET") return ok({ devices: [] });
     if (path === "/settings" && req.method() === "GET") return ok({ settings: m.settings });
     if (path === "/settings" && req.method() === "PUT") {
       Object.assign(m.settings, body);
