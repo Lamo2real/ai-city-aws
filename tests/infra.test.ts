@@ -1,6 +1,6 @@
 // Phase 7 gate, in the unit suite: the tag check and the IAM check over the real Terraform, plus
 // negative cases proving each check actually fails on a bad input.
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -138,7 +138,8 @@ describe("apps origin (docs/APPS.md)", () => {
     expect(api).toMatch(
       /resource "aws_cloudwatch_event_rule" "app_submitted" \{[\s\S]*?tags\s+= \{ Component = "apps" \}/,
     );
-    expect(api).toMatch(/tags = each\.key == "apps" \? \{ Component = "apps" \} : local\.tags/);
+    expect(api).toMatch(/tags = contains\(local\.apps_tagged, each\.key\) \? \{ Component = "apps" \} : local\.tags/);
+    expect(api).toMatch(/apps_tagged\s+= \["apps", "app-bridge"\]/);
   });
 
   it("no worker or Orchestrator policy names the apps bucket", async () => {
@@ -168,11 +169,64 @@ describe("apps origin (docs/APPS.md)", () => {
 });
 
 describe("apps API routes", () => {
-  it("GET /apps and DELETE /apps/{id} sit behind the JWT authorizer, and CORS allows DELETE", async () => {
+  it("the apps routes (v1 and the v2 bridge, proposals, PUT) sit behind the JWT authorizer, and CORS allows DELETE", async () => {
     const api = (await import("node:fs")).readFileSync("infra/modules/api/main.tf", "utf8");
     const routes = api.slice(api.indexOf("routes = ["), api.indexOf("]", api.indexOf("routes = [")));
     expect(routes).toContain('"GET /apps"');
     expect(routes).toContain('"DELETE /apps/{id}"');
+    for (const r of ['"PUT /apps/{id}"', '"POST /apps/{id}/bridge"', '"POST /apps/{id}/proposals"'])
+      expect(routes).toContain(r);
     expect(api).toMatch(/allow_methods = \["GET", "POST", "PUT", "DELETE"\]/);
+  });
+});
+
+describe("app-bridge Lambda (docs/APPS.md v2)", () => {
+  const api = () => readFileSync("infra/modules/api/main.tf", "utf8");
+  const block = (tf: string, start: string) =>
+    tf
+      .slice(tf.indexOf(start), tf.indexOf("    ]", tf.indexOf(start)))
+      .split("\n")
+      .filter((l) => !l.trim().startsWith("#"))
+      .join("\n");
+  it("runs the shared zip with its own handler", () => {
+    expect(api()).toMatch(/app-bridge\s+= \{ bundle = "app", handler = "aic\.lambdas\.app_bridge\.handler"/);
+    expect(api()).toMatch(/app_bridge_name = "\$\{var\.name\}-app-bridge"/);
+  });
+  it("only the api role may invoke it, and the api role has no Gateway access", () => {
+    const tf = api();
+    const apiPerms = block(tf, "    api = [");
+    expect(apiPerms).toContain('function:${local.app_bridge_name}"');
+    expect(apiPerms).not.toMatch(/bedrock-agentcore/);
+    const invokes = [...tf.matchAll(/app_bridge_name\}"\]/g)].length;
+    expect(invokes).toBe(1);
+    expect(tf).not.toMatch(/aws_lambda_permission"[^{]*\{[^}]*app-bridge/);
+    for (const role of ["worker", "orchestrator", "manager", "ace"])
+      expect(JSON.stringify(rolePolicies(role))).not.toMatch(/app-bridge/);
+  });
+  it("reads only APPS, CONNECTORS and MAIL; writes only rate counters and app audit rows; no Gateway yet", () => {
+    const perms = block(api(), "    app-bridge = [");
+    expect(perms).toContain('"dynamodb:LeadingKeys" = ["APPS", "CONNECTORS", "MAIL"]');
+    expect(perms).toContain('"dynamodb:LeadingKeys" = ["RATE#app-*", "TOOL#app-*"]');
+    expect(perms).not.toMatch(
+      /DeleteItem|s3:|events:|sqs:|InvokeGateway|CompleteResourceTokenAuth|CreateSecret|PutSecretValue/,
+    );
+    const reads = perms.split("\n").find((l) => l.includes('"APPS", "CONNECTORS", "MAIL"')) ?? "";
+    expect(reads).not.toMatch(/PutItem|UpdateItem/);
+  });
+  it("mail reads: workload aic-prod-mail, the two providers and the vault, aic/prod/mail/* secrets only", () => {
+    const tf = api();
+    const perms = block(tf, "    app-bridge = [");
+    expect(perms).toMatch(
+      /"bedrock-agentcore:GetWorkloadAccessTokenForUserId"\], Resource = local\.mail_workload_arns/,
+    );
+    expect(perms).toMatch(
+      /"bedrock-agentcore:GetResourceOauth2Token"\], Resource = concat\(local\.mail_workload_arns, \["\$\{local\.agentcore_arn\}:token-vault\/default"\], local\.mail_provider_arns\)/,
+    );
+    expect(perms).toContain(
+      '"secretsmanager:GetSecretValue"], Resource = ["arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:aic/prod/mail/*"]',
+    );
+    expect(tf).toMatch(/workload-identity\/\$\{var\.name\}-mail"\]/);
+    expect(tf).toMatch(/for p in \["google", "microsoft"\]/);
+    expect(block(tf, "    api = [")).not.toMatch(/bedrock-agentcore/);
   });
 });

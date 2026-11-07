@@ -317,6 +317,20 @@ calendar `hidden` come with `calendars`. `approval.requested` for `app.publish` 
   writes, and `bedrock-agentcore:InvokeGateway` on the connectors gateway (after `connectors-skills` merges);
   mail/calendar secret/vault reads as listed under "Mail/calendar reads" (after `connectors-skills` merges). The api
   role gets `lambda:InvokeFunction` on it and no Gateway access. Nothing for workers or the apps origin. HUD CSP unchanged.
+  Done (branch `apps-v2-infra`): the three routes (JWT authorizer; CORS already allowed PUT); the app-bridge Lambda
+  (timeout 25 s) with ledger `GetItem`/`Query` on `APPS`, `CONNECTORS`, `MAIL` and `GetItem`/`PutItem`/`UpdateItem` on
+  `RATE#app-*` and `TOOL#app-*` (the audit rows `audit_tool` writes for agent `app-<app_id>`); the api role's
+  `lambda:InvokeFunction` on it and env `AIC_APP_BRIDGE_FUNCTION` (`aic-prod-app-bridge`). The api Lambda's own ledger
+  policy has no key limit, so its `RATE#app-*` needs no change.
+  - TODO (infra, after `connectors-skills` merges): `bedrock-agentcore:InvokeGateway` on the connectors gateway ARN
+    only, for the app-bridge role (never the api role). Until then connector reads answer `unavailable`.
+  - Mail/calendar read IAM for the bridge is in now (ARNs for resources that exist once `mail-calendar` merges):
+    `GetWorkloadAccessTokenForUserId` on workload `aic-prod-mail`, `GetResourceOauth2Token` on it, the default token
+    vault and `aic-prod-google`/`aic-prod-microsoft`, `GetSecretValue` on `aic/prod/mail/*`, `kms:Decrypt` (every
+    function), ledger read on `MAIL`. TODO at that merge: swap the hand-written provider ARNs (both spellings,
+    `oauth2credentialprovider` and `oauth2-credential-provider`) for the mail module's provider ARN outputs.
+  - Merge note: `connectors-skills` gives the api role `lambda:InvokeFunction` on `aic-prod-connectors` (the api
+    async-invokes it with `{"action":"policies"}`); keep that statement next to the app-bridge one when merging.
 - **connectors session:** `connector_calls.app_call` and the Cedar `permit` for `aic-prod-fn-app-bridge` (§1.9 of its contract).
 
 ## Not in v1 (suggested later)
