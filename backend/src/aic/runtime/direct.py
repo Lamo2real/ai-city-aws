@@ -2,7 +2,7 @@
 
 AIC has no shell or file tools, only city tools, so it doesn't need the Claude Code CLI (whose start-up
 costs seconds). This loop streams text as it is written, runs tool calls through the same policy gate
-and audit as the SDK path (under the same ``mcp__city__<tool>`` names), and stops after a few tool rounds.
+and audit as the SDK path (under the same ``mcp__city__<tool>`` and ``mcp__gateway__<id>___<tool>`` names), and stops after a few tool rounds.
 """
 
 from __future__ import annotations
@@ -20,7 +20,6 @@ from aic.shared.policy import gate
 from aic.shared.turn import StopReason, TurnOutput
 
 from .engine import EngineRequest, activity_for
-from .tools import mcp_name
 
 MAX_TOOL_ROUNDS = 8
 MAX_TOKENS = 2048
@@ -165,8 +164,10 @@ async def _run_tool(req: EngineRequest, tools: dict[str, Any], use: dict[str, An
     spec = tools.get(name)
     if spec is None:
         return result(f"{name} is not one of your tools.", True)
-    full = mcp_name(name)  # the policy and audit use the same names as the SDK path
-    r = await gate(full, args, req.ctx.role, req.ctx.agent_id, consume_approval=req.ledger.consume_approval)
+    full = spec.full_name  # the policy and audit use the same names as the SDK path
+    r = await gate(
+        full, args, req.ctx.role, req.ctx.agent_id, consume_approval=req.ledger.consume_approval, extra_ask=spec.ask
+    )
     await req.ledger.audit_tool(req.ctx.agent_id, full, r.decision, r.reason)
     if r.needs_approval and req.on_needs_approval:
         await req.on_needs_approval(full, args, r.needs_approval.hash, r.needs_approval.reason)

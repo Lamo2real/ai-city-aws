@@ -12,6 +12,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from aic.shared.connectors import ConnectorStore
 from aic.shared.events import now_iso
 from aic.shared.hierarchy.actions import CityDeps, move
 from aic.shared.ids import manager_id
@@ -19,10 +20,13 @@ from aic.shared.log import log, metric
 from aic.shared.models import resolve_role_from_env
 from aic.shared.turn import BackoffOptions, GateDeps, GatedTurn, TurnInput, TurnOutput, run_gated_turn
 
+from .connector_tool import add_connector_tool
 from .engine import AgentEngine, EngineRequest
+from .gateway import GatewayClient, turn_connector_tools
 from .live import LiveReply, Send
 from .prompts import department_template, load_prompt
-from .tools import TurnCtx, file_approval, gate_tools, tools_for
+from .skills import SkillStore, empty_home, use_skill_tool
+from .tools import ToolSpec, TurnCtx, file_approval, gate_tools, tools_for
 
 WORKER_BUILTINS: dict[str, list[str]] = {
     "Bash": ["Bash"],
@@ -49,6 +53,10 @@ class HostOptions:
     timeout_ms: int | None = None
     live_sender: Callable[[dict[str, Any]], Send | None] | None = None
     """For an AIC turn: how to send reply pieces straight to the HUD, or None to use the event bus."""
+    gateway: GatewayClient | None = None
+    """The connectors Gateway (``AIC_GATEWAY_URL``), or None: no connector tools."""
+    skills: SkillStore | None = None
+    """Owner-added skills (``AIC_SKILLS_BUCKET``), or None: no skills."""
 
 
 class AgentHost:
@@ -103,9 +111,26 @@ class AgentHost:
                 ticket_id=inv["ticketId"],
                 task_id=inv["taskId"],
                 conversation=conversation,
+                message_id=inv.get("id"),
+                # add_connector is offered only when the input is the owner's own message (typed or spoken),
+                # never on reports, results, answers, approvals or reminders.
+                from_owner=inv.get("from") == "owner" and inv.get("kind") == "task",
             )
             system, builtins = await self._system(agent, inv)
-            tools = gate_tools(self.d, ctx, tools_for(self.d, ctx))
+            city_tools = tools_for(self.d, ctx)
+            if ctx.role == "ace" and ctx.from_owner:
+                city_tools.append(add_connector_tool(self.d, ctx))
+            skill_rows = await self._skills(ctx.role)
+            if ctx.role == "ace" and skill_rows and self.o.skills:
+                city_tools.append(use_skill_tool(self.o.skills, skill_rows))
+            tools: list[ToolSpec] = gate_tools(self.d, ctx, city_tools)
+            hire = await self._hire_connectors(agent) if ctx.role == "worker" else None
+            tools += await turn_connector_tools(
+                self.o.gateway, ConnectorStore(ledger.table, ledger.now), bus, ctx.role, hire
+            )
+            skills_dir = None
+            if ctx.role != "ace" and skill_rows and self.o.skills:
+                skills_dir = await self.o.skills.materialize(skill_rows)
             prompt = await self._prompt(agent, inv)
             models = resolve_role_from_env(inv["role"], self.o.env if self.o.env is not None else os.environ)
             settings = await self.d.settings()
@@ -151,6 +176,9 @@ class AgentHost:
                         on_needs_approval=on_needs_approval,
                         on_activity=on_activity,
                         on_text=on_text if is_ace and conversation else None,
+                        skills_dir=str(skills_dir) if skills_dir else None,
+                        skill_names=frozenset(r["name"] for r in skill_rows) if skills_dir else frozenset(),
+                        home=str(empty_home()) if self.o.skills and not is_ace else None,
                     )
                 )
 
@@ -198,6 +226,19 @@ class AgentHost:
             if inv["role"] == "worker" and inv.get("department"):
                 await ledger.release_worker_slot(inv["department"])
 
+    async def _skills(self, role: str) -> list[dict[str, Any]]:
+        if not self.o.skills:
+            return []
+        try:
+            return await self.o.skills.skills_for(role)
+        except Exception as e:  # the turn goes on without skills
+            log("warn", "skills.unavailable", error=type(e).__name__)
+            return []
+
+    async def _hire_connectors(self, agent: dict[str, Any]) -> list[str]:
+        spec = await self.d.ledger.table.get(f"AGENT#{agent['id']}", "SPEC") or {}
+        return [str(c) for c in spec.get("connectors") or []]
+
     async def _system(self, agent: dict[str, Any], inv: dict[str, Any]) -> tuple[str, list[str]]:
         role = inv["role"]
         if role == "ace":
@@ -240,6 +281,18 @@ class AgentHost:
         ledger = self.d.ledger
         role = inv["role"]
         lines = [f"Message ({inv['kind']}) from {inv.get('from')}:", inv["body"], "", "Current state from the ledger:"]
+        if role == "ace":
+            conns = await ConnectorStore(ledger.table).list()
+            if conns:
+                lines.append(
+                    "Connectors: "
+                    + "; ".join(
+                        f"{c.get('label') or c['id']} [{c['id']}] {c.get('status')}"
+                        + (f", {len(c.get('tools') or [])} tools" if c.get("status") == "ready" else "")
+                        + (f", needs {c['needs']}" if c.get("needs") else "")
+                        for c in conns
+                    )
+                )
         if role == "ace" and inv.get("conversation"):
             recent = await ledger.recent_conversation(inv["conversation"])
             if recent:
@@ -268,6 +321,16 @@ class AgentHost:
                     lines.append(
                         f"- assignment {k['id']} to {k['to']} [{k['status']}], review rounds {k.get('review_rounds', 0)}"
                     )
+            for_workers = [
+                c
+                for c in await ConnectorStore(ledger.table).list()
+                if c.get("status") == "ready" and (c.get("roles") or {}).get("worker")
+            ]
+            if for_workers:
+                lines.append(
+                    "Connectors you can give a worker (hire_worker connectors): "
+                    + ", ".join(f"{c['id']} ({c.get('label') or c['id']})" for c in for_workers)
+                )
             saved = [s for s in await ledger.list_specialists() if s.get("department") == inv.get("department")]
             if saved:
                 lines.append(f"Saved specialists: {', '.join(f'{s["id"]} ({s["specialty"]})' for s in saved)}")

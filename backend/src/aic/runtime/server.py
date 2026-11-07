@@ -101,6 +101,20 @@ def create_app(host: TurnRunner) -> Starlette:
     )
 
 
+def _gateway(city: Any, e: Mapping[str, str]) -> Any:
+    from .gateway import GatewayClient, sigv4_headers
+
+    url = e.get("AIC_GATEWAY_URL")
+    return GatewayClient(url, sigv4_headers(city.session, city.region)) if url else None
+
+
+def _skills(city: Any, e: Mapping[str, str]) -> Any:
+    from .skills import SkillStore
+
+    bucket = e.get("AIC_SKILLS_BUCKET")
+    return SkillStore(city.ledger.table, city.session.client("s3"), bucket) if bucket else None
+
+
 def build_app(env: Mapping[str, str] | None = None) -> Starlette:
     """Production wiring inside the container."""
     from .engine import sdk_engine
@@ -132,6 +146,8 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
                 if inv.get("wsEndpoint") and inv.get("connectionsTable")
                 else None
             ),
+            gateway=_gateway(city, e),
+            skills=_skills(city, e),
         ),
     )
     log("info", "runtime.started", role=role)

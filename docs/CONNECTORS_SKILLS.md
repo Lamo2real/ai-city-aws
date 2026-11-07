@@ -4,7 +4,7 @@ This file is the **contract** between the infra (`infra/`), backend (`backend/`)
 connectors and skills: names, keys, routes, tools and environment variables. If a contract changes, change it
 here first, in its own commit. The decisions and trade-offs are in `docs/DECISIONS.md` (decisions 67–69; 67 and 68 rewritten for v2).
 
-Status: designed 2026-11-07 on branch `connectors-skills`. Nothing is built yet. **v2 (same day): connectors are added at runtime by asking AIC, for any MCP server, with sign-in when needed (the owner's requirement). It replaces v1's fixed Terraform list.**
+Status: designed 2026-11-07 on branch `connectors-skills`. Backend built on branch `connectors-backend` (offline tests; not deployed). **v2 (same day): connectors are added at runtime by asking AIC, for any MCP server, with sign-in when needed (the owner's requirement). It replaces v1's fixed Terraform list.**
 
 Facts checked 2026-11-07 (AgentCore docs and the hashicorp/aws **6.72.0** schema from `terraform providers schema -json`):
 - Gateway, Identity and Policy in AgentCore are in eu-north-1. The **Web Search Tool is not** in eu-north-1.

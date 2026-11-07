@@ -64,6 +64,9 @@ def request(tools: list[ToolSpec], texts: list[str]) -> Any:
         ledger=Ledger(),
         on_needs_approval=None,
         on_activity=None,
+        skills_dir=None,
+        skill_names=frozenset(),
+        home=None,
     )
 
 

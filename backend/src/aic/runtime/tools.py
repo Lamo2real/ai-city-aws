@@ -44,6 +44,9 @@ class TurnCtx:
     ticket_id: str
     task_id: str
     conversation: str | None = None
+    message_id: str | None = None
+    from_owner: bool = False
+    """The turn's input is the owner's own message (typed or spoken), not a report, answer or reminder."""
 
 
 @dataclass(frozen=True)
@@ -52,6 +55,14 @@ class ToolSpec:
     description: str
     schema: dict[str, Any]
     handler: Handler
+    server: str = CITY_SERVER
+    """``city`` (gated by ``gate_tools``) or ``gateway`` (connector tools, gated by the engine)."""
+    ask: str | None = None
+    """An extra reason to ask the owner first (a connector's approval level)."""
+
+    @property
+    def full_name(self) -> str:
+        return f"mcp__{self.server}__{self.name}"
 
 
 # ---------- schema helpers ----------
@@ -564,6 +575,7 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 "specialty": w.get("specialty") or w["role"],
                 "instructions": spec["instructions"],
                 "tools": spec["tools"],
+                "connectors": spec.get("connectors") or [],
             }
         )
         return f"Saved as specialist {s['id']}."
@@ -600,8 +612,9 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                     "tools": _STRS,
                     "budget_hint_usd": {"type": "number"},
                     "specialist_id": _s(),
+                    "connectors": _STRS,
                 },
-                ("budget_hint_usd", "specialist_id"),
+                ("budget_hint_usd", "specialist_id", "connectors"),
             ),
             hire,
         ),

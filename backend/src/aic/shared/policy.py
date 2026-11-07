@@ -98,12 +98,18 @@ async def gate(
     agent_id: str,
     consume_approval: ConsumeApproval | None = None,
     policy: Mapping[str, Any] | None = None,
+    extra_ask: str | None = None,
 ) -> GateResult:
-    """The gate as the runtime uses it: "ask" becomes deny-until-approved, bound to the exact action."""
+    """The gate as the runtime uses it: "ask" becomes deny-until-approved, bound to the exact action.
+
+    ``extra_ask`` is a reason from outside the policy file that turns an "allow" into an "ask" (a connector's
+    approval level, ``docs/CONNECTORS_SKILLS.md`` §1.4). A deny in the policy file still wins."""
     pol = policy or load_policy()
-    if role == "worker" and not pol.get("policy_applies_to_workers", True):
+    if role == "worker" and not pol.get("policy_applies_to_workers", True) and not extra_ask:
         return GateResult("allow", "policy off for workers")
     d, reason = decide(tool_name, tool_input, pol)
+    if d == "allow" and extra_ask:
+        d, reason = "ask", extra_ask
     if d == "allow":
         return GateResult("allow", "")
     if d == "deny":

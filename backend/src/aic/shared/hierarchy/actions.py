@@ -28,6 +28,10 @@ class CityDeps:
     factory: FactoryClient
     settings: Callable[[], Awaitable[dict[str, Any]]]
     max_review_rounds: int
+    net: Any = None
+    """Outbound HTTP for ``add_connector`` (an ``aic.shared.mcp_http.Transport``); None = urllib."""
+    resolve: Any = None
+    """DNS for the connector URL check (an ``aic.shared.connectors.Resolver``); None = the system's."""
 
 
 async def move(d: CityDeps, id: str, status: str, note: str = "", patch: Record | None = None) -> Record:

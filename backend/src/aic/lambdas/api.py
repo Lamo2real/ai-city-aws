@@ -31,6 +31,10 @@ from aic.shared.turn import ModelRunner
 from aic.shared.utility import UtilityDeps, bedrock_converse_runner, is_addressed_to_ace
 
 from ._runtime import run
+from .connectors_api import ConnectorsApi, on_connector_approval
+from .connectors_api import route as connectors_route
+from .skills_api import SkillsApi
+from .skills_api import route as skills_route
 
 LIVE = ("open", "in_progress", "in_review", "waiting_on_owner")
 ALL = (*LIVE, "parked", "done", "failed", "cancelled")
@@ -58,6 +62,19 @@ ROUTES: list[tuple[str, str]] = [
     ("POST", "/city/resume"),
     ("GET", "/memory"),
     ("POST", "/notes"),
+    ("GET", "/connectors"),
+    ("POST", "/connectors"),
+    ("PUT", "/connectors/higgsfield"),
+    ("DELETE", "/connectors/higgsfield"),
+    ("POST", "/connectors/higgsfield/login"),
+    ("POST", "/connectors/higgsfield/login/complete"),
+    ("PUT", "/connectors/higgsfield/key"),
+    ("POST", "/connectors/higgsfield/refresh"),
+    ("GET", "/skills"),
+    ("POST", "/skills"),
+    ("GET", "/skills/pdf-report"),
+    ("PUT", "/skills/pdf-report"),
+    ("DELETE", "/skills/pdf-report"),
 ]
 
 
@@ -75,6 +92,9 @@ class ApiDeps:
     """A boto3 ``cognito-idp`` client, for re-sending the owner's first-login email."""
     user_pool_id: str | None = None
     owner_email: str | None = None
+    connectors: ConnectorsApi | None = None
+    """The ``/connectors*`` routes and the add-connector approval hook; None = built from ledger and bus."""
+    skills: SkillsApi | None = None
 
 
 class _NoFactory:
@@ -372,6 +392,9 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
             return problem(409, "That approval was already decided.")
         a = await d.ledger.decide_approval(cur["id"], approved)
         assert a is not None
+        if cur.get("kind") == "connector.add":
+            # Only the owner's yes moves an add-connector request on (§1.3.4); a no deletes the record.
+            await on_connector_approval(_connectors(d), cur, approved)
         if cur.get("task_token") and d.sfn is not None:
             if approved:
                 await asyncio.to_thread(
@@ -409,7 +432,21 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
             except ValueError as e:
                 raise BadRequest("That due time is not a date.") from e
         return reply(201, await d.ledger.add_note(_str(b.get("text"), "Note"), kind, due))
+    if seg and seg[0] == "connectors":
+        ans = await connectors_route(_connectors(d), method, seg, lambda: _body(event))
+        if ans:
+            return reply(*ans)
+    if seg and seg[0] == "skills":
+        ans = await skills_route(d.skills or SkillsApi(d.ledger), method, seg, lambda: _body(event))
+        if ans:
+            return reply(*ans)
     return problem(404, "There is nothing here.")
+
+
+def _connectors(d: ApiDeps) -> ConnectorsApi:
+    from aic.shared.connectors import ConnectorStore
+
+    return d.connectors or ConnectorsApi(ConnectorStore(d.ledger.table, d.ledger.now), d.bus)
 
 
 _CAP_KEYS = ("daily_global_usd", "monthly_budget_usd", "daily_department_usd")
@@ -510,6 +547,32 @@ async def handle_http(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
 _deps: ApiDeps | None = None
 
 
+def _connectors_from_env(city: Any) -> ConnectorsApi:
+    from aic.shared.connectors import ConnectorStore
+
+    fn = os.environ.get("AIC_CONNECTORS_FUNCTION")
+    lam = city.session.client("lambda")
+
+    async def invoke(payload: dict[str, Any]) -> None:
+        if not fn:
+            raise RuntimeError("AIC_CONNECTORS_FUNCTION is not set")
+        await asyncio.to_thread(
+            lam.invoke, FunctionName=fn, InvocationType="Event", Payload=json.dumps(payload).encode()
+        )
+
+    return ConnectorsApi(
+        store=ConnectorStore(city.ledger.table, city.ledger.now),
+        bus=city.bus,
+        invoke=invoke,
+        identity=city.session.client("bedrock-agentcore"),
+        control=city.session.client("bedrock-agentcore-control"),
+        secrets=city.session.client("secretsmanager"),
+        workload=os.environ.get("AIC_CONNECTORS_WORKLOAD"),
+        hud_origin=os.environ.get("AIC_HUD_ORIGIN"),
+        kms_key=os.environ.get("AIC_KMS_KEY_ARN"),
+    )
+
+
 def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
     global _deps
     if _deps is None:
@@ -524,5 +587,7 @@ def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
             cognito=city.session.client("cognito-idp"),
             user_pool_id=os.environ.get("AIC_USER_POOL_ID"),
             owner_email=os.environ.get("AIC_OWNER_EMAIL"),
+            connectors=_connectors_from_env(city),
+            skills=SkillsApi(city.ledger, city.session.client("s3"), os.environ.get("AIC_SKILLS_BUCKET")),
         )
     return run(handle_http(event, _deps))

@@ -8,7 +8,7 @@
 - If this file and the code disagree, the code wins: fix this file.
 - New larger features: add a row under §6 and an entry in §10.
 
-Last updated: 2026-11-07 (AIC screen redesign).
+Last updated: 2026-11-07 (connectors and skills backend).
 
 ---
 
@@ -98,8 +98,8 @@ Owner message → `POST /messages` → SQS (`ace` queue) → **dispatcher** Lamb
 | Gap | Worker S3 workspace sync (IAM ready) | ❌ | — |
 | Gap | Runtime use of AgentCore Memory | ❌ | — |
 | Gap | Self-improvement runner (switch + fence exist) | ❌ | `backend/src/aic/lambdas/improve.py` |
-| Connectors | Any MCP server, added by asking AIC (`add_connector`; registry lookup or URL; owner approval card; "Sign in to …" through AgentCore Identity OAuth, or a secure key field to Secrets Manager). Works on the next turn without a redeploy. One Gateway, a bridge Lambda, a per-role Cedar ceiling, per-worker grants, every call gated and audited, output treated as untrusted data. GitHub, Tavily and Slack are the first | ❌ designed | `docs/CONNECTORS_SKILLS.md`, `infra/modules/connectors`, `runtime/gateway.py`, `lambdas/connectors.py` |
-| Skills | Owner-added `SKILL.md` folders (HUD upload, per-role access) in S3, fetched at turn start. SDK agents load them as a city plugin, AIC through `use_skill`. Agents can't edit skills | ❌ designed | `docs/CONNECTORS_SKILLS.md`, `runtime/skills.py`, HUD Skills screen |
+| Connectors | Any MCP server, added by asking AIC (`add_connector`; registry lookup or URL; owner approval card; "Sign in to …" through AgentCore Identity OAuth, or a secure key field to Secrets Manager). Works on the next turn without a redeploy. One Gateway, a bridge Lambda, a per-role Cedar ceiling, per-worker grants, every call gated and audited, output treated as untrusted data. GitHub, Tavily and Slack are the first | 🟡 backend built and tested offline with fakes (tool, approval hook, connectors and bridge Lambdas, Gateway client, gate levels, `/connectors*` API, `app_call` for apps); not deployed. The infra (Gateway, Identity, policy engine, Lambdas, IAM) and the HUD (cards, Settings) are other sessions' work. AgentCore API shapes are checked against botocore 1.43's models, but no call has been made to AWS | `docs/CONNECTORS_SKILLS.md`, `infra/modules/connectors`, `runtime/gateway.py`, `runtime/connector_tool.py`, `lambdas/connectors.py`, `lambdas/connector_bridge.py`, `lambdas/connectors_api.py`, `shared/connector_calls.py` |
+| Skills | Owner-added `SKILL.md` folders (HUD upload, per-role access) in S3, fetched at turn start. SDK agents load them as a city plugin, AIC through `use_skill`. Agents can't edit skills | 🟡 backend built and tested offline (upload checks, versioned S3 storage, `/skills*` API, plugin folder, `Skill` checked in `can_use_tool`, `use_skill`); the CLI's plugin loading was checked against the bundled CLI (opt-in `tests/test_cli_skills.py`). Bucket, IAM and the HUD Skills screen not built here | `docs/CONNECTORS_SKILLS.md`, `runtime/skills.py`, `lambdas/skills_api.py`, `shared/skills.py`, HUD Skills screen |
 | Gap | Reminders emailed | ❌ | `lambdas/scheduler.py` |
 | Gap | Trace propagation dispatcher → runtime; passkeys; custom domain; Departments panel on phones | ❌ | — |
 
@@ -108,7 +108,9 @@ Owner message → `POST /messages` → SQS (`ace` queue) → **dispatcher** Lamb
 - Guard refuses each forbidden variable and Bedrock-off (`test_guard.py`).
 - No spend limit by default: a turn runs whatever was spent. A cap the owner sets blocks all 7 turn kinds. A refusal triggers exactly one fallback (`test_turn.py`).
 - Policy decisions for ~70 commands incl. `exec` and AWS mutation (`test_policy.py`).
-- Every API route rejects a token without the `owner` group (`backend/tests/test_api.py`).
+- Every API route rejects a token without the `owner` group (`backend/tests/test_api.py`), `/connectors*` and `/skills*` included.
+- `add_connector` is offered only on the owner's own message; nothing is provisioned without the owner's approval; keys never reach logs, the ledger or answers; a connector tool not given to the turn is refused (`backend/tests/test_connectors.py`, `test_gateway.py`).
+- `app_call` refuses ungranted, revoked, write, destructive and unknown tools; a skill is never pre-approved and only `aic-skills:<name>` of this turn passes `can_use_tool` (`backend/tests/test_gateway.py`).
 - 500 hires respect ceilings and the session rate; nothing dropped (`backend/tests/test_hierarchy_e2e.py`).
 - `deploy.yml` runs only on pushes to `main` or by hand (never on pull requests); `ci.yml` only by hand (`tests/workflows.test.ts`).
 - Tags and worker IAM limits (`tests/infra.test.ts`).
@@ -149,6 +151,7 @@ Terraform (offline only): `fmt -check -recursive`, `init -backend=false`, `valid
 ## 10. Feature log (newest first)
 | Date | Feature | Notes |
 |---|---|---|
+| 2026-11-07 | Connectors and skills backend | Built on branch `connectors-backend`: `add_connector` (owner-message turns only, registry or URL with SSRF and key-in-link checks, approval bound to id, URL and roles), the approval hook, the connectors Lambda (probe, OAuth discovery with DCR, API key, sync to a Lambda target, Cedar rewrite incl. the apps' read-only permit, remove), the bridge Lambda, the SigV4 Gateway client on both engines, approval levels in the gate, the policy deny rule, `WorkerSpec.connectors`, `app_call`, skills (API, plugin folder, `use_skill`) and prompts. Offline tests only; not deployed. Contract fixes: real role names in Cedar, `app_call` aligned with the apps v2 bridge, qualified skill names. |
 | 2026-11-07 | Connectors and skills designed | The owner's requirement: any MCP server can be added by asking AIC, which asks the owner to sign in when the server needs it (OAuth through AgentCore Identity, or a secure key field). The first ones are GitHub, web search via Tavily (AgentCore's Web Search Tool isn't in Stockholm) and Slack. Skills are uploaded in the HUD and stored in S3. Contract in `docs/CONNECTORS_SKILLS.md`, decisions 67–69. Not built yet. |
 | 2026-11-07 | Voice sign-in fix, plain eye | After tapping the mic the live site showed "The speech service turned AI City down (NotAuthorizedException)": the voice identity pool refused the HUD's ID token while the HTTP API accepted the same token (same app client), which points at the pool's server-side token check (on since the start; sign-in moved to SRP with refresh-token rotation and revocation). The check is now off (ID tokens live 15 minutes; the credentials allow only Transcribe streaming and Polly), the HUD retries once with a freshly refreshed token, and the banner shows AWS's own message. The owner's choice: the eye no longer changes colour or moves with the state; the voice line under it shows the state. |
 | 2026-11-07 | AIC screen redesign, real mic errors | The owner's request: eye and voice strip on the left, chat on the right, a bright theme in the City's palette (WCAG AA, axe-checked). The voice module measures loudness with Web Audio analysers on the mic and on Polly's audio (played straight, without the meter, when Safari keeps Web Audio suspended, so replies are never muted). The mic is now requested first, inside the tap, before loading the speech SDK. The old catch-all "The microphone could not start…" hid the cause; each failure now has its own message and a console log. The live site's headers were checked: `Permissions-Policy: microphone=(self)` and the CSP (Transcribe WebSocket on :8443, Cognito Identity, Polly) allow voice, and the Transcribe endpoint answers in eu-north-1. |

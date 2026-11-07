@@ -181,12 +181,26 @@ class ApprovalRequested(_E):
     action: str
     reason: str
     cost_hint: str | None = None
+    kind: str | None = None
+    """``connector.add`` for an add-connector approval (the chat shows a connector card)."""
+    connector_id: str | None = None
 
 
 class ApprovalDecided(_E):
     type: Literal["approval.decided"]
     id: str
     approved: bool
+
+
+class ConnectorUpdated(_E):
+    type: Literal["connector.updated"]
+    id: str
+    label: str
+    status: str
+    """A record status (``docs/CONNECTORS_SKILLS.md`` §1.2), or ``removed``."""
+    auth: str
+    needs: str | None = None
+    error: str | None = None
 
 
 class CityState(_E):
@@ -226,6 +240,7 @@ CityEventModel = Annotated[
     | Instruction
     | ApprovalRequested
     | ApprovalDecided
+    | ConnectorUpdated
     | CityState
     | SpendCapReachedEvent
     | AceReply,

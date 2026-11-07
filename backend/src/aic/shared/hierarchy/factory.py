@@ -13,6 +13,7 @@ from typing import Any, Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from ..caps import department_cap
+from ..connectors import ConnectorStore
 from ..events import EventBus, now_iso
 from ..ids import department_key, new_id
 from ..ledger import Ledger, Record
@@ -43,6 +44,8 @@ class HireSpec(BaseModel):
     budget_hint_usd: float | None = Field(default=None, gt=0, le=1000)
     specialist_id: str | None = None
     """Hire a saved specialist again: its instructions and tools are used, the spec's specialty names it."""
+    connectors: list[str] = Field(default_factory=list, max_length=20)
+    """Connector ids this worker may use (``docs/CONNECTORS_SKILLS.md`` §1.4); each must be open to workers."""
 
 
 class HireRefused(RuntimeError):
@@ -81,13 +84,21 @@ class Factory:
             raise HireRefused(
                 f"The budget hint of ${_fmt(spec.budget_hint_usd)} is above {dept['name']}'s daily cap of ${_fmt(cap)}."
             )
-        instructions, tools = spec.instructions, list(spec.tools)
+        instructions, tools, connectors = spec.instructions, list(spec.tools), list(dict.fromkeys(spec.connectors))
         if spec.specialist_id:
             saved = await self._ledger.get_specialist(spec.specialist_id)
             if not saved:
                 raise HireRefused(f"No saved specialist {spec.specialist_id}.")
             instructions = saved["instructions"]
             tools = [t for t in saved.get("tools", []) if t in WORKER_TOOLS]
+            connectors = list(saved.get("connectors") or [])
+        if connectors:
+            open_to_workers = {
+                r["id"] for r in await ConnectorStore(self._ledger.table).list() if (r.get("roles") or {}).get("worker")
+            }
+            unknown = [c for c in connectors if c not in open_to_workers]
+            if unknown:
+                raise HireRefused(f"These connectors aren't open to workers: {', '.join(unknown)}.")
         at = now_iso(self._ledger.now())
         agent: Record = {
             "id": new_id(f"wkr-{department_key(dept['name'])}"),
@@ -113,6 +124,7 @@ class Factory:
                 "sk": "SPEC",
                 "instructions": instructions,
                 "tools": tools,
+                "connectors": connectors,
                 "budget_hint_usd": spec.budget_hint_usd,
             }
         )
@@ -136,4 +148,8 @@ async def worker_spec(ledger: Ledger, worker_id: str) -> dict[str, Any] | None:
     it = await ledger.table.get(f"AGENT#{worker_id}", "SPEC")
     if not it:
         return None
-    return {"instructions": str(it.get("instructions", "")), "tools": list(it.get("tools") or [])}
+    return {
+        "instructions": str(it.get("instructions", "")),
+        "tools": list(it.get("tools") or []),
+        "connectors": list(it.get("connectors") or []),
+    }

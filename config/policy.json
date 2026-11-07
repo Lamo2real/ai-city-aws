@@ -125,6 +125,12 @@
     },
     { "tool": "^mcp__github__.*delete", "match": ".*", "decision": "deny", "reason": "Destructive GitHub operation." },
     {
+      "tool": "^mcp__gateway__.*___(merge_pull_request|delete_repository|.*secret.*)$",
+      "match": ".*",
+      "decision": "deny",
+      "reason": "The owner merges and owns secrets."
+    },
+    {
       "tool": "^mcp__meta-ads__",
       "match": "\"status\"\\s*:\\s*\"ACTIVE\"",
       "decision": "ask",
