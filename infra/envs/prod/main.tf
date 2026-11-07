@@ -145,7 +145,7 @@ module "agents" {
   knowledge_data_source_id = module.knowledge.data_source_id
   knowledge_graph_id       = module.knowledge.graph_id
   knowledge_graph_arn      = module.knowledge.graph_arn
-  apps_url              = module.apps.url
+  apps_url                 = module.apps.url
 }
 
 module "api" {
