@@ -10,6 +10,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, cast
 
+from ..apps import Workspace
 from ..cost import format_usd
 from ..events import EventBus, now_iso
 from ..ids import new_id
@@ -28,6 +29,8 @@ class CityDeps:
     factory: FactoryClient
     settings: Callable[[], Awaitable[dict[str, Any]]]
     max_review_rounds: int
+    workspace: Workspace | None = None
+    """Workers' S3 workspace (for ``submit_app``); None outside the worker runtime."""
 
 
 async def move(d: CityDeps, id: str, status: str, note: str = "", patch: Record | None = None) -> Record:

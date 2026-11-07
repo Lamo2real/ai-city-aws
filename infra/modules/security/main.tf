@@ -70,6 +70,8 @@ resource "aws_iam_policy" "boundary" {
           "secretsmanager:GetSecretValue", "sns:Publish", "states:*", "lambda:InvokeFunction", "execute-api:ManageConnections",
           "ecr:GetAuthorizationToken", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer", "sts:AssumeRole", "sts:TagSession",
           "transcribe:StartStreamTranscription", "transcribe:StartStreamTranscriptionWebSocket", "polly:SynthesizeSpeech",
+          # Only the API role grants it, on the apps distribution (removing a published app).
+          "cloudfront:CreateInvalidation",
         ]
         Resource = "*"
       },

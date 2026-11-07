@@ -8,3 +8,4 @@ output "ledger_table" { value = module.ledger.ledger_table }
 output "event_source_mapping_uuids" { value = module.api.event_source_mapping_uuids }
 output "budget_name" { value = module.budgets.budget_name }
 output "agent_role_names" { value = module.agents.role_names }
+output "apps_url" { value = module.apps.url }

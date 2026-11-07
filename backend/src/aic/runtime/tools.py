@@ -6,11 +6,22 @@ Each handler is plain code over the ledger, the bus and the queue; the policy ga
 
 from __future__ import annotations
 
+import asyncio
+import os
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
+from aic.shared.apps import (
+    MAX_FILE_BYTES,
+    MAX_FILES,
+    delete_prefix,
+    request_publish_approvals,
+    submission_prefix,
+    validate_files,
+)
 from aic.shared.events import now_iso
 from aic.shared.hierarchy.actions import (
     CityDeps,
@@ -320,6 +331,7 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
     async def sign_off(a: dict[str, Any]) -> str:
         verdict = a["verdict"]
         kids = [k for k in await d.ledger.child_tickets(c.task_id) if k.get("kind") == "assignment"]
+        apps: list[dict[str, Any]] = []
         if verdict == "PASS":
             pending = [k for k in kids if k["status"] != "in_review" and k["status"] not in DONE_OR_GONE]
             if pending:
@@ -330,6 +342,7 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             await d.ledger.table.put(
                 {"pk": f"TICKET#{c.task_id}", "sk": "SIGNOFF", "verdict": verdict, "at": now_iso(d.ledger.now())}
             )
+            apps = await request_publish_approvals(d.ledger, d.bus, c.task_id, c.agent_id)
         else:
             target = None
             if a.get("department"):
@@ -363,7 +376,14 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         await d.bus.put(
             {"type": "signoff.result", "ticket_id": c.task_id, "verdict": verdict, "summary": str(a["reasons"])[:300]}
         )
-        return "Signed off. Now report to AIC." if verdict == "PASS" else "Sent back for fixes."
+        if verdict != "PASS":
+            return "Sent back for fixes."
+        if apps:
+            return (
+                f"Signed off. The owner is asked to publish {len(apps)} app(s) in Needs you; tell AIC it appears "
+                "under Apps once the owner approves it (it is not live yet). Now report to AIC."
+            )
+        return "Signed off. Now report to AIC."
 
     async def report_to_ace(a: dict[str, Any]) -> str:
         signed = await d.ledger.table.get(f"TICKET#{c.task_id}", "SIGNOFF")
@@ -691,6 +711,39 @@ def _worker_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         )
         return "Reported to your manager. End your turn."
 
+    async def submit_app(a: dict[str, Any]) -> str:
+        ws = d.workspace
+        if ws is None:
+            return "Apps cannot be submitted from here."
+        home = Path(ws.root) / c.agent_id
+        icon = str(a["icon"]) if a.get("icon") else None
+        try:
+            files = await asyncio.to_thread(_collect_app, home, str(a.get("dir") or "app"))
+        except ValueError as e:
+            return f"Not submitted: {e}."
+        bad = validate_files([{"path": p, "size": len(b)} for p, b in files], icon)
+        if bad:
+            return f"Not submitted: {bad}."
+        s3 = await asyncio.to_thread(ws.s3_for, c.agent_id)
+        prefix = submission_prefix(c.agent_id)
+        await delete_prefix(s3, ws.bucket, prefix)
+        for path, body in files:
+            await asyncio.to_thread(s3.put_object, Bucket=ws.bucket, Key=prefix + path, Body=body)
+        await d.bus.put(
+            {
+                "type": "app.submitted",
+                "hire_id": c.agent_id,
+                "ticket_id": c.ticket_id,
+                "task_id": c.task_id,
+                "department": c.department or "",
+                "title": str(a["title"]),
+                "description": str(a["description"]),
+                "icon": icon,
+                "files": [{"path": p, "size": len(b)} for p, b in files],
+            }
+        )
+        return f"Submitted {len(files)} files; the city is checking them."
+
     return [
         ToolSpec(
             "ask_manager",
@@ -704,7 +757,42 @@ def _worker_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             _obj({"summary": _s(3), "artifacts": _STRS, "checks": _s()}, ("artifacts", "checks")),
             report,
         ),
+        ToolSpec(
+            "submit_app",
+            "Apps work only: submit the finished web app folder (index.html at its top) for the owner to publish. "
+            "Calling it again replaces the submission.",
+            _obj(
+                {"title": _s(3, 40), "description": _s(10, 200), "dir": _s(1, 200), "icon": _s(1, 200)},
+                ("dir", "icon"),
+            ),
+            submit_app,
+        ),
     ]
+
+
+def _collect_app(home: Path, rel: str) -> list[tuple[str, bytes]]:
+    """Reads the app folder inside the worker's own workspace: no escaping it, no symlinks, early size limits."""
+    root = (home / rel).resolve()
+    base = home.resolve()
+    if root != base and base not in root.parents:
+        raise ValueError("the folder must be inside your workspace")
+    if not root.is_dir():
+        raise ValueError(f"there is no folder {rel}")
+    out: list[tuple[str, bytes]] = []
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        here = Path(dirpath)
+        if any((here / n).is_symlink() for n in dirnames):
+            raise ValueError("symbolic links are not allowed")
+        for n in sorted(filenames):
+            f = here / n
+            if f.is_symlink():
+                raise ValueError("symbolic links are not allowed")
+            if f.stat().st_size > MAX_FILE_BYTES:
+                raise ValueError(f"{f.relative_to(root).as_posix()} is over the 2 MB per-file limit")
+            out.append((f.relative_to(root).as_posix(), f.read_bytes()))
+            if len(out) > MAX_FILES:
+                raise ValueError(f"more than {MAX_FILES} files")
+    return out
 
 
 def tools_for(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
@@ -723,10 +811,25 @@ async def file_approval(d: CityDeps, c: TurnCtx, tool: str, input: dict[str, Any
     cmd = input.get("command")
     action = cmd[:200] if isinstance(cmd, str) else f"{tool} {', '.join(input)}"
     a = await d.ledger.request_approval(
-        {"agent": c.agent_id, "ticket_id": c.ticket_id, "tool": tool, "action": action, "hash": hash, "reason": reason}
+        {
+            "agent": c.agent_id,
+            "ticket_id": c.ticket_id,
+            "tool": tool,
+            "action": action,
+            "hash": hash,
+            "reason": reason,
+            "kind": "tool",
+        }
     )
     await d.bus.put(
-        {"type": "approval.requested", "id": a["id"], "agent": c.agent_id, "action": action, "reason": reason}
+        {
+            "type": "approval.requested",
+            "id": a["id"],
+            "agent": c.agent_id,
+            "action": action,
+            "reason": reason,
+            "kind": "tool",
+        }
     )
 
 
