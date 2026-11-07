@@ -125,6 +125,22 @@ test("lands on AIC with the input focused; asking something shows AIC's streamed
   m.send({ type: "ace.reply", conversation: "main", text: "Eigh", done: false });
   m.send({ type: "ace.reply", conversation: "main", text: "Eighteen.", done: true });
   await expect(page.getByLabel("Conversation with AIC").getByText("Eighteen.")).toBeVisible();
+  // The owner on the right in a bubble, AIC on the left as plain text with Markdown rendered.
+  m.send({
+    type: "ace.reply",
+    conversation: "main",
+    text: "## Today\n- **Research**: 3 workers\n- Engineering: idle\n\n| Dept | Spend |\n|---|---|\n| Research | $0.30 |",
+    done: true,
+  });
+  const log = page.getByLabel("Conversation with AIC");
+  await expect(log.getByRole("heading", { name: "Today" })).toBeVisible();
+  await expect(log.getByRole("cell", { name: "$0.30" })).toBeVisible();
+  const mine = (await log.locator(".msg-owner .msg-body").first().boundingBox())!;
+  const theirs = (await log.locator(".msg-ace .msg-body").first().boundingBox())!;
+  const panel = (await log.boundingBox())!;
+  expect(mine.x + mine.width).toBeGreaterThan(panel.x + panel.width - 40); // hugs the right edge
+  expect(theirs.x).toBeLessThan(panel.x + 40); // starts at the left edge
+  expect(mine.x).toBeGreaterThan(theirs.x + 100);
   await expect(page.getByText(/Not sent yet/)).toHaveCount(0); // delivered, so nothing waits in the outbox
   await shot(page, "ace");
   await noSeriousA11y(page, "AIC");

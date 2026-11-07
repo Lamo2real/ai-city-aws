@@ -2,6 +2,7 @@
 // phone). Everything else can be done by asking AIC ("AIC, pause everything", "what's the status?").
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { sendMessage } from "../lib/actions.ts";
+import { Markdown } from "../lib/markdown.tsx";
 import { store, useHud, waitingCount } from "../lib/store.ts";
 import { useVoice } from "../voice/useVoice.ts";
 import { Eyes } from "./Eyes.tsx";
@@ -104,9 +105,9 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
           {chat.length === 0 ? <p className="hello">Say hi. Try “yo AIC, what’s the status?” or tap the mic.</p> : null}
           {chat.map((l) => (
             <article key={l.id} className={`msg msg-${l.who}`}>
-              <span className="msg-who">{l.who === "ace" ? "AIC" : "You"}</span>
+              <span className="sr">{l.who === "ace" ? "AIC:" : "You:"}</span>
               <div className="msg-body">
-                <p>{l.text}</p>
+                {l.who === "ace" ? <Markdown text={l.text} /> : <p>{l.text}</p>}
                 {l.state === "failed" || l.state === "queued" ? (
                   <span className="note">Not sent yet. It will send when the connection is back.</span>
                 ) : null}
