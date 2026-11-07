@@ -9,6 +9,7 @@ exact id, URL and roles. Nothing is provisioned until the owner says yes in the 
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from aic.shared.connectors import (
@@ -30,6 +31,35 @@ from aic.shared.mcp_http import urllib_transport
 
 from .tools import ToolSpec, TurnCtx, _obj, _s
 
+MAIL_PROVIDERS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"\b(gmail|google\s*(calendar|workspace|mail)?)\b"), "google"),
+    (re.compile(r"\b(outlook|hotmail|microsoft\s*365|office\s*365|m365|exchange(\s*online)?)\b"), "microsoft"),
+    (re.compile(r"\b(icloud|fastmail|yahoo|imap|caldav)\b"), "imap"),
+]
+
+
+def mail_provider(query: str) -> str | None:
+    """``google``, ``microsoft`` or ``imap`` when the query names a mail or calendar provider (not a link)."""
+    q = query.lower()
+    if "://" in q or q.startswith(("npm:", "pypi:")):
+        return None
+    return next((prov for rx, prov in MAIL_PROVIDERS if rx.search(q)), None)
+
+
+async def connect_mail_account(d: CityDeps, c: TurnCtx, provider: str, label: str | None) -> str:
+    """Mail and calendar accounts are the mail package's (``docs/MAIL_CALENDAR.md`` §2.1). The one place that
+    calls it; until ``aic.mail`` exists, a plain answer instead."""
+    try:
+        from aic.mail import connect_account  # type: ignore[import-not-found,unused-ignore]
+    except ImportError:
+        return (
+            "Mail and calendar accounts aren't set up in the city yet, so I can't connect that mailbox or calendar. "
+            "Tell the owner plainly."
+        )
+    result: str = await connect_account(d, {"provider": provider, "label": label or provider.capitalize()})
+    return result
+
+
 ROLE_NAMES = {"ace": "AIC", "orchestrator": "the Orchestrator", "manager": "Managers", "worker": "Workers"}
 
 
@@ -47,6 +77,8 @@ def add_connector_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
             return "Connectors are added only when the owner asks for one in their own message."
         query = str(a.get("query", "")).strip()
         label = str(a["label"]).strip()[:40] if a.get("label") else None
+        if provider := mail_provider(query):
+            return await connect_mail_account(d, c, provider, label)
         roles = valid_roles(a.get("roles")) if a.get("roles") is not None else dict(DEFAULT_ROLES)
         if roles is None:
             return "roles must map ace, orchestrator, manager or worker to read or all."

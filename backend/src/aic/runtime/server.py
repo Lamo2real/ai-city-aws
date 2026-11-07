@@ -102,7 +102,7 @@ def create_app(host: TurnRunner) -> Starlette:
 
 
 def _gateway(city: Any, e: Mapping[str, str]) -> Any:
-    from .gateway import GatewayClient, sigv4_headers
+    from aic.shared.gateway import GatewayClient, sigv4_headers
 
     url = e.get("AIC_GATEWAY_URL")
     return GatewayClient(url, sigv4_headers(city.session, city.region)) if url else None

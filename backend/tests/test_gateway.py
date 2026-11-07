@@ -8,11 +8,12 @@ from typing import Any
 import pytest
 
 from aic.runtime.direct import direct_engine
-from aic.runtime.gateway import GatewayClient, connector_tools, turn_connector_tools, wrap_untrusted
+from aic.runtime.gateway import connector_tools, turn_connector_tools, wrap_untrusted
 from aic.runtime.tools import ToolSpec
 from aic.shared.connector_calls import AppCallDeps, app_call
 from aic.shared.connectors import ConnectorStore
 from aic.shared.events import MemoryBus
+from aic.shared.gateway import GatewayClient
 from aic.shared.ledger import Ledger as RealLedger
 from aic.shared.policy import decide, gate
 from aic.shared.table import MemoryTable
@@ -284,7 +285,7 @@ async def test_app_call_reads_a_granted_read_only_tool_through_the_gateway_and_a
     assert r == {"ok": True, "data": [{"type": "json", "json": {"events": [1, 2]}}], "truncated": False, "error": None}
     assert g.calls == [("higgsfield___search_videos", {"q": "x"})]
     [audit] = await ledger.tool_calls("app-app-1")
-    assert audit["tool"] == "mcp__app__connector___higgsfield___search_videos" and "args" not in audit
+    assert audit["tool"] == "mcp__gateway__higgsfield___search_videos" and "args" not in audit
 
 
 @pytest.mark.parametrize(
@@ -316,7 +317,7 @@ async def test_app_call_treats_a_policy_ask_as_a_deny(monkeypatch: pytest.Monkey
     pol = {
         "policy_applies_to_workers": True,
         "caps": {"ad_daily_budget_cents": 1},
-        "rules": [{"tool": "^mcp__app__", "match": ".*", "decision": "ask", "reason": "check"}],
+        "rules": [{"tool": "^mcp__gateway__", "match": ".*", "decision": "ask", "reason": "check"}],
     }
 
     async def strict_gate(*a: Any, **kw: Any) -> Any:
@@ -333,12 +334,30 @@ async def test_app_call_treats_a_policy_ask_as_a_deny(monkeypatch: pytest.Monkey
     assert r2["error"] == "not_granted"
 
 
-async def test_app_call_caps_results_at_100000_characters() -> None:
+async def test_app_call_caps_results_at_200000_characters() -> None:
     class Big(FakeGateway):
         async def call_tool(self, name: str, args: dict[str, Any], wait_s: float = 60) -> dict[str, Any]:
-            return {"content": [{"type": "text", "text": "a" * 150_000}]}
+            return {"content": [{"type": "text", "text": "a" * 250_000}]}
 
     d, _, _ = await app_deps([grant("search_videos")])
     d.gateway = Big()
     r = await app_call(d, app_id="app-1", connector_id="higgsfield", tool="search_videos", args={})
-    assert r["ok"] and r["truncated"] and len(r["data"][0]["text"]) == 100_000
+    assert r["ok"] and r["truncated"] and len(r["data"][0]["text"]) == 200_000
+
+
+async def test_app_call_denies_an_app_without_a_record_and_limits_60_calls_a_minute() -> None:
+    d, g, _ledger = await app_deps([grant("search_videos")])
+    r = await app_call(d, app_id="app-missing", connector_id="higgsfield", tool="search_videos", args={})
+    assert r["error"] == "not_granted"
+    for _ in range(60):
+        assert (await app_call(d, app_id="app-1", connector_id="higgsfield", tool="search_videos", args={}))["ok"]
+    over = await app_call(d, app_id="app-1", connector_id="higgsfield", tool="search_videos", args={})
+    assert over["error"] == "rate_limited" and len(g.calls) == 60
+
+
+async def test_app_call_runs_the_agents_policy_rules_so_a_denied_tool_stays_denied() -> None:
+    d, g, _ = await app_deps(
+        [grant("get_secret_value")], tools=[{"name": "get_secret_value", "read_only": True, "destructive": False}]
+    )
+    r = await app_call(d, app_id="app-1", connector_id="higgsfield", tool="get_secret_value", args={})
+    assert r["error"] == "denied" and g.calls == []

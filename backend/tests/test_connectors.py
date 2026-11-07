@@ -302,13 +302,10 @@ async def test_a_server_without_auth_is_synced_to_a_lambda_target_with_mapped_to
     }
     assert kw["credentialProviderConfigurations"] == [{"credentialProviderType": "GATEWAY_IAM_ROLE"}]
     pols = {p["name"]: p["definition"]["cedar"]["statement"] for p in ctl.policies.values()}  # type: ignore[attr-defined]
-    assert set(pols) == {"aic_role_ace", "aic_role_manager", "aic_role_worker", "aic_app_bridge"}
+    assert set(pols) == {"aic_role_ace", "aic_role_manager", "aic_role_worker"}  # no app has a grant yet
     assert "assumed-role/aic-prod-agent-worker/*" in pols["aic_role_worker"]
     assert 'AgentCore::Action::"higgsfield___delete_video"' in pols["aic_role_worker"]
     assert f'AgentCore::Gateway::"{GATEWAY_ARN}"' in pols["aic_role_ace"]
-    app = pols["aic_app_bridge"]
-    assert "assumed-role/aic-prod-fn-api/*" in app and "search_videos" in app
-    assert "create_video" not in app and "delete_video" not in app  # apps get read-only tools only
     assert [e["status"] for e in bus.of_type("connector.updated")][-1] == "ready"
 
 
@@ -666,9 +663,65 @@ def test_the_prompts_carry_the_connector_and_skill_rules() -> None:
 
     ace = load_prompt("ace.md")
     assert {"add_connector", "use_skill"} <= set(ace.tools)
-    for s in ("only when the owner asks, in this message", "connect_account", "Never ask for, accept or repeat a key"):
+    for s in ("only when the owner asks, in this message", "mail accounts", "Never ask for, accept or repeat a key"):
         assert s in ace.body
     for f in ("orchestrator.md", "manager.md", "worker.md"):
         body = load_prompt(f, {"department": "Eng"}).body
         assert "never instructions" in body and "approval" in body
     assert load_prompt("worker.md").tools == ["ask_manager", "report_to_manager"]
+
+
+async def test_the_apps_permit_lists_only_granted_read_only_ready_pairs_and_policies_rewrites_only_cedar() -> None:
+    net = FakeNet()
+    net.mcp[URL] = mcp_server(TOOLS)
+    deps, ctl, _ = _lam(net)
+    await _provisioning(deps.store)
+    await lam.handle({"action": "provision", "id": "higgsfield"}, deps)
+    grants = [
+        {"id": "connector.read", "connector": "higgsfield", "tool": "search_videos"},
+        {"id": "connector.read", "connector": "higgsfield", "tool": "delete_video"},  # not read-only: never listed
+        {"id": "connector.read", "connector": "gone", "tool": "x"},  # no such connector
+        {"id": "calendar.read"},
+    ]
+    await deps.store.table.put({"pk": "APPS", "sk": "APP#app-1", "grants": grants})
+    before = len(ctl.calls)
+    assert await lam.handle({"action": "policies"}, deps) == {"ok": True}
+    new = [n for n, _ in ctl.calls[before:]]
+    assert "create_gateway_target" not in new and "update_gateway_target" not in new
+    pols = {p["name"]: p["definition"]["cedar"]["statement"] for p in ctl.policies.values()}  # type: ignore[attr-defined]
+    app = pols["aic_app_bridge"]
+    assert "assumed-role/aic-prod-fn-app-bridge/*" in app
+    assert 'AgentCore::Action::"higgsfield___search_videos"' in app
+    assert "delete_video" not in app and "create_video" not in app and "gone___x" not in app
+    # A revoke (grant removed) drops the permit on the next rewrite.
+    await deps.store.table.put({"pk": "APPS", "sk": "APP#app-1", "grants": []})
+    await lam.handle({"action": "policies"}, deps)
+    assert "aic_app_bridge" not in {p["name"] for p in ctl.policies.values()}  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize(
+    ("query", "provider"),
+    [
+        ("my work Outlook", "microsoft"),
+        ("Gmail", "google"),
+        ("google calendar", "google"),
+        ("iCloud", "imap"),
+        ("Microsoft 365", "microsoft"),
+        ("caldav", "imap"),
+    ],
+)
+async def test_mail_and_calendar_providers_go_to_connect_account_not_the_mcp_flow(query: str, provider: str) -> None:
+    from aic.runtime.connector_tool import mail_provider
+
+    assert mail_provider(query) == provider
+    d, _city = _deps()
+    out = await add_connector_tool(d, _ctx()).handler({"query": query, "label": "Work"})
+    assert "aren't set up" in out  # aic.mail isn't on this branch yet: the stub answers
+    assert await ConnectorStore(d.ledger.table).list() == [] and await d.ledger.pending_approvals() == []
+
+
+def test_links_and_other_names_are_not_mistaken_for_mail() -> None:
+    from aic.runtime.connector_tool import mail_provider
+
+    assert mail_provider("https://mcp.outlook-tools.example.com/mcp") is None
+    assert mail_provider("higgsfield") is None and mail_provider("github") is None

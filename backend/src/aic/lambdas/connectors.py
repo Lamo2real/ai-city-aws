@@ -6,6 +6,7 @@ Invoked asynchronously by the api Lambda, only after the owner said yes (or acte
 - ``sync`` / ``refresh``: list the server's tools with the credential, map them to Gateway tool schemas, create
   or update the Lambda target ``<id>``, and rewrite the Cedar policies.
 - ``remove``: delete the target, the provider, the secret (7-day recovery), the policies' entries and the record.
+- ``policies``: only rewrite the Cedar policies (the apps code calls it after a publish, a removal or a grant change).
 Every step emits ``connector.updated``. Errors are plain words on the record; credentials are never logged.
 """
 
@@ -68,7 +69,7 @@ class ConnectorsDeps:
     policy_engine_id: str
     bridge_arn: str
     workload: str
-    app_role: str = "aic-prod-fn-api"
+    app_role: str = "aic-prod-fn-app-bridge"
     name_prefix: str = "aic-prod"
     transport: Transport = urllib_transport
     resolve: Resolver = system_resolver
@@ -397,8 +398,15 @@ def _cedar(actions: list[str], gateway_arn: str, principal: str) -> str:
     )
 
 
-def policy_statements(records: list[Record], gateway_arn: str, name_prefix: str, app_role: str) -> dict[str, str]:
-    """One permit per role (that role's level) and one for the apps' read-only bridge. Name -> Cedar text."""
+def policy_statements(
+    records: list[Record],
+    gateway_arn: str,
+    name_prefix: str,
+    app_role: str,
+    granted: set[tuple[str, str]] | None = None,
+) -> dict[str, str]:
+    """One permit per role (that role's level), and one for the apps' bridge Lambda listing exactly the
+    ``(connector, tool)`` pairs some app was granted that are still read-only and ready. Name -> Cedar text."""
     account = gateway_arn.split(":")[4]
     ready = [r for r in records if r.get("status") == "ready"]
     out: dict[str, str] = {}
@@ -414,15 +422,30 @@ def policy_statements(records: list[Record], gateway_arn: str, name_prefix: str,
             out[f"aic_role_{role}"] = _cedar(
                 acts, gateway_arn, f"arn:aws:sts::{account}:assumed-role/{name_prefix}-agent-{role}/*"
             )
-    app = [gateway_name(r["id"], t["name"]) for r in ready for t in r.get("tools") or [] if is_read_only(t)]
+    app = sorted(
+        gateway_name(r["id"], t["name"])
+        for r in ready
+        for t in r.get("tools") or []
+        if is_read_only(t) and (r["id"], t["name"]) in (granted or set())
+    )
     if app:
         out["aic_app_bridge"] = _cedar(app, gateway_arn, f"arn:aws:sts::{account}:assumed-role/{app_role}/*")
     return out
 
 
+async def app_grants(d: ConnectorsDeps) -> set[tuple[str, str]]:
+    """Every ``connector.read`` grant of every app (``APPS`` / ``APP#<app_id>``, the apps contract's record)."""
+    out: set[tuple[str, str]] = set()
+    for app in await d.store.table.query("APPS", "APP#"):
+        for g in app.get("grants") or []:
+            if isinstance(g, dict) and g.get("id") == "connector.read" and g.get("connector") and g.get("tool"):
+                out.add((str(g["connector"]), str(g["tool"])))
+    return out
+
+
 async def rewrite_policies(d: ConnectorsDeps) -> None:
     gw = await asyncio.to_thread(d.control.get_gateway, gatewayIdentifier=d.gateway_id)
-    want = policy_statements(await d.store.list(), gw["gatewayArn"], d.name_prefix, d.app_role)
+    want = policy_statements(await d.store.list(), gw["gatewayArn"], d.name_prefix, d.app_role, await app_grants(d))
     have: dict[str, str] = {}
     token: str | None = None
     while True:
@@ -498,11 +521,15 @@ async def handle(event: Mapping[str, Any], d: ConnectorsDeps) -> dict[str, Any]:
             await sync(d, id)
         elif action == "remove":
             await remove(d, id)
+        elif action == "policies":  # the apps code, after a publish, a removal or a grant change
+            await rewrite_policies(d)
+            return {"ok": True}
         else:
             return {"ok": False, "error": "unknown action"}
     except Exception as e:
         log("error", "connectors.failed", connector=id, action=str(action), error=type(e).__name__)
-        await _fail(d, id, "Something went wrong while setting it up. Try Refresh in Settings.")
+        if id:
+            await _fail(d, id, "Something went wrong while setting it up. Try Refresh in Settings.")
         return {"ok": False}
     return {"ok": True}
 
@@ -528,6 +555,6 @@ def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
             policy_engine_id=require_env("AIC_POLICY_ENGINE_ID"),
             bridge_arn=require_env("AIC_BRIDGE_ARN"),
             workload=require_env("AIC_CONNECTORS_WORKLOAD"),
-            app_role=os.environ.get("AIC_APP_BRIDGE_ROLE") or "aic-prod-fn-api",
+            app_role=os.environ.get("AIC_APP_BRIDGE_ROLE") or "aic-prod-fn-app-bridge",
         )
     return run(handle(event, _deps))

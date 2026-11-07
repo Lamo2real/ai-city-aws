@@ -1,10 +1,10 @@
 """Connector reads for apps (``docs/CONNECTORS_SKILLS.md`` §1.9; ``docs/APPS.md`` v2, capability ``connector.read``).
 
-The apps bridge route (``POST /apps/<app_id>/bridge``, in the api Lambda) calls ``app_call``. It checks, in
-order: the app's grant, that the connector is ready and the tool read-only (outward or destructive tools never,
-whatever the grant says), and the policy gate as role ``app`` (an "ask" is a deny: apps can't ask). Only then
-does it call the Gateway, with the api Lambda's own role, which Cedar limits to read-only tools. The data is
-returned for code, not a model, and is still untrusted.
+``app_call`` runs inside the apps work's Lambda ``aic-prod-app-bridge``. It checks, in order: the app's grant,
+that the connector is ready and the tool read-only (outward or destructive tools never, whatever the grant
+says), the policy gate as role ``app`` under the agents' own name (an "ask" is a deny: apps can't ask), and 60
+calls a minute per app. Only then does it call the Gateway with that Lambda's role, which Cedar limits to the
+granted read-only pairs. The data is returned for code, not a model, and is still untrusted.
 """
 
 from __future__ import annotations
@@ -19,9 +19,10 @@ from .connectors import ConnectorStore, gateway_name, is_read_only, record_tool
 from .ledger import Ledger
 from .log import log
 from .policy import gate
+from .table import AddLimit, UpdateOptions
 
-MAX_CHARS = 100_000
-"""The apps contract's 100 KB of text."""
+MAX_CHARS = 200_000
+PER_MINUTE = 60
 
 
 class AppCallPart(TypedDict, total=False):
@@ -45,7 +46,7 @@ class GatewayCaller(Protocol):
 class AppCallDeps:
     ledger: Ledger
     gateway: GatewayCaller | None
-    """``aic.runtime.gateway.GatewayClient`` signed with the api Lambda's role; None = not configured."""
+    """``aic.shared.gateway.GatewayClient`` signed with the app bridge Lambda's role; None = not configured."""
 
 
 def _no(error: str) -> AppCallResult:
@@ -57,7 +58,9 @@ async def _app_grants(ledger: Ledger, app_id: str) -> list[Mapping[str, Any]]:
     ``APP#<app_id>``, field ``grants``). The one place that knows the record's shape: if the apps contract
     changes it, change this function."""
     rec = await ledger.table.get("APPS", f"APP#{app_id}")
-    grants = (rec or {}).get("grants") or []
+    if rec is None:
+        return []  # a missing item means denied
+    grants = rec.get("grants") or []
     return [g for g in grants if isinstance(g, Mapping)]
 
 
@@ -117,13 +120,23 @@ async def app_call(d: AppCallDeps, *, app_id: str, connector_id: str, tool: str,
     t = record_tool(rec, tool)
     if not t or not is_read_only(t):
         return _no("not_read_only")
-    # 3. The policy gate as role "app"; an ask is a deny, because apps can't ask.
-    name = f"mcp__app__connector___{gateway_name(connector_id, tool)}"
+    # 3. The policy gate as role "app", under the agents' own name so every policy rule applies; an ask is a
+    #    deny, because apps can't ask.
+    name = f"mcp__gateway__{gateway_name(connector_id, tool)}"
     t0 = time.monotonic()
     r = await gate(name, args, "app", f"app-{app_id}")
     await d.ledger.audit_tool(f"app-{app_id}", name, r.decision, r.reason)
     if r.decision != "allow":
         return _no("denied")
+    # 4. 60 calls a minute per app (a ledger counter).
+    minute = d.ledger.now_ms() // 60_000
+    counted = await d.ledger.table.update(
+        f"RATE#app-{app_id}",
+        f"CONN#{minute}",
+        UpdateOptions(add={"n": 1}, add_limit=AddLimit("n", PER_MINUTE), set={"ttl": minute * 60 + 180}),
+    )
+    if counted is None:
+        return _no("rate_limited")
     if d.gateway is None:
         return _no("unavailable")
     try:

@@ -1,19 +1,15 @@
 """Connector tools for a turn, through the AgentCore Gateway (``docs/CONNECTORS_SKILLS.md`` §1.4).
 
-``GatewayClient`` speaks MCP over streamable HTTP to the one Gateway, every request signed with SigV4 (service
-``bedrock-agentcore``) using the caller's role, so Cedar sees who is calling. ``connector_tools`` turns the ready
+``GatewayClient`` (``aic.shared.gateway``) speaks MCP to the one Gateway, signed with SigV4. ``connector_tools`` turns the ready
 connectors this role (and, for a worker, this hire) may use into ``ToolSpec``s on the ``gateway`` server. The
 engines gate and audit each call as ``mcp__gateway__<id>___<tool>``, with the connector's approval level as an
 extra "ask". Output is untrusted data and is wrapped as such.
-
-Only boto3/botocore are needed, so the api Lambda can use the client too (``aic.shared.connector_calls``).
 """
 
 from __future__ import annotations
 
 import json
-import time
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from typing import Any
 
 from aic.shared.connectors import (
@@ -26,66 +22,12 @@ from aic.shared.connectors import (
     gateway_name,
 )
 from aic.shared.events import EventBus
+from aic.shared.gateway import GatewayClient
 from aic.shared.log import log
-from aic.shared.mcp_http import McpHttp, Transport, urllib_transport
 
 from .tools import ToolSpec
 
-LIST_TTL_S = 300
-CALL_TIMEOUT_S = 60
 MAX_OUTPUT = 20_000
-
-
-def sigv4_headers(
-    session: Any, region: str, service: str = "bedrock-agentcore"
-) -> Callable[[str, bytes], dict[str, str]]:
-    """Signs each POST with the session's current credentials."""
-    from botocore.auth import SigV4Auth
-    from botocore.awsrequest import AWSRequest
-
-    def sign(url: str, body: bytes) -> dict[str, str]:
-        creds = session.get_credentials().get_frozen_credentials()
-        req = AWSRequest(
-            method="POST",
-            url=url,
-            data=body,
-            headers={"content-type": "application/json", "accept": "application/json, text/event-stream"},
-        )
-        SigV4Auth(creds, service, region).add_auth(req)
-        return dict(req.headers.items())
-
-    return sign
-
-
-class GatewayClient:
-    def __init__(
-        self,
-        url: str,
-        sign: Callable[[str, bytes], Mapping[str, str]],
-        transport: Transport = urllib_transport,
-        clock: Callable[[], float] = time.monotonic,
-    ) -> None:
-        self.url = url
-        self._sign = sign
-        self._transport = transport
-        self._clock = clock
-        self._cache: tuple[float, str, dict[str, dict[str, Any]]] | None = None
-
-    def _mcp(self, timeout: float) -> McpHttp:
-        return McpHttp(self.url, self._transport, self._sign, timeout)
-
-    async def list_tools(self, stamp: str = "") -> dict[str, dict[str, Any]]:
-        """Gateway tool name -> MCP tool. Cached 5 minutes per process, and refreshed when ``stamp`` (the
-        connector list's ``updated_at`` values) changes."""
-        now = self._clock()
-        if self._cache and self._cache[1] == stamp and now - self._cache[0] < LIST_TTL_S:
-            return self._cache[2]
-        tools = {str(t["name"]): t for t in await self._mcp(30).list_tools() if t.get("name")}
-        self._cache = (now, stamp, tools)
-        return tools
-
-    async def call_tool(self, name: str, args: dict[str, Any], wait_s: float = CALL_TIMEOUT_S) -> dict[str, Any]:
-        return await self._mcp(wait_s).call_tool(name, args, wait_s)
 
 
 def _unwrap(result: Mapping[str, Any]) -> tuple[list[dict[str, Any]], str | None]:
