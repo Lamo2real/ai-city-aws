@@ -142,7 +142,7 @@ async def direct_engine(req: EngineRequest, client: Any = None) -> TurnOutput:
             log(
                 "info",
                 "aic.timing",
-                first_text_ms=ms(first) if first else None,
+                first_word_ms=ms(first) if first else None,
                 total_ms=ms(time.monotonic()),
                 rounds=rnd,
             )
