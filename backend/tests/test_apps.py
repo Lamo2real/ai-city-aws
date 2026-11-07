@@ -201,7 +201,7 @@ async def test_the_lambda_stages_a_valid_submission_as_a_ready_draft_with_the_ci
     dr = await on_submitted(submitted(files=[{"path": "fake.exe", "size": 1}]), ledger, bus, origin(s3), s3, "ws")
     assert dr is not None and dr["status"] == "ready", dr
     assert dr["preview_url"] == f"{URL}/drafts/{dr['draft_id']}/index.html"
-    assert {f["path"] for f in dr["files"]} == {"index.html", "game.js", "icon.svg", "lvl/one.json"}
+    assert {f["path"] for f in dr["files"]} == {"index.html", "game.js", "icon.svg", "lvl/one.json", "aic-bridge.js"}
     staged = s3.objects["aic-prod-apps"]
     html = staged[f"drafts/{dr['draft_id']}/index.html"]
     assert (html["ContentType"], html["CacheControl"]) == ("text/html; charset=utf-8", "no-cache")

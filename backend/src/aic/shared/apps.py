@@ -14,8 +14,10 @@ import hashlib
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
+from .app_caps import MANIFEST, Capability, Invalid, cap_key, check_manifest, clean_cap, labelled, subset
 from .events import EventBus, now_iso
 from .ids import new_id
 from .ledger import Ledger, Record, strip
@@ -54,6 +56,10 @@ ICON_EXTENSIONS = ("svg", "png")
 _PATH = re.compile(r"[A-Za-z0-9._/-]+")
 _HIRE = re.compile(r"wkr-[a-z0-9-]{1,80}")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]+")
+BRIDGE = "aic-bridge.js"
+BRIDGE_JS = (Path(__file__).resolve().parents[1] / "assets" / BRIDGE).read_bytes()
+"""The city's own bridge script, added to every staged app (never the worker's file of that name)."""
+MAX_PINNED = 6
 
 
 # ---------- validation (same code for the tool and the Lambda) ----------
@@ -291,6 +297,8 @@ async def stage_submission(
         "total_bytes": 0,
         "preview_url": None,
         "approval_id": None,
+        "capabilities": [],
+        "pin": False,
         "created_at": now_iso(ledger.now()),
     }
     await put_draft(ledger, draft)
@@ -313,10 +321,21 @@ async def stage_submission(
         ]
         problem = validate_files(files, draft["icon"])
 
+    caps: list[Capability] = []
+    pin = False
+    if problem is None and any(f["path"] == MANIFEST for f in files):
+        obj = await asyncio.to_thread(
+            workspace_s3.get_object, Bucket=workspaces_bucket, Key=submission_prefix(hire_id) + MANIFEST
+        )
+        try:
+            caps, pin = await check_manifest(await asyncio.to_thread(obj["Body"].read), ledger)
+        except Invalid as e:
+            problem = str(e)
+
     if problem is None:
         prefix = submission_prefix(hire_id)
         staged: list[dict[str, Any]] = []
-        for f in files:
+        for f in [f for f in files if f["path"] != BRIDGE]:
             obj = await asyncio.to_thread(workspace_s3.get_object, Bucket=workspaces_bucket, Key=prefix + f["path"])
             body = await asyncio.to_thread(obj["Body"].read)
             if len(body) > MAX_FILE_BYTES:  # the listing said otherwise; trust the bytes
@@ -331,6 +350,16 @@ async def stage_submission(
                 CacheControl=cache_control(f["path"]),
             )
             staged.append({"path": f["path"], "size": len(body), "type": content_type(f["path"])})
+        if problem is None:
+            await asyncio.to_thread(
+                origin.s3.put_object,
+                Bucket=origin.bucket,
+                Key=f"drafts/{draft_id}/{BRIDGE}",
+                Body=BRIDGE_JS,
+                ContentType=content_type(BRIDGE),
+                CacheControl=cache_control(BRIDGE),
+            )
+            staged.append({"path": BRIDGE, "size": len(BRIDGE_JS), "type": content_type(BRIDGE)})
         files = staged
 
     if problem is None:
@@ -339,6 +368,8 @@ async def stage_submission(
             "files": files,
             "total_bytes": sum(f["size"] for f in files),
             "preview_url": origin.preview_url(draft_id),
+            "capabilities": await labelled(ledger, caps),
+            "pin": pin,
         }
     else:
         patch = {"status": "rejected", "reason": problem}
@@ -391,6 +422,8 @@ async def request_publish_approvals(ledger: Ledger, bus: EventBus, task_id: str,
                 "preview_url": dr["preview_url"],
                 "title": dr["title"],
                 "description": dr.get("description", ""),
+                "capabilities": dr.get("capabilities") or [],
+                "pin": bool(dr.get("pin")),
             }
         )
         await update_draft(ledger, dr["draft_id"], {"approval_id": a["id"]})
@@ -406,6 +439,8 @@ async def request_publish_approvals(ledger: Ledger, bus: EventBus, task_id: str,
                 "preview_url": dr["preview_url"],
                 "title": dr["title"],
                 "description": dr.get("description", ""),
+                "capabilities": dr.get("capabilities") or [],
+                "pin": bool(dr.get("pin")),
             }
         )
         filed.append(a)
@@ -413,14 +448,35 @@ async def request_publish_approvals(ledger: Ledger, bus: EventBus, task_id: str,
 
 
 # ---------- the owner's side: publish, refuse, remove ----------
-async def publish_draft(ledger: Ledger, bus: EventBus, origin: AppsOrigin, draft_id: str) -> Record:
-    """Copies ``drafts/<draft_id>/`` to ``live/<app_id>/`` and records the app. Idempotent on draft_id."""
+async def publish_draft(
+    ledger: Ledger,
+    bus: EventBus,
+    origin: AppsOrigin,
+    draft_id: str,
+    grants: list[Capability] | None = None,
+    pinned: bool | None = None,
+) -> Record:
+    """Copies ``drafts/<draft_id>/`` to ``live/<app_id>/`` and records the app with the owner's grants (a subset
+    of the draft's capabilities; default all) and pin (default the manifest's suggestion, while fewer than 6 are
+    pinned). Idempotent on draft_id. Raises ValueError for grants the draft didn't ask for."""
     for existing in await list_apps(ledger):
         if existing.get("draft_id") == draft_id:
             return existing
     dr = await get_draft(ledger, draft_id)
     if not dr or dr.get("status") not in ("awaiting_owner", "ready"):
         raise ValueError("That app draft is not ready to publish.")
+    asked: list[Capability] = list(dr.get("capabilities") or [])
+    chosen = asked if grants is None else [clean_cap(g) for g in grants]
+    if not subset(chosen, asked):
+        raise Invalid("An app can only be granted what it asked for.")
+    # Grants keep exactly {id, connector?, tool?}: app_call and the Cedar rewrite read this list.
+    chosen = [clean_cap(c) for c in {cap_key(c): c for c in chosen}.values()]
+    apps_now = await list_apps(ledger)
+    want_pin = bool(dr.get("pin")) if pinned is None else pinned
+    if want_pin and sum(1 for a in apps_now if a.get("pinned")) >= MAX_PINNED:
+        if pinned:
+            raise ValueError(f"You can pin up to {MAX_PINNED} apps. Unpin one first.")
+        want_pin = False
     app_id = new_id("app")
     for f in dr.get("files") or []:
         await asyncio.to_thread(
@@ -432,7 +488,7 @@ async def publish_draft(ledger: Ledger, bus: EventBus, origin: AppsOrigin, draft
             ContentType=content_type(str(f["path"])),
             CacheControl=cache_control(str(f["path"])),
         )
-    taken = [str(a.get("slug")) for a in await list_apps(ledger)]
+    taken = [str(a.get("slug")) for a in apps_now]
     icon = dr.get("icon")
     app: Record = {
         "app_id": app_id,
@@ -444,6 +500,10 @@ async def publish_draft(ledger: Ledger, bus: EventBus, origin: AppsOrigin, draft
         "draft_id": draft_id,
         "task_id": dr.get("task_id"),
         "department": dr.get("department"),
+        "capabilities": asked,
+        "grants": chosen,
+        "granted_at": now_iso(ledger.now()),
+        "pinned": want_pin,
         "published_at": now_iso(ledger.now()),
     }
     await ledger.table.put({"pk": APPS_PK, "sk": f"APP#{app_id}", **app})
@@ -488,3 +548,40 @@ async def remove_app(ledger: Ledger, bus: EventBus, origin: AppsOrigin, app_id: 
     await ledger.table.delete(APPS_PK, f"APP#{app_id}")
     await bus.put({"type": "app.removed", "app_id": app_id, "slug": app["slug"]})
     return app
+
+
+async def update_app(ledger: Ledger, bus: EventBus, app_id: str, patch: dict[str, Any]) -> Record | None:
+    """``PUT /apps/<id>``: grants may only shrink (a new grant needs a new publish); ``pinned`` up to 6 apps.
+    None if there is no such app; ValueError with plain words when the change isn't allowed."""
+    app = await get_app(ledger, app_id)
+    if not app:
+        return None
+    sets: Record = {}
+    if "grants" in patch:
+        raw = patch["grants"]
+        if not isinstance(raw, list):
+            raise ValueError("grants must be a list.")
+        try:
+            wanted = [clean_cap(g) for g in raw]
+        except Invalid as e:
+            raise ValueError(str(e)) from e
+        current = list(app.get("grants") or [])
+        if not subset(wanted, current):
+            raise ValueError("Grants can only be taken away here. Ask for a new version of the app to add one.")
+        keep = {cap_key(c) for c in wanted}
+        sets["grants"] = [clean_cap(c) for c in current if cap_key(c) in keep]
+    if "pinned" in patch:
+        if not isinstance(patch["pinned"], bool):
+            raise ValueError("pinned must be true or false.")
+        if patch["pinned"] and not app.get("pinned"):
+            others = sum(1 for a in await list_apps(ledger) if a.get("pinned") and a["app_id"] != app_id)
+            if others >= MAX_PINNED:
+                raise ValueError(f"You can pin up to {MAX_PINNED} apps. Unpin one first.")
+        sets["pinned"] = patch["pinned"]
+    if not sets:
+        return app
+    out = strip(await ledger.table.update(APPS_PK, f"APP#{app_id}", UpdateOptions(set=sets, must_exist=True)))
+    if out is None:
+        return None
+    await bus.put({"type": "app.updated", "app": out})
+    return out

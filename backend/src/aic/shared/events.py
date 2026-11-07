@@ -186,6 +186,8 @@ class ApprovalRequested(_E):
     preview_url: str | None = None
     title: str | None = None
     description: str | None = None
+    capabilities: list[dict[str, Any]] | None = None
+    pin: bool | None = None
 
 
 class ApprovalDecided(_E):
@@ -232,6 +234,11 @@ class AppPublished(_E):
     url: str
     task_id: str
     department: str
+
+
+class AppUpdated(_E):
+    type: Literal["app.updated"]
+    app: dict[str, Any]
 
 
 class AppRemoved(_E):
@@ -283,6 +290,7 @@ CityEventModel = Annotated[
     | AppSubmitted
     | AppDraft
     | AppPublished
+    | AppUpdated
     | AppRemoved,
     Field(discriminator="type"),
 ]
