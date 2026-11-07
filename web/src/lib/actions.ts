@@ -30,6 +30,7 @@ export async function sendMessage(text: string) {
   if (!clean) return;
   const line: ChatLine = { id: newLineId(), who: "owner", text: clean, state: "queued", at: Date.now() };
   store.set({ chat: [...store.get().chat, line], presence: "thinking" });
+  store.beginTurn();
   await deliver(line);
 }
 

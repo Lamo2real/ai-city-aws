@@ -21,7 +21,7 @@ import { api, ApiError } from "../lib/api.ts";
 import { money, tokensK } from "../lib/format.ts";
 import { store, useHud, waitingCount } from "../lib/store.ts";
 import { useVoice } from "../voice/useVoice.ts";
-import { MicIcon } from "./AceScreen.tsx";
+import { MicIcon } from "./ui.tsx";
 import { Banner, Button, Loading } from "./ui.tsx";
 
 const REGION_CITY: Record<string, string> = {
@@ -228,7 +228,7 @@ export function CityView({ go }: { go: (view: string) => void }) {
           </button>
         </div>
         <div className="actions">
-          <button type="button" className="tile" onClick={() => go("ace")} aria-label="Chat with Ace">
+          <button type="button" className="tile" onClick={() => go("ace")} aria-label="Chat with AIC">
             <Glyph d="M4 5h16v10H9l-5 4z" />
           </button>
           <button type="button" className="tile" onClick={() => go("tickets")} aria-label="Tickets">
@@ -242,7 +242,7 @@ export function CityView({ go }: { go: (view: string) => void }) {
             className={`tile mic-big ${voice.listening ? "on" : ""}`}
             onClick={voice.pushToTalk}
             aria-pressed={voice.listening}
-            aria-label={voice.listening ? "Stop listening" : "Talk to Ace"}
+            aria-label={voice.listening ? "Stop listening" : "Talk to AIC"}
           >
             <MicIcon />
           </button>
@@ -443,7 +443,7 @@ function DeptPanel({ name, city, onZoom }: { name: string; city: CityState; onZo
     <div>
       <p className="doing">
         {name === "HQ"
-          ? "Ace and the Orchestrator work here."
+          ? "AIC and the Orchestrator work here."
           : `${workers.length ? `${workers.length} workers at their desks.` : "Nobody hired right now."} ${d?.mission ?? ""}`}
       </p>
       {name !== "HQ" ? <Row k="Manager" v={d?.manager_id ?? "—"} /> : null}

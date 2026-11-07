@@ -1,10 +1,10 @@
-// Push-to-talk, the optional wake-word mode, and spoken replies, shared by the Ace screen and the
+// Push-to-talk, the optional wake-word mode, and spoken replies, shared by the AIC screen and the
 // City view's big mic button. Typed and spoken turns go into the same conversation.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { sendMessage } from "../lib/actions.ts";
 import { api } from "../lib/api.ts";
 import { store, useHud } from "../lib/store.ts";
-import { getVoice } from "./voice.ts";
+import { getVoice, logVoiceError, micProblem } from "./voice.ts";
 import { wakeMatch } from "./wake.ts";
 
 const SOUND_KEY = "aic.sound";
@@ -49,27 +49,36 @@ export function useVoice() {
     async (wake: boolean) => {
       setProblem(null);
       getVoice().stopSpeaking();
+      const failed = (where: string, e: unknown) => {
+        logVoiceError(where, e);
+        setProblem(micProblem(e));
+        setWakeMode(false);
+        end();
+      };
       try {
-        stop.current = await getVoice().listen(async (text) => {
-          if (!wake) {
-            end();
-            return void sendMessage(text);
-          }
-          const m = wakeMatch(text);
-          const addressed =
-            m === "yes" ||
-            (m === "unclear" &&
-              (await api<{ addressed: boolean }>("/wake-check", { method: "POST", body: { transcript: text } }).then(
-                (r) => r.addressed,
-                () => false,
-              )));
-          if (addressed) void sendMessage(text);
-        });
+        stop.current = await getVoice().listen(
+          async (text) => {
+            if (!wake) {
+              end();
+              return void sendMessage(text);
+            }
+            const m = wakeMatch(text);
+            const addressed =
+              m === "yes" ||
+              (m === "unclear" &&
+                (await api<{ addressed: boolean }>("/wake-check", { method: "POST", body: { transcript: text } }).then(
+                  (r) => r.addressed,
+                  () => false,
+                )));
+            if (addressed) void sendMessage(text);
+          },
+          undefined,
+          (e) => failed("listening stopped", e),
+        );
         setListening(true);
         store.set({ presence: "listening" });
-      } catch {
-        setProblem("The microphone could not start. Allow microphone access for this site, or type instead.");
-        setListening(false);
+      } catch (e) {
+        failed("the microphone could not start", e);
       }
     },
     [end],

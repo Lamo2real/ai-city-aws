@@ -276,7 +276,7 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         b = _body(event)
         agent_id = _str(b.get("agent_id"), "Agent")
         text = _str(b.get("text"), "Instruction")
-        # The instruction goes through Ace like every owner message, so the same gate applies.
+        # The instruction goes through AIC like every owner message, so the same gate applies.
         conversation = b["conversation"] if isinstance(b.get("conversation"), str) else "hud"
         await d.queue.send(
             cast(

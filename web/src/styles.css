@@ -22,6 +22,10 @@
   --focus: #2257c5;
   --amber: #f2b33d;
   --red: #d8392b;
+  --day: #fbf3e2; /* the AIC screen's daytime ground */
+  --sheet: #fffdf7;
+  --sky: #e7f0ff;
+  --you: #2a56a8; /* the owner speaking */
   --s1: 4px;
   --s2: 8px;
   --s3: 12px;
@@ -391,16 +395,7 @@ main {
   color: var(--bad);
 }
 
-/* ---------- Ace ---------- */
-.ace {
-  max-width: 760px;
-  margin: 0 auto;
-  padding: var(--s4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--s3);
-  min-height: 100%;
-}
+/* ---------- AIC ---------- */
 .eyes {
   display: grid;
   justify-items: center;
@@ -420,38 +415,6 @@ main {
   background: var(--eye);
   -webkit-mask: url("/ace-eye.png") center / contain no-repeat;
   mask: url("/ace-eye.png") center / contain no-repeat;
-  transition:
-    background-color 0.3s,
-    transform 0.3s;
-}
-.eyes-idle .eye-pair {
-  animation: blink 5s infinite;
-}
-.eyes-listening {
-  --eye: #8ef0a0;
-}
-.eyes-listening .eye-pair {
-  animation: pulse 1s ease-in-out infinite;
-}
-.eyes-thinking {
-  --eye: #9fd8f0;
-}
-.eyes-thinking .eye-pair {
-  animation: look 1.6s ease-in-out infinite;
-}
-.eyes-speaking {
-  --eye: var(--paper3);
-}
-.eyes-speaking .eye-pair {
-  animation: talk 0.4s ease-in-out infinite alternate;
-}
-.eyes-waiting {
-  --eye: var(--amber);
-}
-.eyes .bang {
-  color: var(--amber);
-  font: 400 26px var(--pixel);
-  line-height: 1;
 }
 /* On the light sign-in card the eyes are drawn in ink. */
 .signin-brand .eyes {
@@ -461,120 +424,141 @@ main {
   margin: var(--s1) 0 0;
   color: var(--paper2);
 }
-@keyframes blink {
-  0%,
-  96%,
-  100% {
-    transform: scaleY(1);
-  }
-  98% {
-    transform: scaleY(0.1);
-  }
-}
-@keyframes pulse {
-  50% {
-    transform: scale(1.15);
-    transform-origin: center;
-  }
-}
-@keyframes look {
-  0%,
-  100% {
-    transform: translateX(-8px);
-  }
-  50% {
-    transform: translateX(8px);
-  }
-}
-@keyframes talk {
-  to {
-    transform: scaleY(0.85);
-  }
-}
 @media (prefers-reduced-motion: reduce) {
-  .eyes * {
-    animation: none !important;
-  }
   .skeleton {
     animation: none;
   }
 }
-.chat {
-  flex: 1;
-  min-height: 200px;
-  overflow-y: auto;
+/* The AIC screen is daytime in the City: parchment ground, ink outlines, wood and lamplight accents.
+   Every text pair here passes WCAG AA (body ≥ 4.5:1, outlines and marks ≥ 3:1). */
+.view-ace main {
+  background: var(--day);
+  color: var(--text);
+}
+.ace {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: var(--s5);
+  min-height: 100%;
+  display: grid;
+  grid-template-columns: minmax(300px, 400px) minmax(0, 1fr);
+  gap: var(--s5);
+  color: var(--text);
+}
+.ace ::selection {
+  background: #f4c63c;
+  color: var(--text);
+}
+.ace-stage {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
+  gap: var(--s4);
+  align-self: start;
+  position: sticky;
+  top: 0;
+  padding-top: var(--s5);
+}
+.ace .eyes {
+  --eye: var(--ink);
+}
+.ace .eye-pair {
+  width: min(300px, 70vw);
+}
+/* the voice strip */
+.voice {
+  --lvl: 0;
+  display: grid;
   gap: var(--s2);
-  background: var(--night2);
-  border-radius: var(--r);
-  padding: var(--s3);
-  border: 2px solid var(--ink);
 }
-.hello {
-  color: var(--paper2);
+/* No frame: just the line itself, drawn straight on the page under the eye. */
+.voice-strip {
+  position: relative;
+  height: 104px;
 }
-.line {
-  max-width: 85%;
-  padding: var(--s2) var(--s3);
-  border-radius: var(--r);
+.voice-strip canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.voice .mic {
+  position: relative;
+  flex: none;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
   background: var(--paper);
   color: var(--text);
+  box-shadow:
+    0 0 0 2px var(--ink),
+    0 0 0 calc(8px + var(--lvl) * 18px) rgba(42, 86, 168, calc(0.1 + var(--lvl) * 0.25)),
+    0 4px 10px -4px rgba(46, 31, 22, 0.5);
+  transition: transform 0.1s;
 }
-.line p {
-  margin: 0;
-  white-space: pre-wrap;
-}
-.line-owner {
-  align-self: flex-end;
-  background: #d9ecff;
-}
-.line .who {
-  font-size: 13px;
-  color: var(--soft);
-}
-.line .note {
-  display: block;
-  font-size: 13px;
-  color: var(--bad);
-}
-.composer {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: var(--s2);
-  align-items: stretch;
-}
-.composer textarea {
-  min-height: 56px;
-  padding: var(--s2) var(--s3);
-  border-radius: var(--r);
-  border: 2px solid var(--wood2);
-  background: #fffaf0;
-  color: var(--text);
-  resize: vertical;
-}
-.mic {
-  min-width: 72px;
-  min-height: 56px;
-  border-radius: 999px;
-  border: 3px solid var(--ink);
+.voice .mic:not(.on):hover {
   background: var(--paper2);
-  color: var(--text);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s1);
-  padding: 0 var(--s3);
-  cursor: pointer;
-  font-weight: 800;
 }
-.mic.on {
-  background: #8ef0a0;
+.voice .mic:active {
+  transform: scale(0.96);
 }
-.toggles {
+.voice .mic.on {
+  background: var(--you);
+  color: #fff;
+}
+.voice-aic .mic {
+  box-shadow:
+    0 0 0 2px var(--ink),
+    0 0 0 calc(8px + var(--lvl) * 18px) rgba(201, 143, 85, calc(0.15 + var(--lvl) * 0.3)),
+    0 4px 10px -4px rgba(46, 31, 22, 0.5);
+}
+.voice-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--s4);
   align-items: center;
+  gap: var(--s4);
+  padding: var(--s2) var(--s3) 0;
+}
+.voice-label {
+  margin: 0;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  color: var(--soft);
+  font-size: 17px;
+}
+.voice-you .voice-label {
+  color: var(--you);
+}
+.voice-aic .voice-label {
+  color: var(--wood);
+}
+.voice-who {
+  border-radius: 999px;
+  padding: 1px 10px;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff;
+  background: currentColor;
+}
+.voice-who {
+  background: var(--you);
+}
+.voice-aic .voice-who {
+  background: var(--wood);
+}
+.ace .toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  align-items: flex-start;
+  padding: 0 var(--s2);
 }
 .switch {
   display: inline-flex;
@@ -586,6 +570,388 @@ main {
 .switch input {
   width: 22px;
   height: 22px;
+  accent-color: var(--wood);
+}
+
+/* the conversation */
+.talk {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: calc(100dvh - 140px);
+  min-height: 460px;
+  background: var(--sheet);
+  border-radius: 20px;
+  box-shadow:
+    0 0 0 2px var(--ink),
+    0 10px 24px -14px rgba(46, 31, 22, 0.5);
+  overflow: hidden;
+}
+.talk-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s2) var(--s2) var(--s2) var(--s5);
+  border-bottom: 2px solid var(--ink);
+  background: var(--paper);
+}
+.talk-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+}
+.icon-btn {
+  width: var(--tap);
+  height: var(--tap);
+  border: 0;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.icon-btn:hover:not(:disabled) {
+  background: var(--paper2);
+}
+.icon-btn:disabled {
+  color: #9c8a73;
+  cursor: default;
+}
+.talk .banner {
+  margin: var(--s3) var(--s4) 0;
+}
+.chat {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+  padding: var(--s5);
+  scrollbar-color: var(--wood2) transparent;
+}
+.hello {
+  margin: auto;
+  max-width: 34ch;
+  text-align: center;
+  color: var(--soft);
+  font-size: 17px;
+}
+/* Owner on the right in a filled bubble; AIC on the left as plain, full-width text. */
+.msg {
+  display: flex;
+  flex-direction: column;
+}
+.msg-owner {
+  align-items: flex-end;
+}
+.msg-owner .msg-body {
+  max-width: min(80%, 60ch);
+  padding: var(--s3) var(--s4);
+  border-radius: 20px 20px 6px 20px;
+  background: var(--sky);
+  box-shadow: inset 0 0 0 1px #b9cbe8;
+}
+.msg-body p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-weight: 500;
+}
+.msg-ace .msg-body {
+  max-width: 72ch;
+  font-weight: 500;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.msg-ace .msg-body > :first-child {
+  margin-top: 0;
+}
+.msg-ace .msg-body > :last-child {
+  margin-bottom: 0;
+}
+.msg-ace p {
+  white-space: normal;
+  margin: 0 0 var(--s3);
+}
+.msg-ace :is(h3, h4, h5, h6) {
+  margin: var(--s4) 0 var(--s2);
+  line-height: 1.3;
+  font-weight: 800;
+}
+.msg-ace h3 {
+  font-size: 20px;
+}
+.msg-ace h4 {
+  font-size: 18px;
+}
+.msg-ace :is(h5, h6) {
+  font-size: 16px;
+}
+.msg-ace :is(ul, ol) {
+  margin: 0 0 var(--s3);
+  padding-left: 1.4em;
+}
+.msg-ace li + li {
+  margin-top: var(--s1);
+}
+.msg-ace a {
+  color: var(--you);
+  text-underline-offset: 3px;
+}
+.msg-ace code {
+  font:
+    500 0.92em ui-monospace,
+    monospace;
+  background: var(--paper);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.msg-ace pre {
+  margin: 0 0 var(--s3);
+  padding: var(--s3);
+  overflow-x: auto;
+  background: var(--paper);
+  border-radius: 10px;
+}
+.msg-ace pre code {
+  background: none;
+  padding: 0;
+}
+.md-table {
+  margin: 0 0 var(--s3);
+  overflow-x: auto;
+}
+.md-table table {
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.md-table :is(th, td) {
+  padding: var(--s2) var(--s3);
+  border-bottom: 1px solid #d9c7a4;
+  text-align: left;
+  vertical-align: top;
+}
+.md-table th {
+  border-bottom: 2px solid var(--ink);
+  font-weight: 800;
+}
+.msg .note {
+  display: block;
+  margin-top: var(--s1);
+  font-size: 14px;
+  color: var(--bad);
+}
+/* AIC's turn before its first words: the eye blinking slowly, the step in silver with a soft shimmer, seconds. */
+.msg-pending {
+  min-height: 28px;
+  justify-content: center;
+}
+.aic-status {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  font-weight: 600;
+}
+.aic-status-eye {
+  flex: none;
+  width: 34px;
+  aspect-ratio: 600 / 324;
+  background: var(--ink);
+  -webkit-mask: url("/ace-eye.png") center / contain no-repeat;
+  mask: url("/ace-eye.png") center / contain no-repeat;
+  animation: calm-blink 4.8s ease-in-out infinite;
+}
+@keyframes calm-blink {
+  0%,
+  88%,
+  100% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+  93% {
+    transform: scaleY(0.15);
+    opacity: 0.8;
+  }
+}
+/* Silver text: the resting colour is #4d5360 (7:1 on the sheet); the moving highlight is a narrow lighter band. */
+.shimmer {
+  color: #4d5360;
+  background: linear-gradient(100deg, #4d5360 0%, #4d5360 40%, #9aa1ad 50%, #4d5360 60%, #4d5360 100%) 0 0 / 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer-sweep 2.2s linear infinite;
+}
+@keyframes shimmer-sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0% 0;
+  }
+}
+.aic-status-time {
+  color: var(--soft);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.aic-steps {
+  margin-top: var(--s3);
+  color: var(--soft);
+  font-size: 14px;
+}
+.aic-steps summary {
+  cursor: pointer;
+  width: fit-content;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+}
+.aic-steps summary:hover {
+  color: var(--text);
+}
+.aic-steps ol {
+  margin: var(--s1) 0 0;
+  padding-left: 1.4em;
+}
+.aic-steps li + li {
+  margin-top: 2px;
+}
+/* A thin caret at the end of the words while AIC's reply is still coming in. */
+.msg-ace.is-streaming .msg-body > :is(p, h3, h4, h5, h6):last-child::after,
+.msg-ace.is-streaming .msg-body > :is(ul, ol):last-child > li:last-child::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--wood);
+  animation: caret 1s steps(1) infinite;
+}
+@keyframes caret {
+  50% {
+    opacity: 0;
+  }
+}
+.composer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--s3);
+  align-items: end;
+  padding: var(--s3) var(--s4) var(--s4);
+  border-top: 2px solid var(--ink);
+}
+.composer textarea {
+  min-height: 52px;
+  max-height: 200px;
+  padding: var(--s3) var(--s4);
+  border-radius: 14px;
+  border: 2px solid var(--ink);
+  background: #fff;
+  color: var(--text);
+  caret-color: var(--wood);
+  resize: none;
+  font-weight: 500;
+}
+.composer textarea::placeholder {
+  color: #6b5544;
+}
+.send {
+  width: 52px;
+  height: 52px;
+  border: 0;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  background: var(--go);
+  color: #2a1a08;
+  box-shadow:
+    inset 0 -3px 0 var(--go2),
+    0 0 0 2px var(--ink);
+}
+.send:hover:not(:disabled) {
+  background: #f0b04f;
+}
+.send:active:not(:disabled) {
+  transform: translateY(2px);
+}
+.send:disabled {
+  background: var(--paper2);
+  color: #7d6a55;
+  box-shadow: 0 0 0 2px #9c8a73;
+  cursor: default;
+}
+@media (prefers-reduced-motion: reduce) {
+  .aic-status-eye,
+  .shimmer {
+    animation: none;
+  }
+  .msg-ace.is-streaming .msg-body > :is(p, h3, h4, h5, h6):last-child::after,
+  .msg-ace.is-streaming .msg-body > :is(ul, ol):last-child > li:last-child::after {
+    animation: none;
+  }
+  .voice .mic {
+    transition: none;
+  }
+}
+@media (max-width: 899px) {
+  .ace {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--s3);
+    gap: var(--s4);
+  }
+  .ace-stage {
+    position: static;
+    padding-top: var(--s2);
+    gap: var(--s3);
+  }
+  .ace-stage {
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr);
+    align-items: center;
+    column-gap: var(--s3);
+  }
+  .ace-stage > :not(.eyes):not(.voice) {
+    grid-column: 1 / -1;
+  }
+  .ace .eye-pair {
+    width: 96px;
+  }
+  .voice-strip {
+    height: 64px;
+  }
+  .voice-row {
+    padding: 0;
+    gap: var(--s3);
+  }
+  .voice .mic {
+    width: 52px;
+    height: 52px;
+  }
+  .ace .toggles {
+    flex-direction: row;
+    flex-wrap: wrap;
+    column-gap: var(--s4);
+  }
+  .ace .toggles {
+    padding: 0;
+  }
+  .talk {
+    height: calc(100dvh - 390px);
+    min-height: 360px;
+  }
+  .chat {
+    padding: var(--s4);
+  }
+  .msg-owner .msg-body {
+    max-width: 88%;
+  }
 }
 .fab {
   position: fixed;
@@ -1115,13 +1481,6 @@ table.costs td {
     flex: 0 0 100%;
     overflow-x: auto;
     flex-wrap: nowrap;
-  }
-  .composer {
-    grid-template-columns: 1fr auto;
-  }
-  .composer .mic {
-    grid-column: 1 / -1;
-    justify-content: center;
   }
   .citytop {
     right: 9px;

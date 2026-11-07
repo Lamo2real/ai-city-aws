@@ -6,7 +6,7 @@ All commands are run by the owner from a terminal with an AWS IAM Identity Cente
 Follow `docs/DEPLOY_CHECKLIST.md` top to bottom.
 
 ## Pause and resume
-- From the HUD: **Settings → Pause the city…** (or say "Ace, pause everything"). Undo is offered for 12 seconds.
+- From the HUD: **Settings → Pause the city…** (or say "AIC, pause everything"). Undo is offered for 12 seconds.
 - From a terminal (also stops queue triggers):
 ```bash
 AWS_PROFILE=aic ./scripts/city-off.sh "Paused for the weekend"

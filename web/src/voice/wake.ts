@@ -2,10 +2,10 @@
 // unclear ones go to the server, which asks Haiku. Kept in step with backend/src/aic/shared/utility.py
 // (tests on both sides check tests/fixtures/wake-cases.json).
 const GREETING = String.raw`(?:yo|hi|hey|hello|hiya|ok|okay|morning|good (?:morning|afternoon|evening)|what'?s up|whats up|sup|how'?s it going|hows it going)`;
-const NAME = String.raw`(?:ace|aic|a\.?\s?i\.?\s?c\.?)`;
+const NAME = String.raw`(?:aic|a\.?\s?i\.?\s?c\.?)`;
 const ADDRESSED = new RegExp(String.raw`^\s*(?:${GREETING}[\s,!.]*)?${NAME}\b`, "i");
 const ENDS_WITH_NAME = new RegExp(String.raw`[,\s]${NAME}[\s?.!]*$`, "i");
-const MENTIONS = new RegExp(String.raw`\b${NAME}\b|\bays\b|\bace's\b`, "i");
+const MENTIONS = new RegExp(String.raw`\b${NAME}\b`, "i");
 
 export function wakeMatch(transcript: string): "yes" | "no" | "unclear" {
   const t = transcript.trim().replace(/[“”"]/g, "");

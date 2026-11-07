@@ -31,7 +31,7 @@ class EngineRequest:
     ctx: TurnCtx
     ledger: Ledger
     on_text: Callable[[str], Awaitable[None]] | None = None
-    """Text as it streams, for Ace's spoken replies."""
+    """Text as it streams, for AIC's spoken replies."""
     on_needs_approval: Callable[[str, dict[str, Any], str, str], Awaitable[None]] | None = None
     """Called when a built-in tool call needs the owner's approval for this exact action (tool, input, hash, reason)."""
     on_activity: Callable[[str, str | None], Awaitable[None]] | None = None
@@ -78,78 +78,136 @@ def usage_from_model_usage(mu: dict[str, dict[str, Any]], ttl: str) -> Usage:
     return Usage(input=inp, output=out, cache_read=read, cache_write_5m=w5_total, cache_write_1h=w1_total)
 
 
-async def sdk_engine(req: EngineRequest) -> TurnOutput:
-    """The production engine: the Claude Agent SDK, on Bedrock, with the city tools in-process."""
+class _Binding:
+    """What a (possibly pre-started) Claude process is working on right now: tools, permission checks and
+    stderr are looked up here at call time, so one process can be started before its turn arrives."""
+
+    def __init__(self, req: EngineRequest | None = None) -> None:
+        self.req = req
+        self.stderr_tail: list[str] = []
+
+    def bound(self) -> EngineRequest:
+        if self.req is None:
+            raise RuntimeError("no turn is bound to this engine yet")
+        return self.req
+
+
+def _options(req: EngineRequest, b: _Binding) -> Any:
+    """The SDK options for ``req``'s kind of turn. Everything turn-specific goes through ``b``."""
     from claude_agent_sdk import (
-        AssistantMessage,
         ClaudeAgentOptions,
         PermissionResultAllow,
         PermissionResultDeny,
-        ResultMessage,
-        TextBlock,
         create_sdk_mcp_server,
-        query,
         tool,
     )
 
     def make(t: ToolSpec) -> Any:
         @tool(t.name, t.description, t.schema)
         async def run(args: dict[str, Any]) -> dict[str, Any]:
-            return {"content": [{"type": "text", "text": await t.handler(args)}]}
+            handler = next(x.handler for x in b.bound().tools if x.name == t.name)
+            return {"content": [{"type": "text", "text": await handler(args)}]}
 
         return run
 
     server = create_sdk_mcp_server(name=CITY_SERVER, version="1.0.0", tools=[make(t) for t in req.tools])
     allowed = [mcp_name(t.name) for t in req.tools] + req.builtins
     env = {**os.environ, "ANTHROPIC_MODEL": req.turn.model.invoke_id}
+    # The Claude Code CLI on Bedrock needs AWS_REGION; the runtime only sets AIC_REGION.
+    region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or os.environ.get("AIC_REGION")
+    if region:
+        env["AWS_REGION"] = region
+    if not req.builtins:
+        # No shell tools, so nothing to scrub; with it set Claude Code demands bubblewrap and won't start.
+        env.pop("CLAUDE_CODE_SUBPROCESS_ENV_SCRUB", None)
     if req.turn.cache_ttl == "1h":
         env["ENABLE_PROMPT_CACHING_1H"] = "1"
 
+    def on_stderr(line: str) -> None:
+        b.stderr_tail.append(line.rstrip()[:500])
+        del b.stderr_tail[:-30]
+
     async def can_use_tool(name: str, input: dict[str, Any], _ctx: Any) -> Any:
+        r_ = b.bound()
         if name not in allowed:
             return PermissionResultDeny(message=f"{name} is not one of your tools.")
-        r = await gate(name, input, req.ctx.role, req.ctx.agent_id, consume_approval=req.ledger.consume_approval)
-        await req.ledger.audit_tool(req.ctx.agent_id, name, r.decision, r.reason)
-        if r.needs_approval and req.on_needs_approval:
-            await req.on_needs_approval(name, input, r.needs_approval.hash, r.needs_approval.reason)
+        r = await gate(name, input, r_.ctx.role, r_.ctx.agent_id, consume_approval=r_.ledger.consume_approval)
+        await r_.ledger.audit_tool(r_.ctx.agent_id, name, r.decision, r.reason)
+        if r.needs_approval and r_.on_needs_approval:
+            await r_.on_needs_approval(name, input, r.needs_approval.hash, r.needs_approval.reason)
         if r.decision == "allow":
-            if req.on_activity:
-                await req.on_activity(activity_for(name), None)
+            if r_.on_activity:
+                await r_.on_activity(activity_for(name), None)
             return PermissionResultAllow(updated_input=input)
         return PermissionResultDeny(message=r.reason)
+
+    return ClaudeAgentOptions(
+        model=req.turn.model.invoke_id,
+        system_prompt=req.system,  # stable text first, so prompt caching hits
+        mcp_servers={CITY_SERVER: server},
+        # Nothing is pre-approved: an allowed_tools entry would skip can_use_tool, and with it the policy gate.
+        # can_use_tool denies anything outside ``allowed`` and gates the rest.
+        allowed_tools=[],
+        setting_sources=[],  # no settings files: the city decides tools, not the repo a worker clones
+        env=env,
+        cwd=req.cwd,
+        can_use_tool=can_use_tool,
+        include_partial_messages=bool(req.on_text),  # token deltas, so the reply streams as it is written
+        stderr=on_stderr,  # kept so a failed turn says why (the SDK drops it otherwise)
+    )
+
+
+async def _consume(messages: AsyncIterator[Any], req: EngineRequest, b: _Binding, seen: list[bool]) -> TurnOutput:
+    from claude_agent_sdk import AssistantMessage, ResultMessage, StreamEvent
+
+    text = ""
+    stop: StopReason = "end_turn"
+    usage = Usage()
+    try:
+        async for msg in messages:
+            if isinstance(msg, StreamEvent | AssistantMessage | ResultMessage):
+                seen[0] = True  # the model has started (it may have called a tool): no silent retry after this
+            if isinstance(msg, StreamEvent):
+                ev = msg.event
+                delta = ev.get("delta") or {}
+                if req.on_text and ev.get("type") == "content_block_delta" and delta.get("type") == "text_delta":
+                    await req.on_text(str(delta.get("text", "")))
+            elif isinstance(msg, AssistantMessage):
+                if getattr(msg, "stop_reason", None) == "refusal":
+                    stop = "refusal"
+            elif isinstance(msg, ResultMessage):
+                if msg.subtype == "success":
+                    text = msg.result or ""
+                if msg.stop_reason == "refusal":
+                    stop = "refusal"
+                elif msg.stop_reason == "max_tokens":
+                    stop = "max_tokens"
+                usage = usage_from_model_usage(dict(msg.model_usage or {}), req.turn.cache_ttl)  # type: ignore[arg-type]
+                if (msg.subtype != "success" or getattr(msg, "is_error", False)) and stop == "end_turn":
+                    raise RuntimeError(f"agent turn ended with {msg.subtype}: {str(msg.result or '')[:500]}")
+    except Exception as e:
+        tail = " | ".join(b.stderr_tail[-10:])
+        raise RuntimeError(f"{type(e).__name__}: {e}" + (f" — CLI stderr: {tail}" if tail else "")) from e
+    return TurnOutput(text=text, stop_reason=stop, usage=usage)
+
+
+async def sdk_engine(req: EngineRequest) -> TurnOutput:
+    """The production engine: the Claude Agent SDK, on Bedrock, with the city tools in-process. AIC, which has
+    only city tools and must answer within seconds, talks to Bedrock directly instead (see ``direct``)."""
+    if req.ctx.role == "ace" and not req.builtins:
+        from .direct import direct_engine
+
+        return await direct_engine(req)
+    return await _cold(req)
+
+
+async def _cold(req: EngineRequest) -> TurnOutput:
+    from claude_agent_sdk import query
+
+    b = _Binding(req)
 
     # can_use_tool needs streaming input: the prompt is sent as one user message on a stream.
     async def prompt() -> AsyncIterator[dict[str, Any]]:
         yield {"type": "user", "message": {"role": "user", "content": req.turn.prompt}}
 
-    options = ClaudeAgentOptions(
-        model=req.turn.model.invoke_id,
-        system_prompt=req.system,  # stable text first, so prompt caching hits
-        mcp_servers={CITY_SERVER: server},
-        allowed_tools=allowed,
-        setting_sources=[],  # no settings files: the city decides tools, not the repo a worker clones
-        env=env,
-        cwd=req.cwd,
-        can_use_tool=can_use_tool,
-    )
-    text = ""
-    stop: StopReason = "end_turn"
-    usage = Usage()
-    async for msg in query(prompt=prompt(), options=options):
-        if isinstance(msg, AssistantMessage):
-            for block in msg.content:
-                if isinstance(block, TextBlock) and req.on_text:
-                    await req.on_text(block.text)
-            if getattr(msg, "stop_reason", None) == "refusal":
-                stop = "refusal"
-        elif isinstance(msg, ResultMessage):
-            if msg.subtype == "success":
-                text = msg.result or ""
-            if msg.stop_reason == "refusal":
-                stop = "refusal"
-            elif msg.stop_reason == "max_tokens":
-                stop = "max_tokens"
-            usage = usage_from_model_usage(dict(msg.model_usage or {}), req.turn.cache_ttl)  # type: ignore[arg-type]
-            if msg.subtype != "success" and stop == "end_turn":
-                raise RuntimeError(f"agent turn ended with {msg.subtype}")
-    return TurnOutput(text=text, stop_reason=stop, usage=usage)
+    return await _consume(query(prompt=prompt(), options=_options(req, b)), req, b, [False])

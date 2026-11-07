@@ -25,7 +25,7 @@ The Mac version had **no public port**. This version is reachable from the inter
 | **Self-improvement rewriting its judges** | Built and disabled (`AIC_SELF_IMPROVE` unset). Even if enabled, a change touching `infra/`, IAM, `config/policy.json`, `config/caps.json`, the policy/caps/guard code, CI, any `package.json` or an existing test is refused. | — |
 
 ## IAM summary
-- **Ace**: its model (Sonnet), its memory, ledger read/write, events, send to queues.
+- **AIC**: its model (Sonnet), its memory, ledger read/write, events, send to queues.
 - **Orchestrator**: its models (Fable + Opus fallback), ledger, events, queues.
 - **Manager**: as Orchestrator, plus invoke the Agent Factory.
 - **Worker**: its model (Opus) only; ledger reads, writes only under listed key prefixes; consume (delete) owner approvals; send to the manager queue; assume the workspace role with a `hire_id` session tag; Code Interpreter and Browser; the GitHub secret only.

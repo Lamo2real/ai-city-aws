@@ -8,7 +8,7 @@ others).
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -21,6 +21,7 @@ from aic.shared.models import resolve_role_from_env
 from aic.shared.turn import BackoffOptions, GateDeps, GatedTurn, TurnInput, TurnOutput, run_gated_turn
 
 from .engine import AgentEngine, EngineRequest
+from .live import LiveReply, Send
 from .prompts import department_template, load_prompt
 from .tools import TurnCtx, file_approval, gate_tools, tools_for
 
@@ -47,6 +48,8 @@ class HostOptions:
     env: Mapping[str, str] | None = None
     backoff: BackoffOptions | None = None
     timeout_ms: int | None = None
+    live_sender: Callable[[dict[str, Any]], Send | None] | None = None
+    """For an AIC turn: how to send reply pieces straight to the HUD, or None to use the event bus."""
 
 
 class AgentHost:
@@ -56,7 +59,7 @@ class AgentHost:
 
     async def ensure_core(self) -> None:
         at = now_iso(self.d.ledger.now())
-        for id, role, model in (("ace", "Ace", "sonnet-5-5"), ("orchestrator", "Orchestrator", "fable-5-1")):
+        for id, role, model in (("ace", "AIC", "haiku-5-5"), ("orchestrator", "Orchestrator", "fable-5-1")):
             if not await self.d.ledger.get_agent(id):
                 await self.d.ledger.put_agent(
                     {
@@ -119,8 +122,23 @@ class AgentHost:
                     e["detail"] = detail
                 await bus.put(e)
 
+            direct = self.o.live_sender(inv) if self.o.live_sender and is_ace else None
+
+            async def send(event: dict[str, Any]) -> None:
+                if direct:
+                    try:
+                        await direct(event)
+                        if not event.get("done"):
+                            return
+                    except Exception as e:  # the reply still arrives through the bus
+                        log("warn", "live.send_failed", error=type(e).__name__)
+                # The final reply always also goes the reliable way (the HUD ignores a repeat).
+                await bus.put(event)
+
+            live = LiveReply(send, conversation or "")
+
             async def on_text(text: str) -> None:
-                await bus.put({"type": "ace.reply", "conversation": conversation, "text": text, "done": False})
+                await live.add(text)
 
             async def runner(turn: TurnInput) -> TurnOutput:
                 return await self.o.engine(
@@ -169,9 +187,7 @@ class AgentHost:
                 },
             )
             if is_ace and conversation:
-                await bus.put(
-                    {"type": "ace.reply", "conversation": conversation, "text": result.output.text, "done": True}
-                )
+                await live.done(result.output.text)
                 if inv.get("from") == "owner":
                     await ledger.add_conversation_line(conversation, "owner", inv["body"])
                 else:
@@ -243,7 +259,7 @@ class AgentHost:
             if recent:
                 lines = [
                     "Conversation so far (most recent last):",
-                    *[f"{'Ace' if r['who'] == 'ace' else 'Owner'}: {r['text']}" for r in recent],
+                    *[f"{'AIC' if r['who'] == 'ace' else 'Owner'}: {r['text']}" for r in recent],
                     "",
                     *lines,
                 ]

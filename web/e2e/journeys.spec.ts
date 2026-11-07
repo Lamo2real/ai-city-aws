@@ -57,7 +57,7 @@ test("first sign-in on our own screens: temporary password, own password, authen
   await page.getByLabel("6-digit code").fill("123456");
   await page.getByRole("button", { name: "Confirm and sign in" }).click();
 
-  await expect(page.getByRole("button", { name: "AI City — talk to Ace" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "AI City — talk to AIC" })).toBeVisible();
 });
 
 test("later sign-ins: a wrong password says so plainly; then password and code", async ({ page }) => {
@@ -73,7 +73,7 @@ test("later sign-ins: a wrong password says so plainly; then password and code",
   await page.getByLabel("6-digit code", { exact: true }).fill("12a3456"); // only digits are kept
   await expect(page.getByLabel("6-digit code", { exact: true })).toHaveValue("123456");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "AI City — talk to Ace" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "AI City — talk to AIC" })).toBeVisible();
 });
 
 test("forgot password and a new first-login email, without leaving AI City", async ({ page }) => {
@@ -100,7 +100,7 @@ test("forgot password and a new first-login email, without leaving AI City", asy
 test("first login shows a three-step guide that can be skipped", async ({ page }) => {
   await mockBackend(page, { firstRunDone: false });
   await page.goto("/");
-  await expect(page.getByRole("dialog", { name: "Meet Ace" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Meet AIC" })).toBeVisible();
   await shot(page, "first-run-guide");
   await page.getByRole("button", { name: "Next" }).click();
   await expect(page.getByRole("heading", { name: "See the City" })).toBeVisible();
@@ -108,46 +108,173 @@ test("first login shows a three-step guide that can be skipped", async ({ page }
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
-test("lands on Ace with the input focused; asking something shows Ace's streamed reply", async ({ page }) => {
+test("lands on AIC with the input focused; asking something shows AIC's streamed reply", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/");
-  const box = page.getByRole("textbox", { name: "Message to Ace" });
+  const box = page.getByRole("textbox", { name: "Message to AIC" });
   await expect(box).toBeFocused();
-  await expect(page.getByRole("button", { name: "Talk to Ace", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Talk to AIC", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /Today: \$0.42 of \$10/ })).toBeVisible();
   expect(await primaries(page)).toBeLessThanOrEqual(1);
-  await box.fill("yo Ace, what's 9 + 9?");
-  await page.getByRole("button", { name: "Send to Ace" }).click();
+  await box.fill("yo AIC, what's 9 + 9?");
+  await page.getByRole("button", { name: "Send to AIC" }).click();
   await expect
     .poll(() => m.calls.find((c) => c.path === "/messages")?.body)
-    .toMatchObject({ text: "yo Ace, what's 9 + 9?", conversation: "main" });
-  await expect(page.locator("section.ace").getByRole("img", { name: "Ace is thinking" })).toBeVisible();
+    .toMatchObject({ text: "yo AIC, what's 9 + 9?", conversation: "main" });
+  await expect(page.locator("section.ace").getByRole("img", { name: "AIC is thinking" })).toBeVisible();
   m.send({ type: "ace.reply", conversation: "main", text: "Eigh", done: false });
   m.send({ type: "ace.reply", conversation: "main", text: "Eighteen.", done: true });
-  await expect(page.getByLabel("Conversation with Ace").getByText("Eighteen.")).toBeVisible();
+  await expect(page.getByLabel("Conversation with AIC").getByText("Eighteen.")).toBeVisible();
+  // The owner on the right in a bubble, AIC on the left as plain text with Markdown rendered.
+  m.send({
+    type: "ace.reply",
+    conversation: "main",
+    text: "## Today\n- **Research**: 3 workers\n- Engineering: idle\n\n| Dept | Spend |\n|---|---|\n| Research | $0.30 |",
+    done: true,
+  });
+  const log = page.getByLabel("Conversation with AIC");
+  await expect(log.getByRole("heading", { name: "Today" })).toBeVisible();
+  await expect(log.getByRole("cell", { name: "$0.30" })).toBeVisible();
+  const mine = (await log.locator(".msg-owner .msg-body").first().boundingBox())!;
+  const theirs = (await log.locator(".msg-ace .msg-body").first().boundingBox())!;
+  const panel = (await log.boundingBox())!;
+  expect(mine.x + mine.width).toBeGreaterThan(panel.x + panel.width - 40); // hugs the right edge
+  expect(theirs.x).toBeLessThan(panel.x + 40); // starts at the left edge
+  expect(mine.x).toBeGreaterThan(theirs.x + 100);
   await expect(page.getByText(/Not sent yet/)).toHaveCount(0); // delivered, so nothing waits in the outbox
   await shot(page, "ace");
-  await noSeriousA11y(page, "Ace");
+  await noSeriousA11y(page, "AIC");
 });
 
-test("push-to-talk sends what the owner said to Ace", async ({ page }) => {
+test("push-to-talk sends what the owner said to AIC", async ({ page }) => {
   const m = await mockBackend(page);
   await page.addInitScript(
-    () => ((window as unknown as { __heard: string }).__heard = "hey Ace, what's the status of the product?"),
+    () => ((window as unknown as { __heard: string }).__heard = "hey AIC, what's the status of the product?"),
   );
   await page.goto("/");
-  await page.getByRole("button", { name: "Talk to Ace", exact: true }).click();
+  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
   await expect
     .poll(() => m.calls.find((c) => c.path === "/messages")?.body)
-    .toMatchObject({ text: "hey Ace, what's the status of the product?" });
+    .toMatchObject({ text: "hey AIC, what's the status of the product?" });
+});
+
+test("the voice strip shows clearly who is talking: the owner, then AIC", async ({ page }) => {
+  const m = await mockBackend(page);
+  await page.addInitScript(() => {
+    (window as unknown as { __micHold: boolean }).__micHold = true;
+    (window as unknown as { __speakMs: number }).__speakMs = 4000;
+  });
+  await page.goto("/");
+  const strip = page.locator(".voice");
+  await expect(strip).toHaveAttribute("data-speaker", "idle");
+  // The eye is the owner's plain drawing: one ink colour, no motion, whatever the state.
+  const eye = () =>
+    page.locator("section.ace .eye-shape").evaluate((e) => {
+      const look = (n: Element) => getComputedStyle(n);
+      return [look(e).backgroundColor, look(e).animationName, look(e.parentElement!).animationName, look(e).transform];
+    });
+  const plain = await eye();
+  expect(plain.slice(1)).toEqual(["none", "none", "none"]);
+  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await expect(strip).toHaveAttribute("data-speaker", "you");
+  await expect(strip.getByRole("status")).toHaveText("Listening to you");
+  await expect(strip.getByText("You’re talking")).toBeVisible(); // the fake mic is loud
+  await expect(page.getByRole("button", { name: "Stop listening" })).toHaveAttribute("aria-pressed", "true");
+  expect(await eye()).toEqual(plain);
+  await shot(page, "ace-you-talking");
+  await page.getByRole("button", { name: "Stop listening" }).click();
+  await expect(strip).toHaveAttribute("data-speaker", "idle");
+
+  await page.getByRole("textbox", { name: "Message to AIC" }).fill("status?");
+  await page.keyboard.press("Enter");
+  await expect(strip).toHaveAttribute("data-speaker", "thinking");
+  await expect.poll(() => m.calls.some((c) => c.path === "/messages")).toBe(true);
+  await expect(page.getByText(/Not sent yet/)).toHaveCount(0);
+  m.send({ type: "ace.reply", conversation: "main", text: "All quiet. Nothing needs you.", done: true });
+  await expect(strip).toHaveAttribute("data-speaker", "aic");
+  await expect(strip.getByRole("status")).toHaveText("AIC is talking");
+  expect(await eye()).toEqual(plain);
+  await shot(page, "ace-aic-talking");
+  await noSeriousA11y(page, "AIC talking");
+});
+
+test("a microphone failure names the real cause and logs it to the console", async ({ page }) => {
+  await mockBackend(page);
+  await page.addInitScript(() => ((window as unknown as { __micError: string }).__micError = "NotAllowedError"));
+  const logged: string[] = [];
+  page.on("console", (msg) => msg.type() === "error" && logged.push(msg.text()));
+  await page.goto("/");
+  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("Microphone access is blocked for this site");
+  await expect(page.locator(".voice")).toHaveAttribute("data-speaker", "idle");
+  expect(
+    logged.some((t) => t.includes("[AIC voice] the microphone could not start:") && t.includes("NotAllowedError")),
+  ).toBe(true);
+});
+
+test("AIC's reply: its steps with a shimmering status first, then words flowing in, then the steps folded", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  await page.goto("/");
+  const log = page.getByLabel("Conversation with AIC");
+  await page.getByRole("textbox", { name: "Message to AIC" }).fill("tell me about the city");
+  await page.keyboard.press("Enter");
+  const status = log.getByRole("status", { name: /^AIC: / });
+  await expect(status).toHaveAccessibleName("AIC: Understanding your message"); // before any event arrives
+  await expect(status.locator(".shimmer")).toHaveCSS("animation-name", "shimmer-sweep");
+  m.send({ type: "activity", id: "ace", activity: "understanding" });
+  m.send({ type: "activity", id: "ace", activity: "working", detail: "get_status" });
+  await expect(status).toHaveAccessibleName("AIC: Checking the ledger");
+  await expect(status).toContainText(/\ds$/);
+  await shot(page, "ace-working");
+  const words = Array.from({ length: 60 }, (_, i) => `word${i}`).join(" ");
+  m.send({ type: "ace.reply", conversation: "main", text: `**City**: ${words}`, done: false });
+  await expect(status).toHaveCount(0); // the status row goes once words arrive
+  const reply = log.locator(".msg-ace").last();
+  await expect(reply).toHaveAttribute("aria-busy", "true");
+  // Revealed bit by bit, not in one jump.
+  const lengths: number[] = [];
+  for (let i = 0; i < 6; i++) {
+    lengths.push(((await reply.textContent()) ?? "").length);
+    await page.waitForTimeout(60);
+  }
+  expect(lengths[0]).toBeLessThan(words.length);
+  expect(new Set(lengths).size).toBeGreaterThan(2);
+  await expect(reply.locator("strong")).toHaveText("City"); // bold renders as bold, never as **City
+  await shot(page, "ace-reply-streaming");
+  m.send({ type: "ace.reply", conversation: "main", text: "**City**: all quiet. Final answer.", done: true });
+  await expect(reply).toContainText("all quiet. Final answer.");
+  await expect(reply).not.toHaveAttribute("aria-busy", "true");
+  await expect(reply).not.toContainText("word59");
+  const steps = reply.locator("details.aic-steps");
+  await expect(steps.locator("summary")).toHaveText(/^2 steps/);
+  await expect(steps.getByText("Checking the ledger")).toBeHidden(); // folded until opened
+  await steps.locator("summary").click();
+  await expect(steps.getByText("Checking the ledger")).toBeVisible();
+});
+
+test("with reduced motion the reply appears directly, without the typing effect", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const m = await mockBackend(page);
+  await page.goto("/");
+  await page.getByRole("textbox", { name: "Message to AIC" }).fill("status?");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".shimmer")).toHaveCSS("animation-name", "none");
+  await expect(page.locator(".aic-status-eye")).toHaveCSS("animation-name", "none");
+  const text = "One two three four five six seven eight nine ten eleven twelve.";
+  m.send({ type: "ace.reply", conversation: "main", text, done: false });
+  await expect(page.getByLabel("Conversation with AIC").locator(".msg-ace .msg-body").last()).toHaveText(text, {
+    timeout: 150,
+  });
 });
 
 test("a draft survives a reload", async ({ page }) => {
   await mockBackend(page);
   await page.goto("/");
-  await page.getByRole("textbox", { name: "Message to Ace" }).fill("half a thought");
+  await page.getByRole("textbox", { name: "Message to AIC" }).fill("half a thought");
   await page.reload();
-  await expect(page.getByRole("textbox", { name: "Message to Ace" })).toHaveValue("half a thought");
+  await expect(page.getByRole("textbox", { name: "Message to AIC" })).toHaveValue("half a thought");
 });
 
 test("watching the City: a department goes up and workers appear when hired", async ({ page }) => {
@@ -189,7 +316,7 @@ test("watching the City: a department goes up and workers appear when hired", as
   await expect(depts.getByLabel("3 workers")).toBeVisible();
   await expect(page.locator(".feed")).toContainText("Department Engineering created");
   await expect(page.locator(".feed")).toContainText("wkr-engineering-a1 got a ticket from mgr-engineering");
-  await expect.poll(async () => Number(await city.getAttribute("data-people"))).toBeGreaterThanOrEqual(6); // Ace, Orchestrator, manager, 3 workers
+  await expect.poll(async () => Number(await city.getAttribute("data-people"))).toBeGreaterThanOrEqual(6); // AIC, Orchestrator, manager, 3 workers
   await page.waitForTimeout(800); // let the walk-in finish for the picture
   await shot(page, "city-workers");
   await depts.getByRole("button", { name: /Engineering/ }).click();
@@ -316,7 +443,7 @@ test("hitting the spend cap: the money pill turns red and the City says so plain
 test("a lost connection says what happened and that nothing was lost", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/");
-  await expect(page.getByRole("textbox", { name: "Message to Ace" })).toBeFocused();
+  await expect(page.getByRole("textbox", { name: "Message to AIC" })).toBeFocused();
   await expect
     .poll(() => {
       try {

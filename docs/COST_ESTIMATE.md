@@ -23,11 +23,11 @@ Prices: Bedrock global profiles from `docs/FACTS_CHECKED.md` (USD per million to
 
 ## 2. One typical task, end to end
 Computed with `estimateUsd()` from `packages/shared/src/cost.ts` (the same function the ledger uses). "Without caching" sends every cached token as plain input.
-"Add a feature with tests" — Ace 2 turns, Orchestrator 3, one department's manager 6 (incl. reviews), 3 workers each doing an agentic job.
+"Add a feature with tests" — AIC 2 turns, Orchestrator 3, one department's manager 6 (incl. reviews), 3 workers each doing an agentic job.
 
 | Role | Turns | Tokens per turn (input / cache read / cache write / output) | With caching | Without caching |
 |---|---|---|---|---|
-| Ace (Sonnet 5.5) | 2 | 2k / 6k / 0.5k / 0.3k | $0.02 | $0.04 |
+| AIC (Sonnet 5.5) | 2 | 2k / 6k / 0.5k / 0.3k | $0.02 | $0.04 |
 | Orchestrator (Fable 5.1) | 3 | 3k / 10k / 1k / 1k | $0.31 | $0.57 |
 | Manager (Fable 5.1, 1-hour cache) | 6 | 4k / 15k / 2k / 1.5k | $0.95 | $1.71 |
 | Workers (Opus 5.5) | 3 jobs | 40k / 260k / 40k / 15k per job | $2.14 | $4.98 |
@@ -39,7 +39,7 @@ Prompt caching roughly halves the cost because agent turns resend long, stable s
 
 ## 3. Monthly, by usage level (infrastructure + AI)
 
-| Usage | Tasks / month | Ace chats (status, small talk) | AI estimate | Total estimate | vs. the $10,000 alert |
+| Usage | Tasks / month | AIC chats (status, small talk) | AI estimate | Total estimate | vs. the $10,000 alert |
 |---|---|---|---|---|---|
 | Low | 8 (2 a week) | 100 | $28 + $1 | **≈ $661** | far below |
 | Normal | 30 (1 a day) | 300 | $105 + $3 | **≈ $740** | far below |

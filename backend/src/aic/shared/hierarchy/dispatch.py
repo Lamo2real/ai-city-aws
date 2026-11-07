@@ -69,12 +69,12 @@ class Dispatcher:
                     "limit": cap.limit,
                 }
             )
-            # Ace asks the owner once per cap per day whether to raise it; the work waits meanwhile.
+            # AIC asks the owner once per cap per day whether to raise it; the work waits meanwhile.
             if await ledger.claim(f"cap-question:{cap.cap}:{cap.department or 'all'}:{day_key(ledger.now())}"):
                 q = await ledger.ask_question(
                     {
                         "asked_by": "ace",
-                        "path": "Ace",
+                        "path": "AIC",
                         "ticket_id": None,
                         "text": f"{cap.message} Raise the cap so waiting work can continue?",
                         "options": ["Keep the cap (work waits)", "Raise the cap in Settings"],

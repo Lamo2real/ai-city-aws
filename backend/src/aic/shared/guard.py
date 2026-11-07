@@ -32,8 +32,8 @@ def startup_guard(env: Mapping[str, str] | None = None) -> None:
         raise StartupRefused(
             f"Refusing to start: {', '.join(found)} must not be set. Bedrock is reached through the IAM role only."
         )
-    if e.get("CLAUDE_CODE_SUBPROCESS_ENV_SCRUB") == "0":
-        raise StartupRefused("Refusing to start: CLAUDE_CODE_SUBPROCESS_ENV_SCRUB must stay on for worker shells.")
+    if e.get("AIC_ROLE") == "worker" and e.get("CLAUDE_CODE_SUBPROCESS_ENV_SCRUB") != "1":
+        raise StartupRefused("Refusing to start: CLAUDE_CODE_SUBPROCESS_ENV_SCRUB must be 1 for worker shells.")
 
 
 def bedrock_env(region: str) -> dict[str, str]:
@@ -42,5 +42,4 @@ def bedrock_env(region: str) -> dict[str, str]:
         "CLAUDE_CODE_USE_BEDROCK": "1",
         "AWS_REGION": region,
         "CLAUDE_CODE_DISABLE_1M_CONTEXT": "1",
-        "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1",
     }

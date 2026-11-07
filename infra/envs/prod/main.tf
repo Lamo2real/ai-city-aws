@@ -162,6 +162,8 @@ module "api" {
   client_id           = module.auth.client_id
   app_origin          = module.frontend.url
   runtime_arns        = module.agents.runtime_arns
+  runtime_version     = var.agent_image_tag
+  ace_role_name       = module.agents.role_names["ace"]
   utility_invoke_arns = module.agents.utility_invoke_arns
   utility_profile_arn = module.agents.utility_profile_arn
   profile_prefix      = var.profile_prefix

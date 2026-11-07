@@ -98,17 +98,19 @@ def test_every_role_prompt_exists_and_lists_its_tools() -> None:
 def test_aces_prompt_states_its_name_greetings_spoken_style_and_limits() -> None:
     body = load_prompt("ace.md").body
     for s in (
-        "Ace",
         "AIC",
-        "yo Ace",
-        "hi Ace",
-        "what's up Ace",
-        "how's it going Ace",
-        "what's the status of the product, Ace?",
+        "AIC",
+        "yo AIC",
+        "hi AIC",
+        "what's up AIC",
+        "how's it going AIC",
+        "what's the status of the product, AIC?",
         "Short",
         "can't",
     ):
         assert s in body
+    assert "buddy" in body and "informal" in body
+    assert "Never ask for a password or key in chat" in body  # access goes through the HUD, never chat
 
 
 def test_values_put_into_a_prompt_cannot_add_placeholders() -> None:
@@ -150,6 +152,6 @@ def test_dockerfile_builds_for_arm64_serves_8080_runs_as_non_root_keeps_bedrock_
     assert "EXPOSE 8080" in text
     assert re.search(r"^USER aic$", text, re.M)
     assert "CLAUDE_CODE_USE_BEDROCK=1" in text
-    assert "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1" in text
+    assert "bubblewrap" in text  # workers' env scrubbing needs it; the flag itself is set per role
     assert "aic.runtime.server" in text
     assert not re.search(r"ANTHROPIC_API_KEY|awscli|aws-cli", text)

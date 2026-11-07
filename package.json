@@ -2,7 +2,7 @@
   "name": "ai-city-aws",
   "private": true,
   "version": "0.1.0",
-  "description": "AI City (Ace): the owner's personal organization of AI agents on AWS.",
+  "description": "AI City (AIC): the owner's personal organization of AI agents on AWS.",
   "type": "module",
   "engines": {
     "node": ">=24 <27"

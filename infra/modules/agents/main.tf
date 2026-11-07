@@ -145,7 +145,7 @@ resource "aws_iam_role_policy" "common" {
   })
 }
 
-# Ace, the Orchestrator and managers coordinate: ledger and queues. Workers don't (see worker.json).
+# AIC, the Orchestrator and managers coordinate: ledger and queues. Workers don't (see worker.json).
 resource "aws_iam_role_policy" "coordinator" {
   for_each = toset(["ace", "orchestrator", "manager"])
   name     = "coordinate"
@@ -257,27 +257,29 @@ resource "aws_bedrockagentcore_agent_runtime" "role" {
   }
   environment_variables = merge(
     {
-      AIC_ROLE                         = each.key
-      AIC_REGION                       = var.region
-      AIC_LEDGER_TABLE                 = var.ledger_table
-      AIC_EVENT_BUS                    = var.bus_name
-      AIC_QUEUE_ACE                    = var.queue_urls["ace"]
-      AIC_QUEUE_ORCHESTRATOR           = var.queue_urls["orchestrator"]
-      AIC_QUEUE_MANAGER                = var.queue_urls["manager"]
-      AIC_QUEUE_WORKER                 = var.queue_urls["worker"]
-      AIC_FACTORY_FUNCTION             = var.factory_function_name
-      AIC_WORKSPACES_BUCKET            = var.workspaces_bucket
-      AIC_WORKSPACE_ROLE_ARN           = aws_iam_role.workspace.arn
-      AIC_PROFILE_PREFIX               = var.profile_prefix
-      KNOWLEDGE_TABLE                  = var.knowledge_table
-      KNOWLEDGE_BASE_ID                = var.knowledge_base_id
-      KNOWLEDGE_DATA_SOURCE_ID         = var.knowledge_data_source_id
-      KNOWLEDGE_GRAPH_ID               = var.knowledge_graph_id
-      CLAUDE_CODE_USE_BEDROCK          = "1"
-      CLAUDE_CODE_DISABLE_1M_CONTEXT   = "1"
-      CLAUDE_CODE_SUBPROCESS_ENV_SCRUB = "1"
+      AIC_ROLE                       = each.key
+      AIC_REGION                     = var.region
+      AIC_LEDGER_TABLE               = var.ledger_table
+      AIC_EVENT_BUS                  = var.bus_name
+      AIC_QUEUE_ACE                  = var.queue_urls["ace"]
+      AIC_QUEUE_ORCHESTRATOR         = var.queue_urls["orchestrator"]
+      AIC_QUEUE_MANAGER              = var.queue_urls["manager"]
+      AIC_QUEUE_WORKER               = var.queue_urls["worker"]
+      AIC_FACTORY_FUNCTION           = var.factory_function_name
+      AIC_WORKSPACES_BUCKET          = var.workspaces_bucket
+      AIC_WORKSPACE_ROLE_ARN         = aws_iam_role.workspace.arn
+      AIC_PROFILE_PREFIX             = var.profile_prefix
+      KNOWLEDGE_TABLE                = var.knowledge_table
+      KNOWLEDGE_BASE_ID              = var.knowledge_base_id
+      KNOWLEDGE_DATA_SOURCE_ID       = var.knowledge_data_source_id
+      KNOWLEDGE_GRAPH_ID             = var.knowledge_graph_id
+      CLAUDE_CODE_USE_BEDROCK        = "1"
+      CLAUDE_CODE_DISABLE_1M_CONTEXT = "1"
     },
     each.key == "ace" ? { KNOWLEDGE_BUCKET = var.knowledge_bucket } : {},
+    # Only workers run shell commands, so only they scrub their environment (needs bubblewrap, in the image).
+    # On the other roles Claude Code refuses to start with it set and nothing to sandbox.
+    each.key == "worker" ? { CLAUDE_CODE_SUBPROCESS_ENV_SCRUB = "1" } : {},
     var.use_application_inference_profiles ? { "AIC_APP_PROFILE_${upper(each.key)}" = aws_bedrock_inference_profile.role[each.key].arn } : {},
   )
   tags = merge(local.tags, { AgentRole = each.key })

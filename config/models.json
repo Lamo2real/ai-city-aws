@@ -28,7 +28,7 @@
     }
   },
   "roles": {
-    "ace": { "model": "sonnet-5-5", "fallback": null, "cacheTtl": "5m" },
+    "ace": { "model": "haiku-5-5", "fallback": null, "cacheTtl": "5m" },
     "orchestrator": { "model": "fable-5-1", "fallback": "opus-5-5", "cacheTtl": "1h" },
     "manager": { "model": "fable-5-1", "fallback": "opus-5-5", "cacheTtl": "1h" },
     "worker": { "model": "opus-5-5", "fallback": null, "cacheTtl": "5m" },

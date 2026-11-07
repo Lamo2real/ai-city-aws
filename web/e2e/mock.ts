@@ -61,7 +61,7 @@ export const baseSnapshot = () => ({
     {
       id: "ace",
       kind: "core",
-      role: "Ace",
+      role: "AIC",
       department: null,
       model: "sonnet-5-5",
       parent: null,
@@ -191,17 +191,34 @@ export async function mockBackend(
           sessionStorage.removeItem("aic.fake.signedIn");
         },
       };
-      // A fake voice: the mic "hears" whatever the test puts in window.__heard.
+      // A fake voice: the mic "hears" whatever the test puts in window.__heard (or nothing when __micHold is set,
+      // so the screen stays in "listening"); window.__micError makes the mic fail with that DOMException name;
+      // window.__speakMs keeps AIC "talking" that long. levels() wobbles so the voice strip moves.
+      const w = window as unknown as { __heard?: string; __micHold?: boolean; __micError?: string; __speakMs?: number };
+      let hearing = false;
+      let talking = false;
       (window as unknown as { __aicVoice: unknown }).__aicVoice = {
         async listen(onText: (t: string) => void) {
-          const t = setTimeout(
-            () => onText((window as unknown as { __heard?: string }).__heard ?? "yo Ace, status?"),
-            300,
-          );
-          return () => clearTimeout(t);
+          if (w.__micError) throw new DOMException("fake failure", w.__micError);
+          hearing = true;
+          const t = w.__micHold ? undefined : setTimeout(() => onText(w.__heard ?? "yo AIC, status?"), 300);
+          return () => {
+            hearing = false;
+            clearTimeout(t);
+          };
         },
-        async speak() {},
-        stopSpeaking() {},
+        async speak() {
+          talking = true;
+          await new Promise((r) => setTimeout(r, w.__speakMs ?? 0));
+          talking = false;
+        },
+        stopSpeaking() {
+          talking = false;
+        },
+        levels() {
+          const wobble = 0.45 + 0.4 * Math.abs(Math.sin(performance.now() / 140));
+          return { input: hearing ? wobble : 0, output: talking ? wobble : 0 };
+        },
       };
     },
     { signedIn: opts.signedIn ?? true },

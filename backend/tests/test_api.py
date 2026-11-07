@@ -77,7 +77,7 @@ def test_accepts_the_group_in_each_shape_api_gateway_can_send() -> None:
 async def test_post_messages_queues_the_owners_message_for_ace_keyed_by_the_client_id() -> None:
     d = make()
     r = await handle_http(
-        ev("POST", "/messages", {"text": "yo Ace, what's 9 + 9?", "conversation": "c1", "client_id": "abcd1234"}), d
+        ev("POST", "/messages", {"text": "yo AIC, what's 9 + 9?", "conversation": "c1", "client_id": "abcd1234"}), d
     )
     assert r["statusCode"] == 202
     m = d.queue.sent[0]
@@ -215,11 +215,11 @@ async def test_wake_check_plain_matching_first_haiku_only_for_unclear_transcript
         return TurnOutput(text="YES", usage=Usage(input=50, output=1))
 
     d = make(utility_runner=runner)
-    assert js(await handle_http(ev("POST", "/wake-check", {"transcript": "yo Ace, status?"}), d))["addressed"] is True
+    assert js(await handle_http(ev("POST", "/wake-check", {"transcript": "yo AIC, status?"}), d))["addressed"] is True
     assert js(await handle_http(ev("POST", "/wake-check", {"transcript": "pass the salt"}), d))["addressed"] is False
     assert calls == 0
     assert (
-        js(await handle_http(ev("POST", "/wake-check", {"transcript": "so I told ace about it"}), d))["addressed"]
+        js(await handle_http(ev("POST", "/wake-check", {"transcript": "so I told AIC about it"}), d))["addressed"]
         is True
     )
     assert calls == 1
@@ -230,16 +230,18 @@ async def test_wake_check_plain_matching_first_haiku_only_for_unclear_transcript
 @pytest.mark.parametrize(
     ("t", "want"),
     [
-        ("yo Ace", "yes"),
-        ("hi Ace, how are things", "yes"),
-        ("hey ace", "yes"),
-        ("what's up Ace", "yes"),
-        ("how's it going Ace", "yes"),
-        ("Ace, pause everything", "yes"),
-        ("what's the status of the product, Ace?", "yes"),
+        ("yo AIC", "yes"),
+        ("hi AIC, how are things", "yes"),
+        ("hey a.i.c.", "yes"),
+        ("what's up AIC", "yes"),
+        ("how's it going AIC", "yes"),
+        ("AIC, pause everything", "yes"),
+        ("what's the status of the product, AIC?", "yes"),
         ("AIC what time is it", "yes"),
         ("the race was fun", "no"),
-        ("I placed an ace in the deck", "unclear"),
+        ("I placed an ace in the deck", "no"),
+        ("yo Ace", "no"),
+        ("so I told AIC about it", "unclear"),
         ("", "no"),
     ],
 )

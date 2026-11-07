@@ -1,9 +1,9 @@
-# AI City (Ace) on AWS: project rules
+# AI City (AIC) on AWS: project rules
 
-AI City is the owner's personal organization of AI agents, running only in the owner's AWS account. The owner talks to **Ace** (AIC). Ace hands work to the **Orchestrator**, which sends it to one **Department Manager** per department, which hires **Worker** consultants on demand. Agents run on Amazon Bedrock AgentCore; everything else is serverless (Lambda, API Gateway, DynamoDB, SQS, EventBridge, Step Functions, S3, CloudFront, Cognito). Infrastructure is Terraform in `infra/`, single environment `prod`.
+AI City is the owner's personal organization of AI agents, running only in the owner's AWS account. The owner talks to **AIC** (said as the letters A-I-C; never "Ace"). AIC hands work to the **Orchestrator**, which sends it to one **Department Manager** per department, which hires **Worker** consultants on demand. Agents run on Amazon Bedrock AgentCore; everything else is serverless (Lambda, API Gateway, DynamoDB, SQS, EventBridge, Step Functions, S3, CloudFront, Cognito). Infrastructure is Terraform in `infra/`, single environment `prod`.
 
 ## Models (pinned in `config/models.json`; nowhere else)
-- Ace: Claude Sonnet 5.5
+- AIC: Claude Haiku 5.5 (fast replies; it routes, answers status from the ledger, and hands real work to the Orchestrator)
 - Orchestrator and Department Managers: Claude Fable 5.1, falling back to Claude Opus 5.5 once on refusal or no verdict
 - Workers: Claude Opus 5.5
 - Utility calls (wake-word check, titles, compaction): Claude Haiku 5.5, prompts kept under 100,000 tokens

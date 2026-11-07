@@ -1,11 +1,16 @@
-// The landing screen: Ace, with the input focused and the mic in reach. Everything else can be done
-// by asking Ace ("Ace, pause everything", "what's the status of the product?").
+// The landing screen: AIC's eye with the voice strip on the left, the conversation on the right (stacked on a
+// phone). Everything else can be done by asking AIC ("AIC, pause everything", "what's the status?").
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { sendMessage } from "../lib/actions.ts";
 import { store, useHud, waitingCount } from "../lib/store.ts";
 import { useVoice } from "../voice/useVoice.ts";
 import { Eyes } from "./Eyes.tsx";
-import { Banner, Button } from "./ui.tsx";
+import { AicStatus, AicSteps } from "./AicStatus.tsx";
+import { StreamedText } from "./StreamedText.tsx";
+import { Banner, ClearIcon, SendIcon } from "./ui.tsx";
+import { VoiceVisualizer } from "./VoiceVisualizer.tsx";
+
+export { MicIcon } from "./ui.tsx";
 
 const DRAFT = "aic.draft";
 const readDraft = () => {
@@ -21,6 +26,7 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
   const presence = useHud((s) => s.presence);
   const waiting = useHud(waitingCount);
   const live = useHud((s) => s.live);
+  const turn = useHud((s) => s.turn);
   const [text, setText] = useState(readDraft);
   const input = useRef<HTMLTextAreaElement>(null);
   const log = useRef<HTMLDivElement>(null);
@@ -37,6 +43,11 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
   useEffect(() => {
     log.current?.scrollTo({ top: log.current.scrollHeight });
   }, [chat]);
+  // While AIC's reply is being revealed, keep it in view unless the owner has scrolled up to read.
+  const follow = () => {
+    const el = log.current;
+    if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 120) el.scrollTop = el.scrollHeight;
+  };
 
   const submit = async (e?: FormEvent) => {
     e?.preventDefault();
@@ -46,106 +57,114 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
     await sendMessage(t);
     input.current?.focus();
   };
+  const lastLine = chat.at(-1);
+  // Right after the owner sends, AIC's status row (eye, current step, seconds) shows until its first words.
+  const waitingForAic = presence === "thinking" && lastLine?.who === "owner" && lastLine.state !== "failed";
+
   const shown = presence === "idle" && waiting ? "waiting" : presence;
   const unsent = chat.filter((l) => l.who === "owner" && (l.state === "failed" || l.state === "queued")).length;
 
   return (
     <section className="ace" aria-labelledby="ace-title">
       <h1 id="ace-title" className="sr">
-        Talk to Ace
+        Talk to AIC
       </h1>
-      <Eyes presence={shown} />
-      {waiting ? (
-        <Banner tone="warn" action={{ label: "Open", onClick: () => go("inbox") }}>
-          {waiting === 1 ? "One thing needs you." : `${waiting} things need you.`}
-        </Banner>
-      ) : null}
-      {live === "reconnecting" ? (
-        <Banner tone="bad">Connection lost. Your messages are saved. Reconnecting…</Banner>
-      ) : null}
-      {unsent && live === "online" ? (
-        <Banner tone="info">
-          {unsent === 1 ? "One message is waiting to send." : `${unsent} messages are waiting to send.`} They go out
-          automatically.
-        </Banner>
-      ) : null}
-      <div className="chat" ref={log} aria-live="polite" aria-label="Conversation with Ace">
-        {chat.length === 0 ? (
-          <p className="mute hello">Say hi — try “yo Ace, what’s the status?” or tap the mic.</p>
-        ) : null}
-        {chat.map((l) => (
-          <div key={l.id} className={`line line-${l.who}`}>
-            <span className="who">{l.who === "ace" ? "Ace" : "You"}</span>
-            <p>{l.text}</p>
-            {l.state === "failed" || l.state === "queued" ? (
-              <span className="note">Not sent yet — it will send when the connection is back.</span>
-            ) : null}
-            {l.state === "streaming" ? <span className="note">…</span> : null}
-          </div>
-        ))}
+      <div className="ace-stage">
+        <Eyes presence={shown} word={false} />
+        <VoiceVisualizer presence={presence} listening={voice.listening} onMic={voice.pushToTalk} />
+        {voice.problem ? <Banner tone="bad">{voice.problem}</Banner> : null}
+        <div className="toggles">
+          <label className="switch">
+            <input type="checkbox" checked={voice.wakeMode} onChange={voice.toggleWake} /> Hands-free: listen for “hey
+            AIC”
+          </label>
+          <label className="switch">
+            <input type="checkbox" checked={voice.sound} onChange={voice.toggleSound} /> Speak replies
+          </label>
+        </div>
       </div>
-      {voice.problem ? <Banner tone="bad">{voice.problem}</Banner> : null}
-      <form className="composer" onSubmit={submit}>
-        <button
-          type="button"
-          className={`mic ${voice.listening ? "on" : ""}`}
-          onClick={voice.pushToTalk}
-          aria-pressed={voice.listening}
-          aria-label={voice.listening ? "Stop listening" : "Talk to Ace"}
-        >
-          <MicIcon />
-          <span>{voice.listening ? "Listening… tap to stop" : "Talk"}</span>
-        </button>
-        <label className="sr" htmlFor="say">
-          Message to Ace
-        </label>
-        <textarea
-          id="say"
-          ref={input}
-          rows={2}
-          value={text}
-          placeholder="Ask Ace anything…"
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              void submit();
-            }
-          }}
-        />
-        <Button variant="primary" type="submit" label="Send to Ace" disabled={!text.trim()}>
-          Send
-        </Button>
-      </form>
-      <div className="toggles">
-        <label className="switch">
-          <input type="checkbox" checked={voice.wakeMode} onChange={voice.toggleWake} /> Hands-free: listen for “hey
-          Ace”
-        </label>
-        <label className="switch">
-          <input type="checkbox" checked={voice.sound} onChange={voice.toggleSound} /> Speak replies
-        </label>
-        <button type="button" className="link" onClick={() => store.set({ chat: [] })}>
-          Clear conversation on this device
-        </button>
+
+      <div className="talk" role="region" aria-label="Chat with AIC">
+        <header className="talk-head">
+          <p className="talk-title">Chat with AIC</p>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => store.set({ chat: [] })}
+            aria-label="Clear conversation on this device"
+            title="Clear conversation on this device"
+            disabled={chat.length === 0}
+          >
+            <ClearIcon />
+          </button>
+        </header>
+        {waiting ? (
+          <Banner tone="warn" action={{ label: "Open", onClick: () => go("inbox") }}>
+            {waiting === 1 ? "One thing needs you." : `${waiting} things need you.`}
+          </Banner>
+        ) : null}
+        {live === "reconnecting" ? (
+          <Banner tone="bad">Connection lost. Your messages are saved. Reconnecting…</Banner>
+        ) : null}
+        {unsent && live === "online" ? (
+          <Banner tone="info">
+            {unsent === 1 ? "One message is waiting to send." : `${unsent} messages are waiting to send.`} They go out
+            automatically.
+          </Banner>
+        ) : null}
+        <div className="chat" ref={log} aria-live="polite" aria-label="Conversation with AIC">
+          {chat.length === 0 ? <p className="hello">Say hi. Try “yo AIC, what’s the status?” or tap the mic.</p> : null}
+          {chat.map((l) => (
+            <article
+              key={l.id}
+              className={`msg msg-${l.who} ${l.state === "streaming" ? "is-streaming" : ""}`}
+              aria-busy={l.state === "streaming" || undefined}
+            >
+              <span className="sr">{l.who === "ace" ? "AIC:" : "You:"}</span>
+              <div className="msg-body">
+                {l.who === "ace" ? (
+                  <StreamedText text={l.text} streaming={l.state === "streaming"} onGrow={follow} />
+                ) : (
+                  <p>{l.text}</p>
+                )}
+                {l.who === "ace" && l.state === "done" && l.steps ? (
+                  <AicSteps steps={l.steps} tookMs={l.tookMs} />
+                ) : null}
+                {l.state === "failed" || l.state === "queued" ? (
+                  <span className="note">Not sent yet. It will send when the connection is back.</span>
+                ) : null}
+              </div>
+            </article>
+          ))}
+          {waitingForAic && turn ? (
+            <article className="msg msg-ace msg-pending">
+              <AicStatus turn={turn} />
+            </article>
+          ) : null}
+        </div>
+        <form className="composer" onSubmit={submit}>
+          <label className="sr" htmlFor="say">
+            Message to AIC
+          </label>
+          <textarea
+            id="say"
+            ref={input}
+            rows={2}
+            value={text}
+            placeholder="Type your message…"
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void submit();
+              }
+            }}
+          />
+          <button type="submit" className="send" aria-label="Send to AIC" disabled={!text.trim()}>
+            <SendIcon />
+          </button>
+        </form>
       </div>
     </section>
-  );
-}
-
-export function MicIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="22"
-      height="22"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      aria-hidden="true"
-    >
-      <rect x="9" y="3" width="6" height="11" rx="3" />
-      <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
-    </svg>
   );
 }

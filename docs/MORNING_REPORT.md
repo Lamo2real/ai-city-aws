@@ -3,10 +3,10 @@
 Good morning. The whole product exists as code in this repository, tested locally with fakes, documented, and ready for a first deploy that you start. **Nothing was deployed, no workflow ran, no model was called, no secret was written.** Evidence is at the end.
 
 ## What was built
-- **The organization:** Ace → Orchestrator → one Manager per department → Workers hired on demand, as real code: role tools, an Agent Factory, a dispatcher with pause / spend caps / concurrency ceilings / session rate, a ledger where every unit of work is a ticket with history, a crash sweep, a policy gate on every tool call (workers included), approvals bound to the exact action, and the Fable → Opus fallback that runs exactly once.
+- **The organization:** AIC → Orchestrator → one Manager per department → Workers hired on demand, as real code: role tools, an Agent Factory, a dispatcher with pause / spend caps / concurrency ceilings / session rate, a ledger where every unit of work is a ticket with history, a crash sweep, a policy gate on every tool call (workers included), approvals bound to the exact action, and the Fable → Opus fallback that runs exactly once.
 - **The runtime:** one ARM64 container for four AgentCore runtimes (Claude Agent SDK on Bedrock, startup guard first), prompts in `agents/`.
 - **The backend:** HTTP API (22 routes, owner group checked on each), WebSocket API, 11 Lambdas, SQS per role level with DLQs, EventBridge bus, Step Functions approvals, SNS notifications, scheduled jobs (all disabled).
-- **The HUD:** Ace with eyes, streamed replies, push-to-talk and wake-word mode (Transcribe + Polly), the **City view ported from your Mac HUD** (same pixel art and layout; Ace in the plaza, Orchestrator at the HQ door, no Secretary or Reviewer), Needs you, Tickets, Costs, Settings, a first-run guide, phone layout. Screenshots in `docs/screenshots/`.
+- **The HUD:** AIC with eyes, streamed replies, push-to-talk and wake-word mode (Transcribe + Polly), the **City view ported from your Mac HUD** (same pixel art and layout; AIC in the plaza, Orchestrator at the HQ door, no Secretary or Reviewer), Needs you, Tickets, Costs, Settings, a first-run guide, phone layout. Screenshots in `docs/screenshots/`.
 - **Infrastructure:** Terraform for all of it in `eu-north-1`, single `prod`, every resource tagged, KMS everywhere it matters, Cognito with MFA, CloudFront + WAF, AWS Budgets with a deny-Bedrock action, one least-privilege role per runtime with a permission boundary.
 - **CI/CD definitions:** `ci.yml` and `deploy.yml`, both `workflow_dispatch` only; deploy uses OIDC and waits for your approval on the `production` environment.
 
@@ -24,7 +24,7 @@ Good morning. The whole product exists as code in this repository, tested locall
 | `scripts/check-tags.mjs` | pass — 57 taggable resources carry `Component` (+ `AgentRole` on runtimes, profiles, memories); both roots set the six default tags |
 | `scripts/check-iam.mjs` | pass — workers: no IAM actions, no wildcard secrets, no resource-creating actions, Bedrock only on the worker profile; every role has a boundary |
 | Lambda bundles (esbuild) / runtime bundle | 9 bundles built / runtime bundled; started with `ANTHROPIC_API_KEY` set → refused to start, as designed |
-| End-to-end chain with a fake model runner | pass — owner → Ace → Orchestrator → new department → 3 hires → reports → one FAIL → fix → PASS → sign-off → Ace; plus crash resume, stale-lease sweep, `@agent` instruction, 500 concurrent hires against ceilings |
+| End-to-end chain with a fake model runner | pass — owner → AIC → Orchestrator → new department → 3 hires → reports → one FAIL → fix → PASS → sign-off → AIC; plus crash resume, stale-lease sweep, `@agent` instruction, 500 concurrent hires against ceilings |
 
 ## What is NOT tested, because it needs AWS (or Docker)
 - **Anything against real AWS**: no `terraform plan` was run (forbidden tonight), so the plan has never been computed against an account. Expect a few first-apply fixes (most likely: resource names/limits, the application-inference-profile copy from a global profile, AgentCore runtime environment-variable size on platform V2).
@@ -39,7 +39,7 @@ Good morning. The whole product exists as code in this repository, tested locall
 
 ## Known gaps (built partly, or not at all)
 1. **Workers' S3 workspace sync** — the IAM (session-tagged role limited to `hires/<hire id>/`) is in place; the runtime code that assumes it and syncs files is not written. Workers keep files in their microVM and push work to Git branches.
-2. **AgentCore Memory** resources and IAM exist but the runtime doesn't read or write them yet. Agents get their context from the ledger each turn (plus Ace's conversation log), which is why compaction never triggers today (turns don't resume long SDK sessions).
+2. **AgentCore Memory** resources and IAM exist but the runtime doesn't read or write them yet. Agents get their context from the ledger each turn (plus AIC's conversation log), which is why compaction never triggers today (turns don't resume long SDK sessions).
 3. **Self-improvement**: the switch (off) and the fence (refuses infra/, IAM, caps, policy, CI, existing tests) are built and tested; the loop's runner itself is not.
 4. **Integrations** (GitHub, Google, Spotify via AgentCore Gateway + Identity): secret containers and a disabled gateway only; no gateway targets.
 5. **Reminders** are stored and marked due by a (disabled) job, but not emailed yet. Question nudges after 15 minutes work once you enable the `nudge` schedule.
@@ -47,7 +47,7 @@ Good morning. The whole product exists as code in this repository, tested locall
 7. Phone layout hides the Departments/Records panel (buildings stay tappable). Passkeys and a custom domain are not configured.
 
 ## Decisions I made alone (all in `docs/DECISIONS.md`)
-Highlights: Stockholm confirmed (#11); TypeScript pinned to 6.0 for typescript-eslint (#38); a fourth queue for Ace (#39); managers got an `answer_worker` tool (#40); `gh pr merge` and cloud mutation are **denied** for every agent, not asked (#41, #42); Ace's role can write the ledger because its tools need to (#45); worker ledger writes limited by key prefix and owner approvals made delete-only (#46); workers reach S3 only via a session-tagged role (#47); log retention 30 days (#50); image pushed before `terraform apply` in `deploy.yml` (#53); the deploy role is AdministratorAccess fenced by trust and boundary (#54); `[skip ci]` at the end of each commit's subject line, then the Co-Authored-By trailer (#55).
+Highlights: Stockholm confirmed (#11); TypeScript pinned to 6.0 for typescript-eslint (#38); a fourth queue for AIC (#39); managers got an `answer_worker` tool (#40); `gh pr merge` and cloud mutation are **denied** for every agent, not asked (#41, #42); AIC's role can write the ledger because its tools need to (#45); worker ledger writes limited by key prefix and owner approvals made delete-only (#46); workers reach S3 only via a session-tagged role (#47); log retention 30 days (#50); image pushed before `terraform apply` in `deploy.yml` (#53); the deploy role is AdministratorAccess fenced by trust and boundary (#54); `[skip ci]` at the end of each commit's subject line, then the Co-Authored-By trailer (#55).
 
 ## Evidence: no deploy, no workflow, no model call, no secret
 - **Commands not run tonight:** no `terraform plan/apply/import/destroy`, no `aws` CLI, no `docker push/login`, no `gh workflow`, `gh run` or `gh api`, no `agentcore`/`cdk`/`sam`. The only `gh` call was `gh --version`. Terraform was used only for `init -backend=false`, `validate`, `fmt` and `providers schema -json`.
@@ -69,7 +69,7 @@ phase 1: facts and decisions                         [skip ci]
 - **Credential grep** over every tracked file for AWS keys (`AKIA…`, `ASIA…`, `aws_secret_access_key=`), Anthropic keys (`sk-ant-`), GitHub tokens (`ghp_`, `github_pat_`), Slack tokens and private-key headers: **no matches**. No `.env`, `.tfvars`, `.tfstate`, credentials or `.pem` files are tracked. `~/.aws` and `~/.ssh` were never read.
 
 ## The exact next step
-Open `docs/DEPLOY_CHECKLIST.md` and do **section A, step 1**: create (or pick) the dedicated AWS account and confirm it is the one you want. Then follow the checklist in order; the first live test is "yo Ace, what's 9 + 9?" under a $1 cap.
+Open `docs/DEPLOY_CHECKLIST.md` and do **section A, step 1**: create (or pick) the dedicated AWS account and confirm it is the one you want. Then follow the checklist in order; the first live test is "yo AIC, what's 9 + 9?" under a $1 cap.
 
 ---
 
@@ -84,7 +84,7 @@ Status: ✅ done and tested · 🟡 built, verified only offline / partly · ❌
 | 0.4 Progress log, commit per phase | `docs/PROGRESS.md`, 10 commits | `git log` | ✅ |
 | 0.5 New repo, upstream read-only, CLAUDE.md + screenshot copied | repo root, `docs/reference/city-view-mac.png` | first commit | ✅ |
 | 0.6 Facts checked with URLs | `docs/FACTS_CHECKED.md` | — | ✅ (prices: verify at deploy) |
-| 1.1 Hierarchy exactly Ace → Orchestrator → Manager (1/dept) → Workers; no Reviewer/Secretary | `services/agent-runtime/src/tools.ts`, `agents/` | `tests/hierarchy.e2e.test.ts` | ✅ |
+| 1.1 Hierarchy exactly AIC → Orchestrator → Manager (1/dept) → Workers; no Reviewer/Secretary | `services/agent-runtime/src/tools.ts`, `agents/` | `tests/hierarchy.e2e.test.ts` | ✅ |
 | Workers unlimited; only ceilings/quotas/caps limit concurrency | `packages/shared/src/hierarchy/factory.ts`, `dispatch.ts` | 500-hire test | ✅ |
 | Saved specialists reusable | `save_specialist`, Factory `specialist_id` | `hierarchy-lambdas.test.ts` | ✅ |
 | Orchestrator sign-off before anything leaves the city | `sign_off`, `report_to_ace` guard, policy denies merge/push main | e2e test | ✅ |
@@ -115,12 +115,12 @@ Status: ✅ done and tested · 🟡 built, verified only offline / partly · ❌
 | Self-improvement built, disabled, can't touch infra/IAM/caps/policy | `improve.ts` | `hierarchy-lambdas.test.ts` | 🟡 (fence only, no runner) |
 | No path to the Mac | — | nothing connects to it | ✅ |
 | 2.7 Voice: push-to-talk, wake mode (plain match, Haiku for unclear), Transcribe (vocabulary) + Polly via identity pool | `web/src/voice/*`, `utility.ts`, `infra/modules/auth` | `api.test.ts`, `hud.test.tsx`, Playwright | 🟡 (fake voice only) |
-| 2.8 HUD screens: login, Ace + eyes, City view (Mac look, ported), questions/approvals, tickets, costs, settings; responsive, accessible | `web/src` | Playwright 14, axe, screenshots | ✅ |
-| City view details: HQ, Ace in plaza, Orchestrator at entrance, buildings per dept with manager at door, workers walk in/out, FREE LOT, growing town, count badge, houses for specialists, top bar, right panel, bottom bar, click a character → ticket/model/activity/cost/instruct | `web/src/city/*`, `CityView.tsx` | Playwright, `hud.test.tsx`, `city-workers.png` | ✅ |
+| 2.8 HUD screens: login, AIC + eyes, City view (Mac look, ported), questions/approvals, tickets, costs, settings; responsive, accessible | `web/src` | Playwright 14, axe, screenshots | ✅ |
+| City view details: HQ, AIC in plaza, Orchestrator at entrance, buildings per dept with manager at door, workers walk in/out, FREE LOT, growing town, count badge, houses for specialists, top bar, right panel, bottom bar, click a character → ticket/model/activity/cost/instruct | `web/src/city/*`, `CityView.tsx` | Playwright, `hud.test.tsx`, `city-workers.png` | ✅ |
 | 2.9 Idiot-proof rules | all screens | `docs/UX_REVIEW.md`, Playwright | ✅ (known gaps listed there) |
 | 3 Tags on every resource; AgentRole; ledger cost rows by role/dept/ticket/model/tokens/USD; activate-tags step | providers, modules, `ledger.ts`, checklist step 30 | `check-tags.mjs`, `turn.test.ts` | ✅ |
 | 4 Terraform layout, pinned providers, region variable, KMS, deletion protection, offline checks pass | `infra/` | fmt/validate/tflint/checkov | ✅ |
-| 5.1 Caps before every turn of every kind; Ace asks to raise; throttling is back-off | `caps.ts`, `turn.ts`, `dispatch.ts` | `turn.test.ts` (7 kinds) | ✅ |
+| 5.1 Caps before every turn of every kind; AIC asks to raise; throttling is back-off | `caps.ts`, `turn.ts`, `dispatch.ts` | `turn.test.ts` (7 kinds) | ✅ |
 | 5.2 Budget on whole account, 50/80/100 + forecast, deny-Bedrock action | `infra/modules/budgets` | validate, checkov | 🟡 |
 | 5.3 `city-off.sh` / `city-on.sh`; what still costs while paused; teardown | `scripts/`, `docs/RUNBOOK.md` | `bash -n` | 🟡 (not run) |
 | 6 Ceilings as config with the stated defaults; SCALING doc | `config/caps.json`, Settings, `docs/SCALING.md` | 500-hire test | ✅ |

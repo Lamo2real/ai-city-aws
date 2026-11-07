@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_maps_every_role_to_its_pinned_model_on_global_profiles() -> None:
     want = {
-        "ace": "sonnet-5-5",
+        "ace": "haiku-5-5",
         "orchestrator": "fable-5-1",
         "manager": "fable-5-1",
         "worker": "opus-5-5",
@@ -46,7 +46,7 @@ def test_on_eu_profiles_fable_roles_fall_back_to_opus_as_primary() -> None:
 
 def test_reads_prefix_and_application_profile_from_the_environment() -> None:
     r = resolve_role_from_env("ace", {"AIC_PROFILE_PREFIX": "us", "AIC_APP_PROFILE_ACE": "arn:x"})
-    assert r.primary.profile_id == "us.anthropic.claude-sonnet-5-5"
+    assert r.primary.profile_id == "us.anthropic.claude-haiku-5-5"
     assert r.primary.invoke_id == "arn:x"
 
 

@@ -53,7 +53,7 @@ describe("IAM", () => {
       .flatMap((s) => s.Resource);
     expect(workerQueues).toEqual([expect.stringMatching(/aic-prod-manager$/)]);
   });
-  it("Fable roles may invoke their Opus fallback; Ace only Sonnet", () => {
+  it("Fable roles may invoke their Opus fallback; AIC only its own model (Haiku)", () => {
     const models = (role: string) =>
       (rolePolicies(role) as Stmt[])
         .filter((s) => actions([s]).includes("bedrock:InvokeModel"))
@@ -61,8 +61,8 @@ describe("IAM", () => {
         .join(" ");
     expect(models("orchestrator")).toMatch(/fable-5-1/);
     expect(models("orchestrator")).toMatch(/opus-5-5/);
-    expect(models("ace")).toMatch(/sonnet-5-5/);
-    expect(models("ace")).not.toMatch(/opus|fable/);
+    expect(models("ace")).toMatch(/haiku-5-5/);
+    expect(models("ace")).not.toMatch(/sonnet|opus|fable/);
   });
   it("every role Terraform creates has a permission boundary", () => {
     expect(checkBoundaries()).toEqual([]);
@@ -292,5 +292,18 @@ describe("knowledge base (docs/KNOWLEDGE.md)", () => {
     ])
       expect(api).toContain(`"${r}"`);
     expect(api).toContain('allow_methods = ["GET", "POST", "PUT", "DELETE"]');
+  });
+});
+
+describe("voice credentials", () => {
+  it("the identity pool trusts only the HUD's app client and skips the server-side check that refused valid tokens", async () => {
+    const { readFileSync } = await import("node:fs");
+    const tf = readFileSync("infra/modules/auth/main.tf", "utf8");
+    const pool = tf.slice(tf.indexOf('resource "aws_cognito_identity_pool" "voice"'));
+    const block = pool.slice(0, pool.indexOf("\n}\n"));
+    expect(block).toMatch(/client_id\s+= aws_cognito_user_pool_client\.hud\.id/);
+    expect(block).toMatch(/provider_name\s+= aws_cognito_user_pool\.this\.endpoint/);
+    expect(block).toMatch(/allow_unauthenticated_identities\s+= false/);
+    expect(block).toMatch(/server_side_token_check\s+= false/);
   });
 });

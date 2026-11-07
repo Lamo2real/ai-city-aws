@@ -69,7 +69,12 @@ def create_app(host: TurnRunner) -> Starlette:
                     await track(inv)
                 except Exception as e:
                     log(
-                        "error", "turn.failed", agent=inv["agentId"], ticket=inv.get("ticketId"), error=type(e).__name__
+                        "error",
+                        "turn.failed",
+                        agent=inv["agentId"],
+                        ticket=inv.get("ticketId"),
+                        error=type(e).__name__,
+                        detail=str(e)[:1500],
                     )
 
             task = asyncio.create_task(job())
@@ -80,7 +85,14 @@ def create_app(host: TurnRunner) -> Starlette:
             response = await track(inv)
             return JSONResponse({"status": "success", "response": response})
         except Exception as e:
-            log("error", "turn.failed", agent=inv["agentId"], ticket=inv.get("ticketId"), error=type(e).__name__)
+            log(
+                "error",
+                "turn.failed",
+                agent=inv["agentId"],
+                ticket=inv.get("ticketId"),
+                error=type(e).__name__,
+                detail=str(e)[:1500],
+            )
             return JSONResponse({"status": "error", "error": type(e).__name__}, status_code=500)
 
     async def not_found(_: Request, __: Exception) -> JSONResponse:
@@ -96,6 +108,7 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
     """Production wiring inside the container."""
     from .engine import sdk_engine
     from .host import AgentHost, HostOptions
+    from .live import websocket_sender
 
     e = os.environ if env is None else env
     startup_guard(e)  # refuse to start without Bedrock, or with any other credential
@@ -114,7 +127,16 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
             max_review_rounds=caps["max_review_rounds"],
             knowledge=_knowledge(city.session, city.bus, role, e),
         ),
-        HostOptions(engine=sdk_engine, role=role, timeout_ms=minutes * 60_000),
+        HostOptions(
+            engine=sdk_engine,
+            role=role,
+            timeout_ms=minutes * 60_000,
+            live_sender=lambda inv: (
+                websocket_sender(inv["wsEndpoint"], inv["connectionsTable"], city.region)
+                if inv.get("wsEndpoint") and inv.get("connectionsTable")
+                else None
+            ),
+        ),
     )
     log("info", "runtime.started", role=role)
     return create_app(host)

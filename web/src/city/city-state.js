@@ -1,5 +1,5 @@
 // Ported from the owner's Mac HUD (ai-city/jarvis/hud/city-state.js) and adapted to AI City on AWS:
-// Ace and the Orchestrator are the core; there is no Secretary or Reviewer; events and snapshots come
+// AIC and the Orchestrator are the core; there is no Secretary or Reviewer; events and snapshots come
 // from the AWS API and WebSocket. Pure functions, no DOM, unit-tested in Node.
 // The City View's state: what the scene draws, as plain data. Pure functions, no DOM, no three.js,
 // so the event → state step is unit-tested in Node. The scene reads this; it never reads the server.
@@ -165,7 +165,7 @@ export function reduce(state, event, now = Date.now()) {
       return { ...state, now, agents: { ...state.agents, [a.id]: { ...a, awaiting_merge: null } }, feed: feed(state, `${event.branch} is settled; ${a.id} can leave its desk`, "done", now) };
     }
     case "ace.visit":
-      return { ...state, now, feed: feed(state, `Ace ${event.kind === "ask" ? "asks" : "checks in with"} ${event.to}`, "worker", now) };
+      return { ...state, now, feed: feed(state, `AIC ${event.kind === "ask" ? "asks" : "checks in with"} ${event.to}`, "worker", now) };
     case "colleague.ask":
       return { ...state, now, feed: feed(state, event.refused ? `${event.from} and ${event.to} have asked each other too much; ${event.from} was told to stop` : `${event.from} asks ${event.to}: ${event.question.slice(0, 60)}`, event.refused ? "fail" : "worker", now) };
     case "colleague.answer":
