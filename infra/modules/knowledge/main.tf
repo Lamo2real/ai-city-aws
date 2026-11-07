@@ -258,6 +258,13 @@ resource "opensearch_index" "items" {
   }
 }
 
+# A new index takes up to a minute to be visible to Bedrock; creating the knowledge base before that fails
+# the first apply with "storage configuration is invalid".
+resource "time_sleep" "index" {
+  create_duration = "60s"
+  triggers        = { index = opensearch_index.items.id }
+}
+
 resource "aws_iam_role" "kb" {
   name                 = "${local.base}-kb"
   permissions_boundary = var.boundary_arn
@@ -320,7 +327,7 @@ resource "aws_bedrockagent_knowledge_base" "this" {
     }
   }
   tags       = local.tags
-  depends_on = [aws_iam_role_policy.kb, opensearch_index.items]
+  depends_on = [aws_iam_role_policy.kb, time_sleep.index]
 }
 
 resource "aws_bedrockagent_data_source" "normalized" {
