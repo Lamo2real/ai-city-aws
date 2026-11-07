@@ -46,7 +46,7 @@
       "Type": "Choice",
       "Comment": "A page already written to normalized/ goes straight to enrich; otherwise re-route on what the link turned out to be (a link that fetches to another link is an error).",
       "Choices": [
-        { "And": [{ "Variable": "$.last.value.normalized", "IsPresent": true }, { "Variable": "$.last.value.normalized", "BooleanEquals": true }], "Next": "Enrich" },
+        { "And": [{ "Variable": "$.last.value.normalized", "IsPresent": true }, { "Variable": "$.last.value.normalized", "BooleanEquals": true }], "Next": "EnrichAndIngest" },
         { "Variable": "$.last.value.kind", "StringEquals": "link", "Next": "UnknownKind" }
       ],
       "Default": "ByKind"
@@ -57,7 +57,7 @@
       "ResultSelector": { "value.$": "$.Payload" }, "ResultPath": "$.last",
       "Retry": [{ "ErrorEquals": ${lambda_errors}, "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
       "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Fail" }],
-      "Next": "Enrich"
+      "Next": "EnrichAndIngest"
     },
     "DescribeImage": {
       "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
@@ -65,7 +65,7 @@
       "ResultSelector": { "value.$": "$.Payload" }, "ResultPath": "$.last",
       "Retry": [{ "ErrorEquals": ${lambda_errors}, "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
       "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Fail" }],
-      "Next": "Enrich"
+      "Next": "EnrichAndIngest"
     },
     "StartMediaConvert": {
       "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
@@ -117,41 +117,58 @@
       "ResultSelector": { "value.$": "$.Payload" }, "ResultPath": "$.last",
       "Retry": [{ "ErrorEquals": ${lambda_errors}, "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
       "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Fail" }],
-      "Next": "Enrich"
+      "Next": "EnrichAndIngest"
     },
-    "Enrich": {
-      "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
-      "Parameters": { "FunctionName": "${function_arn}", "Payload": { "action": "enrich", "item_id.$": "$.item_id" } },
-      "ResultSelector": { "value.$": "$.Payload" }, "ResultPath": "$.last",
-      "Retry": [{ "ErrorEquals": ${lambda_errors}, "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
-      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Fail" }],
-      "Next": "StartSync"
-    },
-    "StartSync": {
-      "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
-      "Comment": "One ingestion job per data source at a time: ConflictException waits and tries again.",
-      "Parameters": { "FunctionName": "${function_arn}", "Payload": { "action": "start_sync", "item_id.$": "$.item_id" } },
-      "ResultSelector": { "value.$": "$.Payload" }, "ResultPath": "$.last",
-      "Retry": [
-        { "ErrorEquals": ${lambda_errors}, "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 },
-        { "ErrorEquals": ["ConflictException"], "IntervalSeconds": 30, "MaxAttempts": 10, "BackoffRate": 1.5, "MaxDelaySeconds": 300, "JitterStrategy": "FULL" }
+    "EnrichAndIngest": {
+      "Type": "Parallel",
+      "Comment": "Summary + graph and direct KB ingestion run at the same time; a failure in either branch goes to fail.",
+      "Branches": [
+        {
+          "StartAt": "Enrich",
+          "States": {
+              "Enrich": {
+                "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
+                "Parameters": { "FunctionName": "${function_arn}", "Payload": { "action": "enrich", "item_id.$": "$.item_id" } },
+                "ResultSelector": { "value.$": "$.Payload" }, "ResultPath": "$.last",
+                "Retry": [{ "ErrorEquals": ${lambda_errors}, "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
+                "End": true
+              }
+          }
+        },
+        {
+          "StartAt": "Ingest",
+          "States": {
+              "Ingest": {
+                "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
+                "Comment": "IngestKnowledgeBaseDocuments; throttling waits and tries again.",
+                "Parameters": { "FunctionName": "${function_arn}", "Payload": { "action": "ingest", "item_id.$": "$.item_id" } },
+                "ResultSelector": { "value.$": "$.Payload" }, "ResultPath": "$.last",
+                "Retry": [
+                  { "ErrorEquals": ${lambda_errors}, "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 },
+                  { "ErrorEquals": ["ThrottlingException"], "IntervalSeconds": 5, "MaxAttempts": 10, "BackoffRate": 2, "MaxDelaySeconds": 120, "JitterStrategy": "FULL" }
+                ],
+                "Next": "WaitIngest"
+              },
+              "WaitIngest": { "Type": "Wait", "Seconds": 5, "Next": "CheckIngest" },
+              "CheckIngest": {
+                "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
+                "Parameters": { "FunctionName": "${function_arn}", "Payload": { "action": "check_ingest", "item_id.$": "$.item_id" } },
+                "ResultSelector": { "value.$": "$.Payload" }, "ResultPath": "$.last",
+                "Retry": [{ "ErrorEquals": ${lambda_errors}, "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
+                "Next": "IngestDone"
+              },
+              "IngestDone": {
+                "Type": "Choice",
+                "Choices": [{ "Variable": "$.last.value.done", "BooleanEquals": true, "Next": "Indexed" }],
+                "Default": "WaitIngest"
+              },
+              "Indexed": { "Type": "Succeed" }
+          }
+        }
       ],
+      "ResultPath": null,
       "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Fail" }],
-      "Next": "WaitSync"
-    },
-    "WaitSync": { "Type": "Wait", "Seconds": 20, "Next": "CheckSync" },
-    "CheckSync": {
-      "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
-      "Parameters": { "FunctionName": "${function_arn}", "Payload": { "action": "check_sync", "item_id.$": "$.item_id" } },
-      "ResultSelector": { "value.$": "$.Payload" }, "ResultPath": "$.last",
-      "Retry": [{ "ErrorEquals": ${lambda_errors}, "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
-      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Fail" }],
-      "Next": "SyncDone"
-    },
-    "SyncDone": {
-      "Type": "Choice",
-      "Choices": [{ "Variable": "$.last.value.done", "BooleanEquals": true, "Next": "Finish" }],
-      "Default": "WaitSync"
+      "Next": "Finish"
     },
     "Finish": {
       "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",

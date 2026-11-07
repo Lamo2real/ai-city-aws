@@ -47,7 +47,11 @@ export function rolePolicies(role) {
   );
   const kb = `arn:aws:bedrock:${REGION}:${ACCOUNT}:knowledge-base/KB1`;
   const ktable = `arn:aws:dynamodb:${REGION}:${ACCOUNT}:table/aic-prod-knowledge`;
-  const docs = [common, render("knowledge.json.tftpl", { knowledge_base_arn: kb, knowledge_table_arn: ktable })];
+  const graph = `arn:aws:neptune-graph:${REGION}:${ACCOUNT}:graph/g-abc`;
+  const docs = [
+    common,
+    render("knowledge.json.tftpl", { knowledge_base_arn: kb, knowledge_table_arn: ktable, knowledge_graph_arn: graph }),
+  ];
   if (role === "ace")
     docs.push(
       render("knowledge-aic.json.tftpl", {
@@ -188,7 +192,7 @@ export function knowledgeStatements(
   return out;
 }
 
-export function checkKnowledge({ statements = knowledgeStatements(), boundary } = {}) {
+export function checkKnowledge({ statements = knowledgeStatements(), boundary, text } = {}) {
   const problems = [];
   if (!statements.length) problems.push("knowledge: no IAM statements found");
   for (const s of statements) {
@@ -208,6 +212,9 @@ export function checkKnowledge({ statements = knowledgeStatements(), boundary } 
         if (s.resource !== want) problems.push(`${where} may invoke ${s.resource}, not only ${want ?? "nothing"}`);
       }
       if (s.policy === "kb" && /^s3:(Put|Delete)/.test(a)) problems.push(`${where}: the KB role may only read files`);
+      if (/^aoss:/.test(a) && s.policy !== "kb") problems.push(`${where}: only the KB role may reach OpenSearch`);
+      if (/^neptune-graph:/.test(a) && s.policy !== "fn")
+        problems.push(`${where}: only the knowledge Lambda may query the graph here`);
       if (s.policy === "mediaconvert" && /^s3:/.test(a) && !/\/(raw|work)\/\*/.test(s.resource))
         problems.push(`${where}: MediaConvert may only read raw/ and write work/`);
     }
@@ -221,11 +228,19 @@ export function checkKnowledge({ statements = knowledgeStatements(), boundary } 
     problems.push("boundary does not deny passing roles other than the MediaConvert role");
   if (pass.some((p) => /Effect\s*=\s*"Allow"/.test(p) && !/mediaconvert\.amazonaws\.com/.test(p)))
     problems.push("boundary allows iam:PassRole to a service other than MediaConvert");
+  // OpenSearch data access: the KB role reads and writes documents; the deploy role only creates/updates/describes the index.
+  const tf = text ?? readFileSync(join(ROOT, "infra", "modules", "knowledge", "main.tf"), "utf8");
+  const deployer = /Permission = (\[[^\]]*\]) \}\]\s*Principal = \[var\.deployer_arn\]/.exec(tf)?.[1] ?? "";
+  if (!deployer) problems.push("knowledge: no data-access rule for the deploy role");
+  if (/Document|DeleteIndex|\*/.test(deployer))
+    problems.push(`the deploy role may do more than manage the index: ${deployer}`);
   // Every runtime may search; only AIC (ace) may add items or files.
   for (const role of ["ace", "orchestrator", "manager", "worker"]) {
     const stmts = rolePolicies(role);
     if (!stmts.some((s) => list(s.Action).includes("bedrock:Retrieve")))
       problems.push(`${role} cannot search knowledge`);
+    if (stmts.some((s) => list(s.Action).some((a) => /^neptune-graph:(Write|Delete)/.test(a))))
+      problems.push(`${role} can change the knowledge graph`);
     const adds = stmts.filter(
       (s) =>
         list(s.Resource).some((r) => /aic-prod-knowledge/.test(r)) &&

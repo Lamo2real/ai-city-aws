@@ -15,8 +15,11 @@ Prices: Bedrock global profiles from `docs/FACTS_CHECKED.md` (USD per million to
 | CloudFront, API Gateway, Lambda, SQS, EventBridge, SNS, Step Functions | ~$0.50 (free tiers cover most) |
 | Cognito Essentials (1 user; first 10,000 MAU free) | $0.00 |
 | AgentCore runtimes and memory with no sessions | $0.00 |
-| Knowledge base empty: S3 bucket, S3 Vectors, Bedrock Knowledge Base (no charge of its own), graph table, Step Functions, MediaConvert (on demand, no reserved queue), 1 more DLQ alarm $0.10 | ~$0.10 |
-| **Total at idle** | **≈ $18 / month** |
+| Knowledge base, OpenSearch Serverless: 1 OCU minimum (0.5 indexing + 0.5 search, no standby) × $0.255/h × 730 h | ≈ $186 |
+| Knowledge base, Neptune Analytics: 16 m-NCU, no replica, $0.581/h × 730 h | ≈ $424 |
+| Knowledge base, api Lambda SnapStart: snapshot cache (1 GB function, ~$0.0000015/GB-s) plus restores | ≈ $4 |
+| Knowledge base, the rest: S3 bucket, Bedrock Knowledge Base (no charge of its own), item table, Step Functions, MediaConvert (on demand), 1 more DLQ alarm | ~$0.10 |
+| **Total at idle** | **≈ $632 / month** (≈ $18 without the knowledge base; ≈ $614 of it is the knowledge base's fixed cost, owner-approved, decision 66) |
 
 ## 2. One typical task, end to end
 Computed with `estimateUsd()` from `packages/shared/src/cost.ts` (the same function the ledger uses). "Without caching" sends every cached token as plain input.
@@ -38,9 +41,11 @@ Prompt caching roughly halves the cost because agent turns resend long, stable s
 
 | Usage | Tasks / month | Ace chats (status, small talk) | AI estimate | Total estimate | vs. the $10,000 alert |
 |---|---|---|---|---|---|
-| Low | 8 (2 a week) | 100 | $28 + $1 | **≈ $47** | far below |
-| Normal | 30 (1 a day) | 300 | $105 + $3 | **≈ $126** | far below |
-| Heavy | 150 (5 a day) | 600 | $525 + $6 | **≈ $549** | below (no first email until $5,000) |
+| Low | 8 (2 a week) | 100 | $28 + $1 | **≈ $661** | far below |
+| Normal | 30 (1 a day) | 300 | $105 + $3 | **≈ $740** | far below |
+| Heavy | 150 (5 a day) | 600 | $525 + $6 | **≈ $1,163** | below (no first email until $5,000) |
+
+Totals include the knowledge base's ≈ $614 fixed cost (§1); its use-based cost is in §4.
 
 There is no spend cap by default (the owner's choice) and the AWS Budgets alert is $10,000 a month, so the first email comes at $5,000. Heavy use of Fable (coordinators) and Opus (workers) is what drives the bill; Fable is 2.5× Opus per token, so a cheaper option is `eu.` or switching coordinators to Opus 5.5 in `config/models.json` (owner's call).
 
@@ -51,10 +56,11 @@ There is no spend cap by default (the owner's choice) and the AWS Budgets alert 
 | MediaConvert audio-only (basic tier) | ~$0.0075 / output minute | ~$4.50 |
 | Haiku 5.5 (summaries, entities, images, scanned PDFs) | $0.10 / $0.50 per M tokens | ~$1–3 |
 | Titan Text Embeddings V2 | $0.021 per M tokens | < $1 |
-| S3 Vectors | $0.06 / GB-month, $0.20 / GB written, $0.0025 / 1,000 queries | < $1 |
+| OpenSearch Serverless storage | $0.024 / GB-month | < $1 (more OCUs only under heavy load or tens of GB of vectors, $186 / month each) |
+| Neptune Analytics | fixed (§1) | $0 extra at personal scale |
 | S3 storage (raw + normalized, versioned 30 days) | ~$0.023 / GB-month | ~$0.10 |
 | Step Functions Standard (wait loops: ~1 transition per 20–30 s of a job) | $0.025 / 1,000 transitions | < $0.50 |
-| **Knowledge total** | | **≈ $20–25 / month, $0 when idle** |
+| **Knowledge total (use)** | | **≈ $20–25 / month on top of the ≈ $614 fixed** |
 
 ## What moves the number most
 1. Worker job length (output tokens at $20/M and uncached input).

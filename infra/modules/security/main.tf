@@ -33,7 +33,7 @@ resource "aws_kms_key" "data" {
       {
         Sid       = "ServicesUseTheKey"
         Effect    = "Allow"
-        Principal = { Service = ["logs.${var.region}.amazonaws.com", "events.amazonaws.com", "sns.amazonaws.com", "sqs.amazonaws.com", "budgets.amazonaws.com", "cloudwatch.amazonaws.com", "states.amazonaws.com", "scheduler.amazonaws.com", "bedrock-agentcore.amazonaws.com", "indexing.s3vectors.amazonaws.com"] }
+        Principal = { Service = ["logs.${var.region}.amazonaws.com", "events.amazonaws.com", "sns.amazonaws.com", "sqs.amazonaws.com", "budgets.amazonaws.com", "cloudwatch.amazonaws.com", "states.amazonaws.com", "scheduler.amazonaws.com", "bedrock-agentcore.amazonaws.com"] }
         Action    = ["kms:Encrypt", "kms:Decrypt", "kms:ReEncrypt*", "kms:GenerateDataKey*", "kms:DescribeKey"]
         Resource  = "*"
         Condition = { StringEquals = { "aws:SourceAccount" = var.account_id } }
@@ -72,8 +72,9 @@ resource "aws_iam_policy" "boundary" {
           "ecr:GetAuthorizationToken", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer", "sts:AssumeRole", "sts:TagSession",
           "transcribe:StartStreamTranscription", "transcribe:StartStreamTranscriptionWebSocket", "polly:SynthesizeSpeech",
           # The knowledge base (docs/KNOWLEDGE.md section 9).
-          "bedrock:Retrieve", "bedrock:StartIngestionJob", "bedrock:GetIngestionJob", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts",
-          "s3vectors:PutVectors", "s3vectors:GetVectors", "s3vectors:DeleteVectors", "s3vectors:QueryVectors", "s3vectors:GetIndex",
+          "bedrock:Retrieve", "bedrock:IngestKnowledgeBaseDocuments", "bedrock:GetKnowledgeBaseDocuments", "bedrock:DeleteKnowledgeBaseDocuments",
+          "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts", "aoss:APIAccessAll",
+          "neptune-graph:ReadDataViaQuery", "neptune-graph:WriteDataViaQuery", "neptune-graph:DeleteDataViaQuery",
           "transcribe:StartTranscriptionJob", "transcribe:GetTranscriptionJob", "mediaconvert:CreateJob", "mediaconvert:GetJob",
         ]
         Resource = "*"

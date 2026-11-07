@@ -2,8 +2,10 @@
 terraform {
   required_version = ">= 1.11.0"
   required_providers {
-    aws     = { source = "hashicorp/aws", version = ">= 6.68.0, < 7.0.0" }
-    archive = { source = "hashicorp/archive", version = ">= 2.7.0, < 3.0.0" }
+    aws        = { source = "hashicorp/aws", version = ">= 6.68.0, < 7.0.0" }
+    archive    = { source = "hashicorp/archive", version = ">= 2.7.0, < 3.0.0" }
+    opensearch = { source = "opensearch-project/opensearch", version = ">= 2.6.0, < 3.0.0" }
+    time       = { source = "hashicorp/time", version = ">= 0.13.0, < 1.0.0" }
   }
   # Filled in at init time: terraform init -backend-config=backend.hcl (see backend.hcl.example).
   backend "s3" {}
@@ -37,6 +39,24 @@ provider "aws" {
 }
 
 data "aws_caller_identity" "me" {}
+
+# The role behind the deploy session (OpenSearch data-access policies name roles, not sessions).
+data "aws_iam_session_context" "me" {
+  arn = data.aws_caller_identity.me.arn
+}
+
+# Creates the knowledge index inside the OpenSearch Serverless collection (no hashicorp/aws resource exists for
+# an index; decision 67). Signs with the deploy role's credentials (SigV4, service aoss).
+provider "opensearch" {
+  url                   = module.knowledge.collection_endpoint
+  aws_region            = var.region
+  sign_aws_requests     = true
+  aws_signature_service = "aoss"
+  healthcheck           = false
+  opensearch_version    = "2.17" # skips the version ping, which OpenSearch Serverless doesn't answer
+}
+
+provider "time" {}
 
 module "security" {
   source     = "../../modules/security"
@@ -114,6 +134,8 @@ module "agents" {
   knowledge_base_id        = module.knowledge.knowledge_base_id
   knowledge_base_arn       = module.knowledge.knowledge_base_arn
   knowledge_data_source_id = module.knowledge.data_source_id
+  knowledge_graph_id       = module.knowledge.graph_id
+  knowledge_graph_arn      = module.knowledge.graph_arn
 }
 
 module "api" {
@@ -152,12 +174,15 @@ module "api" {
   knowledge_base_id        = module.knowledge.knowledge_base_id
   knowledge_base_arn       = module.knowledge.knowledge_base_arn
   knowledge_data_source_id = module.knowledge.data_source_id
+  knowledge_graph_id       = module.knowledge.graph_id
+  knowledge_graph_arn      = module.knowledge.graph_arn
 }
 
 # The owner's knowledge base (docs/KNOWLEDGE.md): bucket, S3 Vectors + Bedrock Knowledge Base, graph table,
 # the knowledge Lambda and the ingest workflow.
 module "knowledge" {
   source              = "../../modules/knowledge"
+  providers           = { aws = aws, opensearch = opensearch, time = time }
   name                = local.name
   region              = var.region
   account_id          = data.aws_caller_identity.me.account_id
@@ -175,6 +200,7 @@ module "knowledge" {
   profile_prefix      = var.profile_prefix
   deletion_protection = var.deletion_protection
   log_retention_days  = var.log_retention_days
+  deployer_arn        = data.aws_iam_session_context.me.issuer_arn
 }
 
 module "budgets" {
