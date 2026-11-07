@@ -504,44 +504,41 @@ test("after a long conversation the AIC screen still fits the window: only the c
       const main = document.querySelector("main")!;
       const chat = document.querySelector(".chat")!;
       const composer = document.querySelector(".composer")!.getBoundingClientRect();
+      const talk = document.querySelector(".talk")!.getBoundingClientRect();
+      const area = main.getBoundingClientRect();
       return {
         page: document.documentElement.scrollHeight <= window.innerHeight + 1,
         main: main.scrollHeight <= main.clientHeight + 1, // the page area never scrolls into empty space
         chatScrolls: chat.scrollHeight > chat.clientHeight,
         composerOnScreen: composer.bottom <= window.innerHeight,
+        // The chat panel runs from just under the top bar to the bottom edge (only the page gutter around it).
+        chatFromTop: talk.top - area.top <= 32,
+        chatToBottom: window.innerHeight - talk.bottom <= 32,
+        composerAtBottom: talk.bottom - composer.bottom <= 4,
       };
     });
-    expect(fit).toEqual({ page: true, main: true, chatScrolls: true, composerOnScreen: true });
+    expect(fit).toEqual({
+      page: true,
+      main: true,
+      chatScrolls: true,
+      composerOnScreen: true,
+      chatFromTop: true,
+      chatToBottom: true,
+      composerAtBottom: true,
+    });
   }
 });
 
-test("quick replies: one tap answers AIC's question, asks how work is going, or stops it", async ({ page }) => {
+test("a plain chat: nothing is suggested under AIC's replies, even after a question", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/");
   await page.getByRole("textbox", { name: "Message to AIC" }).fill("check the GT3 sentences");
   await page.keyboard.press("Enter");
-  const t = { id: "t-gt3", from: "ace", to: "orchestrator", goal: "GT3 sentences", kind: "task", department: null };
-  m.send({ type: "ticket.status", previous: null, ticket: { ...t, status: "open" } });
   m.send({ type: "ace.reply", conversation: "main", text: "On it. Want me to tell you when it's done?", done: true });
-  const chips = page.getByRole("group", { name: "Quick replies" });
-  await expect(chips.getByRole("button")).toHaveText(["Yes", "No", "How's it going?", "Stop it"]);
-  await shot(page, "ace-quick-replies");
-  await chips.getByRole("button", { name: "Yes" }).click();
-  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").at(-1)?.body).toMatchObject({ text: "Yes" });
-  await expect(chips).toHaveCount(0); // gone until AIC answers
-  m.send({ type: "ace.reply", conversation: "main", text: "Will do.", done: true });
-  await chips.getByRole("button", { name: "Stop it" }).click();
-  await expect
-    .poll(() => m.calls.filter((c) => c.path === "/messages").at(-1)?.body)
-    .toMatchObject({ text: "Stop it" });
-
-  // The result comes back: Show me opens the finished work.
-  m.send({ type: "ace.reply", conversation: "main", text: "Stopped.", done: true });
-  m.send({ type: "result", ticket_id: "t-gt3", summary: "GT3 sentences checked." });
-  m.send({ type: "ace.reply", conversation: "main", text: "The GT3 sentences are checked.", done: true });
-  await expect(chips.getByRole("button")).toHaveText(["Show me", "Thanks"]);
-  await chips.getByRole("button", { name: "Show me" }).click();
-  await expect(page.getByRole("heading", { name: "Work" })).toBeVisible();
+  await expect(page.getByLabel("Conversation with AIC").getByText("Want me to tell you when it's done?")).toBeVisible();
+  await expect(page.getByRole("group", { name: "Quick replies" })).toHaveCount(0);
+  for (const label of ["Yes", "No", "How's it going?", "Stop it"])
+    await expect(page.getByRole("button", { name: label, exact: true })).toHaveCount(0);
 });
 
 test("Stop all work shows while something runs, asks once, then offers Resume", async ({ page }) => {

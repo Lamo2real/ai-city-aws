@@ -4,7 +4,6 @@ import { ChatCards } from "./ConnectCard.tsx";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { sendMessage, setPaused } from "../lib/actions.ts";
 import { gateStatus } from "../city/city-state.js";
-import { chipsFor } from "../lib/chips.ts";
 import { store, useHud, waitingCount } from "../lib/store.ts";
 import { appendDictation, type SpeakMode } from "../voice/modes.ts";
 import { useVoice } from "../voice/useVoice.ts";
@@ -34,12 +33,10 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
   const live = useHud((s) => s.live);
   const turn = useHud((s) => s.turn);
   const city = useHud((s) => s.city);
-  const lastResultAt = useHud((s) => s.lastResultAt);
   const [confirmStop, setConfirmStop] = useState(false);
   const paused = !!gateStatus(city).paused;
   // Anything still going: open work in the city, or work AIC handed on that has not come back.
   const running = Object.keys(city.tickets ?? {}).length > 0 || chat.some((l) => stepsRunning(l));
-  const chips = chipsFor(chat, lastResultAt);
   /** Stop (pause) or resume all work: the same route as Settings. */
   const pauseAll = async (stop: boolean) => {
     try {
@@ -216,20 +213,6 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
             </article>
           ))}
           <ChatCards cards={cards} />
-          {chips.length && !waitingForAic ? (
-            <div className="chips" role="group" aria-label="Quick replies">
-              {chips.map((c) => (
-                <button
-                  key={c.label}
-                  type="button"
-                  className="chip"
-                  onClick={() => (c.go ? go(c.go) : void sendMessage(c.send ?? c.label))}
-                >
-                  {c.label}
-                </button>
-              ))}
-            </div>
-          ) : null}
           {waitingForAic && turn ? (
             <article className="msg msg-ace msg-pending">
               <AicStatus turn={turn} />
