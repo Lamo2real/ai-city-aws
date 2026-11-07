@@ -5,7 +5,7 @@ use it when relevant. This file is the **contract** between the infra (`infra/`)
 (`web/`) work: names, keys, routes, events and tools. Change it first, in its own commit, when a contract
 changes. The decision and trade-offs are in `docs/DECISIONS.md` (decision 64).
 
-Status: designed 2026-11-07. Infra built on branch `knowledge-infra` (2026-11-07, not applied); backend and web in progress.
+Status: built 2026-11-07 on branch `knowledge-base` (infra, backend and HUD merged and checked together offline); not applied, never run against AWS.
 
 Provider check (2026-11-07): hashicorp/aws ≥ 6.68.0 (lock file 6.72.0) has `aws_s3vectors_vector_bucket`,
 `aws_s3vectors_index` and `storage_configuration { type = "S3_VECTORS" }` on `aws_bedrockagent_knowledge_base`,

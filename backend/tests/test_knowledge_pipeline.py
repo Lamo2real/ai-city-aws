@@ -338,3 +338,39 @@ def test_the_lambda_handler_dispatches_every_action_name_and_refuses_others(monk
         "start_transcribe", "check_transcribe", "transcript_to_text", "enrich", "start_sync", "check_sync",
         "finish", "fail", "mark_unsupported",
     }  # fmt: skip
+
+
+class FakeSfn:
+    def __init__(self) -> None:
+        self.runs: dict[str, dict[str, Any]] = {}
+
+    def start_execution(self, **kw: Any) -> dict[str, Any]:
+        if kw["name"] in self.runs:
+            raise type("ExecutionAlreadyExists", (Exception,), {})("exists")
+        self.runs[kw["name"]] = kw
+        return {"executionArn": "arn:x"}
+
+
+def test_start_names_the_run_after_the_item_once_and_ignores_other_keys() -> None:
+    from aic.lambdas.knowledge import start_run
+
+    sfn = FakeSfn()
+    ev = {"action": "start", "bucket": "aic-prod-knowledge", "key": "raw/k-abcDEF123_-x/My video.mov"}
+    assert start_run(ev, sfn, "arn:sm") == {"item_id": "k-abcDEF123_-x", "started": True}
+    assert sfn.runs["k-abcDEF123_-x"]["stateMachineArn"] == "arn:sm"
+    assert json.loads(sfn.runs["k-abcDEF123_-x"]["input"]) == {"item_id": "k-abcDEF123_-x"}
+    assert start_run(ev, sfn, "arn:sm")["reason"] == "already ran"
+    for key in ("raw/k-short/a.txt", "work/k-abcDEF123_-x/a.m4a", "raw/k-abcDEF123_-x/sub/a.txt", "raw/../x"):
+        assert start_run({"action": "start", "key": key}, sfn, "arn:sm")["started"] is False
+    assert len(sfn.runs) == 1
+
+
+def test_start_lets_other_errors_through() -> None:
+    from aic.lambdas.knowledge import start_run
+
+    class Broken:
+        def start_execution(self, **kw: Any) -> None:
+            raise RuntimeError("AccessDenied")
+
+    with pytest.raises(RuntimeError):
+        start_run({"key": "raw/k-abcDEF123_-x/a.txt"}, Broken(), "arn:sm")

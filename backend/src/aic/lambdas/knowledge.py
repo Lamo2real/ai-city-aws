@@ -3,12 +3,15 @@
 Step Functions ``aic-prod-knowledge-ingest`` calls it once per step with ``{"action": …, "item_id": …}``:
 route, fetch_link, prepare_document, describe_image, start_mediaconvert, check_mediaconvert,
 start_transcribe, check_transcribe, transcript_to_text, enrich, start_sync, check_sync, finish, fail,
-mark_unsupported. Errors propagate by class name so the state machine can retry ``ConflictException`` and
+mark_unsupported. The S3 ``raw/`` rule calls it with ``{"action": "start", "bucket", "key"}``, which starts the
+run named after the item (EventBridge cannot name a run). Errors propagate by class name so the state machine can retry ``ConflictException`` and
 send everything else to ``fail``, which stores plain words and tells the HUD.
 """
 
 from __future__ import annotations
 
+import json
+import re
 from typing import Any
 
 from aic.shared.aws import aws_city, require_env
@@ -21,6 +24,23 @@ from aic.shared.utility import UtilityDeps, bedrock_converse_runner
 from ._runtime import run
 
 _pipeline: Pipeline | None = None
+_sfn: Any = None
+_RAW_KEY = re.compile(r"^raw/(k-[A-Za-z0-9_-]{12})/[^/]+$")
+
+
+def start_run(event: dict[str, Any], sfn: Any, state_machine_arn: str) -> dict[str, Any]:
+    """An object landed under ``raw/``: start the ingest run named after its item, once per item."""
+    m = _RAW_KEY.match(str(event.get("key", "")))
+    if not m:
+        return {"started": False, "reason": "not an item upload"}
+    item_id = m.group(1)
+    try:
+        sfn.start_execution(stateMachineArn=state_machine_arn, name=item_id, input=json.dumps({"item_id": item_id}))
+    except Exception as e:  # boto3 raises a modelled error class per service; match it by name
+        if type(e).__name__ != "ExecutionAlreadyExists":
+            raise
+        return {"item_id": item_id, "started": False, "reason": "already ran"}
+    return {"item_id": item_id, "started": True}
 
 
 async def _build() -> Pipeline:
@@ -62,4 +82,9 @@ async def _handle(event: dict[str, Any]) -> dict[str, Any]:
 
 
 def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
+    if event.get("action") == "start":
+        global _sfn
+        if _sfn is None:
+            _sfn = aws_city().session.client("stepfunctions")
+        return start_run(event, _sfn, require_env("KNOWLEDGE_STATE_MACHINE_ARN"))
     return run(_handle(event))
