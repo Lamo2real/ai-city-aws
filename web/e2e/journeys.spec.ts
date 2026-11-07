@@ -212,6 +212,50 @@ test("a microphone failure names the real cause and logs it to the console", asy
   ).toBe(true);
 });
 
+test("AIC's reply: dots right after sending, then words flowing in smoothly, then the final text", async ({ page }) => {
+  const m = await mockBackend(page);
+  await page.goto("/");
+  const log = page.getByLabel("Conversation with AIC");
+  await page.getByRole("textbox", { name: "Message to AIC" }).fill("tell me about the city");
+  await page.keyboard.press("Enter");
+  const dots = log.getByRole("status", { name: "AIC is thinking" });
+  await expect(dots).toBeVisible(); // before any word has arrived
+  await shot(page, "ace-waiting-for-reply");
+
+  const words = Array.from({ length: 60 }, (_, i) => `word${i}`).join(" ");
+  m.send({ type: "ace.reply", conversation: "main", text: `**City**: ${words}`, done: false });
+  await expect(dots).toHaveCount(0);
+  const reply = log.locator(".msg-ace").last();
+  await expect(reply).toHaveAttribute("aria-busy", "true");
+  // Revealed bit by bit, not in one jump.
+  const lengths: number[] = [];
+  for (let i = 0; i < 6; i++) {
+    lengths.push(((await reply.textContent()) ?? "").length);
+    await page.waitForTimeout(60);
+  }
+  expect(lengths[0]).toBeLessThan(words.length);
+  expect(new Set(lengths).size).toBeGreaterThan(2);
+  await expect(reply.locator("strong")).toHaveText("City"); // bold renders as bold, never as **City
+  await shot(page, "ace-reply-streaming");
+  m.send({ type: "ace.reply", conversation: "main", text: "**City**: all quiet. Final answer.", done: true });
+  await expect(reply).toContainText("all quiet. Final answer.");
+  await expect(reply).not.toHaveAttribute("aria-busy", "true");
+  await expect(reply).not.toContainText("word59");
+});
+
+test("with reduced motion the reply appears directly, without the typing effect", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const m = await mockBackend(page);
+  await page.goto("/");
+  await page.getByRole("textbox", { name: "Message to AIC" }).fill("status?");
+  await page.keyboard.press("Enter");
+  const text = "One two three four five six seven eight nine ten eleven twelve.";
+  m.send({ type: "ace.reply", conversation: "main", text, done: false });
+  await expect(page.getByLabel("Conversation with AIC").locator(".msg-ace .msg-body").last()).toHaveText(text, {
+    timeout: 150,
+  });
+});
+
 test("a draft survives a reload", async ({ page }) => {
   await mockBackend(page);
   await page.goto("/");

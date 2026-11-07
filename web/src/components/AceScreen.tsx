@@ -2,10 +2,10 @@
 // phone). Everything else can be done by asking AIC ("AIC, pause everything", "what's the status?").
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { sendMessage } from "../lib/actions.ts";
-import { Markdown } from "../lib/markdown.tsx";
 import { store, useHud, waitingCount } from "../lib/store.ts";
 import { useVoice } from "../voice/useVoice.ts";
 import { Eyes } from "./Eyes.tsx";
+import { StreamedText } from "./StreamedText.tsx";
 import { Banner, ClearIcon, SendIcon } from "./ui.tsx";
 import { VoiceVisualizer } from "./VoiceVisualizer.tsx";
 
@@ -41,6 +41,11 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
   useEffect(() => {
     log.current?.scrollTo({ top: log.current.scrollHeight });
   }, [chat]);
+  // While AIC's reply is being revealed, keep it in view unless the owner has scrolled up to read.
+  const follow = () => {
+    const el = log.current;
+    if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 120) el.scrollTop = el.scrollHeight;
+  };
 
   const submit = async (e?: FormEvent) => {
     e?.preventDefault();
@@ -50,6 +55,9 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
     await sendMessage(t);
     input.current?.focus();
   };
+  const lastLine = chat.at(-1);
+  // Right after the owner sends, AIC's turn shows as bouncing dots until the first words arrive.
+  const waitingForAic = presence === "thinking" && lastLine?.who === "owner" && lastLine.state !== "failed";
   const shown = presence === "idle" && waiting ? "waiting" : presence;
   const unsent = chat.filter((l) => l.who === "owner" && (l.state === "failed" || l.state === "queued")).length;
 
@@ -104,23 +112,33 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
         <div className="chat" ref={log} aria-live="polite" aria-label="Conversation with AIC">
           {chat.length === 0 ? <p className="hello">Say hi. Try “yo AIC, what’s the status?” or tap the mic.</p> : null}
           {chat.map((l) => (
-            <article key={l.id} className={`msg msg-${l.who}`}>
+            <article
+              key={l.id}
+              className={`msg msg-${l.who} ${l.state === "streaming" ? "is-streaming" : ""}`}
+              aria-busy={l.state === "streaming" || undefined}
+            >
               <span className="sr">{l.who === "ace" ? "AIC:" : "You:"}</span>
               <div className="msg-body">
-                {l.who === "ace" ? <Markdown text={l.text} /> : <p>{l.text}</p>}
+                {l.who === "ace" ? (
+                  <StreamedText text={l.text} streaming={l.state === "streaming"} onGrow={follow} />
+                ) : (
+                  <p>{l.text}</p>
+                )}
                 {l.state === "failed" || l.state === "queued" ? (
                   <span className="note">Not sent yet. It will send when the connection is back.</span>
-                ) : null}
-                {l.state === "streaming" ? (
-                  <span className="typing" aria-label="AIC is still writing">
-                    <i />
-                    <i />
-                    <i />
-                  </span>
                 ) : null}
               </div>
             </article>
           ))}
+          {waitingForAic ? (
+            <article className="msg msg-ace msg-pending">
+              <span className="typing" role="status" aria-label="AIC is thinking">
+                <i />
+                <i />
+                <i />
+              </span>
+            </article>
+          ) : null}
         </div>
         <form className="composer" onSubmit={submit}>
           <label className="sr" htmlFor="say">
