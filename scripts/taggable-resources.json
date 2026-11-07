@@ -35,7 +35,6 @@
     "aws_wafv2_web_acl"
   ],
   "untaggable": [
-    "terraform_data",
     "aws_apigatewayv2_authorizer",
     "aws_apigatewayv2_integration",
     "aws_apigatewayv2_route",
@@ -54,6 +53,7 @@
     "aws_iam_role_policy",
     "aws_iam_role_policy_attachment",
     "aws_kms_alias",
+    "aws_lambda_function_event_invoke_config",
     "aws_lambda_permission",
     "aws_s3_bucket_lifecycle_configuration",
     "aws_s3_bucket_policy",
@@ -63,6 +63,8 @@
     "aws_scheduler_schedule",
     "aws_sns_topic_policy",
     "aws_sns_topic_subscription",
-    "aws_wafv2_web_acl_logging_configuration"
+    "aws_sqs_queue_policy",
+    "aws_wafv2_web_acl_logging_configuration",
+    "terraform_data"
   ]
 }
