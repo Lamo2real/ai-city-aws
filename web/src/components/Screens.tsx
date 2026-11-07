@@ -7,7 +7,7 @@ import { api, ApiError } from "../lib/api.ts";
 import { ago, money, spendLevel } from "../lib/format.ts";
 import { store } from "../lib/store.ts";
 import { Banner, Button, Confirm, Loading, toast } from "./ui.tsx";
-import { auth } from "../lib/auth.ts";
+import { signOutHere } from "../lib/auth.ts";
 import { SettingsApps } from "./Apps.tsx";
 import { config } from "../lib/config.ts";
 import { readVoiceId, saveVoiceId, VOICES } from "../voice/modes.ts";
@@ -422,7 +422,7 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
       <Button
         variant="quiet"
         onClick={async () => {
-          await auth().signOut();
+          await signOutHere();
           location.reload();
         }}
       >

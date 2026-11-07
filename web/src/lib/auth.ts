@@ -23,6 +23,8 @@ export interface AuthClient {
   /** Sends a reset code by email. */
   forgotPassword(email: string): Promise<void>;
   confirmForgotPassword(email: string, code: string, password: string): Promise<void>;
+  /** A sign-in was stored on this device before this check (it may since have expired or been revoked). */
+  hadSession?(): boolean;
   /** A valid ID token (refreshed when needed, or always with fresh=true), or null: sign in again. */
   idToken(fresh?: boolean): Promise<string | null>;
   signOut(): Promise<void>;
@@ -74,7 +76,7 @@ function amplifyClient(): AuthClient {
   let ready: Promise<AmplifyAuth> | null = null;
   const auth = () =>
     (ready ??= (async () => {
-      const [{ Amplify }, mod, { cognitoUserPoolsTokenProvider }, { sessionStorage }] = await Promise.all([
+      const [{ Amplify }, mod, { cognitoUserPoolsTokenProvider }, { defaultStorage }] = await Promise.all([
         import("aws-amplify"),
         import("aws-amplify/auth"),
         import("aws-amplify/auth/cognito"),
@@ -82,7 +84,9 @@ function amplifyClient(): AuthClient {
       ]);
       const c = config();
       Amplify.configure({ Auth: { Cognito: { userPoolId: c.userPoolId, userPoolClientId: c.clientId } } });
-      cognitoUserPoolsTokenProvider.setKeyValueStorage(sessionStorage);
+      // localStorage, not sessionStorage (the owner's choice, 2026-11-07): the refresh token survives closing the
+      // tab or restarting the device, so the owner signs in once and stays signed in (docs/SECURITY.md).
+      cognitoUserPoolsTokenProvider.setKeyValueStorage(defaultStorage);
       return mod;
     })());
 
@@ -133,8 +137,10 @@ function amplifyClient(): AuthClient {
         newPassword: password,
       });
     },
+    hadSession: storedSession,
     async idToken(fresh = false) {
       try {
+        // Expired ID tokens are refreshed here with the stored refresh token (rotation stays on).
         const s = await (await auth()).fetchAuthSession({ forceRefresh: fresh });
         return s.tokens?.idToken?.toString() ?? null;
       } catch {
@@ -145,6 +151,45 @@ function amplifyClient(): AuthClient {
       await (await auth()).signOut().catch(() => undefined);
     },
   };
+}
+
+/** Amplify keeps the refresh token under CognitoIdentityServiceProvider.<client>.<user>.refreshToken. */
+function storedSession(): boolean {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i) ?? "";
+      if (k.startsWith("CognitoIdentityServiceProvider.") && k.endsWith(".refreshToken")) return true;
+    }
+  } catch {
+    /* no storage */
+  }
+  return false;
+}
+
+export type BootAuth = { state: "ready" } | { state: "signed_out"; note: string | null } | { state: "offline" };
+export const SESSION_ENDED =
+  "Your sign-in on this device has ended (it expired or was signed out elsewhere). Please sign in again.";
+
+/** On start: use the stored sign-in (refreshing it silently); only show sign-in when there is none or it was
+ *  rejected. Offline with a stored sign-in is not a sign-out: try again later. */
+export async function bootAuth(
+  client: AuthClient = auth(),
+  online: () => boolean = () => navigator.onLine,
+): Promise<BootAuth> {
+  const had = client.hadSession?.() ?? false;
+  if (await client.idToken()) return { state: "ready" };
+  if (had && !online()) return { state: "offline" };
+  return { state: "signed_out", note: had ? SESSION_ENDED : null };
+}
+
+/** Sign out: Cognito tokens (Amplify revokes the refresh token) and this device's conversation and draft. */
+export async function signOutHere() {
+  await auth().signOut();
+  try {
+    for (const k of ["aic.chat", "aic.draft"]) localStorage.removeItem(k);
+  } catch {
+    /* no storage */
+  }
 }
 
 let client: AuthClient | null = null;

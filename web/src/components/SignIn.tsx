@@ -101,7 +101,7 @@ async function requestFirstLoginEmail(email: string): Promise<void> {
   if (!r.ok && r.status !== 202) throw new Error("not sent");
 }
 
-export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
+export function SignIn({ onSignedIn, note = null }: { onSignedIn: () => void; note?: string | null }) {
   const [screen, setScreen] = useState<Screen>({ s: "signin" });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -161,6 +161,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
 
   const banners = (
     <>
+      {note && !problem ? <Banner tone="info">{note}</Banner> : null}
       {problem ? <Banner tone="bad">{problem}</Banner> : null}
       {notice ? <Banner tone="good">{notice}</Banner> : null}
     </>
