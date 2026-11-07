@@ -23,6 +23,11 @@ variable "lambda_zip_path" {
   description = "The same Lambda bundle the api module builds (backend/dist/lambda/app)."
 }
 variable "lambda_zip_hash" { type = string }
+variable "ledger_table" {
+  type        = string
+  description = "The ledger: the knowledge Lambda records the cost of its Haiku calls and checks pause and spend caps first."
+}
+variable "ledger_arn" { type = string }
 variable "bus_name" { type = string }
 variable "bus_arn" { type = string }
 variable "utility_invoke_arns" {
@@ -389,6 +394,7 @@ resource "aws_iam_role_policy" "fn" {
       { Sid = "Utility", Effect = "Allow", Action = ["bedrock:InvokeModel"], Resource = var.utility_invoke_arns },
       { Sid = "Sync", Effect = "Allow", Action = ["bedrock:StartIngestionJob", "bedrock:GetIngestionJob"], Resource = [aws_bedrockagent_knowledge_base.this.arn] },
       { Sid = "Events", Effect = "Allow", Action = ["events:PutEvents"], Resource = [var.bus_arn] },
+      { Sid = "Ledger", Effect = "Allow", Action = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query"], Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] },
       # EventBridge cannot name an execution, so the `start` action names it after the item (one run per item).
       { Sid = "Pipeline", Effect = "Allow", Action = ["states:StartExecution"], Resource = [local.state_machine_arn] },
       { Sid = "PipelineStatus", Effect = "Allow", Action = ["states:DescribeExecution"], Resource = ["arn:aws:states:${var.region}:${var.account_id}:execution:${local.state_machine_name}:*"] },
@@ -425,6 +431,7 @@ resource "aws_lambda_function" "fn" {
     variables = {
       AIC_REGION                  = var.region
       AIC_EVENT_BUS               = var.bus_name
+      AIC_LEDGER_TABLE            = var.ledger_table
       AIC_PROFILE_PREFIX          = var.profile_prefix
       AIC_APP_PROFILE_UTILITY     = var.utility_profile_arn
       KNOWLEDGE_TABLE             = aws_dynamodb_table.this.name

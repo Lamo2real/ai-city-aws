@@ -166,6 +166,8 @@ module "knowledge" {
   app_origin          = module.frontend.url
   lambda_zip_path     = module.api.lambda_zip_path
   lambda_zip_hash     = module.api.lambda_zip_hash
+  ledger_table        = module.ledger.ledger_table
+  ledger_arn          = module.ledger.ledger_arn
   bus_name            = module.bus.bus_name
   bus_arn             = module.bus.bus_arn
   utility_invoke_arns = module.agents.utility_invoke_arns

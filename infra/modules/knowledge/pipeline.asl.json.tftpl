@@ -44,8 +44,11 @@
     },
     "AfterLink": {
       "Type": "Choice",
-      "Comment": "Re-route on what the link turned out to be; a link that fetches to another link is an error.",
-      "Choices": [{ "Variable": "$.last.value.kind", "StringEquals": "link", "Next": "UnknownKind" }],
+      "Comment": "A page already written to normalized/ goes straight to enrich; otherwise re-route on what the link turned out to be (a link that fetches to another link is an error).",
+      "Choices": [
+        { "And": [{ "Variable": "$.last.value.normalized", "IsPresent": true }, { "Variable": "$.last.value.normalized", "BooleanEquals": true }], "Next": "Enrich" },
+        { "Variable": "$.last.value.kind", "StringEquals": "link", "Next": "UnknownKind" }
+      ],
       "Default": "ByKind"
     },
     "PrepareDocument": {

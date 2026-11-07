@@ -185,6 +185,8 @@ describe("knowledge base (docs/KNOWLEDGE.md)", () => {
     expect(names).toContain(asl.StartAt);
     expect(tf).toMatch(/templatefile\("\$\{path\.module\}\/pipeline\.asl\.json\.tftpl"/);
     expect(tf).toMatch(/type\s+= "STANDARD"/);
+    expect(asl.States.AfterLink?.Choices?.[0]?.Next).toBe("Enrich");
+    expect(tf).toMatch(/AIC_LEDGER_TABLE\s+= var\.ledger_table/);
   });
   it("start: raw/ object-created rule invokes the knowledge Lambda's start action (it names the run after the item)", () => {
     expect(tf).toMatch(/object = \{ key = \[\{ prefix = "raw\/" \}\] \}/);

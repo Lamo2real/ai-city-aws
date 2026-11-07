@@ -107,7 +107,7 @@ system prompt (so the prompt cache still works).
 | `KNOWLEDGE_BASE_ID`, `KNOWLEDGE_DATA_SOURCE_ID` | api, knowledge Lambda, all runtimes |
 | `KNOWLEDGE_STATE_MACHINE_ARN` | knowledge Lambda (status only; the start comes from EventBridge) |
 | `MEDIACONVERT_ROLE_ARN` | knowledge Lambda |
-| `AIC_REGION`, `AIC_EVENT_BUS`, `AIC_PROFILE_PREFIX`, `AIC_APP_PROFILE_UTILITY` | knowledge Lambda (as on the api Lambda) |
+| `AIC_REGION`, `AIC_EVENT_BUS`, `AIC_LEDGER_TABLE`, `AIC_PROFILE_PREFIX`, `AIC_APP_PROFILE_UTILITY` | knowledge Lambda (as on the api Lambda; the ledger records the cost of its Haiku calls) |
 
 The HUD's CSP `connect-src` allows `https://aic-prod-knowledge.s3.eu-north-1.amazonaws.com` and
 `https://aic-prod-knowledge.s3.amazonaws.com`; presign with the regional endpoint (SigV4).
@@ -115,7 +115,7 @@ The HUD's CSP `connect-src` allows `https://aic-prod-knowledge.s3.eu-north-1.ama
 ## 9. IAM (permission boundary on every role, as everywhere)
 - Runtimes (all roles): `bedrock:Retrieve` on the one KB; `dynamodb:GetItem/Query/BatchGetItem` on the knowledge table. AIC also `PutItem`/`UpdateItem` on `ITEM#*` and `s3:PutObject` on `raw/*`.
 - api Lambda: knowledge table read/write; S3 `raw/*` put (presign), multipart, delete under the item's prefixes (`raw/`, `work/`, `normalized/`; list limited to those prefixes); put under `normalized/*` (a scope change rewrites `.metadata.json`); `bedrock:StartIngestionJob` on the knowledge base.
-- knowledge Lambda: S3 read/write on the bucket; Transcribe `StartTranscriptionJob`/`GetTranscriptionJob`; MediaConvert `CreateJob`/`GetJob` + `iam:PassRole` on the MediaConvert role only; Bedrock `InvokeModel`/`Converse` on the utility (Haiku 5.5) profile; `bedrock:StartIngestionJob`/`GetIngestionJob`; table read/write; `events:PutEvents` on the bus; `states:StartExecution` on the ingest state machine and `states:DescribeExecution` on its runs.
+- knowledge Lambda: S3 read/write on the bucket; Transcribe `StartTranscriptionJob`/`GetTranscriptionJob`; MediaConvert `CreateJob`/`GetJob` + `iam:PassRole` on the MediaConvert role only; Bedrock `InvokeModel`/`Converse` on the utility (Haiku 5.5) profile; `bedrock:StartIngestionJob`/`GetIngestionJob`; table read/write; `events:PutEvents` on the bus; `states:StartExecution` on the ingest state machine and `states:DescribeExecution` on its runs; ledger `GetItem`/`PutItem`/`UpdateItem`/`Query` (cost rows, spend counters, pause and caps).
 - KB service role: read `normalized/*`, `bedrock:InvokeModel` on Titan V2, S3 Vectors put/query/delete on the index, KMS.
 - MediaConvert role (`aic-prod-knowledge-mediaconvert`): read `raw/*`, write `work/*`, KMS. The permission boundary allows `iam:PassRole` on this role only, to `mediaconvert.amazonaws.com` only, and denies passing any other role.
 - Only one ingestion job runs per data source at a time: the pipeline retries `ConflictException` with back-off (Step Functions `Retry`).
@@ -131,7 +131,7 @@ The HUD's CSP `connect-src` allows `https://aic-prod-knowledge.s3.eu-north-1.ama
 → `enrich` (summary + graph) → `start_sync` → wait 20 s / `check_sync` loop → `finish` (status `ready`, event). Any failure → `fail` (status `failed`, plain `error`, event). Retries: Lambda service errors 3×; `ConflictException` on `start_sync` 10× with back-off.
 
 What the Lambda must return (the ASL is `infra/modules/knowledge/pipeline.asl.json.tftpl`; the answer is kept at `$.last.value`):
-- `route`, `fetch_link` → `{"kind": "document|text|image|link|audio|video|other", "convert": bool}` (`convert` = MediaConvert first; only read for audio/video). `fetch_link` never answers `link`. An unknown kind goes to `fail`.
+- `route`, `fetch_link` → `{"kind": "document|text|image|link|audio|video|other", "convert": bool}` (`convert` = MediaConvert first; only read for audio/video). `fetch_link` never answers `link`; when it already wrote the page to `normalized/` it adds `"normalized": true` and the run goes straight to `enrich`. An unknown kind goes to `fail`.
 - `check_mediaconvert`, `check_transcribe`, `check_sync` → `{"done": bool}`; raise when the job failed.
 - every other action: anything (ignored). Job ids live on the item record, not in the payload.
 - `start_sync` lets `ConflictException` propagate (Lambda `errorType` exactly `ConflictException`).
