@@ -534,12 +534,11 @@ describe("app-bridge Lambda (docs/APPS.md v2)", () => {
 });
 
 describe("AIC's voice (Polly generative)", () => {
-  it("the HUD may call Polly in its own region, which config.json names; Transcribe stays in the main region", async () => {
+  it("the HUD may call Polly in its own region, which config.json names", async () => {
     const { readFileSync } = await import("node:fs");
     const fe = readFileSync("infra/modules/frontend/main.tf", "utf8");
     const connect = fe.split("\n").find((l) => l.includes('"connect-src')) ?? "";
     expect(connect).toContain("https://polly.${var.polly_region}.amazonaws.com");
-    expect(connect).toContain("wss://transcribestreaming.${var.region}.amazonaws.com:8443");
     const prod = readFileSync("infra/envs/prod/main.tf", "utf8");
     expect(prod).toMatch(/pollyRegion\s+= var\.polly_region/);
     const vars = readFileSync("infra/envs/prod/variables.tf", "utf8");
@@ -547,6 +546,29 @@ describe("AIC's voice (Polly generative)", () => {
     // The voice role's Polly permission is not tied to a region, so Frankfurt needs no IAM change.
     const auth = readFileSync("infra/modules/auth/main.tf", "utf8");
     expect(auth).toMatch(/Action = \["polly:SynthesizeSpeech"\], Resource = "\*"/);
+  });
+});
+
+describe("AIC's ears (Transcribe streaming in Frankfurt)", () => {
+  it("Transcribe, its vocabulary, the CSP and config.json all use transcribe_region; the identity pool stays home", () => {
+    const fe = readFileSync("infra/modules/frontend/main.tf", "utf8");
+    const connect = fe.split("\n").find((l) => l.includes('"connect-src')) ?? "";
+    expect(connect).toContain("https://transcribestreaming.${var.transcribe_region}.amazonaws.com");
+    expect(connect).toContain("wss://transcribestreaming.${var.transcribe_region}.amazonaws.com:8443");
+    expect(connect).toContain("https://cognito-identity.${var.region}.amazonaws.com");
+    const prod = readFileSync("infra/envs/prod/main.tf", "utf8");
+    expect(prod).toMatch(/alias\s+= "speech"\s+region = var\.transcribe_region/);
+    expect(prod).toMatch(/providers\s+= \{ aws = aws, aws\.speech = aws\.speech \}/);
+    expect(prod).toMatch(/transcribeRegion\s+= var\.transcribe_region/);
+    const vars = readFileSync("infra/envs/prod/variables.tf", "utf8");
+    expect(vars).toMatch(/variable "transcribe_region"[\s\S]*?default\s+= "eu-central-1"/);
+    const auth = readFileSync("infra/modules/auth/main.tf", "utf8");
+    expect(auth).toMatch(/resource "aws_transcribe_vocabulary" "speech_names" \{\s+provider\s+= aws\.speech/);
+    expect(auth).toMatch(/tags\s+= local\.tags/);
+    // Region-agnostic, as before: Frankfurt needs no IAM change.
+    expect(auth).toMatch(
+      /Action = \["transcribe:StartStreamTranscriptionWebSocket", "transcribe:StartStreamTranscription"\], Resource = "\*"/,
+    );
   });
 });
 

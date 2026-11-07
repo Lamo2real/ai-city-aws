@@ -82,6 +82,12 @@ variable "polly_voice" {
   default     = "Matthew"
 }
 
+variable "transcribe_region" {
+  description = "Where the HUD runs Transcribe streaming and keeps its custom vocabulary. eu-north-1 refused this account (CloudTrail, 2026-11-07), so Frankfurt, like Polly."
+  type        = string
+  default     = "eu-central-1"
+}
+
 variable "polly_region" {
   description = "Where the HUD calls Polly: the generative engine is not offered in eu-north-1, so the nearest region that has it. Transcribe stays in var.region."
   type        = string

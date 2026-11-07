@@ -12,6 +12,8 @@ variable "name" { type = string }
 variable "region" { type = string }
 # Polly's generative voices are not offered in every region (not in eu-north-1); the HUD calls Polly here.
 variable "polly_region" { type = string }
+# Transcribe streaming is called here (eu-north-1 refused this account).
+variable "transcribe_region" { type = string }
 variable "apps_url" {
   type        = string
   description = "The apps origin (https://<id>.cloudfront.net). The HUD may frame it and load icons from it, nothing else."
@@ -32,7 +34,7 @@ locals {
     "font-src 'self'",
     "img-src 'self' data: blob: ${var.apps_url}",
     "media-src 'self' blob:",
-    "connect-src 'self' https://*.execute-api.${var.region}.amazonaws.com wss://*.execute-api.${var.region}.amazonaws.com https://*.auth.${var.region}.amazoncognito.com https://cognito-idp.${var.region}.amazonaws.com https://cognito-identity.${var.region}.amazonaws.com https://transcribestreaming.${var.region}.amazonaws.com wss://transcribestreaming.${var.region}.amazonaws.com:8443 https://polly.${var.polly_region}.amazonaws.com https://${var.name}-knowledge.s3.${var.region}.amazonaws.com https://${var.name}-knowledge.s3.amazonaws.com",
+    "connect-src 'self' https://*.execute-api.${var.region}.amazonaws.com wss://*.execute-api.${var.region}.amazonaws.com https://*.auth.${var.region}.amazoncognito.com https://cognito-idp.${var.region}.amazonaws.com https://cognito-identity.${var.region}.amazonaws.com https://transcribestreaming.${var.transcribe_region}.amazonaws.com wss://transcribestreaming.${var.transcribe_region}.amazonaws.com:8443 https://polly.${var.polly_region}.amazonaws.com https://${var.name}-knowledge.s3.${var.region}.amazonaws.com https://${var.name}-knowledge.s3.amazonaws.com",
     "frame-src ${var.apps_url}",
     "frame-ancestors 'none'",
     "base-uri 'none'",

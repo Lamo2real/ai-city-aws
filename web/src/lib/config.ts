@@ -14,6 +14,8 @@ export interface AppConfig {
   budgetAlertUsd?: number;
   /** Where Polly's generative voices are called (not every region has them). Empty: the main region. */
   pollyRegion?: string;
+  /** Where Transcribe streaming is called (eu-north-1 refused this account). Empty: the main region. */
+  transcribeRegion?: string;
   transcribeVocabulary: string;
   /** The isolated origin that serves the apps the city builds (docs/APPS.md). Empty: no app is shown. */
   appsUrl?: string;

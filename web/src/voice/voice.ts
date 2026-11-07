@@ -7,6 +7,14 @@ import { config } from "../lib/config.ts";
 import { idToken } from "../lib/auth.ts";
 import { readVoiceId } from "./modes.ts";
 import { speakable } from "./speech.ts";
+import { toast } from "../components/ui.tsx";
+import {
+  browserListen,
+  browserSpeechAvailable,
+  canFallBack,
+  rememberBrowserSpeech,
+  usingBrowserSpeech,
+} from "./browserSpeech.ts";
 
 export interface Voice {
   /** Starts listening; calls onText with each final transcript and onError if the stream breaks later.
@@ -61,6 +69,11 @@ export function micProblem(e: unknown): string {
       return `The speech service turned AI City down (${name}${awsSays(e)}). The microphone itself is fine. Typing works meanwhile.`;
     case "BadRequestException":
       return "The speech service refused the request (BadRequestException), for example while its word list is still updating. Try again in a minute.";
+    case "BrowserSpeechNetwork":
+      return "Your browser's speech recognition could not reach its service. Check the connection, or type instead.";
+    case "NoBrowserSpeech":
+    case "BrowserSpeechError":
+      return `Speech recognition did not work in this browser (${name}${awsSays(e)}). Type instead, or try Safari or Chrome.`;
     case "StreamEnded":
       return "Listening stopped because the speech service closed the connection. Tap the mic to talk again.";
     case "LimitExceededException":
@@ -196,7 +209,47 @@ class AwsVoice implements Voice {
     }
   }
 
+  /** Transcribe first; if it refuses the stream before anything was heard, the browser's own speech recognition
+   *  for the rest of this page session (browserSpeech.ts), with a one-time note. */
   async listen(onText: (text: string) => void, onPartial?: (text: string) => void, onError?: (e: unknown) => void) {
+    if (usingBrowserSpeech() && browserSpeechAvailable()) return browserListen(onText, onPartial, onError);
+    let heard = false;
+    let switched = false;
+    let stopNow: () => void = () => undefined;
+    const toBrowser = (why: unknown) => {
+      if (switched) return;
+      switched = true;
+      logVoiceError("Transcribe refused; using the browser's speech recognition", why);
+      stopNow();
+      rememberBrowserSpeech();
+      toast({ text: "Using your browser's speech recognition.", tone: "info" });
+      try {
+        stopNow = browserListen(onText, onPartial, onError);
+      } catch (e) {
+        onError?.(e);
+      }
+    };
+    const fallBackOr = (fail: (e: unknown) => void) => (e: unknown) =>
+      !heard && canFallBack(e) && browserSpeechAvailable() ? toBrowser(e) : fail(e);
+    try {
+      stopNow = await this.transcribeListen(
+        (t) => ((heard = true), onText(t)),
+        (t) => ((heard = true), onPartial?.(t)),
+        fallBackOr((e) => onError?.(e)),
+      );
+    } catch (e) {
+      fallBackOr((x) => {
+        throw x;
+      })(e);
+    }
+    return () => stopNow();
+  }
+
+  private async transcribeListen(
+    onText: (text: string) => void,
+    onPartial?: (text: string) => void,
+    onError?: (e: unknown) => void,
+  ) {
     // Ask for the microphone first, still inside the tap, before any network or module loading: Safari is
     // stricter about prompts and audio that start long after the gesture.
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia)
@@ -267,7 +320,10 @@ class AwsVoice implements Voice {
         if (chunk) yield { AudioEvent: { AudioChunk: chunk } };
       }
     }
-    const client = new TranscribeStreamingClient({ region: c.region, credentials: await credentials() });
+    const client = new TranscribeStreamingClient({
+      region: c.transcribeRegion || c.region,
+      credentials: await credentials(),
+    });
     const res = await client.send(
       new StartStreamTranscriptionCommand({
         LanguageCode: "en-US",

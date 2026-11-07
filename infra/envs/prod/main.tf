@@ -31,6 +31,16 @@ provider "aws" {
   }
 }
 
+# Transcribe streaming and its custom vocabulary run here (CloudTrail showed Transcribe streaming refusing this
+# account in eu-north-1: "Your account isn't authorized to call this operation"). The identity pool stays in var.region.
+provider "aws" {
+  alias  = "speech"
+  region = var.transcribe_region
+  default_tags {
+    tags = local.base_tags
+  }
+}
+
 provider "aws" {
   alias  = "us_east_1"
   region = "us-east-1"
@@ -88,12 +98,13 @@ module "bus" {
 }
 
 module "frontend" {
-  source       = "../../modules/frontend"
-  providers    = { aws = aws, aws.us_east_1 = aws.us_east_1 }
-  name         = local.name
-  region       = var.region
-  polly_region = var.polly_region
-  apps_url     = module.apps.url
+  source            = "../../modules/frontend"
+  providers         = { aws = aws, aws.us_east_1 = aws.us_east_1 }
+  name              = local.name
+  region            = var.region
+  polly_region      = var.polly_region
+  transcribe_region = var.transcribe_region
+  apps_url          = module.apps.url
 }
 
 # Apps the city builds, on their own origin (docs/APPS.md). It reuses the HUD's WAF web ACL; the HUD's
@@ -106,6 +117,7 @@ module "apps" {
 
 module "auth" {
   source              = "../../modules/auth"
+  providers           = { aws = aws, aws.speech = aws.speech }
   name                = local.name
   region              = var.region
   owner_email         = var.owner_email
@@ -322,6 +334,7 @@ resource "aws_s3_object" "config" {
     redirectUri          = "${module.frontend.url}/"
     pollyVoice           = var.polly_voice
     pollyRegion          = var.polly_region
+    transcribeRegion     = var.transcribe_region
     budgetAlertUsd       = var.monthly_budget_usd
     transcribeVocabulary = module.auth.vocabulary_name
     appsUrl              = module.apps.url

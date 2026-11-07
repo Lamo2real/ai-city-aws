@@ -16,6 +16,7 @@ export const CONFIG = {
   redirectUri: "",
   pollyVoice: "Matthew",
   budgetAlertUsd: 10000,
+  transcribeRegion: "eu-central-1",
   transcribeVocabulary: "aic-names",
   appsUrl: "https://apps.aic.test",
 };
