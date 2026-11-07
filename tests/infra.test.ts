@@ -159,7 +159,9 @@ describe("knowledge base (docs/KNOWLEDGE.md)", () => {
     expect(tf).toMatch(/index_knn_algo_param_ef_search = "512"/);
     expect(tf).toMatch(/type = "OPENSEARCH_SERVERLESS"/);
     expect(tf).toMatch(/vector_index_name = opensearch_index\.items\.name/);
-    expect(tf).toMatch(/depends_on = \[aws_iam_role_policy\.kb, opensearch_index\.items\]/);
+    // The KB waits for the index, and a minute more: a fresh index isn't visible to Bedrock at once.
+    expect(tf).toMatch(/depends_on = \[aws_iam_role_policy\.kb, opensearch_index\.items, time_sleep\.index\]/);
+    expect(tf).toMatch(/resource "time_sleep" "index"[\s\S]*?create_duration = "60s"/);
     expect(tf).toMatch(/inclusion_prefixes\s+= \["normalized\/"\]/);
     expect(prod).toMatch(/aws_signature_service = "aoss"/);
     expect(tf).not.toMatch(/amazon\.titan|titan-embed/);
