@@ -137,8 +137,8 @@ from the workspaces bucket (KMS decrypt), validates (`shared/apps.py`, shared wi
 - `worker.md`: mention `submit_app` only for Apps work.
 
 ## HUD (`web/`)
-- Nav: one new item **Apps** (`#/apps`), placed after Tickets. The knowledge (`knowledge`), connectors
-  (`skills`) and mail/calendar sessions also add items to `VIEWS` in `App.tsx`: append yours, expect a
+- Nav: one new item **Apps** (`#/apps`), placed after Tickets. The knowledge (`knowledge`) and connectors
+  (`skills`) sessions also add items to `VIEWS` in `App.tsx`: append yours, expect a
   trivial merge.
 - Routes: `#/apps` = grid of app icons (icon + title + description, empty state: "Ask AIC for a game");
   `#/apps/<slug>` = app page: top row with "← Apps" (back), the title, and "Remove" (confirm dialog,
@@ -184,7 +184,7 @@ anything that acts for the owner. Everything in v1 stays: isolated origin, `sand
 Capability catalogue (`backend/src/aic/shared/app_caps.py`, one table; nothing else is ever grantable):
 | id | Params (validated by the API) | Runs | Returns |
 |---|---|---|---|
-| `calendar.read` | `{from, to}` ISO, ≤ 366 days, split into ≤ 62-day calls; `calendar_ids?` | the mail/calendar module's `calendar_events` (same code as `GET /calendar/events`, `docs/MAIL_CALENDAR.md` §4) | `{events: [Event], calendars: [Calendar], errors}` |
+| `calendar.read` | `{from, to}` ISO, ≤ 366 days, split into ≤ 62-day calls; `calendar_ids?` | the same code as the `calendar_events` tool (`docs/MAIL_CALENDAR.md` §5.2, §11) | `{events: [Event], calendars: [Calendar], errors}` |
 | `calendar.calendars` | — | `calendar_list` | `{calendars}` |
 | `mail.search` | `{query, account_id?, unread_only?, after?, before?, limit ≤ 25}` | `mail_search` | `{messages: [MailSummary]}` (no bodies) |
 | `mail.accounts` | — | `mail_accounts` | `{accounts: [{id, label, provider, address}]}` |
@@ -238,14 +238,41 @@ HUD side (`web/src/lib/bridge.ts`, one `message` listener for the whole HUD):
 ### API: `POST /apps/<app_id>/bridge` (owner group checked, like every route)
 - Loads the APP record; `cap` must be in its `grants` → else 403 `not_granted`. Params validated per capability
   (table above) → 400 `invalid`.
-- Runs the read through `policy.gate` as role **`app`** with tool name `mcp__app__<cap>` (connector reads:
-  `mcp__app__connector___<id>___<tool>`), audited with `app_id` (name, decision, duration; never args or data,
-  as for every tool). `config/policy.json` gets: `^mcp__app__(calendar\.read|calendar\.calendars|mail\.search|mail\.accounts|connector___.+)$`
-  → allow for role `app`; every other `mcp__app__` name → deny. A test pins that no write tool name can pass.
-- Connector reads go through the connectors session's `GatewayClient` (`runtime/gateway.py`), with the api Lambda's
-  role as the caller; the Cedar policies (rewritten by the connectors Lambda) get one `permit` for the api role
-  limited to `read_only` tools of connectors that some app was granted. Mail/calendar reads call the
-  mail/calendar module in-process, as `GET /calendar/events` does.
+- Runs the read through `policy.gate` as role **`app`**, agent `app-<app_id>`, with tool name `mcp__app__<cap>` for
+  mail/calendar reads and `mcp__gateway__<id>___<tool>` for connector reads (so every connector rule in
+  `config/policy.json`, such as the merge and secret denies, applies to apps too), audited with `app_id` (name, decision, duration; never args or data,
+  as for every tool). `config/policy.json` gets: `^mcp__app__(calendar\.read|calendar\.calendars|mail\.search|mail\.accounts)$`
+  → allow for role `app`; every other `mcp__app__` name → deny; for role `app`, "ask" counts as deny. A test pins that no write tool name can pass.
+- The api Lambda checks the grant and params, then invokes the **app-bridge Lambda** `aic-prod-app-bridge`
+  (role `aic-prod-fn-app-bridge`) synchronously with `{app_id, cap, params}`. Only that Lambda can reach the
+  Gateway or the mail/calendar reads for apps, so the api role gets no Gateway access (agreed with the connectors
+  lead, `docs/CONNECTORS_SKILLS.md` §1.9 on `connectors-skills`, commit 8fb8d53).
+- Connector reads: the bridge Lambda calls `aic.shared.connector_calls.app_call(d, app_id=, connector_id=, tool=,
+  args=)` → `{ok, data: [{type: "text", text} | {type: "json", json}], truncated, error}` (Gateway client in
+  `aic.shared.gateway`). `app_call` re-checks the grant on the APP record
+  (below), that the connector is `ready` and the tool read-only and not destructive, runs `policy.gate` as role
+  `app` (agent `app-<app_id>`, tool `mcp__gateway__<id>___<tool>`; "ask" counts as deny) and the audit, applies its own 60/min per-app limit for
+  connector calls, and calls the Gateway as the bridge role; the Cedar `permit` for that principal lists
+  exactly the `<id>___<tool>` pairs found in some APP record's `grants` that are still read-only, not destructive
+  and ready (`docs/CONNECTORS_SKILLS.md` §1.9, commit c4f1cf9).
+- After every publish, app removal or grant change the api Lambda invokes the connectors Lambda
+  (`aic-prod-connectors`) asynchronously with `{"action": "policies"}` so Cedar matches the grants. Until it
+  has run, `app_call`'s own grant check still refuses revoked grants. Output ≤ 200k characters, untrusted.
+- Grant record that `app_call` reads: the APP item itself (pk `APPS`, sk `APP#<app_id>`), field `grants`: a list of
+  `{id, connector?, tool?}` (for example `{id: "connector.read", connector: "github", tool: "list_issues"}`), plus
+  `granted_at`. A revoked grant is simply removed from the list; a removed app has no item.
+- Mail/calendar reads (`docs/MAIL_CALENDAR.md` §11 on `connectors-skills`, connectors lead, commit 59a46a2):
+  the bridge Lambda uses `aic.mail.service.MailService.from_env(ledger)` and only its read methods `accounts()`,
+  `calendars()`, `events(start, end, calendar_ids=None, query=None)` and `search(query, account_id=None, folder=None,
+  unread_only=False, after=None, before=None, limit=25)` (summaries only). Results carry `errors` for accounts that
+  failed; titles and snippets are untrusted. Bridge IAM for this: `GetWorkloadAccessTokenForUserId` on workload
+  `aic-prod-mail` (each account is its own vault user `ma-…`), `GetResourceOauth2Token` on `aic-prod-google` /
+  `aic-prod-microsoft` and the default token vault, `secretsmanager:GetSecretValue` on `aic/prod/mail/*` + `kms:Decrypt`
+  on the project key, ledger read on `pk = "MAIL"`; no writes, no `CompleteResourceTokenAuth`.
+- Proposals run through the mail module: the api files them with `aic.mail.approvals.file(ledger, service, tool, args,
+  requested_by="app:<app_id>")` (full tool name such as `mcp__city__calendar_respond`, preview from `aic.mail.preview.build`,
+  hash from `policy.action_hash`) and on approve runs `aic.mail.approvals.execute(ledger, service, approval)`, which
+  re-checks the policy and the hash and consumes `APPROVED#<hash>` once. Standing rules never apply to app proposals.
 - Rate limit per app: 120 requests per minute, counted in the ledger (`RATE#app-<id>`) → 429 `rate_limited`.
 - Response ≤ 256 KB (cut lists with `truncated: true`). Data is returned as data; the app renders it inside
   its own sandbox, so hostile content in an email subject can at worst affect that one app's page.
@@ -286,24 +313,30 @@ invitations"), are limited to 10 per hour per app, and the app only learns `{ok:
   matches it before a trailing newline) can't be reached with a crafted name.
 
 ### Events (v2)
-`app.updated` {`app`} (grants or pin changed). `approval.requested` for `app.publish` also carries `capabilities`.
+`app.updated` {`app`} (grants or pin changed). Apps granted `calendar.read` or `calendar.calendars` also get the
+`calendar.changed` event (`docs/MAIL_CALENDAR.md` §6) through the bridge as `{aic: 1, event: "calendar.changed"}`, so they
+can reload; `aic-bridge.js` exposes it as `aic.on("calendar.changed", fn)`. No other event reaches an app. The combined
+calendar the owner asked for is an app built on demand (there is no fixed Calendar screen); account `color` and
+calendar `hidden` come with `calendars`. `approval.requested` for `app.publish` also carries `capabilities`.
 
 ### Where the work goes
 - **backend:** `app_caps.py` (catalogue, params validation, labels), manifest checks in `stage_submission`,
   `aic-bridge.js` asset, grants on publish, `PUT /apps/<id>`, `POST /apps/<id>/bridge`, `POST /apps/<id>/proposals`,
   role `app` in the gate + policy rules, rate limit, `app.updated`, prompts (apps department: manifest, `aic.request`,
   `aic.preview`, empty states, never assume data). Mail/calendar capabilities wire to the mail/calendar module once
-  branch `mail-calendar` merges; until then they answer `unavailable`. Connector reads wire to `GatewayClient` once
+  branch `connectors-skills` merges; until then they answer `unavailable`. Connector reads wire to `GatewayClient` once
   `connectors-skills` merges; same fallback.
 - **web:** `lib/bridge.ts` (the listener above), grant switches on the publish card, pinned icons in the top bar,
   pin and grant controls on the app page / Settings → Apps; vitest for every drop rule (wrong source, wrong shape,
   not granted, rate limit, preview) and Playwright: a fake calendar app on the fake apps origin reads granted
   events, gets `not_granted` after a revoke, and a proposal lands in Needs you.
-- **infra:** routes `POST /apps/{id}/bridge`, `POST /apps/{id}/proposals`, `PUT /apps/{id}`; the api Lambda's
-  `bedrock-agentcore:InvokeGateway` on the connectors gateway (after `connectors-skills` merges); nothing for
-  workers or the apps origin. HUD CSP unchanged.
-- **connectors session:** a Cedar `permit` for the api role on read-only tools of app-granted connectors, and
-  `GatewayClient` usable from the api Lambda.
+- **infra:** routes `POST /apps/{id}/bridge`, `POST /apps/{id}/proposals`, `PUT /apps/{id}`; Lambda
+  `aic-prod-app-bridge` (role `aic-prod-fn-app-bridge`, the shared zip, handler `aic.lambdas.app_bridge.handler`)
+  that only the api role may invoke, with ledger read on `APPS`/`CONNECTORS`/mail account rows, `RATE#app-*` and audit
+  writes, and `bedrock-agentcore:InvokeGateway` on the connectors gateway (after `connectors-skills` merges);
+  mail/calendar secret/vault reads as listed under "Mail/calendar reads" (after `connectors-skills` merges). The api
+  role gets `lambda:InvokeFunction` on it and no Gateway access. Nothing for workers or the apps origin. HUD CSP unchanged.
+- **connectors session:** `connector_calls.app_call` and the Cedar `permit` for `aic-prod-fn-app-bridge` (§1.9 of its contract).
 
 ## Not in v1 (suggested later)
 Updating an existing app in place (a new request makes a new app), saved high scores (a per-app storage capability would fit the v2 catalogue), a custom domain for exact `frame-ancestors`.
