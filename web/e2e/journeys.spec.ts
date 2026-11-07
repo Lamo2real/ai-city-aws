@@ -583,6 +583,39 @@ test("plain words: Work in the menu, What I did under replies, today's spend wit
     await expect(page.locator("section.ace")).not.toContainText(word);
 });
 
+test("the message box starts one line tall, grows with more lines up to a limit, and shrinks back", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  await page.goto("/");
+  const box = page.getByRole("textbox", { name: "Message to AIC" });
+  const height = () => box.evaluate((e) => e.getBoundingClientRect().height);
+  const oneLine = await height();
+  expect(oneLine).toBeLessThan(60); // one line plus padding, level with the send button
+
+  await box.click();
+  await box.pressSequentially("first line");
+  await box.press("Shift+Enter");
+  await box.pressSequentially("second line");
+  await box.press("Shift+Enter");
+  await box.pressSequentially("third line");
+  const threeLines = await height();
+  expect(threeLines).toBeGreaterThan(oneLine + 40); // grew by two lines
+
+  await box.fill(Array.from({ length: 20 }, (_, i) => `line ${i}`).join("\n"));
+  const capped = await height();
+  expect(capped).toBeLessThan(260); // about eight lines, then it scrolls inside
+  expect(await box.evaluate((e) => getComputedStyle(e).overflowY)).toBe("auto");
+
+  await box.fill("");
+  expect(await height()).toBe(oneLine); // back to one line
+
+  await box.pressSequentially("hello");
+  await box.press("Enter"); // Enter still sends
+  await expect.poll(() => m.calls.find((c) => c.path === "/messages")?.body).toMatchObject({ text: "hello" });
+  expect(await height()).toBe(oneLine);
+});
+
 test("a draft survives a reload", async ({ page }) => {
   await mockBackend(page);
   await page.goto("/");

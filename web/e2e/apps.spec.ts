@@ -40,6 +40,7 @@ const PUBLISH = {
 test("Apps is in the nav after Work, with an empty state that says how to get one", async ({ page }) => {
   await mockBackend(page);
   await page.goto("/");
+  await expect(page.getByRole("link", { name: "Apps", exact: true })).toBeVisible(); // the menu has rendered
   const names = await page.getByRole("navigation", { name: "Screens" }).getByRole("link").allTextContents();
   expect(names.indexOf("Apps")).toBe(names.indexOf("Work") + 1);
   await page.getByRole("link", { name: "Apps", exact: true }).click();
