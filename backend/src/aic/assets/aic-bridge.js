@@ -3,6 +3,7 @@
      const r = await aic.request("calendar.read", { from, to });
      // r = { ok: true, data } | { ok: false, error, message }
      await aic.propose("calendar.respond", { id, response: "accept" }); // the owner approves it in Needs you
+     aic.on("calendar.changed", reload);                                 // the owner's calendars changed
    aic.preview is true in the publish preview, which never gets data. */
 (function () {
   "use strict";
@@ -18,10 +19,25 @@
     return s;
   }
 
+  var EVENTS = { "calendar.changed": [] };
+
   window.addEventListener("message", function (e) {
     if (e.source !== window.parent) return;
     var m = e.data;
-    if (!m || m.aic !== 1 || typeof m.id !== "string") return;
+    if (!m || m.aic !== 1) return;
+    if (typeof m.event === "string") {
+      var fns = Object.prototype.hasOwnProperty.call(EVENTS, m.event) ? EVENTS[m.event] : null;
+      if (!fns) return; // any other event is ignored
+      fns.slice().forEach(function (fn) {
+        try {
+          fn();
+        } catch (err) {
+          /* an app's own handler error stays in the app */
+        }
+      });
+      return;
+    }
+    if (typeof m.id !== "string") return;
     var p = pending[m.id];
     if (!p) return;
     delete pending[m.id];
@@ -57,6 +73,9 @@
     },
     propose: function (kind, params) {
       return send("propose", { kind: String(kind), params: params || {} });
+    },
+    on: function (name, fn) {
+      if (typeof fn === "function" && Object.prototype.hasOwnProperty.call(EVENTS, name)) EVENTS[name].push(fn);
     },
   });
 })();

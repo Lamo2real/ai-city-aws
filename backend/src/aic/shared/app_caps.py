@@ -10,12 +10,13 @@ those branches merge, the defaults answer ``unavailable``.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import re
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from .ledger import Ledger, strip
 
@@ -78,7 +79,8 @@ def cap_key(cap: Capability) -> str:
 
 
 def clean_cap(cap: Any) -> Capability:
-    """Keeps only the known keys of a capability object; raises Invalid on anything else."""
+    """Keeps only the known keys of a capability object (``{id, connector?, tool?}``, the grant shape
+    ``app_call`` reads); raises Invalid on anything else."""
     if not isinstance(cap, dict) or not isinstance(cap.get("id"), str):
         raise Invalid("each capability must be an object with an id")
     cid = cap["id"]
@@ -101,9 +103,10 @@ def label(cap: Capability, connector_label: str | None = None) -> str:
 
 
 def gate_name(cap: Capability) -> str:
-    """The tool name the policy gate sees for a bridge call (role ``app``)."""
+    """The tool name the policy gate sees for a bridge call (role ``app``). Connector reads use the agents' own
+    name, so every connector rule applies to apps too (``app_call`` gates those)."""
     if cap.get("id") == "connector.read":
-        return f"mcp__app__connector___{cap['connector']}___{cap['tool']}"
+        return f"mcp__gateway__{cap['connector']}___{cap['tool']}"
     return f"mcp__app__{cap['id']}"
 
 
@@ -385,49 +388,131 @@ PROPOSALS: dict[str, Proposal] = {
 PROPOSALS_PER_HOUR = 10
 
 
-# ---------- the readers the bridge calls (injected; defaults answer "unavailable") ----------
-class MailCalendar(Protocol):
-    """The mail/calendar module (docs/MAIL_CALENDAR.md), in-process like GET /calendar/events."""
+# ---------- what the bridge reads through (injected; defaults answer "unavailable") ----------
+class MailReads(Protocol):
+    """The read methods of ``aic.mail.service.MailService`` (docs/MAIL_CALENDAR.md §11 on connectors-skills)."""
 
-    async def calendar_events(self, start: str, end: str, calendar_ids: list[str] | None) -> dict[str, Any]: ...
-    async def calendar_list(self) -> dict[str, Any]: ...
-    async def mail_search(self, params: dict[str, Any]) -> dict[str, Any]: ...
-    async def mail_accounts(self) -> dict[str, Any]: ...
-    async def preview(self, tool: str, args: dict[str, Any]) -> dict[str, Any]: ...
-    async def run(self, tool: str, args: dict[str, Any]) -> dict[str, Any]: ...
-
-
-class NoMailCalendar:
-    """Until branch mail-calendar merges."""
-
-    async def calendar_events(self, start: str, end: str, calendar_ids: list[str] | None) -> dict[str, Any]:
-        raise Unavailable("Mail and calendar are not set up yet.")
-
-    async def calendar_list(self) -> dict[str, Any]:
-        raise Unavailable("Mail and calendar are not set up yet.")
-
-    async def mail_search(self, params: dict[str, Any]) -> dict[str, Any]:
-        raise Unavailable("Mail and calendar are not set up yet.")
-
-    async def mail_accounts(self) -> dict[str, Any]:
-        raise Unavailable("Mail and calendar are not set up yet.")
-
-    async def preview(self, tool: str, args: dict[str, Any]) -> dict[str, Any]:
-        raise Unavailable("Mail and calendar are not set up yet.")
-
-    async def run(self, tool: str, args: dict[str, Any]) -> dict[str, Any]:
-        raise Unavailable("Mail and calendar are not set up yet.")
+    async def accounts(self) -> Any: ...
+    async def calendars(self) -> Any: ...
+    async def events(
+        self, start: str, end: str, calendar_ids: list[str] | None = None, query: str | None = None
+    ) -> Any: ...
+    async def search(
+        self,
+        query: str,
+        account_id: str | None = None,
+        folder: str | None = None,
+        unread_only: bool = False,
+        after: str | None = None,
+        before: str | None = None,
+        limit: int = 25,
+    ) -> Any: ...
 
 
-class ConnectorReads(Protocol):
-    """A read-only connector tool call through the Gateway (docs/CONNECTORS_SKILLS.md §1.4, §1.9).
-    Returns MCP content parts ``[{"type": "text", "text": ...}, …]``."""
-
-    async def call(self, connector_id: str, tool: str, args: dict[str, Any]) -> list[dict[str, Any]]: ...
+NOT_SET_UP = "Mail and calendar are not set up yet."
 
 
-class NoConnectorReads:
-    """Until branch connectors-skills merges (its GatewayClient)."""
+class NoMail:
+    """Until the mail module (branch connectors-skills) is merged."""
 
-    async def call(self, connector_id: str, tool: str, args: dict[str, Any]) -> list[dict[str, Any]]:
-        raise Unavailable("Connectors are not set up yet.")
+    async def accounts(self) -> Any:
+        raise Unavailable(NOT_SET_UP)
+
+    async def calendars(self) -> Any:
+        raise Unavailable(NOT_SET_UP)
+
+    async def events(
+        self, start: str, end: str, calendar_ids: list[str] | None = None, query: str | None = None
+    ) -> Any:
+        raise Unavailable(NOT_SET_UP)
+
+    async def search(
+        self,
+        query: str,
+        account_id: str | None = None,
+        folder: str | None = None,
+        unread_only: bool = False,
+        after: str | None = None,
+        before: str | None = None,
+        limit: int = 25,
+    ) -> Any:
+        raise Unavailable(NOT_SET_UP)
+
+
+AppCall = Callable[..., Awaitable[dict[str, Any]]]
+"""``aic.shared.connector_calls.app_call(d, *, app_id, connector_id, tool, args)`` →
+``{ok, data: [{type: "text", text} | {type: "json", json}], truncated, error}`` (docs/CONNECTORS_SKILLS.md §1.9)."""
+
+
+async def no_app_call(_d: Any, **_: Any) -> dict[str, Any]:
+    """Until the connectors module (branch connectors-skills) is merged."""
+    return {"ok": False, "data": [], "truncated": False, "error": "unavailable"}
+
+
+class MailProposals(Protocol):
+    """``aic.mail.approvals.file`` / ``execute`` with the service bound (docs/MAIL_CALENDAR.md §11)."""
+
+    async def file(self, tool: str, args: dict[str, Any], requested_by: str) -> dict[str, Any]: ...
+    async def execute(self, approval: dict[str, Any]) -> Any: ...
+
+
+class NoProposals:
+    async def file(self, tool: str, args: dict[str, Any], requested_by: str) -> dict[str, Any]:
+        raise Unavailable(NOT_SET_UP)
+
+    async def execute(self, approval: dict[str, Any]) -> Any:
+        raise Unavailable(NOT_SET_UP)
+
+
+def plain(v: Any) -> Any:
+    """The mail module's dataclasses as the same JSON they have on the wire."""
+    if dataclasses.is_dataclass(v) and not isinstance(v, type):
+        return plain(dataclasses.asdict(v))
+    if isinstance(v, dict):
+        return {k: plain(x) for k, x in v.items()}
+    if isinstance(v, list | tuple):
+        return [plain(x) for x in v]
+    return v
+
+
+def mail_from_env(ledger: Ledger) -> MailReads:
+    """``MailService.from_env(ledger)`` once the mail module is in this package; NoMail before that."""
+    try:
+        from aic.mail.service import MailService  # type: ignore[import-not-found,unused-ignore]
+    except ImportError:
+        return NoMail()
+    try:
+        return cast(MailReads, MailService.from_env(ledger))
+    except Exception:  # not configured in this function's env
+        return NoMail()
+
+
+def app_call_from_env() -> AppCall:
+    try:
+        from aic.shared.connector_calls import app_call  # type: ignore[import-not-found,unused-ignore]
+    except ImportError:
+        return no_app_call
+    return cast(AppCall, app_call)
+
+
+class _BoundProposals:
+    def __init__(self, ledger: Ledger, service: Any, approvals: Any) -> None:
+        self._ledger, self._service, self._approvals = ledger, service, approvals
+
+    async def file(self, tool: str, args: dict[str, Any], requested_by: str) -> dict[str, Any]:
+        return cast(
+            dict[str, Any],
+            plain(await self._approvals.file(self._ledger, self._service, tool, args, requested_by=requested_by)),
+        )
+
+    async def execute(self, approval: dict[str, Any]) -> Any:
+        return plain(await self._approvals.execute(self._ledger, self._service, approval))
+
+
+def proposals_from_env(ledger: Ledger) -> MailProposals:
+    try:
+        from aic.mail import approvals  # type: ignore[import-not-found,unused-ignore]
+    except ImportError:
+        return NoProposals()
+    service = mail_from_env(ledger)
+    return NoProposals() if isinstance(service, NoMail) else _BoundProposals(ledger, service, approvals)

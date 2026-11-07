@@ -89,7 +89,7 @@ Departments and workers are data and sessions, never new runtimes, so the accoun
 ## Shared code
 - `backend/src/aic/shared` (Python): model map (`config/models.json` is the only place model IDs live), startup guard, policy gate, single-table ledger (one implementation over a `Table` interface with in-memory and DynamoDB backends), cost math (5-minute vs 1-hour cache writes, geo surcharge, Haiku long-context tier), spend caps, event schemas (Pydantic), the turn gate, the dispatcher's decisions, the Agent Factory, the actions shared by tools and API, utility (Haiku) calls and the wake word.
 - `backend/src/aic/runtime` (Python): the AgentCore container (Starlette on 8080, arm64; image built from `services/agent-runtime/Dockerfile`), role tools, the Claude Agent SDK engine.
-- `backend/src/aic/lambdas` (Python 3.13, one zip for all functions): api, dispatcher, factory, ledger writer, ws (authorizer, connections, broadcast), notifier, approvals, apps (stages a worker's `app.submitted` as a checked draft), scheduler (+ the fenced, disabled self-improvement check).
+- `backend/src/aic/lambdas` (Python 3.13, one zip for all functions): api, dispatcher, factory, ledger writer, ws (authorizer, connections, broadcast), notifier, approvals, apps (stages a worker's `app.submitted` as a checked draft), app bridge (an app's granted read-only data reads, invoked by the api), scheduler (+ the fenced, disabled self-improvement check).
 - `web`: React HUD; the City view is ported from the owner's Mac HUD (`web/src/city/`).
 
 ## Data model (DynamoDB, one table)

@@ -13,12 +13,12 @@ import math
 import os
 import re
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal, cast
 
-from aic.shared.app_bridge import Readers, bridge_call, file_proposal, run_proposal
-from aic.shared.app_caps import Invalid
+from aic.shared.app_bridge import Invoke, api_bridge, file_proposal, run_proposal
+from aic.shared.app_caps import Invalid, MailProposals, proposals_from_env
 from aic.shared.apps import (
     AppsOrigin,
     get_app,
@@ -94,8 +94,12 @@ class ApiDeps:
     owner_email: str | None = None
     apps: AppsOrigin | None = None
     """The apps bucket and distribution, for publishing and removing apps."""
-    readers: Readers = field(default_factory=Readers)
-    """What the apps bridge reads from (mail/calendar, connectors); "unavailable" until those are wired."""
+    bridge_invoke: Invoke | None = None
+    """Synchronous call to the app-bridge Lambda (``{app_id, cap, params}``); None answers "unavailable"."""
+    proposals: MailProposals | None = None
+    """The mail module's approvals (file / execute) for app proposals; None answers "unavailable"."""
+    grants_changed: Callable[[], Awaitable[None]] | None = None
+    """Asks the connectors Lambda to rewrite the Cedar policies after a publish, removal or grant change."""
 
 
 class _NoFactory:
@@ -225,6 +229,16 @@ async def city_snapshot(d: ApiDeps) -> dict[str, Any]:
         },
         "region": os.environ.get("AWS_REGION", "eu-north-1"),
     }
+
+
+async def _grants_changed(d: ApiDeps) -> None:
+    """Best effort: the owner's action already happened; ``app_call`` re-checks grants until Cedar catches up."""
+    if d.grants_changed is None:
+        return
+    try:
+        await d.grants_changed()
+    except Exception as e:
+        log("warn", "apps.policies_refresh_failed", error=type(e).__name__)
 
 
 async def _costs(d: ApiDeps) -> dict[str, Any]:
@@ -434,8 +448,11 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         await d.bus.put({"type": "approval.decided", "id": a["id"], "approved": approved})
         if approved and str(cur.get("requested_by", "")).startswith("app:"):
             # An app's proposal: run that one tool once, exactly as the owner saw it.
-            return reply(200, {"approval": a, "result": await run_proposal(d.ledger, cur, d.readers)})
-        return reply(200, {"approval": a, "app": app} if app else {"approval": a})
+            return reply(200, {"approval": a, "result": await run_proposal(cur, d.proposals)})
+        if app:
+            await _grants_changed(d)
+            return reply(200, {"approval": a, "app": app})
+        return reply(200, {"approval": a})
     if is_("GET", r"/apps"):
         return reply(200, {"apps": await list_apps(d.ledger)})
     if is_("DELETE", r"/apps/[\w-]+"):
@@ -444,6 +461,7 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         gone = await remove_app(d.ledger, d.bus, d.apps, seg[1])
         if not gone:
             return problem(404, "That app does not exist.")
+        await _grants_changed(d)
         return reply(200, {"removed": seg[1]})
     if is_("PUT", r"/apps/[\w-]+"):
         b = _body(event)
@@ -453,6 +471,8 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
             return problem(400, str(e))
         if not updated:
             return problem(404, "That app does not exist.")
+        if "grants" in b:
+            await _grants_changed(d)
         return reply(200, {"app": updated})
     if is_("POST", r"/apps/[\w-]+/(bridge|proposals)"):
         if len(str(event.get("body") or "")) > 32_000:
@@ -462,9 +482,9 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         if not target:
             return reply(404, {"ok": False, "error": "unavailable", "message": "That app does not exist."})
         if seg[2] == "bridge":
-            ans = await bridge_call(d.ledger, target, b.get("cap"), b.get("params"), d.readers)
+            ans = await api_bridge(d.ledger, target, b.get("cap"), b.get("params"), d.bridge_invoke)
         else:
-            ans = await file_proposal(d.ledger, d.bus, target, b, d.readers)
+            ans = await file_proposal(d.ledger, d.bus, target, b, d.proposals)
         return reply(ans.status, ans.body)
     if is_("GET", r"/settings"):
         return reply(200, {"settings": await d.settings()})
@@ -591,6 +611,37 @@ async def handle_http(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
 _deps: ApiDeps | None = None
 
 
+def _bridge_invoke(session: Any, fn: str | None) -> Invoke | None:
+    if not fn:
+        return None
+    client = session.client("lambda")
+
+    async def invoke(payload: dict[str, Any]) -> dict[str, Any]:
+        r = await asyncio.to_thread(
+            client.invoke, FunctionName=fn, InvocationType="RequestResponse", Payload=json.dumps(payload).encode()
+        )
+        if r.get("FunctionError"):
+            raise RuntimeError("the app bridge failed")
+        out = json.loads(r["Payload"].read())
+        return out if isinstance(out, dict) else {}
+
+    return invoke
+
+
+def _policies_refresh(session: Any, fn: str | None) -> Callable[[], Awaitable[None]] | None:
+    """Async-invokes the connectors Lambda with ``{"action": "policies"}``; nothing when it isn't deployed."""
+    if not fn:
+        return None
+    client = session.client("lambda")
+
+    async def refresh() -> None:
+        await asyncio.to_thread(
+            client.invoke, FunctionName=fn, InvocationType="Event", Payload=json.dumps({"action": "policies"}).encode()
+        )
+
+    return refresh
+
+
 def _apps_origin(session: Any) -> AppsOrigin | None:
     bucket, url = os.environ.get("AIC_APPS_BUCKET"), os.environ.get("AIC_APPS_URL")
     if not bucket or not url:
@@ -619,5 +670,8 @@ def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
             user_pool_id=os.environ.get("AIC_USER_POOL_ID"),
             owner_email=os.environ.get("AIC_OWNER_EMAIL"),
             apps=_apps_origin(city.session),
+            bridge_invoke=_bridge_invoke(city.session, os.environ.get("AIC_APP_BRIDGE_FUNCTION")),
+            proposals=proposals_from_env(city.ledger),
+            grants_changed=_policies_refresh(city.session, os.environ.get("AIC_CONNECTORS_FUNCTION")),
         )
     return run(handle_http(event, _deps))

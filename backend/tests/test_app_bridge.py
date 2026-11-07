@@ -1,5 +1,5 @@
-"""Apps v2, the data bridge (docs/APPS.md § v2): the capability catalogue, manifests, grants, pins, the bridge
-route, proposals and the policy for role ``app``. Fakes only: no AWS, no Bedrock, no real account."""
+"""Apps v2, the data bridge (docs/APPS.md § v2): the capability catalogue, manifests, grants, pins, the api route
+and the app-bridge Lambda, proposals and the policy for role ``app``. Fakes only: no AWS, no Bedrock, no account."""
 
 import json
 from typing import Any
@@ -8,21 +8,27 @@ import pytest
 
 from aic.lambdas.api import ROUTES, handle_http
 from aic.lambdas.apps import on_submitted
-from aic.shared.app_bridge import Readers, fit
+from aic.shared.app_bridge import BridgeDeps, fit, serve_bridge
 from aic.shared.app_caps import (
     CATALOGUE,
     Invalid,
     LoginExpired,
+    NoMail,
+    NoProposals,
+    app_call_from_env,
     calendar_chunks,
     check_manifest,
     check_params,
     clean_cap,
     gate_name,
+    mail_from_env,
+    no_app_call,
+    proposals_from_env,
 )
-from aic.shared.apps import BRIDGE_JS, list_apps, publish_draft, request_publish_approvals, update_draft
+from aic.shared.apps import BRIDGE_JS, get_app, list_apps, publish_draft, request_publish_approvals, update_draft
 from aic.shared.events import MemoryBus, parse_event
 from aic.shared.ledger import Ledger
-from aic.shared.policy import decide
+from aic.shared.policy import action_hash, decide
 from aic.shared.table import MemoryTable
 from test_apps import GAME, FakeS3, api, draft, ev, js, origin, staged, submitted, upload
 
@@ -49,55 +55,86 @@ async def connectors(ledger: Ledger, status: str = "ready") -> None:
 
 
 class FakeMail:
-    """The mail/calendar module as the bridge sees it."""
+    """The read methods of MailService (docs/MAIL_CALENDAR.md §11), with its result shapes."""
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, Any]] = []
-        self.ran: list[tuple[str, dict[str, Any]]] = []
         self.fail: Exception | None = None
 
-    async def calendar_events(self, start: str, end: str, calendar_ids: list[str] | None) -> dict[str, Any]:
-        self.calls.append(("calendar_events", (start, end)))
+    async def accounts(self) -> list[dict[str, Any]]:
+        return [{"id": "ma-1", "label": "Personal", "provider": "google", "address": "o@x", "session_uri": "s"}]
+
+    async def calendars(self) -> dict[str, Any]:
+        return {"calendars": [{"id": "ma-1:primary", "name": "Personal"}], "errors": []}
+
+    async def events(
+        self, start: str, end: str, calendar_ids: list[str] | None = None, query: str | None = None
+    ) -> dict[str, Any]:
+        self.calls.append(("events", (start, end)))
         if self.fail:
             raise self.fail
         return {
             "events": [{"id": "e1", "account_id": "ma-1", "start": "2026-11-03T10:00:00+00:00", "title": "Dentist"},
                        {"id": f"e-{start[:10]}", "account_id": "ma-2", "start": start, "title": "Standup"}],
-            "errors": [],
+            "errors": [{"account_id": "ma-3", "message": "timed out"}],
         }  # fmt: skip
 
-    async def calendar_list(self) -> dict[str, Any]:
-        return {"calendars": [{"id": "ma-1:primary", "name": "Personal"}], "errors": []}
-
-    async def mail_search(self, params: dict[str, Any]) -> dict[str, Any]:
-        self.calls.append(("mail_search", params))
-        return {"messages": [{"id": "m1", "subject": "Hi", "body_text": "secret body", "attachments": []}]}
-
-    async def mail_accounts(self) -> dict[str, Any]:
+    async def search(self, query: str, **kw: Any) -> dict[str, Any]:
+        self.calls.append(("search", {"query": query, **kw}))
         return {
-            "accounts": [
-                {"id": "ma-1", "label": "Personal", "provider": "google", "address": "o@x", "session_uri": "s"}
-            ]
+            "messages": [{"id": "m1", "subject": "Hi", "body_text": "secret body", "attachments": []}],
+            "errors": [],
         }
 
-    async def preview(self, tool: str, args: dict[str, Any]) -> dict[str, Any]:
-        if self.fail:
-            raise self.fail
-        return {"kind": "event", "action": args.get("response", "invite"), "title": "Dentist"}
 
-    async def run(self, tool: str, args: dict[str, Any]) -> dict[str, Any]:
-        self.ran.append((tool, args))
+class FakeAppCall:
+    """``connector_calls.app_call`` (docs/CONNECTORS_SKILLS.md §1.9)."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+        self.result: dict[str, Any] = {
+            "ok": True,
+            "data": [{"type": "text", "text": "Sunny, 21°C"}, {"type": "json", "json": {"temp": 21}}],
+            "truncated": False,
+            "error": None,
+        }
+
+    async def __call__(self, d: Any, **kw: Any) -> dict[str, Any]:
+        self.calls.append(kw)
+        return self.result
+
+
+class FakeProposals:
+    """``aic.mail.approvals.file`` / ``execute`` with the service bound."""
+
+    def __init__(self, ledger: Ledger) -> None:
+        self.ledger = ledger
+        self.ran: list[dict[str, Any]] = []
+
+    async def file(self, tool: str, args: dict[str, Any], requested_by: str) -> dict[str, Any]:
+        return await self.ledger.request_approval(
+            {"agent": requested_by.replace("app:", "app-"), "ticket_id": None, "tool": tool, "action": f"{tool} as shown",
+             "hash": action_hash(tool, args), "reason": "an app asks", "kind": "tool", "input": args,
+             "preview": {"kind": "event", "title": "Dentist"}, "requested_by": requested_by}
+        )  # fmt: skip
+
+    async def execute(self, approval: dict[str, Any]) -> dict[str, Any]:
+        self.ran.append(approval)
         return {"done": True}
 
 
-class FakeConnectors:
-    def __init__(self) -> None:
-        self.calls: list[tuple[str, str, dict[str, Any]]] = []
-        self.reply: list[dict[str, Any]] = [{"type": "text", "text": "Sunny, 21°C"}, {"type": "image", "data": "x"}]
+def wire(d: Any, mail: Any = None, app_call: Any = None) -> BridgeDeps:
+    """The api's invoke runs the real app-bridge handler in-process, like the synchronous Lambda invoke."""
+    b = BridgeDeps(ledger=d.ledger, city=object(), mail=mail or NoMail(), app_call=app_call or no_app_call)
+    invokes: list[dict[str, Any]] = []
 
-    async def call(self, connector_id: str, tool: str, args: dict[str, Any]) -> list[dict[str, Any]]:
-        self.calls.append((connector_id, tool, args))
-        return self.reply
+    async def invoke(payload: dict[str, Any]) -> dict[str, Any]:
+        invokes.append(json.loads(json.dumps(payload)))  # what crosses the wire is JSON
+        return json.loads(json.dumps(await serve_bridge(payload, b)))
+
+    d.bridge_invoke = invoke
+    d.invokes = invokes
+    return b
 
 
 _n = [0]
@@ -171,11 +208,10 @@ def test_a_year_is_split_into_calls_of_at_most_62_days() -> None:
 def test_no_write_tool_name_passes_the_policy_for_apps() -> None:
     for name in ("calendar.read", "calendar.calendars", "mail.search", "mail.accounts"):
         assert decide(f"mcp__app__{name}", {})[0] == "allow", name
-    assert decide(gate_name(WEATHER), {})[0] == "allow"
+    assert gate_name(WEATHER) == "mcp__gateway__weather___forecast"  # gated by app_call like the agents' calls
     for bad in ("mail.send", "mail.draft", "mail.trash", "mail.label", "calendar.create", "calendar.respond",
                 "calendar.update", "calendar.delete", "calendar.read.x", "calendar_read", "settings", "propose",
-                "connector___weather", "connector___weather___", "connector___Weather___forecast",
-                "connector___github___get_secret", "delegate_to_orchestrator"):  # fmt: skip
+                "connector___weather___forecast", "connector.read", "delegate_to_orchestrator"):  # fmt: skip
         assert decide(f"mcp__app__{bad}", {})[0] == "deny", bad
 
 
@@ -236,6 +272,7 @@ def test_the_bridge_script_sends_only_the_wire_format_and_trusts_only_the_parent
     js_src = BRIDGE_JS.decode()
     assert "e.source !== window.parent" in js_src
     assert "{ aic: 1, id: id, cap: String(cap), params: params || {} }" in js_src
+    assert 'var EVENTS = { "calendar.changed": [] };' in js_src  # the only event an app can hear
     for banned in ("fetch(", "XMLHttpRequest", "localStorage", "document.cookie", "eval(", "innerHTML"):
         assert banned not in js_src
 
@@ -298,108 +335,172 @@ async def test_put_apps_only_shrinks_grants_and_says_so_on_the_bus() -> None:
 
 
 # ---------- the bridge route ----------
+
+
+# ---------- grants feed the Cedar rewrite ----------
+async def test_grants_keep_exactly_the_app_call_shape() -> None:
+    s3 = FakeS3()
+    d = api(s3)
+    labelled = [{**CAL, "label": "Read your calendars"}, {**WEATHER, "label": "Read from Weather: forecast"}]
+    app = await published(d, s3, labelled)
+    assert app["grants"] == [CAL, WEATHER]
+    assert (await get_app(d.ledger, app["app_id"]) or {})["grants"] == [CAL, WEATHER]
+    upd = js(await handle_http(ev("PUT", f"/apps/{app['app_id']}", {"grants": [{**WEATHER, "label": "x"}]}), d))
+    assert upd["app"]["grants"] == [WEATHER]
+
+
+async def test_publish_removal_and_grant_changes_refresh_the_connector_policies() -> None:
+    s3 = FakeS3()
+    d = api(s3)
+    calls: list[str] = []
+
+    async def refresh() -> None:
+        calls.append("policies")
+
+    d.grants_changed = refresh
+    a = await staged(d, s3)
+    app = js(await handle_http(ev("POST", f"/approvals/{a['id']}", {"approved": True}), d))["app"]
+    await handle_http(ev("PUT", f"/apps/{app['app_id']}", {"pinned": True}), d)  # not a grant change
+    await handle_http(ev("PUT", f"/apps/{app['app_id']}", {"grants": []}), d)
+    await handle_http(ev("DELETE", f"/apps/{app['app_id']}"), d)
+    assert calls == ["policies"] * 3
+
+    async def broken() -> None:
+        raise RuntimeError("connectors Lambda not reachable")
+
+    d.grants_changed = broken
+    b = await staged(d, s3, "drf-2")
+    assert (await handle_http(ev("POST", f"/approvals/{b['id']}", {"approved": True}), d))["statusCode"] == 200
+
+
+# ---------- the api route + the app-bridge Lambda ----------
 async def test_the_bridge_answers_granted_reads_and_refuses_the_rest() -> None:
     s3, mail = FakeS3(), FakeMail()
     d = api(s3)
-    d.readers = Readers(mail=mail)
+    wire(d, mail=mail)
     app = await published(d, s3, [CAL, {"id": "mail.search"}, {"id": "mail.accounts"}, {"id": "propose"}])
     r = await handle_http(
         bridge(app, "calendar.read", {"from": "2026-11-01T00:00:00Z", "to": "2027-01-15T00:00:00Z"}), d
     )
     assert r["statusCode"] == 200, r
+    assert d.invokes[0] == {"app_id": app["app_id"], "cap": "calendar.read",
+                            "params": {"from": "2026-11-01T00:00:00+00:00", "to": "2027-01-15T00:00:00+00:00"}}  # fmt: skip
     data = js(r)["data"]
-    assert [c[0] for c in mail.calls] == ["calendar_events", "calendar_events"]  # 75 days → 2 calls
+    assert [c[0] for c in mail.calls] == ["events", "events"]  # 75 days → 2 calls
     assert [e["title"] for e in data["events"]].count("Dentist") == 1  # merged across calls
-    assert data["calendars"] == [{"id": "ma-1:primary", "name": "Personal"}]
-    m = js(await handle_http(bridge(app, "mail.search", {"query": "hi"}), d))["data"]["messages"][0]
+    assert data["calendars"] == [{"id": "ma-1:primary", "name": "Personal"}] and len(data["errors"]) == 2
+    m = js(await handle_http(bridge(app, "mail.search", {"query": "hi", "limit": 5}), d))["data"]["messages"][0]
     assert "body_text" not in m and m["subject"] == "Hi"
+    assert mail.calls[-1][1]["limit"] == 5
     acct = js(await handle_http(bridge(app, "mail.accounts"), d))["data"]["accounts"][0]
-    assert "session_uri" not in acct
-    for cap, params in (
-        ("calendar.calendars", {}),
-        ("mail.send", {}),
-        ("propose", {}),
-        ("connector.read", {"connector": "weather", "tool": "forecast"}),
-    ):
+    assert "session_uri" not in acct and acct["address"] == "o@x"
+    n = len(d.invokes)
+    for cap, params in (("calendar.calendars", {}), ("mail.send", {}), ("propose", {}),
+                        ("connector.read", {"connector": "weather", "tool": "forecast"})):  # fmt: skip
         no = await handle_http(bridge(app, cap, params), d)
         assert (no["statusCode"], js(no)["error"]) == (403, "not_granted"), cap
     bad = await handle_http(bridge(app, "calendar.read", {"from": "x", "to": "y"}), d)
     assert (bad["statusCode"], js(bad)["error"]) == (400, "invalid")
+    assert len(d.invokes) == n  # refused in the api; the bridge Lambda is never called
     gone = await handle_http(ev("POST", "/apps/app-nope/bridge", {"cap": "calendar.read"}), d)
     assert gone["statusCode"] == 404
 
 
-async def test_a_revoked_grant_stops_working_on_the_next_request() -> None:
+async def test_the_bridge_lambda_rechecks_the_grant_itself() -> None:
     s3 = FakeS3()
     d = api(s3)
-    d.readers = Readers(mail=FakeMail())
+    b = wire(d, mail=FakeMail())
     app = await published(d, s3, [{"id": "mail.accounts"}])
     assert (await handle_http(bridge(app, "mail.accounts"), d))["statusCode"] == 200
     await handle_http(ev("PUT", f"/apps/{app['app_id']}", {"grants": []}), d)
     assert js(await handle_http(bridge(app, "mail.accounts"), d))["error"] == "not_granted"
+    # Called directly (as if the api's check were bypassed), it still refuses.
+    assert (await serve_bridge({"app_id": app["app_id"], "cap": "mail.accounts", "params": {}}, b))[
+        "error"
+    ] == "not_granted"
+    assert (await serve_bridge({"app_id": "app-nope", "cap": "mail.accounts", "params": {}}, b))[
+        "error"
+    ] == "not_granted"
+    assert (await serve_bridge({"cap": "mail.accounts"}, b))["ok"] is False
 
 
-async def test_mail_and_calendar_answer_unavailable_until_they_are_wired() -> None:
+async def test_reads_answer_unavailable_until_the_bridge_and_the_mail_module_exist() -> None:
     s3 = FakeS3()
     d = api(s3)
     app = await published(d, s3, [{"id": "mail.accounts"}])
-    r = await handle_http(bridge(app, "mail.accounts"), d)
+    r = await handle_http(bridge(app, "mail.accounts"), d)  # no bridge Lambda configured
     assert (r["statusCode"], js(r)["ok"], js(r)["error"]) == (200, False, "unavailable")
+    wire(d)  # bridge Lambda, but no mail module yet
+    r = await handle_http(bridge(app, "mail.accounts"), d)
+    assert (js(r)["error"], js(r)["message"]) == ("unavailable", "Mail and calendar are not set up yet.")
     mail = FakeMail()
     mail.fail = LoginExpired("Personal needs you to sign in again.")
-    d.readers = Readers(mail=mail)
+    wire(d, mail=mail)
     cal = await published(d, s3, [CAL])
     r = await handle_http(bridge(cal, "calendar.read", {"from": "2026-11-01", "to": "2026-11-02"}), d)
     assert js(r)["error"] == "login_expired"
 
+    async def down(_: dict[str, Any]) -> dict[str, Any]:
+        raise RuntimeError("invoke failed")
 
-async def test_connector_reads_need_a_ready_read_only_tool_and_its_schema() -> None:
-    s3, conns = FakeS3(), FakeConnectors()
+    d.bridge_invoke = down
+    assert js(await handle_http(bridge(app, "mail.accounts"), d))["error"] == "unavailable"
+
+
+def test_until_merged_the_env_readers_are_the_unavailable_ones() -> None:
+    ledger = Ledger(MemoryTable())
+    assert isinstance(mail_from_env(ledger), NoMail)
+    assert app_call_from_env() is no_app_call
+    assert isinstance(proposals_from_env(ledger), NoProposals)
+
+
+async def test_connector_reads_go_through_app_call_with_the_apps_identity() -> None:
+    s3, call = FakeS3(), FakeAppCall()
     d = api(s3)
     await connectors(d.ledger)
-    d.readers = Readers(connectors=conns)
+    wire(d, app_call=call)
     app = await published(d, s3, [WEATHER])
     ok = await handle_http(
         bridge(app, "connector.read", {"connector": "weather", "tool": "forecast", "args": {"city": "Oslo"}}), d
     )
-    assert js(ok) == {"ok": True, "data": {"content": "Sunny, 21°C"}}  # text parts only
-    assert conns.calls == [("weather", "forecast", {"city": "Oslo"})]
+    assert js(ok) == {"ok": True, "data": {"content": "Sunny, 21°C", "json": [{"temp": 21}]}}
+    assert call.calls == [
+        {"app_id": app["app_id"], "connector_id": "weather", "tool": "forecast", "args": {"city": "Oslo"}}
+    ]
     miss = await handle_http(bridge(app, "connector.read", {"connector": "weather", "tool": "forecast", "args": {}}), d)
-    assert js(miss)["error"] == "invalid" and "city" in js(miss)["message"]
-    # The connector later marks the tool as a write: the grant no longer reads anything.
-    rec = await d.ledger.table.get("CONNECTORS", "CONN#weather")
-    assert rec is not None
-    rec["tools"][0]["read_only"] = False
-    await d.ledger.table.put(rec)
-    w = await handle_http(
-        bridge(app, "connector.read", {"connector": "weather", "tool": "forecast", "args": {"city": "Oslo"}}), d
-    )
-    assert (w["statusCode"], js(w)["error"]) == (403, "not_granted")
-    await connectors(d.ledger, "login_expired")
-    le = await handle_http(
+    assert js(miss)["error"] == "invalid" and "city" in js(miss)["message"]  # the tool's schema, checked in the api
+    assert len(call.calls) == 1
+    for error, status in (("login_expired", 200), ("not_granted", 403), ("rate_limited", 429)):
+        call.result = {"ok": False, "data": [], "truncated": False, "error": error}
+        r = await handle_http(
+            bridge(app, "connector.read", {"connector": "weather", "tool": "forecast", "args": {"city": "x"}}), d
+        )
+        assert (r["statusCode"], js(r)["error"]) == (status, error)
+    call.result = {"ok": False, "data": [], "truncated": False, "error": "Weather is not ready."}
+    r = await handle_http(
         bridge(app, "connector.read", {"connector": "weather", "tool": "forecast", "args": {"city": "x"}}), d
     )
-    assert js(le)["error"] == "login_expired"
-    assert len(conns.calls) == 1
-    d.readers = Readers()
-    await connectors(d.ledger)
-    un = await handle_http(
+    assert (js(r)["error"], js(r)["message"]) == ("unavailable", "Weather is not ready.")
+    wire(d)  # connectors not merged yet
+    r = await handle_http(
         bridge(app, "connector.read", {"connector": "weather", "tool": "forecast", "args": {"city": "x"}}), d
     )
-    assert js(un)["error"] == "unavailable"
+    assert js(r)["error"] == "unavailable"
 
 
-async def test_bridge_calls_are_gated_audited_without_data_and_rate_limited() -> None:
+async def test_mail_reads_are_gated_audited_without_data_and_the_api_limits_the_rate() -> None:
     s3 = FakeS3()
     d = api(s3)
-    d.readers = Readers(mail=FakeMail())
+    wire(d, mail=FakeMail())
     app = await published(d, s3, [{"id": "mail.search"}])
     for _ in range(120):
         assert (await handle_http(bridge(app, "mail.search", {"query": "private words"}), d))["statusCode"] == 200
     r = await handle_http(bridge(app, "mail.search", {"query": "x"}), d)
     assert (r["statusCode"], js(r)["error"]) == (429, "rate_limited")
+    assert len(d.invokes) == 120
     rows = await d.ledger.tool_calls(f"app-{app['app_id']}")
     assert rows and {row["tool"] for row in rows} == {"mcp__app__mail.search"}
+    assert {row["decision"] for row in rows} == {"allow", "done"}
     assert "private words" not in json.dumps(rows)
 
 
@@ -416,9 +517,9 @@ def propose(app: dict[str, Any], kind: str, params: Any) -> dict[str, Any]:
 
 
 async def test_a_proposal_becomes_a_normal_approval_and_runs_once_on_approve() -> None:
-    s3, mail = FakeS3(), FakeMail()
+    s3 = FakeS3()
     d = api(s3)
-    d.readers = Readers(mail=mail)
+    d.proposals = props = FakeProposals(d.ledger)
     app = await published(d, s3, [{"id": "propose"}])
     r = await handle_http(propose(app, "calendar.respond", {"id": "ma-1:e1", "response": "accept"}), d)
     assert js(r) == {"ok": True, "status": "waiting_for_you"}
@@ -428,37 +529,38 @@ async def test_a_proposal_becomes_a_normal_approval_and_runs_once_on_approve() -
         "mcp__city__calendar_respond",
         f"app:{app['app_id']}",
     )
-    assert ap["preview"]["title"] == "Dentist" and ap["input"] == {"id": "ma-1:e1", "response": "accept"}
-    assert d.bus.of_type("approval.requested")[-1]["kind"] == "tool"
+    assert ap["input"] == {"id": "ma-1:e1", "response": "accept"}
+    assert d.bus.of_type("approval.requested")[-1]["id"] == ap["id"]
     again = await handle_http(propose(app, "calendar.respond", {"id": "ma-1:e1", "response": "accept"}), d)
     assert js(again)["status"] == "waiting_for_you" and len(await d.ledger.pending_approvals()) == 1
-    assert mail.ran == []
+    assert props.ran == []
     done = await handle_http(ev("POST", f"/approvals/{ap['id']}", {"approved": True}), d)
     assert js(done)["result"] == {"ok": True, "result": {"done": True}}
-    assert mail.ran == [("mcp__city__calendar_respond", {"id": "ma-1:e1", "response": "accept"})]
+    assert [x["id"] for x in props.ran] == [ap["id"]]
     assert (await handle_http(ev("POST", f"/approvals/{ap['id']}", {"approved": True}), d))["statusCode"] == 409
-    assert len(mail.ran) == 1
+    assert len(props.ran) == 1
 
 
 async def test_a_refused_proposal_runs_nothing() -> None:
-    s3, mail = FakeS3(), FakeMail()
+    s3 = FakeS3()
     d = api(s3)
-    d.readers = Readers(mail=mail)
+    d.proposals = props = FakeProposals(d.ledger)
     app = await published(d, s3, [{"id": "propose"}])
     await handle_http(
         propose(app, "mail.draft", {"account_id": "ma-1", "to": ["a@b.c"], "subject": "Hi", "body": "x"}), d
     )
     (ap,) = await d.ledger.pending_approvals()
+    assert ap["tool"] == "mcp__city__mail_draft"
     await handle_http(ev("POST", f"/approvals/{ap['id']}", {"approved": False}), d)
-    assert mail.ran == []
+    assert props.ran == []
 
 
 async def test_proposals_need_the_grant_a_known_kind_and_stop_at_ten_an_hour() -> None:
-    s3, mail = FakeS3(), FakeMail()
+    s3 = FakeS3()
     d = api(s3)
-    d.readers = Readers(mail=mail)
-    plain = await published(d, s3, [CAL])
-    no = await handle_http(propose(plain, "calendar.respond", {"id": "e", "response": "accept"}), d)
+    d.proposals = FakeProposals(d.ledger)
+    plain_app = await published(d, s3, [CAL])
+    no = await handle_http(propose(plain_app, "calendar.respond", {"id": "e", "response": "accept"}), d)
     assert (no["statusCode"], js(no)["error"]) == (403, "not_granted")
     app = await published(d, s3, [{"id": "propose"}])
     for kind, params in (
@@ -468,28 +570,15 @@ async def test_proposals_need_the_grant_a_known_kind_and_stop_at_ten_an_hour() -
     ):
         bad = await handle_http(propose(app, kind, params), d)
         assert (bad["statusCode"], js(bad)["error"]) == (400, "invalid"), kind
+    event = {"calendar_id": "c", "start": "2026-11-09T10:00:00Z", "end": "2026-11-09T11:00:00Z"}
     for i in range(10):
-        ok = await handle_http(
-            propose(
-                app,
-                "calendar.create",
-                {"calendar_id": "c", "title": f"T{i}", "start": "2026-11-09T10:00:00Z", "end": "2026-11-09T11:00:00Z"},
-            ),
-            d,
-        )
+        ok = await handle_http(propose(app, "calendar.create", {**event, "title": f"T{i}"}), d)
         assert ok["statusCode"] == 200, ok
-    over = await handle_http(
-        propose(
-            app,
-            "calendar.create",
-            {"calendar_id": "c", "title": "T", "start": "2026-11-09T10:00:00Z", "end": "2026-11-09T11:00:00Z"},
-        ),
-        d,
-    )
+    over = await handle_http(propose(app, "calendar.create", {**event, "title": "T"}), d)
     assert (over["statusCode"], js(over)["error"]) == (429, "rate_limited")
 
 
-async def test_proposals_answer_unavailable_until_mail_and_calendar_are_wired() -> None:
+async def test_proposals_answer_unavailable_until_the_mail_module_exists() -> None:
     s3 = FakeS3()
     d = api(s3)
     app = await published(d, s3, [{"id": "propose"}])

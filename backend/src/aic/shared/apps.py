@@ -469,8 +469,8 @@ async def publish_draft(
     chosen = asked if grants is None else [clean_cap(g) for g in grants]
     if not subset(chosen, asked):
         raise Invalid("An app can only be granted what it asked for.")
-    by_key = {cap_key(c): c for c in asked}
-    chosen = [by_key[k] for k in dict.fromkeys(cap_key(c) for c in chosen)]
+    # Grants keep exactly {id, connector?, tool?}: app_call and the Cedar rewrite read this list.
+    chosen = [clean_cap(c) for c in {cap_key(c): c for c in chosen}.values()]
     apps_now = await list_apps(ledger)
     want_pin = bool(dr.get("pin")) if pinned is None else pinned
     if want_pin and sum(1 for a in apps_now if a.get("pinned")) >= MAX_PINNED:
@@ -569,7 +569,7 @@ async def update_app(ledger: Ledger, bus: EventBus, app_id: str, patch: dict[str
         if not subset(wanted, current):
             raise ValueError("Grants can only be taken away here. Ask for a new version of the app to add one.")
         keep = {cap_key(c) for c in wanted}
-        sets["grants"] = [c for c in current if cap_key(c) in keep]
+        sets["grants"] = [clean_cap(c) for c in current if cap_key(c) in keep]
     if "pinned" in patch:
         if not isinstance(patch["pinned"], bool):
             raise ValueError("pinned must be true or false.")
