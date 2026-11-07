@@ -185,6 +185,7 @@ test("the voice strip shows clearly who is talking: the owner, then AIC", async 
   await page.getByRole("button", { name: "Stop listening" }).click();
   await expect(strip).toHaveAttribute("data-speaker", "idle");
 
+  await page.getByLabel("Speak replies").selectOption("always"); // typed messages are answered silently otherwise
   await page.getByRole("textbox", { name: "Message to AIC" }).fill("status?");
   await page.keyboard.press("Enter");
   await expect(strip).toHaveAttribute("data-speaker", "thinking");
@@ -267,6 +268,75 @@ test("with reduced motion the reply appears directly, without the typing effect"
   await expect(page.getByLabel("Conversation with AIC").locator(".msg-ace .msg-body").last()).toHaveText(text, {
     timeout: 150,
   });
+});
+
+test("AIC answers aloud only when it was asked by voice", async ({ page }) => {
+  const m = await mockBackend(page);
+  await page.addInitScript(() => ((window as unknown as { __heard: string }).__heard = "hey AIC, status?"));
+  await page.goto("/");
+  const spoken = () => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []);
+  await expect(page.getByLabel("Speak replies")).toHaveValue("auto"); // the default: only when I talk
+
+  // Typed: a text-only answer.
+  await page.getByRole("textbox", { name: "Message to AIC" }).fill("status?");
+  await page.keyboard.press("Enter");
+  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
+  m.send({ type: "ace.reply", conversation: "main", text: "Typed answer.", done: true });
+  await expect(page.getByLabel("Conversation with AIC").getByText("Typed answer.")).toBeVisible();
+  await page.waitForTimeout(300);
+  expect(await spoken()).toEqual([]);
+
+  // Talk and send (the default mic mode): spoken back.
+  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(2);
+  m.send({ type: "ace.reply", conversation: "main", text: "Spoken answer.", done: true });
+  await expect.poll(spoken).toEqual(["Spoken answer."]);
+});
+
+test("Dictate: words land in the box live, nothing is sent until Send; an untouched dictation counts as voice", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  await page.addInitScript(() => {
+    const w = window as unknown as { __partials: string[]; __heard: string; __micHold: boolean };
+    w.__partials = ["remind me", "remind me to call"];
+    w.__heard = "remind me to call the bank";
+  });
+  await page.goto("/");
+  await page.getByLabel("Dictate into the box").check();
+  const box = page.getByRole("textbox", { name: "Message to AIC" });
+  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await expect(box).toHaveValue("remind me to call"); // a live partial
+  await expect(box).toHaveValue("remind me to call the bank");
+  await expect(page.locator(".voice")).toHaveAttribute("data-speaker", "you"); // still listening: tap to stop
+  await shot(page, "ace-dictating");
+  await page.getByRole("button", { name: "Stop listening" }).click();
+  expect(m.calls.filter((c) => c.path === "/messages")).toHaveLength(0); // nothing sent by itself
+  await page.getByRole("button", { name: "Send to AIC" }).click();
+  await expect
+    .poll(() => m.calls.find((c) => c.path === "/messages")?.body)
+    .toMatchObject({ text: "remind me to call the bank" });
+  m.send({ type: "ace.reply", conversation: "main", text: "I'll remind you.", done: true });
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []))
+    .toEqual(["I'll remind you."]);
+
+  // The choice is remembered; an edited dictation is a typed message, answered silently.
+  await page.reload();
+  await expect(page.getByLabel("Dictate into the box")).toBeChecked();
+  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await expect(box).toHaveValue("remind me to call the bank");
+  await page.getByRole("button", { name: "Stop listening" }).click();
+  await box.press("End");
+  await box.pressSequentially(" tomorrow");
+  await page.getByRole("button", { name: "Send to AIC" }).click();
+  await expect
+    .poll(() => m.calls.filter((c) => c.path === "/messages").at(-1)?.body)
+    .toMatchObject({ text: "remind me to call the bank tomorrow" });
+  m.send({ type: "ace.reply", conversation: "main", text: "Tomorrow it is.", done: true });
+  await expect(page.getByLabel("Conversation with AIC").getByText("Tomorrow it is.")).toBeVisible();
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? [])).toEqual([]);
 });
 
 test("a draft survives a reload", async ({ page }) => {

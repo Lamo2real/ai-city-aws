@@ -27,7 +27,8 @@ async function deliver(line: ChatLine) {
   }
 }
 
-export async function sendMessage(text: string) {
+/** Sends a message to AIC. `voice`: the owner said it (AIC then answers aloud when speaking is "auto"). */
+export async function sendMessage(text: string, opts: { voice?: boolean } = {}) {
   const clean = text.trim();
   if (!clean) return;
   if (looksLikeKey(clean)) {
@@ -38,7 +39,14 @@ export async function sendMessage(text: string) {
     });
     return;
   }
-  const line: ChatLine = { id: newLineId(), who: "owner", text: clean, state: "queued", at: Date.now() };
+  const line: ChatLine = {
+    id: newLineId(),
+    who: "owner",
+    text: clean,
+    state: "queued",
+    at: Date.now(),
+    ...(opts.voice ? { voice: true } : {}),
+  };
   store.set({ chat: [...store.get().chat, line], presence: "thinking" });
   store.beginTurn();
   await deliver(line);

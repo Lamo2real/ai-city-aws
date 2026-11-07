@@ -4,6 +4,7 @@ import { ChatCards } from "./ConnectCard.tsx";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { sendMessage } from "../lib/actions.ts";
 import { store, useHud, waitingCount } from "../lib/store.ts";
+import { appendDictation, type SpeakMode } from "../voice/modes.ts";
 import { useVoice } from "../voice/useVoice.ts";
 import { Eyes } from "./Eyes.tsx";
 import { AicStatus, AicSteps } from "./AicStatus.tsx";
@@ -32,7 +33,19 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
   const [text, setText] = useState(readDraft);
   const input = useRef<HTMLTextAreaElement>(null);
   const log = useRef<HTMLDivElement>(null);
-  const voice = useVoice();
+  // Dictation writes into the box: `base` is the text before the words being spoken right now.
+  const base = useRef(text);
+  const typed = useRef(text.trim() !== ""); // the keyboard touched the box since the last send
+  const dictated = useRef(false); // dictation added words since the last send
+  const voice = useVoice({
+    onPartial: (words) => setText(appendDictation(base.current, words)),
+    onFinal: (words) => {
+      base.current = appendDictation(base.current, words);
+      dictated.current = true;
+      setText(base.current);
+    },
+    onStop: () => setText(base.current),
+  });
 
   useEffect(() => input.current?.focus(), []);
   useEffect(() => {
@@ -55,8 +68,14 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
     e?.preventDefault();
     const t = text.trim();
     if (!t) return;
+    if (voice.listening && voice.micMode === "dictate") voice.pushToTalk(); // stop dictating; send what is shown
+    // A dictated message counts as voice (AIC may answer aloud) only if the keyboard never touched it.
+    const byVoice = dictated.current && !typed.current;
     setText("");
-    await sendMessage(t);
+    base.current = "";
+    typed.current = false;
+    dictated.current = false;
+    await sendMessage(t, { voice: byVoice });
     input.current?.focus();
   };
   const lastLine = chat.at(-1);
@@ -74,14 +93,40 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
       <div className="ace-stage">
         <Eyes presence={shown} word={false} />
         <VoiceVisualizer presence={presence} listening={voice.listening} onMic={voice.pushToTalk} />
+        <fieldset className="mic-mode">
+          <legend className="sr">What the mic does</legend>
+          <label className="switch">
+            <input
+              type="radio"
+              name="mic-mode"
+              checked={voice.micMode === "send"}
+              onChange={() => voice.setMicMode("send")}
+            />{" "}
+            Talk and send
+          </label>
+          <label className="switch">
+            <input
+              type="radio"
+              name="mic-mode"
+              checked={voice.micMode === "dictate"}
+              onChange={() => voice.setMicMode("dictate")}
+            />{" "}
+            Dictate into the box
+          </label>
+        </fieldset>
         {voice.problem ? <Banner tone="bad">{voice.problem}</Banner> : null}
         <div className="toggles">
           <label className="switch">
             <input type="checkbox" checked={voice.wakeMode} onChange={voice.toggleWake} /> Hands-free: listen for “hey
             AIC”
           </label>
-          <label className="switch">
-            <input type="checkbox" checked={voice.sound} onChange={voice.toggleSound} /> Speak replies
+          <label className="switch speak-mode">
+            Speak replies
+            <select value={voice.speakMode} onChange={(e) => voice.setSpeakMode(e.target.value as SpeakMode)}>
+              <option value="auto">Only when I talk</option>
+              <option value="always">Always</option>
+              <option value="never">Never</option>
+            </select>
           </label>
         </div>
       </div>
@@ -154,8 +199,16 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
             ref={input}
             rows={2}
             value={text}
-            placeholder="Type your message…"
-            onChange={(e) => setText(e.target.value)}
+            placeholder={
+              voice.listening && voice.micMode === "dictate"
+                ? "Listening… your words appear here"
+                : "Type your message…"
+            }
+            onChange={(e) => {
+              typed.current = true;
+              base.current = e.target.value;
+              setText(e.target.value);
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
