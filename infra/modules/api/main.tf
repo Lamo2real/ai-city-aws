@@ -50,6 +50,13 @@ variable "log_retention_days" {
   type    = number
   default = 30
 }
+variable "workspaces_bucket" { type = string }
+variable "workspaces_arn" { type = string }
+variable "apps_bucket" { type = string }
+variable "apps_bucket_arn" { type = string }
+variable "apps_url" { type = string }
+variable "apps_distribution_id" { type = string }
+variable "apps_distribution_arn" { type = string }
 variable "worker_queue_concurrency" {
   type    = number
   default = 50
@@ -69,7 +76,7 @@ locals {
   }
   # name => bundle, handler, timeout, memory, extra env
   functions = {
-    api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 512, env = { AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_USER_POOL_ID = var.user_pool_id, AIC_OWNER_EMAIL = var.owner_email } }
+    api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 512, env = { AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_USER_POOL_ID = var.user_pool_id, AIC_OWNER_EMAIL = var.owner_email, AIC_APPS_BUCKET = var.apps_bucket, AIC_APPS_URL = var.apps_url, AIC_APPS_DISTRIBUTION_ID = var.apps_distribution_id } }
     dispatcher    = { bundle = "app", handler = "aic.lambdas.dispatcher.handler", timeout = 120, memory = 1024, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_ARN_ORCHESTRATOR = var.runtime_arns["orchestrator"], AIC_RUNTIME_ARN_MANAGER = var.runtime_arns["manager"], AIC_RUNTIME_ARN_WORKER = var.runtime_arns["worker"], AIC_RUNTIME_VERSION = var.runtime_version, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod", AIC_CONNECTIONS_TABLE = var.connections_table } }
     factory       = { bundle = "app", handler = "aic.lambdas.factory.handler", timeout = 30, memory = 256, env = {} }
     ledger-writer = { bundle = "app", handler = "aic.lambdas.ledger_writer.handler", timeout = 30, memory = 256, env = {} }
@@ -78,6 +85,7 @@ locals {
     approvals     = { bundle = "app", handler = "aic.lambdas.approvals.handler", timeout = 30, memory = 256, env = {} }
     ws-authorizer = { bundle = "app", handler = "aic.lambdas.ws.authorizer_handler", timeout = 10, memory = 256, env = { AIC_USER_POOL_ID = var.user_pool_id, AIC_USER_POOL_CLIENT_ID = var.client_id } }
     ws-connection = { bundle = "app", handler = "aic.lambdas.ws.connection_handler", timeout = 10, memory = 256, env = { AIC_CONNECTIONS_TABLE = var.connections_table } }
+    apps          = { bundle = "app", handler = "aic.lambdas.apps.handler", timeout = 120, memory = 512, env = { AIC_APPS_BUCKET = var.apps_bucket, AIC_APPS_URL = var.apps_url, AIC_WORKSPACES_BUCKET = var.workspaces_bucket } }
     ws-broadcast  = { bundle = "app", handler = "aic.lambdas.ws.broadcast_handler", timeout = 30, memory = 256, env = { AIC_CONNECTIONS_TABLE = var.connections_table, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod" } }
   }
   ledger_rw = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:ConditionCheckItem"]
@@ -91,6 +99,20 @@ locals {
       { Action = ["bedrock:InvokeModel"], Resource = var.utility_invoke_arns },
       # "Send me a new first-login email": re-sends the owner's invitation, nothing else.
       { Action = ["cognito-idp:AdminCreateUser"], Resource = [var.user_pool_arn] },
+      # Publishing an approved app (drafts/ → live/) and removing one; only the owner reaches these routes.
+      { Action = ["s3:GetObject"], Resource = ["${var.apps_bucket_arn}/drafts/*"] },
+      { Action = ["s3:ListBucket"], Resource = [var.apps_bucket_arn], Condition = { StringLike = { "s3:prefix" = ["drafts/*", "live/*"] } } },
+      { Action = ["s3:PutObject", "s3:DeleteObject"], Resource = ["${var.apps_bucket_arn}/live/*"] },
+      { Action = ["cloudfront:CreateInvalidation"], Resource = [var.apps_distribution_arn] },
+    ]
+    # Checks a worker's submission and stages it as a draft. Never live/, never another ledger key.
+    apps = [
+      { Action = ["s3:GetObject"], Resource = ["${var.workspaces_arn}/hires/*/app/*"] },
+      { Action = ["s3:ListBucket"], Resource = [var.workspaces_arn], Condition = { StringLike = { "s3:prefix" = ["hires/*/app/*"] } } },
+      { Action = ["s3:PutObject"], Resource = ["${var.apps_bucket_arn}/drafts/*"] },
+      { Action = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query"], Resource = [var.ledger_arn], Condition = { "ForAllValues:StringEquals" = { "dynamodb:LeadingKeys" = ["APPDRAFTS"] } } },
+      { Action = ["events:PutEvents"], Resource = [var.bus_arn] },
+      { Action = ["sqs:SendMessage"], Resource = [aws_sqs_queue.apps_dlq.arn] },
     ]
     dispatcher = [
       { Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] },
@@ -144,7 +166,7 @@ resource "aws_cloudwatch_log_group" "fn" {
   name              = "/aws/lambda/${var.name}-${each.key}"
   retention_in_days = var.log_retention_days
   kms_key_id        = var.kms_key_arn
-  tags              = local.tags
+  tags              = each.key == "apps" ? { Component = "apps" } : local.tags
 }
 
 resource "aws_iam_role" "fn" {
@@ -155,7 +177,7 @@ resource "aws_iam_role" "fn" {
     Version   = "2012-10-17"
     Statement = [{ Effect = "Allow", Principal = { Service = "lambda.amazonaws.com" }, Action = "sts:AssumeRole" }]
   })
-  tags = local.tags
+  tags = each.key == "apps" ? { Component = "apps" } : local.tags
 }
 
 resource "aws_iam_role_policy" "fn" {
@@ -194,6 +216,13 @@ resource "aws_lambda_function" "fn" {
   tracing_config {
     mode = "Active"
   }
+  # The apps function is invoked asynchronously by EventBridge; what still fails after retries lands here.
+  dynamic "dead_letter_config" {
+    for_each = each.key == "apps" ? [aws_sqs_queue.apps_dlq.arn] : []
+    content {
+      target_arn = dead_letter_config.value
+    }
+  }
   logging_config {
     log_format = "JSON"
     log_group  = aws_cloudwatch_log_group.fn[each.key].name
@@ -201,7 +230,7 @@ resource "aws_lambda_function" "fn" {
   environment {
     variables = merge(local.common_env, each.value.env)
   }
-  tags = local.tags
+  tags = each.key == "apps" ? { Component = "apps" } : local.tags
 }
 
 # ---------- SQS → dispatcher ----------
@@ -392,8 +421,70 @@ resource "aws_cloudwatch_event_target" "notify" {
   arn            = aws_lambda_function.fn["notifier"].arn
 }
 
+# A worker's submit_app → the apps function (validate, stage drafts/, write the draft, put app.draft).
+resource "aws_cloudwatch_event_rule" "app_submitted" {
+  name           = "${var.name}-app-submitted"
+  event_bus_name = var.bus_name
+  event_pattern  = jsonencode({ source = ["aic.city"], "detail-type" = ["app.submitted"] })
+  tags           = { Component = "apps" }
+}
+
+resource "aws_cloudwatch_event_target" "app_submitted" {
+  rule           = aws_cloudwatch_event_rule.app_submitted.name
+  event_bus_name = var.bus_name
+  target_id      = "apps"
+  arn            = aws_lambda_function.fn["apps"].arn
+  retry_policy {
+    maximum_retry_attempts       = 3
+    maximum_event_age_in_seconds = 3600
+  }
+  dead_letter_config {
+    arn = aws_sqs_queue.apps_dlq.arn
+  }
+}
+
+resource "aws_sqs_queue" "apps_dlq" {
+  # SSE-SQS rather than the data key: EventBridge delivers failed events here, and the events carry
+  # only file names and sizes, no owner data.
+  name                      = "${var.name}-apps-dlq"
+  message_retention_seconds = 1209600
+  sqs_managed_sse_enabled   = true
+  tags                      = { Component = "apps" }
+}
+
+resource "aws_sqs_queue_policy" "apps_dlq" {
+  queue_url = aws_sqs_queue.apps_dlq.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "EventBridgeDeadLetters"
+        Effect    = "Allow"
+        Principal = { Service = "events.amazonaws.com" }
+        Action    = "sqs:SendMessage"
+        Resource  = aws_sqs_queue.apps_dlq.arn
+        Condition = { ArnEquals = { "aws:SourceArn" = aws_cloudwatch_event_rule.app_submitted.arn } }
+      },
+      {
+        Sid       = "TlsOnly"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "sqs:*"
+        Resource  = aws_sqs_queue.apps_dlq.arn
+        Condition = { Bool = { "aws:SecureTransport" = "false" } }
+      },
+    ]
+  })
+}
+
+resource "aws_lambda_function_event_invoke_config" "apps" {
+  function_name                = aws_lambda_function.fn["apps"].function_name
+  maximum_retry_attempts       = 2
+  maximum_event_age_in_seconds = 3600
+}
+
 resource "aws_lambda_permission" "events" {
-  for_each      = { ws-broadcast = aws_cloudwatch_event_rule.all.arn, ledger-writer = aws_cloudwatch_event_rule.all.arn, notifier = aws_cloudwatch_event_rule.notify.arn }
+  for_each      = { ws-broadcast = aws_cloudwatch_event_rule.all.arn, ledger-writer = aws_cloudwatch_event_rule.all.arn, notifier = aws_cloudwatch_event_rule.notify.arn, apps = aws_cloudwatch_event_rule.app_submitted.arn }
   statement_id  = "events"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.fn[each.key].function_name
@@ -561,4 +652,5 @@ output "http_api_url" { value = aws_apigatewayv2_api.http.api_endpoint }
 output "ws_url" { value = "${aws_apigatewayv2_api.ws.api_endpoint}/prod" }
 output "function_arns" { value = { for k, f in aws_lambda_function.fn : k => f.arn } }
 output "function_names" { value = { for k, f in aws_lambda_function.fn : k => f.function_name } }
+output "apps_dlq_name" { value = aws_sqs_queue.apps_dlq.name }
 output "event_source_mapping_uuids" { value = { for k, m in aws_lambda_event_source_mapping.queue : k => m.uuid } }

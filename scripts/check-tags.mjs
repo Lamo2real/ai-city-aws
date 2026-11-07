@@ -19,6 +19,7 @@ export const COMPONENTS = [
   "security",
   "storage",
   "budgets",
+  "apps",
 ];
 export const AGENT_ROLE_TYPES = [
   "aws_bedrockagentcore_agent_runtime",
