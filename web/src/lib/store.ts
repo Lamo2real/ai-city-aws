@@ -1,5 +1,6 @@
 // One store for the whole HUD: the city (via the ported reducer), AIC's chat, connection status and
 // the owner's outbox. Every screen reads from here; the WebSocket and API write to it.
+import { needsCount } from "./needs.ts";
 import { useSyncExternalStore } from "react";
 import { applySnapshot, initialState, reduce, type CityApp, type CityState } from "../city/city-state.js";
 import { FIRST_STEP, stepWords } from "./steps.ts";
@@ -296,6 +297,5 @@ export const store = new Store();
 export const useHud = <T>(pick: (s: HudState) => T): T =>
   useSyncExternalStore(store.subscribe, () => pick(store.get()));
 
-/** Things waiting for the owner: questions and approvals. */
-export const waitingCount = (s: HudState) =>
-  Object.keys(s.city.questions).length + Object.keys(s.city.approvals).length;
+/** Things waiting for the owner that can still be answered (lib/needs.ts): the badge, the City's box, Needs you. */
+export const waitingCount = (s: HudState) => needsCount(s.city);

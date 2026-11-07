@@ -374,3 +374,15 @@ def test_there_is_no_pause_route_the_city_is_always_on() -> None:
     from aic.lambdas.api import ROUTES
 
     assert not any("/city/pause" in r[1] or "/city/resume" in r[1] for r in ROUTES)
+
+
+async def test_the_city_snapshot_never_lists_questions_of_a_job_that_already_stopped() -> None:
+    d = make()
+    t = await d.ledger.create_ticket(
+        {"goal": "g", "from": "ace", "to": "orchestrator", "department": None, "parent_id": None, "kind": "task",
+         "status": "cancelled"}
+    )  # fmt: skip
+    await d.ledger.ask_question({"asked_by": "x", "path": "x", "ticket_id": t["id"], "text": "?", "options": [],
+                                 "default_answer": "ok"})  # fmt: skip
+    assert js(await handle_http(ev("GET", "/city"), d))["questions"] == []
+    assert js(await handle_http(ev("GET", "/questions"), d))["questions"] == []

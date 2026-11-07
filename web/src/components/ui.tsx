@@ -214,6 +214,15 @@ export function MicIcon({ size = 22 }: { size?: number }) {
     </svg>
   );
 }
+/** Dictate: a small mic beside lines of text (the words go into the box). */
+export function DictateIcon({ size = 22 }: { size?: number }) {
+  return (
+    <svg {...icon} width={size} height={size} strokeLinecap="round">
+      <rect x="4" y="3" width="5" height="9" rx="2.5" />
+      <path d="M2 10a4.5 4.5 0 0 0 9 0M6.5 14.5V17M14 7h7M14 12h7M4 20h17" />
+    </svg>
+  );
+}
 export function SendIcon({ size = 22 }: { size?: number }) {
   return (
     <svg {...icon} width={size} height={size} strokeLinecap="round" strokeLinejoin="round">

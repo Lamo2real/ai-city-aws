@@ -1,7 +1,7 @@
 // Tickets, Costs and Settings. Plain words in the main view; technical details behind "Details".
 import { ConnectorsSettings } from "./ConnectorsSettings.tsx";
 import { useEffect, useState } from "react";
-import { COST_NOTE, ticketWords } from "../city/city-state.js";
+import { COST_NOTE, plainText, ticketWords } from "../city/city-state.js";
 import { saveSettings } from "../lib/actions.ts";
 import { api, ApiError } from "../lib/api.ts";
 import { ago, money, spendLevel } from "../lib/format.ts";
@@ -52,15 +52,27 @@ interface Ticket {
   updated_at: string;
   result?: string;
 }
+interface Job {
+  id: string;
+  name: string;
+  status: string;
+  words: string;
+  parts_done: number;
+  parts_total: number;
+  started_at?: string;
+  updated_at: string;
+  result?: string;
+}
+/** Work: the owner's jobs, one row each (name, what is happening, parts done, when). Details are a tap away. */
 export function Tickets() {
   const [which, setWhich] = useState<"live" | "done">("live");
   const [open, setOpen] = useState<string | null>(null);
-  const { data, error, retry } = useApi<{ tickets: Ticket[] }>(`/tickets${which === "done" ? "?status=done" : ""}`);
+  const { data, error, retry } = useApi<{ jobs: Job[] }>(`/jobs${which === "done" ? "?status=done" : ""}`);
   if (open) return <TicketDetail id={open} back={() => setOpen(null)} />;
   return (
     <section className="screen" aria-labelledby="tk-title">
       <h1 id="tk-title">Work</h1>
-      <div className="segmented" role="tablist">
+      <div className="segmented" role="tablist" aria-label="Which work">
         <button role="tab" aria-selected={which === "live"} onClick={() => setWhich("live")}>
           Working now
         </button>
@@ -74,23 +86,59 @@ export function Tickets() {
         </Banner>
       ) : null}
       {!data && !error ? <Loading what="your work" /> : null}
-      {data && !data.tickets.length ? (
+      {data && !data.jobs.length ? (
         <p className="empty">
           {which === "live" ? "Nothing is being worked on. Ask AIC for something." : "Nothing is finished yet."}
         </p>
       ) : null}
-      <ul className="list">
-        {data?.tickets.map((t) => (
-          <li key={t.id}>
-            <button type="button" className="listrow" onClick={() => setOpen(t.id)}>
-              <span className={`tag tag-${t.status}`}>{ticketWords(t.status)}</span>
-              <span className="grow">{t.goal}</span>
-              <span className="mute">{`${t.to} · ${ago(Date.parse(t.updated_at))}`}</span>
+      <ul className="jobs">
+        {data?.jobs.map((j) => (
+          <li key={j.id}>
+            <button type="button" className="job" onClick={() => setOpen(j.id)}>
+              <span className="job-name">{j.name}</span>
+              <span className={`tag tag-${j.status}`}>{j.words}</span>
+              {j.parts_total ? (
+                <span className="job-parts">
+                  <span
+                    className="bar"
+                    role="progressbar"
+                    aria-label="Parts done"
+                    aria-valuemin={0}
+                    aria-valuemax={j.parts_total}
+                    aria-valuenow={j.parts_done}
+                  >
+                    <i style={{ width: `${Math.round((100 * j.parts_done) / j.parts_total)}%` }} />
+                  </span>
+                  {`${j.parts_done} of ${j.parts_total} parts done`}
+                </span>
+              ) : (
+                <span className="job-parts mute">Being planned</span>
+              )}
+              <span className="job-time mute">{ago(Date.parse(j.updated_at))}</span>
             </button>
           </li>
         ))}
       </ul>
     </section>
+  );
+}
+
+/** One line of something long, with "more" to read it whole. */
+function Long({ text, max = 110 }: { text: string; max?: number }) {
+  const [whole, setWhole] = useState(false);
+  const p = plainText(text, max);
+  return (
+    <>
+      {whole ? text : p.short}
+      {!p.whole && !whole ? (
+        <>
+          {" "}
+          <button type="button" className="more" onClick={() => setWhole(true)}>
+            more
+          </button>
+        </>
+      ) : null}
+    </>
   );
 }
 
@@ -107,35 +155,49 @@ function TicketDetail({ id, back }: { id: string; back: () => void }) {
         ← All work
       </Button>
       {error ? <Banner tone="bad">{error}</Banner> : null}
-      {!data && !error ? <Loading what="this piece of work" /> : null}
+      {!data && !error ? <Loading what="this job" /> : null}
       {data ? (
         <>
-          <h1 id="td-title">{data.ticket.goal}</h1>
+          <h1 id="td-title">{plainText(data.ticket.goal, 80).short}</h1>
           <p>
-            <span className={`tag tag-${data.ticket.status}`}>{ticketWords(data.ticket.status)}</span>{" "}
-            {`${data.ticket.from} → ${data.ticket.to}`}
+            <span className={`tag tag-${data.ticket.status}`}>{ticketWords(data.ticket.status)}</span>
           </p>
-          {data.ticket.result ? <p className="result">{data.ticket.result}</p> : null}
-          <h2>What happened</h2>
-          <ol className="history">
-            {data.history.map((h, i) => (
-              <li
-                key={i}
-              >{`${new Date(h.at).toLocaleString("sv-SE")} — ${ticketWords(h.to)}${h.note ? ` (${h.note})` : ""}`}</li>
-            ))}
-          </ol>
+          {data.ticket.result ? (
+            <p className="result">
+              <Long text={data.ticket.result} max={240} />
+            </p>
+          ) : null}
           {data.children.length ? (
             <>
               <h2>Parts</h2>
-              <ul className="list">
+              <ul className="parts">
                 {data.children.map((c) => (
-                  <li key={c.id}>{`${ticketWords(c.status)}: ${c.goal} — ${c.to}`}</li>
+                  <li key={c.id}>
+                    <span className={`tag tag-${c.status}`}>{ticketWords(c.status)}</span> <Long text={c.goal} />
+                  </li>
                 ))}
               </ul>
             </>
           ) : null}
+          <h2>What happened</h2>
+          <ol className="history">
+            {data.history.map((h, i) => (
+              <li key={i}>
+                <span className="mute">
+                  {new Date(h.at).toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" })}
+                </span>{" "}
+                {ticketWords(h.to)}
+                {h.note ? (
+                  <>
+                    {": "}
+                    <Long text={h.note} max={80} />
+                  </>
+                ) : null}
+              </li>
+            ))}
+          </ol>
           <button type="button" className="link" onClick={() => setDetails(!details)} aria-expanded={details}>
-            Details
+            Technical details
           </button>
           {details ? <pre className="details">{JSON.stringify(data.ticket, null, 2)}</pre> : null}
         </>

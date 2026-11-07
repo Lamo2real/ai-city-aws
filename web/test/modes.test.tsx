@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { appendDictation, readMicMode, readSpeakMode, saveMicMode, shouldSpeak } from "../src/voice/modes.ts";
+import { appendDictation, readSpeakMode, shouldSpeak } from "../src/voice/modes.ts";
 
 afterEach(() => localStorage.clear());
 
@@ -24,12 +24,7 @@ describe("when AIC speaks its reply", () => {
   });
 });
 
-describe("the mic mode", () => {
-  it("is talk-and-send unless dictate was chosen, and is remembered", () => {
-    expect(readMicMode()).toBe("send");
-    saveMicMode("dictate");
-    expect(readMicMode()).toBe("dictate");
-  });
+describe("dictation", () => {
   it("dictation appends to what is in the box with one space", () => {
     expect(appendDictation("", "hello")).toBe("hello");
     expect(appendDictation("note: ", " buy milk ")).toBe("note: buy milk");

@@ -6,14 +6,15 @@ import {
   MODEL_NAME,
   VISUALS,
   departmentNames,
-  gateStatus,
   plainText,
   stockholmTime,
+  stories,
   ticketWords,
   topBar,
   visualState,
   type CityState,
 } from "../city/city-state.js";
+import { needsWords } from "../lib/needs.ts";
 import { mountCity, type CityScene } from "../city/scene.js";
 import { instruct } from "../lib/actions.ts";
 import { appList, appsDepartment, capped, isPublish } from "../lib/apps.ts";
@@ -24,11 +25,11 @@ import { MicIcon } from "./ui.tsx";
 import { Banner, Button, Loading } from "./ui.tsx";
 
 const REGION_CITY: Record<string, string> = {
-  "eu-north-1": "STOCKHOLM",
-  "eu-central-1": "FRANKFURT",
-  "eu-west-1": "IRELAND",
-  "us-east-1": "N. VIRGINIA",
-  "us-west-2": "OREGON",
+  "eu-north-1": "Stockholm",
+  "eu-central-1": "Frankfurt",
+  "eu-west-1": "Ireland",
+  "us-east-1": "N. Virginia",
+  "us-west-2": "Oregon",
 };
 const SWATCH = [
   "#c0533f",
@@ -58,6 +59,8 @@ export function CityView({ go }: { go: (view: string) => void }) {
   const live = useHud((s) => s.live);
   const [open, setOpen] = useState<Open>(null);
   const [now, setNow] = useState(Date.now());
+  const [earlier, setEarlier] = useState(false);
+  const [health, setHealth] = useState<string | null>(null);
   const voice = useVoice();
 
   useEffect(() => {
@@ -93,8 +96,28 @@ export function CityView({ go }: { go: (view: string) => void }) {
   }, [loadedAt]);
 
   const t = topBar(city);
-  const g = gateStatus(city);
   const names = departmentNames(city);
+  const jobsRunning = Object.values(city.tickets).filter((x) => x.kind === "task" && !x.parent_id).length;
+  const lines = stories(city.feed, earlier ? 40 : 9);
+  const toggleHealth = () => {
+    if (health !== null) return setHealth(null);
+    setHealth("Checking…");
+    void api<{ stale_turns?: number }>("/health").then(
+      (h) => {
+        const stuck = Number(h.stale_turns ?? 0);
+        const held = t.parked;
+        setHealth(
+          [
+            stuck ? `${stuck === 1 ? "1 thing is" : `${stuck} things are`} stuck.` : "Everything is running normally.",
+            held ? `${held === 1 ? "1 job is" : `${held} jobs are`} on hold (see Records, On hold).` : "",
+          ]
+            .filter(Boolean)
+            .join(" "),
+        );
+      },
+      () => setHealth("Couldn't check right now."),
+    );
+  };
   const region = (city as CityState & { region?: string }).region ?? "eu-north-1";
 
   return (
@@ -103,13 +126,33 @@ export function CityView({ go }: { go: (view: string) => void }) {
         ref={canvas}
         aria-label="The city of the agents as a small map. Every building and agent is also listed under Departments and in the panel."
       />
-      <div className="cityui citytop" role="status">
-        <Stat k="AGENTS" v={`${t.agentsActive} active · ${t.agentsTotal} total`} />
-        <Stat k="TICKETS RUNNING" v={String(t.ticketsRunning)} />
-        <Stat k="QUESTIONS" v={String(t.questionsWaiting)} />
-        <Stat k="PARKED" v={String(t.parked)} />
-        <Stat k="TURNS" v={`${g.running ?? 0} running · ${g.waiting ?? 0} waiting`} />
-        <Stat k={REGION_CITY[region] ?? region.toUpperCase()} v={stockholmTime(now)} />
+      <div className="cityui citytop" role="status" aria-label="The city right now">
+        <Stat k="Working now" v={String(t.agentsActive)} />
+        <Stat k="Jobs running" v={String(jobsRunning)} />
+        <Stat k="Need you" v={String(waiting)} />
+        <Stat k={REGION_CITY[region] ?? region} v={stockholmTime(now)} className="clock" />
+        <button
+          type="button"
+          className="info"
+          onClick={toggleHealth}
+          aria-expanded={health !== null}
+          aria-label="Is everything running normally?"
+          title="Is everything running normally?"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width="18"
+            height="18"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            aria-hidden="true"
+          >
+            <path d="M12 11v6M12 7.5v.01" />
+          </svg>
+        </button>
+        {health !== null ? <p className="healthline">{health}</p> : null}
       </div>
       <div className="cityalerts">
         {!loaded && !loadError ? <Loading what="the city" /> : null}
@@ -153,14 +196,9 @@ export function CityView({ go }: { go: (view: string) => void }) {
                 className="dept"
                 style={{ ["--swatch" as string]: SWATCH[i % SWATCH.length] }}
                 onClick={() => setOpen({ dept: n })}
-                data-count={count || undefined}
               >
                 {n}
-                {count ? (
-                  <span className="count" aria-label={`${count} workers`}>
-                    {count}
-                  </span>
-                ) : null}
+                {count ? <span className="working">{`· ${count} working`}</span> : null}
               </button>
             );
           })}
@@ -178,38 +216,41 @@ export function CityView({ go }: { go: (view: string) => void }) {
             type="button"
             className="dept rec"
             onClick={() => setOpen({ record: "parked" })}
-          >{`Parked (${t.parked})`}</button>
+          >{`On hold (${t.parked})`}</button>
           <button type="button" className="dept rec" onClick={() => setOpen({ record: "legend" })}>
             What the marks mean
           </button>
         </nav>
         <div className="cityui feed" aria-live="polite" tabIndex={0} role="log" aria-label="Activity">
           <h3 className="pixel">Activity</h3>
-          {city.feed.length ? (
-            city.feed.slice(0, 12).map((f, i) => (
-              <div key={`${f.at}-${i}`} className={`fline ${f.kind}`}>
-                <span className="t">
-                  {new Date(f.at).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}
-                </span>
-                <span>{f.text}</span>
-              </div>
-            ))
-          ) : (
-            <p className="mute">Quiet. Nothing has happened since this page opened.</p>
-          )}
-        </div>
-        <div className="cityui inboxbar">
-          {waiting ? (
+          {lines.length ? (
             <>
-              <span>{waiting === 1 ? "One thing needs you." : `${waiting} things need you.`}</span>
-              <Button variant="primary" onClick={() => go("inbox")}>
-                Open: needs you
-              </Button>
+              {lines.slice(0, earlier ? 40 : 8).map((f, i) => (
+                <div key={`${f.at}-${i}`} className={`fline ${f.kind}`}>
+                  <span className="t">
+                    {new Date(f.at).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                  <span>{f.text}</span>
+                </div>
+              ))}
+              {!earlier && lines.length > 8 ? (
+                <button type="button" className="more" onClick={() => setEarlier(true)}>
+                  Earlier…
+                </button>
+              ) : null}
             </>
           ) : (
-            <span>Nothing waiting.</span>
+            <p className="mute">Quiet.</p>
           )}
         </div>
+        {waiting ? (
+          <div className="cityui inboxbar">
+            <span>{needsWords(waiting)}</span>
+            <Button variant="primary" onClick={() => go("inbox")} label={`Open Needs you: ${needsWords(waiting)}`}>
+              Open
+            </Button>
+          </div>
+        ) : null}
       </aside>
       <div className="citybottom" role="toolbar" aria-label="Map and actions">
         <div className="zoom">
@@ -289,8 +330,8 @@ function snapshotOf(city: CityState) {
   };
 }
 
-const Stat = ({ k, v, title }: { k: string; v: string; title?: string }) => (
-  <div className="stat" title={title}>
+const Stat = ({ k, v, title, className }: { k: string; v: string; title?: string; className?: string }) => (
+  <div className={`stat ${className ?? ""}`} title={title}>
     <span className="k">{k}</span>
     <b>{v}</b>
   </div>
@@ -335,7 +376,7 @@ function CityPanel({
         ? open.dept === "HQ"
           ? "Headquarters"
           : `${open.dept} department`
-        : { workforce: "Workforce", health: "Health", parked: "Parked", legend: "What the marks mean" }[open.record];
+        : { workforce: "Workforce", health: "Health", parked: "On hold", legend: "What the marks mean" }[open.record];
   return (
     <aside className="cityui citypanel" role="dialog" aria-label={title} ref={ref}>
       <header>
@@ -535,7 +576,7 @@ function Parked({ city }: { city: CityState }) {
       ))}
     </ul>
   ) : (
-    <p className="mute">Nothing is parked.</p>
+    <p className="mute">Nothing is on hold.</p>
   );
 }
 

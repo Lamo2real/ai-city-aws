@@ -1,8 +1,15 @@
 // On a phone: AIC is the default, the mic is in reach, the City fits and the money is visible.
-import { expect, test } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
+import { expect, test, type Page } from "@playwright/test";
 import { appRecord, hired, mockBackend } from "./mock.ts";
 
 const SHOTS = `${import.meta.dirname}/../../docs/screenshots`;
+/** WCAG 2 A/AA at phone width: contrast, names, focus order (the map's canvas is described separately). */
+async function noSeriousA11y(page: Page, label: string) {
+  const r = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).exclude("canvas").analyze();
+  const bad = r.violations.filter((v) => v.impact === "serious" || v.impact === "critical");
+  expect(bad.map((v) => `${label}: ${v.id} — ${v.nodes.map((n) => n.target.join(" ")).join(" | ")}`)).toEqual([]);
+}
 
 test("phone: AIC and the City work at 412px wide", async ({ page }) => {
   const m = await mockBackend(page);
@@ -16,6 +23,7 @@ test("phone: AIC and the City work at 412px wide", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Send to AIC" })).toBeInViewport({ ratio: 1 }); // wholly on screen
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: `${SHOTS}/phone-ace.png` });
+  await noSeriousA11y(page, "AIC at 412px");
   await page.getByRole("textbox", { name: "Message to AIC" }).fill("what's going on in the city today?");
   await page.getByRole("button", { name: "Send to AIC" }).click();
   m.send({
@@ -40,9 +48,10 @@ test("phone: AIC and the City work at 412px wide", async ({ page }) => {
   m.send({ type: "department.created", name: "Research", mission: "Find things out.", manager_id: "mgr-research" });
   m.send(hired("mgr-research", "Research", "manager"));
   m.send(hired("wkr-research-x1", "Research"));
-  await expect(page.locator(".feed")).toContainText("Department Research created");
+  await expect(page.locator(".feed")).toContainText("New department: Research");
   await page.waitForTimeout(600);
   await page.screenshot({ path: `${SHOTS}/phone-city.png` });
+  await noSeriousA11y(page, "City at 412px");
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   expect(overflow).toBe(false);
   // Every toolbar button is fully on screen and big enough to tap.
@@ -106,4 +115,31 @@ test("phone: pinned apps move into the nav row", async ({ page }) => {
   await pin.click();
   await expect(page).toHaveURL(/#\/apps\/star-calendar$/);
   await expect(page.getByRole("link", { name: "← Apps" })).toBeInViewport();
+});
+
+test("phone: Needs you and Work read well at 412px, with big answer buttons", async ({ page }) => {
+  const m = await mockBackend(page);
+  await page.goto("/#/inbox");
+  m.send({
+    type: "question.asked",
+    question: {
+      id: "q1",
+      asked_by: "orchestrator",
+      path: "orchestrator",
+      text: "Should the city keep the old design while the new one is tested?",
+      options: ["Yes", "No"],
+      default_answer: "Yes",
+      status: "open",
+      created_at: new Date().toISOString(),
+    },
+  });
+  const yes = page.getByRole("button", { name: "Yes", exact: true });
+  await expect(yes).toBeVisible();
+  expect((await yes.boundingBox())!.height).toBeGreaterThanOrEqual(48);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await noSeriousA11y(page, "Needs you at 412px");
+  await page.goto("/#/tickets");
+  await expect(page.getByText("2 of 3 parts done")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await noSeriousA11y(page, "Work at 412px");
 });

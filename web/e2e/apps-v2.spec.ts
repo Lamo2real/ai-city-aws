@@ -68,7 +68,8 @@ test("a pinned calendar app reads granted events, gets not_granted after a revok
     .getByRole("link", { name: /Needs you/ })
     .first()
     .click();
-  await expect(page.getByText("Star Calendar (an app) wants to do exactly this, once:")).toBeVisible();
+  await expect(page.getByText("Star Calendar (an app) wants your OK")).toBeVisible();
+  await page.getByText("Exactly what it will do").click();
   await expect(page.getByText("Accept the invitation: Team sync (Mon 10:00)")).toBeVisible();
   await noSeriousA11y(page, "Needs you: app proposal");
   expect(await primaries(page)).toBeLessThanOrEqual(1);

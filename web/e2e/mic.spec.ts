@@ -82,11 +82,10 @@ test("when the speech service refuses, the browser's own recognition takes over 
 
   // The rest of this session goes straight to the browser's recognition, without asking AWS again.
   const before = identityCalls;
-  await page.getByLabel("Dictate into the box").check();
-  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await page.getByRole("button", { name: "Dictate into the box" }).click();
   await expect(page.getByRole("textbox", { name: "Message to AIC" })).toHaveValue("what's the status");
   expect(identityCalls).toBe(before);
-  await page.getByRole("button", { name: "Stop listening" }).click();
+  await page.getByRole("button", { name: "Stop dictating" }).click();
 
   // A new page load tries Transcribe again.
   await page.evaluate(() => sessionStorage.removeItem("aic.speech.engine")); // what closing the tab does

@@ -152,3 +152,63 @@ async def test_a_quiet_job_is_called_stuck() -> None:
     text = await describe_task(c.ledger, task)
     assert "may be stuck" in text and "Nothing has happened for 40 minutes" in text
     assert "Stop the job" in await cancel_preview(c.ledger, task)
+
+
+async def test_stopping_a_job_withdraws_its_questions_and_approvals_and_a_sweep_clears_old_leftovers() -> None:
+    from aic.shared.hierarchy.actions import sweep_stale_asks
+
+    c = await city()
+    task = await job(c, "Write 50 sentences comparing the GT3 and GT3 RS engines", "porsche sentences")
+    part = (await c.ledger.child_tickets(task["id"]))[0]
+    q = await c.ledger.ask_question(
+        {"asked_by": "mgr-writing", "path": "mgr-writing", "ticket_id": part["id"], "text": "Which engine first?",
+         "options": ["GT3", "GT3 RS"], "default_answer": "GT3"}
+    )  # fmt: skip
+    ap = await c.ledger.request_approval(
+        {"agent": "mgr-writing", "ticket_id": part["id"], "tool": "Bash", "action": "rm x", "hash": "h1",
+         "reason": "r", "kind": "tool"}
+    )  # fmt: skip
+    app_ap = await c.ledger.request_approval(  # an app's approval belongs to no job: it stays
+        {"agent": "app", "tool": "calendar", "action": "accept", "hash": "h2", "reason": "r", "kind": "tool"}
+    )
+    await ace_tools(c)["cancel_task"].handler({"query": "the Porsche sentences", "confirm": True})
+    assert await c.ledger.open_questions() == []
+    assert [a["id"] for a in await c.ledger.pending_approvals()] == [app_ap["id"]]
+    assert (await c.ledger.get_question(q["id"]))["status"] == "withdrawn"
+    assert [e["id"] for e in c.bus.of_type("question.withdrawn")] == [q["id"]]
+    assert [e["id"] for e in c.bus.of_type("approval.withdrawn")] == [ap["id"]]
+
+    # Left behind before this fix: asks on a finished ticket and on one that no longer exists are swept.
+    done = await c.ledger.create_ticket(
+        {"goal": "old", "from": "ace", "to": "orchestrator", "department": None, "parent_id": None, "kind": "task",
+         "status": "done"}
+    )  # fmt: skip
+    live = await c.ledger.create_ticket(
+        {"goal": "live", "from": "ace", "to": "orchestrator", "department": None, "parent_id": None, "kind": "task",
+         "status": "waiting_on_owner"}
+    )  # fmt: skip
+    for tid in (done["id"], "t-gone", live["id"]):
+        await c.ledger.ask_question({"asked_by": "x", "path": "x", "ticket_id": tid, "text": "?", "options": [],
+                                     "default_answer": "ok"})  # fmt: skip
+    assert await sweep_stale_asks(c.ledger, c.bus) == 2
+    assert [x["ticket_id"] for x in await c.ledger.open_questions()] == [live["id"]]  # the live job's stays
+    assert await sweep_stale_asks(c.ledger, c.bus) == 0
+
+
+async def test_the_work_screen_lists_jobs_not_parts_in_plain_words_with_progress() -> None:
+    from aic.shared.hierarchy.tasks import job_rows
+
+    c = await city()
+    task = await job(c, "Write 50 sentences comparing the GT3 and GT3 RS engines", "porsche sentences", workers=3)
+    goal = (await c.ledger.child_tickets(task["id"]))[0]
+    parts = await c.ledger.child_tickets(goal["id"])
+    await c.ledger.set_ticket_status(parts[0]["id"], "done", "")
+    await c.ledger.set_ticket_status(parts[1]["id"], "in_review", "")
+    (row,) = await job_rows(c.ledger)
+    assert (row["id"], row["name"], row["words"]) == (task["id"], "Porsche sentences", "Being checked")
+    assert (row["parts_done"], row["parts_total"]) == (1, 3)
+    await c.ledger.set_ticket_status(parts[2]["id"], "waiting_on_owner", "")
+    assert (await job_rows(c.ledger))[0]["words"] == "Waiting for you"  # what needs the owner wins
+    assert await job_rows(c.ledger, finished=True) == []
+    await c.ledger.set_ticket_status(task["id"], "done", "")
+    assert [r["words"] for r in await job_rows(c.ledger, finished=True)] == ["Done"]

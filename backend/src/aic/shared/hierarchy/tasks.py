@@ -91,6 +91,62 @@ async def find_task(ledger: Ledger, query: str) -> tuple[Record | None, list[Rec
     return top[0], []
 
 
+def _capital(s: str) -> str:
+    return s[:1].upper() + s[1:]
+
+
+JOB_WORDS = {
+    "open": "Not started yet",
+    "in_progress": "Working on it",
+    "in_review": "Being checked",
+    "waiting_on_owner": "Waiting for you",
+    "parked": "On hold",
+    "done": "Done",
+    "failed": "Did not finish",
+    "cancelled": "Stopped",
+}
+
+
+async def job_rows(ledger: Ledger, finished: bool = False, limit: int = 50) -> list[Record]:
+    """The Work screen: one row per job of the owner's, in plain words. Status says what matters most across the
+    job's parts (waiting for you, then being checked); progress counts the parts a worker does (the leaves)."""
+    tickets = await ledger.list_tickets(ALL_STATUSES)
+    kids: dict[str, list[Record]] = {}
+    for t in tickets:
+        if t.get("parent_id"):
+            kids.setdefault(str(t["parent_id"]), []).append(t)
+    rows: list[Record] = []
+    for job in tickets:
+        if job.get("kind") != "task" or job.get("parent_id") or (job["status"] in DONE_OR_GONE) != finished:
+            continue
+        tree: list[Record] = []
+        frontier = [job["id"]]
+        while frontier and len(tree) < 500:
+            nxt = [k for pid in frontier for k in kids.get(pid, [])]
+            tree += nxt
+            frontier = [k["id"] for k in nxt]
+        parts = [t for t in tree if not kids.get(t["id"])]
+        live = {t["status"] for t in tree}
+        status = job["status"]
+        if status not in DONE_OR_GONE:
+            status = next((s for s in ("waiting_on_owner", "in_review", "in_progress") if s in live), status)
+        rows.append(
+            {
+                "id": job["id"],
+                "name": _capital(short_name({"goal": job.get("owner_words") or job.get("goal", "")})),
+                "status": status,
+                "words": JOB_WORDS.get(status, status.replace("_", " ")),
+                "parts_done": sum(1 for p in parts if p["status"] == "done"),
+                "parts_total": len(parts),
+                "started_at": job.get("created_at"),
+                "updated_at": max([str(t.get("updated_at") or "") for t in [job, *tree]]),
+                "result": job.get("result"),
+            }
+        )
+    rows.sort(key=lambda r: str(r["updated_at"]), reverse=True)
+    return rows[:limit]
+
+
 async def task_tree(ledger: Ledger, task_id: str) -> list[Record]:
     """The job and everything under it (department goals, worker assignments)."""
     root = await ledger.get_ticket(task_id)

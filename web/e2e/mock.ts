@@ -454,11 +454,6 @@ export async function mockBackend(
       return ok({ settings: m.settings });
     }
     if (path === "/messages") return ok({ accepted: true, conversation: "main" }, 202);
-    if (path === "/workers/home") {
-      const agents = (m.snapshot.agents ?? []) as { kind: string; state: string }[];
-      const n = agents.filter((a) => a.kind === "worker" && a.state === "active").length;
-      return ok({ workers: n, parts: n });
-    }
     if (/^\/tasks\/[\w-]+\/cancel$/.test(path)) return ok({ jobs: 2, workers: 1 });
     if (path.startsWith("/questions/"))
       return ok({ answered: true, answer: path.endsWith("/default") ? "SQLite" : body?.answer });
@@ -492,6 +487,64 @@ export async function mockBackend(
         recent: [{ tool: "Edit", decision: "allow", at: at() }],
         turns: 3,
         cost_usd: 0.31,
+      });
+    if (path.startsWith("/jobs"))
+      return ok({
+        jobs: path.includes("status=done")
+          ? []
+          : [
+              {
+                id: "t-1",
+                name: "Add a power(a, b) function to add.js",
+                status: "in_review",
+                words: "Being checked",
+                parts_done: 2,
+                parts_total: 3,
+                started_at: at(),
+                updated_at: at(),
+              },
+            ],
+      });
+    if (path === "/tickets/t-1")
+      return ok({
+        ticket: {
+          id: "t-1",
+          goal: "Add a power(a, b) function to add.js",
+          from: "ace",
+          to: "orchestrator",
+          status: "in_review",
+          department: null,
+          updated_at: at(),
+        },
+        history: [
+          { from: null, to: "open", note: "", at: at() },
+          {
+            from: "open",
+            to: "in_review",
+            note: "The reviewer is reading the new power function, its tests and the README change line by line before it goes back to the owner.",
+            at: at(),
+          },
+        ],
+        children: [
+          {
+            id: "t-2",
+            goal: "Write power(a, b)",
+            from: "mgr",
+            to: "wkr",
+            status: "done",
+            department: "Engineering",
+            updated_at: at(),
+          },
+          {
+            id: "t-3",
+            goal: "Test it",
+            from: "mgr",
+            to: "wkr",
+            status: "in_review",
+            department: "Engineering",
+            updated_at: at(),
+          },
+        ],
       });
     if (path.startsWith("/tickets"))
       return ok({

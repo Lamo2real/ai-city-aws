@@ -1,34 +1,57 @@
-// Questions & approvals: every question shows its default with a one-tap "Use default"; approvals are
-// bound to the exact action and need holding the button.
+// Needs you: what the city is waiting on the owner for, grouped by job. Each item is one plain sentence (who
+// asks, what) and big answer buttons: the 2–4 choices of a question (its default first), or Yes / No for an
+// approval, plus "Write my own answer". Answering removes the card at once (put back if the server refuses).
+// Approvals stay bound to the exact action and still need holding the button.
 import { useState } from "react";
-import { answerQuestion, decideApproval, applyDefault } from "../lib/actions.ts";
+import { answerQuestion, decideApproval } from "../lib/actions.ts";
 import { ApiError } from "../lib/api.ts";
-import { ago } from "../lib/format.ts";
 import { capKey, capLabel, capped, isPublish, publishApp, type Capability } from "../lib/apps.ts";
-import { useHud } from "../lib/store.ts";
-import type { CityApp, CityApproval } from "../city/city-state.js";
+import { byJob, needs, needsWords, type Need } from "../lib/needs.ts";
+import { store, useHud } from "../lib/store.ts";
+import { plainText, type CityApproval, type CityQuestion } from "../city/city-state.js";
 import { AppFrame } from "./Apps.tsx";
 import { Banner, Button, Confirm, toast } from "./ui.tsx";
 
-export function Inbox() {
-  // Select the stored objects (stable references) and derive lists while rendering.
-  const questionMap = useHud((s) => s.city.questions);
-  const approvalMap = useHud((s) => s.city.approvals);
-  const appsMap = useHud((s) => s.city.apps);
-  const questions = Object.values(questionMap).sort((a, b) => a.created_at.localeCompare(b.created_at));
-  const all = Object.values(approvalMap);
-  const publishes = all.filter(isPublish);
-  const approvals = all.filter((a) => !isPublish(a));
-  const [error, setError] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState<{ id: string; action: string; reason: string } | null>(null);
-  const [own, setOwn] = useState<Record<string, string>>({});
+/** How many cards show before "Show more": the few that matter first. */
+const FIRST = 5;
 
-  const run = async (fn: () => Promise<unknown>, done: string) => {
+/** Takes an item off the screen now; the returned function puts it back. */
+function take(n: Need): () => void {
+  const c = store.get().city;
+  if (n.kind === "question") {
+    const questions = { ...c.questions };
+    delete questions[n.id];
+    store.set({ city: { ...c, questions } });
+    return () => {
+      const now = store.get().city;
+      store.set({ city: { ...now, questions: { ...now.questions, [n.id]: n.q } } });
+    };
+  }
+  const approvals = { ...c.approvals };
+  delete approvals[n.id];
+  store.set({ city: { ...c, approvals } });
+  return () => {
+    const now = store.get().city;
+    store.set({ city: { ...now, approvals: { ...now.approvals, [n.id]: n.a } } });
+  };
+}
+
+export function Inbox() {
+  const city = useHud((s) => s.city);
+  const list = needs(city);
+  const [error, setError] = useState<string | null>(null);
+  const [all, setAll] = useState(false);
+  const [confirming, setConfirming] = useState<Extract<Need, { kind: "approval" }> | null>(null);
+
+  /** Answers: the card goes now; if the server says no, it comes back with the reason. */
+  const settle = async (n: Need, fn: () => Promise<unknown>, done: string) => {
     setError(null);
+    const undo = take(n);
     try {
       await fn();
       toast({ text: done, tone: "good" });
     } catch (e) {
+      undo();
       setError(
         e instanceof ApiError
           ? `${e.message}${e.fix ? ` ${e.fix}` : ""}`
@@ -37,87 +60,65 @@ export function Inbox() {
     }
   };
 
-  if (!questions.length && !all.length)
+  if (!list.length)
     return (
       <section className="screen" aria-labelledby="inbox-title">
         <h1 id="inbox-title">Needs you</h1>
-        <p className="empty">Nothing is waiting for you. AIC will tell you when something is.</p>
+        <p className="empty">Nothing needs you right now. AIC will tell you when something does.</p>
       </section>
     );
 
+  let shown = 0;
+  const groups = byJob(list)
+    .map((g) => {
+      const room = all ? g.items.length : Math.max(0, FIRST - shown);
+      const items = g.items.slice(0, room);
+      shown += items.length;
+      return { ...g, items };
+    })
+    .filter((g) => g.items.length);
+  let primaryUsed = false;
+  const primary = () => (primaryUsed ? false : (primaryUsed = true));
+
   return (
-    <section className="screen" aria-labelledby="inbox-title">
+    <section className="screen needs" aria-labelledby="inbox-title">
       <h1 id="inbox-title">Needs you</h1>
+      <p className="lede">{`${needsWords(list.length)}. Answer and it's gone.`}</p>
       {error ? <Banner tone="bad">{error}</Banner> : null}
-      {publishes.length ? <h2>New apps</h2> : null}
-      {publishes.map((a, i) => (
-        <PublishCard key={a.id} a={a} primary={i === 0} run={run} />
+      {groups.map((g) => (
+        <section
+          key={g.job?.id ?? "other"}
+          className="needgroup"
+          aria-label={g.job ? `Job: ${g.job.name}` : "Other things"}
+        >
+          <h2>{g.job ? g.job.name : "Other things"}</h2>
+          {g.items.map((n) =>
+            n.kind === "question" ? (
+              <QuestionCard key={n.id} n={n} q={n.q} primary={primary()} settle={settle} />
+            ) : isPublish(n.a) ? (
+              <PublishCard key={n.id} a={n.a} primary={primary()} run={(fn, done) => settle(n, fn, done)} />
+            ) : (
+              <ApprovalCard
+                key={n.id}
+                n={n}
+                a={n.a}
+                primary={primary()}
+                settle={settle}
+                onYes={() => setConfirming(n)}
+              />
+            ),
+          )}
+        </section>
       ))}
-      {approvals.length ? <h2>Approvals</h2> : null}
-      {approvals.map((a) => (
-        <article key={a.id} className="card">
-          <p>
-            <b>{askedBy(a, appsMap)}</b> wants to do exactly this, once:
-          </p>
-          {a.preview ? <Preview p={a.preview} /> : <p className="action">{a.action}</p>}
-          <p className="mute">Why it needs you: {a.reason}</p>
-          <div className="row-end">
-            <Button
-              variant="quiet"
-              onClick={() => run(() => decideApproval(a.id, false), "Refused. The agent will carry on without it.")}
-            >
-              Refuse
-            </Button>
-            <Button variant="secondary" onClick={() => setConfirming(a)}>
-              Approve…
-            </Button>
-          </div>
-        </article>
-      ))}
-      {questions.length ? <h2>Questions</h2> : null}
-      {questions.map((q, i) => (
-        <article key={q.id} className="card">
-          <p className="mute">
-            {q.path} · {ago(Date.parse(q.created_at))}
-          </p>
-          <p className="question">{q.text}</p>
-          <div className="choices">
-            <Button
-              variant={i === 0 && !publishes.length ? "primary" : "secondary"}
-              onClick={() => run(() => applyDefault(q.id), `Answered with the default: ${q.default_answer}`)}
-            >
-              Use default: {q.default_answer}
-            </Button>
-            {q.options
-              .filter((o) => o !== q.default_answer)
-              .map((o) => (
-                <Button key={o} variant="quiet" onClick={() => run(() => answerQuestion(q.id, o), `Answered: ${o}`)}>
-                  {o}
-                </Button>
-              ))}
-          </div>
-          <form
-            className="own"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const t = (own[q.id] ?? "").trim();
-              if (t) void run(() => answerQuestion(q.id, t), "Answer sent.");
-            }}
-          >
-            <label>
-              Or answer in your own words
-              <input value={own[q.id] ?? ""} onChange={(e) => setOwn({ ...own, [q.id]: e.target.value })} />
-            </label>
-            <Button variant="quiet" type="submit">
-              Send answer
-            </Button>
-          </form>
-        </article>
-      ))}
+      {list.length > shown ? (
+        <Button variant="secondary" onClick={() => setAll(true)}>
+          {`Show ${list.length - shown} more`}
+        </Button>
+      ) : null}
       {confirming ? (
         <Confirm
           title="Approve this action?"
-          what={`${confirming.action} — it runs once, exactly as written. ${confirming.reason}`}
+          what={`${whatHappens(confirming.a)}. Exactly this, once: ${confirming.a.action}`}
           cost="This may cost money or be hard to undo; that is why it needs you."
           confirmLabel="Approve"
           hold
@@ -125,11 +126,124 @@ export function Inbox() {
           onConfirm={async () => {
             const c = confirming;
             setConfirming(null);
-            await run(() => decideApproval(c.id, true), "Approved once. The agent will run it now.");
+            await settle(c, () => decideApproval(c.id, true), "Approved once. It runs now.");
           }}
         />
       ) : null}
     </section>
+  );
+}
+
+type Settle = (n: Need, fn: () => Promise<unknown>, done: string) => Promise<void>;
+
+function QuestionCard({ n, q, primary, settle }: { n: Need; q: CityQuestion; primary: boolean; settle: Settle }) {
+  const [writing, setWriting] = useState(false);
+  const [text, setText] = useState("");
+  const [whole, setWhole] = useState(false);
+  const ask = plainText(q.text, 160);
+  // The default first, then the other choices; at most four big buttons.
+  const choices = [...new Set([q.default_answer, ...q.options].filter((o) => o && o.trim()))].slice(0, 4);
+  return (
+    <article className="card need" aria-label={`Question from ${n.who}`}>
+      <p className="who">{`${n.who} asks`}</p>
+      <p className="ask">
+        {whole ? q.text : ask.short}{" "}
+        {!ask.whole && !whole ? (
+          <button type="button" className="more" onClick={() => setWhole(true)}>
+            more
+          </button>
+        ) : null}
+      </p>
+      <div className="answers">
+        {choices.map((o, i) => (
+          <Button
+            key={o}
+            variant={i === 0 && primary ? "primary" : "secondary"}
+            className="big"
+            onClick={() => settle(n, () => answerQuestion(q.id, o), `Answered: ${o}`)}
+          >
+            {o}
+          </Button>
+        ))}
+        <Button variant="quiet" className="big" onClick={() => setWriting(true)}>
+          Write my own answer
+        </Button>
+      </div>
+      {writing ? (
+        <form
+          className="own"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const t = text.trim();
+            if (t) void settle(n, () => answerQuestion(q.id, t), "Answer sent.");
+          }}
+        >
+          <input
+            aria-label="Your answer"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Your answer…"
+            autoFocus
+          />
+          <Button variant="primary" type="submit">
+            Send
+          </Button>
+        </form>
+      ) : null}
+    </article>
+  );
+}
+
+/** What will happen if the owner says yes, in one plain sentence. */
+function whatHappens(a: CityApproval): string {
+  const p = a.preview as PreviewData | undefined;
+  if (p?.kind === "email")
+    return p.action === "trash"
+      ? "Move an email to the Trash"
+      : `Send an email${p.to?.length ? ` to ${p.to.join(", ")}` : ""}${p.subject ? `: “${capped(p.subject, 60)}”` : ""}`;
+  if (p?.kind === "event")
+    return `${p.action ?? "Change an event"}${p.title ? `: “${capped(p.title, 60)}”` : ""}${p.start ? ` on ${when(p.start)}` : ""}`;
+  if (a.kind === "connector.add") return `Connect a new service: ${capped(a.action, 60)}`;
+  const tool = (a as { tool?: string }).tool;
+  if (!tool || tool === "Bash") return "Run a command on its work computer";
+  return `Use ${tool.replace(/^mcp__[^_]+__/, "").replace(/_/g, " ")}`;
+}
+
+function ApprovalCard({
+  n,
+  a,
+  primary,
+  settle,
+  onYes,
+}: {
+  n: Need;
+  a: CityApproval;
+  primary: boolean;
+  settle: Settle;
+  onYes: () => void;
+}) {
+  return (
+    <article className="card need" aria-label={`Approval for ${n.who}`}>
+      <p className="who">{`${n.who} wants your OK`}</p>
+      <p className="ask">{`${whatHappens(a)}.`}</p>
+      <details className="exact">
+        <summary>Exactly what it will do</summary>
+        {a.preview ? <Preview p={a.preview as PreviewData} /> : <p className="action">{a.action}</p>}
+        {a.reason ? <p className="mute">{`Why it needs you: ${plainText(a.reason, 200).short}`}</p> : null}
+      </details>
+      <div className="answers">
+        <Button variant={primary ? "primary" : "secondary"} className="big" onClick={onYes}>
+          Yes…
+        </Button>
+        <Button
+          variant="secondary"
+          className="big"
+          onClick={() => settle(n, () => decideApproval(a.id, false), "Refused. It will carry on without it.")}
+        >
+          No
+        </Button>
+      </div>
+    </article>
   );
 }
 
@@ -243,13 +357,6 @@ function Preview({ p }: { p: PreviewData }) {
       </dl>
     );
   return <p className="mute">{p.note ?? "Exactly the action shown is approved."}</p>;
-}
-
-/** "Star Calendar (an app)" for a proposal an app made; the agent otherwise. */
-function askedBy(a: CityApproval, apps: Record<string, CityApp>) {
-  const appId = a.requested_by?.startsWith("app:") ? a.requested_by.slice(4) : null;
-  if (!appId) return a.agent;
-  return `${capped(apps[appId]?.title, 40) || "One of your apps"} (an app)`;
 }
 
 /**

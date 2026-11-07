@@ -157,9 +157,7 @@ export function SkillsScreen() {
   return (
     <section className="screen" aria-labelledby="skills-title">
       <h1 id="skills-title">Skills</h1>
-      <p className="mute">
-        Instructions you add for your agents. Only you can add or change them; agents only read them.
-      </p>
+      <p className="lede">Instructions your agents follow. Only you can add or change them.</p>
       {error ? (
         <Banner
           tone="bad"
@@ -181,7 +179,7 @@ export function SkillsScreen() {
         </Button>
       )}
       {!skills && !error ? <Loading what="skills" /> : null}
-      {skills && !skills.length ? <p>No skills yet.</p> : null}
+      {skills && !skills.length ? <p className="empty">No skills yet.</p> : null}
       {skills?.map((s) => (
         <article key={s.name} className="card" aria-label={`Skill ${s.name}`}>
           <h2>{s.name}</h2>

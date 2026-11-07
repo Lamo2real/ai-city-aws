@@ -35,10 +35,10 @@ from aic.shared.caps import validate_caps
 from aic.shared.clients import client
 from aic.shared.config import caps_config
 from aic.shared.events import EventBus, now_iso
-from aic.shared.hierarchy.actions import CityDeps, answer_question, send_workers_home
+from aic.shared.hierarchy.actions import CityDeps, answer_question, send_workers_home, sweep_stale_asks
 from aic.shared.hierarchy.factory import Factory
 from aic.shared.hierarchy.queue import Queue, WorkMessage
-from aic.shared.hierarchy.tasks import DONE_OR_GONE, cancel_task
+from aic.shared.hierarchy.tasks import DONE_OR_GONE, cancel_task, job_rows
 from aic.shared.ids import department_key, new_id
 from aic.shared.knowledge.service import KnowledgeError, KnowledgeService, NotFound
 from aic.shared.knowledge.wiring import knowledge_from_env
@@ -78,6 +78,7 @@ ROUTES: list[tuple[str, str]] = [
     ("POST", "/wake-check"),
     ("GET", "/tickets"),
     ("GET", "/tickets/t-1"),
+    ("GET", "/jobs"),
     ("GET", "/departments"),
     ("GET", "/agents"),
     ("GET", "/workforce"),
@@ -263,8 +264,18 @@ def _as_number(v: Any) -> float:
         return math.nan
 
 
+async def _sweep(d: ApiDeps) -> None:
+    """Questions and approvals of jobs that already stopped never reach Needs you (a failed sweep is not fatal)."""
+    try:
+        if n := await sweep_stale_asks(d.ledger, d.bus):
+            log("info", "asks.swept", withdrawn=n)
+    except Exception as e:
+        log("warn", "asks.sweep_failed", error=type(e).__name__)
+
+
 async def city_snapshot(d: ApiDeps) -> dict[str, Any]:
     s = await d.settings()
+    await _sweep(d)
     results: list[Any] = await asyncio.gather(
         d.ledger.list_agents(),
         d.ledger.list_departments(),
@@ -547,6 +558,8 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
             transcript, UtilityDeps(ledger=d.ledger, bus=d.bus, settings=await d.settings(), runner=d.utility_runner)
         )
         return reply(200, {"addressed": addressed})
+    if is_("GET", r"/jobs"):
+        return reply(200, {"jobs": await job_rows(d.ledger, finished=q.get("status") == "done")})
     if is_("GET", r"/tickets"):
         status = q.get("status")
         which = ALL if status == "all" else ("done", "failed", "cancelled") if status == "done" else LIVE
@@ -580,6 +593,7 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
             },
         )
     if is_("GET", r"/questions"):
+        await _sweep(d)
         return reply(
             200, {"questions": await d.ledger.open_questions(), "approvals": await d.ledger.pending_approvals()}
         )
