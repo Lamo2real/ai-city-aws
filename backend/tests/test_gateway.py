@@ -230,21 +230,25 @@ async def test_a_skill_cannot_be_pre_approved_and_only_this_turns_plugin_skills_
 
 # ---------- the policy file ----------
 @pytest.mark.parametrize(
-    "tool",
+    ("tool", "want"),
     [
-        "mcp__gateway__gh___merge_pull_request",
-        "mcp__gateway__gh___delete_repository",
-        "mcp__gateway__vault___get_secret_value",
+        ("mcp__gateway__gh___merge_pull_request", "allow"),
+        ("mcp__gateway__gh___delete_repository", "allow"),
+        ("mcp__gateway__vault___get_secret_value", "deny"),
     ],
 )
-def test_the_policy_denies_merges_repo_deletes_and_secrets_on_any_connector(tool: str) -> None:
-    assert decide(tool, {}) == ("deny", "The owner merges and owns secrets.")
+def test_the_policy_denies_only_secrets_on_a_connector_the_owner_merges_and_deletes_freely(
+    tool: str, want: str
+) -> None:
+    # Decision 100: no guardrails on the owner's work; secrets still never flow through an agent.
+    d, reason = decide(tool, {})
+    assert d == want and (want == "allow" or "Secrets Manager" in reason)
 
 
 async def test_a_connectors_approval_level_turns_an_allow_into_an_ask_but_never_softens_a_deny() -> None:
     r = await gate("mcp__gateway__x___delete_file", {}, "worker", "w1", extra_ask="may delete")
     assert r.decision == "deny" and r.needs_approval and r.needs_approval.reason == "may delete"
-    d = await gate("mcp__gateway__gh___merge_pull_request", {}, "ace", "ace", extra_ask="writes")
+    d = await gate("mcp__gateway__vault___get_secret_value", {}, "ace", "ace", extra_ask="reads")
     assert d.decision == "deny" and d.needs_approval is None
 
     async def approved(_: str) -> bool:

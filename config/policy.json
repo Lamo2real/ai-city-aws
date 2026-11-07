@@ -1,7 +1,9 @@
 {
-  "$comment": "Ported from upstream config/policy.json. Shell rules match Bash, exec, bash and process. Cloud mutation is denied for every agent, workers included. The self-improvement loop may never change this file. Apps (role app) reach only the four mail/calendar reads as mcp__app__ names (every other mcp__app__ name is denied); their connector reads are gated as mcp__gateway__ like the agents'.",
+  "$comment": "The owner's choice (2026-11-08, decision 100): no guardrails on the owner's own work. Agents may merge, push, force-push, change GitHub, send mail, publish, run any SQL and install anything the owner asks for. What stays is not a guardrail but the city's own survival: agents never change the city's AWS account (IAM, budgets, secrets, KMS, resources, Terraform, deploys, image pushes), never read raw credential files or a keychain, and never wipe the sandbox root; apps (role app) reach only the owner-granted reads. The self-improvement loop may never change this file.",
   "policy_applies_to_workers": true,
-  "caps": { "ad_daily_budget_cents": 5000 },
+  "caps": {
+    "ad_daily_budget_cents": 5000
+  },
   "rules": [
     {
       "tool": "^(Bash|exec|bash|process)$",
@@ -41,69 +43,9 @@
     },
     {
       "tool": "^(Bash|exec|bash|process)$",
-      "match": "\\b(stripe\\s+(charges|payment_intents|refunds|payouts|transfers)\\b.*(create|capture|confirm)|npm\\s+publish|gh\\s+secret\\s+set|gh\\s+release\\s+create)",
-      "decision": "ask",
-      "reason": "Payments, publishing and credential changes need the owner."
-    },
-    {
-      "tool": "^(Bash|exec|bash|process)$",
-      "match": "\\b(drop\\s+(table|database)|truncate\\s+table)\\b",
-      "decision": "ask",
-      "reason": "Destructive database statements need the owner."
-    },
-    {
-      "tool": "^(Bash|exec|bash|process)$",
-      "match": "git(\\s+-\\S+(\\s+[^-\\s]\\S*)?)*\\s+push\\b.*(--force|-f\\b)",
-      "decision": "deny",
-      "reason": "Force-push is never allowed."
-    },
-    {
-      "tool": "^(Bash|exec|bash|process)$",
-      "match": "git(\\s+-\\S+(\\s+[^-\\s]\\S*)?)*\\s+push\\b.*\\b(main|master)\\b",
-      "decision": "deny",
-      "reason": "Never push to main. Open a PR after the Orchestrator's sign-off; the owner merges."
-    },
-    {
-      "tool": "^(Bash|exec|bash|process)$",
-      "match": "(^|[\\s\"';&|(])git\\s+([^;&|]*\\s)?(-c\\s|--output|--ext-diff|--textconv)",
-      "decision": "deny",
-      "reason": "git -c, --output, --ext-diff and --textconv can run programs or write files; not allowed."
-    },
-    {
-      "tool": "^(Bash|exec|bash|process)$",
-      "match": "(^|[\\s\"';&|(])git\\s[^;&|]*(\\d?>(?!&[0-9-])|&>)",
-      "decision": "deny",
-      "reason": "Redirecting git output into a file is a write path; not allowed. 2>&1 and >&2 are fine."
-    },
-    {
-      "tool": "^(Bash|exec|bash|process)$",
-      "match": "gh\\s+repo\\s+delete",
-      "decision": "deny",
-      "reason": "Deleting repositories needs the owner, by hand."
-    },
-    {
-      "tool": "^(Bash|exec|bash|process)$",
       "match": "rm\\s+-[a-zA-Z]*r[a-zA-Z]*f?\\s+(/|~|\\$HOME)/?(\\s|\\\"|$)",
       "decision": "deny",
       "reason": "Recursive delete of root or home."
-    },
-    {
-      "tool": "^(Bash|exec|bash|process)$",
-      "match": "(curl|wget)[^|]*\\|\\s*(ba|z)?sh",
-      "decision": "deny",
-      "reason": "Piping downloads into a shell."
-    },
-    {
-      "tool": "^(Bash|exec|bash|process)$",
-      "match": "gh\\s+api\\b.*(-X|--method)[\\s=]*(PUT|DELETE|PATCH)",
-      "decision": "ask",
-      "reason": "Changing GitHub through its API needs the owner."
-    },
-    {
-      "tool": "^(Bash|exec|bash|process)$",
-      "match": "gh\\s+pr\\s+merge",
-      "decision": "deny",
-      "reason": "Agents never merge. The owner merges PRs into main."
     },
     {
       "tool": "^(Bash|exec|bash|process)$",
@@ -118,54 +60,10 @@
       "reason": "Reading credential files is not allowed."
     },
     {
-      "tool": "^mcp__github__merge_pull_request$",
+      "tool": "^mcp__gateway__.*___.*secret.*$",
       "match": ".*",
       "decision": "deny",
-      "reason": "Agents never merge. The owner merges PRs into main."
-    },
-    { "tool": "^mcp__github__.*delete", "match": ".*", "decision": "deny", "reason": "Destructive GitHub operation." },
-    {
-      "tool": "^mcp__gateway__.*___(merge_pull_request|delete_repository|.*secret.*)$",
-      "match": ".*",
-      "decision": "deny",
-      "reason": "The owner merges and owns secrets."
-    },
-    {
-      "tool": "^mcp__city__mail_send$",
-      "match": ".*",
-      "decision": "ask",
-      "reason": "Sending an email speaks for the owner."
-    },
-    { "tool": "^mcp__city__mail_trash$", "match": ".*", "decision": "ask", "reason": "Deleting mail needs the owner." },
-    {
-      "tool": "^mcp__city__calendar_(respond|delete)$",
-      "match": ".*",
-      "decision": "ask",
-      "reason": "Answering invitations and deleting events need the owner."
-    },
-    {
-      "tool": "^mcp__city__calendar_(create|update)$",
-      "match": "\"attendees\": \\[[^\\]]",
-      "decision": "ask",
-      "reason": "Inviting people speaks for the owner."
-    },
-    {
-      "tool": "^mcp__city__calendar_update$",
-      "match": "\"_has_attendees\": true",
-      "decision": "ask",
-      "reason": "Changing an event with guests sends them updates."
-    },
-    {
-      "tool": "^mcp__meta-ads__",
-      "match": "\"status\"\\s*:\\s*\"ACTIVE\"",
-      "decision": "ask",
-      "reason": "Activating ads spends real money; create them paused."
-    },
-    {
-      "tool": ".*",
-      "match": "\"privacy(Status)?\"\\s*:\\s*\"public\"",
-      "decision": "ask",
-      "reason": "Publishing a video publicly can't be undone; upload private or unlisted first."
+      "reason": "Secrets reach a process through Secrets Manager, never through an agent."
     },
     {
       "tool": "^mcp__app__(?!(calendar\\.read|calendar\\.calendars|mail\\.search|mail\\.accounts|state\\.get|state\\.set)$)",

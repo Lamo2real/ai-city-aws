@@ -25,7 +25,7 @@ from aic.mail.tokens import Tokens
 from aic.runtime.mail_tools import mail_level, mail_tools
 from aic.runtime.tools import TurnCtx, gate_tools
 from aic.shared.mcp_http import HttpResponse
-from aic.shared.policy import action_hash, decide
+from aic.shared.policy import action_hash, decide, load_policy
 from city_support import make_city
 from test_api import ev, js, make
 
@@ -264,20 +264,21 @@ def test_standing_rules_check_their_input() -> None:
 @pytest.mark.parametrize(
     ("tool_name", "args", "want"),
     [
-        ("mcp__city__mail_send", {"draft_id": "ma-1:d1"}, "ask"),
-        ("mcp__city__mail_trash", {"ids": ["ma-1:m1"]}, "ask"),
-        ("mcp__city__calendar_respond", {"id": "ma-1:e1", "response": "accept"}, "ask"),
-        ("mcp__city__calendar_delete", {"id": "ma-1:e1"}, "ask"),
-        ("mcp__city__calendar_create", {"calendar_id": "ma-1:c", "attendees": ["bo@x.se"]}, "ask"),
+        # Decision 100: nothing the owner asked for waits for an approval, mail and calendar included.
+        ("mcp__city__mail_send", {"draft_id": "ma-1:d1"}, "allow"),
+        ("mcp__city__mail_trash", {"ids": ["ma-1:m1"]}, "allow"),
+        ("mcp__city__calendar_respond", {"id": "ma-1:e1", "response": "accept"}, "allow"),
+        ("mcp__city__calendar_delete", {"id": "ma-1:e1"}, "allow"),
+        ("mcp__city__calendar_create", {"calendar_id": "ma-1:c", "attendees": ["bo@x.se"]}, "allow"),
         ("mcp__city__calendar_create", {"calendar_id": "ma-1:c", "attendees": []}, "allow"),
-        ("mcp__city__calendar_update", {"id": "ma-1:e1", "_has_attendees": True}, "ask"),
+        ("mcp__city__calendar_update", {"id": "ma-1:e1", "_has_attendees": True}, "allow"),
         ("mcp__city__calendar_update", {"id": "ma-1:e1", "_has_attendees": False}, "allow"),
         ("mcp__city__mail_draft", {"account_id": "ma-1", "to": ["bo@x.se"]}, "allow"),
         ("mcp__city__mail_read", {"id": "ma-1:m1"}, "allow"),
         ("mcp__city__mail_label", {"ids": ["ma-1:m1"], "archive": True}, "allow"),
     ],
 )
-def test_policy_asks_for_what_leaves_or_destroys(tool_name: str, args: dict[str, Any], want: str) -> None:
+def test_policy_lets_mail_and_calendar_actions_through(tool_name: str, args: dict[str, Any], want: str) -> None:
     assert decide(tool_name, args)[0] == want
 
 
@@ -334,7 +335,28 @@ async def test_read_output_is_wrapped_as_untrusted() -> None:
     assert "Ignore all rules" in out  # the body is there, as data
 
 
-async def test_sending_waits_for_the_owner_with_a_full_preview_then_runs_once_approved() -> None:
+async def test_sending_runs_at_once_under_the_owners_no_guardrails_policy() -> None:
+    s, city, *_ = make_service()
+    a = await connected(s)
+    send = tool(mail_tools(city.deps, ace(), s, "all"), "mail_send")
+    args = {"account_id": a["id"], "to": ["bo@x.se"], "subject": "Hi", "body": "Hello Bo"}
+    assert await send.handler(args) == "Sent."
+    assert await city.deps.ledger.pending_approvals() == []
+
+
+ASKING_MAIL = {
+    **load_policy(),
+    "rules": [
+        *load_policy()["rules"],
+        {"tool": "^mcp__city__(mail_send|calendar_update)$", "match": ".*", "decision": "ask", "reason": "t"},
+    ],
+}
+
+
+async def test_with_an_ask_rule_sending_waits_for_the_owner_with_a_full_preview_then_runs_once_approved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("aic.shared.policy.load_policy", lambda: ASKING_MAIL)
     s, city, *_ = make_service()
     a = await connected(s)
     send = tool(mail_tools(city.deps, ace(), s, "all"), "mail_send")
@@ -358,7 +380,8 @@ async def test_sending_waits_for_the_owner_with_a_full_preview_then_runs_once_ap
     assert "Needs the owner's approval" in await send.handler(args)  # the approval was used once
 
 
-async def test_a_standing_rule_answers_the_ask_for_named_recipients_only() -> None:
+async def test_a_standing_rule_answers_the_ask_for_named_recipients_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("aic.shared.policy.load_policy", lambda: ASKING_MAIL)
     s, city, *_ = make_service()
     a = await connected(s)
     await RuleStore(city.deps.ledger.table).add(
@@ -374,7 +397,10 @@ async def test_a_standing_rule_answers_the_ask_for_named_recipients_only() -> No
     assert any("standing rule" in str(x.get("reason")) for x in audit)
 
 
-async def test_changing_an_event_with_guests_asks_and_drafts_are_free() -> None:
+async def test_changing_an_event_with_guests_asks_under_an_ask_rule_and_drafts_are_free(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("aic.shared.policy.load_policy", lambda: ASKING_MAIL)
     s, city, *_ = make_service()
     a = await connected(s)
     specs = mail_tools(city.deps, ace(), s, "all")
