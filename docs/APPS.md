@@ -261,8 +261,18 @@ HUD side (`web/src/lib/bridge.ts`, one `message` listener for the whole HUD):
 - Grant record that `app_call` reads: the APP item itself (pk `APPS`, sk `APP#<app_id>`), field `grants`: a list of
   `{id, connector?, tool?}` (for example `{id: "connector.read", connector: "github", tool: "list_issues"}`), plus
   `granted_at`. A revoked grant is simply removed from the list; a removed app has no item.
-- Mail/calendar reads: the bridge Lambda calls the mail/calendar module's read functions (the code behind
-  `GET /calendar/events`, `calendar_list`, `mail_search`, `mail_accounts`), never their write tools.
+- Mail/calendar reads (agreed with the mail lead, `docs/MAIL_CALENDAR.md` §11, commit 9ae6f9b on `mail-calendar`):
+  the bridge Lambda uses `aic.mail.service.MailService.from_env(ledger)` and only its read methods `accounts()`,
+  `calendars()`, `events(start, end, calendar_ids=None, query=None)` and `search(query, account_id=None, folder=None,
+  unread_only=False, after=None, before=None, limit=25)` (summaries only). Results carry `errors` for accounts that
+  failed; titles and snippets are untrusted. Bridge IAM for this: `GetWorkloadAccessTokenForUserId` on workload
+  `aic-prod-mail` (each account is its own vault user `ma-…`), `GetResourceOauth2Token` on `aic-prod-google` /
+  `aic-prod-microsoft` and the default token vault, `secretsmanager:GetSecretValue` on `aic/prod/mail/*` + `kms:Decrypt`
+  on the project key, ledger read on `pk = "MAIL"`; no writes, no `CompleteResourceTokenAuth`.
+- Proposals run through the mail module: the api files them with `aic.mail.approvals.file(ledger, service, tool, args,
+  requested_by="app:<app_id>")` (full tool name such as `mcp__city__calendar_respond`, preview from `aic.mail.preview.build`,
+  hash from `policy.action_hash`) and on approve runs `aic.mail.approvals.execute(ledger, service, approval)`, which
+  re-checks the policy and the hash and consumes `APPROVED#<hash>` once. Standing rules never apply to app proposals.
 - Rate limit per app: 120 requests per minute, counted in the ledger (`RATE#app-<id>`) → 429 `rate_limited`.
 - Response ≤ 256 KB (cut lists with `truncated: true`). Data is returned as data; the app renders it inside
   its own sandbox, so hostile content in an email subject can at worst affect that one app's page.
