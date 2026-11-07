@@ -15,7 +15,7 @@ export const speakerOf = (p: Presence): Speaker =>
   p === "listening" ? "you" : p === "speaking" ? "aic" : p === "thinking" ? "thinking" : "idle";
 
 const BARS = 36;
-const COLOR = { you: "#2a56a8", aic: "#7a4a2a", aicSoft: "#c98f55", thinking: "#5f4636", idle: "#b9a37f" };
+const COLOR = { you: "#2a56a8", aic: "#7a4a2a", aicSoft: "#c98f55", thinking: "#5f4636", idle: "#8a7458" };
 const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 
 export function VoiceVisualizer(p: { presence: Presence; listening: boolean; onMic: () => void }) {

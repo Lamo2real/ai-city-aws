@@ -552,20 +552,15 @@ main {
   display: grid;
   gap: var(--s2);
 }
+/* No frame: just the line itself, drawn straight on the page under the eye. */
 .voice-strip {
   position: relative;
   height: 104px;
-  border-radius: 999px;
-  background: var(--sheet);
-  box-shadow:
-    0 0 0 2px var(--ink),
-    0 6px 14px -8px rgba(46, 31, 22, 0.45);
-  overflow: hidden;
 }
 .voice-strip canvas {
   position: absolute;
-  inset: 0 var(--s4);
-  width: calc(100% - 2 * var(--s4));
+  inset: 0;
+  width: 100%;
   height: 100%;
 }
 .voice .mic {
