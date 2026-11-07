@@ -66,6 +66,12 @@ The app declares `ITSAppUsesNonExemptEncryption = false` (it uses only Apple's H
 - **The password never leaves the phone:** SRP sends a proof, not the password.
 - The chat is kept on the iPhone (last 60 lines, file protection "complete"); *Settings → Forget this iPhone's conversation* clears it.
 
+## Notifications
+
+After the first sign-in the app asks, in one sentence, whether this iPhone should get a notification when the city finishes a **large feature** (never small steps). Allow it and the app registers with Apple's push service on every launch and sends the token to the backend (`POST /devices`); the push itself is sent by the backend through SNS → APNs when a top-level job finishes, with the job, outcome and cost in the text. Tapping it opens AIC. Sign-out removes this iPhone from the backend; so does turning notifications off in iOS Settings. "Not now" is never asked again — Settings → Notifications offers it later.
+
+Real pushes need the **Push Notifications capability**, which only Apple Developer Program teams have (option B above): set `AIC_ENTITLEMENTS = Config/AICity-Push.entitlements` in `Config/AICity.xcconfig`. With a free personal team the app still builds and runs; Settings → Notifications explains that this build can't receive them. The simulator always has the entitlement and `xcrun simctl push booted <bundle-id> payload.json` shows a notification end to end, but a push from the real backend needs a real iPhone.
+
 ## Voice
 
 Tap the mic, talk, tap again to send. The words are recognised by Apple's Speech framework, on the iPhone when the model is available (no audio leaves the phone then); otherwise Apple's speech service. Replies are read aloud with the system voice (*AIC → ⋯ → Speak replies* turns it off). The web HUD uses Amazon Transcribe and Polly instead; see `docs/DECISIONS.md` (decision 69). The microphone is used only while listening.

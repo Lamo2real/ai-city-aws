@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct AICityApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var model: AppModel = AICityApp.makeModel()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -9,7 +10,10 @@ struct AICityApp: App {
         WindowGroup {
             RootView()
                 .environment(model)
-                .task { await model.start() }
+                .task {
+                    delegate.attach(model)
+                    await model.start()
+                }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { Task { await model.becameActive() } }
                 }
@@ -62,6 +66,7 @@ struct MainTabs: View {
 
     var body: some View {
         @Bindable var model = model
+        @Bindable var push = model.push
         TabView(selection: $model.section) {
             ForEach(AppSection.tabs) { s in
                 Group {
@@ -80,6 +85,12 @@ struct MainTabs: View {
         }
         .overlay(alignment: .bottom) { ToastView().padding(.bottom, 60) }
         .sheet(isPresented: $model.showGuide) { FirstRunGuide { model.finishGuide() } }
+        .alert("Get a notification when a large feature is done?", isPresented: $push.askNow) {
+            Button("Not now", role: .cancel) { model.push.notNow() }
+            Button("Allow") { Task { await model.push.allow() } }
+        } message: {
+            Text("AI City tells you when it has finished a large feature, never for small steps.")
+        }
     }
 
     @ViewBuilder private func screen(_ s: AppSection) -> some View {

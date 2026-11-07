@@ -131,6 +131,7 @@ final class DemoTransport: HTTPTransport, @unchecked Sendable {
             body = request.url?.query?.contains("done") == true ? ["tickets": []] : ["tickets": Demo.city["tickets"]]
         case ("GET", let p) where p.hasPrefix("/tickets/"):
             body = ["ticket": Demo.city["tickets"].array[0], "history": [["from": nil, "to": "open", "note": "", "at": Demo.iso(50)], ["from": "open", "to": "in_progress", "note": "hired an iOS developer", "at": Demo.iso(45)]], "children": []]
+        case ("POST", "/devices"): body = ["device": ["id": "dev-demo"]]
         case ("POST", "/messages"):
             Task { @MainActor [weak self] in await self?.streamReply() }
             body = ["accepted": true]

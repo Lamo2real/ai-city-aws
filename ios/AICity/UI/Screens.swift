@@ -334,6 +334,7 @@ struct SettingsScreen: View {
             .labelsHidden()
         }
         Section("Notifications") {
+            PushRow()
             Toggle("Email me when a task is done, a question waits, or spend nears a cap you set", isOn: $form.notifyEmail)
         }
         if !form.integrations.isEmpty {
@@ -389,6 +390,33 @@ struct SettingsScreen: View {
             }
         } catch {
             problem = AppModel.plain(error)
+        }
+    }
+}
+
+/// This iPhone's notifications: on, off in iOS Settings, or not asked yet.
+struct PushRow: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        let push = model.push
+        if let problem = push.problem {
+            Text(problem).foregroundStyle(.secondary)
+        } else {
+            switch push.state {
+            case .on:
+                Label("This iPhone gets a notification when a large feature is done.", systemImage: "bell.badge")
+            case .off:
+                Text("Notifications are off for AI City on this iPhone.")
+                Button("Turn them on in iOS Settings") {
+                    if let u = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(u) }
+                }
+                .frame(minHeight: 44)
+            case .notAsked, .unknown:
+                Button("Notify this iPhone when a large feature is done") { Task { await push.allow() } }
+                    .frame(minHeight: 44)
+            }
         }
     }
 }
