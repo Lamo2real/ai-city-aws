@@ -430,20 +430,57 @@ test("a spoken reply starts with its first sentence while the rest still streams
   await expect(page.locator(".voice")).toHaveAttribute("data-speaker", "idle");
 });
 
+test("a three-sentence streamed reply plays three clips, in order, once each; Send cuts AIC off", async ({ page }) => {
+  const m = await mockBackend(page);
+  await page.addInitScript(() => ((window as unknown as { __speakMs: number }).__speakMs = 250));
+  await page.goto("/");
+  const w = () =>
+    page.evaluate(() => {
+      const x = window as unknown as { __spoken?: string[]; __overlaps?: number };
+      return { spoken: x.__spoken ?? [], overlaps: x.__overlaps ?? 0 };
+    });
+  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click(); // asked by voice
+  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
+  expect(m.calls.find((c) => c.path === "/messages")?.body).toMatchObject({ voice: true }); // AIC keeps it short
+  await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "stop listening"));
+  const pieces = ["Hi there", ". The city is qu", "iet. Research", " has two work", "ers."];
+  for (const text of pieces) m.send({ type: "ace.reply", conversation: "main", text, done: false });
+  m.send({ type: "ace.reply", conversation: "main", text: pieces.join(""), done: true });
+  m.send({ type: "ace.reply", conversation: "main", text: pieces.join(""), done: true }); // the bus's copy
+  const all = ["Hi there.", "The city is quiet.", "Research has two workers."];
+  await expect.poll(async () => (await w()).spoken).toEqual(all);
+  await page.waitForTimeout(700); // nothing more comes later
+  expect(await w()).toEqual({ spoken: all, overlaps: 0 });
+
+  // A long reply to a typed "always" ask: the owner types and sends while AIC talks, and AIC stops.
+  await page.getByLabel("Speak replies").selectOption("always");
+  await page.getByRole("textbox", { name: "Message to AIC" }).fill("status?");
+  await page.keyboard.press("Enter");
+  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(2);
+  m.send({ type: "ace.reply", conversation: "main", text: "One. Two. Three. Four. Five. Six.", done: true });
+  await expect.poll(async () => (await w()).spoken.length).toBeGreaterThan(3);
+  await page.getByRole("textbox", { name: "Message to AIC" }).fill("stop");
+  await page.keyboard.press("Enter");
+  const cut = (await w()).spoken.length;
+  await page.waitForTimeout(1200);
+  expect((await w()).spoken.length).toBeLessThanOrEqual(cut + 1); // at most the clip already starting
+  expect((await w()).spoken).not.toContain("Six.");
+});
+
 test("Settings: pick AIC's voice; it is remembered on this device and can be heard", async ({ page }) => {
   await mockBackend(page);
   await page.goto("/#/settings");
   const voice = page.getByLabel("AIC's voice");
-  await expect(voice).toHaveValue("Matthew"); // the deploy's default
-  await voice.selectOption("Ruth");
+  await expect(voice).toHaveValue("Ruth"); // the deploy's default
+  await voice.selectOption("Danielle");
   await page.getByRole("button", { name: "Test voice" }).click();
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []))
     .toEqual(["Hi, I'm AIC. This is how I'll sound when I answer you."]);
   await expect(page.getByText(/^Played\./)).toBeVisible(); // the button says it worked
   await page.reload();
-  await expect(page.getByLabel("AIC's voice")).toHaveValue("Ruth");
-  expect(await page.evaluate(() => localStorage.getItem("aic.voice"))).toBe("Ruth");
+  await expect(page.getByLabel("AIC's voice")).toHaveValue("Danielle");
+  expect(await page.evaluate(() => localStorage.getItem("aic.voice"))).toBe("Danielle");
 });
 
 test("while the work AIC handed on runs, its steps shimmer with a live clock; they settle when the result is back", async ({
@@ -613,7 +650,9 @@ test("speech to speech: a spoken question gets a spoken answer, and the mic reop
   await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "stop listening"));
   m.send({ type: "ace.reply", conversation: "main", text: "All quiet. Nothing needs you.", done: true });
   await expect
-    .poll(() => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []))
+    .poll(() => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []), {
+      intervals: [50], // the second clip plays for 0.7 s after a short pause
+    })
     .toEqual(["All quiet.", "Nothing needs you."]); // the reply is spoken, sentence by sentence, no typing
   await expect(strip).toHaveAttribute("data-speaker", "aic");
   await expect(page.getByRole("button", { name: "Talk to AIC", exact: true })).toBeVisible(); // not listening while it talks

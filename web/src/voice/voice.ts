@@ -191,6 +191,8 @@ function loudness(a: AnalyserNode | null, buf: Float32Array<ArrayBuffer> | null)
 class AwsVoice implements Voice {
   /** The clip playing right now: an AudioBufferSourceNode on the tap-unlocked output context. */
   private current: AudioBufferSourceNode | null = null;
+  /** Bumped by stopSpeaking(): a clip still decoding when it was stopped never starts. */
+  private generation = 0;
   private playing = false;
   private meterNode: AnalyserNode | null = null;
   private polly: import("@aws-sdk/client-polly").PollyClient | null = null;
@@ -419,6 +421,7 @@ class AwsVoice implements Voice {
    *  at the moment sound really starts; the promise resolves when the clip ends or is stopped. Every way this
    *  can fail throws with a name speakProblem() knows. */
   async play(clip: Blob, onBegin?: () => void) {
+    const gen = this.generation;
     const ctx = (this.outCtx ??= new AudioContext());
     if (ctx.state !== "running") await ctx.resume().catch(() => undefined);
     if (ctx.state !== "running") throw named("AudioSuspended", `the sound context is ${ctx.state}`);
@@ -430,7 +433,9 @@ class AwsVoice implements Voice {
     } catch (e) {
       throw named("DecodeError", `the clip could not be decoded (${(e as Error)?.message ?? String(e)})`);
     }
-    this.stopSpeaking();
+    if (gen !== this.generation) return; // stopped while decoding: this clip is dropped
+    this.stopSpeaking(); // never two clips at once
+    this.generation = gen;
     const src = ctx.createBufferSource();
     src.buffer = buffer;
     src.connect(this.ensureMeter(ctx));
@@ -460,6 +465,7 @@ class AwsVoice implements Voice {
   }
 
   stopSpeaking() {
+    this.generation++;
     try {
       this.current?.stop();
     } catch {

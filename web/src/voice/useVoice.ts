@@ -38,6 +38,38 @@ export interface DictationTarget {
   onStop(): void;
 }
 
+// AIC's reply being spoken: which line, its queue, whether the owner asked by voice, whether anything has
+// actually played, the first failure, and whether it was cut off. Kept outside React (one player for the
+// whole page, shared by the AIC and City screens), so re-renders and switching screens never restart or
+// double a reply.
+type Talker = Pick<SpeechQueue<unknown>, "update" | "end" | "stop">;
+interface Talk {
+  id: string;
+  queue: Talker | null;
+  askedVoice: boolean;
+  started: boolean;
+  problem: unknown;
+  cancelled: boolean;
+}
+const talk: { current: Talk | null } = { current: null };
+// The hands-free loop: armed by a spoken send; while armed, the mic reopens after each spoken reply.
+const loop = { current: false };
+const startRef: { current: ((wake: boolean) => void) | null } = { current: null };
+// Replies already in the chat when the page opens (restored after a reload) are never read aloud again.
+const spoken: { current: string | null | undefined } = { current: undefined };
+
+/** Cuts AIC off: drops the reply's queue, stops the clip playing now and any browser voice. */
+function stopTalking() {
+  const t = talk.current;
+  if (t) {
+    t.cancelled = true;
+    t.queue?.stop();
+  }
+  getVoice().stopSpeaking();
+  browserStopSpeaking();
+  if (store.get().presence === "speaking") store.set({ presence: "idle" });
+}
+
 export function useVoice(dictation?: DictationTarget) {
   const [listening, setListening] = useState(false);
   const [wakeMode, setWakeMode] = useState(false);
@@ -49,39 +81,24 @@ export function useVoice(dictation?: DictationTarget) {
   const target = useRef(dictation);
   target.current = dictation;
   const chat = useHud((s) => s.chat);
-  // The hands-free loop: armed by a spoken send; while armed, the mic reopens after each spoken reply.
-  const loop = useRef(false);
-  const startRef = useRef<((wake: boolean) => void) | null>(null);
   const micModeRef = useRef(micMode);
   micModeRef.current = micMode;
-  // Replies already in the chat when the screen opens (restored after a reload) are never read aloud again.
-  const spoken = useRef<string | null>(store.get().chat.at(-1)?.id ?? null);
-
-  // AIC's reply being spoken: which line, how much went into the queue, the queue, whether the owner asked by
-  // voice, whether anything has actually played, and the first failure.
-  type Talker = Pick<SpeechQueue<unknown>, "push" | "end" | "stop">;
-  const talk = useRef<{
-    id: string;
-    fed: number;
-    queue: Talker | null;
-    askedVoice: boolean;
-    started: boolean;
-    problem: unknown;
-  } | null>(null);
-  const stopTalking = useCallback(() => {
-    talk.current?.queue?.stop();
-    getVoice().stopSpeaking();
-    browserStopSpeaking();
-  }, []);
+  if (spoken.current === undefined) spoken.current = store.get().chat.at(-1)?.id ?? null;
 
   // Read a reply aloud when the speak mode says so for the message it answers. With a voice that can
   // synthesize sentence by sentence, speaking starts with the first complete sentence while the rest streams.
   useEffect(() => {
     const last = chat.at(-1);
+    // The owner sent something new (typed or spoken): whatever AIC was still saying stops.
+    if (last?.who === "owner" && talk.current && !talk.current.cancelled && talk.current.id !== last.id) {
+      stopTalking();
+      return;
+    }
     if (!last || last.who !== "ace" || spoken.current === last.id) return;
     // Done talking: with the hands-free loop on after a spoken reply, the mic reopens for the owner's next
     // sentence; otherwise back to idle. AIC never listens while it talks, so there is no self-echo.
-    const finish = (spokenAloud: boolean, askedVoice: boolean) => {
+    const finish = (t: Talk, spokenAloud: boolean, askedVoice: boolean) => {
+      if (t.cancelled || talk.current !== t) return; // cut off: whoever cut it off decides what's next
       const next = loopNext(loop.current, spokenAloud && askedVoice ? "reply_spoken" : "reply_silent");
       loop.current = next.on;
       if (next.reopen && micModeRef.current === "send" && !wakeMode && !dictating.current) {
@@ -92,16 +109,17 @@ export function useVoice(dictation?: DictationTarget) {
       if (store.get().presence === "speaking") store.set({ presence: wakeMode ? "listening" : "idle" });
     };
     if (talk.current?.id !== last.id) {
+      if (talk.current && !talk.current.cancelled) stopTalking(); // a new reply: the old one stops, queue and all
       const asked = chat.findLast((l) => l.who === "owner" && l.at <= last.at);
       const v = getVoice();
       const say = shouldSpeak(speakMode, asked?.voice);
-      const t: NonNullable<typeof talk.current> = {
+      const t: Talk = {
         id: last.id,
-        fed: 0,
         queue: null,
         askedVoice: asked?.voice === true,
         started: false,
         problem: null,
+        cancelled: false,
       };
       // Polly failed earlier this session: the browser's own voice speaks, sentence by sentence, instead.
       const engine =
@@ -115,6 +133,7 @@ export function useVoice(dictation?: DictationTarget) {
           engine.synth as (s: string) => Promise<unknown>,
           engine.play as (c: unknown, onBegin?: () => void) => Promise<void>,
           () => {
+            if (t.cancelled) return;
             t.started = true;
             store.set({ presence: "speaking" });
           },
@@ -127,17 +146,15 @@ export function useVoice(dictation?: DictationTarget) {
       if (say && !t.queue && last.state !== "done") return; // a voice without synth: speak it whole when done
     }
     const t = talk.current!;
-    if (t.queue && last.text.length > t.fed) {
-      t.queue.push(last.text.slice(t.fed));
-      t.fed = last.text.length;
-    }
-    if (last.state !== "done") return;
+    if (t.cancelled) return;
+    if (last.state !== "done") return void t.queue?.update(last.text);
     spoken.current = last.id;
     if (t.queue) {
       const text = last.text;
       return void t.queue
-        .end()
+        .end(text) // the finished text can differ from what streamed; no sentence is said twice
         .then(async () => {
+          if (t.cancelled) return;
           if (t.started || !t.problem) {
             if (t.problem) setProblem(speakProblem(t.problem)); // part of it played; say why the rest did not
             return;
@@ -151,27 +168,27 @@ export function useVoice(dictation?: DictationTarget) {
               async (s) => s,
               (s, onBegin) => browserSpeak(s, onBegin),
               () => {
+                if (t.cancelled) return;
                 t.started = true;
                 store.set({ presence: "speaking" });
               },
             );
             t.queue = q; // a mic tap can still stop it
-            q.push(text);
-            await q.end();
+            await q.end(text);
           } else setProblem(speakProblem(t.problem));
         })
-        .finally(() => finish(t.started, t.askedVoice));
+        .finally(() => finish(t, t.started, t.askedVoice));
     }
-    if (!shouldSpeak(speakMode, t.askedVoice)) return void finish(false, t.askedVoice);
+    if (!shouldSpeak(speakMode, t.askedVoice)) return void finish(t, false, t.askedVoice);
     store.set({ presence: "speaking" });
     void getVoice()
       .speak(last.text)
       .then(
-        () => finish(true, t.askedVoice),
+        () => finish(t, true, t.askedVoice),
         (e: unknown) => {
           logVoiceError("the reply could not be spoken", e);
           setProblem(speakProblem(e));
-          finish(false, t.askedVoice);
+          finish(t, false, t.askedVoice);
         },
       );
   }, [chat, speakMode, wakeMode]);
@@ -231,7 +248,7 @@ export function useVoice(dictation?: DictationTarget) {
         failed("the microphone could not start", e);
       }
     },
-    [end, micMode, stopTalking],
+    [end, micMode],
   );
   startRef.current = (wake: boolean) => void start(wake);
 

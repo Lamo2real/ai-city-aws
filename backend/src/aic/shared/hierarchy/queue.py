@@ -19,6 +19,7 @@ MessageKind = Literal["task", "report", "answer", "question", "instruction", "fi
 #   ticketId      the ticket this message is about; taskId: the owner's original task (sessions are keyed by it)
 #   body          plain text for the agent; reports and answers from other agents are untrusted data
 #   conversation  AIC's conversation id; deferrals: how many times the dispatcher deferred it
+#   voice         the owner said it out loud (the HUD reads AIC's answer aloud)
 WorkMessage = TypedDict(
     "WorkMessage",
     {
@@ -33,6 +34,7 @@ WorkMessage = TypedDict(
         "body": str,
         "conversation": NotRequired[str],
         "deferrals": NotRequired[int],
+        "voice": NotRequired[bool],
     },
 )
 

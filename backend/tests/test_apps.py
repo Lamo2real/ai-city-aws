@@ -529,3 +529,15 @@ async def test_the_worker_and_its_manager_see_the_citys_verdict_on_the_draft() -
     }
     text = await city.host._prompt(worker, inv)
     assert "- app draft drf-1 [rejected]: index.html is missing" in text
+
+
+async def test_aic_is_told_when_the_owner_spoke_so_it_answers_short_and_spoken() -> None:
+    from city_support import make_city, scripted_engine
+
+    city = make_city(scripted_engine({}))
+    ace = {"id": "ace", "kind": "ace", "role": "ace"}
+    inv = {"role": "ace", "kind": "task", "from": "owner", "body": "how is it going?", "ticketId": "c", "taskId": "c"}
+    assert "said this out loud" not in await city.host._prompt(ace, inv)
+    spoken = await city.host._prompt(ace, {**inv, "voice": True})
+    assert "said this out loud" in spoken and "one to three short" in spoken
+    assert spoken.index("how is it going?") < spoken.index("said this out loud") < spoken.index("Current state")
