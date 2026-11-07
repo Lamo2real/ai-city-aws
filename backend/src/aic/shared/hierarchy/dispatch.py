@@ -16,7 +16,7 @@ from ..ledger import Ledger, day_key
 from .queue import Queue, WorkMessage
 
 DispatchOutcome = Literal[
-    "started", "duplicate", "deferred:paused", "deferred:cap", "deferred:ceiling", "deferred:rate"
+    "started", "duplicate", "cancelled", "deferred:paused", "deferred:cap", "deferred:ceiling", "deferred:rate"
 ]
 DEFER_SECONDS = {"paused": 60, "cap": 900, "ceiling": 15, "rate": 1}
 
@@ -54,6 +54,8 @@ class Dispatcher:
         ledger = self.d.ledger
         if await ledger.is_work_done(m["id"]):
             return "duplicate"
+        if await self._cancelled(m):
+            return "cancelled"
         s = await self.d.settings()
         if await ledger.is_paused():
             await self._defer(m, DEFER_SECONDS["paused"])
@@ -115,6 +117,15 @@ class Dispatcher:
             await ledger.abandon_work(m["id"])
             raise
         return "started"
+
+    async def _cancelled(self, m: WorkMessage) -> bool:
+        """The owner stopped the job: whatever is still queued for it is dropped, not run."""
+        for key in {m.get("ticketId"), m.get("taskId")}:
+            if key:
+                t = await self.d.ledger.get_ticket(str(key))
+                if t and t.get("status") == "cancelled":
+                    return True
+        return False
 
 
 async def resume_stale(ledger: Ledger, queue: Queue) -> int:

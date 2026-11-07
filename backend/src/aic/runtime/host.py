@@ -102,6 +102,9 @@ class AgentHost:
             if agent.get("state") == "dormant":
                 await ledger.update_agent(agent["id"], {"state": "active"})
             ticket = await ledger.get_ticket(inv["ticketId"])
+            if ticket and ticket["status"] == "cancelled":
+                log("info", "turn.skipped", agent=inv["agentId"], reason="the owner stopped this job")
+                return ""
             if ticket and ticket["status"] == "open" and ticket["to"] == agent["id"]:
                 await move(self.d, ticket["id"], "in_progress", "picked up")
             if agent.get("kind") == "worker" and agent.get("worker_state") != "working":

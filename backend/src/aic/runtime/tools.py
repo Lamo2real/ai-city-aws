@@ -40,6 +40,14 @@ from aic.shared.hierarchy.actions import (
     status_summary,
 )
 from aic.shared.hierarchy.factory import worker_spec
+from aic.shared.hierarchy.tasks import (
+    cancel_preview,
+    cancel_task,
+    describe_task,
+    find_task,
+    short_name,
+    which_one,
+)
 from aic.shared.ids import department_key, manager_id
 from aic.shared.knowledge.model import SCOPES
 from aic.shared.knowledge.search import search
@@ -186,6 +194,7 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 **({"acceptance": str(cons)} if cons else {}),
                 **({"conversation": c.conversation} if c.conversation else {}),
                 **({"app_id": target["app_id"]} if target else {}),
+                "owner_words": str(a.get("owner_words", ""))[:500],  # so "the Porsche thing" finds it later
             },
         )
         body = f"New task from the owner.\nGoal: {a['goal']}\nOwner's words: {a.get('owner_words', '')}"
@@ -211,6 +220,26 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             msg["conversation"] = c.conversation
         await send(d, msg)
         return f"Handed to the Orchestrator as task {t['id']}."
+
+    async def task_status(a: dict[str, Any]) -> str:
+        task, candidates = await find_task(d.ledger, str(a.get("query") or ""))
+        if task is None:
+            return which_one(candidates)
+        return await describe_task(d.ledger, task)
+
+    async def cancel(a: dict[str, Any]) -> str:
+        task, candidates = await find_task(d.ledger, str(a.get("query") or ""))
+        if task is None:
+            return which_one(candidates)
+        if task["status"] in DONE_OR_GONE:
+            return f"“{short_name(task)}” is not running: it already {task['status'].replace('cancelled', 'stopped')}."
+        if not a.get("confirm"):
+            return await cancel_preview(d.ledger, task) + " (Ask the owner; call again with confirm=true on yes.)"
+        n = await cancel_task(d, task)
+        return (
+            f"Stopped “{short_name(task)}”: {n['jobs']} part{'s' if n['jobs'] != 1 else ''} cancelled, "
+            f"{n['workers']} worker{'s' if n['workers'] != 1 else ''} sent home. Nothing more will be spent on it."
+        )
 
     async def get_status(_: dict[str, Any]) -> str:
         import json
@@ -267,7 +296,21 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             ),
             delegate,
         ),
-        ToolSpec("get_status", "Tickets, departments, live agents and spend, in one summary.", _obj({}), get_status),
+        ToolSpec("get_status", "Jobs, departments, live agents and spend, in one summary.", _obj({}), get_status),
+        ToolSpec(
+            "get_task_status",
+            "How one of the owner's jobs is going, in plain words. query: the words the owner used for it "
+            "('the Porsche sentences', 'the game'); empty = the only running job.",
+            _obj({"query": _s()}, ("query",)),
+            task_status,
+        ),
+        ToolSpec(
+            "cancel_task",
+            "Stop one of the owner's jobs. First call with confirm=false to get the one-line question to ask the "
+            "owner; on their yes, call again with confirm=true. query: the words the owner used for it.",
+            _obj({"query": _s(), "confirm": {"type": "boolean"}}, ("query", "confirm")),
+            cancel,
+        ),
         ToolSpec(
             "answer_question",
             "Send the owner's answer to a waiting question.",

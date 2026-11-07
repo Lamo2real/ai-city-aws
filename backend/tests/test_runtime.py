@@ -129,6 +129,9 @@ def test_aces_prompt_states_its_name_greetings_spoken_style_and_limits() -> None
     ):
         assert s in body
     assert "buddy" in body and "informal" in body
+    for s in ("get_task_status", "cancel_task", "confirm=true", "Never stop a job without the yes", "seven-year-old"):
+        assert s in body
+    assert 'Never say "ticket"' in body  # no inside words to the owner
     assert "Never ask for a password or key in chat" in body  # access goes through the HUD, never chat
 
 

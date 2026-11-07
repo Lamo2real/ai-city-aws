@@ -99,14 +99,14 @@ async def status_summary(d: CityDeps) -> dict[str, Any]:
     daily = s.get("daily_global_usd")
     return {
         "paused": await d.ledger.is_paused(),
-        "tickets_running": sum(1 for t in tickets if t["status"] in ("in_progress", "in_review")),
-        "tickets_waiting_for_owner": sum(1 for t in tickets if t["status"] == "waiting_on_owner"),
+        "jobs_running": sum(1 for t in tickets if t["status"] in ("in_progress", "in_review")),
+        "jobs_waiting_for_owner": sum(1 for t in tickets if t["status"] == "waiting_on_owner"),
         "departments": [x["name"] for x in departments],
         "workers_busy": sum(1 for a in active if a.get("kind") == "worker"),
         "questions_waiting": len(questions),
-        "spend_today": f"{format_usd(today['usd'])} (estimate, no daily limit)"
+        "spend_today": f"about {format_usd(today['usd'])} today; no spending limit is set"
         if daily is None
-        else f"{format_usd(today['usd'])} of {format_usd(daily)} (estimate)",
+        else f"about {format_usd(today['usd'])} of the {format_usd(daily)} daily limit",
     }
 
 
