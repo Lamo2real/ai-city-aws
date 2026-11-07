@@ -352,6 +352,7 @@ async def test_sending_waits_for_the_owner_with_a_full_preview_then_runs_once_ap
         "subject": "Hi",
         "body": "Hello Bo",
     }
+    assert city.bus.of_type("approval.requested")[-1]["preview"]["subject"] == "Hi"  # the HUD shows it at once
     await city.deps.ledger.decide_approval(ap["id"], True)
     assert await send.handler(args) == "Sent."
     assert "Needs the owner's approval" in await send.handler(args)  # the approval was used once

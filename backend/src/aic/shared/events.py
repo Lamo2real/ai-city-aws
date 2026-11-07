@@ -184,6 +184,8 @@ class ApprovalRequested(_E):
     kind: str | None = None
     """``connector.add`` for an add-connector approval (the chat shows a connector card)."""
     connector_id: str | None = None
+    preview: dict[str, Any] | None = None
+    """An email or event the owner sees before approving (``docs/MAIL_CALENDAR.md`` §5.5)."""
 
 
 class ApprovalDecided(_E):

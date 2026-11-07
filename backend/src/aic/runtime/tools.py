@@ -756,9 +756,11 @@ async def file_approval(
     if preview:
         rec["preview"] = preview  # what Needs you shows (an email or an event), MAIL_CALENDAR.md §5.5
     a = await d.ledger.request_approval(rec)
-    await d.bus.put(
-        {"type": "approval.requested", "id": a["id"], "agent": c.agent_id, "action": action, "reason": reason}
-    )
+    e: dict[str, Any] = {"type": "approval.requested", "id": a["id"], "agent": c.agent_id, "action": action}
+    e["reason"] = reason
+    if preview:
+        e["preview"] = preview
+    await d.bus.put(e)
 
 
 def gate_tools(d: CityDeps, c: TurnCtx, specs: list[ToolSpec]) -> list[ToolSpec]:
