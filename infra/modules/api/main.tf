@@ -1,6 +1,6 @@
 # Lambdas (Node.js 24, arm64), the HTTP API (Cognito JWT authorizer), the WebSocket API (Lambda
 # authorizer on $connect), SQS → dispatcher, EventBridge rules (City view, ledger, notifications,
-# approvals), the Step Functions approval workflow and the EventBridge Scheduler jobs (all DISABLED).
+# approvals), the Step Functions approval workflow and the scheduled jobs (EventBridge rules).
 terraform {
   required_version = ">= 1.11.0"
   required_providers {
@@ -709,44 +709,33 @@ resource "aws_cloudwatch_event_target" "approval" {
   role_arn       = aws_iam_role.events_sfn.arn
 }
 
-# ---------- recurring jobs: all created DISABLED ----------
-resource "aws_scheduler_schedule_group" "this" {
-  name = var.name
-  tags = local.tags
+# ---------- recurring jobs: classic EventBridge rules ----------
+# EventBridge Scheduler could never invoke the Lambda in this account (every attempt a TargetError, with the
+# role's policy simulating as allowed: an organisation-level refusal of role-based service invocations).
+# Rules invoke through the function's resource policy, which works here (the city-event rules do).
+resource "aws_cloudwatch_event_rule" "job" {
+  for_each            = local.jobs
+  name                = "${var.name}-${each.key}"
+  schedule_expression = each.value.schedule
+  state               = lookup(each.value, "state", "DISABLED")
+  tags                = local.tags
 }
 
-resource "aws_iam_role" "scheduler" {
-  name                 = "${var.name}-scheduler"
-  permissions_boundary = var.boundary_arn
-  assume_role_policy = jsonencode({
-    Version   = "2012-10-17"
-    Statement = [{ Effect = "Allow", Principal = { Service = "scheduler.amazonaws.com" }, Action = "sts:AssumeRole", Condition = { StringEquals = { "aws:SourceAccount" = var.account_id } } }]
-  })
-  tags = local.tags
+resource "aws_cloudwatch_event_target" "job" {
+  for_each  = local.jobs
+  rule      = aws_cloudwatch_event_rule.job[each.key].name
+  target_id = each.key
+  arn       = aws_lambda_function.fn[each.value.fn].arn
+  input     = jsonencode(each.value.input)
 }
 
-resource "aws_iam_role_policy" "scheduler" {
-  name   = "invoke-jobs"
-  role   = aws_iam_role.scheduler.id
-  policy = jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = [aws_lambda_function.fn["scheduler"].arn, aws_lambda_function.fn["notifier"].arn] }] })
-}
-
-resource "aws_scheduler_schedule" "job" {
-  for_each                     = local.jobs
-  name                         = "${var.name}-${each.key}"
-  group_name                   = aws_scheduler_schedule_group.this.name
-  state                        = lookup(each.value, "state", "DISABLED")
-  schedule_expression          = each.value.schedule
-  schedule_expression_timezone = "UTC"
-  kms_key_arn                  = var.kms_key_arn
-  flexible_time_window {
-    mode = "OFF"
-  }
-  target {
-    arn      = aws_lambda_function.fn[each.value.fn].arn
-    role_arn = aws_iam_role.scheduler.arn
-    input    = jsonencode(each.value.input)
-  }
+resource "aws_lambda_permission" "job" {
+  for_each      = local.jobs
+  statement_id  = "job-${each.key}"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.fn[each.value.fn].function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.job[each.key].arn
 }
 
 # The one Lambda bundle, reused by the knowledge module's function.

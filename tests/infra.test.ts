@@ -591,6 +591,20 @@ describe("AIC warm-keeper (the owner's under-3-seconds target)", () => {
       /scheduler.*env = \{ AIC_RUNTIME_ARN_ACE = var\.runtime_arns\["ace"\], AIC_RUNTIME_VERSION = var\.runtime_version, AIC_WS_ENDPOINT = "https:\/\/\$\{aws_apigatewayv2_api\.ws\.id\}\.execute-api\.\$\{var\.region\}\.amazonaws\.com\/prod", AIC_CONNECTIONS_TABLE = var\.connections_table \}/,
     );
   });
+  it("every scheduled job is an EventBridge rule with a resource-policy permission, not an EventBridge Scheduler schedule", () => {
+    expect(api).toMatch(/resource "aws_cloudwatch_event_rule" "job" \{\n {2}for_each\s+= local\.jobs/);
+    expect(api).toMatch(/schedule_expression = each\.value\.schedule/);
+    expect(api).toMatch(
+      /resource "aws_cloudwatch_event_target" "job"[\s\S]*?input\s+= jsonencode\(each\.value\.input\)/,
+    );
+    expect(api).toMatch(
+      /resource "aws_lambda_permission" "job"[\s\S]*?principal\s+= "events\.amazonaws\.com"[\s\S]*?source_arn\s+= aws_cloudwatch_event_rule\.job\[each\.key\]\.arn/,
+    );
+    expect(api).not.toMatch(/aws_scheduler_schedule|scheduler\.amazonaws\.com|aws_iam_role" "scheduler"/);
+    expect(api).toMatch(
+      /improve\s*=\s*\{ schedule = "cron\(0 3 \? \* SUN \*\)", fn = "scheduler", input = \{ job = "improve" \} \}/,
+    ); // stays DISABLED
+  });
   it("the dispatcher and ws-broadcast are always on: published, a live alias, provisioned concurrency 1, and every trigger uses the alias", () => {
     expect(api).toMatch(/publish = contains\(\["api", "dispatcher", "ws-broadcast"\], each\.key\)/);
     expect(api).toMatch(
