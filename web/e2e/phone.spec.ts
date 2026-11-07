@@ -26,6 +26,12 @@ test("phone: AIC and the City work at 412px wide", async ({ page }) => {
   });
   await expect(page.getByRole("cell", { name: "$0.30" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(
+    await page.evaluate(() => {
+      const main = document.querySelector("main")!;
+      return main.scrollHeight <= main.clientHeight + 1; // nothing below the chat to scroll to
+    }),
+  ).toBe(true);
   await page.locator(".talk").screenshot({ path: `${SHOTS}/phone-ace-chat.png` });
   await page.goto("/#/city");
   await expect(page.locator("section.city")).toHaveAttribute("data-city-ready", "1");
