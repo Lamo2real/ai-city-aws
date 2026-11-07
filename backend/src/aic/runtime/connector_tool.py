@@ -12,8 +12,8 @@ import json
 import re
 from typing import Any
 
-from aic.shared import connector_packages
 from aic.connectors.openapi_add import add_from_link
+from aic.shared import connector_packages
 from aic.shared.connectors import (
     DEFAULT_ROLES,
     ConnectorStore,

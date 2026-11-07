@@ -20,8 +20,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from aic.shared import connector_packages
 from aic.connectors import openapi_admin
+from aic.shared import connector_packages
 from aic.shared.connectors import (
     LEVELS,
     ROLES,

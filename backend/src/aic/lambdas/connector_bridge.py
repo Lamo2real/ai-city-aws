@@ -16,8 +16,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from aic.shared import connector_packages
 from aic.connectors import openapi_bridge
+from aic.shared import connector_packages
 from aic.shared.connectors import SEP, ConnectorStore, Record
 from aic.shared.log import log
 from aic.shared.mcp_http import McpError, McpHttp, Transport, urllib_transport
