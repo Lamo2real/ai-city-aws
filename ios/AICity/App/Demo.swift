@@ -10,9 +10,20 @@ enum Demo {
         defaults.set("https://demo.ai-city.invalid", forKey: "aic.site")
         let http = DemoTransport()
         let store = ConfigStore(defaults: defaults, http: http, bundleHost: nil)
-        let signedOut = ProcessInfo.processInfo.arguments.contains("-signedout")
-        let auth = DemoAuth(signedIn: !signedOut)
-        let model = AppModel(configStore: store, hud: HudStore(archive: NoChatArchive()), http: http, makeAuth: { _ in auth }, connectLive: false)
+        let args = ProcessInfo.processInfo.arguments
+        let signedOut = args.contains("-signedout")
+        let makeAuth: (AppConfig) -> AuthClient
+        if args.contains("-demo-cognito") {
+            // The real sign-in code (SRP, Keychain, refresh with rotation) against a fake Cognito, so quitting and
+            // relaunching can be checked in the simulator. The tokens survive relaunches like real ones.
+            let keychain = KeychainTokenStore(service: "city.ai.aic.demo.tokens")
+            if args.contains("-reset") { keychain.clear(); DemoCognito.reset() }
+            makeAuth = { CognitoAuth(config: $0, http: http, store: keychain) }
+        } else {
+            let auth = DemoAuth(signedIn: !signedOut)
+            makeAuth = { _ in auth }
+        }
+        let model = AppModel(configStore: store, hud: HudStore(archive: NoChatArchive()), http: http, makeAuth: makeAuth, connectLive: false)
         http.model = model
         UserDefaults.standard.set(true, forKey: "aic.guide.done")
         return model
@@ -105,6 +116,8 @@ final class DemoTransport: HTTPTransport, @unchecked Sendable {
     weak var model: AppModel?
 
     func send(_ request: URLRequest) async throws -> (Data, Int) {
+        if request.url?.host?.hasPrefix("cognito-idp.") == true { return try DemoCognito.answer(request) }
+        if let bearer = request.value(forHTTPHeaderField: "Authorization") { DemoCognito.defaults.set(bearer, forKey: "lastBearer") }
         let path = request.url?.path ?? ""
         let method = request.httpMethod ?? "GET"
         let body: JSONValue
@@ -139,6 +152,50 @@ final class DemoTransport: HTTPTransport, @unchecked Sendable {
             try? await Task.sleep(for: .milliseconds(40))
         }
         hud.event(["type": "ace.reply", "conversation": "main", "text": .string(Demo.reply), "done": true])
+    }
+}
+
+/// A fake Cognito for `-demo-cognito`: accepts any password, the code 123456, issues ID tokens that last
+/// 2 minutes (so a relaunch after a minute or more goes through a refresh) and rotates the refresh token on every
+/// refresh, refusing an old one like Cognito does. Its state lives in UserDefaults "aic.demo.cognito".
+enum DemoCognito {
+    static let defaults = UserDefaults(suiteName: "aic.demo.cognito")!
+    static func reset() { defaults.removePersistentDomain(forName: "aic.demo.cognito") }
+
+    static func answer(_ request: URLRequest) throws -> (Data, Int) {
+        let target = (request.value(forHTTPHeaderField: "X-Amz-Target") ?? "").replacingOccurrences(of: "AWSCognitoIdentityProviderService.", with: "")
+        let body = request.httpBody.flatMap(JSONValue.parse) ?? .null
+        func tokens() -> JSONValue {
+            let n = defaults.integer(forKey: "generation") + 1
+            defaults.set(n, forKey: "generation")
+            defaults.set("refresh-\(n)", forKey: "refresh")
+            return ["AuthenticationResult": ["IdToken": .string("id-\(n)"), "AccessToken": .string("access-\(n)"),
+                                             "RefreshToken": .string("refresh-\(n)"), "ExpiresIn": 120]]
+        }
+        let out: JSONValue
+        var status = 200
+        switch target {
+        case "InitiateAuth":
+            out = ["ChallengeName": "PASSWORD_VERIFIER", "ChallengeParameters": ["USER_ID_FOR_SRP": "demo-user", "SRP_B": "2", "SALT": "ab", "SECRET_BLOCK": "AAAA"]]
+        case "RespondToAuthChallenge" where body["ChallengeName"].string == "PASSWORD_VERIFIER":
+            out = ["ChallengeName": "SOFTWARE_TOKEN_MFA", "Session": "s-1", "ChallengeParameters": [:]]
+        case "RespondToAuthChallenge":
+            if body["ChallengeResponses"]["SOFTWARE_TOKEN_MFA_CODE"].string == "123456" {
+                defaults.set(defaults.integer(forKey: "signIns") + 1, forKey: "signIns")
+                out = tokens()
+            } else { out = ["__type": "CodeMismatchException"]; status = 400 }
+        case "GetTokensFromRefreshToken":
+            if let r = body["RefreshToken"].string, r == defaults.string(forKey: "refresh") {
+                defaults.set(defaults.integer(forKey: "refreshes") + 1, forKey: "refreshes")
+                out = tokens()
+            } else { out = ["__type": "NotAuthorizedException", "message": "Invalid Refresh Token"]; status = 400 }
+        case "RevokeToken":
+            defaults.removeObject(forKey: "refresh")
+            out = [:]
+        default:
+            out = ["__type": "InvalidParameterException"]; status = 400
+        }
+        return (try JSONEncoder().encode(out), status)
     }
 }
 

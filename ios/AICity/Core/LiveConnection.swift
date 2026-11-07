@@ -114,6 +114,13 @@ final class LiveConnection {
         }
     }
 
+    /// Back in the foreground: reconnect now if the connection is down or waiting out a back-off.
+    func resumeNow() {
+        guard !stopped, status != .online else { return }
+        tries = 0
+        start()
+    }
+
     func stop() {
         stopped = true
         generation += 1
