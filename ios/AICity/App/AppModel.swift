@@ -160,7 +160,7 @@ final class AppModel {
                 if s == .online, was != .online {
                     Task { await self.loadCity(); await self.flushOutbox() }  // events may have been missed
                 }
-                if s == .signedOut { self.boot = .signedOut }
+                if s == .signedOut { self.lostSession() }
             }
             live = l
             l.start()
@@ -174,6 +174,29 @@ final class AppModel {
     }
 
     func signedIn() async { await start() }
+
+    /// The app came to the front (after launch, or after hours or weeks in the background): refresh the tokens
+    /// if they are about to expire, reconnect the live connection at once instead of waiting out a back-off,
+    /// and catch up on the city. Only a refresh token Cognito refuses sends the owner to the sign-in screen;
+    /// no connection keeps everything as it is.
+    func becameActive() async {
+        guard boot == .ready, let a = auth else { return }
+        do {
+            if try await a.idToken(fresh: false) == nil { return lostSession() }
+        } catch {
+            return  // offline: the outbox and the live connection retry on their own
+        }
+        live?.resumeNow()
+        await loadCity()
+    }
+
+    /// Cognito refused the refresh token (revoked, expired, or signed out elsewhere): sign in again.
+    /// The conversation on this phone is kept.
+    func lostSession() {
+        live?.stop()
+        live = nil
+        boot = .signedOut
+    }
 
     /// Opens any area: a tab, or a page under More.
     func open(_ s: AppSection) {
@@ -233,6 +256,7 @@ final class AppModel {
         guard let api else { return }
         hud.beginSnapshot()
         do { hud.snapshot(try await api.city()) } catch {
+            if (error as? APIError) == .signedOut, auth?.hasSession == false { return lostSession() }
             hud.loadError = (error as? LocalizedError)?.errorDescription ?? "The city could not load."
         }
     }

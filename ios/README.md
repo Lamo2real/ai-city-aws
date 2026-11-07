@@ -27,7 +27,7 @@ Requires Xcode 26 or later; runs on iOS 17 or later.
 3. On first launch the app asks for your AI City web address, the one you open the HUD at (for example `d1234abcd.cloudfront.net`). It reads `config.json` from there, like the web HUD. To skip that screen, put the host in `Config/AICity.xcconfig` as `AIC_SITE_HOST`.
 4. Sign in with your email, password and 6-digit code, exactly as on the web.
 
-**Demo mode (Debug builds only):** in Xcode, *Product → Scheme → Edit Scheme → Run → Arguments*, add `-demo` to see the app with a made-up city and no AWS at all (`-demo -signedout` shows the sign-in screens; the demo password `first` walks the first-login steps and the code is `123456`). Release builds don't contain the demo.
+**Demo mode (Debug builds only):** in Xcode, *Product → Scheme → Edit Scheme → Run → Arguments*, add `-demo` to see the app with a made-up city and no AWS at all (`-demo -signedout` shows the sign-in screens; the demo password `first` walks the first-login steps and the code is `123456`). `-demo -demo-cognito` uses the real sign-in code against a fake Cognito (any password, code `123456`, ID tokens that last 2 minutes) so you can quit and relaunch and see that you stay signed in; add `-reset` to start over. Release builds don't contain the demo.
 
 Tests: *Product → Test* (⌘U), or
 
@@ -46,7 +46,7 @@ cd ios && xcodebuild test -project AICity.xcodeproj -scheme AICity -destination 
 5. In Xcode pick your iPhone as the run destination and press **Run**.
 6. The first time, the iPhone says the developer is not trusted: **Settings → General → VPN & Device Management →** your Apple Account **→ Trust**.
 
-With a free team the app stops opening after **7 days**; run it from Xcode again to renew. Nothing is lost: your sign-in stays in the iPhone's Keychain until it expires (7 days without use, like the web).
+With a free team the app stops opening after **7 days**; run it from Xcode again to renew. Nothing is lost: your sign-in stays in the iPhone's Keychain, so the app opens signed in.
 
 ### Option B: TestFlight (Apple Developer Program, $99 / year)
 
@@ -59,7 +59,7 @@ The app declares `ITSAppUsesNonExemptEncryption = false` (it uses only Apple's H
 
 ## Security
 
-- **Tokens** (ID, access, refresh) live only in the Keychain, readable only on this iPhone while it's unlocked (`WhenUnlockedThisDeviceOnly`). Sign-out revokes the refresh token at Cognito and deletes them.
+- **Sign in once.** The tokens (ID, access, refresh) live only in the Keychain, on this iPhone only (never synced or backed up), readable after the phone's first unlock since it started. Opening the app, or coming back to it, refreshes them silently; you see the sign-in screen again only if Cognito refuses the refresh token (revoked, or past its validity). Sign-out revokes the refresh token at Cognito and deletes them.
 - **No secrets in the app.** The bundle holds only public values (the site host, if you set it). Cognito IDs and endpoints come from the public `config.json`.
 - **HTTPS only.** App Transport Security is on with no exceptions; the app also refuses a `config.json` whose API isn't `https://` or whose WebSocket isn't `wss://`.
 - **Agent output is text.** AIC's Markdown is parsed into native text runs (bold, italic, code, lists, tables). AIC's replies never go into a web view; HTML stays visible as characters; only `http(s)` links open, in Safari. The one web view in the app is the City map: bundled code only, no network, no tokens.

@@ -234,27 +234,39 @@ final class CognitoAuth: AuthClient, @unchecked Sendable {
     func idToken(fresh: Bool = false) async throws -> String? {
         guard let t = store.load() else { return nil }
         if !fresh, t.expiresAt.timeIntervalSince(now()) > 60 { return t.idToken }
-        // One refresh at a time: with rotation, a second refresh with the old token would be refused.
+        // One refresh at a time: with rotation, a second refresh with the old token would be refused. Callers
+        // that arrive while one runs wait for it; only the refresh itself clears the slot when it is done.
         let task: Task<String?, Error> = lock.withLock {
             if let r = refreshing { return r }
-            let r = Task { try await self.refresh(t) }
+            let r = Task { try await self.refresh() }
             refreshing = r
             return r
         }
-        defer { lock.withLock { refreshing = nil } }
         return try await task.value
     }
 
-    private func refresh(_ t: Tokens) async throws -> String? {
+    private func refresh() async throws -> String? {
+        defer { lock.withLock { refreshing = nil } }
+        guard let t = store.load() else { return nil }  // the newest tokens, read when this refresh starts
+        return try await refresh(t, retry: true)
+    }
+
+    private func refresh(_ t: Tokens, retry: Bool) async throws -> String? {
         do {
             let r = try await call("GetTokensFromRefreshToken", ["ClientId": clientId, "RefreshToken": t.refreshToken])
             let a = r["AuthenticationResult"]
             guard let id = a["IdToken"].string, let access = a["AccessToken"].string else { store.clear(); return nil }
+            // Rotation: Cognito sends a new refresh token each time and the old one stops working; keep the new one.
             store.save(Tokens(idToken: id, accessToken: access, refreshToken: a["RefreshToken"].string ?? t.refreshToken,
                               expiresAt: now().addingTimeInterval(a["ExpiresIn"].double ?? 900)))
             return id
         } catch let e as CognitoError where e.name == "NotAuthorizedException" {
-            store.clear()  // refused (expired, revoked, already rotated): sign in again
+            // If the stored refresh token changed while this request was out, it was rotated meanwhile: use the
+            // newer one before concluding the owner must sign in again.
+            if retry, let latest = store.load(), latest.refreshToken != t.refreshToken {
+                return latest.expiresAt.timeIntervalSince(now()) > 60 ? latest.idToken : try await refresh(latest, retry: false)
+            }
+            store.clear()  // refused (expired, revoked): sign in again
             return nil
         }
     }
