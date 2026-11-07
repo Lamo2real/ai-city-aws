@@ -680,10 +680,13 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             }
         )
         if verdict == "PASS":
-            await move(d, t["id"], "done", "review passed", {"review_rounds": rnd})
             await d.ledger.update_agent(t["to"], {"worker_state": "completed"})
             await d.bus.put({"type": "worker.state", "id": t["to"], "state": "completed"})
-            return f"PASS recorded. Release {t['to']} when you no longer need it."
+            await move(d, t["id"], "done", "review passed", {"review_rounds": rnd})  # sends the worker home
+            w = await d.ledger.get_agent(t["to"])
+            if w and w.get("state") == "retired":
+                return f"PASS recorded. {t['to']} has finished and gone home."
+            return f"PASS recorded. {t['to']} still has other work; it goes home when that passes."
         if rnd >= d.max_review_rounds:
             await move(d, t["id"], "waiting_on_owner", "too many review rounds", {"review_rounds": rnd})
             q = await d.ledger.ask_question(

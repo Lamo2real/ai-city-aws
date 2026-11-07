@@ -718,6 +718,7 @@ _WHOLE_KEYS = (
     "max_concurrent_workers_per_department",
     "max_concurrent_workers_global",
     "max_new_sessions_per_second",
+    "worker_idle_release_minutes",
 )
 
 

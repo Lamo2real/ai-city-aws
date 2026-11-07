@@ -1,11 +1,12 @@
 {
-  "$comment": "Spend caps are off by default (null = no limit), by the owner's choice. The owner can set one in Settings. Concurrency ceilings stay: they protect AgentCore quotas, not spend. max_workers_per_goal is a hard cap on the live workers one manager may have on one goal at a time (the owner's choice after a 50-sentence request hired 21 workers); hire_worker refuses above it.",
+  "$comment": "Spend caps are off by default (null = no limit), by the owner's choice. The owner can set one in Settings. Concurrency ceilings stay: they protect AgentCore quotas, not spend. max_workers_per_goal is a hard cap on the live workers one manager may have on one goal at a time (the owner's choice after a 50-sentence request hired 21 workers); hire_worker refuses above it. worker_idle_release_minutes: a worker with no turn for this long and nothing moving goes home (released by the sweep), paused city included.",
   "monthly_budget_usd": null,
   "daily_global_usd": null,
   "daily_department_usd": null,
   "max_workers_per_goal": 3,
   "max_concurrent_workers_per_department": 10,
   "max_concurrent_workers_global": 2450,
+  "worker_idle_release_minutes": 15,
   "max_new_sessions_per_second": 20,
   "turn_timeout_minutes": 15,
   "async_job_soft_limit_minutes": 450,

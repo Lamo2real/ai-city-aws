@@ -16,6 +16,7 @@ from ..events import EventBus, now_iso
 from ..ids import new_id
 from ..knowledge.service import KnowledgeAccess
 from ..ledger import Ledger, Record
+from ..log import log
 from .factory import FactoryClient
 from .queue import AgentRole, Queue, WorkMessage
 
@@ -53,12 +54,36 @@ class CityDeps:
     """A ``ModelRunner`` for the utility model (AIC's quick triage before delegating); None = always delegate."""
 
 
+FINAL = ("done", "failed", "cancelled")
+OPEN_ASSIGNMENT = ("open", "in_progress", "in_review", "waiting_on_owner")
+
+
+async def release_if_finished(d: CityDeps, worker_id: str, manager_id: str | None = None) -> bool:
+    """Sends a worker home once it has nothing left to do: no assignment still open. The same path a manager's
+    `release_worker` takes (retired, worker_state released, one `agent.retired` event), so the City walks it
+    home; releasing an already-released worker is a no-op."""
+    w = await d.ledger.get_agent(worker_id)
+    if not w or w.get("kind") != "worker" or w.get("state") == "retired":
+        return False
+    if await d.ledger.tickets_of(worker_id, OPEN_ASSIGNMENT):
+        return False
+    await d.factory.release(worker_id, manager_id or str(w.get("parent")))
+    log("info", "worker.released_done", worker=worker_id)
+    return True
+
+
 async def move(d: CityDeps, id: str, status: str, note: str = "", patch: Record | None = None) -> Record:
-    """Moves a ticket and tells the city."""
+    """Moves a ticket and tells the city. An assignment reaching its final state sends its worker home
+    (unless the worker still has another open assignment)."""
     r = await d.ledger.set_ticket_status(id, status, note, patch or {})
     if r:
         ticket, previous = r
         await d.bus.put({"type": "ticket.status", "ticket": ticket, "previous": previous})
+        if status in FINAL and ticket.get("kind") == "assignment" and ticket.get("to"):
+            try:
+                await release_if_finished(d, str(ticket["to"]), str(ticket.get("from") or ""))
+            except Exception as e:  # the ticket moved; a worker that can't be released is logged, not fatal
+                log("warn", "worker.release_failed", worker=str(ticket["to"]), error=type(e).__name__)
         return ticket
     t = await d.ledger.get_ticket(id)
     assert t is not None
