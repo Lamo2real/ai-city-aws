@@ -34,6 +34,11 @@ variable "user_pool_endpoint" { type = string }
 variable "client_id" { type = string }
 variable "app_origin" { type = string }
 variable "runtime_arns" { type = map(string) }
+variable "runtime_version" {
+  type        = string
+  default     = ""
+  description = "The agent image tag. Part of AIC's session id, so a deploy reaches AIC on its next message."
+}
 variable "utility_invoke_arns" { type = list(string) }
 variable "utility_profile_arn" { type = string }
 variable "profile_prefix" { type = string }
@@ -61,7 +66,7 @@ locals {
   # name => bundle, handler, timeout, memory, extra env
   functions = {
     api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 512, env = { AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_USER_POOL_ID = var.user_pool_id, AIC_OWNER_EMAIL = var.owner_email } }
-    dispatcher    = { bundle = "app", handler = "aic.lambdas.dispatcher.handler", timeout = 120, memory = 256, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_ARN_ORCHESTRATOR = var.runtime_arns["orchestrator"], AIC_RUNTIME_ARN_MANAGER = var.runtime_arns["manager"], AIC_RUNTIME_ARN_WORKER = var.runtime_arns["worker"] } }
+    dispatcher    = { bundle = "app", handler = "aic.lambdas.dispatcher.handler", timeout = 120, memory = 256, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_ARN_ORCHESTRATOR = var.runtime_arns["orchestrator"], AIC_RUNTIME_ARN_MANAGER = var.runtime_arns["manager"], AIC_RUNTIME_ARN_WORKER = var.runtime_arns["worker"], AIC_RUNTIME_VERSION = var.runtime_version } }
     factory       = { bundle = "app", handler = "aic.lambdas.factory.handler", timeout = 30, memory = 256, env = {} }
     ledger-writer = { bundle = "app", handler = "aic.lambdas.ledger_writer.handler", timeout = 30, memory = 256, env = {} }
     scheduler     = { bundle = "app", handler = "aic.lambdas.scheduler.handler", timeout = 120, memory = 256, env = {} }

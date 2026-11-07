@@ -196,3 +196,14 @@ def test_allows_prompt_and_code_changes_and_new_tests_but_not_edits_to_existing_
     ok, refused = review_changes([{"status": "M", "path": "backend/tests/test_hierarchy_e2e.py"}])
     assert not ok
     assert refused == ["backend/tests/test_hierarchy_e2e.py"]
+
+
+def test_aic_gets_a_fresh_session_per_runtime_version_other_roles_keep_theirs() -> None:
+    from aic.lambdas.dispatcher import session_id_for
+
+    aic: Any = {"role": "ace", "conversation": "main"}
+    old, new = session_id_for(aic, "owner", "rt-aaaa"), session_id_for(aic, "owner", "rt-bbbb")
+    assert old != new and len(old) >= 33
+    assert session_id_for(aic, "owner", "rt-aaaa") == old  # same version, same session
+    worker: Any = {"role": "worker", "department": "eng", "agentId": "w1"}
+    assert session_id_for(worker, "owner", "rt-aaaa") == session_id_for(worker, "owner", "rt-bbbb")
