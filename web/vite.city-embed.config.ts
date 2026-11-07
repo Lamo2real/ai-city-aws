@@ -13,7 +13,11 @@ export default defineConfig({
     modulePreload: false,
     rollupOptions: {
       input: "city-embed.html",
-      output: { entryFileNames: "city-embed.js", chunkFileNames: "city-embed-[name].js", assetFileNames: "city-embed.[ext]" },
+      output: {
+        entryFileNames: "city-embed.js",
+        chunkFileNames: "city-embed-[name].js",
+        assetFileNames: "city-embed.[ext]",
+      },
     },
   },
 });

@@ -7,7 +7,8 @@ import { mountCity } from "../city/scene.js";
 type Post = { postMessage(m: unknown): void };
 const native = (): Post | undefined =>
   (window as unknown as { webkit?: { messageHandlers?: { city?: Post } } }).webkit?.messageHandlers?.city;
-const tell = (type: "agent" | "building" | "none" | "ready", id: string | null = null) => native()?.postMessage({ type, id });
+const tell = (type: "agent" | "building" | "none" | "ready", id: string | null = null) =>
+  native()?.postMessage({ type, id });
 
 const root = document.getElementById("city")!;
 const scene = mountCity(root, {

@@ -8,7 +8,10 @@ import { fingerprint } from "../scripts/city-embed-stamp.mjs";
 
 describe("iPhone City bundle", () => {
   it("is built from the current City scene sources", () => {
-    const stamped = readFileSync(new URL("../ios/AICity/CityWeb/city-embed.sources.txt", import.meta.url), "utf8").trim();
+    const stamped = readFileSync(
+      new URL("../ios/AICity/CityWeb/city-embed.sources.txt", import.meta.url),
+      "utf8",
+    ).trim();
     expect(stamped, "Run: npm run build:city-embed -w @aic/web").toBe(fingerprint());
   });
   it("has no network access and loads only its own script", () => {
