@@ -122,6 +122,8 @@ locals {
       { Sid = "ReadAppGrants", Action = local.ledger_read, Resource = [var.ledger_arn], Condition = { "ForAllValues:StringEquals" = { "dynamodb:LeadingKeys" = ["APPS"] } } },
       { Sid = "Events", Action = ["events:PutEvents"], Resource = [var.bus_arn] },
       { Sid = "Specs", Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], Resource = ["${aws_s3_bucket.specs.arn}/specs/*"] },
+      # remove deletes every stored spec of a connector, so it lists its own prefix.
+      { Sid = "ListSpecs", Action = ["s3:ListBucket"], Resource = [aws_s3_bucket.specs.arn], Condition = { StringLike = { "s3:prefix" = ["specs/", "specs/*"] } } },
       { Sid = "PackageServers", Action = ["bedrock-agentcore:InvokeAgentRuntime", "bedrock-agentcore:StopRuntimeSession"], Resource = local.host_invoke },
     ]
   }
