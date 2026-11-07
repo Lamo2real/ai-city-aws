@@ -173,8 +173,8 @@ New module `infra/modules/connectors` (replaces the unused `aws_bedrockagentcore
 |---|---|
 | `GET /connectors` | → `{connectors: [Connector]}` (the record without `pk`/`sk`/`oauth.state`) |
 | `PUT /connectors/<id>` | `{roles?, approval?, label?}` → `{connector}` (a role change re-runs the Cedar rewrite; it's a direct owner action, so no extra approval) |
-| `POST /connectors/<id>/login` | → `{url}` (the authorization URL) |
-| `POST /connectors/<id>/login/complete` | `{session_uri, state}` → `{connector}` |
+| `POST /connectors/<id>/login` | → `{url, state}` (the authorization URL; the HUD keeps `state` in sessionStorage for the `?connect=return` handler, the server keeps the session URI) |
+| `POST /connectors/<id>/login/complete` | `{state, session_uri?}` → `{connector}` (`session_uri` from the return URL when AgentCore adds one, else the stored one) |
 | `PUT /connectors/<id>/key` | `{api_key}` or `{client_id, client_secret}` → `{ok: true}` |
 | `POST /connectors/<id>/refresh` | → `{connector}` (re-sync tools) |
 | `DELETE /connectors/<id>` | → `{ok: true}` (target, provider, secret (7-day recovery), Cedar entries, record) |

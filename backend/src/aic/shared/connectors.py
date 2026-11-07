@@ -76,7 +76,7 @@ def public(rec: Mapping[str, Any]) -> Record:
     """The record as the HUD sees it: no keys, no sign-in state."""
     out = {k: v for k, v in rec.items() if k not in ("pk", "sk")}
     if isinstance(out.get("oauth"), dict):
-        out["oauth"] = {k: v for k, v in out["oauth"].items() if k != "state"}
+        out["oauth"] = {k: v for k, v in out["oauth"].items() if k not in ("state", "session_uri")}
     return out
 
 

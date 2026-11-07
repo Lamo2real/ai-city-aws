@@ -582,7 +582,7 @@ async def test_sign_in_starts_with_a_state_and_completes_only_with_the_same_stat
         }
     )
     r = await handle_http(ev("POST", "/connectors/gh/login"), d)
-    assert js(r) == {"url": "https://auth.example.com/authorize?s=1"}
+    assert js(r) == {"url": "https://auth.example.com/authorize?s=1", "state": js(r)["state"]}
     kw = dict(identity.calls)["get_resource_oauth2_token"]
     assert kw["oauth2Flow"] == "USER_FEDERATION" and kw["forceAuthentication"] is True
     assert kw["resourceOauth2ReturnUrl"] == "https://hud.example.com/?connect=return"

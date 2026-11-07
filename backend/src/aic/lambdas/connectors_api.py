@@ -232,8 +232,13 @@ async def _login(c: ConnectorsApi, rec: Record) -> Answer:
     url = r.get("authorizationUrl")
     if not isinstance(url, str):
         return _err(502, "AgentCore Identity didn't give a sign-in link.", "Try again in a moment.")
-    await c.store.update(rec["id"], {"oauth": {**oauth, "state": state}})
-    return 200, {"url": url}
+    session = r.get("sessionUri")
+    await c.store.update(
+        rec["id"],
+        {"oauth": {**oauth, "state": state, **({"session_uri": session} if isinstance(session, str) else {})}},
+    )
+    # The HUD keeps ``state`` in sessionStorage for the shared ``?connect=return`` handler (MAIL_CALENDAR.md §7).
+    return 200, {"url": url, "state": state}
 
 
 async def _complete(c: ConnectorsApi, rec: Record, b: dict[str, Any]) -> Answer:
@@ -241,7 +246,8 @@ async def _complete(c: ConnectorsApi, rec: Record, b: dict[str, Any]) -> Answer:
     given = b.get("state")
     if not (isinstance(state, str) and isinstance(given, str) and hmac.compare_digest(state, given)):
         return _err(400, "That sign-in doesn't match the one started here.", "Start the sign-in again.")
-    session_uri = _owner_secret(b.get("session_uri"), "The session", 1, 2048)
+    stored = (rec.get("oauth") or {}).get("session_uri")
+    session_uri = _owner_secret(b.get("session_uri") or stored, "The session", 1, 2048)
     try:
         await asyncio.to_thread(
             c.identity.complete_resource_token_auth, sessionUri=session_uri, userIdentifier={"userId": OWNER_USER}
@@ -249,7 +255,7 @@ async def _complete(c: ConnectorsApi, rec: Record, b: dict[str, Any]) -> Answer:
     except Exception as e:
         log("warn", "connector.login_complete_failed", connector=rec["id"], error=type(e).__name__)
         return _err(502, "The sign-in couldn't be finished.", "Start the sign-in again.")
-    oauth = {k: v for k, v in (rec.get("oauth") or {}).items() if k != "state"}
+    oauth = {k: v for k, v in (rec.get("oauth") or {}).items() if k not in ("state", "session_uri")}
     out = await _set(c, rec["id"], {"oauth": oauth, "status": "syncing", "error": None})
     await _invoke(c, "sync", rec["id"])
     return 200, {"connector": public(out or rec)}
