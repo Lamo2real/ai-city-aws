@@ -85,11 +85,12 @@ with reason "replaced").
 - `app.draft` {`draft_id`, `ticket_id`, `task_id`, `department`, `title`, `status`, `reason`?, `preview_url`?}
 - `app.published` {`app_id`, `slug`, `title`, `icon_url`?, `url`, `task_id`, `department`}
 - `app.removed` {`app_id`, `slug`}
-- `approval.requested` for `app.publish` also carries `kind`, `draft_id`, `preview_url`, `title`.
+- `approval.requested` carries `kind` (`tool` default, or `app.publish`); `app.publish` also carries `draft_id`, `preview_url`, `title`, `description`.
 
 ## API (owner-only like every route; added to the routes list and `test_api.py`'s owner check)
 - `GET /apps` → `{ "apps": [App, …] }` newest first.
 - `DELETE /apps/<app_id>` → `{ "removed": app_id }`; 404 if unknown.
+- API Lambda env (backend, 2026-11-07): `AIC_APPS_BUCKET`, `AIC_APPS_URL`, `AIC_APPS_DISTRIBUTION_ID`. Without the first two, publish/remove answer 503 and the approval stays pending.
 - `POST /approvals/<id>` (existing): when `kind == "app.publish"`, approve → publish (copy, APP record,
   `app.published`, draft `published`) and return `{approval, app}`; refuse → draft `refused`.
   Publishing is idempotent on `draft_id`.

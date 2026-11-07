@@ -29,11 +29,19 @@ async def on_approval_step(event: dict[str, Any], ledger: Ledger, queue: Queue) 
     agent = await ledger.get_agent(a["agent"])
     if not agent or agent.get("state") == "retired" or not a.get("ticket_id"):
         return {"ok": True}
-    body = (
-        f"The owner approved exactly this action once: {a['action']}. You may run it now, unchanged."
-        if event.get("approved")
-        else f"The owner refused this action: {a['action']}. Do not try it another way; continue without it or report."
-    )
+    if a.get("kind") == "app.publish":
+        if event.get("approved"):
+            return {"ok": True}  # published by the API; app.published tells the city, nothing to resume
+        body = (
+            f"The owner chose not to publish the app “{a.get('title', '')}”. It stays unpublished; "
+            "do not submit or publish it another way."
+        )
+    else:
+        body = (
+            f"The owner approved exactly this action once: {a['action']}. You may run it now, unchanged."
+            if event.get("approved")
+            else f"The owner refused this action: {a['action']}. Do not try it another way; continue without it or report."
+        )
     await queue.send(
         cast(
             WorkMessage,

@@ -18,6 +18,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from aic.shared.apps import workspace_from_env
 from aic.shared.aws import LambdaFactoryClient, aws_city, require_env
 from aic.shared.config import caps_config
 from aic.shared.guard import startup_guard
@@ -122,6 +123,7 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
             factory=factory,
             settings=city.settings,
             max_review_rounds=caps["max_review_rounds"],
+            workspace=workspace_from_env(city.session, e) if role == "worker" else None,
         ),
         HostOptions(
             engine=sdk_engine,

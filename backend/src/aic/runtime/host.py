@@ -12,6 +12,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from aic.shared.apps import drafts_of_ticket
 from aic.shared.events import now_iso
 from aic.shared.hierarchy.actions import CityDeps, move
 from aic.shared.ids import manager_id
@@ -268,6 +269,7 @@ class AgentHost:
                     lines.append(
                         f"- assignment {k['id']} to {k['to']} [{k['status']}], review rounds {k.get('review_rounds', 0)}"
                     )
+                    lines += [_draft_line(dr, "  ") for dr in await drafts_of_ticket(ledger, k["id"])]
             saved = [s for s in await ledger.list_specialists() if s.get("department") == inv.get("department")]
             if saved:
                 lines.append(f"Saved specialists: {', '.join(f'{s["id"]} ({s["specialty"]})' for s in saved)}")
@@ -276,4 +278,11 @@ class AgentHost:
             lines.append(
                 f"Your assignment {inv['ticketId']}: {t.get('goal', '')}\nAcceptance: {t.get('acceptance', '')} [{t.get('status', '?')}]"
             )
+            lines += [_draft_line(dr, "") for dr in await drafts_of_ticket(ledger, inv["ticketId"])]
         return "\n".join(lines)
+
+
+def _draft_line(dr: dict[str, Any], indent: str) -> str:
+    """An app draft as the city checked it (the reason is the city's own words, not the worker's)."""
+    reason = f": {dr['reason']}" if dr.get("reason") else ""
+    return f"{indent}- app draft {dr['draft_id']} [{dr.get('status')}]{reason}"

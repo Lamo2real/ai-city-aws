@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal, cast
 
+from aic.shared.apps import AppsOrigin, get_draft, list_apps, publish_draft, refuse_draft, remove_app
 from aic.shared.aws import aws_city
 from aic.shared.caps import validate_caps
 from aic.shared.config import caps_config
@@ -58,6 +59,8 @@ ROUTES: list[tuple[str, str]] = [
     ("POST", "/city/resume"),
     ("GET", "/memory"),
     ("POST", "/notes"),
+    ("GET", "/apps"),
+    ("DELETE", "/apps/app-1"),
 ]
 
 
@@ -75,6 +78,8 @@ class ApiDeps:
     """A boto3 ``cognito-idp`` client, for re-sending the owner's first-login email."""
     user_pool_id: str | None = None
     owner_email: str | None = None
+    apps: AppsOrigin | None = None
+    """The apps bucket and distribution, for publishing and removing apps."""
 
 
 class _NoFactory:
@@ -175,8 +180,9 @@ async def city_snapshot(d: ApiDeps) -> dict[str, Any]:
         d.ledger.spend("month", "GLOBAL"),
         d.ledger.spend_breakdown("day"),
         d.ledger.list_specialists(),
+        list_apps(d.ledger),
     )
-    agents, departments, tickets, parked, questions, approvals, today, month, day_breakdown, specialists = results
+    agents, departments, tickets, parked, questions, approvals, today, month, day_breakdown, specialists, apps = results
     spend = {dep["name"]: day_breakdown.get(f"DEPT#{dep['key']}", {}).get("usd", 0) for dep in departments}
     return {
         "agents": [{**a, "model_label": model_label(a["model"])} for a in agents],
@@ -186,6 +192,7 @@ async def city_snapshot(d: ApiDeps) -> dict[str, Any]:
         "questions": questions,
         "approvals": approvals,
         "specialists": specialists,
+        "apps": apps,
         "usage": {"usd": today["usd"], "turns": today["turns"], "tokens": today["tokens"]},
         "month": {"usd": month["usd"]},
         "spend": spend,
@@ -370,8 +377,25 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
             return problem(404, "That approval does not exist.")
         if cur.get("status") != "pending":
             return problem(409, "That approval was already decided.")
+        app: Record | None = None
+        if cur.get("kind") == "app.publish":
+            draft_id = str(cur.get("draft_id") or "")
+            if approved:
+                if d.apps is None:
+                    return problem(503, "Apps are not set up yet.", "Deploy the apps origin, then try again.")
+                dr = await get_draft(d.ledger, draft_id)
+                if not dr:
+                    return problem(404, "That app draft is gone.")
+                # Publish first: if it fails, the approval stays pending and the owner can try again.
+                try:
+                    app = await publish_draft(d.ledger, d.bus, d.apps, draft_id)
+                except ValueError as e:
+                    return problem(409, str(e))
+            else:
+                await refuse_draft(d.ledger, draft_id)
         a = await d.ledger.decide_approval(cur["id"], approved)
-        assert a is not None
+        if a is None:  # decided by someone else meanwhile
+            return problem(409, "That approval was already decided.")
         if cur.get("task_token") and d.sfn is not None:
             if approved:
                 await asyncio.to_thread(
@@ -384,7 +408,16 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
                     d.sfn.send_task_failure, taskToken=cur["task_token"], error="Refused", cause="The owner refused."
                 )
         await d.bus.put({"type": "approval.decided", "id": a["id"], "approved": approved})
-        return reply(200, {"approval": a})
+        return reply(200, {"approval": a, "app": app} if app else {"approval": a})
+    if is_("GET", r"/apps"):
+        return reply(200, {"apps": await list_apps(d.ledger)})
+    if is_("DELETE", r"/apps/[\w-]+"):
+        if d.apps is None:
+            return problem(503, "Apps are not set up yet.")
+        gone = await remove_app(d.ledger, d.bus, d.apps, seg[1])
+        if not gone:
+            return problem(404, "That app does not exist.")
+        return reply(200, {"removed": seg[1]})
     if is_("GET", r"/settings"):
         return reply(200, {"settings": await d.settings()})
     if is_("PUT", r"/settings"):
@@ -510,6 +543,19 @@ async def handle_http(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
 _deps: ApiDeps | None = None
 
 
+def _apps_origin(session: Any) -> AppsOrigin | None:
+    bucket, url = os.environ.get("AIC_APPS_BUCKET"), os.environ.get("AIC_APPS_URL")
+    if not bucket or not url:
+        return None
+    return AppsOrigin(
+        s3=session.client("s3"),
+        bucket=bucket,
+        url=url,
+        cloudfront=session.client("cloudfront"),
+        distribution_id=os.environ.get("AIC_APPS_DISTRIBUTION_ID"),
+    )
+
+
 def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
     global _deps
     if _deps is None:
@@ -524,5 +570,6 @@ def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
             cognito=city.session.client("cognito-idp"),
             user_pool_id=os.environ.get("AIC_USER_POOL_ID"),
             owner_email=os.environ.get("AIC_OWNER_EMAIL"),
+            apps=_apps_origin(city.session),
         )
     return run(handle_http(event, _deps))
