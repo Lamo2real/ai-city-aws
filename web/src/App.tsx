@@ -13,13 +13,15 @@ import { AceScreen } from "./components/AceScreen.tsx";
 import { CityView } from "./components/CityView.tsx";
 import { FirstRun } from "./components/FirstRun.tsx";
 import { Inbox } from "./components/Inbox.tsx";
+import { KnowledgeScreen } from "./components/Knowledge.tsx";
+import { knowledge } from "./lib/knowledge.ts";
 import { CostsScreen, SettingsScreen, Tickets } from "./components/Screens.tsx";
 import { SpendPill } from "./components/SpendPill.tsx";
 import { Banner, Button, Toaster } from "./components/ui.tsx";
 import { Eyes } from "./components/Eyes.tsx";
 import { SignIn } from "./components/SignIn.tsx";
 
-const VIEWS = ["ace", "city", "inbox", "tickets", "apps", "costs", "settings"] as const;
+const VIEWS = ["ace", "city", "inbox", "tickets", "apps", "knowledge", "costs", "settings"] as const;
 type View = (typeof VIEWS)[number];
 const LABEL: Record<View, string> = {
   ace: "AIC",
@@ -27,6 +29,7 @@ const LABEL: Record<View, string> = {
   inbox: "Needs you",
   tickets: "Tickets",
   apps: "Apps",
+  knowledge: "Knowledge",
   costs: "Costs",
   settings: "Settings",
 };
@@ -61,6 +64,7 @@ export function App() {
       setBoot("ready");
       live.onEvent((e) => {
         store.event(e);
+        knowledge.event(e);
         forwardEvent(e); // only calendar.changed, only to apps granted the calendar
       });
       live.onStatus((s) => {
@@ -155,6 +159,7 @@ export function App() {
         {view === "tickets" ? <Tickets /> : null}
         {view === "apps" && !slug ? <AppsScreen /> : null}
         {view === "apps" && slug ? <AppPage key={slug} slug={slug} go={go} /> : null}
+        {view === "knowledge" ? <KnowledgeScreen /> : null}
         {view === "costs" ? <CostsScreen /> : null}
         {view === "settings" ? <SettingsScreen reopenGuide={() => setGuide(true)} /> : null}
       </main>

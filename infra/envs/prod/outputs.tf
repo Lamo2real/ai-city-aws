@@ -9,3 +9,6 @@ output "event_source_mapping_uuids" { value = module.api.event_source_mapping_uu
 output "budget_name" { value = module.budgets.budget_name }
 output "agent_role_names" { value = module.agents.role_names }
 output "apps_url" { value = module.apps.url }
+output "knowledge_bucket" { value = module.knowledge.bucket }
+output "knowledge_base_id" { value = module.knowledge.knowledge_base_id }
+output "knowledge_state_machine_arn" { value = module.knowledge.state_machine_arn }

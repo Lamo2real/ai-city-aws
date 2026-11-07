@@ -31,11 +31,14 @@ from aic.shared.apps import (
 )
 from aic.shared.aws import aws_city
 from aic.shared.caps import validate_caps
+from aic.shared.clients import client
 from aic.shared.config import caps_config
 from aic.shared.events import EventBus
 from aic.shared.hierarchy.actions import CityDeps, answer_question
 from aic.shared.hierarchy.queue import Queue, WorkMessage
 from aic.shared.ids import department_key, new_id
+from aic.shared.knowledge.service import KnowledgeError, KnowledgeService, NotFound
+from aic.shared.knowledge.wiring import knowledge_from_env
 from aic.shared.ledger import Ledger, Record
 from aic.shared.log import log
 from aic.shared.models import model_label
@@ -75,6 +78,14 @@ ROUTES: list[tuple[str, str]] = [
     ("PUT", "/apps/app-1"),
     ("POST", "/apps/app-1/bridge"),
     ("POST", "/apps/app-1/proposals"),
+    ("GET", "/knowledge"),
+    ("GET", "/knowledge/k-aaaaaaaaaaaa"),
+    ("POST", "/knowledge/uploads"),
+    ("POST", "/knowledge/uploads/k-aaaaaaaaaaaa/complete"),
+    ("POST", "/knowledge/links"),
+    ("POST", "/knowledge/text"),
+    ("PUT", "/knowledge/k-aaaaaaaaaaaa"),
+    ("DELETE", "/knowledge/k-aaaaaaaaaaaa"),
 ]
 
 
@@ -100,6 +111,8 @@ class ApiDeps:
     """The mail module's approvals (file / execute) for app proposals; None answers "unavailable"."""
     grants_changed: Callable[[], Awaitable[None]] | None = None
     """Asks the connectors Lambda to rewrite the Cedar policies after a publish, removal or grant change."""
+    knowledge: KnowledgeService | None = None
+    """None until the knowledge base is deployed (``KNOWLEDGE_*`` variables)."""
 
 
 class _NoFactory:
@@ -150,12 +163,12 @@ class BadRequest(ValueError):
     pass
 
 
-def _body(event: dict[str, Any]) -> dict[str, Any]:
+def _body(event: dict[str, Any], max_len: int = 64_000) -> dict[str, Any]:
     raw = event.get("body")
     if not raw:
         return {}
     text = base64.b64decode(raw).decode("utf-8") if event.get("isBase64Encoded") else str(raw)
-    if len(text) > 64_000:
+    if len(text) > max_len:
         raise BadRequest("That message is too long.")
     try:
         v = json.loads(text)
@@ -510,6 +523,48 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
             except ValueError as e:
                 raise BadRequest("That due time is not a date.") from e
         return reply(201, await d.ledger.add_note(_str(b.get("text"), "Note"), kind, due))
+    if path == "/knowledge" or path.startswith("/knowledge/"):
+        return await _knowledge(event, method, path, d)
+    return problem(404, "There is nothing here.")
+
+
+_ITEM = r"k-[\w-]{12}"
+
+
+async def _knowledge(event: dict[str, Any], method: str, path: str, d: ApiDeps) -> dict[str, Any]:
+    """The knowledge routes (``docs/KNOWLEDGE.md`` §5). The owner check already ran in ``handle_http``."""
+    k = d.knowledge
+    if k is None:
+        return problem(503, "The knowledge base is not set up yet.", "Deploy it first, then try again.")
+
+    def is_(m: str, pattern: str) -> bool:
+        return method == m and re.fullmatch(pattern, path) is not None
+
+    item_id = path.rsplit("/", maxsplit=1)[-1] if re.fullmatch(rf"/knowledge/{_ITEM}", path) else ""
+    try:
+        if is_("GET", r"/knowledge"):
+            return reply(200, await k.list())
+        if is_("GET", rf"/knowledge/{_ITEM}"):
+            return reply(200, await k.get(item_id))
+        if is_("POST", r"/knowledge/uploads"):
+            return reply(201, await k.create_upload(_body(event)))
+        if is_("POST", rf"/knowledge/uploads/{_ITEM}/complete"):
+            return reply(200, {"item": await k.complete_upload(path.split("/")[3], _body(event))})
+        if is_("POST", r"/knowledge/links"):
+            b = _body(event)
+            return reply(201, {"item": await k.add_link(b.get("url"), b.get("title"), b.get("scope"))})
+        if is_("POST", r"/knowledge/text"):
+            b = _body(event, 1_200_000)
+            return reply(201, {"item": await k.add_text(b.get("text"), b.get("title"), b.get("scope"))})
+        if is_("PUT", rf"/knowledge/{_ITEM}"):
+            return reply(200, {"item": await k.update(item_id, _body(event))})
+        if is_("DELETE", rf"/knowledge/{_ITEM}"):
+            await k.delete(item_id)
+            return reply(200, {"ok": True})
+    except NotFound as e:
+        return problem(404, str(e))
+    except KnowledgeError as e:
+        return problem(400, str(e))
     return problem(404, "There is nothing here.")
 
 
@@ -655,23 +710,50 @@ def _apps_origin(session: Any) -> AppsOrigin | None:
     )
 
 
+def _knowledge_service(session: Any, bus: EventBus) -> KnowledgeService | None:
+    k = knowledge_from_env(session)
+    if not k or not k.blobs:
+        return None
+    return KnowledgeService(store=k.store, blobs=k.blobs, bus=bus, kb=k.kb)
+
+
+def build_deps() -> ApiDeps:
+    city = aws_city()
+    return ApiDeps(
+        ledger=city.ledger,
+        bus=city.bus,
+        queue=city.queue,
+        settings=city.settings,
+        sfn=client(city.session, "stepfunctions"),
+        utility_runner=bedrock_converse_runner(client(city.session, "bedrock-runtime")),
+        cognito=client(city.session, "cognito-idp"),
+        user_pool_id=os.environ.get("AIC_USER_POOL_ID"),
+        owner_email=os.environ.get("AIC_OWNER_EMAIL"),
+        knowledge=_knowledge_service(city.session, city.bus),
+        apps=_apps_origin(city.session),
+        bridge_invoke=_bridge_invoke(city.session, os.environ.get("AIC_APP_BRIDGE_FUNCTION")),
+        proposals=proposals_from_env(city.ledger),
+        grants_changed=_policies_refresh(city.session, os.environ.get("AIC_CONNECTORS_FUNCTION")),
+    )
+
+
 def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
     global _deps
     if _deps is None:
-        city = aws_city()
-        _deps = ApiDeps(
-            ledger=city.ledger,
-            bus=city.bus,
-            queue=city.queue,
-            settings=city.settings,
-            sfn=city.session.client("stepfunctions"),
-            utility_runner=bedrock_converse_runner(city.session.client("bedrock-runtime")),
-            cognito=city.session.client("cognito-idp"),
-            user_pool_id=os.environ.get("AIC_USER_POOL_ID"),
-            owner_email=os.environ.get("AIC_OWNER_EMAIL"),
-            apps=_apps_origin(city.session),
-            bridge_invoke=_bridge_invoke(city.session, os.environ.get("AIC_APP_BRIDGE_FUNCTION")),
-            proposals=proposals_from_env(city.ledger),
-            grants_changed=_policies_refresh(city.session, os.environ.get("AIC_CONNECTORS_FUNCTION")),
-        )
+        _deps = build_deps()
     return run(handle_http(event, _deps))
+
+
+def _init_at_load() -> None:
+    """Inside Lambda, build the clients while the module loads, so the SnapStart snapshot already holds them.
+    If that fails (say, a missing variable), the first request tries again and reports it."""
+    global _deps
+    if not os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+        return
+    try:
+        _deps = build_deps()
+    except Exception as e:
+        log("warn", "api.init_deferred", error=type(e).__name__)
+
+
+_init_at_load()

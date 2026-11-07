@@ -64,6 +64,8 @@ export interface Mock {
   snapshot: Record<string, unknown>;
   settings: Record<string, unknown>;
   apps: Array<Record<string, unknown>>;
+  /** The knowledge base: stored items (newest first) and the S3 PUTs the HUD made. */
+  knowledge: { items: Array<Record<string, unknown>>; puts: string[] };
 }
 export const appRecord = (id: string, slug: string, title: string, extra: Record<string, unknown> = {}) => ({
   app_id: id,
@@ -77,6 +79,33 @@ export const appRecord = (id: string, slug: string, title: string, extra: Record
   published_at: at(),
   ...extra,
 });
+
+export const S3_URL = "https://s3.aic.test";
+const KIND_BY_EXT: Record<string, string> = {
+  pdf: "document",
+  docx: "document",
+  doc: "document",
+  xlsx: "document",
+  csv: "document",
+  html: "document",
+  txt: "text",
+  md: "text",
+  png: "image",
+  jpg: "image",
+  jpeg: "image",
+  webp: "image",
+  gif: "image",
+  mp3: "audio",
+  m4a: "audio",
+  wav: "audio",
+  flac: "audio",
+  ogg: "audio",
+  mp4: "video",
+  mov: "video",
+  m4v: "video",
+  mkv: "video",
+  avi: "video",
+};
 
 export const baseSnapshot = () => ({
   agents: [
@@ -149,6 +178,42 @@ export async function mockBackend(
       integrations: { github: false, google_calendar: false, gmail: false, spotify: false },
       first_run_done: opts.firstRunDone ?? true,
     },
+    knowledge: { items: [], puts: [] },
+  };
+  let kn = 0;
+  const kItem = (id: string) => m.knowledge.items.find((x) => x.id === id);
+  const kEvent = (i: Record<string, unknown>) =>
+    m.send({ type: "knowledge.updated", id: i.id, status: i.status, title: i.title, scope: i.scope, kind: i.kind });
+  const alwaysTokens = () => m.knowledge.items.filter((x) => x.scope === "always").length * 1600;
+  /** The pipeline, faked: processing at once, ready a moment later (unsupported for odd files). */
+  const pipeline = (i: Record<string, unknown>) => {
+    i.status = "processing";
+    kEvent(i);
+    setTimeout(() => {
+      if (!kItem(i.id as string)) return;
+      i.status = i.kind === "other" ? "unsupported" : "ready";
+      kEvent(i);
+    }, 1200);
+  };
+  const newItem = (
+    kind: string,
+    title: string,
+    scope: unknown,
+    status: string,
+    extra: Record<string, unknown> = {},
+  ) => {
+    const i = {
+      id: `k-test${String(++kn).padStart(8, "0")}`,
+      kind,
+      title,
+      scope: (scope as string) ?? "relevant",
+      status,
+      created_at: at(),
+      updated_at: at(),
+      ...extra,
+    };
+    m.knowledge.items.unshift(i);
+    return i;
   };
   await page.addInitScript(
     ({ signedIn }) => {
@@ -331,6 +396,70 @@ export async function mockBackend(
         caps: { daily_global_usd: 10, monthly_budget_usd: 150, daily_department_usd: 5 },
         cost_explorer_url: "https://console.aws.amazon.com/costmanagement/home#/cost-explorer",
       });
+    if (path === "/knowledge" && req.method() === "GET")
+      return ok({ items: m.knowledge.items, always_tokens: alwaysTokens(), always_budget: 8000 });
+    if (path === "/knowledge/uploads" && req.method() === "POST") {
+      const name = String(body?.file_name);
+      const size = Number(body?.size_bytes);
+      const kind = KIND_BY_EXT[name.split(".").pop()!.toLowerCase()] ?? "other";
+      const i = newItem(kind, (body?.title as string) ?? name, body?.scope, "uploading", {
+        source: name,
+        content_type: body?.content_type,
+        size_bytes: size,
+      });
+      const partSize = 16 * 1024 * 1024;
+      const upload =
+        size <= 100 * 1024 * 1024
+          ? {
+              method: "PUT",
+              url: `${S3_URL}/raw/${i.id}/${encodeURIComponent(name)}`,
+              headers: { "content-type": body?.content_type },
+            }
+          : {
+              multipart: true,
+              upload_id: `up-${i.id}`,
+              part_size: partSize,
+              part_urls: Array.from(
+                { length: Math.ceil(size / partSize) },
+                (_, n) => `${S3_URL}/raw/${i.id}/${encodeURIComponent(name)}?partNumber=${n + 1}&uploadId=up-${i.id}`,
+              ),
+            };
+      return ok({ item: i, upload });
+    }
+    const complete = /^\/knowledge\/uploads\/([\w-]+)\/complete$/.exec(path);
+    if (complete && req.method() === "POST") {
+      const i = kItem(complete[1]!);
+      if (!i) return ok({ error: "That item is gone." }, 404);
+      pipeline(i);
+      return ok({ item: i });
+    }
+    if (path === "/knowledge/links" && req.method() === "POST") {
+      const i = newItem("link", (body?.title as string) ?? String(body?.url), body?.scope, "processing", {
+        source: body?.url,
+      });
+      pipeline(i);
+      return ok({ item: i });
+    }
+    if (path === "/knowledge/text" && req.method() === "POST") {
+      const i = newItem("text", String(body?.title), body?.scope, "processing");
+      pipeline(i);
+      return ok({ item: i });
+    }
+    const one = /^\/knowledge\/(k-[\w-]+)$/.exec(path);
+    if (one) {
+      const i = kItem(one[1]!);
+      if (!i) return ok({ error: "That item is gone." }, 404);
+      if (req.method() === "GET") return ok({ ...i, entities: [] });
+      if (req.method() === "PUT") {
+        Object.assign(i, body, { updated_at: at() });
+        kEvent(i);
+        return ok({ item: i });
+      }
+      if (req.method() === "DELETE") {
+        m.knowledge.items = m.knowledge.items.filter((x) => x !== i);
+        return ok({ ok: true });
+      }
+    }
     if (path === "/workforce") return ok({ workers: [], specialists: [] });
     if (path === "/health") return ok({ paused: false, workers_busy: 0, worker_ceiling: 2450, stale_turns: 0 });
     return ok({ error: "There is nothing here." }, 404);
@@ -344,6 +473,25 @@ export async function mockBackend(
       headers: { "access-control-allow-origin": "*" },
     }),
   );
+  // The knowledge bucket's presigned PUTs: answer with an ETag (exposed, as the bucket's CORS does).
+  await page.route(`${S3_URL}/**`, async (route) => {
+    const req = route.request();
+    const headers = {
+      "access-control-allow-origin": "*",
+      "access-control-allow-methods": "PUT",
+      "access-control-allow-headers": "*",
+      "access-control-expose-headers": "ETag",
+    };
+    if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers });
+    const url = new URL(req.url());
+    m.knowledge.puts.push(url.pathname + url.search);
+    const part = url.searchParams.get("partNumber");
+    if (!part) {
+      const i = kItem(url.pathname.split("/")[2]!);
+      if (i) pipeline(i);
+    }
+    return route.fulfill({ status: 200, headers: { ...headers, etag: `"etag-${part ?? "single"}"` }, body: "" });
+  });
   await page.routeWebSocket(`${CONFIG.wsUrl}**`, (ws) => {
     m.ws = () => ws;
     m.send = (e) => ws.send(JSON.stringify({ at: at(), ...e }));

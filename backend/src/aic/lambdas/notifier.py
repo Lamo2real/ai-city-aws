@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from aic.shared.aws import aws_city, require_env
 from aic.shared.caps import default_settings
+from aic.shared.clients import client
 from aic.shared.events import parse_event
 from aic.shared.ledger import Ledger
 
@@ -83,7 +84,7 @@ async def deliver(notices: list[Notice], sns: Any, topic_arn: str, enabled: bool
 
 def handler(event: dict[str, Any], _context: Any = None) -> dict[str, int]:
     city = aws_city()
-    sns = city.session.client("sns")
+    sns = client(city.session, "sns")
 
     async def go() -> int:
         settings = await city.ledger.settings(default_settings())

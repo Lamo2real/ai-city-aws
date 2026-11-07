@@ -20,9 +20,12 @@ from starlette.routing import Route
 
 from aic.shared.apps import workspace_from_env
 from aic.shared.aws import LambdaFactoryClient, aws_city, require_env
+from aic.shared.clients import client
 from aic.shared.config import caps_config
 from aic.shared.guard import startup_guard
 from aic.shared.hierarchy.actions import CityDeps
+from aic.shared.knowledge.service import KnowledgeAccess, KnowledgeService
+from aic.shared.knowledge.wiring import knowledge_from_env
 from aic.shared.log import log
 
 MAX_BODY = 1_000_000
@@ -113,7 +116,7 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
     role = require_env("AIC_ROLE", e)
     city = aws_city(e)
     caps = caps_config()
-    factory = LambdaFactoryClient(city.session.client("lambda"), e.get("AIC_FACTORY_FUNCTION", ""))
+    factory = LambdaFactoryClient(client(city.session, "lambda"), e.get("AIC_FACTORY_FUNCTION", ""))
     minutes = caps["async_job_soft_limit_minutes"] if role == "worker" else caps["turn_timeout_minutes"]
     host = AgentHost(
         CityDeps(
@@ -124,6 +127,7 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
             settings=city.settings,
             max_review_rounds=caps["max_review_rounds"],
             workspace=workspace_from_env(city.session, e) if role == "worker" else None,
+            knowledge=_knowledge(city.session, city.bus, role, e),
         ),
         HostOptions(
             engine=sdk_engine,
@@ -138,6 +142,15 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
     )
     log("info", "runtime.started", role=role)
     return create_app(host)
+
+
+def _knowledge(session: Any, bus: Any, role: str, env: Mapping[str, str]) -> KnowledgeAccess | None:
+    """Search for every role; AIC also adds links and texts (it may write ``raw/*`` and ``ITEM#*``)."""
+    k = knowledge_from_env(session, env)
+    if not k:
+        return None
+    service = KnowledgeService(store=k.store, blobs=k.blobs, bus=bus) if role == "ace" and k.blobs else None
+    return KnowledgeAccess(store=k.store, kb=k.kb, service=service)
 
 
 def main() -> None:

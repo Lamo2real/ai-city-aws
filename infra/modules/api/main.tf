@@ -46,6 +46,15 @@ variable "runtime_version" {
 variable "utility_invoke_arns" { type = list(string) }
 variable "utility_profile_arn" { type = string }
 variable "profile_prefix" { type = string }
+variable "knowledge_table" { type = string }
+variable "knowledge_table_arn" { type = string }
+variable "knowledge_bucket" { type = string }
+variable "knowledge_bucket_arn" { type = string }
+variable "knowledge_base_id" { type = string }
+variable "knowledge_base_arn" { type = string }
+variable "knowledge_data_source_id" { type = string }
+variable "knowledge_graph_id" { type = string }
+variable "knowledge_graph_arn" { type = string }
 variable "log_retention_days" {
   type    = number
   default = 30
@@ -76,7 +85,7 @@ locals {
   }
   # name => bundle, handler, timeout, memory, extra env
   functions = {
-    api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 512, env = { AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_USER_POOL_ID = var.user_pool_id, AIC_OWNER_EMAIL = var.owner_email, AIC_APPS_BUCKET = var.apps_bucket, AIC_APPS_URL = var.apps_url, AIC_APPS_DISTRIBUTION_ID = var.apps_distribution_id, AIC_APP_BRIDGE_FUNCTION = local.app_bridge_name } }
+    api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 1024, env = { AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_USER_POOL_ID = var.user_pool_id, AIC_OWNER_EMAIL = var.owner_email, KNOWLEDGE_TABLE = var.knowledge_table, KNOWLEDGE_BUCKET = var.knowledge_bucket, KNOWLEDGE_BASE_ID = var.knowledge_base_id, KNOWLEDGE_DATA_SOURCE_ID = var.knowledge_data_source_id, KNOWLEDGE_GRAPH_ID = var.knowledge_graph_id, AIC_APPS_BUCKET = var.apps_bucket, AIC_APPS_URL = var.apps_url, AIC_APPS_DISTRIBUTION_ID = var.apps_distribution_id, AIC_APP_BRIDGE_FUNCTION = local.app_bridge_name } }
     dispatcher    = { bundle = "app", handler = "aic.lambdas.dispatcher.handler", timeout = 120, memory = 1024, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_ARN_ORCHESTRATOR = var.runtime_arns["orchestrator"], AIC_RUNTIME_ARN_MANAGER = var.runtime_arns["manager"], AIC_RUNTIME_ARN_WORKER = var.runtime_arns["worker"], AIC_RUNTIME_VERSION = var.runtime_version, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod", AIC_CONNECTIONS_TABLE = var.connections_table } }
     factory       = { bundle = "app", handler = "aic.lambdas.factory.handler", timeout = 30, memory = 256, env = {} }
     ledger-writer = { bundle = "app", handler = "aic.lambdas.ledger_writer.handler", timeout = 30, memory = 256, env = {} }
@@ -110,6 +119,16 @@ locals {
       { Action = ["bedrock:InvokeModel"], Resource = var.utility_invoke_arns },
       # "Send me a new first-login email": re-sends the owner's invitation, nothing else.
       { Action = ["cognito-idp:AdminCreateUser"], Resource = [var.user_pool_arn] },
+      # The knowledge base (docs/KNOWLEDGE.md section 9): items, presigned uploads (single and multipart) under raw/,
+      # scope changes rewrite normalized/…metadata.json, deletes remove the item's files, then a re-sync.
+      { Action = local.ledger_rw, Resource = [var.knowledge_table_arn, "${var.knowledge_table_arn}/index/*"] },
+      { Action = ["dynamodb:BatchWriteItem", "dynamodb:BatchGetItem"], Resource = [var.knowledge_table_arn] },
+      { Action = ["s3:PutObject", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts", "s3:DeleteObject"], Resource = ["${var.knowledge_bucket_arn}/raw/*"] },
+      { Action = ["s3:PutObject", "s3:DeleteObject"], Resource = ["${var.knowledge_bucket_arn}/normalized/*"] },
+      { Action = ["s3:DeleteObject"], Resource = ["${var.knowledge_bucket_arn}/work/*"] },
+      { Action = ["s3:ListBucket"], Resource = [var.knowledge_bucket_arn], Condition = { StringLike = { "s3:prefix" = ["raw/*", "work/*", "normalized/*"] } } },
+      { Action = ["bedrock:IngestKnowledgeBaseDocuments", "bedrock:DeleteKnowledgeBaseDocuments"], Resource = [var.knowledge_base_arn] },
+      { Action = ["neptune-graph:ReadDataViaQuery", "neptune-graph:WriteDataViaQuery", "neptune-graph:DeleteDataViaQuery"], Resource = [var.knowledge_graph_arn] },
       # Publishing an approved app (drafts/ → live/) and removing one; only the owner reaches these routes.
       { Action = ["s3:GetObject"], Resource = ["${var.apps_bucket_arn}/drafts/*"] },
       { Action = ["s3:ListBucket"], Resource = [var.apps_bucket_arn], Condition = { StringLike = { "s3:prefix" = ["drafts/*", "live/*"] } } },
@@ -168,6 +187,8 @@ locals {
     "POST /questions/{id}/default", "POST /approvals/{id}", "GET /settings", "PUT /settings", "POST /city/pause", "POST /city/resume",
     "GET /memory", "POST /notes", "GET /apps", "DELETE /apps/{id}", "PUT /apps/{id}",
     "POST /apps/{id}/bridge", "POST /apps/{id}/proposals",
+    "GET /knowledge", "GET /knowledge/{id}", "POST /knowledge/uploads", "POST /knowledge/uploads/{id}/complete", "POST /knowledge/links",
+    "POST /knowledge/text", "PUT /knowledge/{id}", "DELETE /knowledge/{id}",
   ]
   queue_batch = { ace = 1, orchestrator = 5, manager = 5, worker = 10 }
   queue_conc  = { ace = 5, orchestrator = 10, manager = 20, worker = var.worker_queue_concurrency }
@@ -228,16 +249,25 @@ resource "aws_lambda_function" "fn" {
   #checkov:skip=CKV_AWS_117:No VPC: the functions call only AWS APIs, and a VPC would add NAT cost.
   #checkov:skip=CKV_AWS_272:Code signing is not set up for a single-owner project; deploys run from the owner's approved workflow.
   #checkov:skip=CKV_AWS_116:Synchronous and SQS/EventBridge-invoked functions; failed SQS work goes to the queues' DLQs.
-  for_each                       = local.functions
-  function_name                  = "${var.name}-${each.key}"
-  role                           = aws_iam_role.fn[each.key].arn
-  runtime                        = "python3.13"
-  architectures                  = ["arm64"]
-  handler                        = each.value.handler
-  filename                       = data.archive_file.bundle[each.value.bundle].output_path
-  source_code_hash               = data.archive_file.bundle[each.value.bundle].output_base64sha256
-  timeout                        = each.value.timeout
-  memory_size                    = each.value.memory
+  for_each         = local.functions
+  function_name    = "${var.name}-${each.key}"
+  role             = aws_iam_role.fn[each.key].arn
+  runtime          = "python3.13"
+  architectures    = ["arm64"]
+  handler          = each.value.handler
+  filename         = data.archive_file.bundle[each.value.bundle].output_path
+  source_code_hash = data.archive_file.bundle[each.value.bundle].output_base64sha256
+  timeout          = each.value.timeout
+  memory_size      = each.value.memory
+  # SnapStart (api only, docs/KNOWLEDGE.md section 14): each deploy publishes a version and snapshots its init;
+  # API Gateway calls the `live` alias. Python 3.12+ SnapStart supports arm64.
+  publish = each.key == "api"
+  dynamic "snap_start" {
+    for_each = each.key == "api" ? [1] : []
+    content {
+      apply_on = "PublishedVersions"
+    }
+  }
   kms_key_arn                    = var.kms_key_arn
   reserved_concurrent_executions = each.key == "dispatcher" ? 200 : (each.key == "api" ? 50 : 20)
   tracing_config {
@@ -308,7 +338,7 @@ resource "aws_apigatewayv2_authorizer" "jwt" {
 resource "aws_apigatewayv2_integration" "api" {
   api_id                 = aws_apigatewayv2_api.http.id
   integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.fn["api"].invoke_arn
+  integration_uri        = aws_lambda_alias.api_live.invoke_arn
   payload_format_version = "2.0"
   timeout_milliseconds   = 29000
 }
@@ -347,10 +377,19 @@ resource "aws_apigatewayv2_stage" "http" {
   tags = local.tags
 }
 
+# The HTTP API calls this alias, so it always runs the latest published (snapshotted) version.
+resource "aws_lambda_alias" "api_live" {
+  name             = "live"
+  description      = "Latest published api version (SnapStart)"
+  function_name    = aws_lambda_function.fn["api"].function_name
+  function_version = aws_lambda_function.fn["api"].version
+}
+
 resource "aws_lambda_permission" "http" {
   statement_id  = "http-api"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.fn["api"].function_name
+  qualifier     = aws_lambda_alias.api_live.name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
 }
@@ -660,6 +699,10 @@ resource "aws_scheduler_schedule" "job" {
     input    = jsonencode(each.value.input)
   }
 }
+
+# The one Lambda bundle, reused by the knowledge module's function.
+output "lambda_zip_path" { value = data.archive_file.bundle["app"].output_path }
+output "lambda_zip_hash" { value = data.archive_file.bundle["app"].output_base64sha256 }
 
 # AIC streams its reply straight to the open HUDs (no EventBridge → Lambda hop per piece): it reads the
 # connection list and posts to those connections, the same two things ws-broadcast may do.

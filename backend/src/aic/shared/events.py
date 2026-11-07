@@ -268,6 +268,18 @@ class AceReply(_E):
     done: bool
 
 
+class KnowledgeUpdated(_E):
+    """A knowledge item's status or scope changed (``docs/KNOWLEDGE.md`` §6)."""
+
+    type: Literal["knowledge.updated"]
+    id: str
+    status: Literal["uploading", "processing", "ready", "failed", "unsupported"]
+    title: str
+    scope: Literal["always", "relevant", "on_request"]
+    kind: Literal["text", "document", "image", "audio", "video", "link", "other"]
+    error: str | None = None
+
+
 CityEventModel = Annotated[
     AgentHired
     | AgentRetired
@@ -291,7 +303,8 @@ CityEventModel = Annotated[
     | AppDraft
     | AppPublished
     | AppUpdated
-    | AppRemoved,
+    | AppRemoved
+    | KnowledgeUpdated,
     Field(discriminator="type"),
 ]
 _ADAPTER: TypeAdapter[Any] = TypeAdapter(CityEventModel)

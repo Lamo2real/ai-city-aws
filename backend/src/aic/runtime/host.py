@@ -16,6 +16,7 @@ from aic.shared.apps import drafts_of_ticket
 from aic.shared.events import now_iso
 from aic.shared.hierarchy.actions import CityDeps, move
 from aic.shared.ids import manager_id
+from aic.shared.knowledge.search import always_block
 from aic.shared.log import log, metric
 from aic.shared.models import resolve_role_from_env
 from aic.shared.turn import BackoffOptions, GateDeps, GatedTurn, TurnInput, TurnOutput, run_gated_turn
@@ -106,6 +107,7 @@ class AgentHost:
                 conversation=conversation,
             )
             system, builtins = await self._system(agent, inv)
+            system += await self._owner_knowledge()
             tools = gate_tools(self.d, ctx, tools_for(self.d, ctx))
             prompt = await self._prompt(agent, inv)
             models = resolve_role_from_env(inv["role"], self.o.env if self.o.env is not None else os.environ)
@@ -198,6 +200,18 @@ class AgentHost:
         finally:
             if inv["role"] == "worker" and inv.get("department"):
                 await ledger.release_worker_slot(inv["department"])
+
+    async def _owner_knowledge(self) -> str:
+        """The ``always`` summaries, after the stable system prompt so the cached prefix stays the same."""
+        k = self.d.knowledge
+        if not k:
+            return ""
+        try:
+            block = await always_block(k.store)
+        except Exception as e:
+            log("warn", "knowledge.always_failed", error=type(e).__name__)
+            return ""
+        return f"\n\n{block}" if block else ""
 
     async def _system(self, agent: dict[str, Any], inv: dict[str, Any]) -> tuple[str, list[str]]:
         role = inv["role"]

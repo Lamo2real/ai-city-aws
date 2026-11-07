@@ -19,6 +19,14 @@
       "prefixes": ["global", "us", "eu"]
     }
   },
+  "embeddings": {
+    "knowledge": {
+      "label": "Amazon Titan Text Embeddings V2",
+      "modelId": "amazon.titan-embed-text-v2:0",
+      "dimensions": 1024,
+      "$comment": "Owner's exception to Anthropic-only (2026-11-07): Anthropic has no embedding model. Called in-Region (eu-north-1) by the Bedrock knowledge base only."
+    }
+  },
   "roles": {
     "ace": { "model": "haiku-5-5", "fallback": null, "cacheTtl": "5m" },
     "orchestrator": { "model": "fable-5-1", "fallback": "opus-5-5", "cacheTtl": "1h" },

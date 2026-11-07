@@ -15,6 +15,7 @@ from typing import Any, Literal, Protocol
 from pydantic import ValidationError
 
 from aic.shared.aws import require_env
+from aic.shared.clients import config_for
 from aic.shared.events import now_iso, parse_event
 from aic.shared.log import log
 from aic.shared.table import DynamoTable, Table, UpdateOptions
@@ -161,7 +162,7 @@ def _connections() -> Table:
         import boto3
 
         _table = DynamoTable(
-            boto3.resource("dynamodb", region_name=require_env("AWS_REGION")).Table(
+            boto3.resource("dynamodb", region_name=require_env("AWS_REGION"), config=config_for("dynamodb")).Table(
                 require_env("AIC_CONNECTIONS_TABLE")
             )
         )
@@ -191,6 +192,7 @@ def broadcast_handler(event: dict[str, Any], _context: Any = None) -> dict[str, 
                 "apigatewaymanagementapi",
                 region_name=require_env("AWS_REGION"),
                 endpoint_url=require_env("AIC_WS_ENDPOINT"),
+                config=config_for("apigatewaymanagementapi"),
             )
         )
     r = run(broadcast(event.get("detail"), _connections(), _poster))
