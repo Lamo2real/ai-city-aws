@@ -76,6 +76,68 @@ test("later sign-ins: a wrong password says so plainly; then password and code",
   await expect(page.getByRole("button", { name: "AI City — talk to AIC" })).toBeVisible();
 });
 
+test("sign in once: closing the tab and coming back later opens AI City already signed in", async ({
+  page,
+  context,
+}) => {
+  await mockBackend(page, { signedIn: false });
+  await page.goto("/");
+  await page.getByLabel("Email", { exact: true }).fill("owner@example.com");
+  await page.getByLabel("Password", { exact: true }).fill("Own-Password-12!");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByLabel("6-digit code", { exact: true }).fill("123456");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("button", { name: "AI City — talk to AIC" })).toBeVisible();
+  await page.close(); // the tab is gone (sessionStorage with it)
+
+  const later = await context.newPage();
+  await mockBackend(later, { signedIn: false });
+  await later.goto("/");
+  await expect(later.getByRole("textbox", { name: "Message to AIC" })).toBeVisible();
+  await expect(later.getByRole("heading", { name: /Sign in/ })).toHaveCount(0);
+  await later.reload();
+  await expect(later.getByRole("textbox", { name: "Message to AIC" })).toBeVisible();
+});
+
+test("a sign-in that expired or was revoked lands on sign-in with a plain message", async ({ page }) => {
+  await mockBackend(page, { signedIn: false });
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem("probed")) {
+      sessionStorage.setItem("probed", "1");
+      localStorage.setItem("aic.fake.signedIn", "revoked");
+    }
+  });
+  await page.goto("/");
+  await expect(page.getByRole("status").filter({ hasText: "Your sign-in on this device has ended" })).toBeVisible();
+  await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
+  await page.reload(); // nothing stored any more: the plain sign-in screen, no message
+  await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
+  await expect(page.getByText("Your sign-in on this device has ended")).toHaveCount(0);
+});
+
+test("signing out clears the sign-in and this device's conversation", async ({ page }) => {
+  await mockBackend(page, { signedIn: false });
+  await page.goto("/");
+  await page.evaluate(() => {
+    localStorage.setItem("aic.fake.signedIn", "1");
+    localStorage.setItem("aic.draft", "half a thought");
+  });
+  await page.reload();
+  await page.getByRole("textbox", { name: "Message to AIC" }).fill("remember me?");
+  await page.keyboard.press("Enter");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("aic.chat") ?? "")).toContain("remember me?");
+  await page.goto("/#/settings");
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
+  expect(
+    await page.evaluate(() => [
+      localStorage.getItem("aic.fake.signedIn"),
+      localStorage.getItem("aic.chat"),
+      localStorage.getItem("aic.draft"),
+    ]),
+  ).toEqual([null, null, null]);
+});
+
 test("forgot password and a new first-login email, without leaving AI City", async ({ page }) => {
   const m = await mockBackend(page, { signedIn: false });
   await page.goto("/");

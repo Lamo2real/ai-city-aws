@@ -59,6 +59,9 @@ def create_app(host: TurnRunner) -> Starlette:
             if len(raw) > MAX_BODY:
                 raise ValueError("payload too large")
             inv = json.loads(raw)
+            if isinstance(inv, dict) and inv.get("kind") == "warm":
+                # The warm-keeper's ping: the container is up, that's all it wants to know. No ledger, no model.
+                return JSONResponse({"status": "warm"})
             if not isinstance(inv, dict) or not inv.get("id") or not inv.get("role") or not inv.get("agentId"):
                 raise ValueError("bad invocation")
         except ValueError:

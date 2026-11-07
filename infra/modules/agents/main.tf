@@ -258,8 +258,10 @@ resource "aws_bedrockagentcore_agent_runtime" "role" {
     network_mode = "PUBLIC" # Bedrock, GitHub and the web; inbound only through AgentCore with IAM
   }
   lifecycle_configuration {
-    idle_runtime_session_timeout = 900
-    max_lifetime                 = each.key == "worker" ? 28800 : 3600
+    # AIC: a warm-kept session (the scheduler's warm_ace ping every 5 min) that lives the whole day, so the owner's
+    # message never waits for a container start. Workers: long jobs. Others: an hour.
+    idle_runtime_session_timeout = each.key == "ace" ? 1800 : 900
+    max_lifetime                 = contains(["ace", "worker"], each.key) ? 28800 : 3600
   }
   environment_variables = merge(
     {

@@ -99,7 +99,7 @@ locals {
     dispatcher    = { bundle = "app", handler = "aic.lambdas.dispatcher.handler", timeout = 120, memory = 1024, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_ARN_ORCHESTRATOR = var.runtime_arns["orchestrator"], AIC_RUNTIME_ARN_MANAGER = var.runtime_arns["manager"], AIC_RUNTIME_ARN_WORKER = var.runtime_arns["worker"], AIC_RUNTIME_VERSION = var.runtime_version, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod", AIC_CONNECTIONS_TABLE = var.connections_table } }
     factory       = { bundle = "app", handler = "aic.lambdas.factory.handler", timeout = 30, memory = 256, env = {} }
     ledger-writer = { bundle = "app", handler = "aic.lambdas.ledger_writer.handler", timeout = 30, memory = 256, env = {} }
-    scheduler     = { bundle = "app", handler = "aic.lambdas.scheduler.handler", timeout = 120, memory = 256, env = {} }
+    scheduler     = { bundle = "app", handler = "aic.lambdas.scheduler.handler", timeout = 120, memory = 256, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_VERSION = var.runtime_version } }
     notifier      = { bundle = "app", handler = "aic.lambdas.notifier.handler", timeout = 30, memory = 256, env = { AIC_NOTIFY_TOPIC_ARN = var.notify_topic_arn } }
     approvals     = { bundle = "app", handler = "aic.lambdas.approvals.handler", timeout = 30, memory = 256, env = {} }
     ws-authorizer = { bundle = "app", handler = "aic.lambdas.ws.authorizer_handler", timeout = 10, memory = 256, env = { AIC_USER_POOL_ID = var.user_pool_id, AIC_USER_POOL_CLIENT_ID = var.client_id } }
@@ -169,6 +169,8 @@ locals {
       { Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] },
       { Action = ["events:PutEvents"], Resource = [var.bus_arn] },
       { Action = ["sqs:SendMessage"], Resource = values(var.queue_arns) },
+      # warm_ace: the "warm" ping to AIC's runtime only (never the other roles).
+      { Action = ["bedrock-agentcore:InvokeAgentRuntime"], Resource = [var.runtime_arns["ace"], "${var.runtime_arns["ace"]}/*"] },
     ]
     notifier      = [{ Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] }, { Action = ["sns:Publish"], Resource = [var.notify_topic_arn] }]
     approvals     = [{ Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] }, { Action = ["sqs:SendMessage"], Resource = values(var.queue_arns) }]
@@ -197,12 +199,17 @@ locals {
   ]
   queue_batch = { ace = 1, orchestrator = 5, manager = 5, worker = 10 }
   queue_conc  = { ace = 5, orchestrator = 10, manager = 20, worker = var.worker_queue_concurrency }
+  # Enabled: the crash sweep, idle-agent retirement, reminders and nudges are part of the product (the owner
+  # asked for everything to run). The weekly self-improvement job stays DISABLED by rule.
   jobs = {
-    sweep       = { schedule = "rate(5 minutes)", fn = "scheduler", input = { job = "sweep" } }
-    retire-idle = { schedule = "rate(1 hour)", fn = "scheduler", input = { job = "retire_idle" } }
-    reminders   = { schedule = "rate(5 minutes)", fn = "scheduler", input = { job = "reminders" } }
-    nudge       = { schedule = "rate(5 minutes)", fn = "notifier", input = { job = "nudge" } }
+    sweep       = { schedule = "rate(5 minutes)", fn = "scheduler", input = { job = "sweep" }, state = "ENABLED" }
+    retire-idle = { schedule = "rate(1 hour)", fn = "scheduler", input = { job = "retire_idle" }, state = "ENABLED" }
+    reminders   = { schedule = "rate(5 minutes)", fn = "scheduler", input = { job = "reminders" }, state = "ENABLED" }
+    nudge       = { schedule = "rate(5 minutes)", fn = "notifier", input = { job = "nudge" }, state = "ENABLED" }
     improve     = { schedule = "cron(0 3 ? * SUN *)", fn = "scheduler", input = { job = "improve" } }
+    # Enabled from the start: keeps AIC's container running so a message never waits for a cold start
+    # (AgentCore bills active processing only, so a warm idle container costs nothing). The owner's under-3-seconds target.
+    warm-ace = { schedule = "rate(5 minutes)", fn = "scheduler", input = { job = "warm_ace" }, state = "ENABLED" }
   }
 }
 
@@ -691,7 +698,7 @@ resource "aws_scheduler_schedule" "job" {
   for_each                     = local.jobs
   name                         = "${var.name}-${each.key}"
   group_name                   = aws_scheduler_schedule_group.this.name
-  state                        = "DISABLED"
+  state                        = lookup(each.value, "state", "DISABLED")
   schedule_expression          = each.value.schedule
   schedule_expression_timezone = "UTC"
   kms_key_arn                  = var.kms_key_arn

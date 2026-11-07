@@ -161,3 +161,17 @@ def test_dockerfile_builds_for_arm64_serves_8080_runs_as_non_root_keeps_bedrock_
     assert "bubblewrap" in text  # workers' env scrubbing needs it; the flag itself is set per role
     assert "aic.runtime.server" in text
     assert not re.search(r"ANTHROPIC_API_KEY|awscli|aws-cli", text)
+
+
+async def test_a_warm_ping_answers_at_once_without_running_a_turn() -> None:
+    turns: list[dict[str, Any]] = []
+
+    async def fn(i: dict[str, Any]) -> str:
+        turns.append(i)
+        return "ran"
+
+    async with client(Host(fn)) as c:
+        r = await c.post("/invocations", content=json.dumps({"kind": "warm", "sessionId": "s" * 33}))
+        assert r.status_code == 200 and r.json() == {"status": "warm"}
+        assert turns == []  # no ledger, no model: the container just says it is up
+        assert (await c.get("/ping")).json()["status"] == "Healthy"
