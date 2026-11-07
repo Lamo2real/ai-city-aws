@@ -8,7 +8,8 @@
     "build": "tsc -p tsconfig.json && vite build",
     "typecheck": "tsc -p tsconfig.json",
     "preview": "vite preview --port 4173 --strictPort",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "build:city-embed": "vite build -c vite.city-embed.config.ts && node ../scripts/city-embed-stamp.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-polly": "^3.1163.0",
