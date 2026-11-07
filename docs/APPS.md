@@ -38,7 +38,8 @@ Apps are agent-written code. They must never reach the owner's tokens, the API, 
    `<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" allow="" src="<appsUrl>/live/<app_id>/index.html">`.
    Never `allow-same-origin`, `allow-popups`, `allow-top-navigation*`, `allow-forms`, `allow-modals`.
    The document gets an opaque origin: no cookies, no localStorage/sessionStorage, no IndexedDB.
-   The HUD registers **no** `message` listener for apps and never `postMessage`s anything to them.
+   v1: the HUD registers **no** `message` listener for apps. v2 adds exactly one listener, the data bridge
+   (§ "v2: data bridge"), which answers only the frame it opened and only with granted read data.
 3. **Strict CSP on the apps origin** (response headers policy, override = true):
    `default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; worker-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-ancestors https://*.cloudfront.net`
    plus `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`,
@@ -164,6 +165,126 @@ from the workspaces bucket (KMS decrypt), validates (`shared/apps.py`, shared wi
 - infra: `tests/infra.test.ts` asserts the apps CSP has `connect-src 'none'`, the HUD CSP's frame-src is
   only the apps origin, tags, and that no worker/orchestrator policy names the apps bucket.
 
+## v2: data bridge (the owner's requirement, 2026-11-07)
+The owner's words: "the user should have the option to create this kind of ecosystem and environment, so that
+the user can add anything dynamically and on demand". Example: "a combined calendar page with an icon in the top
+bar" showing the day, week, month or year across personal and work accounts, **built as an app on demand**.
+So an app may read the owner's data, but only what the owner granted it, only by asking the HUD, and never
+anything that acts for the owner. Everything in v1 stays: isolated origin, `sandbox="allow-scripts"`,
+`connect-src 'none'`. The app still can't reach the network, the API, tokens or storage.
+
+### Manifest: `app/aic-app.json` (optional; no file = no capabilities)
+```json
+{ "capabilities": [
+    { "id": "calendar.read" },
+    { "id": "mail.search" },
+    { "id": "connector.read", "connector": "<connector id>", "tool": "<tool name>" } ],
+  "pin": true }
+```
+Capability catalogue (`backend/src/aic/shared/app_caps.py`, one table; nothing else is ever grantable):
+| id | Params (validated by the API) | Runs | Returns |
+|---|---|---|---|
+| `calendar.read` | `{from, to}` ISO, ≤ 366 days, split into ≤ 62-day calls; `calendar_ids?` | the mail/calendar module's `calendar_events` (same code as `GET /calendar/events`, `docs/MAIL_CALENDAR.md` §4) | `{events: [Event], calendars: [Calendar], errors}` |
+| `calendar.calendars` | — | `calendar_list` | `{calendars}` |
+| `mail.search` | `{query, account_id?, unread_only?, after?, before?, limit ≤ 25}` | `mail_search` | `{messages: [MailSummary]}` (no bodies) |
+| `mail.accounts` | — | `mail_accounts` | `{accounts: [{id, label, provider, address}]}` |
+| `connector.read` | `{args}` for that one tool, checked against the tool's input schema | the connector's Gateway tool `<id>___<tool>`, **only if** its record says `read_only: true` and not `destructive` (`docs/CONNECTORS_SKILLS.md` §1.2, §1.4) | `{content}` (text parts only, ≤ 100 KB) |
+Never grantable, by construction (not in the table): any send, draft, trash, label, create, update, respond,
+delete, accept, any non-read-only connector tool, AIC/city tools, knowledge writes, settings.
+
+Validation: the apps Lambda reads the manifest at staging; an unknown capability id, a `connector.read` naming
+a connector or tool that doesn't exist or isn't read-only, or a malformed file → the draft is `rejected` with
+the reason. Requested capabilities are stored on the draft (`capabilities`).
+
+### Grant at publish (Needs you)
+- The `app.publish` approval carries `capabilities` and the card lists each in plain words, e.g. "Read your
+  calendars (all accounts)", "Search your mail (subjects and senders, not bodies)", "Read from <connector label>:
+  <tool>". Each has a switch, on by default; the owner may turn any off. Approve = publish with those grants.
+- `POST /approvals/<id>` for `app.publish` accepts `{approved: true, grants?: [capability, …]}`; `grants` must be a
+  subset of the draft's `capabilities` (default: all). Stored on the APP record as `grants` with `granted_at`.
+- Settings → Apps (or the app page's ⋯ menu): the owner can revoke any grant later
+  (`PUT /apps/<app_id> {grants?, pinned?}`); grants can only shrink there, never grow (a new grant needs a new
+  publish). Revoking takes effect on the next request.
+- **Preview has no data.** In Needs you the preview frame gets `{ok: false, error: "preview"}` for every request,
+  so the owner sees the app's empty state; the city's `aic-bridge.js` exposes `aic.preview === true`.
+
+### Runtime protocol (HUD ⇄ app)
+The city adds `aic-bridge.js` (its own file from `backend/src/aic/assets/aic-bridge.js`, never the worker's; a
+worker file with that name is overwritten) to every staged app. Apps use:
+```js
+const r = await aic.request("calendar.read", { from: "2026-11-01T00:00:00Z", to: "2026-12-01T00:00:00Z" });
+// r = { ok: true, data } | { ok: false, error: "not_granted" | "preview" | "invalid" | "rate_limited" | "unavailable" | "login_expired", message }
+```
+Wire format (structured clone, no functions): app → parent `{aic: 1, id: <random string ≤ 40>, cap, params}`;
+parent → app `{aic: 1, id, ok, data | error, message}`.
+
+HUD side (`web/src/lib/bridge.ts`, one `message` listener for the whole HUD):
+1. Accept a message only when `event.source === <the contentWindow of the AppFrame currently mounted>` (the
+   origin of a sandboxed frame is `"null"`, so the source window is the check, plus `event.origin === "null"`).
+   Anything else is dropped silently. The app id comes from the mounted frame's own state, **never from the message**.
+2. Shape check (`aic === 1`, `id` string ≤ 40, `cap` string ≤ 40, `params` plain object, JSON ≤ 8 KB), and the
+   cap must be in that app's `grants` (HUD copy) — otherwise answer `not_granted` without calling the API.
+3. Throttle per frame: 4 in flight, 30 per minute; over → `rate_limited`.
+4. Call `POST /apps/<app_id>/bridge {cap, params}` with the owner's token (the token never leaves the HUD).
+5. Reply with `frame.contentWindow.postMessage(reply, "*")`. `"*"` is required (the frame's origin is opaque);
+   it is safe because the target is that exact window and the HUD CSP `frame-src <appsUrl>` keeps the frame on
+   the apps origin (a frame navigated elsewhere is blocked).
+6. Never sent to an app: tokens, the API URL, config, ids of other apps, the owner's email, HUD state.
+7. Preview frames (Needs you) get `preview` for everything, without an API call.
+8. Residual: an app could navigate its own frame to another published app's page on the same origin, which would
+   then run with the first app's grants. Every app is owner-approved and grants are read-only, so this is accepted;
+   a per-app subdomain (custom domain gap) would remove it.
+
+### API: `POST /apps/<app_id>/bridge` (owner group checked, like every route)
+- Loads the APP record; `cap` must be in its `grants` → else 403 `not_granted`. Params validated per capability
+  (table above) → 400 `invalid`.
+- Runs the read through `policy.gate` as role **`app`** with tool name `mcp__app__<cap>` (connector reads:
+  `mcp__app__connector___<id>___<tool>`), audited with `app_id` (name, decision, duration; never args or data,
+  as for every tool). `config/policy.json` gets: `^mcp__app__(calendar\.read|calendar\.calendars|mail\.search|mail\.accounts|connector___.+)$`
+  → allow for role `app`; every other `mcp__app__` name → deny. A test pins that no write tool name can pass.
+- Connector reads go through the connectors session's `GatewayClient` (`runtime/gateway.py`), with the api Lambda's
+  role as the caller; the Cedar policies (rewritten by the connectors Lambda) get one `permit` for the api role
+  limited to `read_only` tools of connectors that some app was granted. Mail/calendar reads call the
+  mail/calendar module in-process, as `GET /calendar/events` does.
+- Rate limit per app: 120 requests per minute, counted in the ledger (`RATE#app-<id>`) → 429 `rate_limited`.
+- Response ≤ 256 KB (cut lists with `truncated: true`). Data is returned as data; the app renders it inside
+  its own sandbox, so hostile content in an email subject can at worst affect that one app's page.
+- `login_expired` / `unavailable` pass through as plain errors (the HUD also shows "Sign in again" on the account).
+
+### Outward actions stay with the owner
+Apps get no capability that sends, deletes, accepts or changes anything. An app may *propose* one:
+`aic.propose(kind, params)` with `kind` in `calendar.respond`, `calendar.create`, `mail.draft` (v2 list; nothing
+else). The HUD posts `POST /apps/<app_id>/proposals {kind, params}`; the API files a normal approval (kind `tool`,
+the matching mail/calendar tool, with the mail/calendar preview of `docs/MAIL_CALENDAR.md` §5.5,
+`requested_by: "app:<app_id>"`) into Needs you. On approve, the API runs that tool once, exactly as shown.
+Proposals need the `propose` grant (listed like any capability: "Ask you to approve actions such as answering
+invitations"), are limited to 10 per hour per app, and the app only learns `{ok: true, status: "waiting_for_you"}`.
+
+### Pinned apps in the top bar
+- APP record `pinned` (bool; the manifest's `pin` is a suggestion shown as a pre-ticked box on the publish card).
+- The HUD top bar shows up to 6 pinned app icons after the nav (`aria-label` = title, 44 px targets), each
+  opening `#/apps/<slug>`; a 7th pin is refused with a plain message. On phones they move into the nav overflow.
+- Pin/unpin from the app page (☆) and Settings → Apps; `PUT /apps/<app_id> {pinned}`; event `app.updated {app}`.
+
+### Events (v2)
+`app.updated` {`app`} (grants or pin changed). `approval.requested` for `app.publish` also carries `capabilities`.
+
+### Where the work goes
+- **backend:** `app_caps.py` (catalogue, params validation, labels), manifest checks in `stage_submission`,
+  `aic-bridge.js` asset, grants on publish, `PUT /apps/<id>`, `POST /apps/<id>/bridge`, `POST /apps/<id>/proposals`,
+  role `app` in the gate + policy rules, rate limit, `app.updated`, prompts (apps department: manifest, `aic.request`,
+  `aic.preview`, empty states, never assume data). Mail/calendar capabilities wire to the mail/calendar module once
+  branch `mail-calendar` merges; until then they answer `unavailable`. Connector reads wire to `GatewayClient` once
+  `connectors-skills` merges; same fallback.
+- **web:** `lib/bridge.ts` (the listener above), grant switches on the publish card, pinned icons in the top bar,
+  pin and grant controls on the app page / Settings → Apps; vitest for every drop rule (wrong source, wrong shape,
+  not granted, rate limit, preview) and Playwright: a fake calendar app on the fake apps origin reads granted
+  events, gets `not_granted` after a revoke, and a proposal lands in Needs you.
+- **infra:** routes `POST /apps/{id}/bridge`, `POST /apps/{id}/proposals`, `PUT /apps/{id}`; the api Lambda's
+  `bedrock-agentcore:InvokeGateway` on the connectors gateway (after `connectors-skills` merges); nothing for
+  workers or the apps origin. HUD CSP unchanged.
+- **connectors session:** a Cedar `permit` for the api role on read-only tools of app-granted connectors, and
+  `GatewayClient` usable from the api Lambda.
+
 ## Not in v1 (suggested later)
-Updating an existing app in place (a new request makes a new app), saved high scores (would need a
-per-app storage API), a custom domain for exact `frame-ancestors`.
+Updating an existing app in place (a new request makes a new app), saved high scores (a per-app storage capability would fit the v2 catalogue), a custom domain for exact `frame-ancestors`.
