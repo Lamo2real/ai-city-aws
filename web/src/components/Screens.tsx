@@ -11,7 +11,7 @@ import { signOutHere } from "../lib/auth.ts";
 import { SettingsApps } from "./Apps.tsx";
 import { config } from "../lib/config.ts";
 import { readVoiceId, saveVoiceId, VOICES } from "../voice/modes.ts";
-import { getVoice, logVoiceError, micProblem } from "../voice/voice.ts";
+import { getVoice, logVoiceError, speakProblem } from "../voice/voice.ts";
 
 function useApi<T>(path: string | null) {
   const [data, setData] = useState<T | null>(null);
@@ -473,6 +473,28 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
 /** AIC's voice, chosen per device (no Save needed): Polly's generative voices, the most natural ones. */
 function VoiceSettings() {
   const [id, setId] = useState(() => readVoiceId(config().pollyVoice));
+  const [test, setTest] = useState<{ ok: boolean; words: string } | null>(null);
+  /** One sentence through exactly the reply path (synth, then play on the unlocked context), with the result
+   *  in plain words: "Played." or the precise failure. */
+  const testVoice = async () => {
+    setTest(null);
+    const v = getVoice();
+    v.prime?.(); // this click is the gesture that unlocks sound (Safari)
+    const sentence = "Hi, I'm AIC. This is how I'll sound when I answer you.";
+    try {
+      if (v.synth && v.play) {
+        const clip = await v.synth(sentence);
+        if (!clip) throw Object.assign(new Error("the speech service returned no audio"), { name: "EmptyAudio" });
+        let began = false;
+        await v.play(clip, () => (began = true));
+        if (!began) throw Object.assign(new Error("no sound ever started"), { name: "AudioPlayError" });
+      } else await v.speak(sentence);
+      setTest({ ok: true, words: "Played. If you heard nothing, check the device's volume." });
+    } catch (e) {
+      logVoiceError("the voice test failed", e);
+      setTest({ ok: false, words: speakProblem(e) });
+    }
+  };
   return (
     <>
       <h2>AIC's voice</h2>
@@ -494,19 +516,10 @@ function VoiceSettings() {
           ))}
         </select>
       </label>
-      <Button
-        variant="quiet"
-        onClick={() =>
-          getVoice()
-            .speak("Hi, I'm AIC. This is how I'll sound when I answer you.")
-            .catch((e: unknown) => {
-              logVoiceError("the voice sample could not play", e);
-              toast({ text: micProblem(e), tone: "bad" });
-            })
-        }
-      >
-        Hear this voice
+      <Button variant="quiet" onClick={testVoice}>
+        Test voice
       </Button>
+      {test ? <Banner tone={test.ok ? "good" : "bad"}>{test.words}</Banner> : null}
     </>
   );
 }

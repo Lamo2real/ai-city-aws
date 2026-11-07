@@ -294,6 +294,8 @@ export async function mockBackend(
         __speakMs?: number;
         __partials?: string[];
         __spoken?: string[];
+        __synthMs?: number;
+        __synthError?: string;
       };
       let hearing = false;
       let talking = false;
@@ -318,10 +320,14 @@ export async function mockBackend(
           talking = false;
         },
         // Sentence by sentence, like Polly: a "clip" is the sentence's text; playing it records it in __spoken.
+        // __synthMs makes synthesis take that long; __synthError makes it refuse with that AWS error name.
         async synth(text: string) {
+          if (w.__synthError) throw Object.assign(new Error("the speech service refused"), { name: w.__synthError });
+          if (w.__synthMs) await new Promise((r) => setTimeout(r, w.__synthMs));
           return new Blob([text], { type: "text/plain" });
         },
-        async play(clip: Blob) {
+        async play(clip: Blob, onBegin?: () => void) {
+          onBegin?.();
           (w.__spoken ??= []).push(await clip.text());
           talking = true;
           await new Promise((r) => setTimeout(r, w.__speakMs ?? 0));

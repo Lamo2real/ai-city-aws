@@ -436,10 +436,11 @@ test("Settings: pick AIC's voice; it is remembered on this device and can be hea
   const voice = page.getByLabel("AIC's voice");
   await expect(voice).toHaveValue("Matthew"); // the deploy's default
   await voice.selectOption("Ruth");
-  await page.getByRole("button", { name: "Hear this voice" }).click();
+  await page.getByRole("button", { name: "Test voice" }).click();
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []))
     .toEqual(["Hi, I'm AIC. This is how I'll sound when I answer you."]);
+  await expect(page.getByText(/^Played\./)).toBeVisible(); // the button says it worked
   await page.reload();
   await expect(page.getByLabel("AIC's voice")).toHaveValue("Ruth");
   expect(await page.evaluate(() => localStorage.getItem("aic.voice"))).toBe("Ruth");
@@ -658,6 +659,49 @@ test("speech to speech: a spoken question gets a spoken answer, and the mic reop
     "Nothing needs you.",
   ]);
   await expect(strip).toHaveAttribute("data-speaker", "idle");
+});
+
+test("'speaking' shows only while sound plays, and a voice that fails says why", async ({ page }) => {
+  const m = await mockBackend(page);
+  await page.addInitScript(() => {
+    (window as unknown as { __synthMs: number }).__synthMs = 1200; // making the audio takes a while
+    (window as unknown as { __speakMs: number }).__speakMs = 1000; // and it plays for a second
+  });
+  await page.goto("/");
+  const strip = page.locator(".voice");
+  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click(); // asked by voice
+  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
+  await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "stop listening"));
+  m.send({ type: "ace.reply", conversation: "main", text: "All quiet.", done: true });
+  await expect(page.getByLabel("Conversation with AIC").getByText("All quiet.")).toBeVisible();
+  // The reply is done, but its audio is still being made: not "speaking" yet.
+  await page.waitForTimeout(400);
+  await expect(strip).not.toHaveAttribute("data-speaker", "aic");
+  // The clip starts playing: now it is.
+  await expect(strip).toHaveAttribute("data-speaker", "aic");
+  await expect(strip).not.toHaveAttribute("data-speaker", "aic", { timeout: 8000 }); // and it ends
+
+  // Polly refuses: the voice line says so in plain words, and nothing pretends to speak.
+  await page.evaluate(() => {
+    const w = window as unknown as { __synthMs: number; __synthError: string; __heard: string };
+    w.__synthMs = 0;
+    w.__synthError = "AccessDeniedException";
+    w.__heard = "status?";
+  });
+  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(2);
+  await page.evaluate(() => {
+    delete (window as unknown as { speechSynthesis?: unknown }).speechSynthesis; // no browser voice to fall back on
+    (window as unknown as { __heard: string }).__heard = "stop listening";
+  });
+  m.send({ type: "ace.reply", conversation: "main", text: "Still quiet.", done: true });
+  await expect(page.getByRole("alert")).toContainText("AIC's voice could not play (AccessDeniedException");
+  await expect(strip).not.toHaveAttribute("data-speaker", "aic");
+
+  // The Test voice button reports the same failure, exactly.
+  await page.goto("/#/settings");
+  await page.getByRole("button", { name: "Test voice" }).click();
+  await expect(page.getByText(/AIC's voice could not play \(AccessDeniedException/)).toBeVisible();
 });
 
 test("a draft survives a reload", async ({ page }) => {
