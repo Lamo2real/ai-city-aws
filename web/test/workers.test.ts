@@ -15,6 +15,15 @@ describe("send everyone home", () => {
       },
     } as never;
     expect(workersAtWork(city)).toBe(2);
+    const dormant = {
+      ...city,
+      agents: {
+        ...city.agents,
+        d1: { id: "d1", kind: "worker", state: "dormant", worker_state: "idle" },
+        r1: { id: "r1", kind: "worker", state: "active", worker_state: "released" },
+      },
+    } as never;
+    expect(workersAtWork(dormant)).toBe(3); // dormant still sits at a desk; released does not
     expect(workersAtWork({ agents: {} } as never)).toBe(0);
   });
   it("asks and reports in plain words", () => {

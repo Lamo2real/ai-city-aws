@@ -3,7 +3,10 @@
 import type { CityState } from "../city/city-state.js";
 
 export function workersAtWork(city: CityState): number {
-  return Object.values(city.agents ?? {}).filter((a) => a.kind === "worker" && a.state === "active").length;
+  // Everyone the City draws at a desk: active or dormant, but not retired or released.
+  return Object.values(city.agents ?? {}).filter(
+    (a) => a.kind === "worker" && a.state !== "retired" && a.worker_state !== "released",
+  ).length;
 }
 
 export function sendHomeQuestion(n: number): string {

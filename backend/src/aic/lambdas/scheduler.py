@@ -102,8 +102,9 @@ async def release_idle_workers(
     running = await _running_agents(ledger, turn_timeout_minutes)
     d = CityDeps(ledger=ledger, bus=bus, queue=queue, factory=factory, settings=_no_settings, max_review_rounds=3)
     n = checked = failed = 0
-    for w in await ledger.list_agents("active"):
-        if w.get("kind") != "worker":
+    for w in await ledger.list_agents():
+        # Dormant workers count too: the City still draws them at a desk until they are released.
+        if w.get("kind") != "worker" or w.get("state") == "retired" or w.get("worker_state") == "released":
             continue
         checked += 1
         if w["id"] in running:

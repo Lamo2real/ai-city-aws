@@ -73,8 +73,12 @@ async def release_if_finished(d: CityDeps, worker_id: str, manager_id: str | Non
 
 
 async def workers_at_work(d: CityDeps) -> list[Record]:
-    """Every live worker: the ones the City draws at a desk."""
-    return [w for w in await d.ledger.list_agents("active") if w.get("kind") == "worker"]
+    """Every live worker: the ones the City draws at a desk (active or dormant; never retired or released)."""
+    return [
+        w
+        for w in await d.ledger.list_agents()
+        if w.get("kind") == "worker" and w.get("state") != "retired" and w.get("worker_state") != "released"
+    ]
 
 
 SENT_HOME_NOTE = "sent home by the owner; needs a new worker"
