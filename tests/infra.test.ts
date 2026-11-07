@@ -246,7 +246,7 @@ describe("knowledge base (docs/KNOWLEDGE.md)", () => {
   });
   it("lambdas: api 1024 MB with SnapStart behind the live alias; knowledge 2048 MB, reserved 50", () => {
     expect(api).toMatch(/handler = "aic\.lambdas\.api\.handler", timeout = 30, memory = 1024/);
-    expect(api).toMatch(/publish = each\.key == "api"/);
+    expect(api).toMatch(/publish = contains\(\["api", "dispatcher", "ws-broadcast"\], each\.key\)/);
     expect(api).toMatch(/apply_on = "PublishedVersions"/);
     expect(api).toMatch(/resource "aws_lambda_alias" "api_live" \{\s*name\s+= "live"/);
     expect(api).toContain("integration_uri        = aws_lambda_alias.api_live.invoke_arn");
@@ -554,9 +554,9 @@ describe("AIC warm-keeper (the owner's under-3-seconds target)", () => {
   const api = readFileSync("infra/modules/api/main.tf", "utf8");
   const agents = readFileSync("infra/modules/agents/main.tf", "utf8");
   const deploy = readFileSync(".github/workflows/deploy.yml", "utf8");
-  it("the scheduler pings AIC's runtime every 5 minutes, enabled from the start, and may invoke only that runtime", () => {
+  it("the scheduler pings AIC's runtime every 2 minutes, enabled from the start, and may invoke only that runtime", () => {
     expect(api).toMatch(
-      /warm-ace\s*=\s*\{ schedule = "rate\(5 minutes\)", fn = "scheduler", input = \{ job = "warm_ace" \}, state = "ENABLED" \}/,
+      /warm-ace\s*=\s*\{ schedule = "rate\(2 minutes\)", fn = "scheduler", input = \{ job = "warm_ace" \}, state = "ENABLED" \}/,
     );
     expect(api).toMatch(/state\s*=\s*lookup\(each\.value, "state", "DISABLED"\)/);
     const scheduler = api.slice(
@@ -566,8 +566,24 @@ describe("AIC warm-keeper (the owner's under-3-seconds target)", () => {
     expect(scheduler).toMatch(/bedrock-agentcore:InvokeAgentRuntime.*var\.runtime_arns\["ace"\]/);
     expect(scheduler).not.toMatch(/values\(var\.runtime_arns\)/);
     expect(api).toMatch(
-      /scheduler.*env = \{ AIC_RUNTIME_ARN_ACE = var\.runtime_arns\["ace"\], AIC_RUNTIME_VERSION = var\.runtime_version \}/,
+      /scheduler.*env = \{ AIC_RUNTIME_ARN_ACE = var\.runtime_arns\["ace"\], AIC_RUNTIME_VERSION = var\.runtime_version, AIC_WS_ENDPOINT = "https:\/\/\$\{aws_apigatewayv2_api\.ws\.id\}\.execute-api\.\$\{var\.region\}\.amazonaws\.com\/prod", AIC_CONNECTIONS_TABLE = var\.connections_table \}/,
     );
+  });
+  it("the dispatcher and ws-broadcast are always on: published, a live alias, provisioned concurrency 1, and every trigger uses the alias", () => {
+    expect(api).toMatch(/publish = contains\(\["api", "dispatcher", "ws-broadcast"\], each\.key\)/);
+    expect(api).toMatch(
+      /resource "aws_lambda_alias" "always_on" \{\n {2}for_each\s+= toset\(\["dispatcher", "ws-broadcast"\]\)/,
+    );
+    expect(api).toMatch(
+      /resource "aws_lambda_provisioned_concurrency_config" "always_on" \{[\s\S]*?provisioned_concurrent_executions = 1/,
+    );
+    expect(api).toMatch(/function_name\s+= aws_lambda_alias\.always_on\["dispatcher"\]\.arn/); // the SQS mapping
+    expect(api).toMatch(/each\.key == "ws-broadcast" \? aws_lambda_alias\.always_on\["ws-broadcast"\]\.arn/); // the EventBridge target
+    expect(api).toMatch(
+      /qualifier\s+= each\.key == "ws-broadcast" \? aws_lambda_alias\.always_on\["ws-broadcast"\]\.name : null/,
+    ); // its permission
+    // SnapStart and provisioned concurrency never meet on one function.
+    expect(api).toMatch(/for_each = each\.key == "api" \? \[1\] : \[\]/);
   });
   it("AIC's session lives all day with a 30-minute idle window; the other coordinators keep an hour", () => {
     expect(agents).toMatch(/idle_runtime_session_timeout = each\.key == "ace" \? 1800 : 900/);

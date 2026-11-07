@@ -99,7 +99,7 @@ locals {
     dispatcher    = { bundle = "app", handler = "aic.lambdas.dispatcher.handler", timeout = 120, memory = 1024, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_ARN_ORCHESTRATOR = var.runtime_arns["orchestrator"], AIC_RUNTIME_ARN_MANAGER = var.runtime_arns["manager"], AIC_RUNTIME_ARN_WORKER = var.runtime_arns["worker"], AIC_RUNTIME_VERSION = var.runtime_version, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod", AIC_CONNECTIONS_TABLE = var.connections_table } }
     factory       = { bundle = "app", handler = "aic.lambdas.factory.handler", timeout = 30, memory = 256, env = {} }
     ledger-writer = { bundle = "app", handler = "aic.lambdas.ledger_writer.handler", timeout = 30, memory = 256, env = {} }
-    scheduler     = { bundle = "app", handler = "aic.lambdas.scheduler.handler", timeout = 120, memory = 256, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_VERSION = var.runtime_version } }
+    scheduler     = { bundle = "app", handler = "aic.lambdas.scheduler.handler", timeout = 120, memory = 256, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_VERSION = var.runtime_version, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod", AIC_CONNECTIONS_TABLE = var.connections_table } }
     notifier      = { bundle = "app", handler = "aic.lambdas.notifier.handler", timeout = 30, memory = 256, env = { AIC_NOTIFY_TOPIC_ARN = var.notify_topic_arn } }
     approvals     = { bundle = "app", handler = "aic.lambdas.approvals.handler", timeout = 30, memory = 256, env = {} }
     ws-authorizer = { bundle = "app", handler = "aic.lambdas.ws.authorizer_handler", timeout = 10, memory = 256, env = { AIC_USER_POOL_ID = var.user_pool_id, AIC_USER_POOL_CLIENT_ID = var.client_id } }
@@ -209,7 +209,7 @@ locals {
     improve     = { schedule = "cron(0 3 ? * SUN *)", fn = "scheduler", input = { job = "improve" } }
     # Enabled from the start: keeps AIC's container running so a message never waits for a cold start
     # (AgentCore bills active processing only, so a warm idle container costs nothing). The owner's under-3-seconds target.
-    warm-ace = { schedule = "rate(5 minutes)", fn = "scheduler", input = { job = "warm_ace" }, state = "ENABLED" }
+    warm-ace = { schedule = "rate(2 minutes)", fn = "scheduler", input = { job = "warm_ace" }, state = "ENABLED" }
   }
 }
 
@@ -273,7 +273,9 @@ resource "aws_lambda_function" "fn" {
   memory_size      = each.value.memory
   # SnapStart (api only, docs/KNOWLEDGE.md section 14): each deploy publishes a version and snapshots its init;
   # API Gateway calls the `live` alias. Python 3.12+ SnapStart supports arm64.
-  publish = each.key == "api"
+  # The dispatcher and ws-broadcast are always on instead (provisioned concurrency on a `live` alias, below), so
+  # the owner's message never waits for a Lambda cold start on its way to AIC or back to the HUD.
+  publish = contains(["api", "dispatcher", "ws-broadcast"], each.key)
   dynamic "snap_start" {
     for_each = each.key == "api" ? [1] : []
     content {
@@ -306,7 +308,7 @@ resource "aws_lambda_function" "fn" {
 resource "aws_lambda_event_source_mapping" "queue" {
   for_each                = var.queue_arns
   event_source_arn        = each.value
-  function_name           = aws_lambda_function.fn["dispatcher"].arn
+  function_name           = aws_lambda_alias.always_on["dispatcher"].arn # the always-on alias, never $LATEST
   batch_size              = local.queue_batch[each.key]
   function_response_types = ["ReportBatchItemFailures"]
   scaling_config {
@@ -397,6 +399,25 @@ resource "aws_lambda_alias" "api_live" {
   function_version = aws_lambda_function.fn["api"].version
 }
 
+# Always on (the owner's under-3-seconds target): one warm copy each of the dispatcher (SQS → AIC's runtime) and
+# ws-broadcast (events → the HUD). Each deploy publishes a version, the `live` alias moves to it, and provisioned
+# concurrency keeps one initialized environment ready. About $11/month for the dispatcher's 1 GB and $3/month
+# for ws-broadcast's 256 MB. SnapStart stays on the api function only; the two don't combine.
+resource "aws_lambda_alias" "always_on" {
+  for_each         = toset(["dispatcher", "ws-broadcast"])
+  name             = "live"
+  description      = "Latest published version, kept warm"
+  function_name    = aws_lambda_function.fn[each.key].function_name
+  function_version = aws_lambda_function.fn[each.key].version
+}
+
+resource "aws_lambda_provisioned_concurrency_config" "always_on" {
+  for_each                          = aws_lambda_alias.always_on
+  function_name                     = each.value.function_name
+  qualifier                         = each.value.name
+  provisioned_concurrent_executions = 1
+}
+
 resource "aws_lambda_permission" "http" {
   statement_id  = "http-api"
   action        = "lambda:InvokeFunction"
@@ -482,7 +503,7 @@ resource "aws_cloudwatch_event_target" "all" {
   rule           = aws_cloudwatch_event_rule.all.name
   event_bus_name = var.bus_name
   target_id      = each.key
-  arn            = aws_lambda_function.fn[each.key].arn
+  arn            = each.key == "ws-broadcast" ? aws_lambda_alias.always_on["ws-broadcast"].arn : aws_lambda_function.fn[each.key].arn
 }
 
 resource "aws_cloudwatch_event_rule" "notify" {
@@ -566,6 +587,7 @@ resource "aws_lambda_permission" "events" {
   statement_id  = "events"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.fn[each.key].function_name
+  qualifier     = each.key == "ws-broadcast" ? aws_lambda_alias.always_on["ws-broadcast"].name : null
   principal     = "events.amazonaws.com"
   source_arn    = each.value
 }

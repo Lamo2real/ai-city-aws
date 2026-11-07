@@ -99,11 +99,21 @@ async def run_job(
     return {"skipped": f"unknown job {job}"}
 
 
+def warm_invoker(client: Any, env: Mapping[str, str]) -> AgentInvoker:
+    """The warm ping carries the HUD's WebSocket target, like the dispatcher's real invocations do, so the runtime
+    can ready its sender before the owner's message arrives."""
+    return AgentCoreInvoker(
+        client,
+        {"ace": env["AIC_RUNTIME_ARN_ACE"]},
+        {"wsEndpoint": env.get("AIC_WS_ENDPOINT", ""), "connectionsTable": env.get("AIC_CONNECTIONS_TABLE", "")},
+    )
+
+
 def handler(event: dict[str, Any], _context: Any = None) -> dict[str, int | str]:
     city = aws_city()
     invoker: AgentInvoker | None = None
     if event.get("job") == "warm_ace" and os.environ.get("AIC_RUNTIME_ARN_ACE"):
-        invoker = AgentCoreInvoker(city.session.client("bedrock-agentcore"), {"ace": os.environ["AIC_RUNTIME_ARN_ACE"]})
+        invoker = warm_invoker(city.session.client("bedrock-agentcore"), os.environ)
     out = run(run_job(event["job"], city.ledger, city.queue, city.bus, invoker=invoker))
     log("info", f"job.{event['job']}", **out)
     return out

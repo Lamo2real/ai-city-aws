@@ -3,7 +3,7 @@
 from typing import Any
 
 from aic.lambdas.dispatcher import session_id_for
-from aic.lambdas.scheduler import WARM_CONVERSATIONS, run_job, warm_ace
+from aic.lambdas.scheduler import WARM_CONVERSATIONS, run_job, warm_ace, warm_invoker
 from aic.shared.events import MemoryBus
 from aic.shared.hierarchy.queue import MemoryQueue
 from aic.shared.ledger import Ledger
@@ -47,3 +47,31 @@ async def test_a_failed_ping_is_counted_never_raised_and_the_job_runs_through_ru
     ledger = Ledger(MemoryTable(), None)  # type: ignore[arg-type]
     inv = FakeInvoker()
     assert await run_job("warm_ace", ledger, MemoryQueue(), MemoryBus(), ENV, invoker=inv) == {"warmed": 1, "failed": 0}
+
+
+class FakeAgentCore:
+    def __init__(self) -> None:
+        self.payloads: list[dict[str, Any]] = []
+
+    def invoke_agent_runtime(self, **kw: Any) -> dict[str, Any]:
+        import json
+
+        self.payloads.append(json.loads(kw["payload"]))
+        return {"statusCode": 200}
+
+
+async def test_the_ping_carries_the_huds_websocket_target_so_the_runtime_can_ready_its_sender() -> None:
+    client = FakeAgentCore()
+    env = {
+        **ENV,
+        "AIC_RUNTIME_ARN_ACE": "arn:ace",
+        "AIC_WS_ENDPOINT": "https://ws.example/prod",
+        "AIC_CONNECTIONS_TABLE": "conns",
+    }
+    await warm_ace(warm_invoker(client, env), env)
+    assert client.payloads[0]["kind"] == "warm"
+    assert client.payloads[0]["wsEndpoint"] == "https://ws.example/prod"
+    assert client.payloads[0]["connectionsTable"] == "conns"
+    bare = FakeAgentCore()
+    await warm_ace(warm_invoker(bare, {**ENV, "AIC_RUNTIME_ARN_ACE": "arn:ace"}), ENV)
+    assert "wsEndpoint" not in bare.payloads[0]

@@ -7,10 +7,11 @@ POST /invocations runs one turn; worker jobs are accepted at once and run in the
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import time
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from typing import Any, Protocol
 
 from starlette.applications import Starlette
@@ -35,9 +36,27 @@ class TurnRunner(Protocol):
     async def run_turn(self, inv: dict[str, Any]) -> str: ...
 
 
-def create_app(host: TurnRunner) -> Starlette:
+Warm = Callable[[dict[str, Any]], Awaitable[Any]]
+
+
+def create_app(
+    host: TurnRunner, warm: Warm | None = None, on_startup: list[Callable[[], Any]] | None = None
+) -> Starlette:
+    """``warm`` runs in the background on every warm-keeper ping (AIC only); ``on_startup`` runs when the server
+    starts (eager client creation). Neither may fail a request: both are logged and dropped."""
     state = {"running": 0, "last_update": int(time.time())}
-    background: set[asyncio.Task[None]] = set()
+    background: set[asyncio.Task[Any]] = set()
+
+    def spawn(coro: Awaitable[Any], what: str) -> None:
+        async def run() -> None:
+            try:
+                await coro
+            except Exception as e:
+                log("warn", f"{what}.failed", error=type(e).__name__)
+
+        task = asyncio.create_task(run())
+        background.add(task)
+        task.add_done_callback(background.discard)
 
     async def track(inv: dict[str, Any]) -> str:
         state["running"] += 1
@@ -60,7 +79,9 @@ def create_app(host: TurnRunner) -> Starlette:
                 raise ValueError("payload too large")
             inv = json.loads(raw)
             if isinstance(inv, dict) and inv.get("kind") == "warm":
-                # The warm-keeper's ping: the container is up, that's all it wants to know. No ledger, no model.
+                # The warm-keeper's ping: answer at once; AIC's warmer then heats the reply path in the background.
+                if warm is not None:
+                    spawn(warm(inv), "aic.warm")
                 return JSONResponse({"status": "warm"})
             if not isinstance(inv, dict) or not inv.get("id") or not inv.get("role") or not inv.get("agentId"):
                 raise ValueError("bad invocation")
@@ -81,9 +102,7 @@ def create_app(host: TurnRunner) -> Starlette:
                         detail=str(e)[:1500],
                     )
 
-            task = asyncio.create_task(job())
-            background.add(task)
-            task.add_done_callback(background.discard)
+            spawn(job(), "turn")
             return JSONResponse({"status": "accepted"}, status_code=202)
         try:
             response = await track(inv)
@@ -102,9 +121,21 @@ def create_app(host: TurnRunner) -> Starlette:
     async def not_found(_: Request, __: Exception) -> JSONResponse:
         return JSONResponse({"error": "not found"}, status_code=404)
 
+    @contextlib.asynccontextmanager
+    async def lifespan(_: Starlette) -> AsyncIterator[None]:
+        for f in on_startup or []:
+            try:
+                r = f()
+                if asyncio.iscoroutine(r):
+                    spawn(r, "startup")
+            except Exception as e:
+                log("warn", "startup.failed", error=type(e).__name__)
+        yield
+
     return Starlette(
         routes=[Route("/ping", ping, methods=["GET"]), Route("/invocations", invocations, methods=["POST"])],
         exception_handlers={404: not_found, 405: not_found},
+        lifespan=lifespan,
     )
 
 
@@ -160,8 +191,30 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
             mail=_mail(city, e, role),
         ),
     )
+    warmer = _warmer(city, e) if role == "ace" else None
+    if warmer:
+        warmer.prepare()
     log("info", "runtime.started", role=role)
-    return create_app(host)
+    return create_app(host, warm=warmer.warm if warmer else None, on_startup=[warmer.warm] if warmer else None)
+
+
+def _warmer(city: Any, e: Mapping[str, str]) -> Any:
+    """AIC's warmer: the Bedrock client, the HUD's WebSocket sender, a ledger read and a one-token model call."""
+    from aic.shared.models import resolve_role_from_env
+
+    from .direct import _bedrock
+    from .live import websocket_sender
+    from .warm import AceWarmer
+
+    async def ledger_read() -> Any:
+        return await city.ledger.table.get("WARM", "PING")
+
+    return AceWarmer(
+        bedrock=_bedrock,
+        model_id=resolve_role_from_env("ace", e).primary.invoke_id,
+        ledger_read=ledger_read,
+        sender=lambda endpoint, table: websocket_sender(endpoint, table, city.region),
+    )
 
 
 def _knowledge(session: Any, bus: Any, role: str, env: Mapping[str, str]) -> KnowledgeAccess | None:
