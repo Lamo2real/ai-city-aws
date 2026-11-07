@@ -238,21 +238,26 @@ HUD side (`web/src/lib/bridge.ts`, one `message` listener for the whole HUD):
 ### API: `POST /apps/<app_id>/bridge` (owner group checked, like every route)
 - Loads the APP record; `cap` must be in its `grants` → else 403 `not_granted`. Params validated per capability
   (table above) → 400 `invalid`.
-- Runs the read through `policy.gate` as role **`app`** with tool name `mcp__app__<cap>` (connector reads:
-  `mcp__app__connector___<id>___<tool>`), audited with `app_id` (name, decision, duration; never args or data,
-  as for every tool). `config/policy.json` gets: `^mcp__app__(calendar\.read|calendar\.calendars|mail\.search|mail\.accounts|connector___.+)$`
-  → allow for role `app`; every other `mcp__app__` name → deny. A test pins that no write tool name can pass.
+- Runs the read through `policy.gate` as role **`app`**, agent `app-<app_id>`, with tool name `mcp__app__<cap>` for
+  mail/calendar reads and `mcp__gateway__<id>___<tool>` for connector reads (so every connector rule in
+  `config/policy.json`, such as the merge and secret denies, applies to apps too), audited with `app_id` (name, decision, duration; never args or data,
+  as for every tool). `config/policy.json` gets: `^mcp__app__(calendar\.read|calendar\.calendars|mail\.search|mail\.accounts)$`
+  → allow for role `app`; every other `mcp__app__` name → deny; for role `app`, "ask" counts as deny. A test pins that no write tool name can pass.
 - The api Lambda checks the grant and params, then invokes the **app-bridge Lambda** `aic-prod-app-bridge`
   (role `aic-prod-fn-app-bridge`) synchronously with `{app_id, cap, params}`. Only that Lambda can reach the
   Gateway or the mail/calendar reads for apps, so the api role gets no Gateway access (agreed with the connectors
   lead, `docs/CONNECTORS_SKILLS.md` §1.9 on `connectors-skills`, commit 8fb8d53).
-- Connector reads: the bridge Lambda calls `aic.shared.connector_calls.app_call(d, app_id=, capability_id=,
-  connector_id=, tool=, args=)` → `{ok, data: [{type: "text", text} | {type: "json", json}], truncated, error}`.
-  `capability_id` is `connector.read:<connector_id>:<tool>`. `app_call` re-checks the grant on the APP record
+- Connector reads: the bridge Lambda calls `aic.shared.connector_calls.app_call(d, app_id=, connector_id=, tool=,
+  args=)` → `{ok, data: [{type: "text", text} | {type: "json", json}], truncated, error}` (Gateway client in
+  `aic.shared.gateway`). `app_call` re-checks the grant on the APP record
   (below), that the connector is `ready` and the tool read-only and not destructive, runs `policy.gate` as role
-  `app` (agent `app-<app_id>`; "ask" counts as deny) and the audit, applies its own 60/min per-app limit for
-  connector calls, and calls the Gateway as the bridge role; a Cedar `permit` lets only that principal use
-  read-only tools of ready connectors. Output ≤ 200k characters, untrusted.
+  `app` (agent `app-<app_id>`, tool `mcp__gateway__<id>___<tool>`; "ask" counts as deny) and the audit, applies its own 60/min per-app limit for
+  connector calls, and calls the Gateway as the bridge role; the Cedar `permit` for that principal lists
+  exactly the `<id>___<tool>` pairs found in some APP record's `grants` that are still read-only, not destructive
+  and ready (`docs/CONNECTORS_SKILLS.md` §1.9, commit c4f1cf9).
+- After every publish, app removal or grant change the api Lambda invokes the connectors Lambda
+  (`aic-prod-connectors`) asynchronously with `{"action": "policies"}` so Cedar matches the grants. Until it
+  has run, `app_call`'s own grant check still refuses revoked grants. Output ≤ 200k characters, untrusted.
 - Grant record that `app_call` reads: the APP item itself (pk `APPS`, sk `APP#<app_id>`), field `grants`: a list of
   `{id, connector?, tool?}` (for example `{id: "connector.read", connector: "github", tool: "list_issues"}`), plus
   `granted_at`. A revoked grant is simply removed from the list; a removed app has no item.
