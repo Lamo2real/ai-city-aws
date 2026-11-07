@@ -89,7 +89,14 @@ async def test_runs_a_tool_through_the_gate_and_answers_with_its_result() -> Non
     spec = ToolSpec("get_status", "Status.", {"type": "object", "properties": {}}, get_status)
     fake = FakeBedrock([tool_round("get_status", '{"detail": true}'), text_round("Two things are running.")])
     req = request([spec], [])
+    steps: list[tuple[str, str | None]] = []
+
+    async def on_activity(activity: str, detail: str | None) -> None:
+        steps.append((activity, detail))
+
+    req.on_activity = on_activity
     out = await direct_engine(req, fake)
+    assert steps == [("working", "get_status")]  # the HUD turns this into "Checking the ledger"
     assert out.text == "Two things are running."
     assert seen == [{"detail": True}]
     assert req.ledger.audit == [("mcp__city__get_status", "allow")]

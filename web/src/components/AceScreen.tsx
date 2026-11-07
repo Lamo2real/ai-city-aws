@@ -5,6 +5,7 @@ import { sendMessage } from "../lib/actions.ts";
 import { store, useHud, waitingCount } from "../lib/store.ts";
 import { useVoice } from "../voice/useVoice.ts";
 import { Eyes } from "./Eyes.tsx";
+import { AicStatus, AicSteps } from "./AicStatus.tsx";
 import { StreamedText } from "./StreamedText.tsx";
 import { Banner, ClearIcon, SendIcon } from "./ui.tsx";
 import { VoiceVisualizer } from "./VoiceVisualizer.tsx";
@@ -25,6 +26,7 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
   const presence = useHud((s) => s.presence);
   const waiting = useHud(waitingCount);
   const live = useHud((s) => s.live);
+  const turn = useHud((s) => s.turn);
   const [text, setText] = useState(readDraft);
   const input = useRef<HTMLTextAreaElement>(null);
   const log = useRef<HTMLDivElement>(null);
@@ -56,8 +58,9 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
     input.current?.focus();
   };
   const lastLine = chat.at(-1);
-  // Right after the owner sends, AIC's turn shows as bouncing dots until the first words arrive.
+  // Right after the owner sends, AIC's status row (eye, current step, seconds) shows until its first words.
   const waitingForAic = presence === "thinking" && lastLine?.who === "owner" && lastLine.state !== "failed";
+
   const shown = presence === "idle" && waiting ? "waiting" : presence;
   const unsent = chat.filter((l) => l.who === "owner" && (l.state === "failed" || l.state === "queued")).length;
 
@@ -124,19 +127,18 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
                 ) : (
                   <p>{l.text}</p>
                 )}
+                {l.who === "ace" && l.state === "done" && l.steps ? (
+                  <AicSteps steps={l.steps} tookMs={l.tookMs} />
+                ) : null}
                 {l.state === "failed" || l.state === "queued" ? (
                   <span className="note">Not sent yet. It will send when the connection is back.</span>
                 ) : null}
               </div>
             </article>
           ))}
-          {waitingForAic ? (
+          {waitingForAic && turn ? (
             <article className="msg msg-ace msg-pending">
-              <span className="typing" role="status" aria-label="AIC is thinking">
-                <i />
-                <i />
-                <i />
-              </span>
+              <AicStatus turn={turn} />
             </article>
           ) : null}
         </div>

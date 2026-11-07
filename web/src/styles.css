@@ -744,42 +744,82 @@ main {
   font-size: 14px;
   color: var(--bad);
 }
-/* AIC's turn before the first words: three dots bouncing softly, one after another. */
+/* AIC's turn before its first words: the eye blinking slowly, the step in silver with a soft shimmer, seconds. */
 .msg-pending {
   min-height: 28px;
   justify-content: center;
 }
-.typing {
-  display: inline-flex;
-  align-items: flex-end;
-  gap: 6px;
-  height: 22px;
-  padding: 0 2px;
+.aic-status {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  font-weight: 600;
 }
-.typing i {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--soft);
-  animation: typing 1.1s cubic-bezier(0.33, 1, 0.68, 1) infinite;
+.aic-status-eye {
+  flex: none;
+  width: 34px;
+  aspect-ratio: 600 / 324;
+  background: var(--ink);
+  -webkit-mask: url("/ace-eye.png") center / contain no-repeat;
+  mask: url("/ace-eye.png") center / contain no-repeat;
+  animation: calm-blink 4.8s ease-in-out infinite;
 }
-.typing i:nth-child(2) {
-  animation-delay: 0.14s;
-}
-.typing i:nth-child(3) {
-  animation-delay: 0.28s;
-}
-@keyframes typing {
+@keyframes calm-blink {
   0%,
-  60%,
+  88%,
   100% {
-    transform: translateY(0);
-    opacity: 0.45;
-  }
-  30% {
-    transform: translateY(-8px);
+    transform: scaleY(1);
     opacity: 1;
   }
+  93% {
+    transform: scaleY(0.15);
+    opacity: 0.8;
+  }
+}
+/* Silver text: the resting colour is #4d5360 (7:1 on the sheet); the moving highlight is a narrow lighter band. */
+.shimmer {
+  color: #4d5360;
+  background: linear-gradient(100deg, #4d5360 0%, #4d5360 40%, #9aa1ad 50%, #4d5360 60%, #4d5360 100%) 0 0 / 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer-sweep 2.2s linear infinite;
+}
+@keyframes shimmer-sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0% 0;
+  }
+}
+.aic-status-time {
+  color: var(--soft);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.aic-steps {
+  margin-top: var(--s3);
+  color: var(--soft);
+  font-size: 14px;
+}
+.aic-steps summary {
+  cursor: pointer;
+  width: fit-content;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+}
+.aic-steps summary:hover {
+  color: var(--text);
+}
+.aic-steps ol {
+  margin: var(--s1) 0 0;
+  padding-left: 1.4em;
+}
+.aic-steps li + li {
+  margin-top: 2px;
 }
 /* A thin caret at the end of the words while AIC's reply is still coming in. */
 .msg-ace.is-streaming .msg-body > :is(p, h3, h4, h5, h6):last-child::after,
@@ -848,9 +888,9 @@ main {
   cursor: default;
 }
 @media (prefers-reduced-motion: reduce) {
-  .typing i {
+  .aic-status-eye,
+  .shimmer {
     animation: none;
-    opacity: 0.8;
   }
   .msg-ace.is-streaming .msg-body > :is(p, h3, h4, h5, h6):last-child::after,
   .msg-ace.is-streaming .msg-body > :is(ul, ol):last-child > li:last-child::after {
