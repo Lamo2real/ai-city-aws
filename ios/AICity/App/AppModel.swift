@@ -62,6 +62,8 @@ final class AppModel {
 
     let hud: HudStore
     let voice = VoiceController()
+    /// Notifications when a large feature is done.
+    let push: PushController
     /// The City scene: one web view for the app's lifetime, fed by the store.
     @ObservationIgnored private(set) lazy var cityScene: CityWebController = {
         let c = CityWebController()
@@ -96,8 +98,10 @@ final class AppModel {
     @ObservationIgnored private var toastTask: Task<Void, Never>?
 
     init(configStore: ConfigStore = ConfigStore(), hud: HudStore? = nil, http: HTTPTransport = URLSessionTransport(),
-         makeAuth: @escaping (AppConfig) -> AuthClient = { CognitoAuth(config: $0) }, connectLive: Bool = true) {
+         makeAuth: @escaping (AppConfig) -> AuthClient = { CognitoAuth(config: $0) }, connectLive: Bool = true,
+         push: PushController? = nil) {
         self.configStore = configStore
+        self.push = push ?? PushController()
         self.hud = hud ?? HudStore()
         self.http = http
         self.makeAuth = makeAuth
@@ -120,6 +124,7 @@ final class AppModel {
             let a = auth ?? makeAuth(c)
             auth = a
             api = APIClient(baseURL: c.apiUrl, http: http) { [weak a] fresh in try await a?.idToken(fresh: fresh) ?? nil }
+            push.api = api
             let token: String?
             do { token = try await a.idToken(fresh: false) } catch { token = a.hasSession ? "offline" : nil }
             guard token != nil else { boot = .signedOut; return }
@@ -168,9 +173,19 @@ final class AppModel {
             hud.live = .online
             await loadCity()
         }
+        await push.refresh()
+        await push.sync()  // a token that came before the sign-in
         if let s = try? await api?.settings(), s["first_run_done"].bool != true, !UserDefaults.standard.bool(forKey: "aic.guide.done") {
             showGuide = true
+        } else {
+            await push.offerIfNeeded()
         }
+    }
+
+    /// The owner tapped a notification: AIC has the news.
+    func openFromNotification() {
+        morePath = []
+        open(.aic)
     }
 
     func signedIn() async { await start() }
@@ -188,6 +203,7 @@ final class AppModel {
         }
         live?.resumeNow()
         await loadCity()
+        await push.refresh()  // notifications turned on or off in iOS Settings meanwhile
     }
 
     /// Cognito refused the refresh token (revoked, expired, or signed out elsewhere): sign in again.
@@ -209,6 +225,7 @@ final class AppModel {
         live?.stop()
         live = nil
         voice.stop(send: false)
+        await push.signOut()  // while the tokens still work
         await auth?.signOut()
         hud.city = CityState()
         hud.loaded = false
@@ -219,6 +236,7 @@ final class AppModel {
         showGuide = false
         UserDefaults.standard.set(true, forKey: "aic.guide.done")
         Task { _ = try? await api?.saveSettings(["first_run_done": true]) }
+        Task { await push.offerIfNeeded() }
     }
 
     // MARK: Chat and the outbox: a message that can't be sent stays marked and goes out later.

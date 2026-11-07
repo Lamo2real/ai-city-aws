@@ -79,6 +79,14 @@ final class APIClient: @unchecked Sendable {
         try await request("/settings", method: "PUT", body: patch)["settings"]
     }
 
+    /// Registers this iPhone for notifications; returns the backend's id for it.
+    func registerDevice(token: String, sandbox: Bool) async throws -> String {
+        let r = try await request("/devices", method: "POST", body: ["token": .string(token), "platform": "ios", "sandbox": .bool(sandbox)])
+        guard let id = r["device"]["id"].string ?? r["id"].string else { throw APIError(message: "Something went wrong.", status: 0, fix: nil) }
+        return id
+    }
+    func unregisterDevice(_ id: String) async throws { try await request("/devices/\(Self.seg(id))", method: "DELETE") }
+
     /// IDs come from the server; keep them to one safe path segment anyway.
     static func seg(_ id: String) -> String {
         id.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-_"))) ?? ""

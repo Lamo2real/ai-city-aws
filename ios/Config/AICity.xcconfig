@@ -9,3 +9,10 @@ AIC_SITE_HOST =
 // A free personal team needs a bundle ID nobody else uses.
 AIC_TEAM_ID =
 AIC_BUNDLE_PREFIX = com.lamo2real
+
+// Notifications (a push when a large feature is done) need the Push Notifications capability, which only the
+// Apple Developer Program has; a free Personal Team refuses to sign an app that asks for it. With a program
+// team, set AIC_ENTITLEMENTS = Config/AICity-Push.entitlements (Xcode switches it to production for
+// TestFlight). The simulator always has it.
+AIC_ENTITLEMENTS =
+AIC_ENTITLEMENTS[sdk=iphonesimulator*] = Config/AICity-Push.entitlements
