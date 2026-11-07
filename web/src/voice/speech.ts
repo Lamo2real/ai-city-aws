@@ -90,7 +90,8 @@ export class SpeechQueue<Clip> {
 
   constructor(
     private synth: (text: string) => Promise<Clip | null>,
-    private play: (clip: Clip) => Promise<void>,
+    private play: (clip: Clip, onBegin?: () => void) => Promise<void>,
+    /** Called when a clip's sound actually starts (not when it is queued or synthesized). */
     private onStart?: () => void,
     /** A sentence failed to synthesize or play. The queue carries on with the rest; the caller decides. */
     private onProblem?: (e: unknown) => void,
@@ -122,8 +123,7 @@ export class SpeechQueue<Clip> {
     this.playChain = this.playChain.then(async () => {
       const c = await clip;
       if (!c || this.stopped) return;
-      this.onStart?.();
-      await this.play(c).catch((e: unknown) => this.onProblem?.(e));
+      await this.play(c, this.onStart).catch((e: unknown) => this.onProblem?.(e));
     });
   }
 }

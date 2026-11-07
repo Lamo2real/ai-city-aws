@@ -106,14 +106,14 @@ export function useVoice(dictation?: DictationTarget) {
       // Polly failed earlier this session: the browser's own voice speaks, sentence by sentence, instead.
       const engine =
         usingBrowserVoice() && browserVoiceAvailable()
-          ? { synth: async (s: string) => s, play: (s: string) => browserSpeak(s) }
+          ? { synth: async (s: string) => s, play: (s: string, onBegin?: () => void) => browserSpeak(s, onBegin) }
           : v.synth && v.play
             ? { synth: v.synth.bind(v), play: v.play.bind(v) }
             : null;
       if (say && engine)
         t.queue = new SpeechQueue(
           engine.synth as (s: string) => Promise<unknown>,
-          engine.play as (c: unknown) => Promise<void>,
+          engine.play as (c: unknown, onBegin?: () => void) => Promise<void>,
           () => {
             t.started = true;
             store.set({ presence: "speaking" });
@@ -149,7 +149,7 @@ export function useVoice(dictation?: DictationTarget) {
             toast({ text: "Using your browser's voice.", tone: "info" });
             const q = new SpeechQueue<string>(
               async (s) => s,
-              (s) => browserSpeak(s),
+              (s, onBegin) => browserSpeak(s, onBegin),
               () => {
                 t.started = true;
                 store.set({ presence: "speaking" });
