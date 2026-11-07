@@ -35,7 +35,7 @@ from aic.shared.caps import validate_caps
 from aic.shared.clients import client
 from aic.shared.config import caps_config
 from aic.shared.events import EventBus, now_iso
-from aic.shared.hierarchy.actions import CityDeps, answer_question, send_workers_home, sweep_stale_asks
+from aic.shared.hierarchy.actions import CityDeps, answer_question, send_home, send_workers_home, sweep_stale_asks
 from aic.shared.hierarchy.factory import Factory
 from aic.shared.hierarchy.queue import Queue, WorkMessage
 from aic.shared.hierarchy.tasks import DONE_OR_GONE, cancel_task, job_rows
@@ -93,6 +93,7 @@ ROUTES: list[tuple[str, str]] = [
     ("POST", "/workers/home"),
     ("POST", "/tasks/t-1/cancel"),
     ("POST", "/city/reset"),
+    ("POST", "/agents/wkr-1/home"),
     ("GET", "/memory"),
     ("POST", "/notes"),
     ("GET", "/connectors"),
@@ -715,6 +716,14 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
     if is_("POST", r"/workers/home"):
         # The owner's "send everyone home", straight from the HUD: no model in the loop, instant.
         return reply(200, await send_workers_home(_action_deps(d)))
+    if is_("POST", r"/agents/[\w-]+/home"):
+        # The owner clicked a worker in the City and chose "Send home": that one worker, nothing else.
+        w = await d.ledger.get_agent(seg[1])
+        if not w or w.get("kind") != "worker":
+            return problem(404, "That is not a worker.", "Managers stay with their department; send its workers home.")
+        if w.get("state") == "retired" or w.get("worker_state") == "released":
+            return problem(409, "That worker is already home.")
+        return reply(200, await send_home(_action_deps(d), [w]))
     if is_("POST", r"/city/reset"):
         # The owner's "start over" (Settings): the city is emptied and nothing runs afterwards. No model in the
         # loop; the HUD asks for a held button first and sends confirm=true, nothing else resets anything.

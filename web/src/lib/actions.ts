@@ -80,5 +80,10 @@ export const cancelJob = (id: string) =>
   api<{ jobs: number; workers: number }>(`/tasks/${id}/cancel`, { method: "POST" });
 export const instruct = (agentId: string, text: string) =>
   api("/city/instruct", { method: "POST", body: { agent_id: agentId, text } });
+/** The owner clicked a worker and chose "Send home": that one worker walks home; its job and manager stay. */
+export const sendWorkerHome = (workerId: string) =>
+  api<{ workers: number; parts: number; failed: number }>(`/agents/${encodeURIComponent(workerId)}/home`, {
+    method: "POST",
+  });
 export const saveSettings = (patch: Record<string, unknown>) =>
   api<{ settings: Record<string, unknown> }>("/settings", { method: "PUT", body: patch });

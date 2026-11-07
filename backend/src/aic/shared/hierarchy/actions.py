@@ -85,6 +85,63 @@ SENT_HOME_NOTE = "sent home by the owner"
 STAND_DOWN_NOTE = "The owner sent everyone home; do not hire or assign anything until the owner starts a new job."
 
 
+async def send_home(d: CityDeps, workers: list[Record]) -> dict[str, int]:
+    """The owner's "send him home" for some workers (one clicked in the City, or the ones AIC picked): each
+    one's open assignments are cancelled with a note for its manager and the worker is released (one
+    `agent.retired` each, so the City walks it out). Nobody is woken or re-hired for the dropped parts: the job
+    stays as it is with fewer hands, and the owner starts a new job if they want it done. Managers, jobs and
+    the other workers are untouched (that is `send_workers_home`)."""
+    sent = parts = failed = 0
+    for w in workers:
+        try:
+            stale = await d.ledger.tickets_of(w["id"], OPEN_ASSIGNMENT)
+            for t in stale:
+                await move(d, t["id"], "cancelled", f"{w['id']} {SENT_HOME_NOTE}")
+            await d.factory.release(w["id"], str(w.get("parent")))  # a no-op if a cancel above sent it home
+        except Exception as e:  # one worker that cannot be released never keeps the others at their desks
+            failed += 1
+            log("warn", "worker.release_failed", worker=w["id"], error=type(e).__name__)
+            continue
+        parts += len(stale)
+        sent += 1
+        log("info", "worker.sent_home", worker=w["id"], department=w.get("department"), assignments=len(stale))
+    return {"workers": sent, "parts": parts, "failed": failed}
+
+
+def _words(s: Any) -> set[str]:
+    return {w for w in str(s or "").lower().replace("&", " ").replace("-", " ").split() if len(w) > 1}
+
+
+def pick_workers(at_work: list[Record], who: str) -> tuple[list[Record], str]:
+    """Which of the workers at work the owner means by ``who``: ``"everyone"``/``"all"`` (all of them), a worker
+    id (``wkr-…``), a number (that many, the ones hired most recently first), or words that match a department
+    or a role ("voice engineering", "the writer"). Returns the workers and a plain reason when none match."""
+    q = who.strip().lower()
+    if not at_work:
+        return [], "Nobody is at work right now."
+    if q in ("everyone", "all", "everybody", "*", ""):
+        return list(at_work), ""
+    by_id = [w for w in at_work if str(w.get("id", "")).lower() == q]
+    if by_id:
+        return by_id, ""
+    if q.isdigit():
+        n = int(q)
+        newest = sorted(at_work, key=lambda w: str(w.get("hired_at", "")), reverse=True)
+        return newest[: max(0, n)], ("" if n > 0 else "That is nobody.")
+    words = _words(q) - {"the", "one", "guy", "worker", "workers", "person", "agent", "agents", "in", "from", "at"}
+    if not words:
+        return [], f"I don't know who “{who}” is."
+    hits = [
+        w
+        for w in at_work
+        if words <= _words(w.get("department")) | _words(w.get("role")) | _words(w.get("id"))
+        or (words & _words(w.get("department")) and len(words) <= 2)
+    ]
+    if not hits:
+        return [], f"Nobody at work matches “{who}”."
+    return hits, ""
+
+
 async def running_jobs(d: CityDeps) -> list[Record]:
     """The owner's top-level jobs that are still going."""
     return [

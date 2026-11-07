@@ -407,3 +407,17 @@ async def test_post_city_reset_empties_the_city_only_with_a_clear_confirm() -> N
     assert d.queue.purged == 1 and d.queue.pending == []
     city = js(await handle_http(ev("GET", "/city"), d))
     assert city["agents"] == [] and city["departments"] == [] and city["tickets"] == []
+
+
+async def test_post_agents_home_sends_one_clicked_worker_home_and_nothing_else() -> None:
+    d = make()
+    task_id, (w1, w2) = await _office(d)
+    assert (await handle_http(ev("POST", "/agents/mgr-writing/home"), d))["statusCode"] == 404
+    assert (await handle_http(ev("POST", "/agents/wkr-nope/home"), d))["statusCode"] == 404
+    r = await handle_http(ev("POST", f"/agents/{w1}/home"), d)
+    assert r["statusCode"] == 200 and js(r) == {"workers": 1, "parts": 1, "failed": 0}
+    assert (await d.ledger.get_agent(w1))["state"] == "retired"
+    assert (await d.ledger.get_agent(w2))["state"] == "active"  # the colleague stays
+    assert (await d.ledger.get_ticket(task_id))["status"] == "in_progress"  # the job stays
+    assert (await d.ledger.get_agent("mgr-writing"))["state"] == "active"
+    assert (await handle_http(ev("POST", f"/agents/{w1}/home"), d))["statusCode"] == 409

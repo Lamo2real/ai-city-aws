@@ -637,7 +637,8 @@ export function topBar(state) {
   const agents = Object.values(state.agents).filter((a) => !CORE.has(a.id) && a.kind !== "specialist");
   return {
     agentsTotal: agents.length,
-    agentsActive: agents.filter((a) => a.state === "active").length,
+    // "Working now" = everyone the City draws at a desk (hired, idle or busy); a released one is home and not counted.
+    agentsActive: agentsAtWork(state),
     ticketsRunning: Object.values(state.tickets).filter((t) => t.status === "in_progress" || t.status === "in_review").length,
     questionsWaiting: Object.keys(state.questions).length + Object.keys(state.approvals).length,
     parked: Object.keys(state.parked).length,

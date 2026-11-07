@@ -16,7 +16,7 @@ import {
 } from "../city/city-state.js";
 import { needsWords } from "../lib/needs.ts";
 import { mountCity, type CityScene } from "../city/scene.js";
-import { instruct } from "../lib/actions.ts";
+import { instruct, sendWorkerHome } from "../lib/actions.ts";
 import { appList, appsDepartment, capped, isPublish } from "../lib/apps.ts";
 import { api, ApiError } from "../lib/api.ts";
 import { store, useHud, waitingCount } from "../lib/store.ts";
@@ -351,7 +351,7 @@ const Glyph = ({ d }: { d: string }) => (
   </svg>
 );
 
-function CityPanel({
+export function CityPanel({
   open,
   city,
   onClose,
@@ -405,6 +405,8 @@ function AgentPanel({ id, city }: { id: string; city: CityState }) {
   } | null>(null);
   const [text, setText] = useState("");
   const [note, setNote] = useState<string | null>(null);
+  const [homeAsk, setHomeAsk] = useState(false);
+  const [homeNote, setHomeNote] = useState<string | null>(null);
   useEffect(() => {
     let gone = false;
     if (a && a.kind !== "specialist")
@@ -430,6 +432,16 @@ function AgentPanel({ id, city }: { id: string; city: CityState }) {
       setText("");
     } catch (err) {
       setNote(err instanceof ApiError ? err.message : "Not sent. Try again.");
+    }
+  };
+  const atWork = a.kind === "worker" && a.state !== "retired" && a.worker_state !== "released";
+  const sendHome = async () => {
+    setHomeAsk(false);
+    try {
+      await sendWorkerHome(id);
+      setHomeNote("Walking home. Its unfinished part is stopped; nobody takes its place.");
+    } catch (err) {
+      setHomeNote(err instanceof ApiError ? err.message : "Not sent home. Try again.");
     }
   };
   return (
@@ -466,6 +478,28 @@ function AgentPanel({ id, city }: { id: string; city: CityState }) {
           {note ? <p className="mute">{note}</p> : null}
         </form>
       ) : null}
+      {atWork ? (
+        <div className="sendhome">
+          {homeAsk ? (
+            <>
+              <p>Send this worker home? Its unfinished part stops and nobody takes its place.</p>
+              <div className="actions">
+                <Button variant="danger" onClick={sendHome}>
+                  Yes, send home
+                </Button>
+                <Button variant="quiet" onClick={() => setHomeAsk(false)}>
+                  Keep working
+                </Button>
+              </div>
+            </>
+          ) : (
+            <Button variant="secondary" onClick={() => setHomeAsk(true)}>
+              Send home
+            </Button>
+          )}
+        </div>
+      ) : null}
+      {homeNote ? <p className="mute">{homeNote}</p> : null}
     </div>
   );
 }

@@ -66,10 +66,13 @@ describe("the ported City state", () => {
     });
     expect(placement(s, "wkr-1")).toMatchObject({ place: "station", dept: "Engineering" });
     expect(placement(s, "ace")).toMatchObject({ place: "hq" });
-    expect(topBar(s)).toMatchObject({ agentsTotal: 2 });
+    expect(topBar(s)).toMatchObject({ agentsTotal: 2, agentsActive: 2 }); // the manager and the worker, at their desks
+    s = reduce(s, { type: "worker.state", id: "wkr-1", state: "dormant", at });
+    expect(topBar(s).agentsActive).toBe(2); // idle at the desk still counts as "Working now": the City draws it there
     s = reduce(s, { type: "agent.retired", id: "wkr-1", at });
     s = reduce(s, { type: "worker.state", id: "wkr-1", state: "released", at });
     expect(placement(s, "wkr-1")?.place).toBe("home");
+    expect(topBar(s).agentsActive).toBe(1); // home: not counted
     expect(s.feed.some((f) => /Department Engineering created/.test(f.text))).toBe(true);
   });
   it("shows 'needs you' for an agent with an open question or approval", () => {

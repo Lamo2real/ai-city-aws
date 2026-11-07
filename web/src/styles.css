@@ -1616,6 +1616,16 @@ table.costs td {
 .legend .mark {
   font-weight: 800;
 }
+.sendhome {
+  margin-top: var(--s3);
+  display: grid;
+  gap: var(--s2);
+}
+.sendhome .actions {
+  display: flex;
+  gap: var(--s2);
+  flex-wrap: wrap;
+}
 .instruct {
   display: grid;
   gap: var(--s2);

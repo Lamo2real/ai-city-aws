@@ -58,12 +58,12 @@ async def test_asks_first_then_stops_every_job_and_everyone_stays_home() -> None
 def test_the_prompt_keeps_send_home_and_stop_apart_and_never_pauses() -> None:
     body = load_prompt("ace.md").body
     assert "send_workers_home" in load_prompt("ace.md").tools
-    assert "The two controls" in body and "always on" in body and "stops every job" in body
+    assert "The three controls" in body and "always on" in body and "stops every job" in body
     assert "never argue" in body and "builder session" in body and "Never answer for them" in body
     assert "confirm=false`, which gives you the one short question" in body
     assert "pause_city" not in body and "resume_city" not in body
     assert "pause_city" not in load_prompt("ace.md").tools and "resume_city" not in load_prompt("ace.md").tools
-    assert body.index("`send_workers_home` with `confirm=false`") < body.index("## The two controls")
+    assert body.index("`send_workers_home` with `confirm=false`") < body.index("## The three controls")
 
 
 def test_aic_releases_workers_in_process_never_through_the_factory_lambda() -> None:
@@ -91,3 +91,65 @@ def test_aic_releases_workers_in_process_never_through_the_factory_lambda() -> N
 
     city.session = Session()
     assert isinstance(factory_for("manager", city, {"AIC_FACTORY_FUNCTION": "aic-prod-factory"}), LambdaFactoryClient)
+
+
+async def test_send_home_sends_only_the_named_ones_and_leaves_jobs_and_managers_alone() -> None:
+    c = await city()
+    porsche = await job(c, "Write 50 sentences comparing the GT3 and GT3 RS engines", "porsche sentences", workers=2)
+    await job(c, "Build a snake game", "snake game", department_name="Apps", workers=1)
+    tools = ace_tools(c)
+    before = [w["id"] for w in await c.ledger.list_agents() if w["kind"] == "worker" and w["state"] != "retired"]
+    apps_worker = next(
+        w["id"] for w in await c.ledger.list_agents() if w["kind"] == "worker" and w["department"] == "Apps"
+    )
+
+    # The owner's words pick the workers; nothing moves without the yes.
+    ask = await tools["send_home"].handler({"who": "the apps one", "confirm": False})
+    assert ask.startswith("Send 1 worker home: ") and apps_worker in ask and "confirm=true" in ask
+    assert (await c.ledger.get_agent(apps_worker))["state"] == "active"
+    assert (await tools["send_home"].handler({"who": "the accountant", "confirm": False})).startswith(
+        "Nobody at work matches"
+    )
+
+    said = await tools["send_home"].handler({"who": apps_worker, "confirm": True})
+    assert said.startswith(f"Sent 1 worker home ({apps_worker}") and "1 unfinished part stopped" in said
+    gone = await c.ledger.get_agent(apps_worker)
+    assert gone["state"] == "retired" and gone["worker_state"] == "released"
+    assert [e["id"] for e in c.bus.of_type("agent.retired")] == [apps_worker]
+    # The other job and its workers, and every manager, are untouched; nobody is asked to re-hire.
+    assert (await c.ledger.get_ticket(porsche["id"]))["status"] == "in_progress"
+    still = [w["id"] for w in await c.ledger.list_agents() if w["kind"] == "worker" and w["state"] != "retired"]
+    assert sorted(still) == sorted(set(before) - {apps_worker})
+    assert (await c.ledger.get_agent("mgr-apps"))["state"] != "dormant"
+    assert not [m for m in c.queue.sent if "Assign again" in str(m.get("body"))]
+
+    # A number sends that many (newest first); "everyone" is the big control.
+    assert (await tools["send_home"].handler({"who": "2", "confirm": False})).startswith("Send 2 workers home: ")
+    assert (await tools["send_home"].handler({"who": "everyone", "confirm": False})).startswith(
+        "Send everyone home and stop all"
+    )
+    assert (await tools["send_home"].handler({"who": "writing", "confirm": True})).startswith("Sent 2 workers home")
+    assert (await tools["send_home"].handler({"who": "anyone", "confirm": False})) == "Nobody is at work right now."
+
+
+def test_pick_workers_understands_ids_departments_roles_numbers_and_everyone() -> None:
+    from aic.shared.hierarchy.actions import pick_workers
+
+    at_work = [
+        {"id": "wkr-1", "role": "Writer", "department": "Research & Writing", "hired_at": "2026-11-08T00:01:00Z"},
+        {
+            "id": "wkr-2",
+            "role": "Audio Engineer",
+            "department": "Voice Engineering",
+            "hired_at": "2026-11-08T00:02:00Z",
+        },
+        {"id": "wkr-3", "role": "Game Developer", "department": "Apps", "hired_at": "2026-11-08T00:03:00Z"},
+    ]
+    ids = lambda r: [w["id"] for w in r[0]]  # noqa: E731
+    assert ids(pick_workers(at_work, "everyone")) == ["wkr-1", "wkr-2", "wkr-3"]
+    assert ids(pick_workers(at_work, "WKR-2")) == ["wkr-2"]
+    assert ids(pick_workers(at_work, "the voice engineering guy")) == ["wkr-2"]
+    assert ids(pick_workers(at_work, "the writer")) == ["wkr-1"]
+    assert ids(pick_workers(at_work, "2")) == ["wkr-3", "wkr-2"]
+    assert pick_workers(at_work, "the plumber")[1].startswith("Nobody at work matches")
+    assert pick_workers([], "everyone")[1] == "Nobody is at work right now."

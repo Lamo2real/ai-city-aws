@@ -37,9 +37,11 @@ from aic.shared.hierarchy.actions import (
     instruct_agent,
     move,
     new_ticket,
+    pick_workers,
     quote,
     running_jobs,
     send,
+    send_home,
     send_workers_home,
     status_summary,
     workers_at_work,
@@ -360,7 +362,38 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             "starts a new job. The city is still running."
         )
 
+    async def some_home(a: dict[str, Any]) -> str:
+        who = str(a.get("who") or "")
+        at_work = await workers_at_work(d)
+        chosen, why = pick_workers(at_work, who)
+        if why or not chosen:
+            return why or "Nobody is at work right now."
+        if len(chosen) == len(at_work) and who.strip().lower() in ("everyone", "all", "everybody", "*", ""):
+            return await everyone_home(a)  # "everyone" is the big one: jobs stop and managers stand down
+        names = ", ".join(f"{w['id']} ({w.get('role') or 'worker'}, {w.get('department') or 'HQ'})" for w in chosen)
+        if not a.get("confirm"):
+            return (
+                f"Send {len(chosen)} worker{'s' if len(chosen) != 1 else ''} home: {names}? Their unfinished parts "
+                "stop; nobody is hired in their place. (Ask the owner; call again with confirm=true on a clear yes.)"
+            )
+        r = await send_home(d, chosen)
+        return (
+            f"Sent {r['workers']} worker{'s' if r['workers'] != 1 else ''} home ({names}); "
+            f"{r['parts']} unfinished part{'s' if r['parts'] != 1 else ''} stopped."
+            + (f" {r['failed']} could not be released." if r["failed"] else "")
+        )
+
     return [
+        ToolSpec(
+            "send_home",
+            "Send some workers home now, the ones the owner names: who = a worker id (wkr-…), a department name "
+            "('voice engineering'), a role ('the writer'), a number ('2' = that many, newest first) or "
+            "'everyone'. Their unfinished parts stop and nobody is hired in their place; jobs and managers stay. "
+            "First call with confirm=false to get the one-line question to ask the owner; on their clear yes, "
+            "call again with confirm=true. For 'everyone' this does what send_workers_home does.",
+            _obj({"who": _s(), "confirm": {"type": "boolean"}}, ("who",)),
+            some_home,
+        ),
         ToolSpec(
             "delegate_to_orchestrator",
             "Hand real work to the Orchestrator, only when the owner asked for a deliverable. First call with "
