@@ -139,9 +139,13 @@ resource "aws_cognito_identity_pool" "voice" {
   allow_unauthenticated_identities = false
   allow_classic_flow               = false
   cognito_identity_providers {
-    client_id               = aws_cognito_user_pool_client.hud.id
-    provider_name           = aws_cognito_user_pool.this.endpoint
-    server_side_token_check = true
+    client_id     = aws_cognito_user_pool_client.hud.id
+    provider_name = aws_cognito_user_pool.this.endpoint
+    # Off: with the server-side check on, the identity pool refused the HUD's valid ID tokens
+    # (NotAuthorizedException) since sign-in moved to SRP with refresh-token rotation and revocation, while the
+    # HTTP API accepted the very same tokens. ID tokens live 15 minutes and these credentials allow only
+    # Transcribe streaming and Polly, so skipping the extra "still signed in?" lookup costs little.
+    server_side_token_check = false
   }
   tags = local.tags
 }

@@ -75,3 +75,16 @@ describe("HUD content security policy", () => {
     expect(connect).toContain("https://cognito-idp.${var.region}.amazonaws.com");
   });
 });
+
+describe("voice credentials", () => {
+  it("the identity pool trusts only the HUD's app client and skips the server-side check that refused valid tokens", async () => {
+    const { readFileSync } = await import("node:fs");
+    const tf = readFileSync("infra/modules/auth/main.tf", "utf8");
+    const pool = tf.slice(tf.indexOf('resource "aws_cognito_identity_pool" "voice"'));
+    const block = pool.slice(0, pool.indexOf("\n}\n"));
+    expect(block).toMatch(/client_id\s+= aws_cognito_user_pool_client\.hud\.id/);
+    expect(block).toMatch(/provider_name\s+= aws_cognito_user_pool\.this\.endpoint/);
+    expect(block).toMatch(/allow_unauthenticated_identities\s+= false/);
+    expect(block).toMatch(/server_side_token_check\s+= false/);
+  });
+});

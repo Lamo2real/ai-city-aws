@@ -1,6 +1,7 @@
 // AIC's eye: the owner's own eye drawing (public/ace-eye.png, white lines with a transparent background), one
-// eye, used as a mask so each state can colour and move it. Each state has a colour, a motion and a word, so
-// it never relies on colour alone.
+// eye, used as a mask so it takes the ink or paper colour of where it sits. It stays still and the same colour
+// in every state (the owner's choice); the state is in its accessible name, and on the AIC screen the voice
+// line under it shows the state.
 import type { Presence } from "../lib/store.ts";
 
 const WORDS: Record<Presence, string> = {
@@ -26,11 +27,6 @@ export function Eyes({
       <div className="eye-pair" aria-hidden="true">
         <span className="eye-shape" />
       </div>
-      {presence === "waiting" && !small ? (
-        <span className="bang" aria-hidden="true">
-          !
-        </span>
-      ) : null}
       {!small && word ? <p className="eyes-word">{WORDS[presence]}</p> : null}
     </div>
   );

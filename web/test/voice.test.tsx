@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { VoiceVisualizer, speakerOf } from "../src/components/VoiceVisualizer.tsx";
-import { logVoiceError, micProblem } from "../src/voice/voice.ts";
+import { logVoiceError, micProblem, voiceCredentials } from "../src/voice/voice.ts";
 
 afterEach(cleanup);
 const err = (name: string) => Object.assign(new Error("x"), { name });
@@ -57,5 +57,53 @@ describe("the voice strip", () => {
     expect(
       screen.getByRole("button", { name: presence === "listening" ? "Stop listening" : "Talk to AIC" }),
     ).toBeTruthy();
+  });
+});
+
+describe("voice credentials from the identity pool", () => {
+  const creds = { accessKeyId: "A", secretAccessKey: "S" };
+  const refused = () => Object.assign(new Error("Invalid login token."), { name: "NotAuthorizedException" });
+
+  it("passes the owner's ID token to the identity pool", async () => {
+    const seen: string[] = [];
+    const get = voiceCredentials(
+      async () => "tok-1",
+      (t) => async () => (seen.push(t), creds),
+    );
+    expect(await get()).toEqual(creds);
+    expect(seen).toEqual(["tok-1"]);
+  });
+  it("when the pool refuses the token, it asks Cognito for a fresh token once and tries again", async () => {
+    const asked: boolean[] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const get = voiceCredentials(
+      async (fresh) => (asked.push(fresh), fresh ? "fresh" : "stale"),
+      (t) => async () => {
+        if (t === "stale") throw refused();
+        return creds;
+      },
+    );
+    expect(await get()).toEqual(creds);
+    expect(asked).toEqual([false, true]);
+    spy.mockRestore();
+  });
+  it("gives up after one retry and shows the AWS message", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const get = voiceCredentials(
+      async () => "tok",
+      () => async () => {
+        throw refused();
+      },
+    );
+    const e = await get().catch((x: unknown) => x);
+    expect(micProblem(e)).toMatch(/NotAuthorizedException: Invalid login token\./);
+    spy.mockRestore();
+  });
+  it("a signed-out owner is told to sign in again", async () => {
+    const get = voiceCredentials(
+      async () => null,
+      () => async () => creds,
+    );
+    expect(micProblem(await get().catch((x: unknown) => x))).toMatch(/fresh sign-in/);
   });
 });

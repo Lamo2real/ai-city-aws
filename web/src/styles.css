@@ -415,38 +415,6 @@ main {
   background: var(--eye);
   -webkit-mask: url("/ace-eye.png") center / contain no-repeat;
   mask: url("/ace-eye.png") center / contain no-repeat;
-  transition:
-    background-color 0.3s,
-    transform 0.3s;
-}
-.eyes-idle .eye-pair {
-  animation: blink 5s infinite;
-}
-.eyes-listening {
-  --eye: #8ef0a0;
-}
-.eyes-listening .eye-pair {
-  animation: pulse 1s ease-in-out infinite;
-}
-.eyes-thinking {
-  --eye: #9fd8f0;
-}
-.eyes-thinking .eye-pair {
-  animation: look 1.6s ease-in-out infinite;
-}
-.eyes-speaking {
-  --eye: var(--paper3);
-}
-.eyes-speaking .eye-pair {
-  animation: talk 0.4s ease-in-out infinite alternate;
-}
-.eyes-waiting {
-  --eye: var(--amber);
-}
-.eyes .bang {
-  color: var(--amber);
-  font: 400 26px var(--pixel);
-  line-height: 1;
 }
 /* On the light sign-in card the eyes are drawn in ink. */
 .signin-brand .eyes {
@@ -456,40 +424,7 @@ main {
   margin: var(--s1) 0 0;
   color: var(--paper2);
 }
-@keyframes blink {
-  0%,
-  96%,
-  100% {
-    transform: scaleY(1);
-  }
-  98% {
-    transform: scaleY(0.1);
-  }
-}
-@keyframes pulse {
-  50% {
-    transform: scale(1.15);
-    transform-origin: center;
-  }
-}
-@keyframes look {
-  0%,
-  100% {
-    transform: translateX(-8px);
-  }
-  50% {
-    transform: translateX(8px);
-  }
-}
-@keyframes talk {
-  to {
-    transform: scaleY(0.85);
-  }
-}
 @media (prefers-reduced-motion: reduce) {
-  .eyes * {
-    animation: none !important;
-  }
   .skeleton {
     animation: none;
   }
@@ -530,22 +465,6 @@ main {
 .ace .eye-pair {
   width: min(300px, 70vw);
 }
-.ace .eyes-listening {
-  --eye: var(--you);
-}
-.ace .eyes-thinking {
-  --eye: #1f5f73;
-}
-.ace .eyes-speaking {
-  --eye: var(--wood);
-}
-.ace .eyes-waiting {
-  --eye: var(--warn);
-}
-.ace .eyes .bang {
-  color: var(--warn);
-}
-
 /* the voice strip */
 .voice {
   --lvl: 0;
