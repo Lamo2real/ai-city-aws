@@ -12,9 +12,9 @@ Status: v1 built 2026-11-07 on branch `knowledge-base` (S3 Vectors + DynamoDB gr
 Provider check (2026-11-07, hashicorp/aws 6.72.0): `aws_opensearchserverless_collection` (with `standby_replicas`),
 `aws_neptunegraph_graph` (`provisioned_memory`, `replica_count`, `public_connectivity`), `snap_start` on
 `aws_lambda_function`, and `opensearch_serverless_configuration` on `aws_bedrockagent_knowledge_base` all exist.
-**Gap:** the hashicorp provider has no resource for an OpenSearch *index*; the infra uses the smallest workable
-option (the `opensearch-project/opensearch` provider's `opensearch_index` with AWS SigV4 against the collection
-endpoint, or `awscc_opensearchserverless_index`) and records it. An EventBridge rule cannot set a Step Functions
+**Gap:** the hashicorp provider has no resource for an OpenSearch *index*, and `awscc` (1.109) has none either, so
+the infra uses the `opensearch-project/opensearch` provider's `opensearch_index` with AWS SigV4 (`aoss`) against the
+collection endpoint (decision 67). SnapStart for Python 3.12+ supports arm64, so the api function stays on arm64. An EventBridge rule cannot set a Step Functions
 execution name, so the rule invokes the knowledge Lambda's `start` action, which starts the run named after the
 item (decision 65).
 
