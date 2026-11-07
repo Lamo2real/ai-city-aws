@@ -8,7 +8,7 @@ test("phone: AIC and the City work at 412px wide", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Message to AIC" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Today:/ })).toBeVisible();
+  await expect(page.getByText(/Today: \$/)).toHaveCount(0); // costs live on the Costs screen only
   const mic = page.getByRole("button", { name: "Talk to AIC", exact: true });
   const box = (await mic.boundingBox())!;
   expect(box.height).toBeGreaterThanOrEqual(44);

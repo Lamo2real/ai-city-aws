@@ -1,8 +1,7 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applySnapshot, initialState, placement, reduce, topBar, visualState, CORE } from "../src/city/city-state.js";
 import { Confirm } from "../src/components/ui.tsx";
-import { SpendPill } from "../src/components/SpendPill.tsx";
 import { Eyes } from "../src/components/Eyes.tsx";
 import { spendLevel, money } from "../src/lib/format.ts";
 import { store } from "../src/lib/store.ts";
@@ -19,31 +18,6 @@ describe("money", () => {
     expect(spendLevel(10, 10)).toBe("red");
     expect(money(3.2)).toBe("$3.20");
     expect(money(10000)).toBe("$10,000");
-  });
-  it("the spend pill says 'Today: $x', names a limit only from half of it, changes level and opens Costs", () => {
-    const open = vi.fn();
-    act(() =>
-      store.snapshot({
-        usage: { usd: 3.2, turns: 4, tokens: 1000 },
-        caps: { daily_global_usd: 10, monthly_budget_usd: 150, daily_department_usd: 5 },
-      }),
-    );
-    render(<SpendPill onOpen={open} />);
-    const pill = screen.getByRole("button", { name: /^Today: \$3.20, estimate/ }); // far from the limit: no "of"
-    expect(pill.dataset.level).toBe("ok");
-    act(() => store.snapshot({ usage: { usd: 6.1, turns: 5, tokens: 1500 }, caps: { daily_global_usd: 10 } }));
-    expect(screen.getByRole("button", { name: /Today: \$6.10 of \$10, estimate/ })).toBeTruthy();
-    act(() => store.snapshot({ usage: { usd: 2.07, turns: 5, tokens: 1500 }, caps: { daily_global_usd: 10000 } }));
-    expect(screen.getByRole("button", { name: /^Today: \$2.07, estimate/ })).toBeTruthy(); // never "of $10000"
-    act(() =>
-      store.snapshot({
-        usage: { usd: 10, turns: 9, tokens: 2000 },
-        caps: { daily_global_usd: 10, monthly_budget_usd: 150, daily_department_usd: 5 },
-      }),
-    );
-    expect(screen.getByRole("button", { name: /limit reached/ }).dataset.level).toBe("red");
-    fireEvent.click(screen.getByRole("button", { name: /Open costs/ }));
-    expect(open).toHaveBeenCalled();
   });
 });
 

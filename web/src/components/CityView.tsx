@@ -3,7 +3,6 @@
 // Driven entirely by WebSocket events through the store.
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
-  COST_NOTE,
   MODEL_NAME,
   VISUALS,
   departmentNames,
@@ -19,7 +18,6 @@ import { mountCity, type CityScene } from "../city/scene.js";
 import { instruct } from "../lib/actions.ts";
 import { appList, appsDepartment, capped, isPublish } from "../lib/apps.ts";
 import { api, ApiError } from "../lib/api.ts";
-import { money, tokensK } from "../lib/format.ts";
 import { store, useHud, waitingCount } from "../lib/store.ts";
 import { useVoice } from "../voice/useVoice.ts";
 import { MicIcon } from "./ui.tsx";
@@ -110,8 +108,6 @@ export function CityView({ go }: { go: (view: string) => void }) {
         <Stat k="QUESTIONS" v={String(t.questionsWaiting)} />
         <Stat k="PARKED" v={String(t.parked)} />
         <Stat k="TURNS" v={`${g.running ?? 0} running · ${g.waiting ?? 0} waiting`} />
-        <Stat k="USAGE TODAY, UTC" v={t.usage ? `${t.usage.turns} turns · ${tokensK(t.usage.tokens)} tokens` : "—"} />
-        <Stat k="EST. VALUE, NOT A CHARGE" v={t.usage ? `est. ${money(t.usage.usd)}` : "—"} title={COST_NOTE} />
         <Stat k={REGION_CITY[region] ?? region.toUpperCase()} v={stockholmTime(now)} />
       </div>
       <div className="cityalerts">
@@ -405,7 +401,6 @@ function AgentPanel({ id, city }: { id: string; city: CityState }) {
       <Row k="Department" v={a.department ?? "Headquarters"} />
       <Row k="Model" v={MODEL_NAME[a.model] ?? a.model} />
       <Row k="Reports to" v={a.parent ?? "the owner"} />
-      <Row k="Cost so far" v={`est. ${money(live?.cost_usd ?? a.total_cost_usd ?? 0)}`} />
       <h4>Working on</h4>
       <p>{ticket ? `${ticketWords(ticket.status)}: ${plainText(ticket.goal).short}` : "Nothing right now."}</p>
       {live?.recent.length ? (
@@ -451,7 +446,6 @@ function DeptPanel({ name, city, onZoom }: { name: string; city: CityState; onZo
           : `${workers.length ? `${workers.length} workers at their desks.` : "Nobody hired right now."} ${d?.mission ?? ""}`}
       </p>
       {name !== "HQ" ? <Row k="Manager" v={d?.manager_id ?? "—"} /> : null}
-      {name !== "HQ" ? <Row k="Today, estimate" v={money(city.spend[name] ?? 0)} /> : null}
       <h4>{`Work in progress (${open.length})`}</h4>
       <ul className="recent">
         {open.length ? (
@@ -580,7 +574,7 @@ function Remote({ what }: { what: "workforce" | "health" }) {
         {workers.slice(-30).map((w) => (
           <li
             key={w.id}
-          >{`${w.id} — ${w.role}, ${w.department}: ${(w.worker_state ?? w.state).replace(/_/g, " ")} · est. ${money(w.total_cost_usd)}`}</li>
+          >{`${w.id} — ${w.role}, ${w.department}: ${(w.worker_state ?? w.state).replace(/_/g, " ")}`}</li>
         ))}
       </ul>
     </div>
