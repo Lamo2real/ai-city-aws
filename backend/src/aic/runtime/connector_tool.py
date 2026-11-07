@@ -12,6 +12,7 @@ import json
 import re
 from typing import Any
 
+from aic.connectors.openapi_add import add_from_link
 from aic.shared.connectors import (
     DEFAULT_ROLES,
     ConnectorStore,
@@ -86,6 +87,8 @@ def add_connector_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
         if query.lower().startswith(("http://", "https://")) or "://" in query:
             if bad := check_url(query, resolve):
                 return bad
+            if (spec := await add_from_link(d, c, query, label, roles, _used_by(roles), net, resolve)) is not None:
+                return spec
             url, name, source, title = query, name_from_url(query), "owner_url", None
         else:
             try:
@@ -95,8 +98,9 @@ def add_connector_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
                 found = []
             if not found:
                 return (
-                    f"I couldn't find {query[:80]!r} in the MCP Registry. Ask the owner for the server's https URL, "
-                    "then call add_connector with it."
+                    f"I couldn't find {query[:80]!r} in the MCP Registry. Ask the owner for the MCP server's https URL, "
+                    "or, if the service has no MCP server, the https link to its OpenAPI 3 document, then call "
+                    "add_connector with it."
                 )
             q = query.lower()
             exact = [r for r in found if q in (r["title"].lower(), r["name"].lower().rsplit("/", 1)[-1])]
@@ -170,8 +174,9 @@ def add_connector_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
     roles_schema = {"type": "object", "additionalProperties": {"type": "string", "enum": ["read", "all"]}}
     return ToolSpec(
         "add_connector",
-        "Add an outside service (a remote MCP server) as a connector, only because the owner asked for it in "
-        "this message. query is its name (looked up in the MCP Registry) or its https URL. label names a second "
+        "Add an outside service (a remote MCP server, or a web API by its OpenAPI 3 link) as a connector, only "
+        "because the owner asked for it in this message. query is its name (looked up in the MCP Registry), its "
+        "https URL, or the https link to its OpenAPI 3 document. label names a second "
         "account on the same server. The owner approves on a card before anything connects; keys are never "
         "given in chat.",
         {**_obj({"query": _s(2, 2000), "label": _s(1, 40), "roles": roles_schema}, ("label", "roles"))},

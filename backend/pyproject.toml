@@ -5,8 +5,10 @@ description = "AI City (AIC) backend: shared core, Lambdas and the AgentCore run
 requires-python = ">=3.13"
 dependencies = [
   "boto3>=1.40",
+  "httpx>=0.28.1",
   "pydantic>=2.11",
   "pyjwt[crypto]>=2.10",
+  "pyyaml>=6.0.3",
 ]
 
 [project.optional-dependencies]
@@ -21,7 +23,6 @@ runtime = [
 dev = [
   "pytest>=8.4",
   "pytest-asyncio>=1.1",
-  "httpx>=0.28",
   "ruff>=0.12",
   "mypy>=1.17",
 ]
