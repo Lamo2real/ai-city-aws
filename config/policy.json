@@ -1,5 +1,5 @@
 {
-  "$comment": "Ported from upstream config/policy.json. Shell rules match Bash, exec, bash and process. Cloud mutation is denied for every agent, workers included. The self-improvement loop may never change this file.",
+  "$comment": "Ported from upstream config/policy.json. Shell rules match Bash, exec, bash and process. Cloud mutation is denied for every agent, workers included. The self-improvement loop may never change this file. Apps (role app) reach only the read capabilities in shared/app_caps.py; every other mcp__app__ name is denied.",
   "policy_applies_to_workers": true,
   "caps": { "ad_daily_budget_cents": 5000 },
   "rules": [
@@ -135,6 +135,13 @@
       "match": "\"privacy(Status)?\"\\s*:\\s*\"public\"",
       "decision": "ask",
       "reason": "Publishing a video publicly can't be undone; upload private or unlisted first."
-    }
+    },
+    {
+      "tool": "^mcp__app__(?!(calendar\\.read|calendar\\.calendars|mail\\.search|mail\\.accounts|connector___[a-z][a-z0-9-]{1,30}___[A-Za-z0-9_.-]{1,64})$)",
+      "match": ".*",
+      "decision": "deny",
+      "reason": "Apps can only read what the owner granted: calendars, mail search and read-only connector tools."
+    },
+    { "tool": "^mcp__app__connector___.*___.*secret.*$", "match": ".*", "decision": "deny", "reason": "Apps never read secrets." }
   ]
 }

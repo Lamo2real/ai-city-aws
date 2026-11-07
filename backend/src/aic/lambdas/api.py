@@ -13,11 +13,22 @@ import math
 import os
 import re
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal, cast
 
-from aic.shared.apps import AppsOrigin, get_draft, list_apps, publish_draft, refuse_draft, remove_app
+from aic.shared.app_bridge import Readers, bridge_call, file_proposal, run_proposal
+from aic.shared.app_caps import Invalid
+from aic.shared.apps import (
+    AppsOrigin,
+    get_app,
+    get_draft,
+    list_apps,
+    publish_draft,
+    refuse_draft,
+    remove_app,
+    update_app,
+)
 from aic.shared.aws import aws_city
 from aic.shared.caps import validate_caps
 from aic.shared.config import caps_config
@@ -61,6 +72,9 @@ ROUTES: list[tuple[str, str]] = [
     ("POST", "/notes"),
     ("GET", "/apps"),
     ("DELETE", "/apps/app-1"),
+    ("PUT", "/apps/app-1"),
+    ("POST", "/apps/app-1/bridge"),
+    ("POST", "/apps/app-1/proposals"),
 ]
 
 
@@ -80,6 +94,8 @@ class ApiDeps:
     owner_email: str | None = None
     apps: AppsOrigin | None = None
     """The apps bucket and distribution, for publishing and removing apps."""
+    readers: Readers = field(default_factory=Readers)
+    """What the apps bridge reads from (mail/calendar, connectors); "unavailable" until those are wired."""
 
 
 class _NoFactory:
@@ -386,9 +402,17 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
                 dr = await get_draft(d.ledger, draft_id)
                 if not dr:
                     return problem(404, "That app draft is gone.")
+                grants = b.get("grants")
+                if grants is not None and not isinstance(grants, list):
+                    raise BadRequest("grants must be a list.")
+                pinned = b.get("pinned")
+                if pinned is not None and not isinstance(pinned, bool):
+                    raise BadRequest("pinned must be true or false.")
                 # Publish first: if it fails, the approval stays pending and the owner can try again.
                 try:
-                    app = await publish_draft(d.ledger, d.bus, d.apps, draft_id)
+                    app = await publish_draft(d.ledger, d.bus, d.apps, draft_id, grants, pinned)
+                except Invalid as e:
+                    return problem(400, str(e))
                 except ValueError as e:
                     return problem(409, str(e))
             else:
@@ -408,6 +432,9 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
                     d.sfn.send_task_failure, taskToken=cur["task_token"], error="Refused", cause="The owner refused."
                 )
         await d.bus.put({"type": "approval.decided", "id": a["id"], "approved": approved})
+        if approved and str(cur.get("requested_by", "")).startswith("app:"):
+            # An app's proposal: run that one tool once, exactly as the owner saw it.
+            return reply(200, {"approval": a, "result": await run_proposal(d.ledger, cur, d.readers)})
         return reply(200, {"approval": a, "app": app} if app else {"approval": a})
     if is_("GET", r"/apps"):
         return reply(200, {"apps": await list_apps(d.ledger)})
@@ -418,6 +445,27 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         if not gone:
             return problem(404, "That app does not exist.")
         return reply(200, {"removed": seg[1]})
+    if is_("PUT", r"/apps/[\w-]+"):
+        b = _body(event)
+        try:
+            updated = await update_app(d.ledger, d.bus, seg[1], {k: b[k] for k in ("grants", "pinned") if k in b})
+        except ValueError as e:
+            return problem(400, str(e))
+        if not updated:
+            return problem(404, "That app does not exist.")
+        return reply(200, {"app": updated})
+    if is_("POST", r"/apps/[\w-]+/(bridge|proposals)"):
+        if len(str(event.get("body") or "")) > 32_000:
+            raise BadRequest("That request is too big.")
+        b = _body(event)
+        target = await get_app(d.ledger, seg[1])
+        if not target:
+            return reply(404, {"ok": False, "error": "unavailable", "message": "That app does not exist."})
+        if seg[2] == "bridge":
+            ans = await bridge_call(d.ledger, target, b.get("cap"), b.get("params"), d.readers)
+        else:
+            ans = await file_proposal(d.ledger, d.bus, target, b, d.readers)
+        return reply(ans.status, ans.body)
     if is_("GET", r"/settings"):
         return reply(200, {"settings": await d.settings()})
     if is_("PUT", r"/settings"):
