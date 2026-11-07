@@ -142,7 +142,6 @@ module "agents" {
       r == "worker" ? {} : { AIC_MAIL_WORKLOAD = module.mail.workload_name, AIC_MAIL_PROVIDERS = module.mail.providers, AIC_HUD_ORIGIN = module.frontend.url },
     )
   }
-  enable_gateway        = var.enable_gateway
   # The knowledge base: every runtime searches it; AIC (ace) may add to it.
   knowledge_table          = module.knowledge.table
   knowledge_table_arn      = module.knowledge.table_arn
@@ -213,6 +212,8 @@ module "api" {
     AIC_MAIL_WORKLOAD       = "${local.name}-mail"
     AIC_MAIL_PROVIDERS      = join(",", [for k, p in var.mail_providers : k if p.enabled])
   }
+  # Apps' granted connector reads run in the app-bridge Lambda, through the connectors Gateway (docs/APPS.md v2).
+  app_bridge_env = { AIC_GATEWAY_URL = module.connectors.gateway_url }
 }
 
 # The owner's knowledge base (docs/KNOWLEDGE.md): bucket, S3 Vectors + Bedrock Knowledge Base, graph table,
@@ -242,37 +243,39 @@ module "knowledge" {
 
 # Connectors: any MCP server, added at runtime by asking AIC (docs/CONNECTORS_SKILLS.md). Terraform names none.
 module "connectors" {
-  source             = "../../modules/connectors"
-  name               = local.name
-  region             = var.region
-  account_id         = data.aws_caller_identity.me.account_id
-  kms_key_arn        = module.security.kms_key_arn
-  boundary_arn       = module.security.boundary_arn
-  ledger_arn         = module.ledger.ledger_arn
-  ledger_table       = module.ledger.ledger_table
-  bus_arn            = module.bus.bus_arn
-  bus_name           = module.bus.bus_name
-  hud_origin         = module.frontend.url
-  bundle_path        = module.api.bundle_path
-  bundle_hash        = module.api.bundle_hash
-  agent_role_names   = module.agents.role_names
-  api_role_name      = module.api.role_names["api"]
-  default_tags       = local.base_tags
-  log_retention_days = var.log_retention_days
+  source               = "../../modules/connectors"
+  name                 = local.name
+  region               = var.region
+  account_id           = data.aws_caller_identity.me.account_id
+  kms_key_arn          = module.security.kms_key_arn
+  boundary_arn         = module.security.boundary_arn
+  ledger_arn           = module.ledger.ledger_arn
+  ledger_table         = module.ledger.ledger_table
+  bus_arn              = module.bus.bus_arn
+  bus_name             = module.bus.bus_name
+  hud_origin           = module.frontend.url
+  bundle_path          = module.api.bundle_path
+  bundle_hash          = module.api.bundle_hash
+  agent_role_names     = module.agents.role_names
+  api_role_name        = module.api.role_names["api"]
+  app_bridge_role_name = module.api.role_names["app-bridge"]
+  default_tags         = local.base_tags
+  log_retention_days   = var.log_retention_days
 }
 
 # Mail and calendar accounts (docs/MAIL_CALENDAR.md §8). Workers get none of it.
 module "mail" {
-  source            = "../../modules/mail"
-  name              = local.name
-  region            = var.region
-  account_id        = data.aws_caller_identity.me.account_id
-  kms_key_arn       = module.security.kms_key_arn
-  hud_origin        = module.frontend.url
-  default_tags      = local.base_tags
-  providers_config  = var.mail_providers
-  api_role_name     = module.api.role_names["api"]
-  reader_role_names = { for r, n in module.agents.role_names : r => n if r != "worker" }
+  source               = "../../modules/mail"
+  name                 = local.name
+  region               = var.region
+  account_id           = data.aws_caller_identity.me.account_id
+  kms_key_arn          = module.security.kms_key_arn
+  hud_origin           = module.frontend.url
+  default_tags         = local.base_tags
+  providers_config     = var.mail_providers
+  api_role_name        = module.api.role_names["api"]
+  app_bridge_role_name = module.api.role_names["app-bridge"]
+  reader_role_names    = { for r, n in module.agents.role_names : r => n if r != "worker" }
 }
 
 # Owner-uploaded skills (docs/CONNECTORS_SKILLS.md §2).

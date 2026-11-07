@@ -36,7 +36,7 @@ variable "api_role_name" { type = string }
 variable "app_bridge_role_name" {
   type        = string
   default     = "aic-prod-fn-app-bridge"
-  description = "The apps feature's bridge role (docs/APPS.md). Only named in the Cedar principal; its IAM belongs to the apps work."
+  description = "The apps feature's bridge role (docs/APPS.md): the Cedar principal for app reads, and the one Lambda role besides the runtimes that may invoke the Gateway."
 }
 variable "default_tags" {
   type        = map(string)
@@ -429,6 +429,17 @@ resource "aws_iam_role_policy" "runtime_gateway" {
   for_each = var.agent_role_names
   name     = "connectors-gateway"
   role     = each.value
+  policy = jsonencode({
+    Version   = "2012-10-17"
+    Statement = [{ Sid = "InvokeConnectorsGateway", Effect = "Allow", Action = ["bedrock-agentcore:InvokeGateway"], Resource = [aws_bedrockagentcore_gateway.this.gateway_arn] }]
+  })
+}
+
+# The app-bridge Lambda runs apps' granted connector reads (docs/APPS.md v2): InvokeGateway on this Gateway only.
+# The api role never gets Gateway access.
+resource "aws_iam_role_policy" "app_bridge_gateway" {
+  name = "connectors-gateway"
+  role = var.app_bridge_role_name
   policy = jsonencode({
     Version   = "2012-10-17"
     Statement = [{ Sid = "InvokeConnectorsGateway", Effect = "Allow", Action = ["bedrock-agentcore:InvokeGateway"], Resource = [aws_bedrockagentcore_gateway.this.gateway_arn] }]

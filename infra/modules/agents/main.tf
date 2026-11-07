@@ -32,6 +32,7 @@ variable "runtime_env" {
   type        = map(map(string))
   default     = {}
   description = "Extra environment per role (connectors, skills, mail), keyed by role."
+}
 variable "knowledge_table" { type = string }
 variable "knowledge_table_arn" { type = string }
 variable "knowledge_bucket" { type = string }
@@ -45,10 +46,6 @@ variable "apps_url" {
   description = "The public apps origin; workers read an app's current version from it (load_app, docs/APPS.md § v3)."
   type        = string
   default     = ""
-}
-variable "enable_gateway" {
-  type    = bool
-  default = false
 }
 
 locals {

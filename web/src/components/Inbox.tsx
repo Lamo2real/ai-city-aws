@@ -243,6 +243,8 @@ function Preview({ p }: { p: PreviewData }) {
       </dl>
     );
   return <p className="mute">{p.note ?? "Exactly the action shown is approved."}</p>;
+}
+
 /** "Star Calendar (an app)" for a proposal an app made; the agent otherwise. */
 function askedBy(a: CityApproval, apps: Record<string, CityApp>) {
   const appId = a.requested_by?.startsWith("app:") ? a.requested_by.slice(4) : null;

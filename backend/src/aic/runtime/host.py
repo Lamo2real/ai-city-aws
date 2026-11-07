@@ -13,8 +13,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from aic.mail.service import MailService
-from aic.shared.connectors import ConnectorStore
 from aic.shared.apps import drafts_of_ticket
+from aic.shared.connectors import ConnectorStore
 from aic.shared.events import now_iso
 from aic.shared.hierarchy.actions import CityDeps, move
 from aic.shared.ids import manager_id

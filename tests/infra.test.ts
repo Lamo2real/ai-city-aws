@@ -9,7 +9,15 @@ import { checkRuntimeTagConditions, checkTags } from "../scripts/check-tags.mjs"
 // @ts-expect-error plain .mjs scripts without type declarations
 import * as iam from "../scripts/check-iam.mjs";
 
-const { checkBoundaries, checkInline, checkKnowledge, checkWorker, knowledgeStatements, rolePolicies, workspacePolicy } = iam;
+const {
+  checkBoundaries,
+  checkInline,
+  checkKnowledge,
+  checkWorker,
+  knowledgeStatements,
+  rolePolicies,
+  workspacePolicy,
+} = iam;
 
 const moduleText = (m: string) =>
   readFileSync(join(import.meta.dirname, "..", "infra", "modules", m, "main.tf"), "utf8");
@@ -503,20 +511,24 @@ describe("app-bridge Lambda (docs/APPS.md v2)", () => {
     const reads = perms.split("\n").find((l) => l.includes('"APPS", "CONNECTORS", "MAIL"')) ?? "";
     expect(reads).not.toMatch(/PutItem|UpdateItem/);
   });
-  it("mail reads: workload aic-prod-mail, the two providers and the vault, aic/prod/mail/* secrets only", () => {
+  it("mail reads come from the mail module's read path (its own ARNs), and the api role has no AgentCore access", () => {
     const tf = api();
     const perms = block(tf, "    app-bridge = [");
-    expect(perms).toMatch(
-      /"bedrock-agentcore:GetWorkloadAccessTokenForUserId"\], Resource = local\.mail_workload_arns/,
+    expect(perms).not.toMatch(/bedrock-agentcore|secretsmanager/); // no hand-written Identity or secret ARNs here
+    const mail = readFileSync(join(import.meta.dirname, "..", "infra", "modules", "mail", "main.tf"), "utf8");
+    expect(mail).toMatch(
+      /resource "aws_iam_role_policy" "app_bridge" \{\n {2}name {3}= "mail-read-path"\n {2}role {3}= var\.app_bridge_role_name/,
     );
-    expect(perms).toMatch(
-      /"bedrock-agentcore:GetResourceOauth2Token"\], Resource = concat\(local\.mail_workload_arns, \["\$\{local\.agentcore_arn\}:token-vault\/default"\], local\.mail_provider_arns\)/,
-    );
-    expect(perms).toContain(
-      '"secretsmanager:GetSecretValue"], Resource = ["arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:aic/prod/mail/*"]',
-    );
-    expect(tf).toMatch(/workload-identity\/\$\{var\.name\}-mail"\]/);
-    expect(tf).toMatch(/for p in \["google", "microsoft"\]/);
+    expect(mail).toMatch(/Statement = local\.read_path \}\)\n\}/);
+    expect(mail).toMatch(/workload_arn\s+= "\$\{local\.directory\}\/workload-identity\/\$\{local\.workload\}"/);
+    expect(mail).toMatch(/app_passwords\s+= "\$\{local\.sm\}:aic\/prod\/mail\/\*"/);
     expect(block(tf, "    api = [")).not.toMatch(/bedrock-agentcore/);
+    // The bridge's Gateway access is attached by the connectors module, on the gateway ARN only, never the api role.
+    const conn = readFileSync(join(import.meta.dirname, "..", "infra", "modules", "connectors", "main.tf"), "utf8");
+    expect(conn).toMatch(
+      /resource "aws_iam_role_policy" "app_bridge_gateway" \{\n {2}name = "connectors-gateway"\n {2}role = var\.app_bridge_role_name/,
+    );
+    const prod = readFileSync(join(import.meta.dirname, "..", "infra", "envs", "prod", "main.tf"), "utf8");
+    expect(prod.match(/app_bridge_role_name\s*=\s*module\.api\.role_names\["app-bridge"\]/g)).toHaveLength(2);
   });
 });

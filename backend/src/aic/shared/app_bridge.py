@@ -149,7 +149,8 @@ async def api_bridge(ledger: Ledger, app: Record, cap_name: Any, params: Any, in
 class BridgeDeps:
     ledger: Ledger
     city: Any = None
-    """The ``CityDeps`` handed to ``app_call``."""
+    """The ``aic.shared.connector_calls.AppCallDeps`` (ledger + the Gateway signed with the bridge's role) handed to
+    ``app_call``; the name is historical."""
     mail: MailReads = field(default_factory=NoMail)
     app_call: AppCall = no_app_call
 

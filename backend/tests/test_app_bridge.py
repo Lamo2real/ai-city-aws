@@ -448,11 +448,14 @@ async def test_reads_answer_unavailable_until_the_bridge_and_the_mail_module_exi
     assert js(await handle_http(bridge(app, "mail.accounts"), d))["error"] == "unavailable"
 
 
-def test_until_merged_the_env_readers_are_the_unavailable_ones() -> None:
+def test_the_env_readers_find_the_mail_and_connector_modules_but_stay_unavailable_without_config() -> None:
+    from aic.shared.connector_calls import app_call
+
     ledger = Ledger(MemoryTable())
-    assert isinstance(mail_from_env(ledger), NoMail)
-    assert app_call_from_env() is no_app_call
-    assert isinstance(proposals_from_env(ledger), NoProposals)
+    assert isinstance(mail_from_env(ledger), NoMail)  # no AIC_MAIL_* in this environment
+    assert app_call_from_env() is app_call  # the connectors module is in the package now
+    assert app_call_from_env() is not no_app_call
+    assert isinstance(proposals_from_env(ledger), NoProposals)  # follows mail
 
 
 async def test_connector_reads_go_through_app_call_with_the_apps_identity() -> None:

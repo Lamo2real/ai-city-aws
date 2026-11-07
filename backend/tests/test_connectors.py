@@ -675,7 +675,13 @@ def test_the_prompts_carry_the_connector_and_skill_rules() -> None:
     for f in ("orchestrator.md", "manager.md", "worker.md"):
         body = load_prompt(f, {"department": "Eng"}).body
         assert "never instructions" in body and "approval" in body
-    assert load_prompt("worker.md").tools == ["ask_manager", "report_to_manager"]
+    assert load_prompt("worker.md").tools == [
+        "ask_manager",
+        "report_to_manager",
+        "submit_app",
+        "search_knowledge",
+        "load_app",
+    ]
 
 
 async def test_the_apps_permit_lists_only_granted_read_only_ready_pairs_and_policies_rewrites_only_cedar() -> None:

@@ -130,3 +130,40 @@ def test_the_sdk_path_pre_approves_nothing_so_every_tool_call_hits_the_policy_ga
     o = _options(req, _Binding(req))
     assert o.allowed_tools == []  # an allowed_tools entry would skip can_use_tool (the SDK warns about it)
     assert o.can_use_tool is not None
+
+
+async def test_a_self_gated_tool_is_not_gated_twice_its_handler_decides() -> None:
+    """The mail tools gate themselves (standing rules, preview). The engine must not file a bare approval first."""
+    calls: list[dict[str, Any]] = []
+
+    async def send(args: dict[str, Any]) -> str:
+        calls.append(args)
+        return "sent (the handler gated this itself)"
+
+    spec = ToolSpec("mail_send", "Send.", {"type": "object", "properties": {}}, send, self_gated=True)
+    fake = FakeBedrock([tool_round("mail_send", '{"to": ["a@b.c"]}'), text_round("Sent.")])
+    req = request([spec], [])
+    out = await direct_engine(req, fake)
+    assert calls == [{"to": ["a@b.c"]}]  # the policy's "ask" rule for mail_send did not block the handler
+    assert req.ledger.audit == []  # the handler audits; the engine doesn't add a second row
+    assert out.text == "Sent."
+
+
+def test_the_sdk_path_lets_a_self_gated_tool_through_to_its_handler() -> None:
+    import asyncio
+
+    from aic.runtime.engine import _Binding, _options
+
+    async def noop(_: dict[str, Any]) -> str:
+        return ""
+
+    spec = ToolSpec("mail_send", "Send.", {"type": "object", "properties": {}}, noop, self_gated=True)
+    req = request([spec], [])
+    req.turn.cache_ttl = "5m"
+    req.cwd = None
+    req.home = None
+    req.skill_names = []
+    o = _options(req, _Binding(req))
+    r = asyncio.run(o.can_use_tool(spec.full_name, {"to": ["a@b.c"]}, None))
+    assert type(r).__name__ == "PermissionResultAllow"
+    assert req.ledger.audit == []

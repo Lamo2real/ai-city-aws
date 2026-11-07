@@ -152,6 +152,9 @@ def _options(req: EngineRequest, b: _Binding) -> Any:
         if name == "Skill" and not skill_allowed(input.get("skill"), r_.skill_names):
             return PermissionResultDeny(message="That skill is not one of yours.")
         spec = by_name.get(name)
+        if spec and spec.self_gated:
+            # The handler runs the gate itself (the mail tools: standing rules and the owner's preview come first).
+            return PermissionResultAllow(updated_input=input)
         r = await gate(
             name,
             input,

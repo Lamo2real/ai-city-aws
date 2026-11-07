@@ -574,19 +574,19 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
                 raise BadRequest("That due time is not a date.") from e
         return reply(201, await d.ledger.add_note(_str(b.get("text"), "Note"), kind, due))
     if seg and seg[0] == "connectors":
-        ans = await connectors_route(_connectors(d), method, seg, lambda: _body(event))
-        if ans:
-            return reply(*ans)
+        found = await connectors_route(_connectors(d), method, seg, lambda: _body(event))
+        if found:
+            return reply(*found)
     if seg and seg[0] == "mail":
         if d.mail is None:
             return problem(503, "Mail and calendar aren't set up yet.", "The owner turns them on with a deploy.")
-        ans = await mail_route(d.mail, method, seg, lambda: _body(event))
-        if ans:
-            return reply(*ans)
+        found = await mail_route(d.mail, method, seg, lambda: _body(event))
+        if found:
+            return reply(*found)
     if seg and seg[0] == "skills":
-        ans = await skills_route(d.skills or SkillsApi(d.ledger), method, seg, lambda: _body(event))
-        if ans:
-            return reply(*ans)
+        found = await skills_route(d.skills or SkillsApi(d.ledger), method, seg, lambda: _body(event))
+        if found:
+            return reply(*found)
     if path == "/knowledge" or path.startswith("/knowledge/"):
         return await _knowledge(event, method, path, d)
     return problem(404, "There is nothing here.")

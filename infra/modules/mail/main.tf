@@ -22,6 +22,10 @@ variable "providers_config" {
   })
 }
 variable "api_role_name" { type = string }
+variable "app_bridge_role_name" {
+  type        = string
+  description = "The apps feature's bridge Lambda role: it runs apps' granted mail and calendar reads (docs/APPS.md v2), so it gets the read path and nothing more."
+}
 variable "reader_role_names" {
   type        = map(string)
   description = "Runtime roles on the mail read path: ace, orchestrator, manager (the runtime enforces mail_access). Never the worker."
@@ -110,6 +114,13 @@ resource "aws_iam_role_policy" "reader" {
   name     = "mail-read-path"
   role     = each.value
   policy   = jsonencode({ Version = "2012-10-17", Statement = local.read_path })
+}
+
+# The app-bridge Lambda: the read path only (MailService read methods for apps the owner granted).
+resource "aws_iam_role_policy" "app_bridge" {
+  name   = "mail-read-path"
+  role   = var.app_bridge_role_name
+  policy = jsonencode({ Version = "2012-10-17", Statement = local.read_path })
 }
 
 # The api Lambda: the read path, plus finishing a sign-in and storing IMAP app passwords from the HUD's form.

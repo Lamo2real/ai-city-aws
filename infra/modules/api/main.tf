@@ -64,6 +64,11 @@ variable "api_env" {
   default     = {}
   description = "Extra environment for the api Lambda (connectors, skills, mail)."
 }
+variable "app_bridge_env" {
+  type        = map(string)
+  default     = {}
+  description = "Extra environment for the app-bridge Lambda: AIC_GATEWAY_URL from the connectors module, so apps' granted connector reads reach the Gateway."
+}
 variable "workspaces_bucket" { type = string }
 variable "workspaces_arn" { type = string }
 variable "apps_bucket" { type = string }
@@ -100,20 +105,13 @@ locals {
     ws-authorizer = { bundle = "app", handler = "aic.lambdas.ws.authorizer_handler", timeout = 10, memory = 256, env = { AIC_USER_POOL_ID = var.user_pool_id, AIC_USER_POOL_CLIENT_ID = var.client_id } }
     ws-connection = { bundle = "app", handler = "aic.lambdas.ws.connection_handler", timeout = 10, memory = 256, env = { AIC_CONNECTIONS_TABLE = var.connections_table } }
     apps          = { bundle = "app", handler = "aic.lambdas.apps.handler", timeout = 120, memory = 512, env = { AIC_APPS_BUCKET = var.apps_bucket, AIC_APPS_URL = var.apps_url, AIC_WORKSPACES_BUCKET = var.workspaces_bucket } }
-    app-bridge    = { bundle = "app", handler = "aic.lambdas.app_bridge.handler", timeout = 25, memory = 512, env = {} }
+    app-bridge    = { bundle = "app", handler = "aic.lambdas.app_bridge.handler", timeout = 25, memory = 512, env = var.app_bridge_env }
     ws-broadcast  = { bundle = "app", handler = "aic.lambdas.ws.broadcast_handler", timeout = 30, memory = 256, env = { AIC_CONNECTIONS_TABLE = var.connections_table, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod" } }
   }
   # Named, not referenced: the api function's env and policy name it, and both live in the same for_each.
   app_bridge_name = "${var.name}-app-bridge"
   apps_tagged     = ["apps", "app-bridge"]
-  # AgentCore Identity for the mail module (docs/MAIL_CALENDAR.md §8, §11). These exist once mail-calendar
-  # merges; IAM accepts ARNs of resources that don't exist yet. AWS docs spell the provider path
-  # oauth2-credential-provider, the API returns oauth2credentialprovider: both are listed until the mail
-  # module's credential_provider_arn outputs replace them.
-  agentcore_arn      = "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}"
-  mail_workload_arns = ["${local.agentcore_arn}:workload-identity-directory/default", "${local.agentcore_arn}:workload-identity-directory/default/workload-identity/${var.name}-mail"]
-  mail_provider_arns = flatten([for p in ["google", "microsoft"] : ["${local.agentcore_arn}:token-vault/default/oauth2credentialprovider/${var.name}-${p}", "${local.agentcore_arn}:token-vault/default/oauth2-credential-provider/${var.name}-${p}"]])
-  ledger_rw          = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:ConditionCheckItem"]
+  ledger_rw       = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:ConditionCheckItem"]
   # What each function may do, beyond logs, tracing and the KMS key.
   permissions = {
     api = [
@@ -144,16 +142,11 @@ locals {
     ]
     # Runs an app's granted read (docs/APPS.md v2). Invoked only by the api role. Reads the app's grants, the
     # connector list and the mail account rows; writes only its rate counters and the audit rows of agent app-<id>.
-    # TODO after connectors-skills merges: bedrock-agentcore:InvokeGateway on the connectors gateway ARN only.
+    # Its Gateway access (InvokeGateway, this gateway only) is attached by the connectors module, and its mail and
+    # calendar read path (tokens per account, app passwords) by the mail module, from those modules' own ARNs.
     app-bridge = [
       { Action = ["dynamodb:GetItem", "dynamodb:Query"], Resource = [var.ledger_arn], Condition = { "ForAllValues:StringEquals" = { "dynamodb:LeadingKeys" = ["APPS", "CONNECTORS", "MAIL"] } } },
       { Action = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"], Resource = [var.ledger_arn], Condition = { "ForAllValues:StringLike" = { "dynamodb:LeadingKeys" = ["RATE#app-*", "TOOL#app-*"] } } },
-      # Mail/calendar reads (MailService read methods only): a token per account (vault user ma-…), the IMAP
-      # app passwords, the MAIL rows above. No CompleteResourceTokenAuth, no secret writes. kms:Decrypt on the
-      # project key comes with every function.
-      { Action = ["bedrock-agentcore:GetWorkloadAccessTokenForUserId"], Resource = local.mail_workload_arns },
-      { Action = ["bedrock-agentcore:GetResourceOauth2Token"], Resource = concat(local.mail_workload_arns, ["${local.agentcore_arn}:token-vault/default"], local.mail_provider_arns) },
-      { Action = ["secretsmanager:GetSecretValue"], Resource = ["arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:aic/prod/mail/*"] },
     ]
     # Checks a worker's submission and stages it as a draft. Never live/, never another ledger key.
     apps = [

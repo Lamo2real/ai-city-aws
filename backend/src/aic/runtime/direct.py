@@ -165,6 +165,14 @@ async def _run_tool(req: EngineRequest, tools: dict[str, Any], use: dict[str, An
     if spec is None:
         return result(f"{name} is not one of your tools.", True)
     full = spec.full_name  # the policy and audit use the same names as the SDK path
+    if spec.self_gated:
+        # The handler runs the gate itself (the mail tools: standing rules and the owner's preview come first).
+        if req.on_activity:
+            await req.on_activity(activity_for(full), name)
+        try:
+            return result(await spec.handler(args))
+        except Exception as e:
+            return result(f"The tool failed: {type(e).__name__}: {str(e)[:300]}", True)
     r = await gate(
         full, args, req.ctx.role, req.ctx.agent_id, consume_approval=req.ledger.consume_approval, extra_ask=spec.ask
     )

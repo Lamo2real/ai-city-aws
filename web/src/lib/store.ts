@@ -186,6 +186,7 @@ class Store {
       if (status === "ready" && card?.kind === "signin") return this.putCard({ ...card, status: "connected" });
       if (status === "ready" || status === "syncing") return card?.kind === "key" ? this.dropCard(id) : undefined;
     }
+  }
   /** The published apps from `GET /apps` (the snapshot and the app events keep them current too). */
   setApps(list: CityApp[]) {
     const apps: Record<string, CityApp> = {};
