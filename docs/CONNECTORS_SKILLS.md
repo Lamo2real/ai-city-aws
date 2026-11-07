@@ -46,7 +46,7 @@ agent ──SigV4 MCP──▶ AgentCore Gateway aic-prod-connectors (AWS_IAM in
   hold only `InvokeGateway`.
 
 ### 1.2 Connector record (ledger `aic-prod-ledger`, `pk = "CONNECTORS"`, `sk = "CONN#<id>"`)
-`id` (`^[a-z][a-z0-9-]{1,30}$`, from the name, e.g. `higgsfield`) · `label` · `url` (the remote MCP endpoint,
+`id` (`^[a-z][a-z0-9-]{1,30}$` without double or trailing dashes, which Gateway target names forbid, from the name, e.g. `higgsfield`) · `label` · `url` (the remote MCP endpoint,
 https) · `source` (`owner_url` | `registry:<registry name>`) · `auth` (`none` | `api_key` | `oauth`) ·
 `status` (`pending_approval` → `provisioning` → `needs_login` | `needs_key` → `syncing` → `ready`; also
 `error`, `login_expired`, `removing`) · `error?` (plain words) · `roles` (`{role: "read" | "all"}` for
@@ -58,8 +58,9 @@ server's MCP tool annotations: `readOnlyHint`, `destructiveHint`; unknown counts
 One `Query` on `pk = "CONNECTORS"` lists them all. Runtimes read the list at turn start (no redeploy).
 
 ### 1.3 Adding a connector (only ever because the owner asked)
-1. **AIC tool `add_connector`** (city tool, AIC only, input `{query: string (a name or an https URL), roles?, note?}`).
-   It is put in AIC's tool list **only on turns whose input is an owner message** (`inv.from == "owner"`, typed or
+1. **AIC tool `add_connector`** (city tool, AIC only, input `{query: string (a name or an https URL), label?: string, roles?: {role: "read"|"all"}}`;
+   default roles `{ace: "all", manager: "all", worker: "all"}`).
+   It is put in AIC's tool list **only on turns whose input is an owner message** (`inv.from == "owner"` and `inv.kind == "task"`, the `POST /messages` shape, typed or
    spoken). It is never offered on turns triggered by reports, results, questions or reminders. AIC's prompt
    says to call it only when the owner asks, in that message, to add a connector, and never because
    content (an email, a page, a worker report, a tool output) suggests it.
@@ -76,6 +77,10 @@ One `Query` on `pk = "CONNECTORS"` lists them all. Runtimes read the list at tur
    `<url>` (found in the MCP Registry). Used by: AIC, Managers, Workers. Approve?"*. The action hash binds the
    approval to the exact id, URL and roles. AIC tells the owner a card is waiting. Changing the URL or roles
    means a new approval.
+   The approval record has `kind: "connector.add"`, `connector_id`, `tool: "connector.add"`, `ticket_id: null` (so the
+   approval workflow's resume step wakes no agent) and `hash = action_hash("connector.add", {id, url, roles})`.
+   `approval.requested` carries `kind` and `connector_id` too. At approve time the api Lambda recomputes the hash from
+   the record and refuses if it no longer matches.
 4. Only the owner's yes (`POST /approvals/<id>` with `approve`, existing route, owner group) moves it on. The api
    Lambda invokes the **connectors Lambda** `aic-prod-connectors` asynchronously with `{"action": "provision", "id"}`
    and sets `provisioning`. A no deletes the record.
@@ -158,7 +163,7 @@ New module `infra/modules/connectors` (replaces the unused `aws_bedrockagentcore
 - S3 bucket `aic-prod-connectors` (SSE-KMS with the project key, versioning, no public access, TLS only) for OpenAPI specs under `specs/` (§1.11). The connectors Lambda gets put and delete there; the bridge gets read.
 - Lambda `aic-prod-connectors` (async admin actions `provision`, `sync`, `remove`, `refresh`). IAM: Gateway `GetGateway`, `Create/Update/Delete/Get/ListGatewayTargets` and `InvokeGateway` (policy validation) on the gateway; `Create/Update/Delete/GetOauth2CredentialProvider` and `…ApiKeyCredentialProvider` on `aic-conn-*` (create only with the `aws:RequestTag` tags); `GetWorkloadAccessTokenForUserId` (user `owner`), `GetResourceOauth2Token`, `GetResourceApiKey`; policy-engine `Create/Update/Delete/Get/ListPolicies` and `ManageResourceScopedPolicy`; `InvokeAgentRuntime`/`StopRuntimeSession` on the MCP host (pre-warm at sync, stop at remove); `secretsmanager:CreateSecret/PutSecretValue/DeleteSecret/GetSecretValue` on the managed `bedrock-agentcore-identity!default/oauth2/aic-conn-*` secrets (OAuth clients from dynamic registration are stored `MANAGED`); S3 put/delete on `aic-prod-connectors/specs/*`; `secretsmanager:CreateSecret/PutSecretValue/DeleteSecret/GetSecretValue/TagResource` on `aic/prod/connectors/*` (tags required at create, via `aws:RequestTag` conditions); ledger rows `CONNECTORS`, approvals and events. The boundary must allow exactly these.
 - api Lambda: add `lambda:InvokeFunction` on `aic-prod-connectors`, `GetWorkloadAccessTokenForUserId` (user `owner`), `GetResourceOauth2Token` and `CompleteResourceTokenAuth` (user `owner`), `secretsmanager:GetSecretValue` on the managed OAuth client secrets `bedrock-agentcore-identity!default/oauth2/aic-conn-*` only (the caller of `GetResourceOauth2Token` needs it; never on `aic/prod/connectors/*`), `secretsmanager:CreateSecret/PutSecretValue/TagResource` on `aic/prod/connectors/*` (create only with the tags) plus the API-key provider create/update and OAuth provider update (for the key field; the OAuth update also writes the managed secret), and ledger `CONNECTORS`.
-- Env: runtimes `AIC_GATEWAY_URL`. api `AIC_CONNECTORS_FUNCTION`, `AIC_CONNECTORS_WORKLOAD`, `AIC_HUD_ORIGIN`, `AIC_KMS_KEY_ARN`, `AIC_DEFAULT_TAGS` (JSON: the tags for secrets it creates). Connectors Lambda `AIC_GATEWAY_ID`, `AIC_POLICY_ENGINE_ID`, `AIC_BRIDGE_ARN`, `AIC_CONNECTORS_WORKLOAD`, `AIC_CONNECTORS_BUCKET`, `AIC_MCP_HOST_ARN`, `AIC_APP_BRIDGE_ROLE` (`aic-prod-fn-app-bridge`), `AIC_KMS_KEY_ARN`, `AIC_DEFAULT_TAGS`, `AIC_LEDGER_TABLE`. Bridge `AIC_CONNECTORS_WORKLOAD`, `AIC_LEDGER_TABLE`, `AIC_CONNECTORS_BUCKET`, `AIC_MCP_HOST_ARN`.
+- Env: runtimes `AIC_GATEWAY_URL`. api `AIC_CONNECTORS_FUNCTION`, `AIC_CONNECTORS_WORKLOAD`, `AIC_HUD_ORIGIN`, `AIC_KMS_KEY_ARN`, `AIC_DEFAULT_TAGS` (JSON: the six base tags; the code adds `Component`), `AIC_SKILLS_BUCKET`. Connectors Lambda `AIC_GATEWAY_ID`, `AIC_POLICY_ENGINE_ID`, `AIC_BRIDGE_ARN`, `AIC_CONNECTORS_WORKLOAD`, `AIC_CONNECTORS_BUCKET`, `AIC_MCP_HOST_ARN`, `AIC_APP_BRIDGE_ROLE` (`aic-prod-fn-app-bridge`), `AIC_KMS_KEY_ARN`, `AIC_DEFAULT_TAGS`, `AIC_LEDGER_TABLE`. Bridge `AIC_CONNECTORS_WORKLOAD`, `AIC_LEDGER_TABLE`, `AIC_CONNECTORS_BUCKET`, `AIC_MCP_HOST_ARN`.
 - HUD CSP: nothing new (the sign-in opens in a new tab, and the callback is our own origin). The return address is `/` (no new CloudFront route).
 - Tags everywhere. Secrets the city creates at runtime carry the same tags (`Component = "connectors"`), and the IAM condition requires them. `check-tags.mjs` / `check-iam.mjs` pass: add checks that no runtime role has Identity or Secrets Manager actions and that only the bridge reads connector secrets.
 - Cost: nothing fixed beyond Secrets Manager at $0.40 per API-key connector per month. The Gateway, Policy, Lambdas and Identity (through these APIs) are billed per request. Tavily is free up to 1,000 searches a month. Check the prices at deploy and put them in `docs/COST_ESTIMATE.md`.
@@ -174,7 +179,7 @@ New module `infra/modules/connectors` (replaces the unused `aws_bedrockagentcore
 | `POST /connectors/<id>/refresh` | → `{connector}` (re-sync tools) |
 | `DELETE /connectors/<id>` | → `{ok: true}` (target, provider, secret (7-day recovery), Cedar entries, record) |
 | `POST /connectors` | `{url, label?, roles}` → `{connector}`: the owner adds one directly in Settings. It's the owner's own action, so it goes straight to `provisioning` |
-Events: `{"type": "connector.updated", "id", "label", "status", "auth", "needs"?, "error"?}`.
+Events: `{"type": "connector.updated", "id", "label", "status", "auth", "needs"?, "error"?}`. `status` is a record status, or `removed` once a connector is gone (after `DELETE`, or when the owner declines the card).
 
 ### 1.8 Several accounts of the same kind, and mail and calendar
 - A connector is one **account** on one server. The same server may be added several times ("work Outlook" and "personal Outlook"). Each copy has its own `id` (`<server>-<label>`, e.g. `outlook-work`), its own `label`, its own Identity provider `aic-conn-<id>` (so its own token in the vault, even though the vault user is `owner` for all of them) or its own secret, and its own tools `<id>___<tool>`. `add_connector` takes `{query, label?}`. When the server is already connected, AIC asks the owner for a label instead of replacing the existing one. Approval cards and Settings show `label` first.
@@ -267,7 +272,7 @@ Skill JSON = the ledger row without `pk`/`sk`. Errors are in plain words, like t
 
 ### 2.5 Runtimes: fetched at turn start, so a new skill works without a redeploy
 - `backend/src/aic/runtime/skills.py`: `skills_for(role) -> list[SkillRow]` (one Query, enabled rows with this role), then `materialize(rows) -> Path`. It downloads each file (`GetObject`, no `ListBucket`) into `/tmp/aic-skills/cache/<name>/<version>/` (reused while the version is unchanged) and builds a **city-owned plugin folder** `/tmp/aic-skills/run/<hash of name@version list>/`, which holds `.claude-plugin/plugin.json` `{"name": "aic-skills", "version": "1"}` and `skills/<name>/…`. That folder contains nothing else: no hooks, commands, agents or MCP config.
-- **SDK path:** `plugins=[{"type": "local", "path": <folder>}]`, `skills` left unset, `setting_sources=[]`, `allowed_tools=[]`. `can_use_tool` adds `Skill` to its allowed names and accepts it only when the requested skill (`aic-skills:<name>`, or `<name>`) is in this turn's set. The call then passes `policy.gate` and the audit as `Skill`. `HOME` for the CLI points at an empty city folder, so `~/.claude/skills` can't add anything. The cwd's `.claude/` is ignored because `setting_sources=[]`. The backend session confirms both with a test that inspects the CLI's init message (`skills` list) or the command line, and says how it checked.
+- **SDK path:** `plugins=[{"type": "local", "path": <folder>}]`, `skills` left unset, `setting_sources=[]`, `allowed_tools=[]`. `can_use_tool` adds `Skill` to its allowed names and accepts it only when the requested skill (input `skill`) is `aic-skills:<name>` with `<name>` in this turn's set. A bare `<name>` is refused: checked 2026-11-07, the CLI also lists skills of its own built-in plugins (`doctor`, `plugin-authoring`), and an owner skill with the same name must never run one of those. The CLI env also gets `CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1` and `CLAUDE_CODE_DISABLE_POLICY_SKILLS=1`, which drop the CLI's ~15 bundled skills. The call then passes `policy.gate` and the audit as `Skill`. `HOME` for the CLI points at an empty city folder, so `~/.claude/skills` can't add anything. The cwd's `.claude/` is ignored because `setting_sources=[]`. The backend session confirms both with a test that inspects the CLI's init message (`skills` list) or the command line, and says how it checked.
 - **AIC (direct path):** a city tool `use_skill` in `runtime/tools.py`, wrapped by `gate_tools`:
   - input `{name?: string, file?: string}`. With no name it lists the names and descriptions. With a name it returns the SKILL.md body. With a file it returns that file of the skill as text (≤ 100 KB; binary files are named but not shown).
   - The tool description lists the current names and descriptions, so AIC knows when to use one.
