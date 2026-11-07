@@ -642,6 +642,9 @@ main {
   margin: var(--s3) var(--s4) 0;
 }
 .chat {
+  /* The containing block for the visually hidden "You:"/"AIC:" labels: without it they were placed relative to
+     <main> and stretched its scroll area far below the chat into empty space. */
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-y: auto;

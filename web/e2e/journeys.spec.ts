@@ -478,6 +478,43 @@ test("while the work AIC handed on runs, its steps shimmer with a live clock; th
   await expect(steps.locator("summary")).toHaveText(/^2 steps · \d+s$/);
 });
 
+test("after a long conversation the AIC screen still fits the window: only the chat scrolls, inside its panel", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  const sizes: Array<[number, number]> = [
+    [1440, 900],
+    [1280, 800],
+  ];
+  for (const [width, height] of sizes) {
+    await page.setViewportSize({ width, height });
+    await page.goto("/");
+    for (let i = 0; i < 12; i++) {
+      await page.getByRole("textbox", { name: "Message to AIC" }).fill(`question ${i}`);
+      await page.keyboard.press("Enter");
+      m.send({ type: "ace.reply", conversation: "main", text: `Answer ${i}. `.repeat(20), done: true });
+    }
+    await expect(
+      page
+        .getByLabel("Conversation with AIC")
+        .getByText(/Answer 11\./)
+        .first(),
+    ).toBeVisible();
+    const fit = await page.evaluate(() => {
+      const main = document.querySelector("main")!;
+      const chat = document.querySelector(".chat")!;
+      const composer = document.querySelector(".composer")!.getBoundingClientRect();
+      return {
+        page: document.documentElement.scrollHeight <= window.innerHeight + 1,
+        main: main.scrollHeight <= main.clientHeight + 1, // the page area never scrolls into empty space
+        chatScrolls: chat.scrollHeight > chat.clientHeight,
+        composerOnScreen: composer.bottom <= window.innerHeight,
+      };
+    });
+    expect(fit).toEqual({ page: true, main: true, chatScrolls: true, composerOnScreen: true });
+  }
+});
+
 test("a draft survives a reload", async ({ page }) => {
   await mockBackend(page);
   await page.goto("/");

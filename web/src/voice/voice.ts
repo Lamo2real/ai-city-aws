@@ -16,6 +16,8 @@ export interface Voice {
     onPartial?: (text: string) => void,
     onError?: (error: unknown) => void,
   ): Promise<() => void>;
+  /** Called synchronously inside the owner's tap, before anything async: Safari only lets audio start there. */
+  prime?(): void;
   /** Says a whole text at once (fakes; and the fallback when synth/play are missing). */
   speak(text: string): Promise<void>;
   /** One sentence to audio, and playing a clip: AIC's replies are spoken sentence by sentence with these. */
@@ -65,8 +67,21 @@ export function micProblem(e: unknown): string {
     case "ThrottlingException":
       return "The speech service is busy. Try again in a moment.";
   }
-  if (synthetic) return "The speech service could not be reached. Check the connection and try again.";
-  return "The microphone could not start. Try again, or type instead.";
+  if (synthetic)
+    return "The speech service could not be reached (its connection did not open). Check the connection and try again.";
+  const msg = ((e as { message?: string } | null)?.message ?? "").trim();
+  if (/Importing a module script failed|dynamically imported module|Loading chunk|ChunkLoadError/i.test(msg))
+    return "AI City was updated since this page opened. Reload the page to use the microphone.";
+  if (name === "AudioSuspended")
+    return "The browser kept audio paused, so the microphone could not start. Tap the mic again.";
+  if (name === "InvalidStateError" || name === "NotSupportedError")
+    return `The browser's audio could not start (${name}${awsSays(e)}). Reload the page and tap the mic again.`;
+  if (name === "TypeError" && /load failed|failed to fetch|network/i.test(msg))
+    return "The speech service could not be reached (the browser blocked or lost the connection). Check the connection and try again.";
+  if (name === "CredentialsProviderError")
+    return `Voice could not get its speech sign-in (${name}${awsSays(e)}). Sign out and in again, then tap the mic.`;
+  // Anything else: say what the browser said, so the cause is never hidden behind a generic sentence.
+  return `The microphone could not start (${name || "Error"}${awsSays(e)}). Try again, or type instead.`;
 }
 
 /** Logs the real error so it can be diagnosed in the browser console. Never logs tokens. */
@@ -165,15 +180,38 @@ class AwsVoice implements Voice {
     return { input: loudness(this.inMeter, this.inBuf), output };
   }
 
+  private primed: AudioContext | null = null;
+
+  /** In the tap itself: create and resume the mic's AudioContext (and the reply's), which Safari otherwise keeps
+   *  suspended once the permission prompt or any await has passed. */
+  prime() {
+    try {
+      this.primed?.close().catch(() => undefined);
+      this.primed = new AudioContext();
+      void this.primed.resume().catch(() => undefined);
+      this.outCtx ??= new AudioContext();
+      void this.outCtx.resume().catch(() => undefined);
+    } catch {
+      this.primed = null; // listen() reports the real problem
+    }
+  }
+
   async listen(onText: (text: string) => void, onPartial?: (text: string) => void, onError?: (e: unknown) => void) {
     // Ask for the microphone first, still inside the tap, before any network or module loading: Safari is
     // stricter about prompts and audio that start long after the gesture.
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia)
       throw named("NoMicSupport", "navigator.mediaDevices.getUserMedia is not available");
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
-    });
-    const ctx = new AudioContext();
+    const ctx = this.primed ?? new AudioContext();
+    this.primed = null;
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+      });
+    } catch (e) {
+      void ctx.close().catch(() => undefined);
+      throw e;
+    }
     let stopped = false;
     const release = () => {
       if (stopped) return;
@@ -198,7 +236,10 @@ class AwsVoice implements Voice {
     onPartial?: (text: string) => void,
     onError?: (e: unknown) => void,
   ) {
-    await ctx.resume().catch(() => undefined);
+    // Safari can leave resume() pending forever outside a tap: wait briefly, then say so instead of hanging.
+    if (ctx.state !== "running")
+      await Promise.race([ctx.resume().catch(() => undefined), new Promise((r) => setTimeout(r, 1500))]);
+    if (ctx.state !== "running") throw named("AudioSuspended", `AudioContext is ${ctx.state}`);
     const { TranscribeStreamingClient, StartStreamTranscriptionCommand } =
       await import("@aws-sdk/client-transcribe-streaming");
     const c = config();

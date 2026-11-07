@@ -152,13 +152,18 @@ export function useVoice(dictation?: DictationTarget) {
     /** For the City view's sound tile: anything but "never". */
     sound: speakMode !== "never",
     problem,
-    pushToTalk: () => (listening ? end() : void start(false)),
+    pushToTalk: () => {
+      if (listening) return end();
+      getVoice().prime?.(); // synchronously, inside the tap (Safari)
+      void start(false);
+    },
     toggleWake: () => {
       if (wakeMode) {
         setWakeMode(false);
         end();
       } else {
         setWakeMode(true);
+        getVoice().prime?.();
         void start(true);
       }
     },

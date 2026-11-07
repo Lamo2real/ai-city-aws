@@ -23,9 +23,19 @@ describe("microphone errors say what went wrong and what to do", () => {
     expect(micProblem({ $metadata: { websocketSynthetic500Error: true } })).toMatch(/could not be reached/);
     expect(micProblem(err("SignedOut"))).toMatch(/fresh sign-in/);
   });
-  it("anything else falls back to a plain sentence", () => {
-    expect(micProblem(new Error("boom"))).toBe("The microphone could not start. Try again, or type instead.");
-    expect(micProblem(null)).toMatch(/could not start/);
+  it("anything else names what the browser said, never a bare generic sentence", () => {
+    expect(micProblem(new Error("boom"))).toBe(
+      "The microphone could not start (Error: boom). Try again, or type instead.",
+    );
+    expect(micProblem(null)).toMatch(/could not start \(Error\)/);
+  });
+  it("names the Safari and deploy cases", () => {
+    expect(micProblem(new TypeError("Importing a module script failed."))).toMatch(/AI City was updated.*Reload/);
+    expect(micProblem(new TypeError("Failed to fetch dynamically imported module: x.js"))).toMatch(/Reload the page/);
+    expect(micProblem(err("AudioSuspended"))).toMatch(/kept audio paused.*Tap the mic again/);
+    expect(micProblem(err("InvalidStateError"))).toMatch(/audio could not start \(InvalidStateError/);
+    expect(micProblem(new TypeError("Load failed"))).toMatch(/could not be reached \(the browser blocked or lost/);
+    expect(micProblem(err("CredentialsProviderError"))).toMatch(/speech sign-in/);
   });
   it("the real error goes to the console so it can be diagnosed", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);

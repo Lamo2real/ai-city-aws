@@ -171,6 +171,8 @@ export async function mockBackend(
     snapshot?: Record<string, unknown>;
     firstRunDone?: boolean;
     apps?: Array<Record<string, unknown>>;
+    /** Use the real browser voice (getUserMedia, AudioContext, the AWS SDKs) instead of the fake one. */
+    realVoice?: boolean;
   } = {},
 ): Promise<Mock> {
   // Events sent before the page's WebSocket connects are held and delivered on connect.
@@ -240,7 +242,7 @@ export async function mockBackend(
     return i;
   };
   await page.addInitScript(
-    ({ signedIn }) => {
+    ({ signedIn, realVoice }) => {
       // Like Amplify now: the sign-in lives in localStorage, so it survives closing the tab. "revoked" keeps the
       // stored sign-in but refuses it, as Cognito does with an expired or revoked refresh token.
       if (signedIn) localStorage.setItem("aic.fake.signedIn", "1");
@@ -292,6 +294,7 @@ export async function mockBackend(
       };
       let hearing = false;
       let talking = false;
+      if (realVoice) return;
       (window as unknown as { __aicVoice: unknown }).__aicVoice = {
         async listen(onText: (t: string) => void, onPartial?: (t: string) => void) {
           if (w.__micError) throw new DOMException("fake failure", w.__micError);
@@ -330,7 +333,7 @@ export async function mockBackend(
         },
       };
     },
-    { signedIn: opts.signedIn ?? true },
+    { signedIn: opts.signedIn ?? true, realVoice: opts.realVoice ?? false },
   );
   await page.route("**/config.json", (r) => r.fulfill({ json: CONFIG }));
   await page.route(`${CONFIG.apiUrl}/**`, async (route) => {
