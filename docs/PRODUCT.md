@@ -8,7 +8,7 @@
 - If this file and the code disagree, the code wins: fix this file.
 - New larger features: add a row under §6 and an entry in §10.
 
-Last updated: 2026-11-07 (AIC screen redesign).
+Last updated: 2026-11-07 (iPhone app).
 
 ---
 
@@ -89,6 +89,7 @@ Owner message → `POST /messages` → SQS (`ace` queue) → **dispatcher** Lamb
 | HUD | City view ported from the Mac HUD (AIC in plaza, Orchestrator at HQ door, manager at each department door, workers walk in/out, FREE LOTs, growing town, count badges, houses for specialists, top bar, right panel, bottom bar) | ✅ | `web/src/city/`, `CityView.tsx` |
 | HUD | Needs you (default answer in one tap; hold-to-approve), Tickets, Costs, Settings, first-run guide, spend pill (amber 80 %, red 100 %) | ✅ | `web/src/components/` |
 | HUD | Idiot-proof rules (one primary button, confirms with cost, Undo, plain errors, 44 px targets) | ✅ | `docs/UX_REVIEW.md` |
+| iOS | Native iPhone app (SwiftUI, no third-party packages): same `config.json`, Cognito app client, HTTP API and WebSocket as the HUD. Own sign-in screens (SRP, first-login password, authenticator setup with QR / "open in authenticator" / key, codes, forgot password, first-login email), tokens in the Keychain, refresh with rotation, sign-out revokes. Tabs: AIC (streamed reply with Markdown as native text, status row with steps, outbox, spend pill), City (Canvas pixel town, tap for details, departments and activity as lists), Needs you (default in one tap, hold-to-approve with cost and haptics), Tickets, and More (Costs, Settings). Push-to-talk with Apple's Speech framework, replies read aloud. Dynamic Type, Dark Mode, VoiceOver labels, 44 pt targets, HTTPS only | 🟡 55 XCTest unit tests with fakes (API client, event reducer, store and outbox, auth flow, SRP against Python vectors, Markdown); screens checked in the iOS Simulator in demo mode; never run against the real Cognito / API / WebSocket or on a real iPhone; voice not tried with a real mic | `ios/`, `ios/README.md` |
 | Infra | Terraform: 10 modules, prod root (state bucket created by `deploy.yml`); KMS; deletion protection | 🟡 offline checks only | `infra/` |
 | Infra | One role per runtime, permission boundary on every role, worker limits | ✅ (static check) | `infra/modules/agents/policies/`, `scripts/check-iam.mjs` |
 | Infra | Cost-allocation tags on every taggable resource | ✅ (static check) | `scripts/check-tags.mjs` |
@@ -101,6 +102,7 @@ Owner message → `POST /messages` → SQS (`ace` queue) → **dispatcher** Lamb
 | Gap | Gateway targets for GitHub / Google / Spotify (gateway off, secrets empty) | ❌ | `infra/modules/agents`, `storage` |
 | Gap | Reminders emailed | ❌ | `lambdas/scheduler.py` |
 | Gap | Trace propagation dispatcher → runtime; passkeys; custom domain; Departments panel on phones | ❌ | — |
+| Gap | iOS: hands-free wake mode, push notifications, iPad layout | ❌ | — |
 
 ## 7. Invariants that tests enforce (don't break these)
 - No file except `config/models.json` contains a model ID (`backend/tests/test_models.py`).
@@ -148,6 +150,7 @@ Terraform (offline only): `fmt -check -recursive`, `init -backend=false`, `valid
 ## 10. Feature log (newest first)
 | Date | Feature | Notes |
 |---|---|---|
+| 2026-11-07 | iPhone app | The owner's request: a native iOS app doing what the HUD does, installable on the owner's iPhone (free personal team or TestFlight, steps in `ios/README.md`). Same backend and same Cognito app client, so nothing in AWS changes. Voice uses Apple's speech APIs instead of Transcribe/Polly, and there is no hands-free wake mode on iOS (decisions 64–66). |
 | 2026-11-07 | Voice sign-in fix, plain eye | After tapping the mic the live site showed "The speech service turned AI City down (NotAuthorizedException)": the voice identity pool refused the HUD's ID token while the HTTP API accepted the same token (same app client), which points at the pool's server-side token check (on since the start; sign-in moved to SRP with refresh-token rotation and revocation). The check is now off (ID tokens live 15 minutes; the credentials allow only Transcribe streaming and Polly), the HUD retries once with a freshly refreshed token, and the banner shows AWS's own message. The owner's choice: the eye no longer changes colour or moves with the state; the voice line under it shows the state. |
 | 2026-11-07 | AIC screen redesign, real mic errors | The owner's request: eye and voice strip on the left, chat on the right, a bright theme in the City's palette (WCAG AA, axe-checked). The voice module measures loudness with Web Audio analysers on the mic and on Polly's audio (played straight, without the meter, when Safari keeps Web Audio suspended, so replies are never muted). The mic is now requested first, inside the tap, before loading the speech SDK. The old catch-all "The microphone could not start…" hid the cause; each failure now has its own message and a console log. The live site's headers were checked: `Permissions-Policy: microphone=(self)` and the CSP (Transcribe WebSocket on :8443, Cognito Identity, Polly) allow voice, and the Transcribe endpoint answers in eu-north-1. |
 | 2026-11-07 | AIC is the owner's buddy | The owner's choice: AIC talks informally, like a friend, matching the owner's tone. It never says something can't be built because it's big; the only thing the city can't find itself is access (accounts, logins, API keys), which AIC asks for through a sign-in button or the HUD's secure field, never in chat. |
