@@ -19,7 +19,9 @@ async function deliver(line: ChatLine) {
       body: { text: line.text, conversation: CONVERSATION, client_id: line.id },
     });
     patchLine(line.id, { state: "sent" });
-    store.set({ presence: "thinking" });
+    // Only if AIC has not answered yet: its reply can arrive before this request returns (it is always warm),
+    // and "thinking" must not come back after it.
+    if (store.get().chat.at(-1)?.id === line.id) store.set({ presence: "thinking" });
   } catch (e) {
     patchLine(line.id, { state: "failed" });
     if (!(e instanceof ApiError) || e.status === 0 || e.status >= 500) return; // kept in the outbox

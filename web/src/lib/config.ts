@@ -10,6 +10,8 @@ export interface AppConfig {
   identityPoolId: string;
   redirectUri: string;
   pollyVoice: string;
+  /** The AWS Budgets alert for the whole account, per month (an email, never a limit). */
+  budgetAlertUsd?: number;
   /** Where Polly's generative voices are called (not every region has them). Empty: the main region. */
   pollyRegion?: string;
   transcribeVocabulary: string;
