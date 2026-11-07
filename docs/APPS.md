@@ -293,6 +293,31 @@ invitations"), are limited to 10 per hour per app, and the app only learns `{ok:
   opening `#/apps/<slug>`; a 7th pin is refused with a plain message. On phones they move into the nav overflow.
 - Pin/unpin from the app page (☆) and Settings → Apps; `PUT /apps/<app_id> {pinned}`; event `app.updated {app}`.
 
+### Backend notes (apps-v2-backend, 2026-11-07; additions, nothing removed)
+- `aic.propose(kind, params)` travels as a bridge message with `cap: "propose"` and `params: {kind, params}`; the HUD
+  posts it to `POST /apps/<id>/proposals {kind, params}`.
+- `POST /approvals/<id>` for `app.publish` also accepts `pinned?: bool` (default: the manifest's `pin`, dropped
+  silently when 6 apps are already pinned; `pinned: true` then answers 409). `grants` outside the draft's
+  `capabilities` → 400, and the approval stays pending.
+- Drafts, `app.publish` approvals and `approval.requested` carry `capabilities` with a plain `label` on each, and `pin`.
+  The APP record has `capabilities` (asked, with labels), `grants` (exactly `{id, connector?, tool?}`, no labels),
+  `granted_at`, `pinned`.
+- Bridge answers: 200 `{ok: true, data}`; 403 `not_granted`; 400 `invalid`; 429 `rate_limited`; 404 unknown app;
+  `unavailable` / `login_expired` come as 200 `{ok: false, error, message}`. An `error` from `app_call` that isn't one of
+  the six codes becomes `unavailable` with that text as `message`. `connector.read` data is
+  `{content: <text parts joined, ≤ 100 KB>, json?: [<json parts>], truncated?}`.
+- Env: api Lambda `AIC_APP_BRIDGE_FUNCTION` (sync invoke; unset → `unavailable`) and `AIC_CONNECTORS_FUNCTION`
+  (async `{"action": "policies"}`; unset → skipped; a failed invoke is logged, never fails the owner's action).
+  The app-bridge Lambda needs the usual `AIC_LEDGER_TABLE` / `AIC_EVENT_BUS` / `AIC_REGION` plus whatever
+  `MailService.from_env` and `app_call` read.
+- The api checks a connector tool's `input_schema` (or `inputSchema`) from its `CONNECTORS` record against `args`
+  before invoking; the bridge Lambda re-checks the grant on the APP item (a revoke between the two still refuses).
+- An approved proposal answers `{approval, result: {ok, result | error, message}}`; `aic.mail.approvals.execute` runs it.
+- Until `connectors-skills` merges, `mail_from_env`, `app_call_from_env` and `proposals_from_env` return the
+  `unavailable` stand-ins (the imports are optional).
+- Python's `$` also matches before a trailing newline; mail/calendar gate names come only from catalogue ids, so the
+  `mcp__app__` regex can't be reached with a crafted name.
+
 ### Events (v2)
 `app.updated` {`app`} (grants or pin changed). Apps granted `calendar.read` or `calendar.calendars` also get the
 `calendar.changed` event (`docs/MAIL_CALENDAR.md` §6) through the bridge as `{aic: 1, event: "calendar.changed"}`, so they
