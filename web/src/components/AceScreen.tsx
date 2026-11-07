@@ -8,6 +8,7 @@ import { appendDictation, type SpeakMode } from "../voice/modes.ts";
 import { useVoice } from "../voice/useVoice.ts";
 import { Eyes } from "./Eyes.tsx";
 import { AicStatus, AicSteps } from "./AicStatus.tsx";
+import { stepsRunning } from "../lib/steps.ts";
 import { StreamedText } from "./StreamedText.tsx";
 import { Banner, ClearIcon, SendIcon } from "./ui.tsx";
 import { VoiceVisualizer } from "./VoiceVisualizer.tsx";
@@ -175,7 +176,7 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
                   <p>{l.text}</p>
                 )}
                 {l.who === "ace" && l.state === "done" && l.steps ? (
-                  <AicSteps steps={l.steps} tookMs={l.tookMs} />
+                  <AicSteps steps={l.steps} tookMs={l.tookMs} running={stepsRunning(l)} started={l.started} />
                 ) : null}
                 {l.state === "failed" || l.state === "queued" ? (
                   <span className="note">Not sent yet. It will send when the connection is back.</span>

@@ -443,6 +443,41 @@ test("Settings: pick AIC's voice; it is remembered on this device and can be hea
   expect(await page.evaluate(() => localStorage.getItem("aic.voice"))).toBe("Ruth");
 });
 
+test("while the work AIC handed on runs, its steps shimmer with a live clock; they settle when the result is back", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  await page.goto("/");
+  await page.getByRole("textbox", { name: "Message to AIC" }).fill("build me a budget app");
+  await page.keyboard.press("Enter");
+  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
+  m.send({ type: "activity", id: "ace", activity: "understanding" });
+  m.send({ type: "activity", id: "ace", activity: "delegating", detail: "delegate_to_orchestrator" });
+  const t = { id: "t-budget", from: "ace", to: "orchestrator", goal: "Budget app", kind: "task", department: null };
+  m.send({ type: "ticket.status", previous: null, ticket: { ...t, status: "open" } });
+  m.send({ type: "ace.reply", conversation: "main", text: "On it. The Orchestrator has it.", done: true });
+
+  const steps = page.getByLabel("Conversation with AIC").locator("details.aic-steps").last();
+  await expect(steps).toHaveClass(/is-running/);
+  await expect(steps.locator(".shimmer")).toHaveText("2 steps · Handing this to the Orchestrator…");
+  await expect(steps.locator(".shimmer")).toHaveCSS("animation-name", "shimmer-sweep");
+  const clock = steps.locator(".aic-status-time");
+  const first = Number((await clock.textContent())?.replace("s", ""));
+  await expect
+    .poll(async () => Number((await clock.textContent())?.replace("s", "")), { timeout: 3000 })
+    .toBeGreaterThan(first);
+  await steps.locator("summary").click();
+  await expect(steps.locator("li.current")).toHaveText("Handing this to the Orchestrator");
+  await shot(page, "ace-work-running");
+
+  m.send({ type: "ticket.status", previous: "open", ticket: { ...t, status: "in_progress" } });
+  await expect(steps).toHaveClass(/is-running/); // progress is not the end
+  m.send({ type: "result", ticket_id: "t-budget", summary: "Budget app published." });
+  await expect(steps).not.toHaveClass(/is-running/);
+  await expect(steps.locator(".shimmer")).toHaveCount(0);
+  await expect(steps.locator("summary")).toHaveText(/^2 steps · \d+s$/);
+});
+
 test("a draft survives a reload", async ({ page }) => {
   await mockBackend(page);
   await page.goto("/");
