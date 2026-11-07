@@ -58,7 +58,6 @@ struct ChatScreen: View {
         }
         .navigationTitle("AIC")
         .navigationBarTitleDisplayMode(.inline)
-        .withSpendPill()
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Menu {

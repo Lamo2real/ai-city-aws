@@ -64,7 +64,6 @@ struct InboxScreen: View {
             }
         }
         .navigationTitle("Needs you")
-        .withSpendPill()
         .refreshable { await model.loadCity() }
         .sheet(item: $confirming) { a in
             HoldToApprove(approval: a) {
