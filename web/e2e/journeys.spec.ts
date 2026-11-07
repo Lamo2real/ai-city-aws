@@ -142,6 +142,50 @@ test("push-to-talk sends what the owner said to AIC", async ({ page }) => {
     .toMatchObject({ text: "hey AIC, what's the status of the product?" });
 });
 
+test("the voice strip shows clearly who is talking: the owner, then AIC", async ({ page }) => {
+  const m = await mockBackend(page);
+  await page.addInitScript(() => {
+    (window as unknown as { __micHold: boolean }).__micHold = true;
+    (window as unknown as { __speakMs: number }).__speakMs = 4000;
+  });
+  await page.goto("/");
+  const strip = page.locator(".voice");
+  await expect(strip).toHaveAttribute("data-speaker", "idle");
+  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await expect(strip).toHaveAttribute("data-speaker", "you");
+  await expect(strip.getByRole("status")).toHaveText("Listening to you");
+  await expect(strip.getByText("You’re talking")).toBeVisible(); // the fake mic is loud
+  await expect(page.getByRole("button", { name: "Stop listening" })).toHaveAttribute("aria-pressed", "true");
+  await shot(page, "ace-you-talking");
+  await page.getByRole("button", { name: "Stop listening" }).click();
+  await expect(strip).toHaveAttribute("data-speaker", "idle");
+
+  await page.getByRole("textbox", { name: "Message to AIC" }).fill("status?");
+  await page.keyboard.press("Enter");
+  await expect(strip).toHaveAttribute("data-speaker", "thinking");
+  await expect.poll(() => m.calls.some((c) => c.path === "/messages")).toBe(true);
+  await expect(page.getByText(/Not sent yet/)).toHaveCount(0);
+  m.send({ type: "ace.reply", conversation: "main", text: "All quiet. Nothing needs you.", done: true });
+  await expect(strip).toHaveAttribute("data-speaker", "aic");
+  await expect(strip.getByRole("status")).toHaveText("AIC is talking");
+  await shot(page, "ace-aic-talking");
+  await noSeriousA11y(page, "AIC talking");
+});
+
+test("a microphone failure names the real cause and logs it to the console", async ({ page }) => {
+  await mockBackend(page);
+  await page.addInitScript(() => ((window as unknown as { __micError: string }).__micError = "NotAllowedError"));
+  const logged: string[] = [];
+  page.on("console", (msg) => msg.type() === "error" && logged.push(msg.text()));
+  await page.goto("/");
+  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("Microphone access is blocked for this site");
+  await expect(page.locator(".voice")).toHaveAttribute("data-speaker", "idle");
+  expect(
+    logged.some((t) => t.includes("[AIC voice] the microphone could not start:") && t.includes("NotAllowedError")),
+  ).toBe(true);
+});
+
 test("a draft survives a reload", async ({ page }) => {
   await mockBackend(page);
   await page.goto("/");

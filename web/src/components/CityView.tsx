@@ -21,7 +21,7 @@ import { api, ApiError } from "../lib/api.ts";
 import { money, tokensK } from "../lib/format.ts";
 import { store, useHud, waitingCount } from "../lib/store.ts";
 import { useVoice } from "../voice/useVoice.ts";
-import { MicIcon } from "./AceScreen.tsx";
+import { MicIcon } from "./ui.tsx";
 import { Banner, Button, Loading } from "./ui.tsx";
 
 const REGION_CITY: Record<string, string> = {
