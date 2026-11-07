@@ -58,3 +58,58 @@ export async function removeApp(appId: string) {
   // The app.removed event does the same; doing it now means the screen doesn't wait for it.
   store.event({ type: "app.removed", app_id: appId });
 }
+
+// ---------- v2: grants and pins (docs/APPS.md "v2: data bridge") ----------
+export type Capability = NonNullable<CityApp["grants"]>[number] & { label?: string };
+/** One key per capability, so the same connector with two tools is two switches. */
+export const capKey = (c: Capability) => (c.id === "connector.read" ? `connector.read:${c.connector}/${c.tool}` : c.id);
+const KNOWN: Record<string, string> = {
+  "calendar.read": "Read your calendars (all accounts)",
+  "calendar.calendars": "See the list of your calendars",
+  "mail.search": "Search your mail (subjects and senders, not bodies)",
+  "mail.accounts": "See which mail accounts you have",
+  propose: "Ask you to approve actions such as answering invitations",
+};
+/** Plain words for a capability; null for one the HUD doesn't know (never offered as a switch). */
+export function capLabel(c: Capability): string | null {
+  if (c.id === "connector.read")
+    return c.connector && c.tool ? `Read from ${capped(c.label ?? c.connector, 40)}: ${capped(c.tool, 60)}` : null;
+  return KNOWN[c.id] ?? null;
+}
+
+export const MAX_PINS = 6;
+export const pinnedApps = (apps: Record<string, CityApp> | undefined) =>
+  appList(apps)
+    .filter((a) => a.pinned)
+    .slice(0, MAX_PINS);
+
+/** Change an app's pin or shrink its grants (`PUT /apps/<id>`). Grants can only shrink here. */
+export async function updateApp(appId: string, patch: { pinned?: boolean; grants?: Capability[] }) {
+  if (patch.pinned) {
+    const pins = Object.values(store.get().city.apps).filter((a) => a.pinned && a.app_id !== appId);
+    if (pins.length >= MAX_PINS)
+      throw new Error(`Only ${MAX_PINS} apps fit in the top bar. Unpin one first (Settings → Apps).`);
+  }
+  const r = await api<{ app?: CityApp }>(`/apps/${encodeURIComponent(appId)}`, { method: "PUT", body: patch });
+  const now = store.get().city.apps[appId];
+  // The app.updated event does the same; doing it now means the switch moves at once.
+  if (now) store.event({ type: "app.updated", app: { ...now, ...patch, ...(r?.app ?? {}) } });
+}
+
+/**
+ * Approve a publish with the grants the owner left on (null: the app asked for nothing, so none are
+ * sent), then pin it if they ticked the box.
+ */
+export async function publishApp(approvalId: string, grants: Capability[] | null, pin: boolean) {
+  const r = await api<{ app?: CityApp }>(`/approvals/${encodeURIComponent(approvalId)}`, {
+    method: "POST",
+    body: {
+      approved: true,
+      ...(grants ? { grants: grants.map(({ id, connector, tool }) => ({ id, connector, tool })) } : {}),
+    },
+  });
+  if (!r?.app?.app_id) return;
+  // The app.published event follows; showing it now means Apps has it at once.
+  store.setApps([...Object.values(store.get().city.apps).filter((a) => a.app_id !== r.app!.app_id), r.app]);
+  if (pin && !r.app.pinned) await updateApp(r.app.app_id, { pinned: true });
+}

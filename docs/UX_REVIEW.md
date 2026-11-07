@@ -8,8 +8,8 @@ Legend: ✅ meets the rule · 🔧 failed first, fixed tonight · ⚠️ known g
 
 | Rule | Sign-in | AIC | City | Needs you | Tickets | Apps (grid, app page) | Costs | Settings | First-run guide |
 |---|---|---|---|---|---|---|---|---|---|
-| One obvious next action, ≤ 1 primary | ✅ automatic redirect, no buttons | ✅ Send | ✅ "Open: needs you" only when something waits | ✅ the first "Use default" | ✅ none (list) | ✅ grid: none; app page: none (Remove is quiet); Needs you: Approve is the one primary, a question's default is demoted while a publish waits (tested) | ✅ none | ✅ Save changes | ✅ Next / Start |
-| Plain words, details behind a toggle | ✅ | ✅ | ✅ (IDs only as name plates, like the Mac HUD) | ✅ | ✅ JSON behind "Details" | ✅ agent-written titles/descriptions as plain text, capped 40/200 | ✅ model names, not IDs | ✅ "Worldwide / Europe only" instead of profile prefixes | ✅ |
+| One obvious next action, ≤ 1 primary | ✅ automatic redirect, no buttons | ✅ Send | ✅ "Open: needs you" only when something waits | ✅ the first "Use default" | ✅ none (list) | ✅ grid: none; app page: none (☆, Allowed and Remove are quiet); Needs you: Approve is the one primary, a question's default is demoted while a publish waits (tested) | ✅ none | ✅ Save changes | ✅ Next / Start |
+| Plain words, details behind a toggle | ✅ | ✅ | ✅ (IDs only as name plates, like the Mac HUD) | ✅ | ✅ JSON behind "Details" | ✅ agent-written titles/descriptions as plain text, capped 40/200; permissions in plain words ("Read your calendars (all accounts)"), unknown ones never offered | ✅ model names, not IDs | ✅ "Worldwide / Europe only" instead of profile prefixes | ✅ |
 | Talking to AIC is the default | — | ✅ lands here, input focused (tested), mic visible | ✅ big mic in the bottom bar | ✅ "Talk to AIC" button | ✅ | ✅ empty state says "Ask AIC for a game"; the floating button is hidden on an app page so nothing covers the game | ✅ | ✅ | ✅ |
 | Nothing dangerous by accident | — | — | — | ✅ approvals need **holding** (tested: a tap does nothing) | — | ✅ Remove asks first and says it can't be undone (tested); apps run only sandboxed on their own origin (tested: no storage, no HUD access) | — | ✅ pause asks first and says what happens and what it costs; raising a cap asks, and a very high cap needs typing **raise**; Undo for 12 s on pause and on settings | — |
 | Safe defaults | — | ✅ | — | ✅ every question shows its default with one tap | — | ✅ an app URL off the apps origin is never framed | — | ✅ pre-filled from the server; negative caps rejected; caps are optional (empty = no limit); > 25 sessions/s rejected by the API | — |
@@ -31,6 +31,7 @@ Legend: ✅ meets the rule · 🔧 failed first, fixed tonight · ⚠️ known g
 
 ## Known gaps (not fixed tonight)
 
+- ⚠️ **App data bridge**: tested with a mock API and a fake calendar app on the fake apps origin; the real `aic-bridge.js`, `POST /apps/<id>/bridge` and the policy gate (role `app`) are the backend's and were not run against this HUD.
 - ⚠️ **Apps run agent-written code**: the HUD side is tested with a fake apps origin and without the real CloudFront CSP headers; the real isolation (own distribution, CSP `connect-src 'none'`) is infra's and needs checking on the deployed site. The cabinet on the map is small at the default zoom; the Apps building's panel lists the same apps.
 
 - ⚠️ **Departments list on phones**: on narrow screens the Departments/Records panel is hidden to keep the map visible. Buildings remain tappable, but Workforce/Health/Legend are only reachable on wider screens. Suggested fix: a "Records" sheet behind a tile.

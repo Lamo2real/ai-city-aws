@@ -5,6 +5,7 @@
      await aic.propose("calendar.respond", { id, response: "accept" }); // the owner approves it in Needs you
      aic.on("calendar.changed", reload);                                 // the owner's calendars changed
    aic.preview is true in the publish preview, which never gets data. */
+/* global window, location, crypto */
 (function () {
   "use strict";
   var pending = Object.create(null);
@@ -31,7 +32,7 @@
       fns.slice().forEach(function (fn) {
         try {
           fn();
-        } catch (err) {
+        } catch {
           /* an app's own handler error stays in the app */
         }
       });

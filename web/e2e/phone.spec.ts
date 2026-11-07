@@ -82,3 +82,20 @@ test("phone: Apps, an app page and a publish preview fit at 412px wide", async (
   await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
   expect(await fits()).toBe(true);
 });
+
+test("phone: pinned apps move into the nav row", async ({ page }) => {
+  await mockBackend(page, {
+    apps: [appRecord("app-cal000000001", "star-calendar", "Star Calendar", { pinned: true, grants: [] })],
+  });
+  await page.goto("/");
+  await expect(page.getByRole("navigation", { name: "Pinned apps" })).toBeHidden();
+  const pin = page.getByRole("navigation", { name: "Screens" }).getByRole("link", { name: "Star Calendar" });
+  await pin.scrollIntoViewIfNeeded();
+  await expect(pin).toBeVisible();
+  const box = (await pin.boundingBox())!;
+  expect(box.height).toBeGreaterThanOrEqual(44);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await pin.click();
+  await expect(page).toHaveURL(/#\/apps\/star-calendar$/);
+  await expect(page.getByRole("link", { name: "← Apps" })).toBeInViewport();
+});
