@@ -10,6 +10,8 @@ describe("AIC's steps in plain words", () => {
     expect(stepWords("working", "get_status")).toBe("Checking the ledger");
     expect(stepWords("delegating", "delegate_to_orchestrator")).toBe("Handing this to the Orchestrator");
     expect(stepWords("working", "mcp__city__list_notes")).toBe("Reading your notes");
+    expect(stepWords("working", "search_knowledge")).toBe("Searching your knowledge base");
+    expect(stepWords("working", "mcp__city__add_to_knowledge")).toBe("Saving to your knowledge base");
     expect(stepWords("understanding")).toBe("Understanding your message");
     expect(stepWords("something_new")).toBe("Working on it");
     expect(stepWords("idle")).toBeNull();
