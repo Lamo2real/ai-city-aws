@@ -18,7 +18,13 @@ unchanged.)
 3. **Turn it on and deploy once.** In the GitHub repository: Settings → Secrets and variables → Actions → Variables →
    `AIC_APNS_ENABLED` = `true`. Then push any commit to `main` (or run the deploy workflow by hand). The deploy creates
    the two SNS platform applications (App Store/TestFlight builds, and Xcode debug builds) from your key.
-4. **Allow notifications on the phone.** Open the AI City app; when iOS asks, allow notifications. The app registers
+4. **Build the app with the push entitlement.** In `ios/Config/AICity.xcconfig` set
+   `AIC_ENTITLEMENTS = Config/AICity-Push.entitlements`, then install the app on the iPhone from Xcode again. Signing
+   that entitlement needs your **Apple Developer Program** team (the same account the key in step 1 came from) set as
+   `AIC_TEAM_ID`; a free personal team can't sign it, so a free-team build never receives pushes — the app still
+   builds and runs, and its Settings → Notifications says why. The simulator always has the entitlement without this
+   line (`ios/README.md` § Notifications).
+5. **Allow notifications on the phone.** Open the AI City app; when iOS asks, allow notifications. The app registers
    the phone (`POST /devices`). Settings → Notifications shows "1 phone registered".
 
 Replacing the key later: paste the new one the same way and deploy once.
