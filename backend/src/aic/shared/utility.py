@@ -98,6 +98,14 @@ async def is_addressed_to_ace(transcript: str, d: UtilityDeps) -> bool:
     return bool(re.match(r"^yes\b", await utility_turn("wake-word", transcript, d), re.I))
 
 
+def _block_text(c: dict[str, Any]) -> str:
+    """A text block, or the text inside a ``citationsContent`` block (PDF reading with citations on)."""
+    if "text" in c:
+        return str(c["text"])
+    cited = c.get("citationsContent") or {}
+    return "".join(str(x.get("text", "")) for x in cited.get("content") or [] if isinstance(x, dict))
+
+
 def bedrock_converse_runner(client: Any) -> ModelRunner:
     """Haiku through Bedrock Converse with the Lambda's role. ``client`` is a boto3 ``bedrock-runtime`` client."""
 
@@ -105,11 +113,11 @@ def bedrock_converse_runner(client: Any) -> ModelRunner:
         r = await asyncio.to_thread(
             client.converse,
             modelId=input.model.invoke_id,
-            messages=[{"role": "user", "content": [{"text": input.prompt}]}],
-            inferenceConfig={"maxTokens": 1024},
+            messages=[{"role": "user", "content": [*input.attachments, {"text": input.prompt}]}],
+            inferenceConfig={"maxTokens": input.max_tokens or 1024},
         )
         content = ((r.get("output") or {}).get("message") or {}).get("content") or []
-        text = "".join(c.get("text", "") for c in content if isinstance(c, dict))
+        text = "".join(_block_text(c) for c in content if isinstance(c, dict))
         u = r.get("usage") or {}
         stop = r.get("stopReason")
         return TurnOutput(

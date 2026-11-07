@@ -33,6 +33,9 @@ class TurnInput:
     model: ResolvedModel
     cache_ttl: str
     prompt: str
+    attachments: tuple[dict[str, Any], ...] = ()
+    """Extra Converse content blocks (an image or a PDF) sent before the prompt. Utility calls only."""
+    max_tokens: int | None = None
 
 
 @dataclass(frozen=True)
@@ -122,6 +125,8 @@ class GatedTurn:
     """For review and sign-off turns: a turn without a PASS/FAIL verdict counts as "no verdict"."""
     timeout_ms: int | None = None
     turn_id: str | None = None
+    attachments: tuple[dict[str, Any], ...] = ()
+    max_tokens: int | None = None
 
 
 @dataclass
@@ -187,6 +192,8 @@ async def run_gated_turn(t: GatedTurn, d: GateDeps) -> GatedResult:
                     model=model,
                     cache_ttl=t.models.cache_ttl,
                     prompt=t.prompt,
+                    attachments=t.attachments,
+                    max_tokens=t.max_tokens,
                 )
             )
 

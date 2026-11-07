@@ -24,6 +24,8 @@ from aic.shared.events import EventBus
 from aic.shared.hierarchy.actions import CityDeps, answer_question
 from aic.shared.hierarchy.queue import Queue, WorkMessage
 from aic.shared.ids import department_key, new_id
+from aic.shared.knowledge.service import KnowledgeError, KnowledgeService, NotFound
+from aic.shared.knowledge.wiring import knowledge_from_env
 from aic.shared.ledger import Ledger, Record
 from aic.shared.log import log
 from aic.shared.models import model_label
@@ -58,6 +60,14 @@ ROUTES: list[tuple[str, str]] = [
     ("POST", "/city/resume"),
     ("GET", "/memory"),
     ("POST", "/notes"),
+    ("GET", "/knowledge"),
+    ("GET", "/knowledge/k-aaaaaaaaaaaa"),
+    ("POST", "/knowledge/uploads"),
+    ("POST", "/knowledge/uploads/k-aaaaaaaaaaaa/complete"),
+    ("POST", "/knowledge/links"),
+    ("POST", "/knowledge/text"),
+    ("PUT", "/knowledge/k-aaaaaaaaaaaa"),
+    ("DELETE", "/knowledge/k-aaaaaaaaaaaa"),
 ]
 
 
@@ -75,6 +85,8 @@ class ApiDeps:
     """A boto3 ``cognito-idp`` client, for re-sending the owner's first-login email."""
     user_pool_id: str | None = None
     owner_email: str | None = None
+    knowledge: KnowledgeService | None = None
+    """None until the knowledge base is deployed (``KNOWLEDGE_*`` variables)."""
 
 
 class _NoFactory:
@@ -125,12 +137,12 @@ class BadRequest(ValueError):
     pass
 
 
-def _body(event: dict[str, Any]) -> dict[str, Any]:
+def _body(event: dict[str, Any], max_len: int = 64_000) -> dict[str, Any]:
     raw = event.get("body")
     if not raw:
         return {}
     text = base64.b64decode(raw).decode("utf-8") if event.get("isBase64Encoded") else str(raw)
-    if len(text) > 64_000:
+    if len(text) > max_len:
         raise BadRequest("That message is too long.")
     try:
         v = json.loads(text)
@@ -409,6 +421,48 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
             except ValueError as e:
                 raise BadRequest("That due time is not a date.") from e
         return reply(201, await d.ledger.add_note(_str(b.get("text"), "Note"), kind, due))
+    if path == "/knowledge" or path.startswith("/knowledge/"):
+        return await _knowledge(event, method, path, d)
+    return problem(404, "There is nothing here.")
+
+
+_ITEM = r"k-[\w-]{12}"
+
+
+async def _knowledge(event: dict[str, Any], method: str, path: str, d: ApiDeps) -> dict[str, Any]:
+    """The knowledge routes (``docs/KNOWLEDGE.md`` §5). The owner check already ran in ``handle_http``."""
+    k = d.knowledge
+    if k is None:
+        return problem(503, "The knowledge base is not set up yet.", "Deploy it first, then try again.")
+
+    def is_(m: str, pattern: str) -> bool:
+        return method == m and re.fullmatch(pattern, path) is not None
+
+    item_id = path.rsplit("/", maxsplit=1)[-1] if re.fullmatch(rf"/knowledge/{_ITEM}", path) else ""
+    try:
+        if is_("GET", r"/knowledge"):
+            return reply(200, await k.list())
+        if is_("GET", rf"/knowledge/{_ITEM}"):
+            return reply(200, await k.get(item_id))
+        if is_("POST", r"/knowledge/uploads"):
+            return reply(201, await k.create_upload(_body(event)))
+        if is_("POST", rf"/knowledge/uploads/{_ITEM}/complete"):
+            return reply(200, {"item": await k.complete_upload(path.split("/")[3], _body(event))})
+        if is_("POST", r"/knowledge/links"):
+            b = _body(event)
+            return reply(201, {"item": await k.add_link(b.get("url"), b.get("title"), b.get("scope"))})
+        if is_("POST", r"/knowledge/text"):
+            b = _body(event, 1_200_000)
+            return reply(201, {"item": await k.add_text(b.get("text"), b.get("title"), b.get("scope"))})
+        if is_("PUT", rf"/knowledge/{_ITEM}"):
+            return reply(200, {"item": await k.update(item_id, _body(event))})
+        if is_("DELETE", rf"/knowledge/{_ITEM}"):
+            await k.delete(item_id)
+            return reply(200, {"ok": True})
+    except NotFound as e:
+        return problem(404, str(e))
+    except KnowledgeError as e:
+        return problem(400, str(e))
     return problem(404, "There is nothing here.")
 
 
@@ -510,6 +564,13 @@ async def handle_http(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
 _deps: ApiDeps | None = None
 
 
+def _knowledge_service(session: Any, bus: EventBus) -> KnowledgeService | None:
+    k = knowledge_from_env(session)
+    if not k or not k.blobs:
+        return None
+    return KnowledgeService(store=k.store, blobs=k.blobs, bus=bus, kb=k.kb)
+
+
 def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
     global _deps
     if _deps is None:
@@ -524,5 +585,6 @@ def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
             cognito=city.session.client("cognito-idp"),
             user_pool_id=os.environ.get("AIC_USER_POOL_ID"),
             owner_email=os.environ.get("AIC_OWNER_EMAIL"),
+            knowledge=_knowledge_service(city.session, city.bus),
         )
     return run(handle_http(event, _deps))

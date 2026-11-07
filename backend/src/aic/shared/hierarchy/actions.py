@@ -13,6 +13,7 @@ from typing import Any, cast
 from ..cost import format_usd
 from ..events import EventBus, now_iso
 from ..ids import new_id
+from ..knowledge.service import KnowledgeAccess
 from ..ledger import Ledger, Record
 from .factory import FactoryClient
 from .queue import AgentRole, Queue, WorkMessage
@@ -28,6 +29,8 @@ class CityDeps:
     factory: FactoryClient
     settings: Callable[[], Awaitable[dict[str, Any]]]
     max_review_rounds: int
+    knowledge: KnowledgeAccess | None = None
+    """The owner's knowledge base; None until it is deployed."""
 
 
 async def move(d: CityDeps, id: str, status: str, note: str = "", patch: Record | None = None) -> Record:
