@@ -44,6 +44,8 @@ variable "knowledge_bucket_arn" { type = string }
 variable "knowledge_base_id" { type = string }
 variable "knowledge_base_arn" { type = string }
 variable "knowledge_data_source_id" { type = string }
+variable "knowledge_graph_id" { type = string }
+variable "knowledge_graph_arn" { type = string }
 variable "log_retention_days" {
   type    = number
   default = 30
@@ -67,7 +69,7 @@ locals {
   }
   # name => bundle, handler, timeout, memory, extra env
   functions = {
-    api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 512, env = { AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_USER_POOL_ID = var.user_pool_id, AIC_OWNER_EMAIL = var.owner_email, KNOWLEDGE_TABLE = var.knowledge_table, KNOWLEDGE_BUCKET = var.knowledge_bucket, KNOWLEDGE_BASE_ID = var.knowledge_base_id, KNOWLEDGE_DATA_SOURCE_ID = var.knowledge_data_source_id } }
+    api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 1024, env = { AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_USER_POOL_ID = var.user_pool_id, AIC_OWNER_EMAIL = var.owner_email, KNOWLEDGE_TABLE = var.knowledge_table, KNOWLEDGE_BUCKET = var.knowledge_bucket, KNOWLEDGE_BASE_ID = var.knowledge_base_id, KNOWLEDGE_DATA_SOURCE_ID = var.knowledge_data_source_id, KNOWLEDGE_GRAPH_ID = var.knowledge_graph_id } }
     dispatcher    = { bundle = "app", handler = "aic.lambdas.dispatcher.handler", timeout = 120, memory = 256, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_ARN_ORCHESTRATOR = var.runtime_arns["orchestrator"], AIC_RUNTIME_ARN_MANAGER = var.runtime_arns["manager"], AIC_RUNTIME_ARN_WORKER = var.runtime_arns["worker"] } }
     factory       = { bundle = "app", handler = "aic.lambdas.factory.handler", timeout = 30, memory = 256, env = {} }
     ledger-writer = { bundle = "app", handler = "aic.lambdas.ledger_writer.handler", timeout = 30, memory = 256, env = {} }
@@ -97,7 +99,8 @@ locals {
       { Action = ["s3:PutObject", "s3:DeleteObject"], Resource = ["${var.knowledge_bucket_arn}/normalized/*"] },
       { Action = ["s3:DeleteObject"], Resource = ["${var.knowledge_bucket_arn}/work/*"] },
       { Action = ["s3:ListBucket"], Resource = [var.knowledge_bucket_arn], Condition = { StringLike = { "s3:prefix" = ["raw/*", "work/*", "normalized/*"] } } },
-      { Action = ["bedrock:StartIngestionJob"], Resource = [var.knowledge_base_arn] },
+      { Action = ["bedrock:IngestKnowledgeBaseDocuments", "bedrock:DeleteKnowledgeBaseDocuments"], Resource = [var.knowledge_base_arn] },
+      { Action = ["neptune-graph:ReadDataViaQuery", "neptune-graph:WriteDataViaQuery", "neptune-graph:DeleteDataViaQuery"], Resource = [var.knowledge_graph_arn] },
     ]
     dispatcher = [
       { Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] },
@@ -188,16 +191,25 @@ resource "aws_lambda_function" "fn" {
   #checkov:skip=CKV_AWS_117:No VPC: the functions call only AWS APIs, and a VPC would add NAT cost.
   #checkov:skip=CKV_AWS_272:Code signing is not set up for a single-owner project; deploys run from the owner's approved workflow.
   #checkov:skip=CKV_AWS_116:Synchronous and SQS/EventBridge-invoked functions; failed SQS work goes to the queues' DLQs.
-  for_each                       = local.functions
-  function_name                  = "${var.name}-${each.key}"
-  role                           = aws_iam_role.fn[each.key].arn
-  runtime                        = "python3.13"
-  architectures                  = ["arm64"]
-  handler                        = each.value.handler
-  filename                       = data.archive_file.bundle[each.value.bundle].output_path
-  source_code_hash               = data.archive_file.bundle[each.value.bundle].output_base64sha256
-  timeout                        = each.value.timeout
-  memory_size                    = each.value.memory
+  for_each         = local.functions
+  function_name    = "${var.name}-${each.key}"
+  role             = aws_iam_role.fn[each.key].arn
+  runtime          = "python3.13"
+  architectures    = ["arm64"]
+  handler          = each.value.handler
+  filename         = data.archive_file.bundle[each.value.bundle].output_path
+  source_code_hash = data.archive_file.bundle[each.value.bundle].output_base64sha256
+  timeout          = each.value.timeout
+  memory_size      = each.value.memory
+  # SnapStart (api only, docs/KNOWLEDGE.md section 14): each deploy publishes a version and snapshots its init;
+  # API Gateway calls the `live` alias. Python 3.12+ SnapStart supports arm64.
+  publish = each.key == "api"
+  dynamic "snap_start" {
+    for_each = each.key == "api" ? [1] : []
+    content {
+      apply_on = "PublishedVersions"
+    }
+  }
   kms_key_arn                    = var.kms_key_arn
   reserved_concurrent_executions = each.key == "dispatcher" ? 200 : (each.key == "api" ? 50 : 20)
   tracing_config {
@@ -261,7 +273,7 @@ resource "aws_apigatewayv2_authorizer" "jwt" {
 resource "aws_apigatewayv2_integration" "api" {
   api_id                 = aws_apigatewayv2_api.http.id
   integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.fn["api"].invoke_arn
+  integration_uri        = aws_lambda_alias.api_live.invoke_arn
   payload_format_version = "2.0"
   timeout_milliseconds   = 29000
 }
@@ -300,10 +312,19 @@ resource "aws_apigatewayv2_stage" "http" {
   tags = local.tags
 }
 
+# The HTTP API calls this alias, so it always runs the latest published (snapshotted) version.
+resource "aws_lambda_alias" "api_live" {
+  name             = "live"
+  description      = "Latest published api version (SnapStart)"
+  function_name    = aws_lambda_function.fn["api"].function_name
+  function_version = aws_lambda_function.fn["api"].version
+}
+
 resource "aws_lambda_permission" "http" {
   statement_id  = "http-api"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.fn["api"].function_name
+  qualifier     = aws_lambda_alias.api_live.name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
 }

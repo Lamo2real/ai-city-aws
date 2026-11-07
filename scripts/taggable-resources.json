@@ -1,5 +1,5 @@
 {
-  "$comment": "From `terraform providers schema -json` (hashicorp/aws v6.72.0): resource types used in infra/, split by whether they accept tags. Regenerate when a new type is added.",
+  "$comment": "From `terraform providers schema -json` (hashicorp/aws v6.72.0): resource types used in infra/, split by whether they accept tags. Regenerate when a new type is added. time_sleep and opensearch_index come from hashicorp/time and opensearch-project/opensearch (no tags).",
   "taggable": [
     "aws_apigatewayv2_api",
     "aws_apigatewayv2_stage",
@@ -25,10 +25,10 @@
     "aws_kms_key",
     "aws_lambda_event_source_mapping",
     "aws_lambda_function",
+    "aws_neptunegraph_graph",
+    "aws_opensearchserverless_collection",
     "aws_s3_bucket",
     "aws_s3_object",
-    "aws_s3vectors_index",
-    "aws_s3vectors_vector_bucket",
     "aws_scheduler_schedule_group",
     "aws_secretsmanager_secret",
     "aws_sfn_state_machine",
@@ -71,6 +71,11 @@
     "aws_s3_bucket_cors_configuration",
     "aws_s3_bucket_notification",
     "aws_bedrockagent_data_source",
-    "aws_sqs_queue_policy"
+    "aws_sqs_queue_policy",
+    "aws_lambda_alias",
+    "aws_opensearchserverless_security_policy",
+    "aws_opensearchserverless_access_policy",
+    "time_sleep",
+    "opensearch_index"
   ]
 }

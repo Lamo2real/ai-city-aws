@@ -91,12 +91,17 @@ describe("knowledge base (docs/KNOWLEDGE.md)", () => {
     Default?: string;
     Choices?: { Next: string }[];
     End?: boolean;
+    Branches?: { StartAt: string; States: Record<string, State> }[];
   };
   const asl = JSON.parse(
     readFileSync("infra/modules/knowledge/pipeline.asl.json.tftpl", "utf8")
       .replaceAll("${function_arn}", "arn:aws:lambda:eu-north-1:1:function:aic-prod-knowledge")
       .replaceAll("${lambda_errors}", JSON.stringify(["Lambda.ServiceException"])),
   ) as { StartAt: string; States: Record<string, State> };
+  // Every state, including those inside Parallel branches, with the scope (state names) it may jump to.
+  const scopes: Record<string, State>[] = [asl.States];
+  for (const st of Object.values(asl.States)) for (const b of st.Branches ?? []) scopes.push(b.States);
+  const allStates = scopes.flatMap((sc) => Object.entries(sc));
 
   it("IAM: no IAM beyond passing the MediaConvert role, Bedrock only on Titan/Haiku, only AIC adds knowledge", () => {
     expect(checkKnowledge()).toEqual([]);
@@ -113,6 +118,10 @@ describe("knowledge base (docs/KNOWLEDGE.md)", () => {
     expect(p.some((x: string) => /IAM action iam:PassRole/.test(x))).toBe(true);
     expect(p.some((x: string) => /kb\/E may invoke/.test(x))).toBe(true);
     expect(p.some((x: string) => /boundary does not deny/.test(x))).toBe(true);
+    const wideDeployer = checkKnowledge({
+      text: `Rules = [{ ResourceType = "index", Resource = ["index/x/items"], Permission = ["aoss:*"] }]\n      Principal = [var.deployer_arn]`,
+    });
+    expect(wideDeployer.some((x: string) => /deploy role may do more/.test(x))).toBe(true);
   });
   it("bucket: KMS, versioned, private, EventBridge on, CORS PUT from the HUD with ETag, work/ expires after 7 days", () => {
     expect(tf).toMatch(/resource "aws_s3_bucket" "this" \{[\s\S]*?bucket\s+= local\.base/);
@@ -126,20 +135,58 @@ describe("knowledge base (docs/KNOWLEDGE.md)", () => {
     expect(tf).toMatch(/expose_headers\s+= \["ETag"\]/);
     expect(tf).toMatch(/prefix = "work\/"\s*\}\s*expiration \{\s*days = 7/);
   });
-  it("vectors: S3 Vectors index (cosine, dims from config/models.json), KB embeds with the model from config only", () => {
+  it("vectors: OpenSearch Serverless VECTORSEARCH (no standby, KMS, IAM-only), index items per section 14, KB on it", () => {
     expect(tf).toMatch(
       /jsondecode\(file\("\$\{path\.module\}\/\.\.\/\.\.\/\.\.\/config\/models\.json"\)\)\.embeddings\.knowledge/,
     );
-    expect(tf).toMatch(/dimension\s+= local\.embedding\.dimensions/);
-    expect(tf).toMatch(/distance_metric\s+= "cosine"/);
-    expect(tf).toMatch(/index_name\s+= "items"/);
-    expect(tf).toMatch(/type = "S3_VECTORS"/);
+    expect(tf).toMatch(/type\s+= "VECTORSEARCH"/);
+    expect(tf).toMatch(/standby_replicas = "DISABLED"/);
+    expect(tf).toMatch(/AWSOwnedKey = false\s+KmsARN\s+= var\.kms_key_arn/);
+    expect(tf).not.toMatch(/s3vectors/);
+    const mapping = /mappings = jsonencode\(([\s\S]*?)\n {2}\}\)/.exec(tf)![1];
+    for (const want of [
+      'type      = "knn_vector"',
+      "dimension = local.embedding.dimensions",
+      'engine = "faiss"',
+      'space_type = "innerproduct"',
+      "m = 16, ef_construction = 512",
+      'metadata = { type = "text", index = false }',
+      'item_id  = { type = "keyword" }',
+      'scope    = { type = "keyword" }',
+      'kind     = { type = "keyword" }',
+    ])
+      expect(mapping).toContain(want);
+    expect(tf).toMatch(/index_knn_algo_param_ef_search = "512"/);
+    expect(tf).toMatch(/type = "OPENSEARCH_SERVERLESS"/);
+    expect(tf).toMatch(/vector_index_name = opensearch_index\.items\.name/);
+    expect(tf).toMatch(/depends_on = \[aws_iam_role_policy\.kb, opensearch_index\.items\]/);
     expect(tf).toMatch(/inclusion_prefixes\s+= \["normalized\/"\]/);
-    // item_id, scope and kind must stay filterable: only Bedrock's own large keys are non-filterable.
-    expect(tf).toContain('non_filterable_metadata_keys = ["AMAZON_BEDROCK_TEXT", "AMAZON_BEDROCK_METADATA"]');
+    expect(prod).toMatch(/aws_signature_service = "aoss"/);
     expect(tf).not.toMatch(/amazon\.titan|titan-embed/);
     const models = JSON.parse(readFileSync("config/models.json", "utf8"));
     expect(models.embeddings.knowledge.dimensions).toBe(1024);
+  });
+  it("graph: Neptune Analytics 16 m-NCU, no replica, public (IAM), KMS, deletion protection, no vector index", () => {
+    const g = /resource "aws_neptunegraph_graph" "this" \{([\s\S]*?)\n\}/.exec(tf)![1];
+    expect(g).toMatch(/graph_name\s+= "\$\{local\.base\}-graph"/);
+    expect(g).toMatch(/provisioned_memory\s+= 16/);
+    expect(g).toMatch(/replica_count\s+= 0/);
+    expect(g).toMatch(/public_connectivity = true/);
+    expect(g).toMatch(/kms_key_identifier\s+= var\.kms_key_arn/);
+    expect(g).toMatch(/deletion_protection = var\.deletion_protection/);
+    expect(g).not.toMatch(/vector_search_configuration/);
+    for (const r of ["ace", "orchestrator", "manager", "worker"])
+      expect(actions(rolePolicies(r) as Stmt[])).toContain("neptune-graph:ReadDataViaQuery");
+  });
+  it("lambdas: api 1024 MB with SnapStart behind the live alias; knowledge 2048 MB, reserved 50", () => {
+    expect(api).toMatch(/handler = "aic\.lambdas\.api\.handler", timeout = 30, memory = 1024/);
+    expect(api).toMatch(/publish = each\.key == "api"/);
+    expect(api).toMatch(/apply_on = "PublishedVersions"/);
+    expect(api).toMatch(/resource "aws_lambda_alias" "api_live" \{\s*name\s+= "live"/);
+    expect(api).toContain("integration_uri        = aws_lambda_alias.api_live.invoke_arn");
+    expect(api).toMatch(/qualifier\s+= aws_lambda_alias\.api_live\.name/);
+    expect(tf).toMatch(/memory_size\s+= 2048/);
+    expect(tf).toMatch(/reserved_concurrent_executions = 50/);
   });
   it("table: pk/sk, gsi1, gsi2, PITR, KMS", () => {
     const t = /resource "aws_dynamodb_table" "this" \{([\s\S]*?)\n\}/.exec(tf)![1];
@@ -149,8 +196,8 @@ describe("knowledge base (docs/KNOWLEDGE.md)", () => {
     expect(t).toMatch(/point_in_time_recovery \{\s*enabled = true/);
     expect(t).toMatch(/kms_key_arn = var\.kms_key_arn/);
   });
-  it("pipeline: every section-10 action, Lambda retries 3x, ConflictException on start_sync 10x, failures go to fail", () => {
-    const tasks = Object.entries(asl.States).filter(([, s]) => s.Type === "Task");
+  it("pipeline: every section-10 action, Lambda retries 3x, ThrottlingException on ingest 10x, enrich and ingest in parallel", () => {
+    const tasks = allStates.filter(([, s]) => s.Type === "Task");
     const acts = tasks.map(([, s]) => s.Parameters!.Payload!.action).sort();
     expect(acts).toEqual(
       [
@@ -165,27 +212,40 @@ describe("knowledge base (docs/KNOWLEDGE.md)", () => {
         "transcript_to_text",
         "mark_unsupported",
         "enrich",
-        "start_sync",
-        "check_sync",
+        "ingest",
+        "check_ingest",
         "finish",
         "fail",
       ].sort(),
     );
+    const top = new Set(Object.keys(asl.States));
     for (const [name, s] of tasks) {
       expect(s.Retry![0]).toMatchObject({ ErrorEquals: ["Lambda.ServiceException"], MaxAttempts: 3 });
-      if (name !== "Fail")
+      // top-level tasks catch into fail; tasks inside the Parallel branches fail the Parallel, which catches.
+      if (top.has(name) && name !== "Fail")
         expect(s.Catch).toEqual([{ ErrorEquals: ["States.ALL"], ResultPath: "$.error", Next: "Fail" }]);
     }
-    expect(asl.States.StartSync?.Retry?.[1]).toMatchObject({ ErrorEquals: ["ConflictException"], MaxAttempts: 10 });
-    // every transition points at a real state
-    const names = new Set(Object.keys(asl.States));
-    for (const s of Object.values(asl.States))
-      for (const n of [s.Next, s.Default, ...(s.Choices ?? []).map((c) => c.Next)].filter(Boolean))
-        expect(names).toContain(n);
-    expect(names).toContain(asl.StartAt);
+    const par = asl.States.EnrichAndIngest!;
+    expect(par.Type).toBe("Parallel");
+    expect(par.Branches!.map((b) => b.StartAt)).toEqual(["Enrich", "Ingest"]);
+    expect(par.Catch).toEqual([{ ErrorEquals: ["States.ALL"], ResultPath: "$.error", Next: "Fail" }]);
+    expect(par.Next).toBe("Finish");
+    expect(par.Branches![1]!.States.Ingest?.Retry?.[1]).toMatchObject({
+      ErrorEquals: ["ThrottlingException"],
+      MaxAttempts: 10,
+    });
+    expect(JSON.stringify(asl)).not.toMatch(/start_sync|check_sync|ConflictException/);
+    // every transition points at a real state in its own scope
+    for (const sc of scopes) {
+      const names = new Set(Object.keys(sc));
+      for (const s of Object.values(sc))
+        for (const n of [s.Next, s.Default, ...(s.Choices ?? []).map((c) => c.Next)].filter(Boolean))
+          expect(names).toContain(n);
+    }
+    expect(top).toContain(asl.StartAt);
     expect(tf).toMatch(/templatefile\("\$\{path\.module\}\/pipeline\.asl\.json\.tftpl"/);
     expect(tf).toMatch(/type\s+= "STANDARD"/);
-    expect(asl.States.AfterLink?.Choices?.[0]?.Next).toBe("Enrich");
+    expect(asl.States.AfterLink?.Choices?.[0]?.Next).toBe("EnrichAndIngest");
     expect(tf).toMatch(/AIC_LEDGER_TABLE\s+= var\.ledger_table/);
   });
   it("start: raw/ object-created rule invokes the knowledge Lambda's start action (it names the run after the item)", () => {
@@ -201,13 +261,20 @@ describe("knowledge base (docs/KNOWLEDGE.md)", () => {
       "KNOWLEDGE_BUCKET",
       "KNOWLEDGE_BASE_ID",
       "KNOWLEDGE_DATA_SOURCE_ID",
+      "KNOWLEDGE_GRAPH_ID",
       "KNOWLEDGE_STATE_MACHINE_ARN",
       "MEDIACONVERT_ROLE_ARN",
     ])
       expect(tf).toMatch(new RegExp(`\\b${v}\\s+=`));
-    for (const v of ["KNOWLEDGE_TABLE", "KNOWLEDGE_BUCKET", "KNOWLEDGE_BASE_ID", "KNOWLEDGE_DATA_SOURCE_ID"])
+    for (const v of [
+      "KNOWLEDGE_TABLE",
+      "KNOWLEDGE_BUCKET",
+      "KNOWLEDGE_BASE_ID",
+      "KNOWLEDGE_DATA_SOURCE_ID",
+      "KNOWLEDGE_GRAPH_ID",
+    ])
       expect(api).toContain(`${v} = var.`);
-    for (const v of ["KNOWLEDGE_TABLE", "KNOWLEDGE_BASE_ID", "KNOWLEDGE_DATA_SOURCE_ID"])
+    for (const v of ["KNOWLEDGE_TABLE", "KNOWLEDGE_BASE_ID", "KNOWLEDGE_DATA_SOURCE_ID", "KNOWLEDGE_GRAPH_ID"])
       expect(agents).toMatch(new RegExp(`${v}\\s+= var\\.`));
     expect(agents).toContain('each.key == "ace" ? { KNOWLEDGE_BUCKET = var.knowledge_bucket } : {}');
     expect(prod).toMatch(/module "knowledge" \{/);

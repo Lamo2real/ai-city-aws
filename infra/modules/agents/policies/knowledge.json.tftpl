@@ -8,10 +8,16 @@
       "Resource": "${knowledge_base_arn}"
     },
     {
-      "Sid": "ReadKnowledgeGraph",
+      "Sid": "ReadKnowledgeItems",
       "Effect": "Allow",
       "Action": ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:BatchGetItem"],
       "Resource": ["${knowledge_table_arn}", "${knowledge_table_arn}/index/*"]
+    },
+    {
+      "Sid": "ReadKnowledgeGraph",
+      "Effect": "Allow",
+      "Action": ["neptune-graph:ReadDataViaQuery"],
+      "Resource": "${knowledge_graph_arn}"
     }
   ]
 }

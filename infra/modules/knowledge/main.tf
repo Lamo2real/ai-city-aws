@@ -1,11 +1,13 @@
-# The owner's knowledge base (docs/KNOWLEDGE.md): the S3 bucket for raw and normalized files, an
-# Amazon Bedrock Knowledge Base on S3 Vectors (Titan Text Embeddings V2, from config/models.json),
-# the DynamoDB entity graph, the knowledge Lambda, the ingest workflow (Step Functions) and the
-# rule that starts it when a file lands under raw/. About $0 when idle.
+# The owner's knowledge base (docs/KNOWLEDGE.md, v2: performance first): the S3 bucket for raw and normalized
+# files, an Amazon Bedrock Knowledge Base on OpenSearch Serverless (hybrid search; Titan Text Embeddings V2 from
+# config/models.json), the Neptune Analytics graph, the item table, the knowledge Lambda, the ingest workflow
+# (Step Functions, direct ingestion) and the rule that starts it when a file lands under raw/. ~$610/month fixed.
 terraform {
   required_version = ">= 1.11.0"
   required_providers {
-    aws = { source = "hashicorp/aws", version = ">= 6.68.0, < 7.0.0" }
+    aws        = { source = "hashicorp/aws", version = ">= 6.68.0, < 7.0.0" }
+    opensearch = { source = "opensearch-project/opensearch", version = ">= 2.6.0, < 3.0.0" }
+    time       = { source = "hashicorp/time", version = ">= 0.13.0, < 1.0.0" }
   }
 }
 
@@ -17,6 +19,10 @@ variable "boundary_arn" { type = string }
 variable "app_origin" {
   type        = string
   description = "The HUD's origin: the only one allowed to PUT presigned uploads (CORS)."
+}
+variable "deployer_arn" {
+  type        = string
+  description = "The IAM role (not the session) that runs terraform apply: it alone may create the OpenSearch index."
 }
 variable "lambda_zip_path" {
   type        = string
@@ -51,6 +57,7 @@ locals {
   embedding = jsondecode(file("${path.module}/../../../config/models.json")).embeddings.knowledge
   # The one embedding model, in-Region (owner's exception, 2026-11-07). Its ID lives only in config/models.json.
   embedding_model_arn = "arn:aws:bedrock:${var.region}::foundation-model/${local.embedding.modelId}"
+  collection          = local.base
   function_name       = local.base
   state_machine_name  = "${local.base}-ingest"
   state_machine_arn   = "arn:aws:states:${var.region}:${var.account_id}:stateMachine:${local.state_machine_name}"
@@ -164,28 +171,91 @@ resource "aws_s3_bucket_notification" "this" {
   eventbridge = true
 }
 
-# ---------- vectors: S3 Vectors + the Bedrock Knowledge Base ----------
-resource "aws_s3vectors_vector_bucket" "this" {
-  vector_bucket_name = "${local.base}-vectors"
-  encryption_configuration {
-    sse_type    = "aws:kms"
-    kms_key_arn = var.kms_key_arn
-  }
-  tags = local.tags
+# ---------- vectors + keywords: OpenSearch Serverless + the Bedrock Knowledge Base ----------
+# One VECTORSEARCH collection without standby replicas (1 OCU minimum, ~$186/month): tens of ms per query and
+# hybrid search (BM25 + k-NN). Reached only with IAM SigV4 and the data-access policy below.
+resource "aws_opensearchserverless_security_policy" "encryption" {
+  name = local.base
+  type = "encryption"
+  policy = jsonencode({
+    Rules       = [{ ResourceType = "collection", Resource = ["collection/${local.collection}"] }]
+    AWSOwnedKey = false
+    KmsARN      = var.kms_key_arn
+  })
 }
 
-resource "aws_s3vectors_index" "items" {
-  vector_bucket_name = aws_s3vectors_vector_bucket.this.vector_bucket_name
-  index_name         = "items"
-  data_type          = "float32"
-  dimension          = local.embedding.dimensions
-  distance_metric    = "cosine"
-  # Bedrock stores the chunk text and its own metadata here; they are too large to filter on. Every other key
-  # (item_id, scope, kind from the .metadata.json files) stays filterable.
-  metadata_configuration {
-    non_filterable_metadata_keys = ["AMAZON_BEDROCK_TEXT", "AMAZON_BEDROCK_METADATA"]
+# Public endpoint (dashboards off), IAM-authenticated: Bedrock, and the deploy runner that creates the index,
+# reach it without a VPC. With AllowFromPublic the source-service list is not needed (and not allowed).
+resource "aws_opensearchserverless_security_policy" "network" {
+  name = local.base
+  type = "network"
+  policy = jsonencode([{
+    Rules           = [{ ResourceType = "collection", Resource = ["collection/${local.collection}"] }]
+    AllowFromPublic = true
+  }])
+}
+
+resource "aws_opensearchserverless_collection" "this" {
+  name             = local.collection
+  description      = "The owner's knowledge: vectors and keywords for the Bedrock Knowledge Base"
+  type             = "VECTORSEARCH"
+  standby_replicas = "DISABLED"
+  tags             = local.tags
+  depends_on       = [aws_opensearchserverless_security_policy.encryption, aws_opensearchserverless_security_policy.network]
+}
+
+# Who may touch the data: the KB role reads and writes index items; the deploy role only creates and updates
+# that index (Describe is how the provider reads it back).
+resource "aws_opensearchserverless_access_policy" "data" {
+  name = local.base
+  type = "data"
+  policy = jsonencode([
+    {
+      Rules = [
+        { ResourceType = "collection", Resource = ["collection/${local.collection}"], Permission = ["aoss:DescribeCollectionItems"] },
+        { ResourceType = "index", Resource = ["index/${local.collection}/items"], Permission = ["aoss:DescribeIndex", "aoss:UpdateIndex", "aoss:ReadDocument", "aoss:WriteDocument"] },
+      ]
+      Principal = [aws_iam_role.kb.arn]
+    },
+    {
+      Rules     = [{ ResourceType = "index", Resource = ["index/${local.collection}/items"], Permission = ["aoss:CreateIndex", "aoss:UpdateIndex", "aoss:DescribeIndex"] }]
+      Principal = [var.deployer_arn]
+    },
+  ])
+}
+
+# Data-access policies take up to a minute to apply; the index is created after that.
+resource "time_sleep" "data_policy" {
+  create_duration = "60s"
+  triggers        = { policy = aws_opensearchserverless_access_policy.data.policy_version }
+}
+
+# The index Bedrock writes into (docs/KNOWLEDGE.md section 14), created before the KB.
+resource "opensearch_index" "items" {
+  name                           = "items"
+  index_knn                      = true
+  index_knn_algo_param_ef_search = "512"
+  force_destroy                  = false
+  mappings = jsonencode({
+    properties = {
+      # Titan V2 vectors are normalized, so inner product is cosine.
+      embedding = {
+        type      = "knn_vector"
+        dimension = local.embedding.dimensions
+        data_type = "float"
+        method    = { name = "hnsw", engine = "faiss", space_type = "innerproduct", parameters = { m = 16, ef_construction = 512 } }
+      }
+      text     = { type = "text" }
+      metadata = { type = "text", index = false }
+      item_id  = { type = "keyword" }
+      scope    = { type = "keyword" }
+      kind     = { type = "keyword" }
+    }
+  })
+  depends_on = [time_sleep.data_policy]
+  lifecycle {
+    ignore_changes = [mappings] # Bedrock adds its own fields; the mapping above is only the start.
   }
-  tags = local.tags
 }
 
 resource "aws_iam_role" "kb" {
@@ -215,7 +285,7 @@ resource "aws_iam_role_policy" "kb" {
       { Sid = "Embed", Effect = "Allow", Action = ["bedrock:InvokeModel"], Resource = [local.embedding_model_arn] },
       { Sid = "ListNormalized", Effect = "Allow", Action = ["s3:ListBucket"], Resource = [aws_s3_bucket.this.arn], Condition = { StringLike = { "s3:prefix" = ["normalized/*"] }, StringEquals = { "aws:ResourceAccount" = var.account_id } } },
       { Sid = "ReadNormalized", Effect = "Allow", Action = ["s3:GetObject"], Resource = ["${aws_s3_bucket.this.arn}/normalized/*"], Condition = { StringEquals = { "aws:ResourceAccount" = var.account_id } } },
-      { Sid = "Vectors", Effect = "Allow", Action = ["s3vectors:PutVectors", "s3vectors:GetVectors", "s3vectors:DeleteVectors", "s3vectors:QueryVectors", "s3vectors:GetIndex"], Resource = [aws_s3vectors_index.items.index_arn] },
+      { Sid = "Collection", Effect = "Allow", Action = ["aoss:APIAccessAll"], Resource = [aws_opensearchserverless_collection.this.arn] },
       { Sid = "Key", Effect = "Allow", Action = ["kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"], Resource = var.kms_key_arn },
     ]
   })
@@ -238,13 +308,19 @@ resource "aws_bedrockagent_knowledge_base" "this" {
     }
   }
   storage_configuration {
-    type = "S3_VECTORS"
-    s3_vectors_configuration {
-      index_arn = aws_s3vectors_index.items.index_arn
+    type = "OPENSEARCH_SERVERLESS"
+    opensearch_serverless_configuration {
+      collection_arn    = aws_opensearchserverless_collection.this.arn
+      vector_index_name = opensearch_index.items.name
+      field_mapping {
+        vector_field   = "embedding"
+        text_field     = "text"
+        metadata_field = "metadata"
+      }
     }
   }
   tags       = local.tags
-  depends_on = [aws_iam_role_policy.kb]
+  depends_on = [aws_iam_role_policy.kb, opensearch_index.items]
 }
 
 resource "aws_bedrockagent_data_source" "normalized" {
@@ -265,7 +341,19 @@ resource "aws_bedrockagent_data_source" "normalized" {
   }
 }
 
-# ---------- the graph and item records ----------
+# ---------- the graph: Neptune Analytics (in-memory, openCypher; ~$424/month) ----------
+# Public endpoint with IAM SigV4: only the neptune-graph query permissions below reach it (no VPC, no NAT).
+resource "aws_neptunegraph_graph" "this" {
+  graph_name          = "${local.base}-graph"
+  provisioned_memory  = 16
+  replica_count       = 0
+  public_connectivity = true
+  kms_key_identifier  = var.kms_key_arn
+  deletion_protection = var.deletion_protection
+  tags                = local.tags
+}
+
+# ---------- item records ----------
 resource "aws_dynamodb_table" "this" {
   name                        = local.base
   billing_mode                = "PAY_PER_REQUEST"
@@ -392,7 +480,9 @@ resource "aws_iam_role_policy" "fn" {
       { Sid = "PassMediaConvertRole", Effect = "Allow", Action = ["iam:PassRole"], Resource = [aws_iam_role.mediaconvert.arn], Condition = { StringEquals = { "iam:PassedToService" = "mediaconvert.amazonaws.com" } } },
       # Converse is authorized as bedrock:InvokeModel; Haiku 5.5 (utility) only.
       { Sid = "Utility", Effect = "Allow", Action = ["bedrock:InvokeModel"], Resource = var.utility_invoke_arns },
-      { Sid = "Sync", Effect = "Allow", Action = ["bedrock:StartIngestionJob", "bedrock:GetIngestionJob"], Resource = [aws_bedrockagent_knowledge_base.this.arn] },
+      # Direct ingestion per item (no data-source syncs: AWS says not to mix them).
+      { Sid = "Ingest", Effect = "Allow", Action = ["bedrock:IngestKnowledgeBaseDocuments", "bedrock:GetKnowledgeBaseDocuments", "bedrock:DeleteKnowledgeBaseDocuments"], Resource = [aws_bedrockagent_knowledge_base.this.arn] },
+      { Sid = "Graph", Effect = "Allow", Action = ["neptune-graph:ReadDataViaQuery", "neptune-graph:WriteDataViaQuery", "neptune-graph:DeleteDataViaQuery"], Resource = [aws_neptunegraph_graph.this.arn] },
       { Sid = "Events", Effect = "Allow", Action = ["events:PutEvents"], Resource = [var.bus_arn] },
       { Sid = "Ledger", Effect = "Allow", Action = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query"], Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] },
       # EventBridge cannot name an execution, so the `start` action names it after the item (one run per item).
@@ -414,9 +504,9 @@ resource "aws_lambda_function" "fn" {
   filename                       = var.lambda_zip_path
   source_code_hash               = var.lambda_zip_hash
   timeout                        = 900
-  memory_size                    = 1024
+  memory_size                    = 2048 # PDF and image work is CPU-bound; CPU scales with memory
   kms_key_arn                    = var.kms_key_arn
-  reserved_concurrent_executions = 20
+  reserved_concurrent_executions = 50 # items ingest in parallel
   ephemeral_storage {
     size = 2048
   }
@@ -438,6 +528,7 @@ resource "aws_lambda_function" "fn" {
       KNOWLEDGE_BUCKET            = aws_s3_bucket.this.bucket
       KNOWLEDGE_BASE_ID           = aws_bedrockagent_knowledge_base.this.id
       KNOWLEDGE_DATA_SOURCE_ID    = aws_bedrockagent_data_source.normalized.data_source_id
+      KNOWLEDGE_GRAPH_ID          = aws_neptunegraph_graph.this.id
       KNOWLEDGE_STATE_MACHINE_ARN = local.state_machine_arn
       MEDIACONVERT_ROLE_ARN       = aws_iam_role.mediaconvert.arn
     }
@@ -573,6 +664,9 @@ output "table_arn" { value = aws_dynamodb_table.this.arn }
 output "knowledge_base_id" { value = aws_bedrockagent_knowledge_base.this.id }
 output "knowledge_base_arn" { value = aws_bedrockagent_knowledge_base.this.arn }
 output "data_source_id" { value = aws_bedrockagent_data_source.normalized.data_source_id }
+output "graph_id" { value = aws_neptunegraph_graph.this.id }
+output "graph_arn" { value = aws_neptunegraph_graph.this.arn }
+output "collection_endpoint" { value = aws_opensearchserverless_collection.this.collection_endpoint }
 output "state_machine_arn" { value = aws_sfn_state_machine.ingest.arn }
 output "mediaconvert_role_arn" { value = aws_iam_role.mediaconvert.arn }
 output "function_names" { value = { knowledge = aws_lambda_function.fn.function_name } }

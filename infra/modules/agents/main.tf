@@ -35,6 +35,8 @@ variable "knowledge_bucket_arn" { type = string }
 variable "knowledge_base_id" { type = string }
 variable "knowledge_base_arn" { type = string }
 variable "knowledge_data_source_id" { type = string }
+variable "knowledge_graph_id" { type = string }
+variable "knowledge_graph_arn" { type = string }
 variable "enable_gateway" {
   type    = bool
   default = false
@@ -162,6 +164,7 @@ resource "aws_iam_role_policy" "knowledge" {
   policy = templatefile("${path.module}/policies/knowledge.json.tftpl", {
     knowledge_base_arn  = var.knowledge_base_arn
     knowledge_table_arn = var.knowledge_table_arn
+    knowledge_graph_arn = var.knowledge_graph_arn
   })
 }
 
@@ -269,6 +272,7 @@ resource "aws_bedrockagentcore_agent_runtime" "role" {
       KNOWLEDGE_TABLE                  = var.knowledge_table
       KNOWLEDGE_BASE_ID                = var.knowledge_base_id
       KNOWLEDGE_DATA_SOURCE_ID         = var.knowledge_data_source_id
+      KNOWLEDGE_GRAPH_ID               = var.knowledge_graph_id
       CLAUDE_CODE_USE_BEDROCK          = "1"
       CLAUDE_CODE_DISABLE_1M_CONTEXT   = "1"
       CLAUDE_CODE_SUBPROCESS_ENV_SCRUB = "1"
