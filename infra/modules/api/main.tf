@@ -76,7 +76,7 @@ locals {
   }
   # name => bundle, handler, timeout, memory, extra env
   functions = {
-    api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 512, env = { AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_USER_POOL_ID = var.user_pool_id, AIC_OWNER_EMAIL = var.owner_email, AIC_APPS_BUCKET = var.apps_bucket, AIC_APPS_URL = var.apps_url, AIC_APPS_DISTRIBUTION_ID = var.apps_distribution_id } }
+    api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 512, env = { AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_USER_POOL_ID = var.user_pool_id, AIC_OWNER_EMAIL = var.owner_email, AIC_APPS_BUCKET = var.apps_bucket, AIC_APPS_URL = var.apps_url, AIC_APPS_DISTRIBUTION_ID = var.apps_distribution_id, AIC_APP_BRIDGE_FUNCTION = local.app_bridge_name } }
     dispatcher    = { bundle = "app", handler = "aic.lambdas.dispatcher.handler", timeout = 120, memory = 1024, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_ARN_ORCHESTRATOR = var.runtime_arns["orchestrator"], AIC_RUNTIME_ARN_MANAGER = var.runtime_arns["manager"], AIC_RUNTIME_ARN_WORKER = var.runtime_arns["worker"], AIC_RUNTIME_VERSION = var.runtime_version, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod", AIC_CONNECTIONS_TABLE = var.connections_table } }
     factory       = { bundle = "app", handler = "aic.lambdas.factory.handler", timeout = 30, memory = 256, env = {} }
     ledger-writer = { bundle = "app", handler = "aic.lambdas.ledger_writer.handler", timeout = 30, memory = 256, env = {} }
@@ -86,9 +86,13 @@ locals {
     ws-authorizer = { bundle = "app", handler = "aic.lambdas.ws.authorizer_handler", timeout = 10, memory = 256, env = { AIC_USER_POOL_ID = var.user_pool_id, AIC_USER_POOL_CLIENT_ID = var.client_id } }
     ws-connection = { bundle = "app", handler = "aic.lambdas.ws.connection_handler", timeout = 10, memory = 256, env = { AIC_CONNECTIONS_TABLE = var.connections_table } }
     apps          = { bundle = "app", handler = "aic.lambdas.apps.handler", timeout = 120, memory = 512, env = { AIC_APPS_BUCKET = var.apps_bucket, AIC_APPS_URL = var.apps_url, AIC_WORKSPACES_BUCKET = var.workspaces_bucket } }
+    app-bridge    = { bundle = "app", handler = "aic.lambdas.app_bridge.handler", timeout = 25, memory = 512, env = {} }
     ws-broadcast  = { bundle = "app", handler = "aic.lambdas.ws.broadcast_handler", timeout = 30, memory = 256, env = { AIC_CONNECTIONS_TABLE = var.connections_table, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod" } }
   }
-  ledger_rw = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:ConditionCheckItem"]
+  # Named, not referenced: the api function's env and policy name it, and both live in the same for_each.
+  app_bridge_name = "${var.name}-app-bridge"
+  apps_tagged     = ["apps", "app-bridge"]
+  ledger_rw       = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:ConditionCheckItem"]
   # What each function may do, beyond logs, tracing and the KMS key.
   permissions = {
     api = [
@@ -104,6 +108,16 @@ locals {
       { Action = ["s3:ListBucket"], Resource = [var.apps_bucket_arn], Condition = { StringLike = { "s3:prefix" = ["drafts/*", "live/*"] } } },
       { Action = ["s3:PutObject", "s3:DeleteObject"], Resource = ["${var.apps_bucket_arn}/live/*"] },
       { Action = ["cloudfront:CreateInvalidation"], Resource = [var.apps_distribution_arn] },
+      # Apps' data reads run only in the app-bridge Lambda; the api role itself gets no Gateway access.
+      { Action = ["lambda:InvokeFunction"], Resource = ["arn:aws:lambda:${var.region}:${var.account_id}:function:${local.app_bridge_name}"] },
+    ]
+    # Runs an app's granted read (docs/APPS.md v2). Invoked only by the api role. Reads the app's grants, the
+    # connector list and the mail account rows; writes only its rate counters and the audit rows of agent app-<id>.
+    # TODO after connectors-skills merges: bedrock-agentcore:InvokeGateway on the connectors gateway ARN only.
+    # TODO after mail-calendar merges: the mail/calendar read path (read only).
+    app-bridge = [
+      { Action = ["dynamodb:GetItem", "dynamodb:Query"], Resource = [var.ledger_arn], Condition = { "ForAllValues:StringEquals" = { "dynamodb:LeadingKeys" = ["APPS", "CONNECTORS", "MAIL"] } } },
+      { Action = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"], Resource = [var.ledger_arn], Condition = { "ForAllValues:StringLike" = { "dynamodb:LeadingKeys" = ["RATE#app-*", "TOOL#app-*"] } } },
     ]
     # Checks a worker's submission and stages it as a draft. Never live/, never another ledger key.
     apps = [
@@ -167,7 +181,7 @@ resource "aws_cloudwatch_log_group" "fn" {
   name              = "/aws/lambda/${var.name}-${each.key}"
   retention_in_days = var.log_retention_days
   kms_key_id        = var.kms_key_arn
-  tags              = each.key == "apps" ? { Component = "apps" } : local.tags
+  tags              = contains(local.apps_tagged, each.key) ? { Component = "apps" } : local.tags
 }
 
 resource "aws_iam_role" "fn" {
@@ -178,7 +192,7 @@ resource "aws_iam_role" "fn" {
     Version   = "2012-10-17"
     Statement = [{ Effect = "Allow", Principal = { Service = "lambda.amazonaws.com" }, Action = "sts:AssumeRole" }]
   })
-  tags = each.key == "apps" ? { Component = "apps" } : local.tags
+  tags = contains(local.apps_tagged, each.key) ? { Component = "apps" } : local.tags
 }
 
 resource "aws_iam_role_policy" "fn" {
@@ -231,7 +245,7 @@ resource "aws_lambda_function" "fn" {
   environment {
     variables = merge(local.common_env, each.value.env)
   }
-  tags = each.key == "apps" ? { Component = "apps" } : local.tags
+  tags = contains(local.apps_tagged, each.key) ? { Component = "apps" } : local.tags
 }
 
 # ---------- SQS → dispatcher ----------
