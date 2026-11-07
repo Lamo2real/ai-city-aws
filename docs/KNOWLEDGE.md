@@ -69,6 +69,7 @@ DynamoDB `aic-prod-knowledge` (`pk`, `sk`, `gsi1pk`/`gsi1sk`, `gsi2pk`/`gsi2sk`,
 | Relationship | `ENT#<a>` / `REL#<relation>#<b>#<id>` (and the reverse `ENT#<b>` / `REL#~<relation>#<a>#<id>`) | — |
 
 `id` = `k-` + 12 random URL-safe characters. Status: `uploading → processing → ready | failed | unsupported`.
+Pipeline bookkeeping on the item (optional, shown in Item JSON): `upload_id` (multipart, until complete), `work_key` (a fetched link's file under `work/<id>/fetched/`), `audio_key`, `mediaconvert_job`, `transcribe_job`, `sync_job`. Relationship items also carry `relation, other, item_id, from_name, to_name`.
 
 ## 5. HTTP API (owner group checked like every route)
 | Route | Body → answer |
@@ -137,6 +138,8 @@ What the Lambda must return (the ASL is `infra/modules/knowledge/pipeline.asl.js
 - `start_sync` lets `ConflictException` propagate (Lambda `errorType` exactly `ConflictException`).
 - `fail` receives `{"action": "fail", "item_id", "error": {"Error", "Cause"}}` and must not raise.
 - A run times out after 12 h (the item then stays `processing`; the HUD can offer Delete). Failed `start` events go to the SQS DLQ `aic-prod-knowledge-start-dlq` (alarmed like the other DLQs).
+
+The backend answers every step as `{item_id, …}` plus the fields above (`start_*` also add `job_id`, `finish`/`fail`/`mark_unsupported` add `status`); job ids are also kept on the item record, which is what `check_*` read.
 
 ## 11. HUD
 A **Knowledge** screen beside the others: one drop zone (files, many at once) + "Paste a link or text" field;

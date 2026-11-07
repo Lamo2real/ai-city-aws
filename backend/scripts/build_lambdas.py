@@ -51,7 +51,7 @@ def main() -> int:
             "--target",
             str(OUT),
             "--python-platform",
-            "aarch64-manylinux2014",
+            "aarch64-manylinux_2_28",  # the Lambda Python 3.13 runtime is Amazon Linux 2023 (glibc 2.34)
             "--python-version",
             "3.13",
             "--only-binary",

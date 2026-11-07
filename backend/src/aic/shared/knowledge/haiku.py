@@ -1,0 +1,116 @@
+"""The knowledge base's Haiku 5.5 calls: summary + graph, image description, scanned-PDF page reading.
+
+Each is a utility turn through the same gate as the other utility calls (pause flag, spend caps, cost row in
+the ledger, ``cost.update`` event), with the utility role's model from ``config/models.json``. Every prompt
+stays far below Haiku's 100,000-token long-context tier.
+"""
+
+from __future__ import annotations
+
+import io
+from dataclasses import dataclass
+
+from ..models import resolve_role_from_env
+from ..turn import GateDeps, GatedTurn, run_gated_turn
+from ..utility import UTILITY_MAX_CHARS, UtilityDeps, agents_dir
+from .extract import Extraction, parse_extraction
+
+MAX_IMAGE_BYTES = int(3.75 * 1024**2)
+MAX_IMAGE_EDGE = 1568
+"""Larger images cost more tokens without reading better; Bedrock's own limit is 8,000 px."""
+_IMAGE_FORMATS = {"PNG": "png", "JPEG": "jpeg", "WEBP": "webp", "GIF": "gif"}
+
+
+def knowledge_prompt(name: str) -> str:
+    return (agents_dir() / "utility" / f"knowledge-{name}.md").read_text(encoding="utf-8").strip()
+
+
+def fit_image(data: bytes) -> tuple[bytes, str]:
+    """(bytes, Converse format) within Bedrock's limits: resized and re-encoded only when needed."""
+    from PIL import Image
+
+    with Image.open(io.BytesIO(data)) as im:
+        fmt = _IMAGE_FORMATS.get(str(im.format))
+        animated = bool(getattr(im, "is_animated", False))
+        if fmt and not animated and max(im.size) <= MAX_IMAGE_EDGE and len(data) <= MAX_IMAGE_BYTES:
+            return data, fmt
+        im.seek(0)
+        frame = im.convert("RGBA" if im.mode in ("RGBA", "LA", "P") else "RGB")
+    frame.thumbnail((MAX_IMAGE_EDGE, MAX_IMAGE_EDGE))
+    buf = io.BytesIO()
+    if frame.mode == "RGBA":
+        frame.save(buf, "PNG", optimize=True)
+        if buf.tell() <= MAX_IMAGE_BYTES:
+            return buf.getvalue(), "png"
+        frame = frame.convert("RGB")
+        buf = io.BytesIO()
+    frame.save(buf, "JPEG", quality=85)
+    return buf.getvalue(), "jpeg"
+
+
+@dataclass
+class KnowledgeModel:
+    deps: UtilityDeps
+
+    async def _call(
+        self, prompt: str, data: str, attachments: tuple[dict[str, object], ...] = (), max_tokens: int = 2048
+    ) -> str:
+        d = self.deps
+        body = data[:UTILITY_MAX_CHARS]
+        r = await run_gated_turn(
+            GatedTurn(
+                kind="utility",
+                role="utility",
+                agent_id="utility",
+                session_id="utility-calls-are-stateless-000000",
+                department=None,
+                ticket_id=None,
+                models=resolve_role_from_env("utility", d.env),
+                prompt=f"{prompt}\n\n<data>\n{body}\n</data>",
+                prefix=d.settings.get("profile_prefix"),
+                timeout_ms=120_000,
+                attachments=attachments,
+                max_tokens=max_tokens,
+            ),
+            GateDeps(ledger=d.ledger, bus=d.bus, settings=d.settings, runner=d.runner),
+        )
+        return r.output.text.strip()
+
+    async def summarize(self, title: str, text: str) -> Extraction:
+        """Summary (≤ 150 words) + entities and relationships. One retry when the JSON doesn't validate."""
+        data = f"Title: {title}\n\n{text}"
+        reply = await self._call(knowledge_prompt("summary"), data, max_tokens=4096)
+        try:
+            return parse_extraction(reply)
+        except ValueError:
+            reply = await self._call(
+                knowledge_prompt("summary") + "\n\nReply with the JSON object only.", data, max_tokens=4096
+            )
+            return parse_extraction(reply)
+
+    async def describe_image(self, title: str, data: bytes) -> str:
+        img, fmt = fit_image(data)
+        return await self._call(
+            knowledge_prompt("image"),
+            f"Title: {title}",
+            ({"image": {"format": fmt, "source": {"bytes": img}}},),
+            max_tokens=4096,
+        )
+
+    async def read_pages(self, title: str, first_page: int, pdf: bytes) -> str:
+        """Bedrock Converse reads a PDF visually (scanned pages) only with citations enabled."""
+        return await self._call(
+            knowledge_prompt("pages"),
+            f"Title: {title}\nThe attached part starts at page {first_page}.",
+            (
+                {
+                    "document": {
+                        "format": "pdf",
+                        "name": f"pages from {first_page}",
+                        "source": {"bytes": pdf},
+                        "citations": {"enabled": True},
+                    }
+                },
+            ),
+            max_tokens=8192,
+        )

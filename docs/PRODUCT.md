@@ -8,7 +8,7 @@
 - If this file and the code disagree, the code wins: fix this file.
 - New larger features: add a row under §6 and an entry in §10.
 
-Last updated: 2026-11-07 (knowledge base designed, not built).
+Last updated: 2026-11-07 (knowledge base backend built and tested offline; infra and HUD in progress).
 
 ---
 
@@ -80,7 +80,7 @@ Owner message → `POST /messages` → SQS (`ace` queue) → **dispatcher** Lamb
 | Hierarchy | Ace conversation memory (typed + spoken, last 12 lines) | ✅ | `ledger.py`, `runtime/host.py` |
 | Runtime | AgentCore container (8080, `/ping` Healthy/HealthyBusy, `/invocations` sync/async) | ✅ code / 🟡 image never built | `backend/src/aic/runtime/server.py`, `services/agent-runtime/Dockerfile` |
 | Runtime | Claude Agent SDK (Python) engine on Bedrock | 🟡 type-checked only, never run against Bedrock | `runtime/engine.py` |
-| API | HTTP API, 22 routes, owner group re-checked | ✅ | `backend/src/aic/lambdas/api.py` |
+| API | HTTP API, 30 routes, owner group re-checked | ✅ | `backend/src/aic/lambdas/api.py` |
 | API | WebSocket: `$connect` authorizer, connections with TTL, broadcast | ✅ | `lambdas/ws.py` (Cognito token checked with PyJWT) |
 | API | Notifications (results, cap alerts, pause, 15-min question nudge) | ✅ / nudge job off | `lambdas/notifier.py` |
 | Voice | Push-to-talk, wake mode (plain match, Haiku for unclear), Transcribe + Polly via identity pool | 🟡 fake voice only | `web/src/voice/`, `utility.py`, `tests/fixtures/wake-cases.json` |
@@ -96,7 +96,10 @@ Owner message → `POST /messages` → SQS (`ace` queue) → **dispatcher** Lamb
 | Ops | `city-off.sh` / `city-on.sh`, `build-images.sh` (no push) | 🟡 not run | `scripts/` |
 | CI/CD | `ci.yml`, `deploy.yml`: needs only the variable `AIC_DEPLOY_ROLE_ARN` + the secret `AIC_OWNER_EMAIL`; creates the state bucket if missing; runs on every push to `main` (no approval; docs-only pushes skipped); one plan builds + pushes the image (tag = hash of the runtime sources) and deploys from nothing | 🟡 never run | `.github/workflows/`, `scripts/ensure-state-bucket.sh`, `scripts/push-image.sh` |
 | Knowledge | Knowledge infra: bucket `aic-prod-knowledge` (KMS, versioned, private, EventBridge, CORS PUT from the HUD, `work/` expires in 7 days), S3 Vectors index (1,024 dims, cosine), Bedrock Knowledge Base + `normalized/` data source (embedding model read from `config/models.json`), graph table (PITR, KMS), knowledge Lambda, Step Functions ingest, `raw/` rule → Lambda `start` (run named after the item) + DLQ, MediaConvert role, 8 HTTP routes, env vars and IAM (boundary passes only the MediaConvert role) | 🟡 offline checks only (fmt, validate, tflint, checkov, tag/IAM checks, `tests/infra.test.ts`); not applied | `infra/modules/knowledge`, `scripts/check-iam.mjs` |
-| Knowledge | Knowledge base: links, documents, images, audio, video, text; routed by format (Transcribe, MediaConvert, Haiku vision), Bedrock Knowledge Base on S3 Vectors (Titan V2 embeddings) + DynamoDB graph; scopes always / relevant / on request; `search_knowledge` for every role, `add_to_knowledge` and `list_knowledge` for AIC; HUD Knowledge screen | ❌ designed, not built | `docs/KNOWLEDGE.md` |
+| Knowledge | Backend: item store + graph (`aic-prod-knowledge` keys), routing by format, link fetch with the private/metadata address guard (redirects re-checked), PDF text-layer check + Haiku page reading for scans, Haiku image description, transcript → `[mm:ss]` text, summary + entity extraction (validated, ≤ 50), KB metadata files, search (Retrieve + scope filter + one-hop graph expansion, checked against the current item), always-include block (8,000 tokens) | 🟡 tested on fakes only; never run against Bedrock, S3, Transcribe or MediaConvert | `backend/src/aic/shared/knowledge/` |
+| Knowledge | Pipeline Lambda (15 actions, `knowledge.updated` events, Haiku cost recorded like other utility calls) | 🟡 fakes only; the state machine is infra's | `backend/src/aic/lambdas/knowledge.py` |
+| Knowledge | API routes `/knowledge…` (list, get, presigned single + multipart uploads, links, text, scope/title change with re-sync, delete) | ✅ (memory fakes) / 🟡 presigned URLs never tried against S3 | `backend/src/aic/lambdas/api.py` |
+| Knowledge | Tools: `search_knowledge` for every role, `add_to_knowledge` + `list_knowledge` for AIC, all through `gate_tools`; `<owner-knowledge>` block in every prompt | ✅ (fakes) | `runtime/tools.py`, `runtime/host.py`, `agents/*.md` |
 | Gap | Worker S3 workspace sync (IAM ready) | ❌ | — |
 | Gap | Runtime use of AgentCore Memory | ❌ | — |
 | Gap | Self-improvement runner (switch + fence exist) | ❌ | `backend/src/aic/lambdas/improve.py` |
@@ -109,7 +112,8 @@ Owner message → `POST /messages` → SQS (`ace` queue) → **dispatcher** Lamb
 - Guard refuses each forbidden variable and Bedrock-off (`test_guard.py`).
 - No spend limit by default: a turn runs whatever was spent. A cap the owner sets blocks all 7 turn kinds. A refusal triggers exactly one fallback (`test_turn.py`).
 - Policy decisions for ~70 commands incl. `exec` and AWS mutation (`test_policy.py`).
-- Every API route rejects a token without the `owner` group (`backend/tests/test_api.py`).
+- Every API route rejects a token without the `owner` group, the knowledge routes included (`backend/tests/test_api.py`).
+- Knowledge: link fetching refuses private, loopback, link-local and metadata addresses, also after a redirect; search leaves out `on_request` items unless asked and follows the item's current scope; the always block stays within 8,000 tokens; stored content is escaped so it can't close its data block (`backend/tests/test_knowledge_*.py`).
 - 500 hires respect ceilings and the session rate; nothing dropped (`backend/tests/test_hierarchy_e2e.py`).
 - `deploy.yml` runs only on pushes to `main` or by hand (never on pull requests); `ci.yml` only by hand (`tests/workflows.test.ts`).
 - Tags and worker IAM limits (`tests/infra.test.ts`).
@@ -153,6 +157,7 @@ Terraform (offline only): `fmt -check -recursive`, `init -backend=false`, `valid
 | Date | Feature | Notes |
 |---|---|---|
 | 2026-11-07 | Knowledge base infra | `infra/modules/knowledge`: S3 bucket, S3 Vectors + Bedrock Knowledge Base, graph table, knowledge Lambda, Step Functions ingest, MediaConvert role; routes, env vars and IAM on the api Lambda and runtimes. EventBridge can't name a Step Functions run, so the `raw/` rule calls the Lambda's `start` action (decision 65). Checked offline only; not applied. |
+| 2026-11-07 | Knowledge base backend | Python side of `docs/KNOWLEDGE.md`: `aic.shared.knowledge` (store, graph, routing, link guard, PDFs, images, transcripts, extraction, search), the pipeline Lambda, 8 owner-only routes, three agent tools and the always-include block. New dependencies pypdf and Pillow; Lambda wheels now target `manylinux_2_28` (Amazon Linux 2023). Tested on fakes only. |
 | 2026-11-07 | Knowledge base (designed) | The owner stores links, PDFs, documents, images, audio and video; each is routed by format, embedded into a Bedrock Knowledge Base on S3 Vectors in Stockholm (Titan V2 embeddings, the owner's one exception to Anthropic-only) and linked in a DynamoDB entity graph built by Haiku 5.5. Every item has a scope: always include, when relevant, only when asked. Contract in `docs/KNOWLEDGE.md`, decision 64. Not built yet. |
 | 2026-11-06 | Own sign-in, clear first-login email, Ace's eye | The HUD signs in on its own screens (Amplify Auth, SRP; no Cognito hosted pages): first login walks through temporary password → own password → authenticator app. Cognito's invitation email is rewritten (link, user name, temporary password valid 7 days, steps) and so is the reset-code email; a public `POST /auth/first-login-email` re-sends the invitation (owner only, once per 10 min, same answer for any email). Ace is shown with one eye, the owner's own drawing. |
 | 2026-11-06 | Deploy stages | `deploy.yml` runs **web** and **backend** (ruff, mypy, pytest, Lambda package) in parallel, then **plan → apply → frontend**; the plan job prints the OIDC claims GitHub presents (never the token), so a trust-policy mismatch is visible in the log. |

@@ -22,6 +22,8 @@ from aic.shared.aws import LambdaFactoryClient, aws_city, require_env
 from aic.shared.config import caps_config
 from aic.shared.guard import startup_guard
 from aic.shared.hierarchy.actions import CityDeps
+from aic.shared.knowledge.service import KnowledgeAccess, KnowledgeService
+from aic.shared.knowledge.wiring import knowledge_from_env
 from aic.shared.log import log
 
 MAX_BODY = 1_000_000
@@ -109,11 +111,21 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
             factory=factory,
             settings=city.settings,
             max_review_rounds=caps["max_review_rounds"],
+            knowledge=_knowledge(city.session, city.bus, role, e),
         ),
         HostOptions(engine=sdk_engine, role=role, timeout_ms=minutes * 60_000),
     )
     log("info", "runtime.started", role=role)
     return create_app(host)
+
+
+def _knowledge(session: Any, bus: Any, role: str, env: Mapping[str, str]) -> KnowledgeAccess | None:
+    """Search for every role; AIC also adds links and texts (it may write ``raw/*`` and ``ITEM#*``)."""
+    k = knowledge_from_env(session, env)
+    if not k:
+        return None
+    service = KnowledgeService(store=k.store, blobs=k.blobs, bus=bus) if role == "ace" and k.blobs else None
+    return KnowledgeAccess(store=k.store, kb=k.kb, service=service)
 
 
 def main() -> None:
