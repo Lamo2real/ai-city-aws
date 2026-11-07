@@ -456,6 +456,7 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
                     "from": "owner",
                     "body": text,
                     "conversation": conversation,
+                    **({"voice": True} if b.get("voice") is True else {}),
                 },
             )
         )

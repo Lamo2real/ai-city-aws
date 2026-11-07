@@ -81,6 +81,9 @@ async def test_post_messages_queues_the_owners_message_for_ace_keyed_by_the_clie
     assert r["statusCode"] == 202
     m = d.queue.sent[0]
     assert (m["id"], m["role"], m["conversation"], m["from"]) == ("owner-abcd1234", "ace", "c1", "owner")
+    assert "voice" not in m
+    await handle_http(ev("POST", "/messages", {"text": "status?", "voice": True}), d)
+    assert d.queue.sent[1]["voice"] is True  # said out loud: AIC is told to keep it short
     assert (await handle_http(ev("POST", "/messages", {"text": ""}), d))["statusCode"] == 400
     assert (await handle_http({**ev("POST", "/messages"), "body": "{"}, d))["statusCode"] == 400
 

@@ -79,7 +79,7 @@ variable "mail_providers" {
 variable "polly_voice" {
   description = "The default Polly generative voice for AIC (the owner can pick another per device in Settings)."
   type        = string
-  default     = "Matthew"
+  default     = "Ruth"
 }
 
 variable "transcribe_region" {

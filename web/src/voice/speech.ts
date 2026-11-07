@@ -2,12 +2,13 @@
 // first sentence is complete instead of reading the whole page at the end.
 //   SentenceSplitter: cuts the arriving text at sentence ends and line ends; skips code blocks and table rules.
 //   speakable:        what a person would say: no Markdown, emoji or URLs; "AIC" said as letters.
-//   SpeechQueue:      synthesizes one sentence at a time (ahead of playback, so the next clip is ready when the
-//                     current one ends) and plays the clips strictly in order. Polly is never hit in parallel.
+//   SpeechQueue:      one reply, each sentence once: synthesizes one sentence at a time (ahead of playback, so
+//                     the next clip is ready when the current one ends) and plays the clips strictly in order,
+//                     with a short pause between them. Polly is never hit in parallel.
 // No SSML: Polly's generative voices ignore most of it, and plain short sentences sound most natural.
 
-/** Sentence end: . ! ? … (optionally closed by a quote or bracket) followed by whitespace. */
-const SENTENCE_END = /[.!?…]+["'”’)\]]*\s/;
+/** Sentence end: . ! ? … (optionally closed by a quote, a bracket or Markdown emphasis) followed by whitespace. */
+const SENTENCE_END = /[.!?…]+["'”’)\]*_]*\s/;
 const LIST_MARKER = /^\s*(?:\d+[.)]|[-*+•])\s+/;
 const TABLE_RULE = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
 
@@ -82,8 +83,24 @@ export function speakable(md: string): string {
   return /[\p{L}\p{N}]/u.test(t) ? t : "";
 }
 
+/** The pause between two sentences, like a breath (generative voices ignore SSML breaks). */
+export const SENTENCE_GAP_MS = 200;
+
+/** Every complete sentence in `text` so far, as it would be said (`done`: the rest counts too). The split
+ *  only depends on the text, so a longer version of the same reply gives the same first sentences. */
+export function sentencesOf(text: string, done = false): string[] {
+  const split = new SentenceSplitter();
+  return [...split.push(text), ...(done ? split.flush() : [])].map(speakable).filter(Boolean);
+}
+
+/** One reply, spoken once: a strict first-in, first-out player. The queue holds the reply's whole text and
+ *  re-splits it on every update, so a piece that arrives twice, a re-render, or a final text that replaces
+ *  the streamed one (it can, after a tool call) never re-queues a sentence: each sentence is said at most once,
+ *  in order. Synthesis runs one ahead of playback; a clip starts only after the previous one ended. */
 export class SpeechQueue<Clip> {
-  private split = new SentenceSplitter();
+  private text = "";
+  private said = new Set<string>();
+  private played = 0;
   private synthChain: Promise<unknown> = Promise.resolve();
   private playChain: Promise<void> = Promise.resolve();
   private stopped = false;
@@ -95,25 +112,38 @@ export class SpeechQueue<Clip> {
     private onStart?: () => void,
     /** A sentence failed to synthesize or play. The queue carries on with the rest; the caller decides. */
     private onProblem?: (e: unknown) => void,
+    private gapMs = SENTENCE_GAP_MS,
   ) {}
 
   /** More of the reply arrived. */
-  push(text: string) {
-    for (const s of this.split.push(text)) this.say(s);
+  push(more: string) {
+    this.update(this.text + more);
   }
-  /** The reply is complete; resolves when the last clip has played (or the queue was stopped). */
-  end(): Promise<void> {
-    for (const s of this.split.flush()) this.say(s);
+  /** The reply so far, whole (what the chat line shows now). */
+  update(full: string, done = false) {
+    if (this.stopped) return;
+    this.text = full;
+    for (const s of sentencesOf(full, done)) {
+      if (this.said.has(s)) continue;
+      this.said.add(s);
+      this.say(s);
+    }
+  }
+  /** The reply is complete (`final`: its finished text, if it replaced the streamed one); resolves when the
+   *  last clip has played or the queue was stopped. */
+  end(final?: string): Promise<void> {
+    this.update(final ?? this.text, true);
     return this.playChain;
   }
-  /** Stop talking now (the owner tapped the mic, or turned speaking off). */
+  /** Stop talking now and drop everything queued (a new reply, the mic, Send, or speaking turned off). */
   stop() {
     this.stopped = true;
   }
+  get isStopped() {
+    return this.stopped;
+  }
 
-  private say(sentence: string) {
-    const text = speakable(sentence);
-    if (!text) return;
+  private say(text: string) {
     // One synthesis at a time, started as soon as the previous one finished: the next clip is usually ready
     // before the current one ends.
     const clip = this.synthChain.then(() =>
@@ -123,6 +153,8 @@ export class SpeechQueue<Clip> {
     this.playChain = this.playChain.then(async () => {
       const c = await clip;
       if (!c || this.stopped) return;
+      if (this.played++ && this.gapMs) await new Promise((r) => setTimeout(r, this.gapMs));
+      if (this.stopped) return;
       await this.play(c, this.onStart).catch((e: unknown) => this.onProblem?.(e));
     });
   }
