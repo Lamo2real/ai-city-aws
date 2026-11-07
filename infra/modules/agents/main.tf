@@ -28,6 +28,13 @@ variable "factory_function_name" { type = string }
 variable "workspaces_bucket" { type = string }
 variable "workspaces_arn" { type = string }
 variable "github_secret_arn" { type = string }
+variable "knowledge_table" { type = string }
+variable "knowledge_table_arn" { type = string }
+variable "knowledge_bucket" { type = string }
+variable "knowledge_bucket_arn" { type = string }
+variable "knowledge_base_id" { type = string }
+variable "knowledge_base_arn" { type = string }
+variable "knowledge_data_source_id" { type = string }
 variable "enable_gateway" {
   type    = bool
   default = false
@@ -147,6 +154,26 @@ resource "aws_iam_role_policy" "coordinator" {
   })
 }
 
+# Every role searches the owner's knowledge base; only AIC (ace) may add to it (docs/KNOWLEDGE.md section 9).
+resource "aws_iam_role_policy" "knowledge" {
+  for_each = toset(local.roles)
+  name     = "knowledge-read"
+  role     = aws_iam_role.agent[each.key].id
+  policy = templatefile("${path.module}/policies/knowledge.json.tftpl", {
+    knowledge_base_arn  = var.knowledge_base_arn
+    knowledge_table_arn = var.knowledge_table_arn
+  })
+}
+
+resource "aws_iam_role_policy" "knowledge_aic" {
+  name = "knowledge-add"
+  role = aws_iam_role.agent["ace"].id
+  policy = templatefile("${path.module}/policies/knowledge-aic.json.tftpl", {
+    knowledge_table_arn  = var.knowledge_table_arn
+    knowledge_bucket_arn = var.knowledge_bucket_arn
+  })
+}
+
 resource "aws_iam_role_policy" "factory" {
   name   = "agent-factory"
   role   = aws_iam_role.agent["manager"].id
@@ -239,10 +266,14 @@ resource "aws_bedrockagentcore_agent_runtime" "role" {
       AIC_WORKSPACES_BUCKET            = var.workspaces_bucket
       AIC_WORKSPACE_ROLE_ARN           = aws_iam_role.workspace.arn
       AIC_PROFILE_PREFIX               = var.profile_prefix
+      KNOWLEDGE_TABLE                  = var.knowledge_table
+      KNOWLEDGE_BASE_ID                = var.knowledge_base_id
+      KNOWLEDGE_DATA_SOURCE_ID         = var.knowledge_data_source_id
       CLAUDE_CODE_USE_BEDROCK          = "1"
       CLAUDE_CODE_DISABLE_1M_CONTEXT   = "1"
       CLAUDE_CODE_SUBPROCESS_ENV_SCRUB = "1"
     },
+    each.key == "ace" ? { KNOWLEDGE_BUCKET = var.knowledge_bucket } : {},
     var.use_application_inference_profiles ? { "AIC_APP_PROFILE_${upper(each.key)}" = aws_bedrock_inference_profile.role[each.key].arn } : {},
   )
   tags = merge(local.tags, { AgentRole = each.key })

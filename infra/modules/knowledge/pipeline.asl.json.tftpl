@@ -1,0 +1,182 @@
+{
+  "Comment": "Knowledge ingest (docs/KNOWLEDGE.md section 10). Input {item_id}. Each Task calls the knowledge Lambda with {action, item_id}; its answer is kept in $.last.value.",
+  "TimeoutSeconds": 43200,
+  "StartAt": "Route",
+  "States": {
+    "Route": {
+      "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": { "FunctionName": "${function_arn}", "Payload": { "action": "route", "item_id.$": "$.item_id" } },
+      "ResultSelector": { "value.$": "$.Payload" }, "ResultPath": "$.last",
+      "Retry": [{ "ErrorEquals": ${lambda_errors}, "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Fail" }],
+      "Next": "ByKind"
+    },
+    "ByKind": {
+      "Type": "Choice",
+      "Choices": [
+        { "Or": [{ "Variable": "$.last.value.kind", "StringEquals": "document" }, { "Variable": "$.last.value.kind", "StringEquals": "text" }], "Next": "PrepareDocument" },
+        { "Variable": "$.last.value.kind", "StringEquals": "image", "Next": "DescribeImage" },
+        { "Variable": "$.last.value.kind", "StringEquals": "link", "Next": "FetchLink" },
+        {
+          "And": [
+            { "Or": [{ "Variable": "$.last.value.kind", "StringEquals": "audio" }, { "Variable": "$.last.value.kind", "StringEquals": "video" }] },
+            { "Variable": "$.last.value.convert", "IsPresent": true },
+            { "Variable": "$.last.value.convert", "BooleanEquals": true }
+          ],
+          "Next": "StartMediaConvert"
+        },
+        { "Or": [{ "Variable": "$.last.value.kind", "StringEquals": "audio" }, { "Variable": "$.last.value.kind", "StringEquals": "video" }], "Next": "StartTranscribe" },
+        { "Variable": "$.last.value.kind", "StringEquals": "other", "Next": "MarkUnsupported" }
+      ],
+      "Default": "UnknownKind"
+    },
+    "UnknownKind": {
+      "Type": "Pass", "Parameters": { "Error": "UnknownKind", "Cause": "route returned a kind the pipeline does not know" }, "ResultPath": "$.error",
+      "Next": "Fail"
+    },
+    "FetchLink": {
+      "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": { "FunctionName": "${function_arn}", "Payload": { "action": "fetch_link", "item_id.$": "$.item_id" } },
+      "ResultSelector": { "value.$": "$.Payload" }, "ResultPath": "$.last",
+      "Retry": [{ "ErrorEquals": ${lambda_errors}, "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Fail" }],
+      "Next": "AfterLink"
+    },
+    "AfterLink": {
+      "Type": "Choice",
+      "Comment": "A page already written to normalized/ goes straight to enrich; otherwise re-route on what the link turned out to be (a link that fetches to another link is an error).",
+      "Choices": [
+        { "And": [{ "Variable": "$.last.value.normalized", "IsPresent": true }, { "Variable": "$.last.value.normalized", "BooleanEquals": true }], "Next": "Enrich" },
+        { "Variable": "$.last.value.kind", "StringEquals": "link", "Next": "UnknownKind" }
+      ],
+      "Default": "ByKind"
+    },
+    "PrepareDocument": {
+      "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": { "FunctionName": "${function_arn}", "Payload": { "action": "prepare_document", "item_id.$": "$.item_id" } },
+      "ResultSelector": { "value.$": "$.Payload" }, "ResultPath": "$.last",
+      "Retry": [{ "ErrorEquals": ${lambda_errors}, "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Fail" }],
+      "Next": "Enrich"
+    },
+    "DescribeImage": {
+      "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": { "FunctionName": "${function_arn}", "Payload": { "action": "describe_image", "item_id.$": "$.item_id" } },
+      "ResultSelector": { "value.$": "$.Payload" }, "ResultPath": "$.last",
+      "Retry": [{ "ErrorEquals": ${lambda_errors}, "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Fail" }],
+      "Next": "Enrich"
+    },
+    "StartMediaConvert": {
+      "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": { "FunctionName": "${function_arn}", "Payload": { "action": "start_mediaconvert", "item_id.$": "$.item_id" } },
+      "ResultSelector": { "value.$": "$.Payload" }, "ResultPath": "$.last",
+      "Retry": [{ "ErrorEquals": ${lambda_errors}, "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Fail" }],
+      "Next": "WaitMediaConvert"
+    },
+    "WaitMediaConvert": { "Type": "Wait", "Seconds": 20, "Next": "CheckMediaConvert" },
+    "CheckMediaConvert": {
+      "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": { "FunctionName": "${function_arn}", "Payload": { "action": "check_mediaconvert", "item_id.$": "$.item_id" } },
+      "ResultSelector": { "value.$": "$.Payload" }, "ResultPath": "$.last",
+      "Retry": [{ "ErrorEquals": ${lambda_errors}, "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Fail" }],
+      "Next": "MediaConvertDone"
+    },
+    "MediaConvertDone": {
+      "Type": "Choice",
+      "Choices": [{ "Variable": "$.last.value.done", "BooleanEquals": true, "Next": "StartTranscribe" }],
+      "Default": "WaitMediaConvert"
+    },
+    "StartTranscribe": {
+      "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": { "FunctionName": "${function_arn}", "Payload": { "action": "start_transcribe", "item_id.$": "$.item_id" } },
+      "ResultSelector": { "value.$": "$.Payload" }, "ResultPath": "$.last",
+      "Retry": [{ "ErrorEquals": ${lambda_errors}, "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Fail" }],
+      "Next": "WaitTranscribe"
+    },
+    "WaitTranscribe": { "Type": "Wait", "Seconds": 30, "Next": "CheckTranscribe" },
+    "CheckTranscribe": {
+      "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": { "FunctionName": "${function_arn}", "Payload": { "action": "check_transcribe", "item_id.$": "$.item_id" } },
+      "ResultSelector": { "value.$": "$.Payload" }, "ResultPath": "$.last",
+      "Retry": [{ "ErrorEquals": ${lambda_errors}, "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Fail" }],
+      "Next": "TranscribeDone"
+    },
+    "TranscribeDone": {
+      "Type": "Choice",
+      "Choices": [{ "Variable": "$.last.value.done", "BooleanEquals": true, "Next": "TranscriptToText" }],
+      "Default": "WaitTranscribe"
+    },
+    "TranscriptToText": {
+      "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": { "FunctionName": "${function_arn}", "Payload": { "action": "transcript_to_text", "item_id.$": "$.item_id" } },
+      "ResultSelector": { "value.$": "$.Payload" }, "ResultPath": "$.last",
+      "Retry": [{ "ErrorEquals": ${lambda_errors}, "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Fail" }],
+      "Next": "Enrich"
+    },
+    "Enrich": {
+      "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": { "FunctionName": "${function_arn}", "Payload": { "action": "enrich", "item_id.$": "$.item_id" } },
+      "ResultSelector": { "value.$": "$.Payload" }, "ResultPath": "$.last",
+      "Retry": [{ "ErrorEquals": ${lambda_errors}, "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Fail" }],
+      "Next": "StartSync"
+    },
+    "StartSync": {
+      "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
+      "Comment": "One ingestion job per data source at a time: ConflictException waits and tries again.",
+      "Parameters": { "FunctionName": "${function_arn}", "Payload": { "action": "start_sync", "item_id.$": "$.item_id" } },
+      "ResultSelector": { "value.$": "$.Payload" }, "ResultPath": "$.last",
+      "Retry": [
+        { "ErrorEquals": ${lambda_errors}, "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 },
+        { "ErrorEquals": ["ConflictException"], "IntervalSeconds": 30, "MaxAttempts": 10, "BackoffRate": 1.5, "MaxDelaySeconds": 300, "JitterStrategy": "FULL" }
+      ],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Fail" }],
+      "Next": "WaitSync"
+    },
+    "WaitSync": { "Type": "Wait", "Seconds": 20, "Next": "CheckSync" },
+    "CheckSync": {
+      "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": { "FunctionName": "${function_arn}", "Payload": { "action": "check_sync", "item_id.$": "$.item_id" } },
+      "ResultSelector": { "value.$": "$.Payload" }, "ResultPath": "$.last",
+      "Retry": [{ "ErrorEquals": ${lambda_errors}, "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Fail" }],
+      "Next": "SyncDone"
+    },
+    "SyncDone": {
+      "Type": "Choice",
+      "Choices": [{ "Variable": "$.last.value.done", "BooleanEquals": true, "Next": "Finish" }],
+      "Default": "WaitSync"
+    },
+    "Finish": {
+      "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": { "FunctionName": "${function_arn}", "Payload": { "action": "finish", "item_id.$": "$.item_id" } },
+      "ResultSelector": { "value.$": "$.Payload" }, "ResultPath": "$.last",
+      "Retry": [{ "ErrorEquals": ${lambda_errors}, "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Fail" }],
+      "End": true
+    },
+    "MarkUnsupported": {
+      "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": { "FunctionName": "${function_arn}", "Payload": { "action": "mark_unsupported", "item_id.$": "$.item_id" } },
+      "ResultSelector": { "value.$": "$.Payload" }, "ResultPath": "$.last",
+      "Retry": [{ "ErrorEquals": ${lambda_errors}, "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "Fail" }],
+      "End": true
+    },
+    "Fail": {
+      "Type": "Task", "Resource": "arn:aws:states:::lambda:invoke",
+      "Comment": "Marks the item failed with a plain error and sends knowledge.updated. No Catch here: a failure to record the failure just fails the run.",
+      "Parameters": { "FunctionName": "${function_arn}", "Payload": { "action": "fail", "item_id.$": "$.item_id", "error.$": "$.error" } },
+      "ResultPath": null,
+      "Retry": [{ "ErrorEquals": ${lambda_errors}, "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
+      "Next": "Failed"
+    },
+    "Failed": { "Type": "Fail", "Error": "KnowledgeIngestFailed", "Cause": "The item is marked failed; its error is on the item record." }
+  }
+}

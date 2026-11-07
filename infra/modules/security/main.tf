@@ -12,7 +12,8 @@ variable "region" { type = string }
 variable "account_id" { type = string }
 
 locals {
-  tags = { Component = "security" }
+  tags                  = { Component = "security" }
+  mediaconvert_role_arn = "arn:aws:iam::${var.account_id}:role/${var.name}-knowledge-mediaconvert"
 }
 
 resource "aws_kms_key" "data" {
@@ -32,7 +33,7 @@ resource "aws_kms_key" "data" {
       {
         Sid       = "ServicesUseTheKey"
         Effect    = "Allow"
-        Principal = { Service = ["logs.${var.region}.amazonaws.com", "events.amazonaws.com", "sns.amazonaws.com", "sqs.amazonaws.com", "budgets.amazonaws.com", "cloudwatch.amazonaws.com", "states.amazonaws.com", "scheduler.amazonaws.com", "bedrock-agentcore.amazonaws.com"] }
+        Principal = { Service = ["logs.${var.region}.amazonaws.com", "events.amazonaws.com", "sns.amazonaws.com", "sqs.amazonaws.com", "budgets.amazonaws.com", "cloudwatch.amazonaws.com", "states.amazonaws.com", "scheduler.amazonaws.com", "bedrock-agentcore.amazonaws.com", "indexing.s3vectors.amazonaws.com"] }
         Action    = ["kms:Encrypt", "kms:Decrypt", "kms:ReEncrypt*", "kms:GenerateDataKey*", "kms:DescribeKey"]
         Resource  = "*"
         Condition = { StringEquals = { "aws:SourceAccount" = var.account_id } }
@@ -70,13 +71,31 @@ resource "aws_iam_policy" "boundary" {
           "secretsmanager:GetSecretValue", "sns:Publish", "states:*", "lambda:InvokeFunction", "execute-api:ManageConnections",
           "ecr:GetAuthorizationToken", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer", "sts:AssumeRole", "sts:TagSession",
           "transcribe:StartStreamTranscription", "transcribe:StartStreamTranscriptionWebSocket", "polly:SynthesizeSpeech",
+          # The knowledge base (docs/KNOWLEDGE.md section 9).
+          "bedrock:Retrieve", "bedrock:StartIngestionJob", "bedrock:GetIngestionJob", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts",
+          "s3vectors:PutVectors", "s3vectors:GetVectors", "s3vectors:DeleteVectors", "s3vectors:QueryVectors", "s3vectors:GetIndex",
+          "transcribe:StartTranscriptionJob", "transcribe:GetTranscriptionJob", "mediaconvert:CreateJob", "mediaconvert:GetJob",
         ]
         Resource = "*"
+      },
+      # The one role any city role may pass: the knowledge MediaConvert role, to MediaConvert only.
+      {
+        Sid       = "PassOnlyTheMediaConvertRole"
+        Effect    = "Allow"
+        Action    = "iam:PassRole"
+        Resource  = local.mediaconvert_role_arn
+        Condition = { StringEquals = { "iam:PassedToService" = "mediaconvert.amazonaws.com" } }
+      },
+      {
+        Sid         = "NeverPassAnyOtherRole"
+        Effect      = "Deny"
+        Action      = "iam:PassRole"
+        NotResource = local.mediaconvert_role_arn
       },
       {
         Sid      = "NeverTheseServices"
         Effect   = "Deny"
-        Action   = ["organizations:*", "account:*", "aws-portal:*", "budgets:Modify*", "budgets:Delete*", "ce:Update*", "iam:Create*", "iam:Delete*", "iam:Put*", "iam:Update*", "iam:PassRole", "iam:Tag*", "iam:Untag*"]
+        Action   = ["organizations:*", "account:*", "aws-portal:*", "budgets:Modify*", "budgets:Delete*", "ce:Update*", "iam:Create*", "iam:Delete*", "iam:Put*", "iam:Update*", "iam:Tag*", "iam:Untag*"]
         Resource = "*"
       },
     ]

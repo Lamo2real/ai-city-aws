@@ -15,6 +15,7 @@ Prices: Bedrock global profiles from `docs/FACTS_CHECKED.md` (USD per million to
 | CloudFront, API Gateway, Lambda, SQS, EventBridge, SNS, Step Functions | ~$0.50 (free tiers cover most) |
 | Cognito Essentials (1 user; first 10,000 MAU free) | $0.00 |
 | AgentCore runtimes and memory with no sessions | $0.00 |
+| Knowledge base empty: S3 bucket, S3 Vectors, Bedrock Knowledge Base (no charge of its own), graph table, Step Functions, MediaConvert (on demand, no reserved queue), 1 more DLQ alarm $0.10 | ~$0.10 |
 | **Total at idle** | **≈ $18 / month** |
 
 ## 2. One typical task, end to end
@@ -42,6 +43,18 @@ Prompt caching roughly halves the cost because agent turns resend long, stable s
 | Heavy | 150 (5 a day) | 600 | $525 + $6 | **≈ $549** | below (no first email until $5,000) |
 
 There is no spend cap by default (the owner's choice) and the AWS Budgets alert is $10,000 a month, so the first email comes at $5,000. Heavy use of Fable (coordinators) and Opus (workers) is what drives the bill; Fable is 2.5× Opus per token, so a cheaper option is `eu.` or switching coordinators to Opus 5.5 in `config/models.json` (owner's call).
+
+## 4. Knowledge base, by use (eu-north-1 list prices, 2026-11-07)
+| Item | Price | Light personal use (2 GB documents, 10 h video, 3,000 searches a month) |
+|---|---|---|
+| Transcribe batch | $0.024 / audio minute | 600 min ≈ $14.40 |
+| MediaConvert audio-only (basic tier) | ~$0.0075 / output minute | ~$4.50 |
+| Haiku 5.5 (summaries, entities, images, scanned PDFs) | $0.10 / $0.50 per M tokens | ~$1–3 |
+| Titan Text Embeddings V2 | $0.021 per M tokens | < $1 |
+| S3 Vectors | $0.06 / GB-month, $0.20 / GB written, $0.0025 / 1,000 queries | < $1 |
+| S3 storage (raw + normalized, versioned 30 days) | ~$0.023 / GB-month | ~$0.10 |
+| Step Functions Standard (wait loops: ~1 transition per 20–30 s of a job) | $0.025 / 1,000 transitions | < $0.50 |
+| **Knowledge total** | | **≈ $20–25 / month, $0 when idle** |
 
 ## What moves the number most
 1. Worker job length (output tokens at $20/M and uncached input).

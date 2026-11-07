@@ -4,6 +4,7 @@
     "aws_apigatewayv2_api",
     "aws_apigatewayv2_stage",
     "aws_bedrock_inference_profile",
+    "aws_bedrockagent_knowledge_base",
     "aws_bedrockagentcore_agent_runtime",
     "aws_bedrockagentcore_gateway",
     "aws_bedrockagentcore_memory",
@@ -26,6 +27,8 @@
     "aws_lambda_function",
     "aws_s3_bucket",
     "aws_s3_object",
+    "aws_s3vectors_index",
+    "aws_s3vectors_vector_bucket",
     "aws_scheduler_schedule_group",
     "aws_secretsmanager_secret",
     "aws_sfn_state_machine",
@@ -63,6 +66,11 @@
     "aws_scheduler_schedule",
     "aws_sns_topic_policy",
     "aws_sns_topic_subscription",
-    "aws_wafv2_web_acl_logging_configuration"
+    "aws_wafv2_web_acl_logging_configuration",
+    "aws_s3_bucket_ownership_controls",
+    "aws_s3_bucket_cors_configuration",
+    "aws_s3_bucket_notification",
+    "aws_bedrockagent_data_source",
+    "aws_sqs_queue_policy"
   ]
 }
