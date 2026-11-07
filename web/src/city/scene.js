@@ -4,7 +4,7 @@
 // Reviewer; each department's manager stands at its door; panels are React (see CityView.tsx).
 // The City View: a small game world of the agents, drawn pixel by pixel on a canvas from city-state.js.
 // All of the art is drawn here in code. Every person on screen is a real agent; only the scenery moves on its own.
-import { BUILDING_H, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatRows, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, commuteRoute, doorOf, staggerMs, walkSpeed } from "./city-state.js";
+import { BUILDING_H, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatRows, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, commuteRoute, doorOf, staggerMs, walkSpeed, managerSpot, blockWindow } from "./city-state.js";
 
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const INK = "#1d1c36";
@@ -293,26 +293,32 @@ const windowRect = (p, b) => { const pitch = (b.w * TILE - 8) / 4; return { x: M
 function office(g, b) {
   const X = b.x * TILE, Y = b.y * TILE, W = b.w * TILE, H = b.h * TILE, r = rng(b.dept);
   const [roof, light, dark] = ROOFS[b.slot % ROOFS.length], wall = WALLS[hashOf(b.dept) % WALLS.length];
-  paving(g, X, Y + 56, W, H - 56, PLAZA, "#5e4d5e", b.dept);
-  // The building: roof, then the wall with windows and a door, on a little shadow.
-  const bx = X + 8, bw = W - 16, by = Y + 2;
-  R(g, bx - 1, by + 70, bw + 2, 4, "rgba(20,18,40,.35)");
-  R(g, bx - 1, by + 26, bw + 2, 45, INK); R(g, bx, by + 27, bw, 43, wall); R(g, bx, by + 27, bw, 3, "rgba(60,30,40,.25)");
-  R(g, bx - 3, by - 1, bw + 6, 29, INK); R(g, bx - 2, by, bw + 4, 27, roof);
-  for (let ry = 0; ry < 27; ry += 5) { R(g, bx - 2, by + ry, bw + 4, 1, dark); for (let rx = (ry / 5) % 2 ? 4 : 0; rx < bw + 4; rx += 8) R(g, bx - 2 + rx, by + ry, 1, 5, dark); }
-  R(g, bx - 2, by, bw + 4, 2, light);
-  if (hashOf(b.dept) % 2) { R(g, bx + 10, by - 4, 8, 7, INK); R(g, bx + 11, by - 3, 6, 5, "#8a5a50"); } // a chimney on some
-  // Lit windows either side of the door.
-  for (const wx of [bx + 8, bx + 28, bx + bw - 44, bx + bw - 24]) { R(g, wx - 1, by + 43, 16, 14, INK); R(g, wx, by + 44, 14, 12, "#ffdf94"); R(g, wx, by + 44, 14, 3, "#ffefc0"); R(g, wx + 6, by + 44, 2, 12, INK); R(g, wx, by + 49, 14, 1, INK); R(g, wx - 1, by + 57, 16, 2, dark); }
-  const dx = X + W / 2 - 8;
-  R(g, dx - 1, by + 48, 18, 23, INK); R(g, dx, by + 49, 16, 21, "#7a4a2a"); R(g, dx + 7, by + 49, 2, 21, INK); R(g, dx + 11, by + 60, 2, 2, "#f4c63c"); R(g, dx + 3, by + 60, 2, 2, "#f4c63c");
-  stallRoof(g, X + W / 2 - 16, by + 39, 32, roof, "#f3e6cc");
-  sign(g, b.dept, X + W / 2, by + 27, W - 26);
-  // The terrace: a seat for everyone, with a lamp and planters at its edges.
-  // The glass front: a dark pane behind each seat's desk. The lit glow and the mullions and sill are drawn live, around the figure.
-  for (let s = 0; s < seatRows(b) * 4; s++) { const p = seatSpot(b, s), q = windowRect(p, b); R(g, q.x - 1, q.y - 1, q.w + 2, q.h + 2, INK); R(g, q.x, q.y, q.w, q.h, "#3a4660"); R(g, p.x - 8, p.y + 2, 16, 2, "rgba(20,18,40,.28)"); g.drawImage(desk("none"), p.x - 12, p.y - 11); }
-  lamp(g, X + 1, Y + BUILDING_H * TILE + 8); lamp(g, X + W - 1, Y + BUILDING_H * TILE + 8);
-  if (r() > 0.5) flowers(g, X + W - 18, Y + H - 12, "#d2699e");
+  const bx = X + 8, bw = W - 16, bot = Y + H;
+  // The pavement in front, and the tower: one modern building, flat roof, floors of windows, glass lobby.
+  paving(g, X, bot - 14, W, 14, PLAZA, "#5e4d5e", b.dept);
+  R(g, bx - 2, bot - 13, bw + 4, 4, "rgba(20,18,40,.35)");
+  R(g, bx - 3, Y + 2, bw + 6, H - 15, INK); R(g, bx - 2, Y + 3, bw + 4, H - 17, wall);
+  R(g, bx - 2, Y + 3, bw + 4, 12, roof); R(g, bx - 2, Y + 3, bw + 4, 2, light); R(g, bx - 2, Y + 13, bw + 4, 2, dark); // the parapet
+  sign(g, b.dept, X + W / 2, Y + 5, W - 26);
+  // Floors: a ledge over each row of windows, the station windows themselves (dark until someone works
+  // there; the lit glow is drawn live), and a screen on every sill.
+  for (let s = 0; s < seatRows(b) * 4; s++) {
+    const p = seatSpot(b, s), q = windowRect(p, b);
+    if (s % 4 === 0) R(g, bx - 2, q.y - 6, bw + 4, 2, "rgba(20,18,40,.22)");
+    R(g, q.x - 1, q.y - 1, q.w + 2, q.h + 2, INK); R(g, q.x, q.y, q.w, q.h, "#3a4660");
+    g.drawImage(desk("none"), p.x - 12, p.y - 11);
+  }
+  // The lobby: glass either side of the door, the manager's own window on the left, a canopy and lamps.
+  R(g, bx + 2, bot - 44, bw - 4, 2, "rgba(20,18,40,.22)");
+  const d = doorOf(b);
+  const mw = managerSpot(b);
+  R(g, mw.x - 11, mw.y - 25, 22, 30, INK); R(g, mw.x - 10, mw.y - 24, 20, 28, "#3a4660");
+  R(g, d.x + 12, bot - 38, 22, 24, INK); R(g, d.x + 13, bot - 37, 20, 22, "#3a4660"); R(g, d.x + 13, bot - 37, 20, 4, "#4a5876");
+  R(g, d.x - 10, bot - 38, 20, 25, INK); R(g, d.x - 9, bot - 37, 18, 23, "#7a4a2a"); R(g, d.x - 1, bot - 37, 2, 23, INK);
+  R(g, d.x - 6, bot - 26, 2, 2, "#f4c63c"); R(g, d.x + 4, bot - 26, 2, 2, "#f4c63c");
+  stallRoof(g, d.x - 16, bot - 42, 32, roof, "#f3e6cc");
+  lamp(g, X + 1, bot - 8); lamp(g, X + W - 1, bot - 8);
+  if (r() > 0.5) flowers(g, X + W - 18, bot - 6, "#d2699e");
 }
 function freeLot(g, l, text) {
   const X = l.x * TILE, Y = l.y * TILE, W = l.w * TILE, H = l.h * TILE, r = rng(`${l.x},${l.y}`);
@@ -371,6 +377,22 @@ function house(g, h, i) {
   R(g, X + 3, Y + 41 + (i % 2), 8, 1, "#387a5c");
 }
 
+// An apartment block: a modern flat-roofed building, four windows a floor, one per resident.
+function apartment(g, b) {
+  const X = b.x * TILE, W = b.w * TILE, bot = (b.y + b.h) * TILE;
+  const body = b.floors * 14, top = bot - 12 - body;
+  R(g, X + 4, bot - 7, W - 8, 3, "rgba(20,18,40,.3)");
+  R(g, X + 2, top - 9, W - 4, body + 13, INK); R(g, X + 3, top - 8, W - 6, body + 11, "#d9c6c0");
+  R(g, X + 3, top - 8, W - 6, 5, "#8b8fa8"); R(g, X + 3, top - 8, W - 6, 1, "#c9c9d6"); // the flat roof band
+  for (let f = 0; f < b.floors; f++) {
+    const wy = bot - 12 - (f + 1) * 14 + 3;
+    R(g, X + 3, wy + 11, W - 6, 1, "rgba(0,0,0,.14)");
+    for (let c = 0; c < 4; c++) { const wx = X + 11 + c * 20; R(g, wx - 1, wy - 1, 14, 11, INK); R(g, wx, wy, 12, 9, "#3a3f62"); R(g, wx + 5, wy, 2, 9, INK); }
+  }
+  R(g, X + 3, bot - 12, W - 6, 6, "#8a8aa0"); // the base
+  R(g, X + W / 2 - 7, bot - 22, 14, 16, INK); R(g, X + W / 2 - 6, bot - 21, 12, 15, "#7a4a2a"); R(g, X + W / 2 + 2, bot - 15, 1, 2, "#f4c63c");
+}
+
 // Everything that does not move, baked once per layout, with a margin of countryside so the map runs off the screen's edges.
 const MARGIN = 30; // tiles
 function bake(world) {
@@ -399,7 +421,10 @@ function bake(world) {
   // The neighbourhood: houses, with trees where no house stands yet.
   const hx = world.homes.x * TILE, hy = world.homes.y * TILE, hw = world.homes.w * TILE;
   world.homes.houses.forEach((h, i) => house(g, h, i));
-  const below = world.homes.houses.at(-1), freeY = below ? below.y * TILE + 68 : hy;
+  (world.homes.blocks ?? []).forEach((b) => apartment(g, b));
+  const lastBlock = (world.homes.blocks ?? []).at(-1);
+  const below = world.homes.houses.at(-1);
+  const freeY = Math.max(below ? below.y * TILE + 68 : hy, lastBlock ? (lastBlock.y + lastBlock.h) * TILE + 4 : 0);
   for (let y = freeY; y < hy + world.homes.h * TILE - 16; y += 44) for (let x = hx + 16; x < hx + hw - 8; x += 52) tree(g, x + r() * 10, y + 26 + r() * 8, r);
   g.fillStyle = "rgba(38,30,78,.14)"; g.fillRect(-M, -M, W + M * 2, H + M * 2); // the dusk wash over all of it
   return c;
@@ -419,7 +444,6 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   let homes = new Map();
   let effects = [], parcels = [];
   const doorQueue = new Map(); // door key → when it is next free, so walkers take turns instead of overlapping
-  const lights = new Map(); // house index → lit until (performance.now() ms)
   const cam = { x: 0, y: 0, wantX: 0, wantY: 0, zoom: 2, userMoved: false };
   const walked = new Set(); // ids that already walked home for good
   root._people = people; // a read-only test hook: e2e/commute.spec.ts watches who stands where
@@ -437,7 +461,8 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     const agent = state.agents[id];
     if (where.place === "station" && agent?.kind === "manager") {
       const b = world.buildings.find((x) => x.dept === where.dept);
-      if (b) return { x: (b.x + b.w / 2) * TILE + 14, y: b.y * TILE + 78, key: `door:${where.dept}`, seated: false };
+      if (b && visualState(state, id) === "hiring") { const d = doorOf(b); return { x: d.x + 18, y: d.y, key: `door:${where.dept}`, seated: false }; }
+      if (b) { const m = managerSpot(b); return { x: m.x, y: m.y, key: `mgrwin:${where.dept}`, seated: true }; }
     }
     if (where.place === "station") {
       const b = world.buildings.find((x) => x.dept === where.dept), seat = seats.get(where.dept)?.get(id);
@@ -460,8 +485,9 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     homes = assignSlots(shown.ids, homes);
     const portrait = isPortrait();
     const minHouses = portrait ? 7 : 8;
-    const houses = Math.max(minHouses, Math.ceil((Math.max(-1, ...homes.values()) + 1) / 2));
-    const next = layout(state, { portrait, seats: seatCount, houses });
+    // The small houses stay small-town; everyone beyond them gets a window in an apartment block.
+    const residentCount = Math.max(-1, ...homes.values()) + 1;
+    const next = layout(state, { portrait, seats: seatCount, houses: minHouses, residents: residentCount });
     const sig = JSON.stringify(next);
     const rebaked = sig !== worldSig;
     if (rebaked) { world = next; worldSig = sig; ground = bake(world); fitView(); }
@@ -475,30 +501,38 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       if (fresh) { const start = !still && to.key.startsWith("desk") ? homeSpot(world, homes.get(id) ?? 0) ?? to : to; p = { id, x: start.x, y: start.y, key: fresh && start === to ? to.key : "home", phase: hashOf(id) % 4, flip: false, hop: 0 }; people.set(id, p); }
       if (p.visiting) continue; // AIC is out; it comes back by itself
       p.seated = to.seated;
-      if (p.key === to.key) { if (!p.move && !p.route) { p.x = to.x; p.y = to.y; } else if (p.route) p.route[p.route.length - 1] = to; else if (p.move) p.move.to = to; continue; } // a new layout only shifts them
+      if (p.key === to.key) { if (!p.move && !p.route && !p.ride) { p.x = to.x; p.y = to.y; } else if (p.thenRide) p.thenRide = { x: to.x, y: to.y }; else if (p.ride) p.ride.to = to; else if (p.route) p.route[p.route.length - 1] = to; else if (p.move) p.move.to = to; continue; } // a new layout only shifts them
       const fromKey = p.key;
       p.key = to.key;
       const walkHome = to.key === "home" && walksOut(state, id, walked);
-      if (still) { p.x = to.x; p.y = to.y; p.move = null; p.route = null; p.waitUntil = null; p.speed = null; p.homecoming = false; continue; }
+      if (still) { p.x = to.x; p.y = to.y; p.move = null; p.route = null; p.waitUntil = null; p.speed = null; p.homecoming = false; p.ride = null; p.thenRide = null; continue; }
       if (walkHome) {
-        // Checking out: stand up, say so, take a turn at the door, and walk the streets home.
+        // Checking out: down the lift, out the door (taking turns there), and the streets home.
         const b = buildingOfKey(fromKey);
-        p.move = null;
-        p.route = commuteRoute(world, p, to, { leaving: fromKey.startsWith("desk:") ? b : null });
-        p.speed = walkSpeed(p.route, p);
-        p.waitUntil = b ? queueAt(`door:${b.dept}`, 150) : performance.now();
-        p.homecoming = true; // lights the house on arrival (step() clears it)
+        p.move = null; p.thenRide = null;
+        if (b && (fromKey.startsWith("desk:") || fromKey.startsWith("mgrwin:"))) {
+          const d = doorOf(b);
+          p.ride = { to: d, until: queueAt(`door:${b.dept}`, 450) };
+          p.route = walkRoute(world, d, to).slice();
+          p.speed = walkSpeed(p.route, d);
+        } else {
+          p.route = commuteRoute(world, p, to, {});
+          p.speed = walkSpeed(p.route, p);
+          p.waitUntil = performance.now();
+        }
+        p.homecoming = true;
         p.say = { text: "CHECKED OUT", until: performance.now() + 1800 };
-      } else if (to.key === "home") { p.x = to.x; p.y = to.y; p.move = null; p.route = null; } // any other move home is instant
+      } else if (to.key === "home") { p.x = to.x; p.y = to.y; p.move = null; p.route = null; p.ride = null; p.thenRide = null; } // any other move home is instant
       else if (to.key.startsWith("desk:") && (fresh || fromKey === "home") && buildingOfKey(to.key)) {
-        // Hired: the house lights up, then the worker walks out, along the streets and in through the door.
+        // Hired: out of the house, along the streets to the door (one at a time), then the lobby and the
+        // lift, and the worker appears at its window.
         const b = buildingOfKey(to.key);
         const from = { x: p.x, y: p.y };
         p.move = null;
-        p.route = commuteRoute(world, from, to, { entering: b });
+        p.route = commuteRoute(world, from, doorOf(b), {});
         p.speed = walkSpeed(p.route, from);
         p.waitUntil = queueAt(`door:${b.dept}`, 700);
-        lightHouse(id, p.waitUntil - performance.now() + 500);
+        p.thenRide = { x: to.x, y: to.y };
       } else dashTo(p, to);
     }
     const lit = [];
@@ -508,7 +542,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     root.dataset.people = String(people.size);
   }
   const buildingOfKey = (key) => {
-    const m = /^(?:desk|door):([^:]+)/.exec(key ?? "");
+    const m = /^(?:desk|door|mgrwin):([^:]+)/.exec(key ?? "");
     return m ? world.buildings.find((b) => b.dept === m[1]) : null;
   };
   /** A turn at a door: at the earliest `lead` ms from now, later if someone else just took it. */
@@ -516,12 +550,6 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     const at = Math.max(performance.now() + lead, doorQueue.get(key) ?? 0);
     doorQueue.set(key, at + staggerMs(1));
     return at;
-  }
-  /** Lights a house window for a while (a worker about to leave, or just home). */
-  function lightHouse(id, ms) {
-    const i = Math.floor((homes.get(id) ?? 0) / 2);
-    lights.set(i, Math.max(lights.get(i) ?? 0, performance.now() + ms));
-    setTimeout(() => wake(), ms + 150);
   }
   function dashTo(p, to, then) {
     p.waitUntil = null;
@@ -563,7 +591,9 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   function onEvent(e) {
     const feedBefore = state.feed;
     state = reduce(state, e);
-    if (PLACEMENT_EVENTS.has(e.type)) { sync(); markApps(); } else refreshVisuals();
+    if (PLACEMENT_EVENTS.has(e.type)) { sync(); markApps(); }
+    else if (e.type === "activity" && state.agents[e.id]?.kind === "manager") sync(); // steps out to recruit, and back
+    else refreshVisuals();
     const hop = courierFor(e); if (hop) courier(hop);
     if (e.type === "ace.visit") aceVisit(e);
     if (e.type === "review.result" && e.verdict === "FAIL") { const t = state.tickets[e.ticket_id], p = t && people.get(t.to); if (p) dust(p.x, p.y - 20, 14, ["#55525e", "#77747f", "#99969f"], 18, 1.2); }
@@ -788,13 +818,27 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     R(ctx, fx - 1, fy - 10 - jet, 2, jet, "#bfe6ff"); R(ctx, fx - 3, fy - 10 - jet, 6, 1, "#d7f1ff");
     for (const [dx, dy] of [[-3, -8 - jet + (f * 3) % 6], [3, -8 - jet + ((f + 2) * 3) % 6], [-5, -4 - ((f * 2) % 4)], [5, -6 + ((f * 2) % 4)]]) R(ctx, fx + dx, fy + dy - 2, 1, 2, "#a8dcff");
     R(ctx, fx - 12 + f * 2, fy - 1, 6, 1, "#8ab2d6"); R(ctx, fx + 6 - f * 2, fy + 2, 7, 1, "#8ab2d6");
-    // A lit window marks a house with movement: someone called in to work, or just home after checking out.
-    for (const [i, until] of lights) {
-      if (until <= now) { lights.delete(i); continue; }
+    // Home windows are lit while someone is home, dark while they are at work: the houses' single window,
+    // and each block resident's own window.
+    const occupied = new Set();
+    for (const p of people.values()) {
+      if (p.move || p.route || p.ride || p.key !== "home") continue;
+      const slot = homes.get(p.id) ?? 0;
+      const bw = blockWindow(world, slot);
+      if (bw) { R(ctx, bw.x - ox, bw.y - oy, bw.w, bw.h, "#ffdf94"); R(ctx, bw.x - ox, bw.y - oy, bw.w, 2, "#ffefc0"); }
+      else occupied.add(Math.floor(slot / 2));
+    }
+    for (const i of occupied) {
       const hh = world.homes.houses[i];
       if (hh) { const win = houseWindows(hh); R(ctx, win.x - ox, win.y - oy, win.w, win.h, "#ffdf94"); R(ctx, win.x - ox, win.y - oy, win.w, 2, "#ffefc0"); }
     }
     if (hiddenHomes) label(`+${hiddenHomes} MORE IN WORKFORCE`, world.homes.x * TILE + 60, (world.homes.y + world.homes.h) * TILE - 12);
+    // The manager's window glows while the manager is in it.
+    for (const q of people.values()) {
+      if (!q.key?.startsWith?.("mgrwin:") || q.move || q.route || q.ride) continue;
+      const mb = world.buildings.find((x) => x.dept === q.key.slice(7));
+      if (mb) { const m = managerSpot(mb); R(ctx, m.x - 10 - ox, m.y - 24 - oy, 20, 28, "#ffdf94"); R(ctx, m.x - 10 - ox, m.y - 24 - oy, 20, 4, "#ffefc0"); }
+    }
     // Lit glass behind the desks: one window per occupied seat.
     const litWin = [];
     for (const [d, m] of seats) { const b = world.buildings.find((x) => x.dept === d); if (!b) continue; for (const seat of m.values()) { const q = windowRect(seatSpot(b, seat), b); litWin.push(q); R(ctx, q.x - ox, q.y - oy, q.w, q.h, "#ffdf94"); R(ctx, q.x - ox, q.y - oy, q.w, 4, "#ffefc0"); } }
@@ -838,6 +882,12 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     let busy = false;
     for (const p of people.values()) {
       if (p.hop > 0) { p.hop = Math.max(0, p.hop - dt * 2.6); busy = true; }
+      if (p.ride) {
+        busy = true;
+        if (now < p.ride.until) continue; // in the lobby and the lift
+        p.x = p.ride.to.x; p.y = p.ride.to.y; p.ride = null;
+        dust(p.x, p.y - 6, 8, POOF, 26, 0.4);
+      }
       if (p.waitUntil) {
         if (now < p.waitUntil) { busy = true; continue; }
         p.waitUntil = null;
@@ -858,7 +908,8 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
           p.x = to.x; p.y = to.y; p.route.shift();
           if (!p.route.length) {
             p.route = null; p.speed = null;
-            if (p.homecoming) { p.homecoming = false; lightHouse(p.id, 1500); dust(p.x, p.y - 8, 10, POOF, 28, 0.5); } // home: the light goes on, then out
+            if (p.thenRide) { p.ride = { to: p.thenRide, until: now + 500 }; p.thenRide = null; } // into the lobby, up the lift
+            if (p.homecoming) { p.homecoming = false; dust(p.x, p.y - 8, 10, POOF, 28, 0.5); } // home: the window lights up
           }
         } else { p.x += (dx / d) * s; p.y += (dy / d) * s; }
       }
