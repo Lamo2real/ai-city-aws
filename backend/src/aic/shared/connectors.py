@@ -38,6 +38,22 @@ KEY_PARAM = re.compile(r"key|token|secret|password|auth", re.I)
 KEY_IN_LINK = "Leave the key out of the link; I'll ask for it in a safe field."
 
 Record = dict[str, Any]
+
+
+def resource_tags(env: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Tags for what the city creates at runtime (secrets, Identity providers): ``AIC_DEFAULT_TAGS`` (JSON, the
+    project's full set) with ``Project`` and ``Component=connectors`` always present, because IAM requires them at
+    create time (``aws:RequestTag``)."""
+    import os
+
+    raw = (os.environ if env is None else env).get("AIC_DEFAULT_TAGS") or "{}"
+    try:
+        base = {str(k): str(v) for k, v in dict(json.loads(raw)).items()}
+    except (ValueError, TypeError):
+        base = {}
+    return {"Project": "ai-city", **base, "Component": "connectors"}
+
+
 Resolver = Callable[[str], list[str]]
 """host -> the IP addresses it resolves to."""
 

@@ -303,7 +303,12 @@ async def test_a_server_without_auth_is_synced_to_a_lambda_target_with_mapped_to
     assert kw["credentialProviderConfigurations"] == [{"credentialProviderType": "GATEWAY_IAM_ROLE"}]
     pols = {p["name"]: p["definition"]["cedar"]["statement"] for p in ctl.policies.values()}  # type: ignore[attr-defined]
     assert set(pols) == {"aic_role_ace", "aic_role_manager", "aic_role_worker"}  # no app has a grant yet
-    assert "assumed-role/aic-prod-agent-worker/*" in pols["aic_role_worker"]
+    # AgentCore drops the session name from IamEntity ids: the principal is the exact role ARN, never a pattern.
+    assert (
+        'principal == AgentCore::IamEntity::"arn:aws:sts::123456789012:assumed-role/aic-prod-agent-worker"'
+        in pols["aic_role_worker"]
+    )
+    assert all(" like " not in p and "/*" not in p for p in pols.values())
     assert 'AgentCore::Action::"higgsfield___delete_video"' in pols["aic_role_worker"]
     assert f'AgentCore::Gateway::"{GATEWAY_ARN}"' in pols["aic_role_ace"]
     assert [e["status"] for e in bus.of_type("connector.updated")][-1] == "ready"
@@ -466,6 +471,8 @@ async def test_an_api_key_goes_to_secrets_manager_and_nowhere_else(capsys: pytes
     r = await handle_http(ev("PUT", "/connectors/higgsfield/key", {"api_key": SECRET}), d)
     assert r["statusCode"] == 200 and js(r) == {"ok": True}
     assert json.loads(secrets.calls[0][1]["SecretString"]) == {"api_key": SECRET}
+    tags = {t["Key"]: t["Value"] for t in secrets.calls[0][1]["Tags"]}
+    assert tags["Project"] == "ai-city" and tags["Component"] == "connectors"  # IAM requires both at CreateSecret
     provider = dict(ctl.calls)["create_api_key_credential_provider"]
     assert provider["apiKeySecretSource"] == "EXTERNAL" and "apiKey" not in provider
     assert invoked == [{"action": "sync", "id": "higgsfield"}]
@@ -690,7 +697,7 @@ async def test_the_apps_permit_lists_only_granted_read_only_ready_pairs_and_poli
     assert "create_gateway_target" not in new and "update_gateway_target" not in new
     pols = {p["name"]: p["definition"]["cedar"]["statement"] for p in ctl.policies.values()}  # type: ignore[attr-defined]
     app = pols["aic_app_bridge"]
-    assert "assumed-role/aic-prod-fn-app-bridge/*" in app
+    assert 'principal == AgentCore::IamEntity::"arn:aws:sts::123456789012:assumed-role/aic-prod-fn-app-bridge"' in app
     assert 'AgentCore::Action::"higgsfield___search_videos"' in app
     assert "delete_video" not in app and "create_video" not in app and "gone___x" not in app
     # A revoke (grant removed) drops the permit on the next rewrite.
@@ -725,3 +732,12 @@ def test_links_and_other_names_are_not_mistaken_for_mail() -> None:
 
     assert mail_provider("https://mcp.outlook-tools.example.com/mcp") is None
     assert mail_provider("higgsfield") is None and mail_provider("github") is None
+
+
+def test_runtime_created_resources_carry_the_default_tags_with_project_and_component() -> None:
+    from aic.shared.connectors import resource_tags
+
+    env = {"AIC_DEFAULT_TAGS": json.dumps({"Project": "ai-city", "Owner": "owner", "Component": "api"})}
+    assert resource_tags(env) == {"Project": "ai-city", "Owner": "owner", "Component": "connectors"}
+    assert resource_tags({}) == {"Project": "ai-city", "Component": "connectors"}
+    assert resource_tags({"AIC_DEFAULT_TAGS": "not json"}) == {"Project": "ai-city", "Component": "connectors"}

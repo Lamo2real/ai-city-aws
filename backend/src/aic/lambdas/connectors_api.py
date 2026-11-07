@@ -25,6 +25,7 @@ from aic.shared.connectors import (
     make_id,
     name_from_url,
     public,
+    resource_tags,
     system_resolver,
     valid_roles,
 )
@@ -52,7 +53,7 @@ class ConnectorsApi:
     kms_key: str | None = None
     secret_prefix: str = "aic/prod/connectors"  # noqa: S105 (a name prefix, not a secret)
     resolve: Resolver = system_resolver
-    tags: dict[str, str] = field(default_factory=lambda: {"Component": "connectors"})
+    tags: dict[str, str] = field(default_factory=resource_tags)
 
 
 def _err(status: int, message: str, fix: str | None = None) -> Answer:

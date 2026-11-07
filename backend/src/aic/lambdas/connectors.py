@@ -29,6 +29,7 @@ from aic.shared.connectors import (
     check_url,
     gateway_name,
     is_read_only,
+    resource_tags,
     system_resolver,
     tool_entry,
 )
@@ -73,7 +74,7 @@ class ConnectorsDeps:
     name_prefix: str = "aic-prod"
     transport: Transport = urllib_transport
     resolve: Resolver = system_resolver
-    tags: dict[str, str] = field(default_factory=lambda: {"Component": "connectors"})
+    tags: dict[str, str] = field(default_factory=resource_tags)
 
 
 async def _emit(d: ConnectorsDeps, rec: Record | None) -> None:
@@ -389,12 +390,14 @@ async def sync(d: ConnectorsDeps, id: str) -> Record | None:
 
 # ---------- Cedar (§1.5) ----------
 def _cedar(actions: list[str], gateway_arn: str, principal: str) -> str:
+    """One permit. AgentCore's IamEntity id is the caller's assumed-role ARN **without the session name**
+    ("Principal-scoped policies"), so the principal is matched exactly, never with ``like ".../*"``."""
     acts = ", ".join(f'AgentCore::Action::"{a}"' for a in sorted(actions))
     return (
-        "permit(\n  principal is AgentCore::IamEntity,\n"
+        f'permit(\n  principal == AgentCore::IamEntity::"{principal}",\n'
         f"  action in [{acts}],\n"
         f'  resource == AgentCore::Gateway::"{gateway_arn}"\n'
-        f') when {{ principal.id like "{principal}" }};'
+        ");"
     )
 
 
@@ -420,7 +423,7 @@ def policy_statements(
                 ]
         if acts:
             out[f"aic_role_{role}"] = _cedar(
-                acts, gateway_arn, f"arn:aws:sts::{account}:assumed-role/{name_prefix}-agent-{role}/*"
+                acts, gateway_arn, f"arn:aws:sts::{account}:assumed-role/{name_prefix}-agent-{role}"
             )
     app = sorted(
         gateway_name(r["id"], t["name"])
@@ -429,7 +432,7 @@ def policy_statements(
         if is_read_only(t) and (r["id"], t["name"]) in (granted or set())
     )
     if app:
-        out["aic_app_bridge"] = _cedar(app, gateway_arn, f"arn:aws:sts::{account}:assumed-role/{app_role}/*")
+        out["aic_app_bridge"] = _cedar(app, gateway_arn, f"arn:aws:sts::{account}:assumed-role/{app_role}")
     return out
 
 
