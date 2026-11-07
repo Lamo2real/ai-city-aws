@@ -37,7 +37,9 @@ from aic.shared.hierarchy.actions import (
     new_ticket,
     quote,
     send,
+    send_workers_home,
     status_summary,
+    workers_at_work,
 )
 from aic.shared.hierarchy.factory import worker_spec
 from aic.shared.hierarchy.tasks import (
@@ -274,6 +276,22 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             return "That due time is not a valid date."
         return f"Reminder {(await d.ledger.add_note(str(a['text']), 'reminder', str(a['due_at'])))['id']} saved."
 
+    async def everyone_home(a: dict[str, Any]) -> str:
+        n = len(await workers_at_work(d))
+        if n == 0:
+            return "Nobody is at work right now."
+        if not a.get("confirm"):
+            return (
+                f"Send all {n} worker{'s' if n != 1 else ''} home now? They'll drop what they're doing. "
+                "(Ask the owner; call again with confirm=true on yes.)"
+            )
+        r = await send_workers_home(d)
+        return (
+            f"Sent {r['workers']} worker{'s' if r['workers'] != 1 else ''} home. "
+            f"{r['parts']} part{'s' if r['parts'] != 1 else ''} will need a new worker when the managers pick them up again. "
+            "The city is still running."
+        )
+
     async def pause(a: dict[str, Any]) -> str:
         reason = str(a["reason"]) if a.get("reason") else "Paused by the owner"
         await d.ledger.update_settings({"paused": True, "pause_reason": reason})
@@ -332,8 +350,17 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             add_reminder,
         ),
         ToolSpec(
+            "send_workers_home",
+            "Send every worker home now: they drop what they are doing and walk home; their unfinished parts wait "
+            "for a new worker. The city is NOT paused. First call with confirm=false to get the one-line question "
+            "to ask the owner; on their yes, call again with confirm=true.",
+            _obj({"confirm": {"type": "boolean"}}, ()),
+            everyone_home,
+        ),
+        ToolSpec(
             "pause_city",
-            "Pause the city: no new turns start; running turns finish.",
+            "Pause the whole city: no new turns start; running turns finish. Only when the owner asks to pause or stop "
+            "everything, never for sending workers home or stopping one job.",
             _obj({"reason": _s()}, ("reason",)),
             pause,
         ),

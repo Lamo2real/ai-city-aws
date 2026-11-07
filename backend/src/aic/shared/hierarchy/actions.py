@@ -72,6 +72,48 @@ async def release_if_finished(d: CityDeps, worker_id: str, manager_id: str | Non
     return True
 
 
+async def workers_at_work(d: CityDeps) -> list[Record]:
+    """Every live worker: the ones the City draws at a desk."""
+    return [w for w in await d.ledger.list_agents("active") if w.get("kind") == "worker"]
+
+
+SENT_HOME_NOTE = "sent home by the owner; needs a new worker"
+
+
+async def send_workers_home(d: CityDeps) -> dict[str, int]:
+    """The owner's "send the workers home": every live worker drops what it is doing and goes home (released,
+    one `agent.retired` each, so the City walks them out), its open parts are cancelled with a note, and each
+    manager is told once which parts need a new worker. The city itself is not paused: nothing else changes."""
+    workers = await workers_at_work(d)
+    by_manager: dict[str, list[Record]] = {}
+    parts = 0
+    for w in workers:
+        stale = await d.ledger.tickets_of(w["id"], OPEN_ASSIGNMENT)
+        for t in stale:
+            await move(d, t["id"], "cancelled", f"{w['id']} {SENT_HOME_NOTE}")
+        parts += len(stale)
+        await d.factory.release(w["id"], str(w.get("parent")))  # a no-op if the last cancel above sent it home
+        log("info", "worker.sent_home", worker=w["id"], department=w.get("department"), assignments=len(stale))
+        if stale and w.get("parent"):
+            by_manager.setdefault(str(w["parent"]), []).extend(stale)
+    for mgr, stale in by_manager.items():
+        listed = "; ".join(f"{t['id']}: {t.get('goal', '')}" for t in stale)
+        await send(
+            d,
+            {
+                "role": "manager",
+                "agentId": mgr,
+                "department": stale[0].get("department"),
+                "ticketId": str(stale[0].get("parent_id") or stale[0]["id"]),
+                "taskId": str(stale[0].get("task_id") or stale[0].get("parent_id") or stale[0]["id"]),
+                "kind": "task",
+                "from": "city",
+                "body": f"The owner sent the workers home. Assign again when you are ready: {listed}",
+            },
+        )
+    return {"workers": len(workers), "parts": parts}
+
+
 async def move(d: CityDeps, id: str, status: str, note: str = "", patch: Record | None = None) -> Record:
     """Moves a ticket and tells the city. An assignment reaching its final state sends its worker home
     (unless the worker still has another open assignment)."""
