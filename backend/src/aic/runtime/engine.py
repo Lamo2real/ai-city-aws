@@ -11,7 +11,7 @@ import os
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from aic.shared.cost import Usage
 from aic.shared.ledger import Ledger
@@ -216,7 +216,9 @@ async def _consume(messages: AsyncIterator[Any], req: EngineRequest, b: _Binding
                     stop = "refusal"
                 elif msg.stop_reason == "max_tokens":
                     stop = "max_tokens"
-                usage = usage_from_model_usage(dict(msg.model_usage or {}), req.turn.cache_ttl)  # type: ignore[arg-type]
+                usage = usage_from_model_usage(
+                    cast(dict[str, dict[str, Any]], dict(msg.model_usage or {})), req.turn.cache_ttl
+                )
                 if (msg.subtype != "success" or getattr(msg, "is_error", False)) and stop == "end_turn":
                     raise RuntimeError(f"agent turn ended with {msg.subtype}: {str(msg.result or '')[:500]}")
     except Exception as e:

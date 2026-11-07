@@ -167,3 +167,20 @@ def test_the_sdk_path_lets_a_self_gated_tool_through_to_its_handler() -> None:
     r = asyncio.run(o.can_use_tool(spec.full_name, {"to": ["a@b.c"]}, None))
     assert type(r).__name__ == "PermissionResultAllow"
     assert req.ledger.audit == []
+
+
+async def test_after_a_triage_says_answer_yourself_aic_answers_in_the_same_turn() -> None:
+    from aic.runtime.direct import MAX_TOKENS
+
+    async def delegate(_: dict[str, Any]) -> str:
+        return "Triage: answer this yourself now, in full. No task was created."
+
+    spec = ToolSpec("delegate_to_orchestrator", "Hand off.", {"type": "object", "properties": {}}, delegate)
+    fake = FakeBedrock(
+        [tool_round("delegate_to_orchestrator", '{"goal": "x"}'), text_round("Sentence one. ", "Sentence two.")]
+    )
+    texts: list[str] = []
+    out = await direct_engine(request([spec], texts), fake)
+    assert out.text == "Sentence one. Sentence two."
+    assert texts == ["Sentence one. ", "Sentence two."]  # streamed in the same turn, after the tool result
+    assert fake.calls[1]["inferenceConfig"]["maxTokens"] == MAX_TOKENS == 4096

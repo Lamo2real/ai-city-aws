@@ -22,7 +22,7 @@ from aic.shared.turn import StopReason, TurnOutput
 from .engine import EngineRequest, activity_for
 
 MAX_TOOL_ROUNDS = 8
-MAX_TOKENS = 2048
+MAX_TOKENS = 4096  # a "50 sentences on …" answer must not be cut short
 
 _client: Any = None
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -43,7 +44,9 @@ from aic.shared.ids import department_key, manager_id
 from aic.shared.knowledge.model import SCOPES
 from aic.shared.knowledge.search import search
 from aic.shared.knowledge.service import KnowledgeError
+from aic.shared.log import log
 from aic.shared.policy import gate
+from aic.shared.utility import UtilityDeps, triage
 
 CITY_SERVER = "city"
 DONE_OR_GONE = ("done", "failed", "cancelled")
@@ -144,6 +147,33 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         target = await get_app(d.ledger, str(a["app_id"])) if a.get("app_id") else None
         if a.get("app_id") and not target:
             return "There is no app with that id. Check get_status for the apps and their ids."
+        hint = ""
+        if d.utility_runner is not None and not target:
+            # The Orchestrator's quick triage (one short utility call): most questions, lists and drafts are
+            # AIC's to answer right now; only real work becomes a task.
+            t0 = time.monotonic()
+            names = [str(x.get("name", "")) for x in await d.ledger.list_departments()]
+            verdict = await triage(
+                f"{a.get('owner_words') or ''}\nGoal: {a['goal']}",
+                [n for n in names if n],
+                UtilityDeps(ledger=d.ledger, bus=d.bus, settings=await d.settings(), runner=d.utility_runner),
+            )
+            log(
+                "info",
+                "aic.triage",
+                route=verdict.route,
+                department=verdict.department,
+                ms=round((time.monotonic() - t0) * 1000),
+            )
+            if verdict.route == "self":
+                return "Triage: answer this yourself now, in full. No task was created."
+            hint = (
+                f"\nTriage suggests the {verdict.department} department."
+                if verdict.route == "department" and verdict.department
+                else f"\nTriage suggests a new department: {verdict.department}."
+                if verdict.department
+                else ""
+            ) + (f" ({verdict.reason})" if verdict.reason else "")
         t = await new_ticket(
             d,
             {
@@ -166,6 +196,7 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             )
         if cons:
             body += f"\nConstraints: {cons}"
+        body += hint
         msg: dict[str, Any] = {
             "role": "orchestrator",
             "agentId": "orchestrator",

@@ -28,6 +28,7 @@ from aic.shared.hierarchy.actions import CityDeps
 from aic.shared.knowledge.service import KnowledgeAccess, KnowledgeService
 from aic.shared.knowledge.wiring import knowledge_from_env
 from aic.shared.log import log
+from aic.shared.utility import bedrock_converse_runner
 
 MAX_BODY = 1_000_000
 
@@ -155,6 +156,7 @@ def _skills(city: Any, e: Mapping[str, str]) -> Any:
 
 def build_app(env: Mapping[str, str] | None = None) -> Starlette:
     """Production wiring inside the container."""
+    from .direct import _bedrock
     from .engine import sdk_engine
     from .host import AgentHost, HostOptions
     from .live import websocket_sender
@@ -174,6 +176,8 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
             factory=factory,
             settings=city.settings,
             max_review_rounds=caps["max_review_rounds"],
+            # AIC's quick triage before delegating runs on the utility model through the runtime's own Bedrock client.
+            utility_runner=bedrock_converse_runner(_bedrock()) if role == "ace" else None,
             workspace=workspace_from_env(city.session, e) if role == "worker" else None,
             knowledge=_knowledge(city.session, city.bus, role, e),
         ),

@@ -70,7 +70,7 @@ class UtilityDeps:
     env: Mapping[str, str] | None = None
 
 
-async def utility_turn(kind: Literal["wake-word", "title", "compaction"], text: str, d: UtilityDeps) -> str:
+async def utility_turn(kind: Literal["wake-word", "title", "compaction", "triage"], text: str, d: UtilityDeps) -> str:
     body = text[-UTILITY_MAX_CHARS:] if len(text) > UTILITY_MAX_CHARS else text
     r = await run_gated_turn(
         GatedTurn(
@@ -88,6 +88,63 @@ async def utility_turn(kind: Literal["wake-word", "title", "compaction"], text: 
         GateDeps(ledger=d.ledger, bus=d.bus, settings=d.settings, runner=d.runner),
     )
     return r.output.text.strip()
+
+
+TriageRoute = Literal["self", "department", "new_department"]
+
+
+@dataclass(frozen=True)
+class Triage:
+    route: TriageRoute
+    department: str | None
+    reason: str
+
+
+_TRIAGE_CACHE: dict[str, Triage] = {}
+_TRIAGE_CACHE_MAX = 256
+TRIAGE_WHEN_UNSURE = Triage("department", None, "triage unavailable; the Orchestrator decides")
+
+
+def parse_triage(text: str) -> Triage | None:
+    """The utility model's JSON answer, or None when it isn't one."""
+    import json
+
+    m = re.search(r"\{.*\}", text, re.S)
+    if not m:
+        return None
+    try:
+        obj = json.loads(m.group(0))
+    except ValueError:
+        return None
+    route = obj.get("route") if isinstance(obj, dict) else None
+    if route not in ("self", "department", "new_department"):
+        return None
+    dept = obj.get("department")
+    return Triage(
+        route, str(dept)[:80] if isinstance(dept, str) and dept.strip() else None, str(obj.get("reason", ""))[:200]
+    )
+
+
+async def triage(request: str, departments: list[str], d: UtilityDeps) -> Triage:
+    """The Orchestrator's quick triage, on the utility model: may AIC just answer this itself?
+
+    A full Orchestrator turn only to decide would cost seconds; this is one short Haiku call, cached per
+    request text, costed like every utility turn. Any failure routes to the Orchestrator as before.
+    """
+    key = f"{request.strip()}\n{sorted(departments)}"
+    hit = _TRIAGE_CACHE.get(key)
+    if hit:
+        return hit
+    body = f"Existing departments: {', '.join(departments) or 'none yet'}\n\nThe owner's request:\n{request}"
+    try:
+        out = parse_triage(await utility_turn("triage", body, d))
+    except Exception:
+        out = None
+    result = out or TRIAGE_WHEN_UNSURE
+    if len(_TRIAGE_CACHE) >= _TRIAGE_CACHE_MAX:
+        _TRIAGE_CACHE.clear()
+    _TRIAGE_CACHE[key] = result
+    return result
 
 
 async def is_addressed_to_ace(transcript: str, d: UtilityDeps) -> bool:

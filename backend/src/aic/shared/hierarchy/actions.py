@@ -49,6 +49,8 @@ class CityDeps:
     """Outbound HTTP for ``add_connector`` (an ``aic.shared.mcp_http.Transport``); None = urllib."""
     resolve: Any = None
     """DNS for the connector URL check (an ``aic.shared.connectors.Resolver``); None = the system's."""
+    utility_runner: Any = None
+    """A ``ModelRunner`` for the utility model (AIC's quick triage before delegating); None = always delegate."""
 
 
 async def move(d: CityDeps, id: str, status: str, note: str = "", patch: Record | None = None) -> Record:
