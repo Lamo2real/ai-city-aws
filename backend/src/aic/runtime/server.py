@@ -66,7 +66,12 @@ def create_app(host: TurnRunner) -> Starlette:
                     await track(inv)
                 except Exception as e:
                     log(
-                        "error", "turn.failed", agent=inv["agentId"], ticket=inv.get("ticketId"), error=type(e).__name__
+                        "error",
+                        "turn.failed",
+                        agent=inv["agentId"],
+                        ticket=inv.get("ticketId"),
+                        error=type(e).__name__,
+                        detail=str(e)[:1500],
                     )
 
             task = asyncio.create_task(job())
@@ -77,7 +82,14 @@ def create_app(host: TurnRunner) -> Starlette:
             response = await track(inv)
             return JSONResponse({"status": "success", "response": response})
         except Exception as e:
-            log("error", "turn.failed", agent=inv["agentId"], ticket=inv.get("ticketId"), error=type(e).__name__)
+            log(
+                "error",
+                "turn.failed",
+                agent=inv["agentId"],
+                ticket=inv.get("ticketId"),
+                error=type(e).__name__,
+                detail=str(e)[:1500],
+            )
             return JSONResponse({"status": "error", "error": type(e).__name__}, status_code=500)
 
     async def not_found(_: Request, __: Exception) -> JSONResponse:

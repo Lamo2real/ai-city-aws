@@ -102,6 +102,16 @@ async def sdk_engine(req: EngineRequest) -> TurnOutput:
     server = create_sdk_mcp_server(name=CITY_SERVER, version="1.0.0", tools=[make(t) for t in req.tools])
     allowed = [mcp_name(t.name) for t in req.tools] + req.builtins
     env = {**os.environ, "ANTHROPIC_MODEL": req.turn.model.invoke_id}
+    # The Claude Code CLI on Bedrock needs AWS_REGION; the runtime only sets AIC_REGION.
+    region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or os.environ.get("AIC_REGION")
+    if region:
+        env["AWS_REGION"] = region
+    stderr_tail: list[str] = []
+
+    def on_stderr(line: str) -> None:
+        stderr_tail.append(line.rstrip()[:500])
+        del stderr_tail[:-30]
+
     if req.turn.cache_ttl == "1h":
         env["ENABLE_PROMPT_CACHING_1H"] = "1"
 
@@ -131,25 +141,30 @@ async def sdk_engine(req: EngineRequest) -> TurnOutput:
         env=env,
         cwd=req.cwd,
         can_use_tool=can_use_tool,
+        stderr=on_stderr,  # kept so a failed turn says why (the SDK drops it otherwise)
     )
     text = ""
     stop: StopReason = "end_turn"
     usage = Usage()
-    async for msg in query(prompt=prompt(), options=options):
-        if isinstance(msg, AssistantMessage):
-            for block in msg.content:
-                if isinstance(block, TextBlock) and req.on_text:
-                    await req.on_text(block.text)
-            if getattr(msg, "stop_reason", None) == "refusal":
-                stop = "refusal"
-        elif isinstance(msg, ResultMessage):
-            if msg.subtype == "success":
-                text = msg.result or ""
-            if msg.stop_reason == "refusal":
-                stop = "refusal"
-            elif msg.stop_reason == "max_tokens":
-                stop = "max_tokens"
-            usage = usage_from_model_usage(dict(msg.model_usage or {}), req.turn.cache_ttl)  # type: ignore[arg-type]
-            if msg.subtype != "success" and stop == "end_turn":
-                raise RuntimeError(f"agent turn ended with {msg.subtype}")
+    try:
+        async for msg in query(prompt=prompt(), options=options):
+            if isinstance(msg, AssistantMessage):
+                for block in msg.content:
+                    if isinstance(block, TextBlock) and req.on_text:
+                        await req.on_text(block.text)
+                if getattr(msg, "stop_reason", None) == "refusal":
+                    stop = "refusal"
+            elif isinstance(msg, ResultMessage):
+                if msg.subtype == "success":
+                    text = msg.result or ""
+                if msg.stop_reason == "refusal":
+                    stop = "refusal"
+                elif msg.stop_reason == "max_tokens":
+                    stop = "max_tokens"
+                usage = usage_from_model_usage(dict(msg.model_usage or {}), req.turn.cache_ttl)  # type: ignore[arg-type]
+                if (msg.subtype != "success" or getattr(msg, "is_error", False)) and stop == "end_turn":
+                    raise RuntimeError(f"agent turn ended with {msg.subtype}: {str(msg.result or '')[:500]}")
+    except Exception as e:
+        tail = " | ".join(stderr_tail[-10:])
+        raise RuntimeError(f"{type(e).__name__}: {e}" + (f" — CLI stderr: {tail}" if tail else "")) from e
     return TurnOutput(text=text, stop_reason=stop, usage=usage)
