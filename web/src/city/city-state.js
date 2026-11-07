@@ -438,6 +438,43 @@ export function walkRoute(world, from, to) {
   return a === b ? [{ x: from.x, y: a }, { x: to.x, y: a }, to] : [{ x: from.x, y: a }, { x: ax, y: a }, { x: ax, y: b }, { x: to.x, y: b }, to];
 }
 
+// The street-side door of a building: everyone enters and leaves here (the manager also stands at it).
+export function doorOf(building) {
+  return { x: (building.x + building.w / 2) * TILE + 14, y: building.y * TILE + 78 };
+}
+
+// A commute keeps to the streets and uses doors: out through the door of the building being left, along the
+// roads (crossing at the avenue, like walkRoute), and in through the door of the building being entered.
+export function commuteRoute(world, from, to, { leaving = null, entering = null } = {}) {
+  const route = [];
+  let start = from;
+  if (leaving) {
+    const d = doorOf(leaving);
+    route.push(d);
+    start = d;
+  }
+  const street = entering ? doorOf(entering) : to;
+  route.push(...walkRoute(world, start, street));
+  if (entering) route.push(to);
+  return route;
+}
+
+// Fast enough that a commute takes about COMMUTE_MS whatever its length, never slower than an evening stroll.
+export const WALK_PX_S = 46;
+export const COMMUTE_MS = 2500;
+export function walkSpeed(route, from) {
+  let len = 0;
+  let at = from;
+  for (const p of route) {
+    len += Math.hypot(p.x - at.x, p.y - at.y);
+    at = p;
+  }
+  return Math.max(WALK_PX_S, len / (COMMUTE_MS / 1000));
+}
+
+// People take turns at a door instead of overlapping: the i-th walker sets off this much later.
+export const staggerMs = (i) => i * 350;
+
 // What the map should say when it has nothing to show. Null when people and offices speak for themselves.
 export function cityMessage(state) {
   const others = Object.keys(state.agents).filter((id) => !CORE.has(id));

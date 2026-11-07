@@ -46,6 +46,8 @@ export type Presence = "idle" | "listening" | "thinking" | "speaking" | "waiting
 export interface HudState {
   city: CityState;
   loaded: boolean;
+  /** Counts real snapshot loads (page open, reconnect): the City scene rebuilds only on these, never per event. */
+  snapshotAt: number;
   loadError: string | null;
   chat: ChatLine[];
   live: LiveStatus;
@@ -69,6 +71,7 @@ class Store {
   state: HudState = {
     city: initialState(),
     loaded: false,
+    snapshotAt: 0,
     loadError: null,
     chat: readChat(),
     live: "connecting",
@@ -106,7 +109,7 @@ class Store {
     let city = applySnapshot(this.state.city, snap);
     for (const e of this.during ?? []) city = reduce(city, e);
     this.during = null;
-    this.set({ city, loaded: true, loadError: null });
+    this.set({ city, loaded: true, loadError: null, snapshotAt: this.state.snapshotAt + 1 });
     // Work that finished while this page was closed or offline: no longer open in the city, so settled.
     const open = new Set([...Object.keys(city.tickets ?? {}), ...Object.keys(city.parked ?? {})]);
     this.settleTasks((id) => !open.has(id));

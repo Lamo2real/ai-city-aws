@@ -87,8 +87,9 @@ export function CityView({ go }: { go: (view: string) => void }) {
       store.sceneEvents.delete(off);
     };
   }, []);
-  // A fresh snapshot (first load, reconnect) rebuilds the scene's copy.
-  const loadedAt = useHud((s) => (s.loaded ? s.city.now : 0));
+  // A fresh snapshot (first load, reconnect) rebuilds the scene's copy — never a mere event, whose reload
+  // would wipe walks in progress and activity bubbles (the scene already gets every event itself).
+  const loadedAt = useHud((s) => s.snapshotAt);
   useEffect(() => {
     if (loadedAt && scene.current) scene.current.load(snapshotOf(store.get().city));
   }, [loadedAt]);
