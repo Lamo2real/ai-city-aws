@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 // @ts-expect-error plain .mjs scripts without type declarations
 import { checkTags } from "../scripts/check-tags.mjs";
 // @ts-expect-error plain .mjs scripts without type declarations
-import { checkBoundaries, checkWorker, rolePolicies } from "../scripts/check-iam.mjs";
+import { checkBoundaries, checkWorker, rolePolicies, workspacePolicy } from "../scripts/check-iam.mjs";
 
 type Stmt = { Sid?: string; Action: string | string[]; Resource: string | string[] };
 const actions = (s: Stmt[]) => s.flatMap((x) => (Array.isArray(x.Action) ? x.Action : [x.Action]));
@@ -86,5 +86,93 @@ describe("voice credentials", () => {
     expect(block).toMatch(/provider_name\s+= aws_cognito_user_pool\.this\.endpoint/);
     expect(block).toMatch(/allow_unauthenticated_identities\s+= false/);
     expect(block).toMatch(/server_side_token_check\s+= false/);
+  });
+});
+
+describe("apps origin (docs/APPS.md)", () => {
+  const read = async (p: string) => (await import("node:fs")).readFileSync(p, "utf8");
+  const cspOf = (tf: string) => {
+    const start = tf.indexOf("csp = join(");
+    return tf.slice(start, tf.indexOf("])", start));
+  };
+  const directives = (csp: string) =>
+    Object.fromEntries(
+      [...csp.matchAll(/^\s*"([a-z-]+)\s*([^"]*)",?$/gm)].map((m) => [m[1], (m[2] ?? "").trim()]),
+    ) as Record<string, string>;
+
+  it("the apps CSP blocks the network, workers, frames and forms, and lets only CloudFront sites frame it", async () => {
+    const d = directives(cspOf(await read("infra/modules/apps/main.tf")));
+    expect(d["default-src"]).toBe("'none'");
+    expect(d["connect-src"]).toBe("'none'");
+    for (const k of ["worker-src", "frame-src", "form-action", "base-uri", "object-src"]) expect(d[k]).toBe("'none'");
+    expect(d["script-src"]).toBe("'self' 'unsafe-inline'");
+    expect(d["frame-ancestors"]).toBe("https://*.cloudfront.net");
+  });
+
+  it("the apps distribution has its own bucket, the HUD's WAF, no SPA rewrite, CORS GET/HEAD only", async () => {
+    const tf = await read("infra/modules/apps/main.tf");
+    expect(tf).toMatch(/bucket = "\$\{var\.name\}-apps"/);
+    expect(tf).toMatch(/web_acl_id\s+= var\.waf_acl_arn/);
+    expect(tf).not.toMatch(/custom_error_response/);
+    expect(tf).not.toMatch(/frame_options/);
+    expect(tf).toMatch(/items = \["GET", "HEAD"\]/);
+    expect(tf).toMatch(/content_security_policy = local\.csp\s+override\s+= true/);
+    expect(tf).toMatch(/prefix = "drafts\/"/);
+    const prod = await read("infra/envs/prod/main.tf");
+    expect(prod).toMatch(/waf_acl_arn = module\.frontend\.waf_acl_arn/);
+    expect(prod).toMatch(/appsUrl\s+= module\.apps\.url/);
+  });
+
+  it("the HUD CSP frames only the apps origin and adds it to img-src, never to connect-src", async () => {
+    const d = directives(cspOf(await read("infra/modules/frontend/main.tf")));
+    expect(d["frame-src"]).toBe("${var.apps_url}");
+    expect(d["img-src"]).toBe("'self' data: blob: ${var.apps_url}");
+    expect(d["connect-src"]).not.toContain("apps_url");
+    expect(d["frame-ancestors"]).toBe("'none'");
+  });
+
+  it("apps resources carry Component = apps", async () => {
+    expect(await read("infra/modules/apps/main.tf")).toMatch(/tags = \{ Component = "apps" \}/);
+    const api = await read("infra/modules/api/main.tf");
+    expect(api).toMatch(/resource "aws_sqs_queue" "apps_dlq" \{[\s\S]*?tags\s+= \{ Component = "apps" \}/);
+    expect(api).toMatch(
+      /resource "aws_cloudwatch_event_rule" "app_submitted" \{[\s\S]*?tags\s+= \{ Component = "apps" \}/,
+    );
+    expect(api).toMatch(/tags = each\.key == "apps" \? \{ Component = "apps" \} : local\.tags/);
+  });
+
+  it("no worker or Orchestrator policy names the apps bucket", async () => {
+    for (const role of ["worker", "orchestrator", "manager", "ace"]) {
+      const text = JSON.stringify(rolePolicies(role));
+      expect(text).not.toMatch(/aic-prod-apps|apps_bucket|live\//);
+    }
+    expect(JSON.stringify(workspacePolicy())).not.toMatch(/apps/);
+    const { readdirSync } = await import("node:fs");
+    for (const f of readdirSync("infra/modules/agents/policies"))
+      expect(await read(`infra/modules/agents/policies/${f}`)).not.toMatch(/apps_bucket|-apps|cloudfront/);
+    expect(await read("infra/modules/agents/main.tf")).not.toMatch(/apps_bucket|module\.apps|cloudfront/);
+  });
+
+  it("the apps Lambda: EventBridge on app.submitted, drafts/ only, APPDRAFTS only; only the API writes live/", async () => {
+    const api = await read("infra/modules/api/main.tf");
+    expect(api).toMatch(/apps\s+= \{ bundle = "app", handler = "aic\.lambdas\.apps\.handler"/);
+    expect(api).toMatch(/"detail-type" = \["app\.submitted"\]/);
+    const appsPerms = api.slice(api.indexOf("    apps = ["), api.indexOf("    ]", api.indexOf("    apps = [")));
+    expect(appsPerms).toContain('"${var.apps_bucket_arn}/drafts/*"');
+    expect(appsPerms).not.toContain("live/");
+    expect(appsPerms).toContain('"dynamodb:LeadingKeys" = ["APPDRAFTS"]');
+    expect(appsPerms).toContain('"${var.workspaces_arn}/hires/*/app/*"');
+    expect(api.match(/live\/\*/g)?.length).toBe(2); // the API's ListBucket prefix and its Put/Delete
+    expect(api).toMatch(/cloudfront:CreateInvalidation"\], Resource = \[var\.apps_distribution_arn\]/);
+  });
+});
+
+describe("apps API routes", () => {
+  it("GET /apps and DELETE /apps/{id} sit behind the JWT authorizer, and CORS allows DELETE", async () => {
+    const api = (await import("node:fs")).readFileSync("infra/modules/api/main.tf", "utf8");
+    const routes = api.slice(api.indexOf("routes = ["), api.indexOf("]", api.indexOf("routes = [")));
+    expect(routes).toContain('"GET /apps"');
+    expect(routes).toContain('"DELETE /apps/{id}"');
+    expect(api).toMatch(/allow_methods = \["GET", "POST", "PUT", "DELETE"\]/);
   });
 });
