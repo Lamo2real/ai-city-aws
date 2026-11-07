@@ -247,8 +247,8 @@ HUD side (`web/src/lib/bridge.ts`, one `message` listener for the whole HUD):
   (role `aic-prod-fn-app-bridge`) synchronously with `{app_id, cap, params}`. Only that Lambda can reach the
   Gateway or the mail/calendar reads for apps, so the api role gets no Gateway access (agreed with the connectors
   lead, `docs/CONNECTORS_SKILLS.md` §1.9 on `connectors-skills`, commit 8fb8d53).
-- Connector reads: the bridge Lambda calls `aic.shared.connector_calls.app_call(d, app_id=, capability_id=,
-  connector_id=, tool=, args=)` (`capability_id` = `connector.read:<connector_id>:<tool>`) → `{ok, data: [{type: "text", text} | {type: "json", json}], truncated, error}` (Gateway client in
+- Connector reads: the bridge Lambda calls `aic.shared.connector_calls.app_call(d, app_id=, connector_id=, tool=,
+  args=)` → `{ok, data: [{type: "text", text} | {type: "json", json}], truncated, error}` (Gateway client in
   `aic.shared.gateway`). `app_call` re-checks the grant on the APP record
   (below), that the connector is `ready` and the tool read-only and not destructive, runs `policy.gate` as role
   `app` (agent `app-<app_id>`, tool `mcp__gateway__<id>___<tool>`; "ask" counts as deny) and the audit, applies its own 60/min per-app limit for
