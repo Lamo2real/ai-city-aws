@@ -8,7 +8,7 @@
 - If this file and the code disagree, the code wins: fix this file.
 - New larger features: add a row under §6 and an entry in §10.
 
-Last updated: 2026-11-06 (initial build, not deployed).
+Last updated: 2026-11-07 (AIC screen redesign).
 
 ---
 
@@ -83,9 +83,9 @@ Owner message → `POST /messages` → SQS (`ace` queue) → **dispatcher** Lamb
 | API | HTTP API, 22 routes, owner group re-checked | ✅ | `backend/src/aic/lambdas/api.py` |
 | API | WebSocket: `$connect` authorizer, connections with TTL, broadcast | ✅ | `lambdas/ws.py` (Cognito token checked with PyJWT) |
 | API | Notifications (results, cap alerts, pause, 15-min question nudge) | ✅ / nudge job off | `lambdas/notifier.py` |
-| Voice | Push-to-talk, wake mode (plain match, Haiku for unclear), Transcribe + Polly via identity pool | 🟡 fake voice only | `web/src/voice/`, `utility.py`, `tests/fixtures/wake-cases.json` |
+| Voice | Push-to-talk, wake mode (plain match, Haiku for unclear), Transcribe + Polly via identity pool; a failing mic or speech service shows its real cause (blocked permission, no mic, mic busy, AWS error name) and logs `[AIC voice] …` with the original error to the browser console; a broken or closed stream stops listening instead of hanging | 🟡 fake voice only (error messages unit- and Playwright-tested; real Transcribe not run in a browser) | `web/src/voice/`, `utility.py`, `tests/fixtures/wake-cases.json` |
 | HUD | Own sign-in screens: temporary password → own password (live rules) → authenticator app (QR + key) → code; later password + code; forgot password; “send me a new first-login email” (public API route, owner's email only, 1 per 10 min) | ✅ (fake auth in Playwright) / 🟡 real Cognito not yet tried | `web/src/components/SignIn.tsx`, `web/src/lib/auth.ts`, `backend/src/aic/lambdas/api.py` |
-| HUD | AIC screen (AIC's eye: the owner's own drawing, `web/public/ace-eye.png`; states idle/listening/thinking/speaking/waiting; streaming; drafts + outbox survive reloads) | ✅ | `web/src/components/AceScreen.tsx` |
+| HUD | AIC screen in a bright daytime theme (parchment, ink outlines, wood and lamplight from the City): the eye (the owner's own drawing, `web/public/ace-eye.png`) with a voice strip under it on the left, the chat on the right (stacked on a phone). The strip shows who talks by shape, words and colour: blue bars following the owner's mic level ("You’re talking"), a brown flowing wave following AIC's Polly reply ("AIC is talking"), travelling dots ("AIC is thinking"), a flat line when idle; still pictures with prefers-reduced-motion. Message cards with round You/AIC badges; streaming; drafts + outbox survive reloads | ✅ | `web/src/components/AceScreen.tsx`, `VoiceVisualizer.tsx` |
 | HUD | City view ported from the Mac HUD (AIC in plaza, Orchestrator at HQ door, manager at each department door, workers walk in/out, FREE LOTs, growing town, count badges, houses for specialists, top bar, right panel, bottom bar) | ✅ | `web/src/city/`, `CityView.tsx` |
 | HUD | Needs you (default answer in one tap; hold-to-approve), Tickets, Costs, Settings, first-run guide, spend pill (amber 80 %, red 100 %) | ✅ | `web/src/components/` |
 | HUD | Idiot-proof rules (one primary button, confirms with cost, Undo, plain errors, 44 px targets) | ✅ | `docs/UX_REVIEW.md` |
@@ -148,6 +148,7 @@ Terraform (offline only): `fmt -check -recursive`, `init -backend=false`, `valid
 ## 10. Feature log (newest first)
 | Date | Feature | Notes |
 |---|---|---|
+| 2026-11-07 | AIC screen redesign, real mic errors | The owner's request: eye and voice strip on the left, chat on the right, a bright theme in the City's palette (WCAG AA, axe-checked). The voice module measures loudness with Web Audio analysers on the mic and on Polly's audio (played straight, without the meter, when Safari keeps Web Audio suspended, so replies are never muted). The mic is now requested first, inside the tap, before loading the speech SDK. The old catch-all "The microphone could not start…" hid the cause; each failure now has its own message and a console log. The live site's headers were checked: `Permissions-Policy: microphone=(self)` and the CSP (Transcribe WebSocket on :8443, Cognito Identity, Polly) allow voice, and the Transcribe endpoint answers in eu-north-1. |
 | 2026-11-07 | Named AIC, not Ace | The owner's choice: the front agent is called AIC everywhere (screens, its prompt, docs) and is said as the letters A-I-C; Polly reads it as “A.I.C.”. The wake word is AIC / “A I C”; “Ace” no longer wakes it. Internal ids (`ace` role, queues, runtimes) are unchanged so nothing in AWS is replaced. Also: the HUD's CSP now allows Cognito's sign-in API (`cognito-idp`), which our own sign-in screens need. |
 | 2026-11-06 | Own sign-in, clear first-login email, AIC's eye | The HUD signs in on its own screens (Amplify Auth, SRP; no Cognito hosted pages): first login walks through temporary password → own password → authenticator app. Cognito's invitation email is rewritten (link, user name, temporary password valid 7 days, steps) and so is the reset-code email; a public `POST /auth/first-login-email` re-sends the invitation (owner only, once per 10 min, same answer for any email). AIC is shown with one eye, the owner's own drawing. |
 | 2026-11-06 | Deploy stages | `deploy.yml` runs **web** and **backend** (ruff, mypy, pytest, Lambda package) in parallel, then **plan → apply → frontend**; the plan job prints the OIDC claims GitHub presents (never the token), so a trust-policy mismatch is visible in the log. |

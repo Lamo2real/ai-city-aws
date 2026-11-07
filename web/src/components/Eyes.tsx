@@ -11,7 +11,16 @@ const WORDS: Record<Presence, string> = {
   waiting: "AIC is waiting for you",
 };
 
-export function Eyes({ presence, small = false }: { presence: Presence; small?: boolean }) {
+export function Eyes({
+  presence,
+  small = false,
+  word = true,
+}: {
+  presence: Presence;
+  small?: boolean;
+  /** Show the state as a visible line under the eye (the AIC screen says it in the voice strip instead). */
+  word?: boolean;
+}) {
   return (
     <div className={`eyes eyes-${presence} ${small ? "eyes-small" : ""}`} role="img" aria-label={WORDS[presence]}>
       <div className="eye-pair" aria-hidden="true">
@@ -22,7 +31,7 @@ export function Eyes({ presence, small = false }: { presence: Presence; small?: 
           !
         </span>
       ) : null}
-      {!small ? <p className="eyes-word">{WORDS[presence]}</p> : null}
+      {!small && word ? <p className="eyes-word">{WORDS[presence]}</p> : null}
     </div>
   );
 }
