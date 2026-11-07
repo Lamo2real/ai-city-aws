@@ -170,16 +170,6 @@ def _knowledge(session: Any, bus: Any, role: str, env: Mapping[str, str]) -> Kno
     return KnowledgeAccess(store=k.store, kb=k.kb, service=service)
 
 
-def main() -> None:
-    import uvicorn
-
-    uvicorn.run(build_app(), host="0.0.0.0", port=int(os.environ.get("PORT", "8080")), log_level="warning")  # noqa: S104
-
-
-if __name__ == "__main__":
-    main()
-
-
 def _mail(city: Any, e: Mapping[str, str], role: str | None) -> Any:
     """Mail and calendar for the roles that may have it (never workers, decision 79)."""
     if role == "worker" or not e.get("AIC_MAIL_WORKLOAD"):
@@ -194,3 +184,13 @@ def _mail(city: Any, e: Mapping[str, str], role: str | None) -> Any:
     s = MailService.from_env(city.ledger.table, city.session, city.ledger.now)
     s.on_status = on_status
     return s
+
+
+def main() -> None:
+    import uvicorn
+
+    uvicorn.run(build_app(), host="0.0.0.0", port=int(os.environ.get("PORT", "8080")), log_level="warning")  # noqa: S104
+
+
+if __name__ == "__main__":
+    main()
