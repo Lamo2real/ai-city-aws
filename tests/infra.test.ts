@@ -168,11 +168,13 @@ describe("apps origin (docs/APPS.md)", () => {
 });
 
 describe("apps API routes", () => {
-  it("GET /apps and DELETE /apps/{id} sit behind the JWT authorizer, and CORS allows DELETE", async () => {
+  it("the apps routes (v1 and the v2 bridge, proposals, PUT) sit behind the JWT authorizer, and CORS allows DELETE", async () => {
     const api = (await import("node:fs")).readFileSync("infra/modules/api/main.tf", "utf8");
     const routes = api.slice(api.indexOf("routes = ["), api.indexOf("]", api.indexOf("routes = [")));
     expect(routes).toContain('"GET /apps"');
     expect(routes).toContain('"DELETE /apps/{id}"');
+    for (const r of ['"PUT /apps/{id}"', '"POST /apps/{id}/bridge"', '"POST /apps/{id}/proposals"'])
+      expect(routes).toContain(r);
     expect(api).toMatch(/allow_methods = \["GET", "POST", "PUT", "DELETE"\]/);
   });
 });

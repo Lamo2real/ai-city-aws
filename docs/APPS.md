@@ -282,7 +282,11 @@ invitations"), are limited to 10 per hour per app, and the app only learns `{ok:
   events, gets `not_granted` after a revoke, and a proposal lands in Needs you.
 - **infra:** routes `POST /apps/{id}/bridge`, `POST /apps/{id}/proposals`, `PUT /apps/{id}`; the api Lambda's
   `bedrock-agentcore:InvokeGateway` on the connectors gateway (after `connectors-skills` merges); nothing for
-  workers or the apps origin. HUD CSP unchanged.
+  workers or the apps origin. HUD CSP unchanged. Done (branch `apps-v2-infra`): the three routes (JWT
+  authorizer; CORS already allowed PUT); `RATE#app-*` needs no change (the api Lambda's ledger policy covers
+  the whole table, no key limit).
+  - TODO (infra, after `connectors-skills` merges): grant the api Lambda `bedrock-agentcore:InvokeGateway` on the
+    connectors gateway ARN only; until then connector reads answer `unavailable`.
 - **connectors session:** a Cedar `permit` for the api role on read-only tools of app-granted connectors, and
   `GatewayClient` usable from the api Lambda.
 
