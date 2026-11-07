@@ -63,17 +63,22 @@ def ctx() -> TurnCtx:
     )
 
 
-async def delegate_with(route_json: str | None, goal: str = "Compare the GT3 and GT3 RS engines") -> tuple[str, Any]:
+async def delegate_with(
+    route_json: str | None,
+    goal: str = "Compare the GT3 and GT3 RS engines",
+    owner_words: str = "can you give me 50 sentences on …",
+    confirm: bool = True,
+) -> tuple[str, Any]:
     utility._TRIAGE_CACHE.clear()
     city = make_city(scripted_engine({}))
     city.deps.utility_runner = runner_saying(route_json) if route_json is not None else None
     spec = next(t for t in tools_for(city.deps, ctx()) if t.name == "delegate_to_orchestrator")
-    out = await spec.handler({"goal": goal, "owner_words": "can you give me 50 sentences on …"})
+    out = await spec.handler({"goal": goal, "owner_words": owner_words, "confirm": confirm})
     return out, city
 
 
 async def test_self_means_no_task_and_aic_answers_in_the_same_turn() -> None:
-    out, city = await delegate_with('{"route": "self", "department": null, "reason": "a list"}')
+    out, city = await delegate_with('{"route": "self", "department": null, "reason": "a list"}', confirm=False)
     assert out.startswith("Triage: answer this yourself now")
     assert city.queue.pending == []
     assert [t for t in await city.ledger.list_tickets(ALL_STATUSES) if t.get("kind") == "task"] == []
@@ -96,3 +101,46 @@ async def test_new_department_hint_and_no_runner_means_delegate_as_before() -> N
     assert "Triage suggests a new department: Legal" in body
     out2, _ = await delegate_with(None)
     assert out2.startswith("Handed to the Orchestrator")
+
+
+async def test_nothing_starts_until_the_owner_said_yes() -> None:
+    out, city = await delegate_with(
+        '{"route": "department", "department": "Engineering", "reason": "needs code"}',
+        goal="Build a snake game",
+        owner_words="build me a snake game",
+        confirm=False,
+    )
+    assert out.startswith("Ask the owner first") and "Engineering" in out and "Nothing was started" in out
+    assert city.queue.pending == []
+    assert [t for t in await city.ledger.list_tickets(ALL_STATUSES) if t.get("kind") == "task"] == []
+    out2, _ = await delegate_with(None, goal="Build a snake game", owner_words="build me a snake game", confirm=False)
+    assert out2.startswith("Ask the owner first") and "the team" in out2
+
+
+async def test_a_complaint_about_ai_city_is_never_a_job_even_on_yes() -> None:
+    for words in ("the voice is bugged, fix it", "make the voice more humane", "why is the city so slow?"):
+        city = make_city(scripted_engine({}))
+        city.deps.utility_runner = runner_saying('{"route": "new_department", "department": "Voice Engineering"}')
+        spec = next(t for t in tools_for(city.deps, ctx()) if t.name == "delegate_to_orchestrator")
+        out = await spec.handler({"goal": "Fix AIC's voice", "owner_words": words, "confirm": True})
+        assert "about AI City itself" in out and "builder session" in out, words
+        assert city.queue.pending == []
+        assert city.deps.utility_runner.seen == []  # not even triaged
+    # An explicit "have the team …" still goes through.
+    out, city = await delegate_with(
+        '{"route": "department", "department": "Engineering", "reason": "code"}',
+        goal="Build a voice recorder app",
+        owner_words="have the team build me a voice recorder app",
+    )
+    assert out.startswith("Handed to the Orchestrator")
+
+
+async def test_no_more_jobs_than_the_ceiling() -> None:
+    city = make_city(scripted_engine({}))
+    spec = next(t for t in tools_for(city.deps, ctx()) if t.name == "delegate_to_orchestrator")
+    for n in range(3):
+        out = await spec.handler({"goal": f"Build thing {n}", "owner_words": f"build me thing {n}", "confirm": True})
+        assert out.startswith("Handed to the Orchestrator")
+    out = await spec.handler({"goal": "Build thing 4", "owner_words": "build me thing 4", "confirm": True})
+    assert out.startswith("Not started: 3 jobs already running (the limit is 3)")
+    assert len([t for t in await city.ledger.list_tickets(ALL_STATUSES) if t.get("kind") == "task"]) == 3

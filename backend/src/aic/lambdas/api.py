@@ -35,7 +35,7 @@ from aic.shared.caps import validate_caps
 from aic.shared.clients import client
 from aic.shared.config import caps_config
 from aic.shared.events import EventBus, now_iso
-from aic.shared.hierarchy.actions import CityDeps, answer_question, send_workers_home, workers_at_work
+from aic.shared.hierarchy.actions import CityDeps, answer_question, send_workers_home
 from aic.shared.hierarchy.factory import Factory
 from aic.shared.hierarchy.queue import Queue, WorkMessage
 from aic.shared.hierarchy.tasks import DONE_OR_GONE, cancel_task
@@ -620,10 +620,7 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         return await _put_settings(_body(event), d)
     if is_("POST", r"/workers/home"):
         # The owner's "send everyone home", straight from the HUD: no model in the loop, instant.
-        deps = _action_deps(d)
-        if not await workers_at_work(deps):
-            return reply(200, {"workers": 0, "parts": 0})
-        return reply(200, await send_workers_home(deps))
+        return reply(200, await send_workers_home(_action_deps(d)))
     if is_("POST", r"/tasks/[\w-]+/cancel"):
         task = await d.ledger.get_ticket(seg[1])
         if not task or task.get("kind") != "task":
@@ -715,6 +712,9 @@ _WHOLE_KEYS = (
     "max_workers_per_goal",
     "max_concurrent_workers_per_department",
     "max_concurrent_workers_global",
+    "max_live_workers_city",
+    "max_open_jobs",
+    "max_departments",
     "max_new_sessions_per_second",
     "worker_idle_release_minutes",
 )

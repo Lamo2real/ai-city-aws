@@ -12,7 +12,6 @@ import { stepsRunning } from "../lib/steps.ts";
 import { StreamedText } from "./StreamedText.tsx";
 import { Banner, ClearIcon, SendIcon } from "./ui.tsx";
 import { VoiceVisualizer } from "./VoiceVisualizer.tsx";
-import { SendHomeButton } from "./SendHome.tsx";
 
 export { MicIcon } from "./ui.tsx";
 
@@ -32,7 +31,6 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
   const waiting = useHud(waitingCount);
   const live = useHud((s) => s.live);
   const turn = useHud((s) => s.turn);
-  const city = useHud((s) => s.city);
   const [text, setText] = useState(readDraft);
   const input = useRef<HTMLTextAreaElement>(null);
   const log = useRef<HTMLDivElement>(null);
@@ -148,7 +146,6 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
       <div className="talk" role="region" aria-label="Chat with AIC">
         <header className="talk-head">
           <p className="talk-title">Chat with AIC</p>
-          <SendHomeButton city={city} />
           <button
             type="button"
             className="icon-btn"

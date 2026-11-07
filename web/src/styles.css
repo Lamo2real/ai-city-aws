@@ -1270,15 +1270,6 @@ table.costs td {
   overflow-x: auto;
   z-index: 2;
 }
-.citytop .citytop-action {
-  margin-left: auto;
-}
-.send-home .btn {
-  white-space: nowrap;
-}
-.talk-head .send-home {
-  margin-left: 0.5rem;
-}
 .citytop .stat {
   display: flex;
   flex-direction: column;

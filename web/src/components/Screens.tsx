@@ -259,6 +259,9 @@ type S = Record<string, unknown> & {
   max_workers_per_goal: number;
   max_concurrent_workers_per_department: number;
   max_concurrent_workers_global: number;
+  max_live_workers_city: number;
+  max_open_jobs: number;
+  max_departments: number;
   max_new_sessions_per_second: number;
   profile_prefix: string;
   notify_push: boolean;
@@ -365,6 +368,24 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
           label="In total"
           value={form.max_concurrent_workers_global}
           onChange={(v) => num("max_concurrent_workers_global", v)}
+          step={1}
+        />
+        <Field
+          label="At work in the whole city (hard ceiling)"
+          value={form.max_live_workers_city}
+          onChange={(v) => num("max_live_workers_city", v)}
+          step={1}
+        />
+        <Field
+          label="Jobs running at once (hard ceiling)"
+          value={form.max_open_jobs}
+          onChange={(v) => num("max_open_jobs", v)}
+          step={1}
+        />
+        <Field
+          label="Departments (hard ceiling)"
+          value={form.max_departments}
+          onChange={(v) => num("max_departments", v)}
           step={1}
         />
         <Field

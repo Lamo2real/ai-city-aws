@@ -129,7 +129,9 @@ async def _release_idle(d: CityDeps, w: Record, minutes: int) -> int:
         await move(d, t["id"], "cancelled", f"{w['id']} went home after {minutes} idle minutes; needs a new worker")
     await factory.release(w["id"], str(w.get("parent")))  # a no-op if the last cancel above sent it home
     log("info", "worker.released_idle", worker=w["id"], department=w.get("department"), assignments=len(stale))
-    if stale and w.get("parent"):
+    dept = await ledger.get_department(str(w.get("department") or "")) or {}
+    if stale and w.get("parent") and not dept.get("stood_down_at"):
+        # A stood-down department (the owner sent everyone home) is never invited to hire again.
         parts = "; ".join(f"{t['id']}: {t.get('goal', '')}" for t in stale)
         await send(
             d,

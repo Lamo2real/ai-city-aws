@@ -174,6 +174,15 @@ class Ledger:
     async def get_department(self, name: str) -> Record | None:
         return strip(await self.table.get(f"DEPT#{department_key(name)}", "META"))
 
+    async def stand_down_department(self, name: str, down: bool = True) -> None:
+        """The owner sent everyone home: the department hires and assigns nothing until a new goal arrives
+        (`down=False` clears it, which `assign_to_department` does)."""
+        await self.table.update(
+            f"DEPT#{department_key(name)}",
+            "META",
+            UpdateOptions(set={"stood_down_at": self._iso() if down else ""}),
+        )
+
     async def list_departments(self) -> list[Record]:
         return [_strip(i) for i in await self.table.query_index("gsi1", "DEPT")]
 
