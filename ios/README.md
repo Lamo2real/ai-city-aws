@@ -11,7 +11,8 @@ A native SwiftUI app that does what the web HUD (`web/`) does: sign in, talk to 
 | `Config/Info.plist` | Microphone and speech-recognition wording, App Transport Security (HTTPS only) |
 | `AICity/Auth` | Cognito sign-in on the app's own screens: SRP, first-login password, authenticator app, forgot password, refresh, sign-out. Tokens in the Keychain |
 | `AICity/Core` | `config.json`, the HTTP API, the WebSocket, the store (chat, outbox, AIC's steps), Markdown |
-| `AICity/City` | The event reducer (a Swift port of `web/src/city/city-state.js`) and the pixel town drawn with SwiftUI Canvas |
+| `AICity/City` | The City screen and its locked-down web view; the event reducer (a Swift port of `web/src/city/city-state.js`) for the native lists and sheets |
+| `AICity/CityWeb` | The web HUD's own City scene, built from `web/src/city/` (do not edit; rebuild it) |
 | `AICity/Voice` | Push-to-talk with Apple's Speech framework (on the iPhone when it can) and spoken replies |
 | `AICity/UI` | The screens |
 | `AICityTests` | XCTest unit tests with fakes only (no AWS) |
@@ -61,13 +62,23 @@ The app declares `ITSAppUsesNonExemptEncryption = false` (it uses only Apple's H
 - **Tokens** (ID, access, refresh) live only in the Keychain, readable only on this iPhone while it's unlocked (`WhenUnlockedThisDeviceOnly`). Sign-out revokes the refresh token at Cognito and deletes them.
 - **No secrets in the app.** The bundle holds only public values (the site host, if you set it). Cognito IDs and endpoints come from the public `config.json`.
 - **HTTPS only.** App Transport Security is on with no exceptions; the app also refuses a `config.json` whose API isn't `https://` or whose WebSocket isn't `wss://`.
-- **Agent output is text.** AIC's Markdown is parsed into native text runs (bold, italic, code, lists, tables). No web view anywhere; HTML stays visible as characters; only `http(s)` links open, in Safari.
+- **Agent output is text.** AIC's Markdown is parsed into native text runs (bold, italic, code, lists, tables). AIC's replies never go into a web view; HTML stays visible as characters; only `http(s)` links open, in Safari. The one web view in the app is the City map: bundled code only, no network, no tokens.
 - **The password never leaves the phone:** SRP sends a proof, not the password.
 - The chat is kept on the iPhone (last 60 lines, file protection "complete"); *Settings → Forget this iPhone's conversation* clears it.
 
 ## Voice
 
 Tap the mic, talk, tap again to send. The words are recognised by Apple's Speech framework, on the iPhone when the model is available (no audio leaves the phone then); otherwise Apple's speech service. Replies are read aloud with the system voice (*AIC → ⋯ → Speak replies* turns it off). The web HUD uses Amazon Transcribe and Polly instead; see `docs/DECISIONS.md` (decision 64). The microphone is used only while listening.
+
+## The City is the browser's City
+
+The map is the web HUD's own code (`web/src/city/scene.js` and `city-state.js`), built into one small page and bundled in the app, so the phone and the browser always draw the same town. After changing anything in `web/src/city/`, rebuild it and commit the result:
+
+```bash
+npm run build:city-embed -w @aic/web
+```
+
+`npm test` fails if you forget. The page runs in a web view that can load only those bundled files, has no network access and never sees your tokens: the app hands it the city snapshot and live events, and the page tells the app only what you tapped.
 
 ## Adding a screen
 

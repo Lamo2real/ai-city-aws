@@ -64,6 +64,11 @@ final class HudStore {
     @ObservationIgnored private let archive: ChatArchive
     @ObservationIgnored private var during: [JSONValue]?
     @ObservationIgnored var clock: () -> Double = nowMs
+    /// The City scene (the web HUD's own, in a web view) keeps its own animated copy: it gets the raw
+    /// snapshot plus the events that arrived while it loaded, then every event.
+    @ObservationIgnored var onSceneSnapshot: (JSONValue, [JSONValue]) -> Void = { _, _ in }
+    @ObservationIgnored var onSceneEvent: (JSONValue) -> Void = { _ in }
+    @ObservationIgnored private(set) var lastSnapshot: JSONValue?
     /// Called once with AIC's whole reply when it is done (to read it aloud).
     @ObservationIgnored var onReplyDone: (String) -> Void = { _ in }
 
@@ -79,8 +84,11 @@ final class HudStore {
 
     func snapshot(_ snap: JSONValue) {
         var c = City.applySnapshot(city, snap, now: clock())
-        for e in during ?? [] { c = City.reduce(c, e, now: clock()) }
+        let replay = during ?? []
+        for e in replay { c = City.reduce(c, e, now: clock()) }
         during = nil
+        lastSnapshot = snap
+        onSceneSnapshot(snap, replay)
         city = c
         loaded = true
         loadError = nil
@@ -92,6 +100,7 @@ final class HudStore {
         if type == "activity", e["id"].string == "ace" { aceStep(e["activity"].string ?? "", e["detail"].string) }
         during?.append(e)
         city = City.reduce(city, e, now: clock())
+        if during == nil { onSceneEvent(e) }
     }
 
     /// Starts AIC's turn: the status row shows from now until its first words.

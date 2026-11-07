@@ -62,6 +62,30 @@ final class AppModel {
 
     let hud: HudStore
     let voice = VoiceController()
+    /// The City scene: one web view for the app's lifetime, fed by the store.
+    @ObservationIgnored private(set) lazy var cityScene: CityWebController = {
+        let c = CityWebController()
+        c.onReady = { [weak self, weak c] in
+            guard let self, let c else { return }
+            if let snap = self.hud.lastSnapshot { c.load(snapshot: snap) }
+            c.resume()
+        }
+        return c
+    }()
+    @ObservationIgnored private var sceneWired = false
+
+    /// Connects the store to the City scene the first time the City is shown.
+    func wireCityScene() {
+        guard !sceneWired else { return }
+        sceneWired = true
+        let scene = cityScene
+        hud.onSceneSnapshot = { [weak scene] snap, replay in
+            scene?.load(snapshot: snap)
+            for e in replay { scene?.event(e) }
+        }
+        hud.onSceneEvent = { [weak scene] e in scene?.event(e) }
+        if let snap = hud.lastSnapshot { scene.load(snapshot: snap) }
+    }
     @ObservationIgnored let configStore: ConfigStore
     @ObservationIgnored private(set) var auth: AuthClient?
     @ObservationIgnored private(set) var api: APIClient?
@@ -124,6 +148,7 @@ final class AppModel {
 
     private func ready() async {
         boot = .ready
+        wireCityScene()  // the town loads in the background, so the City tab opens drawn
         guard let c = config, let a = auth else { return }
         if connectLive {
             let l = LiveConnection(wsURL: c.wsUrl) { [weak a] fresh in try await a?.idToken(fresh: fresh) ?? nil }

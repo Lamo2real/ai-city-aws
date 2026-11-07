@@ -145,15 +145,9 @@ final class CityReducerTests: XCTestCase {
         XCTAssertEqual(next, ["b": 1, "c": 0], "a seat is kept; a newcomer takes the lowest free one")
     }
 
-    func testScenePlanPutsEveryoneSomewhere() {
+    func testCityMessages() {
         let s = City.applySnapshot(CityState(), snapshot(), now: now)
-        let (plan, _) = CityScenePlan.make(s)
-        let ids = Set(plan.figures.map(\.id))
-        XCTAssertTrue(ids.isSuperset(of: ["ace", "mgr-app", "wkr-1", "spec-s1"]))
-        XCTAssertEqual(plan.layout.buildings.map(\.dept), ["App"])
-        XCTAssertEqual(plan.layout.lots.count, 3, "two rows of two plots, one taken")
-        XCTAssertEqual(plan.layout.houses.count, 1)
-        XCTAssertEqual(City.cityMessage(s), nil)
+        XCTAssertNil(City.cityMessage(s))
         XCTAssertEqual(City.cityMessage(CityState()), "No departments yet. An office goes up the moment a prompt needs one.")
     }
 
