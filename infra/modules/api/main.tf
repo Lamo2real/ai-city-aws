@@ -26,7 +26,11 @@ variable "bus_name" { type = string }
 variable "bus_arn" { type = string }
 variable "queue_urls" { type = map(string) }
 variable "queue_arns" { type = map(string) }
-variable "notify_topic_arn" { type = string }
+variable "apns_enabled" {
+  type        = bool
+  default     = false
+  description = "Whether modules/notifications created the APNs platform applications (their ARNs follow from the name)."
+}
 variable "user_pool_id" { type = string }
 variable "user_pool_arn" { type = string }
 variable "owner_email" { type = string }
@@ -95,12 +99,12 @@ locals {
   }
   # name => bundle, handler, timeout, memory, extra env
   functions = {
-    api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 1024, env = merge({ AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_USER_POOL_ID = var.user_pool_id, AIC_OWNER_EMAIL = var.owner_email, KNOWLEDGE_TABLE = var.knowledge_table, KNOWLEDGE_BUCKET = var.knowledge_bucket, KNOWLEDGE_BASE_ID = var.knowledge_base_id, KNOWLEDGE_DATA_SOURCE_ID = var.knowledge_data_source_id, KNOWLEDGE_GRAPH_ID = var.knowledge_graph_id, AIC_APPS_BUCKET = var.apps_bucket, AIC_APPS_URL = var.apps_url, AIC_APPS_DISTRIBUTION_ID = var.apps_distribution_id, AIC_APP_BRIDGE_FUNCTION = local.app_bridge_name }, var.api_env) }
+    api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 1024, env = merge(local.apns_env, { AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_USER_POOL_ID = var.user_pool_id, AIC_OWNER_EMAIL = var.owner_email, KNOWLEDGE_TABLE = var.knowledge_table, KNOWLEDGE_BUCKET = var.knowledge_bucket, KNOWLEDGE_BASE_ID = var.knowledge_base_id, KNOWLEDGE_DATA_SOURCE_ID = var.knowledge_data_source_id, KNOWLEDGE_GRAPH_ID = var.knowledge_graph_id, AIC_APPS_BUCKET = var.apps_bucket, AIC_APPS_URL = var.apps_url, AIC_APPS_DISTRIBUTION_ID = var.apps_distribution_id, AIC_APP_BRIDGE_FUNCTION = local.app_bridge_name }, var.api_env) }
     dispatcher    = { bundle = "app", handler = "aic.lambdas.dispatcher.handler", timeout = 120, memory = 1024, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_ARN_ORCHESTRATOR = var.runtime_arns["orchestrator"], AIC_RUNTIME_ARN_MANAGER = var.runtime_arns["manager"], AIC_RUNTIME_ARN_WORKER = var.runtime_arns["worker"], AIC_RUNTIME_VERSION = var.runtime_version, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod", AIC_CONNECTIONS_TABLE = var.connections_table } }
     factory       = { bundle = "app", handler = "aic.lambdas.factory.handler", timeout = 30, memory = 256, env = {} }
     ledger-writer = { bundle = "app", handler = "aic.lambdas.ledger_writer.handler", timeout = 30, memory = 256, env = {} }
     scheduler     = { bundle = "app", handler = "aic.lambdas.scheduler.handler", timeout = 120, memory = 256, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_VERSION = var.runtime_version, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod", AIC_CONNECTIONS_TABLE = var.connections_table } }
-    notifier      = { bundle = "app", handler = "aic.lambdas.notifier.handler", timeout = 30, memory = 256, env = { AIC_NOTIFY_TOPIC_ARN = var.notify_topic_arn } }
+    notifier      = { bundle = "app", handler = "aic.lambdas.notifier.handler", timeout = 30, memory = 256, env = local.apns_env }
     approvals     = { bundle = "app", handler = "aic.lambdas.approvals.handler", timeout = 30, memory = 256, env = {} }
     ws-authorizer = { bundle = "app", handler = "aic.lambdas.ws.authorizer_handler", timeout = 10, memory = 256, env = { AIC_USER_POOL_ID = var.user_pool_id, AIC_USER_POOL_CLIENT_ID = var.client_id } }
     ws-connection = { bundle = "app", handler = "aic.lambdas.ws.connection_handler", timeout = 10, memory = 256, env = { AIC_CONNECTIONS_TABLE = var.connections_table } }
@@ -172,7 +176,7 @@ locals {
       # warm_ace: the "warm" ping to AIC's runtime only (never the other roles).
       { Action = ["bedrock-agentcore:InvokeAgentRuntime"], Resource = [var.runtime_arns["ace"], "${var.runtime_arns["ace"]}/*"] },
     ]
-    notifier      = [{ Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] }, { Action = ["sns:Publish"], Resource = [var.notify_topic_arn] }]
+    notifier      = [{ Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] }] # push rights: modules/notifications
     approvals     = [{ Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] }, { Action = ["sqs:SendMessage"], Resource = values(var.queue_arns) }]
     ws-authorizer = [{ Action = ["cognito-idp:DescribeUserPool"], Resource = ["arn:aws:cognito-idp:${var.region}:${var.account_id}:userpool/${var.user_pool_id}"] }]
     ws-connection = [{ Action = ["dynamodb:PutItem", "dynamodb:DeleteItem", "dynamodb:UpdateItem"], Resource = [var.connections_arn] }]
@@ -196,16 +200,24 @@ locals {
     "GET /mail/accounts", "POST /mail/accounts", "PUT /mail/accounts/{id}", "DELETE /mail/accounts/{id}",
     "POST /mail/accounts/{id}/signin", "POST /mail/accounts/{id}/complete", "POST /mail/accounts/{id}/imap",
     "GET /mail/rules", "POST /mail/rules", "DELETE /mail/rules/{id}",
+    # iPhone notifications (docs/NOTIFICATIONS.md): the owner's phones and the Apple key.
+    "GET /devices", "POST /devices", "DELETE /devices/{id}", "GET /notifications/apns", "PUT /notifications/apns",
   ]
   queue_batch = { ace = 1, orchestrator = 5, manager = 5, worker = 10 }
   queue_conc  = { ace = 5, orchestrator = 10, manager = 20, worker = var.worker_queue_concurrency }
   # Enabled: the crash sweep, idle-agent retirement, reminders and nudges are part of the product (the owner
   # asked for everything to run). The weekly self-improvement job stays DISABLED by rule.
+  # The APNs platform applications live in modules/notifications under names that follow from ours, so the
+  # functions can be told their ARNs without a dependency cycle; empty until the owner's key is deployed.
+  apns_env = {
+    AIC_APNS_ARN         = var.apns_enabled ? "arn:aws:sns:${var.region}:${var.account_id}:app/APNS/${var.name}-apns" : ""
+    AIC_APNS_SANDBOX_ARN = var.apns_enabled ? "arn:aws:sns:${var.region}:${var.account_id}:app/APNS_SANDBOX/${var.name}-apns-sandbox" : ""
+    AIC_APNS_SECRET      = "aic/prod/apns"
+  }
   jobs = {
     sweep       = { schedule = "rate(5 minutes)", fn = "scheduler", input = { job = "sweep" }, state = "ENABLED" }
     retire-idle = { schedule = "rate(1 hour)", fn = "scheduler", input = { job = "retire_idle" }, state = "ENABLED" }
     reminders   = { schedule = "rate(5 minutes)", fn = "scheduler", input = { job = "reminders" }, state = "ENABLED" }
-    nudge       = { schedule = "rate(5 minutes)", fn = "notifier", input = { job = "nudge" }, state = "ENABLED" }
     improve     = { schedule = "cron(0 3 ? * SUN *)", fn = "scheduler", input = { job = "improve" } }
     # Enabled from the start: keeps AIC's container running so a message never waits for a cold start
     # (AgentCore bills active processing only, so a warm idle container costs nothing). The owner's under-3-seconds target.
@@ -509,7 +521,7 @@ resource "aws_cloudwatch_event_target" "all" {
 resource "aws_cloudwatch_event_rule" "notify" {
   name           = "${var.name}-notify"
   event_bus_name = var.bus_name
-  event_pattern  = jsonencode({ source = ["aic.city"], "detail-type" = ["result", "spend.cap_reached", "city.state"] })
+  event_pattern  = jsonencode({ source = ["aic.city"], "detail-type" = ["ticket.status"], detail = { ticket = { kind = ["task"], status = ["done", "failed", "cancelled"] } } })
   tags           = local.tags
 }
 

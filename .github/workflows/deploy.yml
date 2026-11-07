@@ -150,6 +150,8 @@ jobs:
           IMAGE_TAG: ${{ needs.backend.outputs.image_tag }}
           # Optional JSON, e.g. {"google":{"enabled":true,"client_id":"…"},"microsoft":{"enabled":false,"client_id":"","tenant_id":"common"}}
           MAIL_PROVIDERS: ${{ vars.AIC_MAIL_PROVIDERS }}
+          # "true" once the owner has pasted the Apple APNs key in Settings (docs/NOTIFICATIONS.md).
+          APNS_ENABLED: ${{ vars.AIC_APNS_ENABLED || 'false' }}
         run: |
           terraform init -input=false \
             -backend-config="bucket=${STATE_BUCKET}" \
@@ -164,6 +166,7 @@ jobs:
             -var "owner_email=${OWNER_EMAIL}" \
             -var "agent_image_tag=${IMAGE_TAG}" \
             -var "monthly_budget_usd=${BUDGET}" \
+            -var "apns_enabled=${APNS_ENABLED}" \
             "${extra[@]}"
           # The full plan goes to this log (where the owner email is masked), not to a downloadable file.
           terraform show -no-color prod.tfplan | tee /tmp/plan.txt

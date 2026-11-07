@@ -1,98 +1,82 @@
-"""Notifications to the owner's email (SNS): completed tasks, spend alerts, and questions that waited more than
-15 minutes. Plain words, no IDs beyond a short reference, no content from outside."""
+"""One push notification to the owner's iPhone per finished job, and nothing else. No email.
+
+The owner's words: "I don't want a thousand emails per agent… one per large feature… remove emails fully."
+EventBridge sends this Lambda only ``ticket.status`` events for top-level jobs (``kind: task``) reaching
+``done``, ``failed`` or ``cancelled``; a ledger claim makes each job notify at most once. Parts, reviews, hires
+and partial results never notify. Without the owner's Apple key deployed, the push is skipped and logged.
+"""
 
 from __future__ import annotations
 
-import asyncio
-from dataclasses import dataclass
-from datetime import datetime
+import os
 from typing import Any
 
 from pydantic import ValidationError
 
-from aic.shared.aws import aws_city, require_env
+from aic.shared.aws import aws_city
 from aic.shared.caps import default_settings
 from aic.shared.clients import client
+from aic.shared.cost import format_usd
 from aic.shared.events import parse_event
+from aic.shared.hierarchy.tasks import job_cost, short_name
 from aic.shared.ledger import Ledger
+from aic.shared.log import log
+from aic.shared.push import DeviceStore, PushApps
 
 from ._runtime import run
 
-QUESTION_NUDGE_MS = 15 * 60_000
+FINAL = ("done", "failed", "cancelled")
 
 
-@dataclass(frozen=True)
-class Notice:
-    subject: str
-    message: str
-
-
-def _fmt(v: float) -> str:
-    return str(int(v)) if float(v).is_integer() else str(v)
-
-
-def notice_for(detail: Any) -> Notice | None:
+def finished_job(detail: Any) -> dict[str, Any] | None:
+    """The top-level job that just reached its final state, or None for anything else."""
     try:
         e = parse_event(detail)
     except (ValidationError, TypeError):
         return None
-    t = e["type"]
-    if t == "result":
-        return Notice(
-            "AI City: a task is done",
-            f"AIC has a result for you. Open AI City to hear it.\n\nSummary: {e['summary'][:300]}",
-        )
-    if t == "spend.cap_reached":
-        return Notice(
-            "AI City: spend cap reached",
-            f"The {e['cap'].replace('_', ' ')} cap of ${_fmt(e['limit'])} is reached (estimate ${e['spent']:.2f}). "
-            "No new work starts until you raise the cap or the period resets.",
-        )
-    if t == "city.state" and e["paused"]:
-        return Notice(
-            "AI City is paused", f"{e.get('reason') or 'Paused'}. Work already running finishes; nothing new starts."
-        )
-    return None
+    if e["type"] != "ticket.status":
+        return None
+    ticket = e["ticket"]
+    if ticket.get("kind", "task") != "task" or ticket["status"] not in FINAL:
+        return None
+    if e.get("previous") in FINAL:
+        return None  # already final before: a no-op move, not a second finish
+    return dict(ticket)
 
 
-async def stale_questions(ledger: Ledger) -> list[Notice]:
-    """Questions open for more than 15 minutes, each nudged once."""
-    now = ledger.now_ms()
-    out: list[Notice] = []
-    for q in await ledger.open_questions():
-        created = int(datetime.fromisoformat(q["created_at"].replace("Z", "+00:00")).timestamp() * 1000)
-        if now - created < QUESTION_NUDGE_MS:
-            continue
-        if not await ledger.claim(f"nudge:{q['id']}", 30 * 86_400):
-            continue
-        out.append(
-            Notice(
-                "AI City: a question is waiting for you",
-                f"{q['path']} asks: {q['text'][:300]}\nDefault if you don't answer: {q['default_answer']}",
-            )
-        )
-    return out
+async def push_text(ledger: Ledger, job: dict[str, Any]) -> tuple[str, str]:
+    """Plain words: the job's name, what happened, what it cost."""
+    name = short_name(job)
+    cost = format_usd(await job_cost(ledger, job))
+    status = job["status"]
+    if status == "done":
+        return "Done", f"{name} is ready. About {cost}."
+    if status == "cancelled":
+        return "Stopped", f"{name} was stopped. About {cost} so far."
+    return "Could not finish", f"{name} failed. About {cost} so far. Open AI City to see why."
 
 
-async def deliver(notices: list[Notice], sns: Any, topic_arn: str, enabled: bool) -> int:
-    if not enabled:
-        return 0
-    for n in notices:
-        await asyncio.to_thread(sns.publish, TopicArn=topic_arn, Subject=n.subject[:99], Message=n.message)
-    return len(notices)
+async def notify(detail: Any, ledger: Ledger, store: DeviceStore, sns: Any, apps: PushApps) -> dict[str, Any]:
+    job = finished_job(detail)
+    if not job:
+        return {"sent": 0, "reason": "not a finished job"}
+    settings = await ledger.settings(default_settings())
+    if settings.get("notify_push") is False:
+        return {"sent": 0, "reason": "push off in settings"}
+    if not await ledger.claim(f"push:{job['id']}", 30 * 86_400):
+        return {"sent": 0, "reason": "already notified"}
+    title, body = await push_text(ledger, job)
+    if not apps.configured:
+        log("info", "push.skipped", job=job["id"], reason="apns not configured")
+        return {"sent": 0, "reason": "apns not configured"}
+    counts = await store.push_all(sns, title, body, {"job": job["id"], "status": job["status"]})
+    log("info", "push.sent", job=job["id"], **counts)
+    return {**counts, "reason": "sent"}
 
 
-def handler(event: dict[str, Any], _context: Any = None) -> dict[str, int]:
+def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
     city = aws_city()
-    sns = client(city.session, "sns")
-
-    async def go() -> int:
-        settings = await city.ledger.settings(default_settings())
-        if event.get("job") == "nudge":
-            notices = await stale_questions(city.ledger)
-        else:
-            n = notice_for(event.get("detail"))
-            notices = [n] if n else []
-        return await deliver(notices, sns, require_env("AIC_NOTIFY_TOPIC_ARN"), bool(settings.get("notify_email")))
-
-    return {"sent": run(go())}
+    apps = PushApps(os.environ.get("AIC_APNS_ARN", ""), os.environ.get("AIC_APNS_SANDBOX_ARN", ""))
+    sns = client(city.session, "sns") if apps.configured else None
+    store = DeviceStore(city.ledger.table, city.ledger.now)
+    return run(notify(event.get("detail"), city.ledger, store, sns, apps))

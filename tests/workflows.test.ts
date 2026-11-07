@@ -50,7 +50,14 @@ describe("GitHub workflows", () => {
     const text = readFileSync(join(WF, "deploy.yml"), "utf8");
     const vars = new Set([...text.matchAll(/vars\.([A-Z0-9_]+)/g)].map((m) => m[1]));
     expect([...vars].sort()).toEqual(
-      ["AIC_DEPLOY_ROLE_ARN", "AIC_MAIL_PROVIDERS", "AIC_MONTHLY_BUDGET_USD", "AIC_REGION", "AIC_STATE_BUCKET"].sort(),
+      [
+        "AIC_APNS_ENABLED",
+        "AIC_DEPLOY_ROLE_ARN",
+        "AIC_MAIL_PROVIDERS",
+        "AIC_MONTHLY_BUDGET_USD",
+        "AIC_REGION",
+        "AIC_STATE_BUCKET",
+      ].sort(),
     );
     // The owner email is a secret so it is masked in this public repository's logs.
     const secrets = new Set([...text.matchAll(/secrets\.([A-Z0-9_]+)/g)].map((m) => m[1]));

@@ -619,3 +619,46 @@ describe("AIC warm-keeper (the owner's under-3-seconds target)", () => {
     expect(after).toMatch(/\|\| echo "warm-up skipped"/);
   });
 });
+
+describe("notifications: no email, one iPhone push per finished job (decision 90)", () => {
+  const api = readFileSync("infra/modules/api/main.tf", "utf8");
+  const bus = readFileSync("infra/modules/bus/main.tf", "utf8");
+  const notifications = readFileSync("infra/modules/notifications/main.tf", "utf8");
+  const prod = readFileSync("infra/envs/prod/main.tf", "utf8");
+  it("nothing subscribes an email address to the city's topic, and the nudge job is gone", () => {
+    expect(bus).not.toMatch(/aws_sns_topic_subscription/);
+    expect(bus).not.toMatch(/protocol\s*=\s*"email"/);
+    expect(api).not.toMatch(/job = "nudge"/);
+    expect(api).not.toMatch(/AIC_NOTIFY_TOPIC_ARN|notify_topic_arn/);
+  });
+  it("the notifier is woken only for top-level jobs reaching their end", () => {
+    expect(api).toMatch(
+      /"detail-type" = \["ticket\.status"\], detail = \{ ticket = \{ kind = \["task"\], status = \["done", "failed", "cancelled"\] \} \}/,
+    );
+  });
+  it("the Apple key is a secret the owner fills; platform applications and their rights exist only when apns_enabled", () => {
+    expect(notifications).toMatch(/name\s*=\s*local\.secret_name/);
+    expect(notifications).toMatch(/secret_name = "aic\/prod\/apns"/);
+    expect(notifications).toMatch(/for_each\s*=\s*var\.apns_enabled \? local\.app_names : \{\}/);
+    expect(notifications).toMatch(/count\s*=\s*var\.apns_enabled \? 1 : 0/);
+    expect(notifications).toMatch(/apple_platform_team_id/);
+    // The notifier may only publish to endpoints of these applications; the api may only register endpoints under them.
+    expect(notifications).toMatch(
+      /Sid = "Push", Effect = "Allow", Action = \["sns:Publish"\], Resource = local\.endpoints/,
+    );
+    expect(notifications).toMatch(/Action = \["sns:CreatePlatformEndpoint"\], Resource = values\(local\.app_arns\)/);
+    expect(prod).toMatch(/module "notifications"/);
+    expect(prod).toMatch(/apns_enabled\s*=\s*var\.apns_enabled/);
+    expect(api).toMatch(
+      /AIC_APNS_ARN\s*=\s*var\.apns_enabled \? "arn:aws:sns:\$\{var\.region\}:\$\{var\.account_id\}:app\/APNS\/\$\{var\.name\}-apns" : ""/,
+    );
+    for (const r of [
+      "GET /devices",
+      "POST /devices",
+      "DELETE /devices/{id}",
+      "GET /notifications/apns",
+      "PUT /notifications/apns",
+    ])
+      expect(api).toContain(`"${r}"`);
+  });
+});

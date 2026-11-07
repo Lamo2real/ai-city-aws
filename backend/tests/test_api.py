@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import parse_qsl
 
@@ -7,7 +7,6 @@ import pytest
 
 from aic.lambdas.api import ROUTES, ApiDeps, handle_http, is_owner
 from aic.lambdas.approvals import on_approval_step
-from aic.lambdas.notifier import notice_for, stale_questions
 from aic.lambdas.ws import authorize, broadcast, on_connection
 from aic.shared.caps import default_settings
 from aic.shared.cost import Usage
@@ -300,33 +299,7 @@ async def test_stores_connections_with_a_ttl_broadcasts_and_drops_gone_connectio
     assert await table.query_index("gsi1", "CONN") == []
 
 
-# ---------- notifications and approval steps ----------
-async def test_emails_results_and_cap_alerts_and_nudges_questions_waiting_over_15_minutes_once() -> None:
-    at = "2026-11-06T12:00:00.000Z"
-    n = notice_for({"type": "result", "ticket_id": "t", "summary": "done", "at": at})
-    assert n and "done" in n.subject
-    cap = notice_for(
-        {"type": "spend.cap_reached", "cap": "daily_global", "department": None, "spent": 10.2, "limit": 10, "at": at}
-    )
-    assert cap and "$10" in cap.message
-    clock = Clock()
-    d = make(clock)
-    await d.ledger.ask_question(
-        {
-            "asked_by": "w1",
-            "path": "mgr › w1",
-            "ticket_id": None,
-            "text": "Which DB?",
-            "options": [],
-            "default_answer": "SQLite",
-        }
-    )
-    assert await stale_questions(d.ledger) == []
-    clock.t += timedelta(minutes=16)
-    assert len(await stale_questions(d.ledger)) == 1
-    assert await stale_questions(d.ledger) == []
-
-
+# ---------- approval steps ----------
 async def test_stores_the_task_token_and_wakes_the_agent_with_the_owners_decision() -> None:
     d = make()
     await d.ledger.put_agent(
