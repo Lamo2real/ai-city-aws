@@ -105,3 +105,18 @@ async def test_an_unknown_tool_gets_an_error_result_not_a_crash() -> None:
     result = fake.calls[1]["messages"][2]["content"][0]["toolResult"]
     assert result["status"] == "error" and "not one of your tools" in result["content"][0]["text"]
     assert out.text == "I can't do that."
+
+
+def test_the_sdk_path_pre_approves_nothing_so_every_tool_call_hits_the_policy_gate() -> None:
+    from aic.runtime.engine import _Binding, _options
+
+    async def noop(_: dict[str, Any]) -> str:
+        return ""
+
+    spec = ToolSpec("assign", "Assign.", {"type": "object", "properties": {}}, noop)
+    req = request([spec], [])
+    req.turn.cache_ttl = "1h"
+    req.cwd = None
+    o = _options(req, _Binding(req))
+    assert o.allowed_tools == []  # an allowed_tools entry would skip can_use_tool (the SDK warns about it)
+    assert o.can_use_tool is not None

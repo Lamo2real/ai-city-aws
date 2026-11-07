@@ -145,7 +145,9 @@ def _options(req: EngineRequest, b: _Binding) -> Any:
         model=req.turn.model.invoke_id,
         system_prompt=req.system,  # stable text first, so prompt caching hits
         mcp_servers={CITY_SERVER: server},
-        allowed_tools=allowed,
+        # Nothing is pre-approved: an allowed_tools entry would skip can_use_tool, and with it the policy gate.
+        # can_use_tool denies anything outside ``allowed`` and gates the rest.
+        allowed_tools=[],
         setting_sources=[],  # no settings files: the city decides tools, not the repo a worker clones
         env=env,
         cwd=req.cwd,
