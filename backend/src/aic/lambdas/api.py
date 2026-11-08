@@ -64,6 +64,8 @@ from aic.shared.utility import UtilityDeps, bedrock_converse_runner, is_addresse
 from aic.shared.voice_url import EXPIRES_S, VoiceUrlDeps, presigned_voice_url
 
 from ._runtime import run
+from .calendar_api import CalendarApi
+from .calendar_api import route as calendar_route
 from .connectors_api import ConnectorsApi, on_connector_approval
 from .connectors_api import route as connectors_route
 from .mail_api import MailApi
@@ -123,6 +125,10 @@ ROUTES: list[tuple[str, str]] = [
     ("POST", "/mail/accounts/ma-0000aaaa/signin"),
     ("POST", "/mail/accounts/ma-0000aaaa/complete"),
     ("POST", "/mail/accounts/ma-0000aaaa/imap"),
+    ("GET", "/features"),
+    ("PUT", "/features/calendar"),
+    ("GET", "/calendar/events?from=2026-11-08&to=2026-11-15"),
+    ("POST", "/calendar/refresh"),
     ("GET", "/mail/rules"),
     ("POST", "/mail/rules"),
     ("DELETE", "/mail/rules/rule-1"),
@@ -184,6 +190,8 @@ class ApiDeps:
     """The ``/connectors*`` routes and the add-connector approval hook; None = built from ledger and bus."""
     skills: SkillsApi | None = None
     mail: MailApi | None = None
+    calendar: CalendarApi | None = None
+    """City → Features and the owner's calendar (``/features``, ``/calendar/*``); None = built from the ledger."""
     """The ``/mail/*`` routes (``AIC_MAIL_WORKLOAD``); None = mail isn't set up (503)."""
     push: PushDeps | None = None
     """iPhone notifications: device registration and the owner's Apple key; None = not deployed (503)."""
@@ -863,6 +871,11 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         found = await connectors_route(_connectors(d), method, seg, lambda: _body(event))
         if found:
             return reply(*found)
+    if seg and seg[0] in ("features", "calendar"):
+        cal = d.calendar or CalendarApi(d.ledger.table, d.ledger.now, claim=d.ledger.claim)
+        found = await calendar_route(cal, method, seg, lambda: _body(event), event.get("queryStringParameters") or {})
+        if found:
+            return reply(*found)
     if seg and seg[0] == "mail":
         if d.mail is None:
             return problem(503, "Mail and calendar aren't set up yet.", "The owner turns them on with a deploy.")
@@ -1094,6 +1107,20 @@ def _bridge_invoke(session: Any, fn: str | None) -> Invoke | None:
     return invoke
 
 
+def _job_starter(session: Any, fn: str | None, job: str) -> Callable[[], Awaitable[None]] | None:
+    """Async-invokes the scheduler Lambda with one job (the calendar's "Refresh now"); None when not deployed."""
+    if not fn:
+        return None
+    client = session.client("lambda")
+
+    async def start() -> None:
+        await asyncio.to_thread(
+            client.invoke, FunctionName=fn, InvocationType="Event", Payload=json.dumps({"job": job}).encode()
+        )
+
+    return start
+
+
 def _policies_refresh(session: Any, fn: str | None) -> Callable[[], Awaitable[None]] | None:
     """Async-invokes the connectors Lambda with ``{"action": "policies"}``; nothing when it isn't deployed."""
     if not fn:
@@ -1154,6 +1181,12 @@ def build_deps() -> ApiDeps:
         connectors=_connectors_from_env(city, github.token),
         skills=SkillsApi(city.ledger, city.session.client("s3"), os.environ.get("AIC_SKILLS_BUCKET")),
         mail=_mail_from_env(city),
+        calendar=CalendarApi(
+            city.ledger.table,
+            city.ledger.now,
+            refresh=_job_starter(city.session, os.environ.get("AIC_SCHEDULER_FUNCTION"), "calendar_import"),
+            claim=city.ledger.claim,
+        ),
         push=_push_from_env(city),
         speech=_speech_from_env(city),
         github=github,

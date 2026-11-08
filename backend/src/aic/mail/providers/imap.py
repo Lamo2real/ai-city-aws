@@ -14,7 +14,7 @@ import re
 import smtplib
 import ssl
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from email.message import EmailMessage
 from email.utils import format_datetime, parsedate_to_datetime
 from typing import Any
@@ -324,6 +324,52 @@ class Imap:
             return len(ids)
 
         result: int = await self._run(fn)
+        return result
+
+    async def invitations(self, state: Json | None, since_days: int = 30, limit: int = 200) -> tuple[list[str], Json]:
+        """The iCalendar texts (meeting invitations, ``.ics``) on INBOX messages newer than ``state``
+        (``{uidvalidity, last_uid}`` from the last call), opened read-only so nothing is marked read. The first
+        call, or a changed UIDVALIDITY, looks back ``since_days``. Answers the texts and the next state."""
+
+        def fn(c: Any) -> tuple[list[str], Json]:
+            typ, _ = c.select('"INBOX"', readonly=True)
+            if typ != "OK":
+                raise ProviderError("Couldn't open the inbox.")
+            got_uv = c.response("UIDVALIDITY")[1] or [b"0"]
+            uv = int((got_uv[0] or b"0").decode() if isinstance(got_uv[0], bytes) else got_uv[0])
+            st = state or {}
+            last = int(st.get("last_uid") or 0) if st.get("uidvalidity") == uv else 0
+            if last:
+                _typ, data = c.uid("SEARCH", None, "UID", f"{last + 1}:*")
+            else:
+                since = (datetime.now(UTC) - timedelta(days=since_days)).strftime("%d-%b-%Y")
+                _typ, data = c.uid("SEARCH", None, "SINCE", since)
+            uids = sorted(int(u) for u in (data[0] or b"").split() if int(u) > last)[-limit:]
+            texts: list[str] = []
+            if uids:
+                _typ, got = c.uid("FETCH", ",".join(map(str, uids)), "(UID BODYSTRUCTURE)")
+                with_cal: list[str] = []
+                for item in got or []:
+                    line = b" ".join(x for x in item if isinstance(x, bytes)) if isinstance(item, tuple) else item
+                    text = (line or b"").decode(errors="replace") if isinstance(line, bytes) else str(line or "")
+                    m = re.search(r"UID (\d+)", text)
+                    if m and re.search(r'"text" "calendar"|\.ics"|"application" "ics"', text, re.I):
+                        with_cal.append(m.group(1))
+                for uid in with_cal:
+                    _typ, got = c.uid("FETCH", uid, "(BODY.PEEK[])")
+                    raw = next((i[1] for i in got or [] if isinstance(i, tuple)), None)
+                    if not raw:
+                        continue
+                    msg = email.message_from_bytes(raw, policy=email.policy.default)
+                    for part in msg.walk():
+                        name = str(part.get_filename() or "").lower()
+                        if part.get_content_type() in ("text/calendar", "application/ics") or name.endswith(".ics"):
+                            payload = part.get_payload(decode=True)
+                            if isinstance(payload, bytes):
+                                texts.append(payload.decode(part.get_content_charset() or "utf-8", "replace"))
+            return texts, {"uidvalidity": uv, "last_uid": max([last, *uids])}
+
+        result: tuple[list[str], Json] = await self._run(fn)
         return result
 
     async def check(self) -> None:

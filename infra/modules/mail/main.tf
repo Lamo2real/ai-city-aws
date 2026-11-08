@@ -26,6 +26,11 @@ variable "app_bridge_role_name" {
   type        = string
   description = "The apps feature's bridge Lambda role: it runs apps' granted mail and calendar reads (docs/APPS.md v2), so it gets the read path and nothing more."
 }
+variable "scheduler_role_name" {
+  type        = string
+  default     = ""
+  description = "The scheduler Lambda role: its calendar_import job reads every connected calendar (read path only)."
+}
 variable "reader_role_names" {
   type        = map(string)
   description = "Runtime roles on the mail read path: ace, orchestrator, manager (the runtime enforces mail_access). Never the worker."
@@ -123,6 +128,14 @@ resource "aws_iam_role_policy" "app_bridge" {
   policy = jsonencode({ Version = "2012-10-17", Statement = local.read_path })
 }
 
+# The scheduler Lambda: the read path only, for the owner's calendar import (docs/MAIL_CALENDAR.md §12).
+resource "aws_iam_role_policy" "scheduler" {
+  count  = var.scheduler_role_name == "" ? 0 : 1
+  name   = "mail-read-path"
+  role   = var.scheduler_role_name
+  policy = jsonencode({ Version = "2012-10-17", Statement = local.read_path })
+}
+
 # The api Lambda: the read path, plus finishing a sign-in and storing IMAP app passwords from the HUD's form.
 # A managed policy, not inline: the api role carries one inline policy per feature and IAM caps
 # a role's inline policies at 10,240 bytes in total (the connectors release hit it).
@@ -142,6 +155,8 @@ resource "aws_iam_policy" "api" {
       },
       { Sid = "ManageAppPasswords", Effect = "Allow", Action = ["secretsmanager:PutSecretValue", "secretsmanager:DeleteSecret"], Resource = [local.app_passwords] },
       { Sid = "EncryptAppPasswords", Effect = "Allow", Action = ["kms:Encrypt", "kms:GenerateDataKey"], Resource = var.kms_key_arn },
+      # The calendar's "Refresh now" starts the scheduler's calendar_import job (docs/MAIL_CALENDAR.md §12).
+      { Sid = "StartCalendarImport", Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = ["arn:aws:lambda:${var.region}:${var.account_id}:function:${var.name}-scheduler"] },
     ])
   })
 }

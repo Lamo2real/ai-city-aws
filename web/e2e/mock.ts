@@ -122,6 +122,13 @@ export interface Mock {
   openai: { key: string | null; savedAt: string | null; error: { code: string; message: string } | null };
   /** The city's GitHub token (docs/GITHUB_ACCESS.md): stored or not, whose it is, when it was saved. */
   github: { token: string | null; login: string | null; savedAt: string | null };
+  /** City → Features and the owner's calendar (docs/MAIL_CALENDAR.md §12). */
+  features: Array<{ id: string; name: string; blurb: string; enabled: boolean }>;
+  calendar: {
+    events: Array<Record<string, unknown>>;
+    accounts: Array<Record<string, unknown>>;
+    state: Record<string, unknown>;
+  };
 }
 export const appRecord = (id: string, slug: string, title: string, extra: Record<string, unknown> = {}) => ({
   app_id: id,
@@ -227,6 +234,15 @@ export async function mockBackend(
     state: {},
     openai: { key: null, savedAt: null, error: null },
     github: { token: null, login: null, savedAt: null },
+    features: [
+      {
+        id: "calendar",
+        name: "Calendar",
+        blurb: "Every meeting from every email account you connect, in one calendar, with a big Join button.",
+        enabled: true,
+      },
+    ],
+    calendar: { events: [], accounts: [], state: {} },
     settings: {
       monthly_budget_usd: 150,
       daily_global_usd: 10,
@@ -752,6 +768,15 @@ export async function mockBackend(
       m.skills = [];
       return ok({ ok: true });
     }
+    if (path === "/features") return ok({ features: m.features });
+    if (/^\/features\/[\w-]+$/.test(path) && method === "PUT") {
+      const f = m.features.find((x) => x.id === path.split("/")[2]);
+      if (!f) return ok({ error: "That feature doesn't exist." }, 404);
+      f.enabled = (body as { enabled: boolean }).enabled;
+      return ok({ feature: f });
+    }
+    if (path.startsWith("/calendar/events")) return ok({ enabled: m.features[0]!.enabled, ...m.calendar });
+    if (path === "/calendar/refresh" && method === "POST") return ok({ started: true }, 202);
     if (path === "/mail/accounts" && method === "GET") return ok({ accounts: m.mail });
     if (path === "/mail/rules") return ok({ rules: [] });
     if (/^\/mail\/accounts\/[\w-]+\/signin$/.test(path))

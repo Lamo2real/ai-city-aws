@@ -9,7 +9,7 @@ import { store } from "./store.ts";
 export function route<V extends string>(hash: string, views: readonly V[]): { view: V; slug: string | null } {
   const [head = "", ...rest] = hash.replace(/^#\/?/, "").split("/");
   const view = (views as readonly string[]).includes(head) ? (head as V) : views[0]!;
-  if ((view !== "apps" && view !== "settings") || !rest.length || !rest.join("")) return { view, slug: null };
+  if ((view !== "apps" && view !== "settings" && view !== "city") || !rest.length || !rest.join("")) return { view, slug: null };
   let slug = rest.join("/");
   try {
     slug = decodeURIComponent(slug);

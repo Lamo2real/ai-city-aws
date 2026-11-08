@@ -38,6 +38,50 @@ def _escape(v: str) -> str:
     return v.replace("\\", "\\\\").replace(";", r"\;").replace(",", "\\,").replace("\n", "\\n")
 
 
+# Outlook writes Windows zone names in invitations; the common ones, as IANA zones.
+WINDOWS_ZONES = {
+    "W. Europe Standard Time": "Europe/Berlin",
+    "Central Europe Standard Time": "Europe/Budapest",
+    "Romance Standard Time": "Europe/Paris",
+    "Central European Standard Time": "Europe/Warsaw",
+    "GMT Standard Time": "Europe/London",
+    "Greenwich Standard Time": "Atlantic/Reykjavik",
+    "FLE Standard Time": "Europe/Helsinki",
+    "GTB Standard Time": "Europe/Bucharest",
+    "E. Europe Standard Time": "Europe/Chisinau",
+    "Russian Standard Time": "Europe/Moscow",
+    "Turkey Standard Time": "Europe/Istanbul",
+    "Arabian Standard Time": "Asia/Dubai",
+    "India Standard Time": "Asia/Kolkata",
+    "China Standard Time": "Asia/Shanghai",
+    "Tokyo Standard Time": "Asia/Tokyo",
+    "Singapore Standard Time": "Asia/Singapore",
+    "AUS Eastern Standard Time": "Australia/Sydney",
+    "Eastern Standard Time": "America/New_York",
+    "Central Standard Time": "America/Chicago",
+    "Mountain Standard Time": "America/Denver",
+    "Pacific Standard Time": "America/Los_Angeles",
+    "UTC": "UTC",
+    "Coordinated Universal Time": "UTC",
+}
+
+
+def zone(tzid: str) -> Any:
+    """A tzinfo for an iCalendar TZID (IANA, or a common Windows name); UTC when unknown."""
+    name = (tzid or "").strip().strip('"')
+    for n in (
+        name,
+        WINDOWS_ZONES.get(name, ""),
+        name.rsplit("/", 2)[-2] + "/" + name.rsplit("/", 1)[-1] if name.count("/") >= 2 else "",
+    ):
+        if n:
+            try:
+                return ZoneInfo(n)
+            except Exception:  # noqa: S112 - try the next spelling
+                continue
+    return UTC
+
+
 def _when(params: dict[str, str], value: str) -> tuple[str, bool]:
     """An ISO string (UTC with ``Z`` when the time has a zone) and whether it's a whole day."""
     if params.get("VALUE") == "DATE" or re.fullmatch(r"\d{8}", value):
@@ -46,10 +90,7 @@ def _when(params: dict[str, str], value: str) -> tuple[str, bool]:
     if value.endswith("Z"):
         d = d.replace(tzinfo=UTC)
     elif params.get("TZID"):
-        try:
-            d = d.replace(tzinfo=ZoneInfo(params["TZID"]))
-        except Exception:
-            d = d.replace(tzinfo=UTC)
+        d = d.replace(tzinfo=zone(params["TZID"]))
     else:
         return d.isoformat(), False
     return d.astimezone(UTC).isoformat().replace("+00:00", "Z"), False
@@ -82,8 +123,18 @@ def parse_ics(text: str) -> list[Json]:
             continue
         if key in ("DTSTART", "DTEND"):
             cur[key.lower()], cur["all_day"] = _when(params, value)
-        elif key in ("SUMMARY", "LOCATION", "DESCRIPTION", "UID"):
-            cur[key.lower()] = _unescape(value)
+            if key == "DTSTART":  # kept for repeating invitations (aic.features.invites expands them)
+                cur["dtstart_raw"], cur["tzid"] = value, params.get("TZID", "").strip('"')
+            else:
+                cur["dtend_raw"] = value
+        elif key in ("SUMMARY", "LOCATION", "DESCRIPTION", "UID", "STATUS", "URL", "RRULE"):
+            cur[key.lower()] = _unescape(value) if key != "RRULE" else value
+        elif key in ("X-MICROSOFT-SKYPETEAMSMEETINGURL", "X-GOOGLE-CONFERENCE"):
+            cur["join_url"] = value
+        elif key == "SEQUENCE":
+            cur["sequence"] = int(value) if value.strip().isdigit() else 0
+        elif key == "EXDATE":
+            cur.setdefault("exdate", []).extend(_when(params, v)[0] for v in value.split(",") if v)
         elif key == "ORGANIZER":
             cur["organizer"] = addr(
                 params.get("CN", "").strip('"'), value.removeprefix("mailto:").removeprefix("MAILTO:")
@@ -95,8 +146,10 @@ def parse_ics(text: str) -> list[Json]:
                     "response": params.get("PARTSTAT", "").lower(),
                 }
             )
-        elif key in ("RRULE", "RECURRENCE-ID"):
+        if key in ("RRULE", "RECURRENCE-ID"):
             cur["recurring"] = True
+        if key == "RECURRENCE-ID":
+            cur["recurrence_id"] = _when(params, value)[0]
     return events
 
 
@@ -231,6 +284,9 @@ class CalDav:
             organizer=e.get("organizer"),
             attendees=e.get("attendees"),
             recurring=e.get("recurring"),
+            uid=e.get("uid"),
+            join_url=e.get("join_url"),
+            time_zone=e.get("tzid"),
         )
 
     async def _get(self, href: str) -> tuple[Json, str]:

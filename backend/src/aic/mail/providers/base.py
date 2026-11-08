@@ -137,6 +137,9 @@ def event(**kw: Any) -> Json:
         e["my_response"] = kw["my_response"]
     if kw.get("url"):
         e["url"] = kw["url"]
+    for k in ("uid", "join_url", "time_zone"):  # the combined calendar's dedupe key, meeting link and zone
+        if kw.get(k):
+            e[k] = str(kw[k])[:2000]
     return e
 
 

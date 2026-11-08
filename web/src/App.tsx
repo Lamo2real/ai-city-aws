@@ -12,6 +12,7 @@ import { PinnedApps } from "./components/Apps.tsx";
 import { ProjectPage, ProjectsScreen } from "./components/Projects.tsx";
 import { AceScreen } from "./components/AceScreen.tsx";
 import { CityView } from "./components/CityView.tsx";
+import { FeaturesScreen } from "./components/Features.tsx";
 import { FirstRun } from "./components/FirstRun.tsx";
 import { Inbox } from "./components/Inbox.tsx";
 import { KnowledgeScreen } from "./components/Knowledge.tsx";
@@ -144,7 +145,7 @@ export function App() {
 
   return (
     <div
-      className={`app view-${view}${view === "apps" && slug ? " view-app" : ""}`}
+      className={`app view-${view === "city" && slug ? "features" : view}${view === "apps" && slug ? " view-app" : ""}`}
       style={{ "--top-h": `${topH}px` } as React.CSSProperties}
     >
       <a className="skip" href="#main">
@@ -176,7 +177,8 @@ export function App() {
       </header>
       <main id="main" tabIndex={-1}>
         {view === "ace" ? <AceScreen go={go} /> : null}
-        {view === "city" ? <CityView go={go} /> : null}
+        {view === "city" && !slug ? <CityView go={go} /> : null}
+        {view === "city" && slug ? <FeaturesScreen page={slug} go={go} /> : null}
         {view === "inbox" ? <Inbox /> : null}
         {view === "tickets" ? <Tickets /> : null}
         {view === "apps" && !slug ? <ProjectsScreen /> : null}
@@ -188,7 +190,7 @@ export function App() {
       </main>
       {guide ? <FirstRun onDone={finishGuide} /> : null}
       <Toaster />
-      {view !== "ace" && view !== "city" && !(view === "apps" && slug) ? (
+      {view !== "ace" && !(view === "city" && !slug) && !(view === "apps" && slug) ? (
         <div className="fab">
           <Button variant="quiet" onClick={() => go("ace")} label="Talk to AIC">
             Talk to AIC

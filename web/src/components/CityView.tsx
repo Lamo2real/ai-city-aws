@@ -1,6 +1,7 @@
 // The City view: the ported pixel-art scene on a canvas, with the Mac HUD's layout around it —
 // status bar on top, departments / records / activity on the right, zoom and actions at the bottom.
 // Driven entirely by WebSocket events through the store.
+import { CityTabs } from "./Features.tsx";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   MODEL_NAME,
@@ -72,7 +73,7 @@ export function CityView({ go }: { go: (view: string) => void }) {
   useEffect(() => {
     if (!root.current || !canvas.current) return;
     const wide = () =>
-      root.current!.clientWidth >= 800 ? { l: 0, t: 64, r: 250, b: 70 } : { l: 0, t: 96, r: 0, b: 254 };
+      root.current!.clientWidth >= 800 ? { l: 0, t: 64, r: 250, b: 70 } : { l: 0, t: 140, r: 0, b: 254 };
     const s = mountCity(root.current, {
       canvas: canvas.current,
       insets: wide,
@@ -127,6 +128,7 @@ export function CityView({ go }: { go: (view: string) => void }) {
         aria-label="The city of the agents as a small map. Every building and agent is also listed under Departments and in the panel."
       />
       <div className="cityui citytop" role="status" aria-label="The city right now">
+        <CityTabs on="city" />
         <Stat k="Working now" v={String(t.agentsActive)} />
         <Stat k="Jobs running" v={String(jobsRunning)} />
         <Stat k="Need you" v={String(waiting)} />

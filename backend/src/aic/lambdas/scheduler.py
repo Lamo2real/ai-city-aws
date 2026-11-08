@@ -10,6 +10,9 @@ assignments that were still open are cancelled with a note and its manager is to
 again (within the cap) when work resumes.
 - reminders: due reminders become notifications.
 - improve: the weekly self-improvement loop. Built, and refused here unless explicitly enabled.
+- calendar_import: every 15 minutes, the owner's one calendar is read from every connected account (and the
+  invitation emails of plain IMAP accounts), merged and stored (docs/MAIL_CALENDAR.md §12). Skipped when the
+  Calendar feature is off. "Refresh now" in the HUD starts the same job.
 - warm_ace: keeps AIC's runtime container running (a "warm" ping every few minutes on the owner's conversation
   session), so a message never pays the container's cold start. Created ENABLED: an idle container costs nothing.
 """
@@ -36,7 +39,7 @@ from ._runtime import run
 from .dispatcher import AgentCoreInvoker, AgentInvoker, session_id_for
 from .improve import improvement_allowed
 
-Job = Literal["sweep", "retire_idle", "reminders", "improve", "warm_ace"]
+Job = Literal["sweep", "retire_idle", "reminders", "improve", "warm_ace", "calendar_import"]
 
 # The conversations the HUD talks to AIC on (see api.py: POST /messages uses "main").
 WARM_CONVERSATIONS = ("main",)
@@ -70,6 +73,25 @@ async def warm_ace(invoker: AgentInvoker | None, env: Mapping[str, str]) -> dict
             failed += 1
             log("warn", "warm.failed", conversation=c, error=type(e).__name__)
     return {"warmed": warmed, "failed": failed}
+
+
+async def calendar_import(
+    ledger: Ledger, bus: EventBus, env: Mapping[str, str], service: Any = None
+) -> dict[str, int | str]:
+    """The owner's calendar import (read-only). ``service`` is a ``MailService`` (tests pass a fake)."""
+    from aic.features import FeatureStore
+    from aic.features.calendar import CalendarStore, import_calendar
+
+    if not await FeatureStore(ledger.table, ledger.now).enabled("calendar"):
+        return {"skipped": "the Calendar feature is off"}
+    if service is None:
+        if not env.get("AIC_MAIL_WORKLOAD"):
+            return {"skipped": "mail and calendar aren't set up here"}
+        from aic.mail.service import MailService
+
+        service = MailService.from_env(ledger)
+    out = await import_calendar(CalendarStore(ledger.table, ledger.now), service, bus.put)
+    return {k: v for k, v in out.items() if isinstance(v, int | str)}
 
 
 async def _running_agents(ledger: Ledger, turn_timeout_minutes: int) -> set[str]:
@@ -164,6 +186,8 @@ async def run_job(
 ) -> dict[str, int | str]:
     if job == "warm_ace":
         return await warm_ace(invoker, os.environ if env is None else env)
+    if job == "calendar_import":
+        return await calendar_import(ledger, bus, os.environ if env is None else env)
     if job in ("sweep", "retire_idle"):
         settings: Record = await ledger.settings(default_settings())
         minutes = int(settings.get("worker_idle_release_minutes") or 15)

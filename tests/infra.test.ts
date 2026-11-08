@@ -590,7 +590,7 @@ describe("AIC warm-keeper (the owner's under-3-seconds target)", () => {
     expect(scheduler).toMatch(/bedrock-agentcore:InvokeAgentRuntime.*var\.runtime_arns\["ace"\]/);
     expect(scheduler).not.toMatch(/values\(var\.runtime_arns\)/);
     expect(api).toMatch(
-      /scheduler.*env = \{ AIC_RUNTIME_ARN_ACE = var\.runtime_arns\["ace"\], AIC_RUNTIME_VERSION = var\.runtime_version, AIC_WS_ENDPOINT = "https:\/\/\$\{aws_apigatewayv2_api\.ws\.id\}\.execute-api\.\$\{var\.region\}\.amazonaws\.com\/prod", AIC_CONNECTIONS_TABLE = var\.connections_table \}/,
+      /scheduler.*env = merge\(\{ AIC_RUNTIME_ARN_ACE = var\.runtime_arns\["ace"\], AIC_RUNTIME_VERSION = var\.runtime_version, AIC_WS_ENDPOINT = "https:\/\/\$\{aws_apigatewayv2_api\.ws\.id\}\.execute-api\.\$\{var\.region\}\.amazonaws\.com\/prod", AIC_CONNECTIONS_TABLE = var\.connections_table \}, local\.scheduler_mail_env\)/,
     );
   });
   it("every scheduled job is an EventBridge rule with a resource-policy permission, not an EventBridge Scheduler schedule", () => {
@@ -633,6 +633,30 @@ describe("AIC warm-keeper (the owner's under-3-seconds target)", () => {
     expect(after).toMatch(/warm AIC's runtime/);
     expect(after).toMatch(/aws lambda invoke --function-name "\$fn" --payload '\{"job":"warm_ace"\}'/);
     expect(after).toMatch(/\|\| echo "warm-up skipped"/);
+  });
+});
+
+describe("the owner's calendar (City → Features, docs/MAIL_CALENDAR.md §12)", () => {
+  const api = readFileSync("infra/modules/api/main.tf", "utf8");
+  const mail = readFileSync("infra/modules/mail/main.tf", "utf8");
+  const prod = readFileSync("infra/envs/prod/main.tf", "utf8");
+  const routes = api.slice(api.indexOf("routes = ["), api.indexOf("]", api.indexOf("routes = [")));
+  it("the features and calendar routes sit behind the JWT authorizer", () => {
+    for (const r of ['"GET /features"', '"PUT /features/{id}"', '"GET /calendar/events"', '"POST /calendar/refresh"'])
+      expect(routes).toContain(r);
+  });
+  it("the scheduler imports every 15 minutes, enabled, with the mail read path and nothing to write mail", () => {
+    expect(api).toMatch(
+      /calendar-import = \{ schedule = "rate\(15 minutes\)", fn = "scheduler", input = \{ job = "calendar_import" \}, state = "ENABLED" \}/,
+    );
+    expect(api).toMatch(/scheduler_mail_env = \{ for k in \["AIC_MAIL_WORKLOAD", "AIC_MAIL_PROVIDERS"\]/);
+    const block = mail.slice(mail.indexOf('resource "aws_iam_role_policy" "scheduler"'));
+    expect(block.slice(0, block.indexOf("\n}\n"))).toMatch(/role\s+= var\.scheduler_role_name\n\s+policy = jsonencode\(\{ Version = "2012-10-17", Statement = local\.read_path \}\)/);
+    expect(prod).toMatch(/scheduler_role_name\s+= module\.api\.role_names\["scheduler"\]/);
+  });
+  it("Refresh now: the api may start the scheduler, and knows its name", () => {
+    expect(mail).toMatch(/Sid = "StartCalendarImport", Effect = "Allow", Action = \["lambda:InvokeFunction"\], Resource = \["arn:aws:lambda:\$\{var\.region\}:\$\{var\.account_id\}:function:\$\{var\.name\}-scheduler"\]/);
+    expect(api).toMatch(/AIC_SCHEDULER_FUNCTION = local\.scheduler_name/);
   });
 });
 

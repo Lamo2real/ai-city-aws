@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from ..http import Http, call, qs
+from ..joinlinks import find_join
 from .base import BODY_MAX, Json, addr, cap, event, html_to_text, summary
 
 GRAPH = "https://graph.microsoft.com/v1.0/me"
@@ -35,6 +36,13 @@ def _recips(xs: list[Any] | None) -> list[Json]:
         email = x if isinstance(x, str) else x["email"]
         out.append({"emailAddress": {"address": email}})
     return out
+
+
+def _body_join(e: Json) -> str | None:
+    """A Zoom, Meet or Webex link in the event's body (Teams has its own field)."""
+    body = (e.get("body") or {}).get("content") or ""
+    j = find_join(html_to_text(body) if "<" in body else body)
+    return j["url"] if j else None
 
 
 def utc_naive(iso: str) -> str:
@@ -202,6 +210,9 @@ class Microsoft:
             my_response=_MY.get((e.get("responseStatus") or {}).get("response", "none")),
             recurring=e.get("type") in ("occurrence", "exception", "seriesMaster"),
             url=e.get("webLink"),
+            uid=e.get("iCalUId"),
+            join_url=(e.get("onlineMeeting") or {}).get("joinUrl") or e.get("onlineMeetingUrl") or _body_join(e),
+            time_zone=e.get("originalStartTimeZone"),
         )
 
     async def events(self, start: str, end: str, calendar_ids: list[str] | None, query: str | None) -> list[Json]:

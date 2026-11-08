@@ -62,7 +62,7 @@ test("phone: AIC and the City work at 412px wide", async ({ page }) => {
     expect(r.x + r.width).toBeLessThanOrEqual(width);
     expect(Math.min(r.width, r.height)).toBeGreaterThanOrEqual(44);
   }
-  await expect(page.getByRole("link", { name: "City" })).toBeInViewport();
+  await expect(page.getByRole("navigation", { name: "Screens" }).getByRole("link", { name: "City" })).toBeInViewport();
 });
 
 test("phone: Apps, an app page and a publish preview fit at 412px wide", async ({ page }) => {

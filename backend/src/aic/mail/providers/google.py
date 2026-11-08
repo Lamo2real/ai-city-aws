@@ -50,6 +50,14 @@ def split_event_pid(pid: str) -> tuple[str, str]:
     return _b64(cal).decode(), ev
 
 
+def _video(e: Json) -> str | None:
+    """The video entry point of an event's conference (Meet, or a Zoom/Teams add-on)."""
+    for p in (e.get("conferenceData") or {}).get("entryPoints") or []:
+        if p.get("entryPointType") == "video" and p.get("uri"):
+            return str(p["uri"])
+    return None
+
+
 def _date(d: str) -> str:
     return d[:10].replace("-", "/")
 
@@ -232,6 +240,9 @@ class Google:
             my_response={"needsAction": "needs_action"}.get(mine or "", mine),
             recurring=bool(e.get("recurringEventId") or e.get("recurrence")),
             url=e.get("htmlLink"),
+            uid=e.get("iCalUID"),
+            join_url=e.get("hangoutLink") or _video(e),
+            time_zone=start.get("timeZone"),
         )
 
     async def events(self, start: str, end: str, calendar_ids: list[str] | None, query: str | None) -> list[Json]:

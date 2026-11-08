@@ -7,7 +7,7 @@ here first, in its own commit. The decisions are in `docs/DECISIONS.md` (decisio
 Status: backend built 2026-11-07 on branch `connectors-mail` (tests with fakes only; no real account tried). Designed on branch `mail-calendar`, then **folded into `connectors-skills`** the same day, when the
 owner shelved the separate mail and calendar feature. **Mail and calendar accounts are connectors added on demand**
 (they're listed and added like the others), and **a combined calendar is an app** that AIC builds when asked
-(`docs/APPS.md`), reading through §11. There's no hardcoded Calendar page in the HUD. Nothing is built yet.
+(`docs/APPS.md`), reading through §11. Since 2026-11-08 the owner's one combined Calendar is also a built-in feature (City → Features, §12, decision 123).
 
 The owner's requests: "if the user wants he can request AIC to take full control over email addresses from multiple
 sources and different addresses, as well as combining calendars into one…", and later: "the user should have the
@@ -99,7 +99,7 @@ Ids are the provider's own ids. A global id is `<account_id>:<provider id>` in t
 | `GET /mail/rules` · `POST /mail/rules` · `DELETE /mail/rules/<id>` | standing rules (§5.3), owner only; no agent tool can create or change them |
 | `PUT /settings` (existing) | adds `mail_access: {orchestrator, manager}`, each `"none"|"read"` (§5.1) |
 
-There are no `/calendar/*` HUD routes: there's no Calendar page. A combined calendar is an app, which reads through §11 and proposes writes as approvals.
+The combined Calendar (City → Features) has its own read-only routes, §12. Apps still read through §11 and propose writes as approvals.
 
 ## 5. Agent tools, gate and approvals
 
@@ -171,7 +171,7 @@ Rows: `pk = "MAIL"`, `sk = "RULE#<id>"`, `{id, kind, account_id, match, created_
 `activity_for`: `mail_` maps to "reading mail" (`mail_send` to "sending mail"), and `calendar_` maps to "checking the calendar".
 
 ## 7. HUD (web)
-- **No Calendar screen.** The owner asks AIC for a combined calendar, and the apps feature builds it as an app (`docs/APPS.md`), reading through §11. The account `color` (8 palette keys `ink-blue, moss, brick, plum, ochre, teal, rose, slate`, AA on the parchment theme) and each calendar's `hidden` flag stay on the rows, so apps can use them.
+- **The Calendar** is City → Features → Calendar (§12). Apps may still show calendars, reading through §11. The account `color` (8 palette keys `ink-blue, moss, brick, plum, ochre, teal, rose, slate`, AA on the parchment theme) and each calendar's `hidden` flag stay on the rows, so apps can use them.
 - **Settings → Connectors → Mail & calendar** (`web/src/components/MailAccounts.tsx`, shown inside the Connectors section, so one list holds everything the owner connected): the accounts with their provider, address, status, colour picker, mail/calendar switches, "Sign in again" when needed, and Disconnect (confirmed, saying what is removed). "Add account" offers the same sign-in and app-password flows. Calendars can be shown or hidden per account (`PUT /mail/accounts/<id>`, `calendars[].hidden`). Underneath come the role access (Orchestrator and Managers: none/read; Workers: "never, by design") and standing rules (list, add send_to or accept_from, delete).
 - **Chat cards** for `connect.signin` and the app-password modal live in a new `web/src/components/ConnectCard.tsx`. The sign-in card is shared with connectors, and whichever branch lands first builds it:
   ```ts
@@ -237,3 +237,19 @@ Published apps read mail and calendar through the Lambda `aic-prod-app-bridge` (
   - On approve, the api calls `aic.mail.approvals.execute(ledger, service, approval)`. That checks that `policy.decide` isn't `deny` and that the hash matches, then runs the same action function the tool uses (`aic.mail.actions.<name>`), exactly once (it consumes `APPROVED#<hash>`).
   - Calls the runtime would allow without approval (`mail_draft`, `calendar_create` without attendees) still go through Needs you when an app proposes them. That's stricter, and fine.
   - Standing rules don't apply to app-proposed actions.
+
+## 12. The owner's one calendar (City → Features → Calendar, decision 123)
+Every meeting from every connected account in one place. **Read-only**: nothing here accepts, declines or changes a meeting; that stays with the `calendar_*` tools (§5) when the owner asks AIC explicitly.
+
+- **Features.** `FEATURES`/`<id>` rows `{enabled, updated_at}`; a feature without a row has its default (Calendar: on). Code: `backend/src/aic/features/__init__.py`. "Add a feature" in the HUD opens AIC's chat with "I'd like a feature that…".
+- **Import** (`aic.features.calendar.import_calendar`), job `calendar_import` of the `scheduler` Lambda, an EventBridge rule every 15 minutes (`infra/modules/api`, `calendar-import`), skipped when the feature is off:
+  - Reads `MailService.events` for every connected account with `calendar` on, 31 days back to 92 ahead, in chunks of 61 days (§11's 62-day limit). The providers now also return `uid` (iCalendar UID), `join_url` (Google `hangoutLink`/conference video entry, Graph `onlineMeeting.joinUrl` or a link in the body, ICS `X-MICROSOFT-SKYPETEAMSMEETINGURL`/`X-GOOGLE-CONFERENCE`) and `time_zone`.
+  - Plain IMAP accounts with `mail` on: `Imap.invitations(state)` opens INBOX read-only (EXAMINE), finds new messages since the last UID (`CALENDAR`/`IMAP#<account>` `{uidvalidity, last_uid}`; the first time, and after a UIDVALIDITY change, the last 30 days, at most 200 messages), fetches only messages whose BODYSTRUCTURE has `text/calendar` or an `.ics` part, with `BODY.PEEK[]`. Invitations are kept as `CALENDAR`/`ICS#<account>#<uid hash>#<instance hash>` (a higher SEQUENCE wins; CANCEL or STATUS:CANCELLED hides it). Repeats (`RRULE` DAILY, WEEKLY+BYDAY, MONTHLY by day or "2TU", YEARLY; INTERVAL, COUNT, UNTIL, EXDATE; a single moved or cancelled occurrence by RECURRENCE-ID) are expanded in the invitation's own zone (IANA or a common Windows name). `aic.features.invites`.
+  - **Merge**: one meeting when the UID and start match, or the title (without "Fwd:", "Updated invitation:", case and punctuation), start and end match and the organizers don't differ. The merged meeting keeps every source `{account_id, label, address, provider, event_id, url, color}`; the calendar's own copy leads over an invitation email.
+  - **Rows** `CALENDAR`/`EV#<start>#<id>`: `{id, title, start, end (UTC "…Z", or dates for a whole day, end exclusive), all_day, time_zone, organizer, attendees, location, description (≤ 4,000), my_response, recurring, uid, join {url, kind} | null, sources, color}`, TTL 120 days after the end, written only when changed (a content hash). In the window, a meeting that's gone is deleted, except when one of its accounts failed this time (kept until it answers). A disconnected account's meetings and invitations go. `CALENDAR`/`STATE`: `{last_import_at, accounts, events, errors: [{account_id, label, message}], time_zone}`. When something changed the bus gets `calendar.changed` (§6), and the HUD reloads.
+- **Join links** (`aic.mail.joinlinks.find_join`): https only, on the services' meeting paths only (Teams `/l/meetup-join/`, `/meet/`; Zoom `/j/`, `/my/`, `/w/`, `/s/` on `*.zoom.us`/`zoomgov.com`; Meet `meet.google.com/xxx-xxxx-xxx`; Webex `*.webex.com` `/meet/`, `/join/`, `j.php`, …), Outlook safe links unwrapped, trailing punctuation dropped; the explicit join field first, then the location, then the description.
+- **Routes** (owner only): `GET /features` → `{features}`; `PUT /features/<id>` `{enabled}` → `{feature}` (turning the Calendar on starts an import); `GET /calendar/events?from=YYYY-MM-DD&to=YYYY-MM-DD&tz=<IANA>` (≤ 62 days; `tz` is remembered for AIC) → `{enabled, events, state, accounts}`; `POST /calendar/refresh` → 202 (409 when off, 503 before the deploy; one import per 20 s).
+- **AIC**: `calendar_agenda {from, to?, query?}` (dates, `to` inclusive) reads the rows, answers times in the owner's zone, titles wrapped as `<calendar-content>` (§5.4). Through the policy gate (`gate_tools`), audited, AIC only.
+- **HUD**: `web/src/components/Features.tsx`, `web/src/lib/calendar.ts`. Today, Week, Month, Agenda (remembered per device), ‹ › and "Back to today", account colour dots, "Updated … ago" and Refresh now; a meeting's sheet with when, where, organizer, people, the accounts it came from (each with "Open in Outlook/Google"), notes as plain text, and **Join on <service>** (lit from 10 minutes before). Empty states say what to do (connect an account, turn the Calendar on); a failing account is named with "Open accounts".
+- **Infra**: the mail module attaches the read path to the scheduler role (`scheduler_role_name`) and lets the api invoke the scheduler (`StartCalendarImport`); the scheduler gets `AIC_MAIL_WORKLOAD`/`AIC_MAIL_PROVIDERS`, the api `AIC_SCHEDULER_FUNCTION`.
+- Tests: `backend/tests/test_calendar.py`, `web/test/calendar.test.tsx`, `web/e2e/features.spec.ts`, `tests/infra.test.ts`. Fakes only; no real Google, Microsoft or IMAP account tried.

@@ -289,6 +289,7 @@ module "mail" {
   providers_config     = var.mail_providers
   api_role_name        = module.api.role_names["api"]
   app_bridge_role_name = module.api.role_names["app-bridge"]
+  scheduler_role_name  = module.api.role_names["scheduler"]
   reader_role_names    = { for r, n in module.agents.role_names : r => n if r != "worker" }
 }
 

@@ -104,11 +104,11 @@ locals {
   }
   # name => bundle, handler, timeout, memory, extra env
   functions = {
-    api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 1024, env = merge(local.apns_env, { AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_USER_POOL_ID = var.user_pool_id, AIC_OWNER_EMAIL = var.owner_email, KNOWLEDGE_TABLE = var.knowledge_table, KNOWLEDGE_BUCKET = var.knowledge_bucket, KNOWLEDGE_BASE_ID = var.knowledge_base_id, KNOWLEDGE_DATA_SOURCE_ID = var.knowledge_data_source_id, KNOWLEDGE_GRAPH_ID = var.knowledge_graph_id, AIC_APPS_BUCKET = var.apps_bucket, AIC_APPS_URL = var.apps_url, AIC_APPS_DISTRIBUTION_ID = var.apps_distribution_id, AIC_APP_BRIDGE_FUNCTION = local.app_bridge_name, AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_VERSION = var.runtime_version }, var.api_env) }
+    api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 1024, env = merge(local.apns_env, { AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_USER_POOL_ID = var.user_pool_id, AIC_OWNER_EMAIL = var.owner_email, KNOWLEDGE_TABLE = var.knowledge_table, KNOWLEDGE_BUCKET = var.knowledge_bucket, KNOWLEDGE_BASE_ID = var.knowledge_base_id, KNOWLEDGE_DATA_SOURCE_ID = var.knowledge_data_source_id, KNOWLEDGE_GRAPH_ID = var.knowledge_graph_id, AIC_APPS_BUCKET = var.apps_bucket, AIC_APPS_URL = var.apps_url, AIC_APPS_DISTRIBUTION_ID = var.apps_distribution_id, AIC_APP_BRIDGE_FUNCTION = local.app_bridge_name, AIC_SCHEDULER_FUNCTION = local.scheduler_name, AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_VERSION = var.runtime_version }, var.api_env) }
     dispatcher    = { bundle = "app", handler = "aic.lambdas.dispatcher.handler", timeout = 120, memory = 1024, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_ARN_ORCHESTRATOR = var.runtime_arns["orchestrator"], AIC_RUNTIME_ARN_MANAGER = var.runtime_arns["manager"], AIC_RUNTIME_ARN_WORKER = var.runtime_arns["worker"], AIC_RUNTIME_VERSION = var.runtime_version, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod", AIC_CONNECTIONS_TABLE = var.connections_table } }
     factory       = { bundle = "app", handler = "aic.lambdas.factory.handler", timeout = 30, memory = 256, env = {} }
     ledger-writer = { bundle = "app", handler = "aic.lambdas.ledger_writer.handler", timeout = 30, memory = 256, env = {} }
-    scheduler     = { bundle = "app", handler = "aic.lambdas.scheduler.handler", timeout = 120, memory = 256, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_VERSION = var.runtime_version, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod", AIC_CONNECTIONS_TABLE = var.connections_table } }
+    scheduler     = { bundle = "app", handler = "aic.lambdas.scheduler.handler", timeout = 120, memory = 256, env = merge({ AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_VERSION = var.runtime_version, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod", AIC_CONNECTIONS_TABLE = var.connections_table }, local.scheduler_mail_env) }
     notifier      = { bundle = "app", handler = "aic.lambdas.notifier.handler", timeout = 30, memory = 256, env = local.apns_env }
     approvals     = { bundle = "app", handler = "aic.lambdas.approvals.handler", timeout = 30, memory = 256, env = {} }
     ws-authorizer = { bundle = "app", handler = "aic.lambdas.ws.authorizer_handler", timeout = 10, memory = 256, env = { AIC_USER_POOL_ID = var.user_pool_id, AIC_USER_POOL_CLIENT_ID = var.client_id } }
@@ -119,8 +119,12 @@ locals {
   }
   # Named, not referenced: the api function's env and policy name it, and both live in the same for_each.
   app_bridge_name = "${var.name}-app-bridge"
-  apps_tagged     = ["apps", "app-bridge"]
-  ledger_rw       = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:ConditionCheckItem"]
+  scheduler_name  = "${var.name}-scheduler"
+  # The calendar import (job calendar_import) reads mail accounts the way the api does; its read path is attached
+  # by the mail module (docs/MAIL_CALENDAR.md §12).
+  scheduler_mail_env = { for k in ["AIC_MAIL_WORKLOAD", "AIC_MAIL_PROVIDERS"] : k => var.api_env[k] if contains(keys(var.api_env), k) }
+  apps_tagged        = ["apps", "app-bridge"]
+  ledger_rw          = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:ConditionCheckItem"]
   # What each function may do, beyond logs, tracing and the KMS key.
   permissions = {
     api = [
@@ -211,6 +215,8 @@ locals {
     "GET /mail/accounts", "POST /mail/accounts", "PUT /mail/accounts/{id}", "DELETE /mail/accounts/{id}",
     "POST /mail/accounts/{id}/signin", "POST /mail/accounts/{id}/complete", "POST /mail/accounts/{id}/imap",
     "GET /mail/rules", "POST /mail/rules", "DELETE /mail/rules/{id}",
+    # City → Features and the owner's calendar (docs/MAIL_CALENDAR.md §12): read-only for meetings.
+    "GET /features", "PUT /features/{id}", "GET /calendar/events", "POST /calendar/refresh",
     # iPhone notifications (docs/NOTIFICATIONS.md): the owner's phones and the Apple key.
     "GET /devices", "POST /devices", "DELETE /devices/{id}", "GET /notifications/apns", "PUT /notifications/apns",
     # AIC's voice through OpenAI text-to-speech (docs/VOICE.md): the key the owner pastes, and the speech itself.
@@ -239,6 +245,8 @@ locals {
     # Enabled from the start: keeps AIC's container running so a message never waits for a cold start
     # (AgentCore bills active processing only, so a warm idle container costs nothing). The owner's under-3-seconds target.
     warm-ace = { schedule = "rate(2 minutes)", fn = "scheduler", input = { job = "warm_ace" }, state = "ENABLED" }
+    # The owner's calendar: every connected account read every 15 minutes (skipped when the feature is off).
+    calendar-import = { schedule = "rate(15 minutes)", fn = "scheduler", input = { job = "calendar_import" }, state = "ENABLED" }
   }
 }
 
