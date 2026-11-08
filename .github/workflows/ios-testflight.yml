@@ -1,0 +1,110 @@
+# The iPhone app on the owner's own phone, updated on every change (the owner's request, 2026-11-08).
+# Every push to main that changes the app (ios/) builds it, runs its tests, and uploads it to TestFlight;
+# TestFlight then updates the app on the owner's iPhone by itself. Nothing in AWS is touched.
+#
+# Needs (docs/IOS_TESTFLIGHT.md): the Apple Developer Program, an app record in App Store Connect for
+# <AIC_BUNDLE_PREFIX>.aicity, and these repository settings:
+#   secrets   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 (the App Store Connect API key, the .p8 file's text)
+#   variables APPLE_TEAM_ID (the program team's ID; not a secret)
+# Until they exist the job says so and stops, green, without building.
+name: iOS to TestFlight
+
+on:
+  push:
+    branches: [main]
+    paths: ["ios/**", ".github/workflows/ios-testflight.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  testflight:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+    steps:
+      - name: Check the App Store Connect settings
+        id: ready
+        run: |
+          if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$TEAM_ID" ]; then
+            echo "::notice::TestFlight is not set up yet (docs/IOS_TESTFLIGHT.md): no build uploaded."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.ready.outputs.ok == 'true'
+
+      - name: Pick the newest Xcode 26 or later
+        if: steps.ready.outputs.ok == 'true'
+        run: |
+          x=$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$x" ] || { echo "::error::No Xcode 26 or later on this runner."; exit 1; }
+          sudo xcode-select -s "$x"
+          xcodebuild -version
+
+      - name: Write the API key to a private file
+        if: steps.ready.outputs.ok == 'true'
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          umask 077
+          mkdir -p "$RUNNER_TEMP/asc"
+          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/asc/AuthKey.p8"
+
+      - name: Unit tests
+        if: steps.ready.outputs.ok == 'true'
+        working-directory: ios
+        run: |
+          sim=$(xcrun simctl list devices available -j | python3 -c 'import json,sys
+          d=json.load(sys.stdin)["devices"]
+          print(next(x["udid"] for k,v in sorted(d.items(), reverse=True) if "iOS" in k for x in v if x["name"].startswith("iPhone")))')
+          xcodebuild test -project AICity.xcodeproj -scheme AICity -destination "id=$sim" \
+            CODE_SIGNING_ALLOWED=NO -quiet
+
+      - name: Archive (signed for App Store Connect)
+        if: steps.ready.outputs.ok == 'true'
+        working-directory: ios
+        run: |
+          xcodebuild archive -project AICity.xcodeproj -scheme AICity -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/AICity.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            AIC_TEAM_ID="$TEAM_ID" AIC_ENTITLEMENTS=Config/AICity-Push.entitlements \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" -quiet
+
+      - name: Upload to TestFlight
+        if: steps.ready.outputs.ok == 'true'
+        working-directory: ios
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>${TEAM_ID}</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
+          EOF
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/AICity.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+          echo "::notice::Build ${{ github.run_number }} uploaded. TestFlight installs it on the iPhone after Apple's processing (usually 5 to 15 minutes)."
+
+      - name: Remove the API key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/asc"

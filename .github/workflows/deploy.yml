@@ -23,6 +23,7 @@ on:
       - "docs/**"
       - "**/*.md"
       - "ios/**" # the iPhone app is built in Xcode, nothing in it deploys
+      - ".github/workflows/ios-testflight.yml" # the iPhone app's own pipeline
   workflow_dispatch:
 
 permissions:

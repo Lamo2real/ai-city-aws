@@ -52,6 +52,9 @@ With a free team the app stops opening after **7 days**; run it from Xcode again
 
 ### Option B: TestFlight (Apple Developer Program, $99 / year)
 
+**Automatic:** follow `docs/IOS_TESTFLIGHT.md` once; then every change to `ios/` on `main` is built, tested and uploaded to TestFlight by `.github/workflows/ios-testflight.yml`, and the iPhone updates by itself. The manual way:
+
+
 1. Enroll at developer.apple.com, then set `AIC_TEAM_ID` to the program team and `AIC_BUNDLE_PREFIX` to your own reverse domain.
 2. In App Store Connect create an app with the bundle ID `<prefix>.aicity` (internal testing only is fine; it never needs to be public).
 3. In Xcode choose **Any iOS Device**, then **Product → Archive** → **Distribute App → TestFlight & App Store** → Upload.
