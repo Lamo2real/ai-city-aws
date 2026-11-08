@@ -195,7 +195,7 @@ locals {
   }
   routes = [
     "GET /city", "GET /city/agent", "POST /city/instruct", "POST /messages", "POST /wake-check", "GET /tickets", "GET /tickets/{id}", "GET /jobs",
-    "GET /departments", "GET /agents", "GET /workforce", "GET /costs", "GET /health", "GET /questions", "POST /questions/{id}/answer",
+    "GET /departments", "GET /departments/presets", "GET /agents", "GET /workforce", "GET /costs", "GET /health", "GET /questions", "POST /questions/{id}/answer",
     "POST /questions/{id}/default", "POST /approvals/{id}", "GET /settings", "PUT /settings",
     "POST /workers/home", "POST /tasks/{id}/cancel", "POST /city/reset", "POST /agents/{id}/home",
     "GET /memory", "POST /notes", "GET /apps", "DELETE /apps/{id}", "PUT /apps/{id}",

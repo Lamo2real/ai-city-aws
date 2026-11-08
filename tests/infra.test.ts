@@ -1,6 +1,6 @@
 // Phase 7 gate, in the unit suite: the tag check and the IAM check over the real Terraform, plus
 // negative cases proving each check actually fails on a bad input.
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -762,5 +762,24 @@ describe("the owner's start over", () => {
     expect(api).toContain('"POST /agents/{id}/home"'); // the City's Send home button
     expect(api).toContain('"dynamodb:Scan", "dynamodb:BatchWriteItem"');
     expect(api).toContain('"sqs:PurgeQueue"');
+  });
+});
+
+describe("pre-configured departments (decision 113)", () => {
+  const apiTf = readFileSync("infra/modules/api/main.tf", "utf8");
+  const presets = JSON.parse(readFileSync("config/departments.json", "utf8"));
+  it("the presets route is routed", () => {
+    expect(apiTf).toContain('"GET /departments/presets"');
+  });
+  it("IT and Marketing exist, each skill has a SKILL.md and each connector is in the catalog with an https url", () => {
+    expect(presets.departments.map((d: { name: string }) => d.name)).toEqual(["IT", "Marketing"]);
+    for (const d of presets.departments) {
+      expect(existsSync(`agents/departments/${d.key}.md`)).toBe(true);
+      for (const s of d.skills) expect(existsSync(`agents/skills/${s}/SKILL.md`)).toBe(true);
+      for (const c of d.connectors) expect(presets.connectors[c]?.url).toMatch(/^https:\/\//);
+    }
+  });
+  it("the Lambda package carries the bundled skills", () => {
+    expect(readFileSync("backend/scripts/build_lambdas.py", "utf8")).toContain('"agents" / "skills"');
   });
 });

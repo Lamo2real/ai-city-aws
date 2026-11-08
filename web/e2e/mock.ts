@@ -3,7 +3,35 @@
 //   password "Temp-Password-1!"   → first login: choose own password → authenticator setup → code 123456
 //   password "Own-Password-12!"   → the 6-digit code (123456)
 //   anything else                   → "That email or password is not right"
+import { readFileSync, readdirSync } from "node:fs";
 import type { Page, WebSocketRoute } from "@playwright/test";
+
+// Settings → Departments: the real presets file, shaped as GET /departments/presets answers it.
+const PRESETS_FILE = JSON.parse(readFileSync(`${import.meta.dirname}/../../config/departments.json`, "utf8")) as {
+  departments: Array<{
+    key: string;
+    name: string;
+    mission: string;
+    teams: unknown[];
+    skills: string[];
+    connectors: string[];
+  }>;
+  connectors: Record<string, { label: string; url: string; what: string }>;
+};
+const skillDescription = (name: string) =>
+  /description: "(.*)"/.exec(
+    readFileSync(`${import.meta.dirname}/../../agents/skills/${name}/SKILL.md`, "utf8"),
+  )?.[1] ?? "";
+const PRESETS = PRESETS_FILE.departments.map((d) => ({
+  key: d.key,
+  name: d.name,
+  mission: d.mission,
+  teams: d.teams,
+  skills: d.skills
+    .filter((s) => readdirSync(`${import.meta.dirname}/../../agents/skills`).includes(s))
+    .map((s) => ({ name: s, description: skillDescription(s) })),
+  connectors: d.connectors.map((c) => ({ id: c, ...PRESETS_FILE.connectors[c]! })),
+}));
 
 export const CONFIG = {
   region: "eu-north-1",
@@ -669,6 +697,25 @@ export async function mockBackend(
     // ---------- connectors, skills, mail (CONNECTORS_SKILLS.md §1.7, §2.4; MAIL_CALENDAR.md §4) ----------
     const method = req.method();
     if (path === "/connectors" && method === "GET") return ok({ connectors: m.connectors });
+    if (path === "/departments/presets") return ok({ departments: PRESETS });
+    if (path === "/connectors" && method === "POST") {
+      // Added by link or by a department's switch: a service that needs the owner's account asks to sign in.
+      const b = body as { url: string; label?: string };
+      const id = (b.label ?? new URL(b.url).hostname.split(".")[1] ?? "mcp").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      const c = {
+        id,
+        label: b.label ?? id,
+        url: b.url,
+        status: "needs_login",
+        roles: { ace: "all", manager: "all", worker: "all" },
+      };
+      m.connectors.push(c);
+      return ok({ connector: c }, 201);
+    }
+    if (/^\/connectors\/[\w-]+$/.test(path) && method === "DELETE") {
+      m.connectors = m.connectors.filter((x) => x.id !== path.split("/")[2]);
+      return ok({ ok: true });
+    }
     if (/^\/connectors\/[\w-]+\/login$/.test(path))
       return ok({ url: "https://auth.provider.test/authorize?x=1", state: "st-1" });
     if (/^\/connectors\/[\w-]+\/login\/complete$/.test(path))

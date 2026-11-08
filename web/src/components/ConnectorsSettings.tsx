@@ -12,10 +12,12 @@ import {
   removeConnector,
   ROLE_LABEL,
   ROLES,
+  sameServer,
   type Connector,
   type Role,
 } from "../lib/connect.ts";
 import { KeyCard, SignInCard } from "./ConnectCard.tsx";
+import { DepartmentPresets } from "./DepartmentPresets.tsx";
 import { MailAccounts } from "./MailAccounts.tsx";
 import { Banner, Button, Confirm, toast } from "./ui.tsx";
 
@@ -33,6 +35,7 @@ export function ConnectorsSettings(p: {
   const [error, setError] = useState<string | null>(null);
   const [url, setUrl] = useState<string | null>(null);
   const [removing, setRemoving] = useState<Connector | null>(null);
+  const [presetUrls, setPresetUrls] = useState<string[]>([]);
   const load = () =>
     listConnectors().then(
       (r) => {
@@ -54,8 +57,11 @@ export function ConnectorsSettings(p: {
       toast({ text: e instanceof ApiError ? e.message : "Not saved.", tone: "bad" });
     }
   };
+  // A connector a department's switch stands for signs in there (Settings → Departments), not a second time here.
+  const inPreset = (c: Connector) => presetUrls.some((u) => sameServer(u, c.url));
   return (
     <div className="connectors">
+      <DepartmentPresets connectors={list} reload={load} onRemove={setRemoving} onUrls={setPresetUrls} />
       <h2>Connectors</h2>
       <p className="mute">
         Outside services your agents can use. Ask AIC to add any one ("add Higgsfield as an MCP"). Keys go straight to
@@ -72,7 +78,7 @@ export function ConnectorsSettings(p: {
               <span className="mute">{c.package ? `${c.package.name}@${c.package.version}` : c.url}</span>
             </p>
             <p className={`status status-${st.tone}`}>{st.text}</p>
-            {c.status === "needs_login" || c.status === "login_expired" ? (
+            {(c.status === "needs_login" || c.status === "login_expired") && !inPreset(c) ? (
               <SignInCard
                 kind="connector"
                 id={c.id}
@@ -83,7 +89,7 @@ export function ConnectorsSettings(p: {
                 tokenInstead={githubSignIn(c) ? c.id : undefined}
               />
             ) : null}
-            {c.status === "needs_key" ? (
+            {c.status === "needs_key" && !inPreset(c) ? (
               <KeyCard
                 targetId={c.id}
                 title={`Add the key for ${c.label ?? c.id}`}

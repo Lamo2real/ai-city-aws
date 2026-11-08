@@ -48,7 +48,10 @@ class SkillStore:
         return body
 
     def _cached(self, row: Row) -> Path:
-        """The skill's files at this version, downloaded once per version."""
+        """The skill's files at this version, downloaded once per version. A bundled department skill
+        (``aic.shared.skills_bundled``) is already on disk in the image."""
+        if row.get("builtin") and row.get("dir"):
+            return Path(row["dir"])
         d = self.root / "cache" / row["name"] / row["version"]
         if (d / ".complete").is_file():
             return d

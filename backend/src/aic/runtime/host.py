@@ -21,6 +21,8 @@ from aic.shared.ids import manager_id
 from aic.shared.knowledge.search import always_block
 from aic.shared.log import log, metric
 from aic.shared.models import resolve_role_from_env
+from aic.shared.presets import orchestrator_note
+from aic.shared.skills_bundled import department_skills
 from aic.shared.turn import BackoffOptions, GateDeps, GatedTurn, TurnInput, TurnOutput, run_gated_turn
 
 from .connector_tool import add_connector_tool
@@ -139,6 +141,10 @@ class AgentHost:
             if ctx.role == "ace" and ctx.from_owner:
                 city_tools.append(add_connector_tool(self.d, ctx))
             skill_rows = await self._skills(ctx.role)
+            if ctx.role in ("manager", "worker"):  # a preset department's bundled skills; the owner's win on a name
+                own = {r["name"] for r in skill_rows}
+                dept = await self._department_name(agent, inv)
+                skill_rows = skill_rows + [r for r in department_skills(dept) if r["name"] not in own]
             if ctx.role == "ace" and skill_rows and self.o.skills:
                 city_tools.append(use_skill_tool(self.o.skills, skill_rows))
             if self.o.mail is not None:
@@ -269,6 +275,14 @@ class AgentHost:
             log("warn", "skills.unavailable", error=type(e).__name__)
             return []
 
+    async def _department_name(self, agent: dict[str, Any], inv: dict[str, Any]) -> str:
+        key = inv.get("department") or agent.get("department") or ""
+        try:
+            dept = await self.d.ledger.get_department(str(key)) if key else None
+        except Exception:
+            dept = None
+        return str((dept or {}).get("name") or key)
+
     async def _hire_connectors(self, agent: dict[str, Any]) -> list[str]:
         spec = await self.d.ledger.table.get(f"AGENT#{agent['id']}", "SPEC") or {}
         return [str(c) for c in spec.get("connectors") or []]
@@ -347,6 +361,7 @@ class AgentHost:
             lines.append(f"Task {inv['taskId']}: {task.get('goal', '')} [{task.get('status', '?')}]")
             names = ", ".join(d["name"] for d in await ledger.list_departments()) or "none yet"
             lines.append(f"Departments: {names}")
+            lines.append(orchestrator_note())
             for k in await ledger.child_tickets(inv["taskId"]):
                 if k.get("kind") == "assignment":
                     lines.append(f"- {k.get('department')}: {k['id']} [{k['status']}]")

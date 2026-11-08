@@ -1,1 +1,59 @@
-{ "$comment": "Empty seed. The Orchestrator creates departments as data.", "departments": [] }
+{
+  "$comment": "Pre-configured departments (decision 113). The Orchestrator uses these names when work fits; any other department is still created as data. Each department's manager prompt is agents/departments/<key>.md, its skills are agents/skills/<name>/SKILL.md, and its connectors are switched on in Settings -> Departments (POST /connectors with the url). Read by backend/src/aic/shared/presets.py and served to the HUD by GET /departments/presets.",
+  "departments": [
+    {
+      "key": "it",
+      "name": "IT",
+      "aliases": ["engineering", "it infrastructure", "infrastructure", "application", "software", "development", "devops"],
+      "mission": "Build, run and fix the owner's software and infrastructure: cloud infrastructure as code, backends, web frontends, iOS and Android apps, CI/CD, security and monitoring.",
+      "teams": [
+        { "name": "Cloud & infrastructure", "does": "AWS, Terraform, networking, CI/CD pipelines, cost and security" },
+        { "name": "Backend", "does": "APIs, services, data stores, integrations" },
+        { "name": "Frontend", "does": "Web apps and sites: React, TypeScript, accessibility, performance" },
+        { "name": "iOS", "does": "SwiftUI apps for iPhone and iPad, App Store readiness" },
+        { "name": "Android", "does": "Kotlin and Jetpack Compose apps, Play Store readiness" },
+        { "name": "QA & security", "does": "Tests, reviews, dependency and secret scanning" }
+      ],
+      "skills": ["aws-well-architected", "terraform-iac", "backend-services", "web-frontend", "ios-swiftui", "android-kotlin", "ci-cd-github", "security-baseline", "current-docs"],
+      "connectors": ["github", "aws-knowledge", "context7", "microsoft-learn", "cloudflare-docs", "linear", "atlassian", "sentry", "vercel", "supabase", "figma"]
+    },
+    {
+      "key": "marketing",
+      "name": "Marketing",
+      "aliases": ["design", "brand", "content", "social", "ads", "advertising", "growth"],
+      "mission": "Grow the owner's brands: strategy, copy, design, images, video, voice-overs, social posts, ad campaigns, SEO, email and reporting.",
+      "teams": [
+        { "name": "Strategy", "does": "Positioning, audiences, campaign plans, budgets and calendars" },
+        { "name": "Design", "does": "Canva designs: social posts, ads, presentations, layouts, resumes, brand kits" },
+        { "name": "Video & voice", "does": "Higgsfield and HeyGen videos, ElevenLabs voice-overs" },
+        { "name": "Copy & content", "does": "Posts, landing pages, emails, scripts, blog articles" },
+        { "name": "Paid ads", "does": "Meta (Facebook, Instagram) campaigns: audiences, creatives, budgets, reporting" },
+        { "name": "SEO & analytics", "does": "Keywords, site audits, competitors, performance reports" }
+      ],
+      "skills": ["brand-and-copy", "canva-design", "video-and-voice", "meta-ads-campaigns", "seo-content", "campaign-planning"],
+      "connectors": ["canva", "higgsfield", "heygen", "elevenlabs", "meta-ads", "ahrefs", "hubspot", "notion", "figma", "stripe"]
+    }
+  ],
+  "connectors": {
+    "github": { "label": "GitHub", "url": "https://api.githubcopilot.com/mcp/", "what": "Repositories, issues, pull requests, Actions (uses the GitHub token from Settings when it is saved)" },
+    "aws-knowledge": { "label": "AWS Knowledge", "url": "https://knowledge-mcp.global.api.aws", "what": "AWS documentation, the Well-Architected Framework, regional availability, What's New" },
+    "context7": { "label": "Context7", "url": "https://mcp.context7.com/mcp", "what": "Current docs for any library or tool: Terraform providers, Swift, Kotlin, React, Python and more" },
+    "microsoft-learn": { "label": "Microsoft Learn", "url": "https://learn.microsoft.com/api/mcp", "what": "Azure, .NET, TypeScript and Microsoft 365 documentation" },
+    "cloudflare-docs": { "label": "Cloudflare Docs", "url": "https://docs.mcp.cloudflare.com/mcp", "what": "Cloudflare documentation: DNS, Workers, CDN" },
+    "linear": { "label": "Linear", "url": "https://mcp.linear.app/mcp", "what": "Issues, projects and cycles" },
+    "atlassian": { "label": "Jira & Confluence", "url": "https://mcp.atlassian.com/v1/mcp", "what": "Jira issues and Confluence pages" },
+    "sentry": { "label": "Sentry", "url": "https://mcp.sentry.dev/mcp", "what": "Errors and performance from your apps" },
+    "vercel": { "label": "Vercel", "url": "https://mcp.vercel.com", "what": "Deployments, projects and logs" },
+    "supabase": { "label": "Supabase", "url": "https://mcp.supabase.com/mcp", "what": "Postgres databases, auth and storage" },
+    "figma": { "label": "Figma", "url": "https://mcp.figma.com/mcp", "what": "Design files and components for building UIs" },
+    "canva": { "label": "Canva", "url": "https://mcp.canva.com/mcp", "what": "Create, edit, autofill and export designs: posts, ads, presentations, resumes" },
+    "higgsfield": { "label": "Higgsfield", "url": "https://mcp.higgsfield.ai/mcp", "what": "AI video and image generation" },
+    "heygen": { "label": "HeyGen", "url": "https://mcp.heygen.com/mcp/v1/", "what": "Avatar and presenter videos" },
+    "elevenlabs": { "label": "ElevenLabs", "url": "https://api.us.elevenlabs.io/v1/mcp", "what": "Voice-overs, voice design, sound effects" },
+    "meta-ads": { "label": "Meta Ads", "url": "https://mcp.pipeboard.co/meta-ads-mcp", "what": "Facebook and Instagram ads: campaigns, audiences, creatives, budgets, insights (through Pipeboard, signed in with your Meta account)" },
+    "ahrefs": { "label": "Ahrefs", "url": "https://api.ahrefs.com/mcp/mcp", "what": "Keywords, backlinks, site audits, competitors" },
+    "hubspot": { "label": "HubSpot", "url": "https://mcp.hubspot.com/anthropic", "what": "Contacts, deals, email campaigns" },
+    "notion": { "label": "Notion", "url": "https://mcp.notion.com/mcp", "what": "Briefs, content calendars and docs" },
+    "stripe": { "label": "Stripe", "url": "https://mcp.stripe.com", "what": "Products, prices, payment links and revenue" }
+  }
+}

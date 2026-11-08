@@ -38,6 +38,26 @@ export function githubSignIn(c: Connector): boolean {
   }
 }
 export const listConnectors = () => api<{ connectors: Connector[] }>("/connectors");
+// ---------- pre-configured departments (decision 113) ----------
+export interface PresetConnector {
+  id: string;
+  label: string;
+  url: string;
+  what: string;
+}
+export interface DepartmentPreset {
+  key: string;
+  name: string;
+  mission: string;
+  teams: Array<{ name: string; does: string }>;
+  skills: Array<{ name: string; description: string }>;
+  connectors: PresetConnector[];
+}
+export const listPresets = () => api<{ departments: DepartmentPreset[] }>("/departments/presets");
+/** The connector a department's switch stands for: the same server link (a trailing slash doesn't matter). */
+export const sameServer = (a?: string, b?: string) =>
+  !!a && !!b && a.trim().replace(/\/+$/, "").toLowerCase() === b.trim().replace(/\/+$/, "").toLowerCase();
+
 export const addConnectorByUrl = (url: string, label?: string) =>
   api<{ connector: Connector }>("/connectors", { method: "POST", body: { url, ...(label ? { label } : {}) } });
 export const editConnector = (id: string, patch: Partial<Pick<Connector, "roles" | "approval" | "label">>) =>

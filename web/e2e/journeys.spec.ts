@@ -1209,3 +1209,41 @@ test("the + menu: files ride along with the message, slash commands become plain
   await page.goto("/#/knowledge");
   await expect(page.getByRole("listitem").filter({ hasText: "brief.pdf" })).toBeVisible();
 });
+
+test("Settings → Departments: IT and Marketing with their skills; a switch connects a service and asks to sign in", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  await page.goto("/#/settings");
+  const section = page.getByRole("region", { name: "Departments" });
+  await expect(section.getByRole("heading", { name: "IT", exact: true })).toBeVisible();
+  await expect(section.getByRole("heading", { name: "Marketing", exact: true })).toBeVisible();
+  const marketing = section.getByRole("article", { name: "Marketing department" });
+  await expect(marketing.getByText(/Design · Video & voice/)).toBeVisible();
+  await marketing.getByText(/skills built in/).click();
+  await expect(marketing.getByText("canva-design", { exact: true })).toBeVisible();
+
+  // Canva: off → on adds the connector with its link and label, and its sign-in shows right there.
+  const canva = marketing.getByRole("checkbox", { name: "Canva" });
+  await expect(canva).not.toBeChecked();
+  await marketing.getByText("Canva", { exact: true }).click();
+  await expect(canva).toBeChecked();
+  expect(m.calls.filter((c) => c.path === "/connectors" && c.method === "POST").at(-1)?.body).toEqual({
+    url: "https://mcp.canva.com/mcp",
+    label: "Canva",
+  });
+  await expect(marketing.getByText("Needs you to sign in")).toBeVisible();
+  await expect(marketing.getByRole("button", { name: /Sign in/ })).toBeVisible();
+  // Under Connectors it keeps its roles and approvals, without a second sign-in button.
+  const listed = page.getByRole("article", { name: "Connector Canva" });
+  await expect(listed.getByText("Who may use it")).toBeVisible();
+  await expect(listed.getByRole("button", { name: /Sign in/ })).toHaveCount(0);
+  await shot(page, "settings-departments");
+  await noSeriousA11y(page, "Settings → Departments");
+
+  // On → off asks first, then removes it.
+  await marketing.getByText("Canva", { exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Remove connector" }).click();
+  await expect(canva).not.toBeChecked();
+  expect(m.calls.some((c) => c.method === "DELETE" && c.path === "/connectors/canva")).toBe(true);
+});

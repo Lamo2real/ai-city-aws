@@ -17,6 +17,7 @@ from typing import Any
 from aic.shared import connector_packages
 from aic.shared.connectors import (
     APPROVALS,
+    DEFAULT_ROLES,
     GITHUB_MCP_URL,
     ConnectorStore,
     Record,
@@ -210,7 +211,8 @@ async def _add_direct(c: ConnectorsApi, b: dict[str, Any]) -> Answer:
     if bad := check_url(url, c.resolve):
         return _err(400, bad)
     label = str(b["label"]).strip()[:40] if b.get("label") else None
-    roles = _roles(b.get("roles"))
+    # No roles chosen (Add by link, a department's switch): the usual default, AIC, managers and workers.
+    roles = _roles(b["roles"]) if b.get("roles") is not None else dict(DEFAULT_ROLES)
     id = make_id(name_from_url(url), label)
     rec: Record = {
         "id": id,

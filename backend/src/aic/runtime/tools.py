@@ -62,6 +62,7 @@ from aic.shared.knowledge.search import search
 from aic.shared.knowledge.service import KnowledgeError
 from aic.shared.log import log
 from aic.shared.policy import decide, gate
+from aic.shared.presets import preset_for
 from aic.shared.utility import UtilityDeps, about_ai_city, triage
 
 CITY_SERVER = "city"
@@ -580,6 +581,9 @@ def _ask_owner(d: CityDeps, c: TurnCtx) -> ToolSpec:
 def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
     async def create_department(a: dict[str, Any]) -> str:
         name = str(a["name"]).strip()
+        if preset := preset_for(name):  # "Engineering", "IT infrastructure", "Design" → the preset IT / Marketing
+            name = preset["name"]
+            a = {**a, "mission": str(a.get("mission") or "").strip() or preset["mission"]}
         dept_cap = int((await d.settings()).get("max_departments") or 6)
         existing = await d.ledger.list_departments()
         if len(existing) >= dept_cap and not any(str(x.get("name", "")).lower() == name.lower() for x in existing):
@@ -612,6 +616,9 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
 
     async def assign(a: dict[str, Any]) -> str:
         dept = await d.ledger.get_department(str(a["department"]))
+        if not dept and (preset := preset_for(str(a["department"]))):  # "Engineering" → IT
+            dept = await d.ledger.get_department(preset["name"])
+            a = {**a, "department": preset["name"]}
         if not dept:
             return f"There is no department called {a['department']}. Create it first."
         if dept.get("stood_down_at"):

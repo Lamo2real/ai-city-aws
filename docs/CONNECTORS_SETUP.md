@@ -71,6 +71,11 @@ none of this: skip to step 3.
 - [ ] Pick your provider in the card (it fills in the servers), type your address and the app password, then tap
       **Connect securely**. If the server refuses it, the card says so and nothing is stored.
 
+## 4a. The fastest way: Settings → Departments
+- [ ] Open **Settings → Departments**. IT and Marketing each list the services they use, with a switch.
+- [ ] Switch one on. If the service needs your account, a **Sign in to …** button appears in that row: tap it and
+      approve. A service that wants a key shows a key field instead. Switching it off asks first, then removes it.
+
 ## 4. GitHub, Slack and other services that need a sign-in
 - [ ] **GitHub, the short way:** paste your token in **Settings → GitHub** first (`docs/GITHUB_ACCESS.md`). Then ask AIC
       **"add GitHub as an MCP"** (or Settings → Connectors → Add by link with `https://api.githubcopilot.com/mcp/`) and

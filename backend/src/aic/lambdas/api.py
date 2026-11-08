@@ -46,6 +46,7 @@ from aic.shared.knowledge.wiring import knowledge_from_env
 from aic.shared.ledger import Ledger, Record
 from aic.shared.log import log
 from aic.shared.models import model_label
+from aic.shared.presets import public_presets
 from aic.shared.push import DeviceStore, PushApps, PushDeps, apns_key_secret, store_apns_secret
 from aic.shared.speech import (
     DEFAULT_VOICE,
@@ -83,6 +84,7 @@ ROUTES: list[tuple[str, str]] = [
     ("GET", "/tickets/t-1"),
     ("GET", "/jobs"),
     ("GET", "/departments"),
+    ("GET", "/departments/presets"),
     ("GET", "/agents"),
     ("GET", "/workforce"),
     ("GET", "/costs"),
@@ -641,6 +643,8 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
             d.ledger.ticket_history(t["id"]), d.ledger.trace(t["id"]), d.ledger.child_tickets(t["id"])
         )
         return reply(200, {"ticket": t, "history": history, "trace": trace, "children": children})
+    if is_("GET", r"/departments/presets"):
+        return reply(200, {"departments": public_presets()})
     if is_("GET", r"/departments"):
         return reply(200, {"departments": await d.ledger.list_departments()})
     if is_("GET", r"/agents"):

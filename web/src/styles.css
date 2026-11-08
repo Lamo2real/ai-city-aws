@@ -616,6 +616,112 @@ main {
   accent-color: var(--amber);
 }
 
+/* A glass on/off switch: the knob slides and the track turns the brand's amber when on (Settings → Departments). */
+.toggle {
+  position: relative;
+  gap: var(--s3);
+  font-weight: 700;
+}
+.toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+}
+.toggle-track {
+  position: relative;
+  flex: none;
+  width: 46px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid var(--edge-2);
+  background: var(--glass);
+  box-shadow: var(--glow);
+  transition:
+    background 0.25s ease,
+    border-color 0.25s ease;
+}
+.toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--gsoft);
+  transition:
+    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    background 0.25s ease;
+}
+.toggle input:checked + .toggle-track {
+  background: linear-gradient(180deg, rgba(249, 201, 118, 0.96), rgba(232, 163, 61, 0.96));
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.toggle input:checked + .toggle-track .toggle-knob {
+  transform: translateX(20px);
+  background: #2a1a08;
+}
+.toggle input:disabled + .toggle-track {
+  opacity: 0.55;
+}
+.toggle input:focus-visible + .toggle-track {
+  outline: 3px solid var(--gfocus);
+  outline-offset: 2px;
+}
+/* Settings → Departments */
+.preset h3 {
+  margin: 0 0 var(--s1);
+}
+.preset-teams {
+  margin: var(--s2) 0;
+}
+.preset-skills {
+  margin: var(--s2) 0 var(--s3);
+}
+.preset-skills ul {
+  margin: var(--s2) 0 0;
+  padding-left: var(--s4);
+  display: grid;
+  gap: var(--s1);
+}
+.preset-connectors {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s2);
+}
+.preset-row {
+  display: grid;
+  grid-template-columns: minmax(150px, auto) minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--s3);
+  padding: var(--s1) 0;
+  border-top: 1px solid var(--edge);
+}
+.preset-row > :is(.signin, .connect-card, form, .card) {
+  grid-column: 1 / -1;
+}
+.preset-what {
+  font-size: var(--fs-s);
+}
+@media (max-width: 599px) {
+  .preset-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .preset-what {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toggle-track,
+  .toggle-knob {
+    transition: none;
+  }
+}
+
 /* the conversation */
 .talk {
   position: relative;

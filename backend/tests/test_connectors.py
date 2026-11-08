@@ -623,6 +623,13 @@ async def test_the_owner_adds_one_directly_in_settings_without_an_approval() -> 
     assert bad["statusCode"] == 400
 
 
+async def test_a_link_added_without_roles_gets_the_default_roles() -> None:
+    d, _invoked, _c = _api()
+    r = await handle_http(ev("POST", "/connectors", {"url": URL, "label": "Higgsfield"}), d)
+    assert r["statusCode"] == 201
+    assert js(r)["connector"]["roles"] == {"ace": "all", "manager": "all", "worker": "all"}
+
+
 async def test_delete_marks_removing_and_hands_the_cleanup_to_the_connectors_lambda() -> None:
     d, invoked, c = _api()
     await c.store.create({"id": "gh", "url": URL, "status": "ready"})
