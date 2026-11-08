@@ -102,6 +102,8 @@ class SonicSession:
     _closed: bool = False
     _got_output: bool = False
     _tried: int = 0
+    _last_error: str = ""
+    _errors_in_a_row: int = 0
 
     # ---------- opening and rotating streams ----------
     async def start(self) -> None:
@@ -115,8 +117,16 @@ class SonicSession:
                 await self.send_client({"type": "ready", "model": model_id, "region": region})
                 return
             except Exception as e:
-                log("warn", "voice.open_failed", model=model_id, region=region, error=type(e).__name__)
-        raise RuntimeError("no Nova Sonic model could be opened")
+                self._last_error = f"{model_id} in {region}: {type(e).__name__}: {str(e)[:160]}"
+                log(
+                    "warn",
+                    "voice.open_failed",
+                    model=model_id,
+                    region=region,
+                    error=type(e).__name__,
+                    detail=str(e)[:300],
+                )
+        raise RuntimeError(f"Nova Sonic could not be opened ({self._last_error or 'no model configured'})")
 
     async def _open(self, model_id: str, region: str, replay: bool = False) -> None:
         stream = await self.open_stream(model_id, region)
@@ -212,11 +222,14 @@ class SonicSession:
                 if stream is not self.stream:
                     return
                 self._got_output = True
+                self._errors_in_a_row = 0
                 await self._on_event(ev.get("event", {}))
         except Exception as e:
             if stream is not self.stream or self._closed:
                 return
             log("warn", "voice.stream_error", error=type(e).__name__, detail=str(e)[:300])
+            assert self.model is not None
+            self._last_error = f"{self.model[0]} in {self.model[1]}: {type(e).__name__}: {str(e)[:160]}"
             if not self._got_output and self._tried < len(self.candidates):
                 model_id, region = self.candidates[self._tried]  # this model isn't usable here: the next one
                 self._tried += 1
@@ -226,6 +239,14 @@ class SonicSession:
                     return
                 except Exception as e2:
                     log("warn", "voice.open_failed", model=model_id, region=region, error=type(e2).__name__)
+            # A stream that keeps failing before Sonic says anything is not coming back: say why and stop,
+            # instead of reopening it forever while the owner hears nothing.
+            self._errors_in_a_row += 1
+            if not self._got_output and self._errors_in_a_row >= 2:
+                log("warn", "voice.gave_up", detail=self._last_error)
+                await self.send_client({"type": "error", "message": f"Nova Sonic stopped ({self._last_error})"})
+                await self.close()
+                return
             await self._rotate("error")
             return
         if stream is self.stream and not self._closed:

@@ -149,8 +149,8 @@ def create_app(
             try:
                 await session.start()
             except Exception as e:
-                log("warn", "voice.start_failed", error=type(e).__name__)
-                await send({"type": "error", "message": "AIC's voice could not start (Nova Sonic is not available)."})
+                log("warn", "voice.start_failed", error=type(e).__name__, detail=str(e)[:300])
+                await send({"type": "error", "message": str(e)[:300] or "Nova Sonic is not available"})
                 return
             while True:
                 raw = await ws.receive_text()

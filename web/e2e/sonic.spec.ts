@@ -96,3 +96,46 @@ test("when the real-time voice is not set up, the step-by-step voice takes over"
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
   expect(m.calls.find((c) => c.path === "/messages")?.body).toMatchObject({ text: "what's the status?", voice: true });
 });
+
+test("in the standard voice, talking over AIC stops it at once and the mic opens", async ({ page }) => {
+  const m = await mockBackend(page);
+  await page.addInitScript(() => {
+    const w = window as unknown as { __heard: string; __speakMs: number; __loud: (on: boolean) => void };
+    w.__heard = "what's the status?";
+    w.__speakMs = 6000; // AIC would talk for six seconds
+    (window as unknown as { __aicSonic: boolean }).__aicSonic = true;
+    // A microphone the test can make loud: a tone behind a gain set to silence.
+    let gain: GainNode | null = null;
+    w.__loud = (on) => gain && (gain.gain.value = on ? 0.6 : 0);
+    navigator.mediaDevices.getUserMedia = async () => {
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      gain = ctx.createGain();
+      gain.gain.value = 0;
+      const out = ctx.createMediaStreamDestination();
+      osc.connect(gain).connect(out);
+      osc.start();
+      return out.stream;
+    };
+  });
+  await page.route(`${CONFIG.apiUrl}/voice/session`, (r) =>
+    r.fulfill({ status: 503, json: { error: "not_configured", message: "Real-time voice is not set up." } }),
+  );
+  await page.goto("/");
+  const strip = page.locator(".voice");
+  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  // The reason the real-time voice is not in use is shown, in plain words.
+  await expect(page.getByText(/Real-time voice didn't connect \(Real-time voice is not set up\)/)).toBeVisible();
+  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
+  await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "wait, the costs?"));
+  m.send({ type: "ace.reply", conversation: "main", text: "All quiet. Nothing needs you at the moment.", done: true });
+  await expect(strip).toHaveAttribute("data-speaker", "aic");
+  await page.waitForTimeout(500); // the listener learns the room's noise
+  const cut = Date.now();
+  await page.evaluate(() => (window as unknown as { __loud: (on: boolean) => void }).__loud(true));
+  await expect(strip).toHaveAttribute("data-speaker", "you", { timeout: 1500 });
+  expect(Date.now() - cut).toBeLessThan(1500);
+  await page.evaluate(() => (window as unknown as { __loud: (on: boolean) => void }).__loud(false));
+  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(2);
+  expect(m.calls.filter((c) => c.path === "/messages")[1]?.body).toMatchObject({ text: "wait, the costs?" });
+});

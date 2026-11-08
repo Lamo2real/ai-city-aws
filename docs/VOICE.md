@@ -16,7 +16,8 @@ again, or say "stop listening", to end the call.
   then Nova Sonic 1. The voice is `voiceId`; how quickly it decides you finished is `endpointingSensitivity`.
 - **Long calls.** Bedrock ends a stream after eight minutes; the relay starts a fresh one after about seven and
   replays what was said.
-- **When Sonic is not available** the button falls back to the step-by-step voice below by itself.
+- **When Sonic is not available** the button falls back to the step-by-step voice below by itself, and a short notice says why (the model, region and AWS error), so the cause is visible without logs. A call that breaks part-way carries on in the step-by-step voice the same way.
+- **Talking over AIC in the step-by-step voice** works too: while AIC's reply plays, a quiet listener watches the mic with echo cancellation. When your voice stays above the room's noise for about a fifth of a second, the reply stops at once and the mic opens (`web/src/voice/bargeIn.ts`).
 - **Logs.** The ace runtime logs `voice.*` lines (model chosen, rotation, failures).
 
 ## Step-by-step voice: OpenAI text-to-speech

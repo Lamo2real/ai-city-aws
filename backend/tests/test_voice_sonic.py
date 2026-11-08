@@ -272,3 +272,37 @@ async def test_the_api_hands_out_a_five_minute_signed_address_to_aics_own_runtim
     assert q["X-Amz-Expires"] == ["300"] and "X-Amz-Signature" in q
     r = js(await handle_http(ev("POST", "/voice/session"), make(voice=deps)))
     assert r["url"].startswith("wss://") and r["expires_in"] == 300
+
+
+async def test_a_stream_that_keeps_failing_says_why_instead_of_going_silent() -> None:
+    r = Rig()
+    await r.s.start()
+    for _ in range(4):
+        if r.client and r.client[-1].get("type") in ("error", "closed"):
+            break
+        await r.stream.out.put(RuntimeError("AccessDeniedException: not authorized"))
+        await settle()
+        await asyncio.sleep(0.01)
+    errors = [m for m in r.client if m["type"] == "error"]
+    assert errors and "AccessDeniedException" in errors[0]["message"]
+    assert len(r.opened) <= 4  # tried the next models, then gave up; no endless reopening
+    await r.s.close()
+
+
+async def test_when_no_model_opens_the_reason_reaches_the_browser() -> None:
+    async def refuse(model: str, region: str) -> Any:
+        raise RuntimeError(f"ValidationException: {model} is not available in {region}")
+
+    sent: list[dict[str, Any]] = []
+
+    async def send(m: dict[str, Any]) -> None:
+        sent.append(m)
+
+    async def ask(_: str) -> str:
+        return ""
+
+    s = V.SonicSession(
+        send_client=send, ask_aic=ask, open_stream=refuse, system_prompt="x", candidates=[("nova-2", "eu-north-1")]
+    )
+    with pytest.raises(RuntimeError, match="nova-2 in eu-north-1: RuntimeError: ValidationException"):
+        await s.start()

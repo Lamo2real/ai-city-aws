@@ -24,6 +24,7 @@ import { SpeechQueue } from "./speech.ts";
 import { loadOpenAi, onVoiceNote, withOpenAi } from "./openai.ts";
 import { toast } from "../components/ui.tsx";
 import { getVoice, logVoiceError, micProblem, speakProblem } from "./voice.ts";
+import { watchForBargeIn } from "./bargeIn.ts";
 import { primeSonic, sonicWanted, startSonic, type SonicCall } from "./sonic.ts";
 
 /** Where dictated words go: each partial while talking, then each final piece. */
@@ -61,8 +62,16 @@ const lineId = () => `v${Date.now().toString(36)}${Math.random().toString(36).sl
 // Replies already in the chat when the page opens (restored after a reload) are never read aloud again.
 const spoken: { current: string | null | undefined } = { current: undefined };
 
+// While AIC talks in a voice conversation, a quiet listener for the owner talking over it (bargeIn.ts).
+const barge: { current: (() => void) | null } = { current: null };
+function stopBargeIn() {
+  barge.current?.();
+  barge.current = null;
+}
+
 /** Cuts AIC off: drops the reply's queue, stops the clip playing now and any browser voice. */
 function stopTalking() {
+  stopBargeIn();
   const t = talk.current;
   if (t) {
     t.cancelled = true;
@@ -111,6 +120,7 @@ export function useVoice(dictation?: DictationTarget) {
     // sentence; otherwise back to idle. AIC never listens while it talks, so there is no self-echo.
     const finish = (t: Talk, spokenAloud: boolean, askedVoice: boolean) => {
       if (t.cancelled || talk.current !== t) return; // cut off: whoever cut it off decides what's next
+      stopBargeIn();
       const next = loopNext(loop.current, spokenAloud && askedVoice ? "reply_spoken" : "reply_silent");
       loop.current = next.on;
       // In a voice conversation the mic always opens again after AIC's answer; otherwise the City's loop decides.
@@ -163,6 +173,16 @@ export function useVoice(dictation?: DictationTarget) {
           },
         );
       talk.current = t;
+      // Talking over AIC stops it at once and opens the mic (in the voice conversation).
+      if (say && convo.current && !dictating.current) {
+        stopBargeIn();
+        barge.current = watchForBargeIn(() => {
+          barge.current = null;
+          if (talk.current !== t || t.cancelled || !convo.current) return;
+          stopTalking();
+          startRef.current?.(true);
+        });
+      }
       if (say && !t.queue && last.state !== "done") return; // a voice without synth: speak it whole when done
     }
     const t = talk.current!;
@@ -302,6 +322,17 @@ export function useVoice(dictation?: DictationTarget) {
         onSpeaking: (on) => presence(on ? "speaking" : "listening"),
         onEnd: (e) => {
           sonic.current = null;
+          if (e && convo.current) {
+            // The call broke: say why and carry on with the standard voice instead of going silent.
+            logVoiceError("the voice call stopped", e);
+            const why = ((e as Error).message ?? "").trim().replace(/\.$/, "").slice(0, 160);
+            toast({
+              text: `Real-time voice stopped${why ? ` (${why})` : ""}, so AIC is using its standard voice.`,
+              tone: "info",
+            });
+            getVoice().prime?.();
+            return void start();
+          }
           endConversation();
           setListening(false);
           store.set({ presence: "idle" });
@@ -323,6 +354,12 @@ export function useVoice(dictation?: DictationTarget) {
         setProblem(micProblem(e));
         return endConversation();
       }
+      // Say why, in one line, so it can be fixed; the standard voice carries on meanwhile.
+      const why = ((e as Error | null)?.message ?? "").trim().replace(/\.$/, "").slice(0, 160);
+      toast({
+        text: `Real-time voice didn't connect${why ? ` (${why})` : ""}, so AIC is using its standard voice.`,
+        tone: "info",
+      });
       getVoice().prime?.();
       void start();
     }
