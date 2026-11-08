@@ -107,21 +107,13 @@
     }
   },
   "voice": {
-    "$comment": "Owner's exception to Anthropic-only (2026-11-08, decision 120): Amazon Nova 2 Sonic is AIC's real-time voice (speech in, speech out, turn-taking, barge-in). It is only the voice: every request goes to AIC (Haiku) through the ask_aic tool. Tried in this order until one opens (Nova 2 Sonic's regions vary by account); the first is the default.",
+    "$comment": "Owner's exception to Anthropic-only (2026-11-08, decision 120): Amazon Nova 2.5 Sonic (then Nova 2 Sonic) is AIC's real-time voice (speech in, speech out, turn-taking, barge-in). voiceId tiffany: the warm American feminine voice closest to ChatGPT's Sol (Nova Sonic has no custom or cloned voices). It is only the voice: every request goes to AIC (Haiku) through the ask_aic tool. Tried in this order until one opens (regions vary by account); the first is the default.",
     "speech": [
-      {
-        "modelId": "amazon.nova-2-sonic-v1:0",
-        "region": "eu-north-1"
-      },
-      {
-        "modelId": "amazon.nova-2-sonic-v1:0",
-        "region": "us-east-1"
-      },
-      {
-        "modelId": "amazon.nova-sonic-v1:0",
-        "region": "eu-north-1"
-      }
-    ],
+        {"modelId": "amazon.nova-2-5-sonic", "region": "eu-north-1"},
+        {"modelId": "amazon.nova-2-5-sonic", "region": "us-east-1"},
+        {"modelId": "amazon.nova-2-sonic-v1:0", "region": "eu-north-1"},
+        {"modelId": "amazon.nova-2-sonic-v1:0", "region": "us-east-1"}
+      ],
     "voiceId": "tiffany",
     "endpointingSensitivity": "MEDIUM"
   }

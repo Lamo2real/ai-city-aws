@@ -7,7 +7,7 @@ AI City is the owner's personal organization of AI agents, running only in the o
 - Orchestrator and Department Managers: Claude Fable 5.1, falling back to Claude Opus 5.5 once on refusal or no verdict
 - Workers: Claude Opus 5.5
 - Utility calls (wake-word check, titles, compaction): Claude Haiku 5.5, prompts kept under 100,000 tokens
-- Anthropic models only, via Amazon Bedrock with IAM roles. One exception (the owner's, 2026-11-07): the knowledge base embeds with Amazon Titan Text Embeddings V2 (`embeddings.knowledge` in `config/models.json`); it never reasons or writes text. A second exception (the owner's, 2026-11-08, decision 120): Amazon Nova 2 Sonic is AIC's real-time voice (`voice.speech` in `config/models.json`); it only listens and speaks, and hands every request to AIC. Never an Anthropic API key, never a subscription login.
+- Anthropic models only, via Amazon Bedrock with IAM roles. One exception (the owner's, 2026-11-07): the knowledge base embeds with Amazon Titan Text Embeddings V2 (`embeddings.knowledge` in `config/models.json`); it never reasons or writes text. A second exception (the owner's, 2026-11-08, decision 120): Amazon Nova 2.5 Sonic (falling back to Nova 2 Sonic) is AIC's real-time voice (`voice.speech` in `config/models.json`); it only listens and speaks, and hands every request to AIC. Never an Anthropic API key, never a subscription login.
 
 ## Product spec
 - `docs/PRODUCT.md` is the living spec: requirements, features with status, defaults, invariants. Read it first in a new or compacted session, and update it in the same commit as any change to a requirement, feature, default or invariant.

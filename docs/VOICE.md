@@ -1,6 +1,6 @@
 # AIC's voice
 
-## Real-time voice: Nova 2 Sonic (decision 120)
+## Real-time voice: Nova 2.5 Sonic (decision 120)
 
 The voice button on the AIC screen opens a real-time call. Talk naturally; talk over AIC and it stops at once
 and listens. While AIC works on something longer it says a short cue ("one sec, checking"). Tap the button
@@ -12,8 +12,11 @@ again, or say "stop listening", to end the call.
 - **How it connects.** The HUD calls `POST /voice/session` and gets a five-minute signed WebSocket address to
   AIC's own runtime (`/ws` in `backend/src/aic/runtime/server.py`). The relay (`backend/src/aic/runtime/voice.py`)
   streams 16 kHz microphone audio to Bedrock and 24 kHz speech back (`web/src/voice/sonic.ts`).
-- **Models and regions** are in `config/models.json` under `voice`: Nova 2 Sonic in Stockholm, then Virginia,
-  then Nova Sonic 1. The voice is `voiceId`; how quickly it decides you finished is `endpointingSensitivity`.
+- **Models and regions** are in `config/models.json` under `voice`: Nova 2.5 Sonic (`amazon.nova-2-5-sonic`) in
+  Stockholm, then Virginia, then Nova 2 Sonic in the same two. The voice is `tiffany`: Nova Sonic offers 16 fixed
+  voices and no custom or cloned ones, and Tiffany (warm, American, feminine, and able to speak every supported
+  language) is the closest to ChatGPT's Sol. Sol itself is not available outside ChatGPT. Personality, pacing and
+  expressions come from `agents/voice.md`; the timbre comes only from the voice ID. The voice is `voiceId`; how quickly it decides you finished is `endpointingSensitivity`.
 - **Long calls.** Bedrock ends a stream after eight minutes; the relay starts a fresh one after about seven and
   replays what was said.
 - **When Sonic is not available** the button falls back to the step-by-step voice below by itself, and a short notice says why (the model, region and AWS error), so the cause is visible without logs. A call that breaks part-way carries on in the step-by-step voice the same way.
