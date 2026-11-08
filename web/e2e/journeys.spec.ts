@@ -235,6 +235,7 @@ test("one voice button: the conversation stays on, the voice bar shows who is ta
   const m = await mockBackend(page);
   await page.addInitScript(() => {
     (window as unknown as { __micHold: boolean }).__micHold = true;
+    (window as unknown as { __micLoud: boolean }).__micLoud = true; // the owner keeps talking
     (window as unknown as { __speakMs: number }).__speakMs = 4000;
   });
   await page.goto("/");
@@ -457,10 +458,9 @@ test("a three-sentence streamed reply plays three clips, in order, once each; Se
   await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "status?"));
   await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(2);
-  await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "stop listening"));
   await page.getByRole("textbox", { name: "Message to AIC" }).fill("status?");
   await page.keyboard.press("Enter");
-  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(2);
+  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(3); // the typed one too
   m.send({ type: "ace.reply", conversation: "main", text: "One. Two. Three. Four. Five. Six.", done: true });
   await expect.poll(async () => (await w()).spoken.length).toBeGreaterThan(3);
   await page.getByRole("textbox", { name: "Message to AIC" }).fill("stop");

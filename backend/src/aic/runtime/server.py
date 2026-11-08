@@ -284,6 +284,7 @@ def _voice(host: TurnRunner, city: Any) -> VoiceFactory:
     from .voice import SonicSession, bedrock_opener
 
     cfg = voice_config()
+    cues: dict[str, Any] = cfg.get("cues") or {}
     opener = bedrock_opener(city.session)
     prompt = load_prompt("voice.md").body
 
@@ -312,6 +313,9 @@ def _voice(host: TurnRunner, city: Any) -> VoiceFactory:
             system_prompt=prompt,
             voice_id=str(cfg.get("voiceId") or "tiffany"),
             sensitivity=str(cfg.get("endpointingSensitivity") or "MEDIUM"),
+            cue_after_s=float(cues.get("afterMs", 1500)) / 1000,
+            cue_again_s=float(cues.get("againMs", 10000)) / 1000,
+            max_cues=int(cues.get("max", 2)),
         )
 
     return make

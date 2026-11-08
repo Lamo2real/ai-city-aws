@@ -33,6 +33,7 @@ from aic.shared.log import log
 INTERRUPTED = '{ "interrupted" : true }'
 CUE_AFTER_S = 1.5
 CUE_AGAIN_S = 10.0
+USER_QUIET_S = 1.2  # the owner spoke this recently: no cue yet
 ROTATE_AFTER_S = 7 * 60 + 15  # Bedrock's limit is 8 minutes
 QUIET_S = 1.5  # Sonic counts as quiet this long after its last audio
 HISTORY = 24  # lines replayed into a fresh session
@@ -102,6 +103,11 @@ class SonicSession:
     _closed: bool = False
     _got_output: bool = False
     _tried: int = 0
+    # Thinking cues (config/models.json voice.cues): after how long AIC is "thinking", how often, how many.
+    cue_after_s: float = CUE_AFTER_S
+    cue_again_s: float = CUE_AGAIN_S
+    max_cues: int = 2
+    _user_at: float = -1e9  # when the owner last spoke (a cue never starts over the owner's words)
     _last_error: str = ""
     _errors_in_a_row: int = 0
 
@@ -256,6 +262,8 @@ class SonicSession:
         if "contentStart" in ev:
             c = ev["contentStart"]
             self._role = c.get("role", "")
+            if self._role == "USER":
+                self._user_at = self.clock()
             stage = ""
             with contextlib.suppress(ValueError):
                 stage = json.loads(c.get("additionalModelFields") or "{}").get("generationStage", "")
@@ -266,6 +274,7 @@ class SonicSession:
                 await self.send_client({"type": "interrupted"})  # barge-in: the browser stops playback now
                 return
             if self._role == "USER" and text.strip():
+                self._user_at = self.clock()
                 self._tool_in_turn = False
                 self.history.append(("USER", text))
                 await self.send_client({"type": "transcript", "role": "user", "text": text})
@@ -328,11 +337,19 @@ class SonicSession:
         await self._send({"contentEnd": {"promptName": self.prompt, "contentName": name}})
 
     async def _cues(self) -> None:
-        """A short, human cue while AIC works longer than a moment: once after CUE_AFTER_S, once more later."""
-        await asyncio.sleep(CUE_AFTER_S)
-        await self._text("USER", "[status] thinking: AIC needs a moment for this one.", interactive=True)
-        await asyncio.sleep(CUE_AGAIN_S - CUE_AFTER_S)
-        await self._text("USER", "[status] AIC is still working; it is a bigger one.", interactive=True)
+        """Short, human cues while AIC works longer than a moment: the first after ``cue_after_s``, then every
+        ``cue_again_s``, at most ``max_cues``. Never while the owner is talking: it waits for a quiet moment."""
+        notes = [
+            "[status] thinking: AIC needs a moment for this one.",
+            "[status] AIC is still working; it is a bigger one.",
+            "[status] AIC is still on it.",
+        ]
+        for i in range(self.max_cues):
+            await asyncio.sleep(self.cue_after_s if i == 0 else self.cue_again_s)
+            # The clock is injected (tests), so this polls it rather than waiting on an event.
+            while self.clock() - self._user_at < USER_QUIET_S:  # noqa: ASYNC110
+                await asyncio.sleep(0.25)
+            await self._text("USER", notes[min(i, len(notes) - 1)], interactive=True)
 
     # ---------- plumbing ----------
     async def _send(self, event: dict[str, Any]) -> None:

@@ -25,7 +25,7 @@ import { loadOpenAi, onVoiceNote, withOpenAi } from "./openai.ts";
 import { toast } from "../components/ui.tsx";
 import { getVoice, logVoiceError, micProblem, speakProblem } from "./voice.ts";
 import { watchForBargeIn } from "./bargeIn.ts";
-import { CUE_AFTER_MS, CUE_AGAIN_MS, MAX_CUES, nextCue } from "./cues.ts";
+import { CUE_AFTER_MS, CUE_AGAIN_MS, MAX_CUES, OWNER_TALKING_LEVEL, nextCue } from "./cues.ts";
 import { primeSonic, sonicWanted, startSonic, type SonicCall } from "./sonic.ts";
 
 /** Where dictated words go: each partial while talking, then each final piece. */
@@ -136,6 +136,11 @@ export function useVoice(dictation?: DictationTarget) {
       const tick = () => {
         const now = store.get().chat.at(-1);
         if (!convo.current || sonic.current || now?.id !== last.id || n >= MAX_CUES) return stopCues();
+        // Never over the owner's words: while they are still talking, wait a moment and look again.
+        if ((getVoice().levels?.().input ?? 0) > OWNER_TALKING_LEVEL) {
+          cue.timer = window.setTimeout(tick, 400);
+          return;
+        }
         sayCue(nextCue(n++));
         cue.timer = window.setTimeout(tick, CUE_AGAIN_MS);
       };

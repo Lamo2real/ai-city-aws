@@ -115,6 +115,12 @@
         {"modelId": "amazon.nova-2-sonic-v1:0", "region": "us-east-1"}
       ],
     "voiceId": "tiffany",
-    "endpointingSensitivity": "MEDIUM"
+    "endpointingSensitivity": "MEDIUM",
+    "cues": {
+      "$comment": "Thinking cues: said only when AIC has not answered after afterMs, then every againMs, at most max, and never while the owner is talking.",
+      "afterMs": 1500,
+      "againMs": 10000,
+      "max": 2
+    }
   }
 }

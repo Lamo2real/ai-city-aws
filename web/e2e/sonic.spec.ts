@@ -159,7 +159,7 @@ test("the standard voice says a short thinking cue only when AIC takes a moment,
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
   // AIC takes a while: one short cue.
   await expect.poll(spoken, { timeout: 4000 }).toHaveLength(1);
-  expect((await spoken())[0]).toMatch(/think|sec|check|moment|look|see|pull/i);
+  expect((await spoken())[0]).toMatch(/think|second|check|moment|look|see/i);
   m.send({ type: "ace.reply", conversation: "main", text: "All quiet.", done: true });
   await expect.poll(spoken).toContain("All quiet.");
 

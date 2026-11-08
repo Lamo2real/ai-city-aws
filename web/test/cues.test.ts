@@ -9,7 +9,7 @@ describe("thinking cues", () => {
     for (const c of said) expect(c.split(" ").length).toBeLessThanOrEqual(8);
   });
   it("start with a thinking line, later ones say AIC is still at it", () => {
-    expect(nextCue(0, () => 0)).toMatch(/think|sec|check|moment|look|see|pull/i);
-    expect(nextCue(1, () => 0)).toMatch(/still|almost|bear|pulling|nearly/i);
+    expect(nextCue(0, () => 0)).toMatch(/think|second|check|moment|look|see/i);
+    expect(nextCue(1, () => 0)).toMatch(/still|almost|bear|nearly/i);
   });
 });

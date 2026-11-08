@@ -5,25 +5,25 @@
 /** How long AIC may take before a cue is said, and how often one follows while it keeps working. */
 export const CUE_AFTER_MS = 1300;
 export const CUE_AGAIN_MS = 9000;
-export const MAX_CUES = 3;
+export const MAX_CUES = 2;
+/** Mic loudness above which the owner counts as talking: a cue waits for them. */
+export const OWNER_TALKING_LEVEL = 0.12;
 
 const FIRST = [
-  "Hmm, let me think.",
-  "One sec.",
-  "Okay, let me check.",
-  "Good question. Give me a moment.",
+  "Hmm, let me think about that.",
+  "Let's see.",
+  "Give me a second.",
   "Let me look into that.",
-  "Mm, one moment.",
-  "Right, let me see.",
-  "Sure, let me pull that up.",
+  "Let me check something.",
+  "Interesting… one moment.",
+  "Give me a second, I'm checking.",
 ];
 const LATER = [
   "Still on it.",
   "Almost there.",
   "Bear with me, this one takes a moment.",
-  "Just pulling that together.",
   "Nearly done.",
-  "Still working on it.",
+  "Still working through it.",
 ];
 
 let previous = "";

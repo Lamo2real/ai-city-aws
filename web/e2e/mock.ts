@@ -342,6 +342,7 @@ export async function mockBackend(
       const w = window as unknown as {
         __heard?: string;
         __micHold?: boolean;
+        __micLoud?: boolean;
         __micError?: string;
         __speakMs?: number;
         __partials?: string[];
@@ -350,12 +351,17 @@ export async function mockBackend(
         __synthError?: string;
       };
       let hearing = false;
+      let voiceUntil = 0;
       let talking = false;
       if (realVoice) return;
       (window as unknown as { __aicVoice: unknown }).__aicVoice = {
-        async listen(onText: (t: string) => void, onPartial?: (t: string) => void) {
+        async listen(heardText: (t: string) => void, onPartial?: (t: string) => void) {
           if (w.__micError) throw new DOMException("fake failure", w.__micError);
           hearing = true;
+          const onText = (t: string) => {
+            voiceUntil = performance.now() + 300;
+            heardText(t);
+          };
           // Live partials first (window.__partials, 100 ms apart), then the final transcript.
           const timers = (w.__partials ?? []).map((p, i) => setTimeout(() => onPartial?.(p), 100 * (i + 1)));
           const delay = 100 * ((w.__partials ?? []).length + 1) + 200;
@@ -399,7 +405,9 @@ export async function mockBackend(
         },
         levels() {
           const wobble = 0.45 + 0.4 * Math.abs(Math.sin(performance.now() / 140));
-          return { input: hearing ? wobble : 0, output: talking ? wobble : 0 };
+          // The owner's voice is loud only around the moments words are heard; otherwise a quiet room.
+          const voice = hearing && (w.__micLoud === true || performance.now() < voiceUntil);
+          return { input: voice ? wobble : hearing ? 0.02 : 0, output: talking ? wobble : 0 };
         },
       };
     },

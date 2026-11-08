@@ -17,6 +17,14 @@ again, or say "stop listening", to end the call.
   voices and no custom or cloned ones, and Tiffany (warm, American, feminine, and able to speak every supported
   language) is the closest to ChatGPT's Sol. Sol itself is not available outside ChatGPT. Personality, pacing and
   expressions come from `agents/voice.md`; the timbre comes only from the voice ID. The voice is `voiceId`; how quickly it decides you finished is `endpointingSensitivity`.
+- **Thinking cues** are status cues, not reasoning: said only when AIC has not answered after `voice.cues.afterMs`
+  (1.5 s), again every `againMs` (10 s), at most `max` (2), and never while the owner is talking (the relay waits
+  until the owner has been quiet for 1.2 s). The standard voice does the same with the constants in
+  `web/src/voice/cues.ts`, and waits while the mic hears the owner.
+- **Personality** (`agents/voice.md`, and AIC's spoken style in `agents/ace.md`): a calm, warm executive assistant;
+  varied pace and emphasis; expressions for understanding, responding and investigating used only when they fit,
+  never twice in a row; no invented steps, no narrated reasoning; after an interruption it continues from what
+  the owner just said.
 - **Long calls.** Bedrock ends a stream after eight minutes; the relay starts a fresh one after about seven and
   replays what was said.
 - **When Sonic is not available** the button falls back to the step-by-step voice below by itself, and a short notice says why (the model, region and AWS error), so the cause is visible without logs. A call that breaks part-way carries on in the step-by-step voice the same way.

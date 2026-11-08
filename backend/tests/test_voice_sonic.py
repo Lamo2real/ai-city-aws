@@ -170,10 +170,9 @@ async def test_barge_in_tells_the_browser_to_stop_at_once_and_audio_is_passed_th
     await r.s.close()
 
 
-async def test_long_work_gets_a_short_spoken_cue_from_sonic(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(V, "CUE_AFTER_S", 0.01)
-    monkeypatch.setattr(V, "CUE_AGAIN_S", 10)
+async def test_long_work_gets_a_short_spoken_cue_from_sonic() -> None:
     r = Rig(delay=0.08)
+    r.s.cue_after_s, r.s.cue_again_s = 0.01, 10
     await r.s.start()
     await say(r, *tool_call("build me a landing page"))
     await asyncio.sleep(0.05)
@@ -306,3 +305,30 @@ async def test_when_no_model_opens_the_reason_reaches_the_browser() -> None:
     )
     with pytest.raises(RuntimeError, match="nova-2 in eu-north-1: RuntimeError: ValidationException"):
         await s.start()
+
+
+async def test_quick_answers_get_no_cue_and_a_cue_never_starts_while_the_owner_talks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(V, "USER_QUIET_S", 0.5)
+    statuses = lambda r: [e for e in r.stream.sent if e.get("textInput", {}).get("content", "").startswith("[status]")]  # noqa: E731
+    # A quick answer: no cue.
+    r = Rig(delay=0.01)
+    r.s.cue_after_s = 0.05
+    await r.s.start()
+    await say(r, *tool_call("what's the time?"))
+    await asyncio.sleep(0.1)
+    assert statuses(r) == []
+    await r.s.close()
+    # A long one while the owner is still talking: the cue waits for a quiet moment.
+    r = Rig(delay=0.3)
+    r.s.cue_after_s, r.s.cue_again_s, r.s.max_cues = 0.02, 10, 1
+    await r.s.start()
+    await say(r, *tool_call("build me a landing page"))
+    await say(r, *user_said("and make it blue"))  # the owner keeps talking
+    await asyncio.sleep(0.05)
+    assert statuses(r) == []
+    r.now += 1  # quiet now
+    await asyncio.sleep(0.3)
+    assert len(statuses(r)) == 1
+    await r.s.close()
