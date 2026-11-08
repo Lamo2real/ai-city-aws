@@ -629,29 +629,55 @@ main {
   margin-bottom: var(--s1);
 }
 .speak-mode .seg {
-  display: inline-flex;
+  --i: 0; /* which option is on; AceScreen sets it */
+  position: relative;
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr; /* three equal cells, so the pill is one cell wide wherever it sits */
   border: 1px solid var(--edge-2);
   border-radius: 999px;
   overflow: hidden;
   background: var(--glass);
   box-shadow: var(--glow);
 }
+/* The amber pill: one element that glides to the chosen option instead of three that switch. */
+.speak-mode .seg::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(100% / 3);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(249, 201, 118, 0.96), rgba(232, 163, 61, 0.96));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  transform: translateX(calc(var(--i) * 100%));
+  transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+}
 .speak-mode .seg label {
   position: relative;
+  z-index: 1;
   min-height: var(--tap);
   padding: 0 var(--s3);
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   font-size: var(--fs-s);
   font-weight: 700;
   color: var(--gtext);
+  transition: color 0.32s ease;
 }
 .speak-mode .seg label + label {
   border-left: 1px solid var(--edge);
 }
 .speak-mode .seg label.on {
-  background: linear-gradient(180deg, rgba(249, 201, 118, 0.96), rgba(232, 163, 61, 0.96));
   color: #2a1a08;
+}
+@media (prefers-reduced-motion: reduce) {
+  .speak-mode .seg::before,
+  .speak-mode .seg label {
+    transition: none;
+  }
 }
 .speak-mode .seg input {
   position: absolute;

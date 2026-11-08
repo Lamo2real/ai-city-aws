@@ -114,7 +114,11 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
           </label>
           <fieldset className="speak-mode">
             <legend>Speak replies</legend>
-            <div className="seg">
+            {/* The amber pill slides to the chosen option (`--i` is its index; see .seg::before). */}
+            <div
+              className="seg"
+              style={{ "--i": ["auto", "always", "never"].indexOf(voice.speakMode) } as React.CSSProperties}
+            >
               {(
                 [
                   ["auto", "When I talk"],
