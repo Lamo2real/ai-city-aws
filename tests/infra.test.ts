@@ -721,6 +721,7 @@ describe("the owner's start over", () => {
     const { readFileSync } = await import("node:fs");
     const api = readFileSync("infra/modules/api/main.tf", "utf8");
     expect(api).toContain('"POST /city/reset"');
+    expect(api).toContain('"POST /agents/{id}/home"'); // the City's Send home button
     expect(api).toContain('"dynamodb:Scan", "dynamodb:BatchWriteItem"');
     expect(api).toContain('"sqs:PurgeQueue"');
   });
