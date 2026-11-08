@@ -35,6 +35,7 @@ from aic.shared.caps import validate_caps
 from aic.shared.clients import client
 from aic.shared.config import caps_config
 from aic.shared.events import EventBus, now_iso
+from aic.shared.github import GitHubDeps, GitHubError, github_token_secret, whoami
 from aic.shared.hierarchy.actions import CityDeps, answer_question, send_home, send_workers_home, sweep_stale_asks
 from aic.shared.hierarchy.factory import Factory
 from aic.shared.hierarchy.queue import Queue, WorkMessage
@@ -143,6 +144,9 @@ ROUTES: list[tuple[str, str]] = [
     ("POST", "/speech"),
     ("GET", "/voice/openai"),
     ("PUT", "/voice/openai-key"),
+    ("GET", "/github"),
+    ("PUT", "/github/token"),
+    ("DELETE", "/github/token"),
 ]
 
 
@@ -179,6 +183,8 @@ class ApiDeps:
     """iPhone notifications: device registration and the owner's Apple key; None = not deployed (503)."""
     speech: SpeechDeps | None = None
     """AIC's voice through OpenAI text-to-speech (``/speech``, ``/voice/openai*``); None = not configured (503)."""
+    github: GitHubDeps | None = None
+    """The owner's GitHub token (``/github``, ``/github/token``); None = not configured (503 on store)."""
 
 
 def _action_deps(d: ApiDeps) -> CityDeps:
@@ -409,6 +415,61 @@ async def _speech_routes(method: str, path: str, event: dict[str, Any], d: ApiDe
     return None
 
 
+GITHUB_FLAG = ("GITHUB#token", "META")
+
+
+async def _github_routes(method: str, path: str, event: dict[str, Any], d: ApiDeps) -> dict[str, Any] | None:
+    """The owner's GitHub token (docs/GITHUB_ACCESS.md): ``GET /github`` says who it belongs to, ``PUT /github/token``
+    stores one, ``DELETE /github/token`` clears it. The token itself is never echoed or logged."""
+    if path not in ("/github", "/github/token"):
+        return None
+    g = d.github
+    if method == "GET" and path == "/github":
+        flag = await d.ledger.table.get(*GITHUB_FLAG)
+        st = await g.status() if g else {"configured": False, "login": None, "error": None}
+        return reply(200, {**st, "saved_at": flag.get("saved_at") if flag else None})
+    if path != "/github/token":
+        return None
+    if g is None or g.secrets is None:
+        return reply(503, {"error": "not_deployed", "message": "The token can't be stored yet. Deploy first."})
+    if method == "PUT":
+        try:
+            value = github_token_secret(_body(event))
+        except ValueError as e:
+            return reply(400, {"error": "bad_request", "message": str(e)})
+        try:
+            user = await whoami(g.get, json.loads(value)["token"])
+        except GitHubError as e:
+            if e.error == "bad_token":
+                return reply(400, {"error": e.error, "message": e.message})
+            user = None  # GitHub was unreachable: keep the token, the status will say who it belongs to later
+        try:
+            await asyncio.to_thread(store_secret, g.secrets, g.secret_name, value, g.kms_key, g.tags)
+        except Exception as e:
+            log("warn", "github.token_store_failed", error=type(e).__name__)
+            return reply(
+                502, {"error": "store_failed", "message": "The token couldn't be stored. Try again in a moment."}
+            )
+        g.forget()
+        at = now_iso(d.ledger.now())
+        await d.ledger.table.put({"pk": GITHUB_FLAG[0], "sk": GITHUB_FLAG[1], "saved_at": at})
+        log("info", "github.token_saved", known_owner=user is not None)
+        return reply(200, {"ok": True, "saved_at": at, "login": user["login"] if user else None})
+    if method == "DELETE":
+        try:
+            await asyncio.to_thread(store_secret, g.secrets, g.secret_name, "{}", g.kms_key, g.tags)
+        except Exception as e:
+            log("warn", "github.token_remove_failed", error=type(e).__name__)
+            return reply(
+                502, {"error": "store_failed", "message": "The token couldn't be removed. Try again in a moment."}
+            )
+        g.forget()
+        await d.ledger.table.delete(GITHUB_FLAG[0], GITHUB_FLAG[1])
+        log("info", "github.token_removed")
+        return reply(200, {"ok": True})
+    return None
+
+
 async def _push_routes(method: str, path: str, event: dict[str, Any], d: ApiDeps) -> dict[str, Any] | None:
     """iPhone notifications: the owner's phones (``/devices``) and the Apple key (``/notifications/apns``)."""
     if not (path == "/devices" or path.startswith("/devices/") or path == "/notifications/apns"):
@@ -484,6 +545,9 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
     spoken = await _speech_routes(method, path, event, d)
     if spoken is not None:
         return spoken
+    gh = await _github_routes(method, path, event, d)
+    if gh is not None:
+        return gh
     if is_("GET", r"/city"):
         return reply(200, await city_snapshot(d))
     if is_("GET", r"/city/agent"):
@@ -860,8 +924,7 @@ async def _put_settings(b: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         if any(k not in ("orchestrator", "manager") or v not in ("none", "read") for k, v in ma.items()):
             raise BadRequest("mail_access takes orchestrator and manager, each none or read.")
         patch["mail_access"] = dict(ma)
-    if isinstance(b.get("integrations"), dict):
-        patch["integrations"] = {k: bool(v) for k, v in b["integrations"].items()}
+    # "integrations" (four dead switches, removed 2026-11-08) is ignored when an old client still sends it.
     if isinstance(b.get("department_caps"), dict):
         patch["department_caps"] = {department_key(k): _as_number(v) for k, v in b["department_caps"].items()}
     bad = validate_caps({k: patch[k] for k in _CAP_KEYS if k in patch})
@@ -944,7 +1007,7 @@ async def handle_http(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
 _deps: ApiDeps | None = None
 
 
-def _connectors_from_env(city: Any) -> ConnectorsApi:
+def _connectors_from_env(city: Any, github_token: Callable[[], Awaitable[str | None]]) -> ConnectorsApi:
     from aic.shared.connectors import ConnectorStore
 
     fn = os.environ.get("AIC_CONNECTORS_FUNCTION")
@@ -967,6 +1030,7 @@ def _connectors_from_env(city: Any) -> ConnectorsApi:
         workload=os.environ.get("AIC_CONNECTORS_WORKLOAD"),
         hud_origin=os.environ.get("AIC_HUD_ORIGIN"),
         kms_key=os.environ.get("AIC_KMS_KEY_ARN"),
+        github_token=github_token,
     )
 
 
@@ -1037,6 +1101,12 @@ def _knowledge_service(session: Any, bus: EventBus) -> KnowledgeService | None:
 
 def build_deps() -> ApiDeps:
     city = aws_city()
+    github = GitHubDeps(
+        secrets=client(city.session, "secretsmanager"),
+        secret_name=os.environ.get("AIC_GITHUB_SECRET", "aic/prod/github"),
+        kms_key=os.environ.get("AIC_KMS_KEY_ARN"),
+        tags={"Project": "ai-city", "Component": "github"},
+    )
     return ApiDeps(
         ledger=city.ledger,
         bus=city.bus,
@@ -1052,11 +1122,12 @@ def build_deps() -> ApiDeps:
         bridge_invoke=_bridge_invoke(city.session, os.environ.get("AIC_APP_BRIDGE_FUNCTION")),
         proposals=proposals_from_env(city.ledger),
         grants_changed=_policies_refresh(city.session, os.environ.get("AIC_CONNECTORS_FUNCTION")),
-        connectors=_connectors_from_env(city),
+        connectors=_connectors_from_env(city, github.token),
         skills=SkillsApi(city.ledger, city.session.client("s3"), os.environ.get("AIC_SKILLS_BUCKET")),
         mail=_mail_from_env(city),
         push=_push_from_env(city),
         speech=_speech_from_env(city),
+        github=github,
     )
 
 

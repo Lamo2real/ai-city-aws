@@ -696,6 +696,44 @@ describe("voice: OpenAI text-to-speech (decision 96)", () => {
   });
 });
 
+describe("GitHub access (decision 110)", () => {
+  const github = readFileSync("infra/modules/github/main.tf", "utf8");
+  const prodTf = readFileSync("infra/envs/prod/main.tf", "utf8");
+  const apiTf = readFileSync("infra/modules/api/main.tf", "utf8");
+  const storage = readFileSync("infra/modules/storage/main.tf", "utf8");
+  const agents = readFileSync("infra/modules/agents/main.tf", "utf8");
+  const worker = readFileSync("infra/modules/agents/policies/worker.json.tftpl", "utf8");
+  it("the token is one secret: the api stores and reads it, every runtime role reads it", () => {
+    expect(github).toMatch(/secret_name = "aic\/prod\/github"/);
+    expect(github).toMatch(/kms_key_id\s*=\s*var\.kms_key_arn/);
+    expect(github).toMatch(
+      /Action = \["secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue", "secretsmanager:DescribeSecret"\], Resource = \[aws_secretsmanager_secret\.github\.arn\]/,
+    );
+    expect(github).toMatch(
+      /Action = \["secretsmanager:GetSecretValue"\], Resource = \[aws_secretsmanager_secret\.github\.arn\]/,
+    );
+    expect(github).toMatch(/for_each\s*=\s*var\.agent_role_names/);
+    expect(prodTf).toMatch(/module "github"/);
+    expect(prodTf).toMatch(/agent_role_names = module\.agents\.role_names/);
+    expect(prodTf).toMatch(/AIC_GITHUB_SECRET\s*=\s*"aic\/prod\/github"/);
+  });
+  it("the old empty container moves over instead of being destroyed, and nothing else grants the read", () => {
+    expect(prodTf).toMatch(/from = module\.storage\.aws_secretsmanager_secret\.this\["github"\]/);
+    expect(prodTf).toMatch(/to\s*=\s*module\.github\.aws_secretsmanager_secret\.github/);
+    expect(storage).not.toMatch(/github = "/);
+    expect(agents).not.toContain("github_secret_arn");
+    expect(worker).not.toContain("secretsmanager");
+  });
+  it("the routes exist and the image has gh and curl", () => {
+    for (const r of ["GET /github", "PUT /github/token", "DELETE /github/token"]) expect(apiTf).toContain(`"${r}"`);
+    const docker = readFileSync("services/agent-runtime/Dockerfile", "utf8");
+    expect(docker).toMatch(/ARG GH_VERSION=\d+\.\d+\.\d+/);
+    expect(docker).toMatch(/ARG GH_SHA256=[0-9a-f]{64}/);
+    expect(docker).toContain("sha256sum -c");
+    expect(docker).toMatch(/mkdir -p \/tmp\/work \/workspace/);
+  });
+});
+
 describe("the city is always on", () => {
   it("has no pause or resume route in the HTTP API", async () => {
     const { readFileSync } = await import("node:fs");

@@ -6,6 +6,7 @@ import {
   addConnectorByUrl,
   connectorStatus,
   editConnector,
+  githubSignIn,
   listConnectors,
   refreshConnector,
   removeConnector,
@@ -79,6 +80,7 @@ export function ConnectorsSettings(p: {
                 signinPath={`/connectors/${c.id}/login`}
                 completePath={`/connectors/${c.id}/login/complete`}
                 status="pending"
+                tokenInstead={githubSignIn(c) ? c.id : undefined}
               />
             ) : null}
             {c.status === "needs_key" ? (

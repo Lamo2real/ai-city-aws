@@ -15,8 +15,9 @@ variable "workspace_days" {
 }
 
 locals {
-  tags    = { Component = "storage" }
-  secrets = { github = "GitHub token for workers' branches and PRs", google = "Google Calendar/Gmail OAuth (integration off)", spotify = "Spotify OAuth (integration off)" }
+  tags = { Component = "storage" }
+  # The GitHub token moved to infra/modules/github (decision 110): the owner pastes it in Settings → GitHub.
+  secrets = { google = "Google Calendar/Gmail OAuth (integration off)", spotify = "Spotify OAuth (integration off)" }
 }
 
 resource "aws_s3_bucket" "workspaces" {

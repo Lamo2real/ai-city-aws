@@ -502,7 +502,8 @@ async def remove(d: ConnectorsDeps, id: str) -> None:
     if rec.get("auth") == "oauth":
         steps.append(("provider", d.control.delete_oauth2_credential_provider, {"name": f"aic-conn-{id}"}))
     if rec.get("auth") == "api_key":
-        steps.append(("provider", d.control.delete_api_key_credential_provider, {"name": f"aic-conn-{id}"}))
+        name = str(rec.get("provider_name") or f"aic-conn-{id}")  # ``-key`` when a token replaced a sign-in
+        steps.append(("provider", d.control.delete_api_key_credential_provider, {"name": name}))
     if rec.get("transport") == "package":  # §1.10: end the connector's microVM
         steps.append(("session", d.identity.stop_runtime_session, connector_packages.stop_kwargs(rec, d.mcp_host_arn)))
     if rec.get("secret_name"):

@@ -18,6 +18,7 @@ AI City is the owner's personal organization of AI agents, running only in the o
 - `ci.yml` runs only by hand; `deploy.yml` runs on pushes to `main` (docs-only pushes excepted) or by hand, never on pull requests.
 - Every taggable resource carries the default cost-allocation tags (`Project`, `App`, `Environment`, `Owner`, `ManagedBy`, `CostCenter`, `Component`; plus `AgentRole` on agent runtimes and inference profiles).
 - Secrets live in Secrets Manager and are read by name at runtime. Never write a secret to code, Terraform, logs, prompts, docs or commits.
+- The GitHub token is the owner's, one for the whole city, in Secrets Manager `aic/prod/github` (pasted in Settings → GitHub, `docs/GITHUB_ACCESS.md`); runtimes hand it to git and gh through the environment and never read, print or store it.
 - The application is Python 3.13 (`backend/`: Lambdas, AgentCore runtime, shared core), the HUD is React + TypeScript (`web/`), infrastructure is Terraform (`infra/`). Python is checked with ruff, mypy and pytest; `uv` manages it.
 - Every non-trivial module comes with tests. Unit tests use fake model runners and never call Bedrock.
 - Prompts live in `agents/**/*.md`.

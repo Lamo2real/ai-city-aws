@@ -27,7 +27,6 @@ variable "factory_function_arn" { type = string }
 variable "factory_function_name" { type = string }
 variable "workspaces_bucket" { type = string }
 variable "workspaces_arn" { type = string }
-variable "github_secret_arn" { type = string }
 variable "runtime_env" {
   type        = map(map(string))
   default     = {}
@@ -197,7 +196,6 @@ resource "aws_iam_role_policy" "worker" {
     ledger_arn         = var.ledger_arn
     manager_queue_arn  = var.queue_arns["manager"]
     workspace_role_arn = aws_iam_role.workspace.arn
-    github_secret_arn  = var.github_secret_arn
   })
 }
 

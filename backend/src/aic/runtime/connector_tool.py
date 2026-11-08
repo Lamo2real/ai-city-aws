@@ -16,11 +16,15 @@ from aic.connectors.openapi_add import add_from_link
 from aic.shared import connector_packages
 from aic.shared.connectors import (
     DEFAULT_ROLES,
+    GITHUB_KNOWN,
+    GITHUB_REGISTRY_NAME,
     ConnectorStore,
     Record,
     approval_hash,
     check_url,
     event,
+    github_page_hint,
+    is_github_query,
     make_id,
     name_from_url,
     registry_search,
@@ -96,6 +100,8 @@ def add_connector_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
         if connector_packages.is_spec(query):  # §1.10: npm:<name>@<ver> / pypi:<name>==<ver>
             return await connector_packages.add_from_spec(d, store, **pkg_args)
         if query.lower().startswith(("http://", "https://")) or "://" in query:
+            if hint := github_page_hint(query):
+                return f"{hint} Offer it to the owner; on their yes call add_connector with that link or with 'GitHub'."
             if bad := check_url(query, resolve):
                 return bad
             if (spec := await add_from_link(d, c, query, label, roles, _used_by(roles), net, resolve)) is not None:
@@ -107,6 +113,9 @@ def add_connector_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
             except Exception as e:
                 log("warn", "connector.registry_failed", error=type(e).__name__)
                 found = []
+            if is_github_query(query):
+                # GitHub's own server: the registry entry when it is there, the known address otherwise.
+                found = [r for r in found if r["name"] == GITHUB_REGISTRY_NAME] or [dict(GITHUB_KNOWN)]
             if not found and (answer := await connector_packages.add_from_registry(d, store, **pkg_args)):
                 return answer  # §1.10: no remote server, but an npm or PyPI package
             if not found:

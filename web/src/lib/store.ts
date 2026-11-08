@@ -39,6 +39,8 @@ export type ConnectCardState =
       targetId: string;
       title: string;
       status: "pending" | "connected" | "failed";
+      /** The sign-in would be at github.com: the card also offers "I have a token instead". */
+      tokenOk?: boolean;
     }
   | { kind: "key"; id: string; targetId: string; title: string; needs?: string; names?: string[] }
   | { kind: "imap"; id: string; targetId: string; title: string; status: "pending" | "connected" };
@@ -218,6 +220,7 @@ class Store {
           targetId: s("id"),
           title: `Sign in to ${label}`,
           status: "pending",
+          tokenOk: s("oauth_host") === "github.com",
         });
       if (status === "needs_key")
         return this.putCard({

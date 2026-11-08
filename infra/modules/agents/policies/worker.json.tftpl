@@ -45,12 +45,6 @@
         "bedrock-agentcore:StartBrowserSession", "bedrock-agentcore:StopBrowserSession", "bedrock-agentcore:GetBrowserSession", "bedrock-agentcore:ConnectBrowserAutomationStream", "bedrock-agentcore:UpdateBrowserStream"
       ],
       "Resource": ["arn:aws:bedrock-agentcore:${region}:aws:code-interpreter/aws.codeinterpreter.v1", "arn:aws:bedrock-agentcore:${region}:aws:browser/aws.browser.v1"]
-    },
-    {
-      "Sid": "GitHubCredentialOnly",
-      "Effect": "Allow",
-      "Action": ["secretsmanager:GetSecretValue"],
-      "Resource": "${github_secret_arn}"
     }
   ]
 }

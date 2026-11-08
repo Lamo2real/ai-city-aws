@@ -26,6 +26,16 @@ export interface Connector {
   approval?: "destructive" | "writes" | "none";
   tools?: Array<{ name: string; read_only?: boolean; destructive?: boolean }>;
   package?: { name: string; version: string; secrets?: Array<{ name: string; description?: string }> };
+  oauth?: { authorization_server?: string };
+}
+/** True when the connector's sign-in would be at github.com, so a GitHub token can stand in for it. */
+export function githubSignIn(c: Connector): boolean {
+  const server = c.oauth?.authorization_server ?? "";
+  try {
+    return new URL(server.includes("://") ? server : `https://${server}`).hostname === "github.com";
+  } catch {
+    return false;
+  }
 }
 export const listConnectors = () => api<{ connectors: Connector[] }>("/connectors");
 export const addConnectorByUrl = (url: string, label?: string) =>

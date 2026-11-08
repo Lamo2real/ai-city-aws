@@ -16,10 +16,21 @@ export type SignInCardProps = {
   signinPath: string;
   completePath: string;
   status: "pending" | "connected" | "failed";
+  /** A connector whose sign-in is at github.com: the owner may paste a GitHub token instead (PUT …/key). */
+  tokenInstead?: string;
 };
 
 export function SignInCard(p: SignInCardProps) {
   const [problem, setProblem] = useState<string | null>(null);
+  const [withToken, setWithToken] = useState(false);
+  if (withToken && p.tokenInstead)
+    return (
+      <KeyCard
+        targetId={p.tokenInstead}
+        title={`Paste a GitHub token for ${p.title.replace(/^Sign in to /, "")}`}
+        onDone={() => setWithToken(false)}
+      />
+    );
   if (p.status === "connected")
     return (
       <div className="connect-card connect-done" role="status">
@@ -53,6 +64,11 @@ export function SignInCard(p: SignInCardProps) {
       <Button variant="secondary" onClick={go}>
         {p.status === "failed" ? "Try again" : p.title}
       </Button>
+      {p.tokenInstead ? (
+        <Button variant="quiet" onClick={() => setWithToken(true)}>
+          I have a token instead
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -260,6 +276,7 @@ export function ChatCards({ cards }: { cards: ConnectCardState[] }) {
             status={c.status}
             signinPath={c.target === "mail" ? `${base}/signin` : base}
             completePath={c.target === "mail" ? `${base}/complete` : `${base}/complete`}
+            tokenInstead={c.target === "connector" && c.tokenOk ? c.targetId : undefined}
           />
         );
       })}

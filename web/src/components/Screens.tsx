@@ -1,5 +1,6 @@
 // Tickets, Costs and Settings. Plain words in the main view; technical details behind "Details".
 import { ConnectorsSettings } from "./ConnectorsSettings.tsx";
+import { GitHubSettings } from "./GitHubSettings.tsx";
 import { useEffect, useState } from "react";
 import { COST_NOTE, plainText, ticketWords } from "../city/city-state.js";
 import { saveSettings } from "../lib/actions.ts";
@@ -337,7 +338,6 @@ type S = Record<string, unknown> & {
   max_new_sessions_per_second: number;
   profile_prefix: string;
   notify_push: boolean;
-  integrations: Record<string, boolean>;
 };
 export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
   const { data, error, retry } = useApi<{ settings: S }>("/settings");
@@ -489,18 +489,7 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
         Tell my iPhone when a job is finished
       </label>
       <ApnsCard />
-      <h2>Integrations</h2>
-      <p className="mute">Built but off. Each needs its sign-in set up in AWS first (see the deploy checklist).</p>
-      {Object.entries(form.integrations).map(([k, v]) => (
-        <label key={k} className="switch">
-          <input
-            type="checkbox"
-            checked={v}
-            onChange={(e) => setForm({ ...form, integrations: { ...form.integrations, [k]: e.target.checked } })}
-          />{" "}
-          {k.replace(/_/g, " ")}
-        </label>
-      ))}
+      <GitHubSettings />
       <ConnectorsSettings
         mailAccess={(form as unknown as { mail_access?: Record<string, string> }).mail_access ?? {}}
         onMailAccess={(mail_access) => setForm({ ...form, mail_access } as S)}

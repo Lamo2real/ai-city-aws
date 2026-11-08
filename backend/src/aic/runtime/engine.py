@@ -54,7 +54,7 @@ class AgentEngine(Protocol):
 _ACTIVITY: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"^(Write|Edit|MultiEdit)$"), "coding"),
     (re.compile(r"^(Read|Glob|Grep)$"), "reading"),
-    (re.compile(r"^Bash$"), "running"),
+    (re.compile(r"^Bash$|run_command"), "running"),
     (re.compile(r"^(WebSearch|WebFetch)$"), "researching"),
     (re.compile(r"browser"), "browsing"),
     (re.compile(r"hire_worker"), "hiring"),

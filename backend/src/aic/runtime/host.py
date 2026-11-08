@@ -26,6 +26,7 @@ from aic.shared.turn import BackoffOptions, GateDeps, GatedTurn, TurnInput, Turn
 from .connector_tool import add_connector_tool
 from .engine import AgentEngine, EngineRequest
 from .gateway import GatewayClient, turn_connector_tools
+from .github_auth import GitAuth
 from .live import LiveReply, Send
 from .mail_tools import mail_level, mail_tools
 from .prompts import department_template, load_prompt
@@ -63,6 +64,8 @@ class HostOptions:
     """Owner-added skills (``AIC_SKILLS_BUCKET``), or None: no skills."""
     mail: MailService | None = None
     """Mail and calendar accounts (``AIC_MAIL_WORKLOAD``), or None: no mail tools."""
+    git_auth: GitAuth | None = None
+    """git and gh signed in with the owner's GitHub token (AIC and workers), or None."""
 
 
 class AgentHost:
@@ -95,6 +98,11 @@ class AgentHost:
         ledger, bus = self.d.ledger, self.d.bus
         try:
             await self.ensure_core()
+            if self.o.git_auth is not None:
+                try:
+                    await self.o.git_auth.ensure()  # a token pasted since the last turn takes effect now
+                except Exception as e:  # the turn goes on without GitHub
+                    log("warn", "github.auth_failed", error=type(e).__name__)
             agent = await ledger.get_agent(inv["agentId"])
             if not agent or agent.get("state") == "retired":
                 log("warn", "turn.skipped", agent=inv["agentId"], reason="no such agent or retired")

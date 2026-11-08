@@ -90,6 +90,8 @@ export interface Mock {
   state: Record<string, unknown>;
   /** OpenAI's voice (docs/VOICE.md): the stored key, when it was saved, and an error /speech should answer. */
   openai: { key: string | null; savedAt: string | null; error: { code: string; message: string } | null };
+  /** The city's GitHub token (docs/GITHUB_ACCESS.md): stored or not, whose it is, when it was saved. */
+  github: { token: string | null; login: string | null; savedAt: string | null };
 }
 export const appRecord = (id: string, slug: string, title: string, extra: Record<string, unknown> = {}) => ({
   app_id: id,
@@ -194,6 +196,7 @@ export async function mockBackend(
     apps: [...(opts.apps ?? [])],
     state: {},
     openai: { key: null, savedAt: null, error: null },
+    github: { token: null, login: null, savedAt: null },
     settings: {
       monthly_budget_usd: 150,
       daily_global_usd: 10,
@@ -208,7 +211,6 @@ export async function mockBackend(
       max_new_sessions_per_second: 20,
       profile_prefix: "global",
       notify_push: true,
-      integrations: { github: false, google_calendar: false, gmail: false, spotify: false },
       first_run_done: opts.firstRunDone ?? true,
     },
     knowledge: { items: [], puts: [] },
@@ -422,6 +424,33 @@ export async function mockBackend(
         saved_at: "2026-11-07T12:00:00.000Z",
         next: "Turn on AIC_APNS_ENABLED in GitHub and deploy once.",
       });
+    if (path === "/github" && req.method() === "GET")
+      return ok({
+        configured: !!m.github.token,
+        login: m.github.token ? m.github.login : null,
+        saved_at: m.github.savedAt,
+        error:
+          m.github.token && !m.github.login ? "GitHub rejected the token. Make a new one and paste it again." : null,
+      });
+    if (path === "/github/token" && req.method() === "PUT") {
+      const t = String(body?.token ?? "");
+      if (!/^(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})$/.test(t))
+        return ok(
+          { error: "bad_request", message: "Paste the whole GitHub token (it starts with ghp_ or github_pat_)." },
+          400,
+        );
+      if (t.includes("rejected"))
+        return ok(
+          { error: "bad_token", message: "GitHub rejected the token. Make a new one and paste it again." },
+          400,
+        );
+      m.github = { token: t, login: "lamo2real", savedAt: "2026-11-08T12:00:00.000Z" };
+      return ok({ ok: true, saved_at: m.github.savedAt, login: m.github.login });
+    }
+    if (path === "/github/token" && req.method() === "DELETE") {
+      m.github = { token: null, login: null, savedAt: null };
+      return ok({ ok: true });
+    }
     if (path === "/voice/openai" && req.method() === "GET")
       return ok({
         configured: !!m.openai.key,

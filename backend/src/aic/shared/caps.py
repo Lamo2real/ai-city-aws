@@ -36,7 +36,6 @@ def default_settings() -> dict[str, Any]:
         "worker_idle_release_minutes": c["worker_idle_release_minutes"],
         "profile_prefix": "global",
         "notify_push": True,
-        "integrations": {"github": False, "google_calendar": False, "gmail": False, "spotify": False},
         "first_run_done": False,
     }
 

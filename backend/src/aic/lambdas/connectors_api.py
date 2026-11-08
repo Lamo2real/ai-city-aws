@@ -17,12 +17,15 @@ from typing import Any
 from aic.shared import connector_packages
 from aic.shared.connectors import (
     APPROVALS,
+    GITHUB_MCP_URL,
     ConnectorStore,
     Record,
     Resolver,
     approval_hash,
     check_url,
     event,
+    github_page_hint,
+    is_github_server,
     make_id,
     name_from_url,
     public,
@@ -55,6 +58,8 @@ class ConnectorsApi:
     secret_prefix: str = "aic/prod/connectors"  # noqa: S105 (a name prefix, not a secret)
     resolve: Resolver = system_resolver
     tags: dict[str, str] = field(default_factory=resource_tags)
+    github_token: Callable[[], Awaitable[str | None]] | None = None
+    """The city's GitHub token (Settings → GitHub), so GitHub's MCP server connects without a sign-in."""
 
 
 def _err(status: int, message: str, fix: str | None = None) -> Answer:
@@ -90,7 +95,53 @@ async def on_connector_approval(c: ConnectorsApi, approval: Mapping[str, Any], a
         await _set(c, rec["id"], {"status": "error", "error": "It changed after the card was made. Ask AIC again."})
         return
     if await _set(c, rec["id"], {"status": "provisioning"}, {"status": "pending_approval"}):
-        await _invoke(c, "provision", rec["id"])
+        await _start(c, rec)
+
+
+async def _start(c: ConnectorsApi, rec: Record) -> None:
+    """Provisions the connector; GitHub's server with the city's GitHub token already saved skips the sign-in and
+    uses that token as its bearer key (docs/GITHUB_ACCESS.md §3)."""
+    if is_github_server(str(rec.get("url", ""))) and c.github_token and c.secrets and c.control:
+        token = await c.github_token()
+        if token:
+            try:
+                await _bearer_key(c, rec, token)
+                await _invoke(c, "sync", rec["id"])
+                return
+            except Exception as e:
+                log("warn", "connector.github_token_failed", connector=rec["id"], error=type(e).__name__)
+    await _invoke(c, "provision", rec["id"])
+
+
+async def _bearer_key(c: ConnectorsApi, rec: Record, key: str) -> None:
+    """Stores ``key`` as the connector's ``Authorization: Bearer`` credential (an API-key provider over our secret)."""
+    id = rec["id"]
+    name = f"{c.secret_prefix}/{id}"
+    provider = f"aic-conn-{id}-key" if rec.get("auth") == "oauth" else f"aic-conn-{id}"
+    arn = await asyncio.to_thread(_store_secret, c, name, json.dumps({"api_key": key}))
+    await asyncio.to_thread(_api_key_provider, c, provider, arn)
+    if rec.get("auth") == "oauth":  # the owner chose a token over the sign-in: the OAuth provider goes
+        try:
+            await asyncio.to_thread(
+                c.control.delete_oauth2_credential_provider, name=rec.get("provider_name") or f"aic-conn-{id}"
+            )
+        except Exception as e:
+            log("warn", "connector.oauth_provider_delete_failed", connector=id, error=type(e).__name__)
+    await _set(
+        c,
+        id,
+        {
+            "auth": "api_key",
+            "oauth": None,
+            "provider_name": provider,
+            "secret_name": name,
+            "key_header": "Authorization",
+            "key_prefix": "Bearer ",
+            "status": "syncing",
+            "needs": None,
+            "error": None,
+        },
+    )
 
 
 # ---------- routes ----------
@@ -154,6 +205,8 @@ async def _route(c: ConnectorsApi, method: str, seg: list[str], body: Callable[[
 async def _add_direct(c: ConnectorsApi, b: dict[str, Any]) -> Answer:
     """The owner adds one in Settings: their own action, so it goes straight to provisioning."""
     url = _owner_secret(b.get("url"), "The link", 8, 2000)
+    if hint := github_page_hint(url):
+        return _err(400, hint, f"Add {GITHUB_MCP_URL} instead.")
     if bad := check_url(url, c.resolve):
         return _err(400, bad)
     label = str(b["label"]).strip()[:40] if b.get("label") else None
@@ -176,8 +229,8 @@ async def _add_direct(c: ConnectorsApi, b: dict[str, Any]) -> Answer:
     if not await c.store.create(rec):
         return _err(409, f"There is already a connector called {id}.", "Give it a different label.")
     await c.bus.put(event(rec))
-    await _invoke(c, "provision", id)
-    return 201, {"connector": public(rec)}
+    await _start(c, rec)
+    return 201, {"connector": public(await c.store.get(id) or rec)}
 
 
 async def _edit(c: ConnectorsApi, rec: Record, b: dict[str, Any]) -> Answer:
@@ -273,13 +326,21 @@ async def _key(c: ConnectorsApi, rec: Record, b: dict[str, Any]) -> Answer:
     if "env" in b:  # §1.10: a package connector's variables, stored as {"env": {…}} (no Identity provider)
         return await _store_env(c, rec, connector_packages.env_secret(rec, b["env"]))
     if "api_key" in b:
-        if rec.get("auth") != "api_key":
+        if rec.get("auth") not in ("api_key", "oauth"):
             return _err(409, "That connector doesn't use an API key.")
         key = _owner_secret(b.get("api_key"), "The key", 8, 4096)
+        if rec.get("auth") == "oauth":  # "I have a token instead": the token becomes the bearer key
+            try:
+                await _bearer_key(c, rec, key)
+            except Exception as e:
+                log("warn", "connector.key_failed", connector=id, error=type(e).__name__)
+                return _err(502, "The token couldn't be stored.", "Try again in a moment.")
+            await _invoke(c, "sync", id)
+            return 200, {"ok": True}
         name = f"{c.secret_prefix}/{id}"
         try:
             arn = await asyncio.to_thread(_store_secret, c, name, json.dumps({"api_key": key}))
-            await asyncio.to_thread(_api_key_provider, c, f"aic-conn-{id}", arn)
+            await asyncio.to_thread(_api_key_provider, c, rec.get("provider_name") or f"aic-conn-{id}", arn)
         except Exception as e:
             log("warn", "connector.key_failed", connector=id, error=type(e).__name__)
             return _err(502, "The key couldn't be stored.", "Try again in a moment.")

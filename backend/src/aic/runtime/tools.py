@@ -30,6 +30,7 @@ from aic.shared.apps import (
     version_files,
 )
 from aic.shared.events import now_iso
+from aic.shared.github import redact
 from aic.shared.hierarchy.actions import (
     STAND_DOWN_NOTE,
     CityDeps,
@@ -60,11 +61,16 @@ from aic.shared.knowledge.model import SCOPES
 from aic.shared.knowledge.search import search
 from aic.shared.knowledge.service import KnowledgeError
 from aic.shared.log import log
-from aic.shared.policy import gate
+from aic.shared.policy import decide, gate
 from aic.shared.utility import UtilityDeps, about_ai_city, triage
 
 CITY_SERVER = "city"
 DONE_OR_GONE = ("done", "failed", "cancelled")
+ACE_WORKSPACE_DEFAULT = "/workspace"
+"""AIC's own folder for quick git and shell jobs (``run_command``); it lives as long as the runtime (about 8 h)."""
+OUTPUT_CAP = 20_000
+"""About 20 KB of command output reaches AIC; the middle is cut with a plain note."""
+DEFAULT_TIMEOUT_S, MAX_TIMEOUT_S = 120, 600
 
 Handler = Callable[[dict[str, Any]], Awaitable[str]]
 
@@ -98,6 +104,8 @@ class ToolSpec:
     """An extra reason to ask the owner first (a connector's approval level)."""
     self_gated: bool = False
     """The handler runs the gate itself (the mail tools: standing rules and previews come before it)."""
+    step: Callable[[dict[str, Any]], str] | None = None
+    """The HUD's words for one call, made from its arguments ("Running: git push"); None = the tool's name."""
 
     @property
     def full_name(self) -> str:
@@ -172,6 +180,87 @@ async def owner_said(d: CityDeps, conversation: str, answer: str, since: str) ->
         if want in said or (said and said in want and len(said) >= 2):
             return True
     return False
+
+
+def hide_token(text: str) -> str:
+    """The city's GitHub token never reaches the owner, a report or the ledger (``docs/GITHUB_ACCESS.md``)."""
+    return redact(text, os.environ.get("GH_TOKEN"))
+
+
+def workspace_root() -> Path:
+    return Path(os.environ.get("AIC_ACE_WORKSPACE", ACE_WORKSPACE_DEFAULT))
+
+
+def cap_output(text: str, cap: int = OUTPUT_CAP) -> str:
+    """Keeps the start and the end of a long output and says how much was cut out of the middle."""
+    if len(text) <= cap:
+        return text
+    head, tail = text[: cap * 3 // 5], text[-(cap * 2 // 5) :]
+    return f"{head}\n[… {len(text) - len(head) - len(tail)} characters cut out of the middle: the output was too long …]\n{tail}"
+
+
+async def run_shell(command: str, cwd: Path, timeout_s: int) -> tuple[int | None, str]:
+    """Runs one shell command in ``cwd`` with the runtime's environment (so git and gh are signed in). Returns the
+    exit code (None when it was stopped at the timeout) and the capped output."""
+    proc = await asyncio.create_subprocess_shell(
+        command,
+        cwd=str(cwd),
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+        env=dict(os.environ),
+    )
+    try:
+        raw, _ = await asyncio.wait_for(proc.communicate(), timeout_s)
+    except TimeoutError:
+        proc.kill()
+        await proc.wait()
+        return None, f"Stopped: the command was still running after {timeout_s} s."
+    return proc.returncode, cap_output(raw.decode("utf-8", "replace"))
+
+
+def _run_command_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
+    async def run_command(a: dict[str, Any]) -> str:
+        command = str(a["command"]).strip()
+        # The same deny rules as a worker's Bash (the city's own AWS account, deploys, credential files, the sandbox
+        # root), checked and audited under the Bash name so one policy file covers both.
+        decision, reason = decide("Bash", {"command": command})
+        if decision != "allow":
+            await d.ledger.audit_tool(c.agent_id, "Bash", "deny", reason)
+            return f"Denied by policy: {reason}"
+        root = workspace_root()
+        root.mkdir(parents=True, exist_ok=True)
+        cwd = root
+        if a.get("cwd"):
+            cwd = (root / str(a["cwd"]).lstrip("/")).resolve()
+            if not cwd.is_relative_to(root.resolve()):
+                return f"cwd must be a folder inside your workspace ({root})."
+            if not cwd.is_dir():
+                return f"There is no folder {a['cwd']!r} in your workspace. Clone or create it first."
+        timeout = min(max(int(a.get("timeout_s") or DEFAULT_TIMEOUT_S), 1), MAX_TIMEOUT_S)
+        code, out = await run_shell(command, cwd, timeout)
+        status = f"exit {code}" if code is not None else "stopped at the timeout"
+        return hide_token(f"{status}\n{out}".rstrip())
+
+    return ToolSpec(
+        "run_command",
+        "Run a shell command yourself, in your own workspace folder (/workspace, kept while this runtime lives, "
+        "about 8 hours). git and gh (the GitHub CLI) are signed in as the owner, curl and python are there, and the "
+        "internet is reachable. For quick jobs the owner asks for: clone a repository, add/commit/push, gh repo "
+        "create, gh pr create, gh api, inspect files, run a script, fetch a page with curl. cwd is a folder inside "
+        "the workspace (default: the workspace itself); timeout_s defaults to 120 (max 600). Output is capped at "
+        "about 20 KB. Real builds and multi-step deliverables still go to the team.",
+        _obj(
+            {
+                "command": _s(1, 4000),
+                "cwd": _s(1, 500),
+                "timeout_s": {"type": "integer", "minimum": 1, "maximum": MAX_TIMEOUT_S},
+            },
+            ("cwd", "timeout_s"),
+        ),
+        run_command,
+        step=lambda a: f"Running: {str(a.get('command', ''))[:80]}",
+    )
 
 
 # ---------- AIC ----------
@@ -455,6 +544,7 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             _obj({"confirm": {"type": "boolean"}}, ()),
             everyone_home,
         ),
+        _run_command_tool(d, c),
     ]
 
 
@@ -977,7 +1067,7 @@ def _worker_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 "taskId": c.task_id,
                 "kind": "question",
                 "from": c.agent_id,
-                "body": f"{c.agent_id} asks: {a['question']}",
+                "body": hide_token(f"{c.agent_id} asks: {a['question']}"),
             },
         )
         return "Question sent to your manager."
@@ -986,7 +1076,9 @@ def _worker_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         m = await manager()
         artifacts = a.get("artifacts") or []
         checks = a.get("checks") or ""
-        body = f"{a['summary']}\nArtifacts: {', '.join(map(str, artifacts)) or 'none'}\nChecks: {checks or 'none'}"
+        body = hide_token(
+            f"{a['summary']}\nArtifacts: {', '.join(map(str, artifacts)) or 'none'}\nChecks: {checks or 'none'}"
+        )
         await move(d, c.ticket_id, "in_review", "reported", {"result": body})
         await d.ledger.update_agent(c.agent_id, {"worker_state": "review"})
         await d.bus.put({"type": "worker.state", "id": c.agent_id, "state": "reporting"})
@@ -1298,7 +1390,7 @@ def gate_tools(d: CityDeps, c: TurnCtx, specs: list[ToolSpec]) -> list[ToolSpec]
             bad = validate_args(s.schema, args)
             if bad:
                 return f"Invalid input: {bad}."
-            return await s.handler(args)
+            return hide_token(await s.handler(args))
 
         return replace(s, handler=handler)
 

@@ -146,7 +146,6 @@ module "agents" {
   factory_function_arn  = "arn:aws:lambda:${var.region}:${data.aws_caller_identity.me.account_id}:function:${local.name}-factory"
   workspaces_bucket     = module.storage.workspaces_bucket
   workspaces_arn        = module.storage.workspaces_arn
-  github_secret_arn     = module.storage.secret_arns["github"]
   # Connectors, skills and mail are read at turn start, so new ones work without a redeploy.
   runtime_env = {
     for r in local.roles : r => merge(
@@ -225,6 +224,7 @@ module "api" {
     AIC_MAIL_WORKLOAD       = "${local.name}-mail"
     AIC_MAIL_PROVIDERS      = join(",", [for k, p in var.mail_providers : k if p.enabled])
     AIC_OPENAI_SECRET       = "aic/prod/openai" # module.voice creates it; a literal here avoids an api ↔ voice cycle
+    AIC_GITHUB_SECRET       = "aic/prod/github" # module.github creates it; a literal here avoids an api ↔ github cycle
   }
   # Apps' granted connector reads run in the app-bridge Lambda, through the connectors Gateway (docs/APPS.md v2).
   app_bridge_env = { AIC_GATEWAY_URL = module.connectors.gateway_url }
@@ -310,6 +310,21 @@ module "voice" {
   name          = local.name
   kms_key_arn   = module.security.kms_key_arn
   api_role_name = module.api.role_names["api"]
+}
+
+# The owner's GitHub token (docs/GITHUB_ACCESS.md, decision 110): stored by the api, read by every agent runtime.
+module "github" {
+  source           = "../../modules/github"
+  name             = local.name
+  kms_key_arn      = module.security.kms_key_arn
+  api_role_name    = module.api.role_names["api"]
+  agent_role_names = module.agents.role_names
+}
+
+# The secret used to live in the storage module as one of the "empty containers the owner fills in the console".
+moved {
+  from = module.storage.aws_secretsmanager_secret.this["github"]
+  to   = module.github.aws_secretsmanager_secret.github
 }
 
 # Owner-uploaded skills (docs/CONNECTORS_SKILLS.md §2).

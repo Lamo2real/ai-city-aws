@@ -178,6 +178,7 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
     caps = caps_config()
     factory = factory_for(role, city, e)
     minutes = caps["async_job_soft_limit_minutes"] if role == "worker" else caps["turn_timeout_minutes"]
+    git_auth = _git_auth(city, e) if role in ("ace", "worker") else None
     host = AgentHost(
         CityDeps(
             ledger=city.ledger,
@@ -203,13 +204,29 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
             gateway=_gateway(city, e),
             skills=_skills(city, e),
             mail=_mail(city, e, role),
+            git_auth=git_auth,
         ),
     )
     warmer = _warmer(city, e) if role == "ace" else None
     if warmer:
         warmer.prepare()
     log("info", "runtime.started", role=role)
-    return create_app(host, warm=warmer.warm if warmer else None, on_startup=[warmer.warm] if warmer else None)
+    startup = ([warmer.warm] if warmer else []) + ([git_auth.ensure] if git_auth else [])
+    return create_app(host, warm=warmer.warm if warmer else None, on_startup=startup or None)
+
+
+def _git_auth(city: Any, e: Mapping[str, str]) -> Any:
+    """git and gh signed in with the owner's token (docs/GITHUB_ACCESS.md): AIC's run_command and workers' shells."""
+    from aic.shared.github import GitHubDeps
+
+    from .github_auth import GitAuth
+
+    return GitAuth(
+        GitHubDeps(
+            secrets=client(city.session, "secretsmanager"),
+            secret_name=e.get("AIC_GITHUB_SECRET", "aic/prod/github"),
+        )
+    )
 
 
 def _warmer(city: Any, e: Mapping[str, str]) -> Any:

@@ -29,6 +29,7 @@ export const COMPONENTS = [
   "skills",
   "notifications",
   "voice",
+  "github",
 ];
 // Creating these at runtime must be tag-conditioned. AgentCore's own MANAGED secrets
 // (bedrock-agentcore-identity!…) are created by the service for a provider and are exempt.

@@ -88,11 +88,58 @@ def event(rec: Mapping[str, Any], status: str | None = None) -> dict[str, Any]:
         "status": status or rec.get("status", "error"),
         "auth": rec.get("auth") or "unknown",
     }
+    if host := oauth_host(rec):
+        e["oauth_host"] = host  # the HUD offers "I have a token instead" when the sign-in would be at github.com
     if rec.get("needs"):
         e["needs"] = rec["needs"]
     if rec.get("error"):
         e["error"] = str(rec["error"])[:300]
     return e
+
+
+def oauth_host(rec: Mapping[str, Any]) -> str | None:
+    """The host the connector's sign-in happens at (``oauth.authorization_server``), or None."""
+    o = rec.get("oauth")
+    server = o.get("authorization_server") if isinstance(o, dict) else None
+    if not isinstance(server, str) or not server:
+        return None
+    return urllib.parse.urlsplit(server if "://" in server else f"https://{server}").hostname
+
+
+# ---------- GitHub (docs/GITHUB_ACCESS.md §3) ----------
+GITHUB_MCP_URL = "https://api.githubcopilot.com/mcp/"
+"""GitHub's hosted MCP server (OAuth through github.com, or ``Authorization: Bearer <token>``)."""
+GITHUB_REGISTRY_NAME = "io.github.github/github-mcp-server"
+GITHUB_KNOWN: Record = {
+    "name": GITHUB_REGISTRY_NAME,
+    "title": "GitHub",
+    "description": "GitHub's official MCP server: repositories, issues, pull requests, actions.",
+    "url": GITHUB_MCP_URL,
+    "key_header": None,
+}
+_GITHUB_PAGE_HOSTS = ("github.com", "www.github.com", "gist.github.com", "raw.githubusercontent.com")
+_GITHUB_QUERY = re.compile(r"^(the\s+)?github(\s+mcp)?(\s+server)?(\s+connector)?$")
+
+
+def is_github_query(query: str) -> bool:
+    """``"GitHub"``, ``"github mcp"``, ``"the GitHub MCP server"``: the owner means GitHub's own server."""
+    return _GITHUB_QUERY.fullmatch(re.sub(r"[^a-z0-9]+", " ", query.lower()).strip()) is not None
+
+
+def is_github_server(url: str) -> bool:
+    return (urllib.parse.urlsplit(url).hostname or "").lower() == "api.githubcopilot.com"
+
+
+def github_page_hint(url: str) -> str | None:
+    """Plain words when the link is a GitHub page or a ``.git`` clone address, not an MCP server; else None."""
+    p = urllib.parse.urlsplit(url)
+    host = (p.hostname or "").lower()
+    if host in _GITHUB_PAGE_HOSTS or p.path.lower().endswith(".git"):
+        return (
+            f"That is a code repository page, not a server. GitHub's MCP server is {GITHUB_MCP_URL} "
+            "(it signs in with the owner's GitHub account, or uses the GitHub token saved in Settings → GitHub)."
+        )
+    return None
 
 
 def approval_hash(id: str, url: str, roles: Mapping[str, str]) -> str:

@@ -72,11 +72,17 @@ none of this: skip to step 3.
       **Connect securely**. If the server refuses it, the card says so and nothing is stored.
 
 ## 4. GitHub, Slack and other services that need a sign-in
+- [ ] **GitHub, the short way:** paste your token in **Settings → GitHub** first (`docs/GITHUB_ACCESS.md`). Then ask AIC
+      **"add GitHub as an MCP"** (or Settings → Connectors → Add by link with `https://api.githubcopilot.com/mcp/`) and
+      approve the card: the connector uses that token as its bearer key and is **On** without any sign-in.
+      A github.com page or a `.git` link is not a server: AIC says so and offers the real address.
 - [ ] Ask AIC: **"add GitHub as an MCP"** (or Slack, Notion, Linear, Higgsfield…), then approve the card.
 - [ ] If the service supports automatic app registration, you get **"Sign in to …"** right away. Tap it and approve.
 - [ ] If it doesn't (GitHub usually doesn't), the card asks for a **client id and client secret**, and shows a
       **callback URL**. Create an OAuth app at the service (GitHub: Settings → Developer settings → OAuth Apps → New)
       with that callback URL, paste the id and secret into the card, then tap **Sign in to …**.
+- [ ] A sign-in card at github.com also offers **"I have a token instead"**: paste a GitHub token and the connector
+      uses it as its bearer key (no OAuth app needed).
 - [ ] Choose who may use it in Settings → Connectors (each agent role: No / Read only / Everything). The default
       approval setting asks you before anything destructive.
 

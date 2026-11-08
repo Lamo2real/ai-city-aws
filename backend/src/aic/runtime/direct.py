@@ -182,8 +182,9 @@ async def _run_tool(req: EngineRequest, tools: dict[str, Any], use: dict[str, An
     if r.decision != "allow":
         return result(r.reason, True)
     if req.on_activity:
-        # The tool name rides along as the detail, so the HUD can show AIC's steps in plain words.
-        await req.on_activity(activity_for(full), name)
+        # The tool name rides along as the detail, so the HUD can show AIC's steps in plain words; a tool with
+        # ``step`` says it from its arguments ("Running: git push").
+        await req.on_activity(activity_for(full), spec.step(args) if spec.step else name)
     try:
         return result(await spec.handler(args))
     except Exception as e:

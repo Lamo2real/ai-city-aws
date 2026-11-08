@@ -70,7 +70,6 @@ export function rolePolicies(role) {
         ledger_arn: ledger,
         manager_queue_arn: queues[2],
         workspace_role_arn: `arn:aws:iam::${ACCOUNT}:role/aic-prod-worker-workspace`,
-        github_secret_arn: `arn:aws:secretsmanager:${REGION}:${ACCOUNT}:secret:aic/prod/github-AbCd`,
       }),
     );
   } else {
