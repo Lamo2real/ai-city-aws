@@ -25,6 +25,7 @@ import { loadOpenAi, onVoiceNote, withOpenAi } from "./openai.ts";
 import { toast } from "../components/ui.tsx";
 import { getVoice, logVoiceError, micProblem, speakProblem } from "./voice.ts";
 import { watchForBargeIn } from "./bargeIn.ts";
+import { CUE_AFTER_MS, CUE_AGAIN_MS, MAX_CUES, nextCue } from "./cues.ts";
 import { primeSonic, sonicWanted, startSonic, type SonicCall } from "./sonic.ts";
 
 /** Where dictated words go: each partial while talking, then each final piece. */
@@ -62,6 +63,26 @@ const lineId = () => `v${Date.now().toString(36)}${Math.random().toString(36).sl
 // Replies already in the chat when the page opens (restored after a reload) are never read aloud again.
 const spoken: { current: string | null | undefined } = { current: undefined };
 
+// Thinking cues in the standard voice (cues.ts): the timer, and the last cue said (so its echo is not sent).
+const cue: { timer: number | undefined; last: string; at: number } = { timer: undefined, last: "", at: 0 };
+function stopCues() {
+  window.clearTimeout(cue.timer);
+  cue.timer = undefined;
+}
+/** Says one short cue with whatever voice AIC is using; never throws. */
+function sayCue(text: string) {
+  cue.last = text;
+  cue.at = Date.now();
+  const v = getVoice();
+  const done = (p: Promise<unknown>) => void p.catch(() => undefined);
+  if (usingBrowserVoice() && browserVoiceAvailable()) return done(browserSpeak(text));
+  if (v.synth && v.play) {
+    const synth = withOpenAi(v.synth.bind(v));
+    return done(synth(text).then((clip) => (clip ? v.play!(clip) : undefined)));
+  }
+  done(v.speak(text));
+}
+
 // While AIC talks in a voice conversation, a quiet listener for the owner talking over it (bargeIn.ts).
 const barge: { current: (() => void) | null } = { current: null };
 function stopBargeIn() {
@@ -88,6 +109,8 @@ export function useVoice(dictation?: DictationTarget) {
   const [speakMode, setSpeakModeState] = useState<SpeakMode>(readSpeakMode);
   const [dictatingNow, setDictatingNow] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  // Which voice the conversation runs on, and why the standard one when the real-time one could not start.
+  const [engine, setEngine] = useState<{ kind: "realtime" | "standard"; why?: string } | null>(null);
   const stop = useRef<(() => void) | null>(null);
   const dictating = useRef(false);
   const target = useRef(dictation);
@@ -105,6 +128,19 @@ export function useVoice(dictation?: DictationTarget) {
   // synthesize sentence by sentence, speaking starts with the first complete sentence while the rest streams.
   useEffect(() => {
     const last = chat.at(-1);
+    // AIC goes into thinking on a spoken message in the voice conversation: after a moment without an answer,
+    // a short cue ("Hmm, let me think."), then another now and then while it keeps working.
+    stopCues();
+    if (last?.who === "owner" && last.voice && convo.current && !sonic.current && !dictating.current) {
+      let n = 0;
+      const tick = () => {
+        const now = store.get().chat.at(-1);
+        if (!convo.current || sonic.current || now?.id !== last.id || n >= MAX_CUES) return stopCues();
+        sayCue(nextCue(n++));
+        cue.timer = window.setTimeout(tick, CUE_AGAIN_MS);
+      };
+      cue.timer = window.setTimeout(tick, CUE_AFTER_MS);
+    }
     // The owner sent something new (typed or spoken): whatever AIC was still saying stops.
     if (last?.who === "owner" && talk.current && !talk.current.cancelled && talk.current.id !== last.id) {
       stopTalking();
@@ -246,7 +282,9 @@ export function useVoice(dictation?: DictationTarget) {
   }, []);
 
   const endConversation = useCallback(() => {
+    stopCues();
     convo.current = false;
+    setEngine(null);
     setConversation(false);
   }, []);
 
@@ -280,6 +318,7 @@ export function useVoice(dictation?: DictationTarget) {
                 const said = store.get().chat.find((l) => l.id === t.id)?.text ?? "";
                 if (isEcho(text, said)) return;
               }
+              if (cue.last && Date.now() - cue.at < 6000 && isEcho(text, cue.last)) return; // a cue's echo
               stopTalking();
               return void sendMessage(text, { voice: true });
             }
@@ -339,6 +378,7 @@ export function useVoice(dictation?: DictationTarget) {
             // The call broke: say why and carry on with the standard voice instead of going silent.
             logVoiceError("the voice call stopped", e);
             const why = ((e as Error).message ?? "").trim().replace(/\.$/, "").slice(0, 160);
+            setEngine({ kind: "standard", why: why || "no reason given" });
             toast({
               text: `Real-time voice stopped${why ? ` (${why})` : ""}, so AIC is using its standard voice.`,
               tone: "info",
@@ -357,6 +397,7 @@ export function useVoice(dictation?: DictationTarget) {
       });
       if (!convo.current) return call.stop(); // tapped off while it was connecting
       sonic.current = call;
+      setEngine({ kind: "realtime" });
       setListening(true);
       store.set({ presence: "listening" });
     } catch (e) {
@@ -369,6 +410,7 @@ export function useVoice(dictation?: DictationTarget) {
       }
       // Say why, in one line, so it can be fixed; the standard voice carries on meanwhile.
       const why = ((e as Error | null)?.message ?? "").trim().replace(/\.$/, "").slice(0, 160);
+      setEngine({ kind: "standard", why: why || "no reason given" });
       toast({
         text: `Real-time voice didn't connect${why ? ` (${why})` : ""}, so AIC is using its standard voice.`,
         tone: "info",
@@ -388,6 +430,8 @@ export function useVoice(dictation?: DictationTarget) {
     listening,
     /** The voice conversation is on (the AIC screen's voice button). */
     conversation,
+    /** Which voice the conversation runs on, and why the standard one, for the voice bar. */
+    engine,
     speakMode,
     /** Listening into the message box (the dictate icon), not to send. */
     dictating: listening && dictatingNow,
@@ -417,6 +461,7 @@ export function useVoice(dictation?: DictationTarget) {
         primeSonic(); // synchronously, inside the tap (Safari)
         return void startLive();
       }
+      setEngine({ kind: "standard" });
       getVoice().prime?.(); // synchronously, inside the tap (Safari)
       if (!listening) void start();
     },

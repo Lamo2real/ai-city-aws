@@ -260,7 +260,13 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
         </div>
         {voice.conversation || (voice.listening && !voice.dictating) ? (
           // While the voice conversation is on (or dictation listens): who is talking, as the moving line.
-          <VoiceVisualizer presence={presence} listening={voice.listening} onMic={voice.pushToTalk} bare />
+          <VoiceVisualizer
+            presence={presence}
+            listening={voice.listening}
+            onMic={voice.pushToTalk}
+            bare
+            engine={voice.engine}
+          />
         ) : null}
         <form className={`composer${voice.dictating ? " is-dictating" : ""}`} onSubmit={submit}>
           {items.length ? (

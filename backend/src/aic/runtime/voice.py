@@ -31,8 +31,8 @@ from aic.shared.config import voice_config
 from aic.shared.log import log
 
 INTERRUPTED = '{ "interrupted" : true }'
-CUE_AFTER_S = 4.0
-CUE_AGAIN_S = 12.0
+CUE_AFTER_S = 1.5
+CUE_AGAIN_S = 10.0
 ROTATE_AFTER_S = 7 * 60 + 15  # Bedrock's limit is 8 minutes
 QUIET_S = 1.5  # Sonic counts as quiet this long after its last audio
 HISTORY = 24  # lines replayed into a fresh session
@@ -330,7 +330,7 @@ class SonicSession:
     async def _cues(self) -> None:
         """A short, human cue while AIC works longer than a moment: once after CUE_AFTER_S, once more later."""
         await asyncio.sleep(CUE_AFTER_S)
-        await self._text("USER", "[status] AIC is still working on it.", interactive=True)
+        await self._text("USER", "[status] thinking: AIC needs a moment for this one.", interactive=True)
         await asyncio.sleep(CUE_AGAIN_S - CUE_AFTER_S)
         await self._text("USER", "[status] AIC is still working; it is a bigger one.", interactive=True)
 

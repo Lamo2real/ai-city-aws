@@ -1226,6 +1226,14 @@ main {
   text-transform: uppercase;
   white-space: nowrap;
 }
+.voice-engine-why {
+  margin: 0;
+  padding: 0 var(--s3) var(--s2);
+  text-align: center;
+  font-size: var(--fs-s);
+  color: var(--gmute);
+  overflow-wrap: anywhere;
+}
 .voice-on-dot {
   width: 9px;
   height: 9px;

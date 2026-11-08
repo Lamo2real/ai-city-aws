@@ -25,6 +25,8 @@ export function VoiceVisualizer(p: {
   onMic: () => void;
   /** The line and the words only, no mic button (the AIC screen's voice bar; the button is in the message box). */
   bare?: boolean;
+  /** Which voice the conversation runs on (the voice bar's badge), and why the standard one. */
+  engine?: { kind: "realtime" | "standard"; why?: string } | null;
 }) {
   const speaker = speakerOf(p.presence);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -153,7 +155,7 @@ export function VoiceVisualizer(p: {
           // Unmistakable while the conversation is on: a live badge with a beating dot.
           <span className="voice-on-pill">
             <span className="voice-on-dot" aria-hidden="true" />
-            Voice on
+            {p.engine?.kind === "realtime" ? "Voice on · real-time" : p.engine ? "Voice on · standard" : "Voice on"}
           </span>
         ) : null}
         <p className="voice-label">
@@ -168,6 +170,9 @@ export function VoiceVisualizer(p: {
           </span>
         </p>
       </div>
+      {p.bare && p.engine?.kind === "standard" && p.engine.why ? (
+        <p className="voice-engine-why">Real-time voice didn't connect: {p.engine.why}</p>
+      ) : null}
     </div>
   );
 }

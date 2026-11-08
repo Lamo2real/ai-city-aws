@@ -139,3 +139,36 @@ test("in the standard voice, the sound of the owner talking over AIC silences it
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(2);
   expect(m.calls.filter((c) => c.path === "/messages")[1]?.body).toMatchObject({ text: "wait, the costs?" });
 });
+
+test("the standard voice says a short thinking cue only when AIC takes a moment, and the bar says which voice is on", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  await page.addInitScript(() => {
+    (window as unknown as { __aicSonic: boolean }).__aicSonic = true;
+    (window as unknown as { __heard: string }).__heard = "what's the status?";
+  });
+  await page.route(`${CONFIG.apiUrl}/voice/session`, (r) =>
+    r.fulfill({ status: 503, json: { error: "not_configured", message: "Real-time voice is not set up." } }),
+  );
+  await page.goto("/");
+  const spoken = () => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []);
+  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await expect(page.getByText("Voice on · standard")).toBeVisible();
+  await expect(page.getByText("Real-time voice didn't connect: Real-time voice is not set up")).toBeVisible();
+  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
+  // AIC takes a while: one short cue.
+  await expect.poll(spoken, { timeout: 4000 }).toHaveLength(1);
+  expect((await spoken())[0]).toMatch(/think|sec|check|moment|look|see|pull/i);
+  m.send({ type: "ace.reply", conversation: "main", text: "All quiet.", done: true });
+  await expect.poll(spoken).toContain("All quiet.");
+
+  // A quick answer: no cue at all.
+  const before = (await spoken()).length;
+  await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "and the costs?"));
+  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(2);
+  m.send({ type: "ace.reply", conversation: "main", text: "Two dollars.", done: true });
+  await expect.poll(spoken).toContain("Two dollars.");
+  await page.waitForTimeout(1600);
+  expect((await spoken()).slice(before)).toEqual(["Two dollars."]);
+});
