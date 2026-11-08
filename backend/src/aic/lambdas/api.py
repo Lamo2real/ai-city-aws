@@ -33,6 +33,8 @@ from aic.shared.apps import (
 )
 from aic.shared.aws import aws_city
 from aic.shared.caps import validate_caps
+from aic.shared.chief_of_staff import CHIEF, record_decision
+from aic.shared.chief_of_staff import status as chief_status
 from aic.shared.clients import client
 from aic.shared.config import caps_config
 from aic.shared.events import EventBus, now_iso
@@ -99,6 +101,7 @@ ROUTES: list[tuple[str, str]] = [
     ("POST", "/approvals/a-1"),
     ("GET", "/settings"),
     ("PUT", "/settings"),
+    ("GET", "/chief-of-staff"),
     ("POST", "/workers/home"),
     ("POST", "/tasks/t-1/cancel"),
     ("POST", "/city/reset"),
@@ -698,71 +701,13 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
             200, {"questions": await d.ledger.open_questions(), "approvals": await d.ledger.pending_approvals()}
         )
     if is_("POST", r"/questions/[\w-]+/(answer|default)"):
-        qn = await d.ledger.get_question(seg[1])
-        if not qn or qn.get("status") != "open":
-            return problem(409, "That question was already answered.", "Refresh the list.")
-        answer = qn["default_answer"] if seg[2] == "default" else _str(_body(event).get("answer"), "Answer")
-        await answer_question(_action_deps(d), qn["id"], answer, "owner")
-        return reply(200, {"answered": True, "answer": answer})
+        given = None if seg[2] == "default" else _str(_body(event).get("answer"), "Answer")
+        return await decide_question(d, seg[1], given, "owner")
     if is_("POST", r"/approvals/[\w-]+"):
         b = _body(event)
         if not isinstance(b.get("approved"), bool):
             raise BadRequest("Say approve or refuse.")
-        approved: bool = b["approved"]
-        cur = await d.ledger.get_approval(seg[1])
-        if not cur:
-            return problem(404, "That approval does not exist.")
-        if cur.get("status") != "pending":
-            return problem(409, "That approval was already decided.")
-        app: Record | None = None
-        if cur.get("kind") == "app.publish":
-            draft_id = str(cur.get("draft_id") or "")
-            if approved:
-                if d.apps is None:
-                    return problem(503, "Apps are not set up yet.", "Deploy the apps origin, then try again.")
-                dr = await get_draft(d.ledger, draft_id)
-                if not dr:
-                    return problem(404, "That app draft is gone.")
-                grants = b.get("grants")
-                if grants is not None and not isinstance(grants, list):
-                    raise BadRequest("grants must be a list.")
-                pinned = b.get("pinned")
-                if pinned is not None and not isinstance(pinned, bool):
-                    raise BadRequest("pinned must be true or false.")
-                # Publish first: if it fails, the approval stays pending and the owner can try again.
-                try:
-                    app = await publish_draft(d.ledger, d.bus, d.apps, draft_id, grants, pinned)
-                except Invalid as e:
-                    return problem(400, str(e))
-                except ValueError as e:
-                    return problem(409, str(e))
-            else:
-                await refuse_draft(d.ledger, draft_id)
-        a = await d.ledger.decide_approval(cur["id"], approved)
-        if a is None:  # decided by someone else meanwhile
-            return problem(409, "That approval was already decided.")
-        if cur.get("kind") == "connector.add":
-            # Only the owner's yes moves an add-connector request on (§1.3.4); a no deletes the record.
-            await on_connector_approval(_connectors(d), cur, approved)
-        if cur.get("task_token") and d.sfn is not None:
-            if approved:
-                await asyncio.to_thread(
-                    d.sfn.send_task_success,
-                    taskToken=cur["task_token"],
-                    output=json.dumps({"approved": True, "id": cur["id"]}),
-                )
-            else:
-                await asyncio.to_thread(
-                    d.sfn.send_task_failure, taskToken=cur["task_token"], error="Refused", cause="The owner refused."
-                )
-        await d.bus.put({"type": "approval.decided", "id": a["id"], "approved": approved})
-        if approved and str(cur.get("requested_by", "")).startswith("app:"):
-            # An app's proposal: run that one tool once, exactly as the owner saw it.
-            return reply(200, {"approval": a, "result": await run_proposal(cur, d.proposals)})
-        if app:
-            await _grants_changed(d)
-            return reply(200, {"approval": a, "app": app})
-        return reply(200, {"approval": a})
+        return await decide_approval(d, seg[1], b["approved"], b.get("grants"), b.get("pinned"))
     if is_("GET", r"/apps"):
         return reply(200, {"apps": await list_apps(d.ledger)})
     if is_("GET", r"/apps/[\w-]+/activity"):
@@ -812,6 +757,8 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         else:
             ans = await file_proposal(d.ledger, d.bus, target, b, d.proposals)
         return reply(ans.status, ans.body)
+    if is_("GET", r"/chief-of-staff"):
+        return reply(200, await chief_status(d.ledger, await d.settings()))
     if is_("GET", r"/settings"):
         return reply(200, {"settings": await d.settings()})
     if is_("PUT", r"/settings"):
@@ -931,6 +878,116 @@ async def _knowledge(event: dict[str, Any], method: str, path: str, d: ApiDeps) 
     return problem(404, "There is nothing here.")
 
 
+async def decide_question(d: ApiDeps, id: str, given: str | None, by: str) -> dict[str, Any]:
+    """The owner's answer (``given``) or the default (None), from the HUD or the Chief of Staff (``by``)."""
+    qn = await d.ledger.get_question(id)
+    if not qn or qn.get("status") != "open":
+        return problem(409, "That question was already answered.", "Refresh the list.")
+    answer = qn["default_answer"] if given is None else given
+    await answer_question(_action_deps(d), qn["id"], answer, by)
+    return reply(200, {"answered": True, "answer": answer})
+
+
+async def decide_approval(
+    d: ApiDeps, id: str, approved: bool, grants: Any = None, pinned: Any = None
+) -> dict[str, Any]:
+    """Approve or refuse one pending approval: the same steps whether the owner or the Chief of Staff decides."""
+    cur = await d.ledger.get_approval(id)
+    if not cur:
+        return problem(404, "That approval does not exist.")
+    if cur.get("status") != "pending":
+        return problem(409, "That approval was already decided.")
+    app: Record | None = None
+    if cur.get("kind") == "app.publish":
+        draft_id = str(cur.get("draft_id") or "")
+        if approved:
+            if d.apps is None:
+                return problem(503, "Apps are not set up yet.", "Deploy the apps origin, then try again.")
+            dr = await get_draft(d.ledger, draft_id)
+            if not dr:
+                return problem(404, "That app draft is gone.")
+            if grants is not None and not isinstance(grants, list):
+                raise BadRequest("grants must be a list.")
+            if pinned is not None and not isinstance(pinned, bool):
+                raise BadRequest("pinned must be true or false.")
+            # Publish first: if it fails, the approval stays pending and the owner can try again.
+            try:
+                app = await publish_draft(d.ledger, d.bus, d.apps, draft_id, grants, pinned)
+            except Invalid as e:
+                return problem(400, str(e))
+            except ValueError as e:
+                return problem(409, str(e))
+        else:
+            await refuse_draft(d.ledger, draft_id)
+    a = await d.ledger.decide_approval(cur["id"], approved)
+    if a is None:  # decided by someone else meanwhile
+        return problem(409, "That approval was already decided.")
+    if cur.get("kind") == "connector.add":
+        # Only a yes (the owner's or the Chief of Staff's, decision 124) moves an add-connector request on (§1.3.4);
+        # a no deletes the record.
+        await on_connector_approval(_connectors(d), cur, approved)
+    if cur.get("task_token") and d.sfn is not None:
+        if approved:
+            await asyncio.to_thread(
+                d.sfn.send_task_success,
+                taskToken=cur["task_token"],
+                output=json.dumps({"approved": True, "id": cur["id"]}),
+            )
+        else:
+            await asyncio.to_thread(
+                d.sfn.send_task_failure, taskToken=cur["task_token"], error="Refused", cause="The owner refused."
+            )
+    await d.bus.put({"type": "approval.decided", "id": a["id"], "approved": approved})
+    if approved and str(cur.get("requested_by", "")).startswith("app:"):
+        # An app's proposal: run that one tool once, exactly as the owner saw it.
+        return reply(200, {"approval": a, "result": await run_proposal(cur, d.proposals)})
+    if app:
+        await _grants_changed(d)
+        return reply(200, {"approval": a, "app": app})
+    return reply(200, {"approval": a})
+
+
+async def steward_apply(op: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
+    """Carries out one Chief of Staff decision (decision 124) through the routes' own code, then records it.
+
+    Reached only by a direct invoke from the chief-of-staff Lambda (IAM: that role alone may invoke this
+    function besides API Gateway); an HTTP event never has the ``chief_of_staff`` key."""
+    kind, id, reason = op.get("kind"), str(op.get("id") or ""), str(op.get("reason") or "")[:240]
+    if kind not in ("question", "approval") or not re.fullmatch(r"[\w-]{1,64}", id):
+        return {"ok": False, "error": "bad op"}
+    item = await (d.ledger.get_question(id) if kind == "question" else d.ledger.get_approval(id))
+    if not item:
+        return {"ok": False, "error": "gone"}
+    which = op.get("op")
+    if which == "stop_job":
+        task = await d.ledger.get_ticket(str(item.get("ticket_id") or ""))
+        for _ in range(20):
+            if not task or task.get("kind", "task") == "task" or not task.get("parent_id"):
+                break
+            task = await d.ledger.get_ticket(str(task["parent_id"]))
+        if not task or task.get("kind", "task") != "task" or task.get("status") in DONE_OR_GONE:
+            return {"ok": False, "error": "no running job"}
+        await cancel_task(_action_deps(d), task)
+        choice = "Stopped the job"
+    elif kind == "question" and which in ("answer", "default"):
+        given = None if which == "default" else str(op.get("answer") or "")[:4000]
+        if given == "":
+            return {"ok": False, "error": "empty answer"}
+        r = await decide_question(d, id, given, CHIEF)
+        if r["statusCode"] != 200:
+            return {"ok": False, "status": r["statusCode"]}
+        choice = str(json.loads(r["body"])["answer"])
+    elif kind == "approval" and which in ("approve", "refuse"):
+        r = await decide_approval(d, id, which == "approve")
+        if r["statusCode"] != 200:
+            return {"ok": False, "status": r["statusCode"]}
+        choice = "Approved" if which == "approve" else "Refused"
+    else:
+        return {"ok": False, "error": "bad op"}
+    await record_decision(d.ledger, d.bus, kind, item, choice, reason)
+    return {"ok": True, "choice": choice}
+
+
 def _connectors(d: ApiDeps) -> ConnectorsApi:
     from aic.shared.connectors import ConnectorStore
 
@@ -960,6 +1017,8 @@ async def _put_settings(b: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         patch["notify_push"] = b["notify_push"]
     if isinstance(b.get("first_run_done"), bool):
         patch["first_run_done"] = b["first_run_done"]
+    if isinstance(b.get("chief_of_staff_enabled"), bool):
+        patch["chief_of_staff_enabled"] = b["chief_of_staff_enabled"]
     if isinstance(b.get("mail_access"), dict):
         # Orchestrator and managers may read mail when the owner turns it on; workers never (decision 79).
         ma = b["mail_access"]
@@ -1236,6 +1295,8 @@ def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
     global _deps
     if _deps is None:
         _deps = build_deps()
+    if isinstance(event.get("chief_of_staff"), dict):  # a direct invoke from the chief-of-staff Lambda
+        return run(steward_apply(event["chief_of_staff"], _deps))
     return run(handle_http(event, _deps))
 
 

@@ -48,10 +48,11 @@ variable "apps_url" {
 }
 
 locals {
-  tags      = { Component = "agents" }
-  models    = jsondecode(file("${path.module}/../../../config/models.json"))
-  roles     = ["ace", "orchestrator", "manager", "worker"]
-  all_roles = concat(local.roles, ["utility"])
+  tags   = { Component = "agents" }
+  models = jsondecode(file("${path.module}/../../../config/models.json"))
+  roles  = ["ace", "orchestrator", "manager", "worker"]
+  # utility and chief_of_staff are Lambda-side calls (no runtime): a profile each, so the bill splits by role.
+  all_roles = concat(local.roles, ["utility", "chief_of_staff"])
   # Plain model names each role may call: its own, and its fallback.
   role_models = { for r in local.all_roles : r => compact([local.models.roles[r].model, local.models.roles[r].fallback]) }
   system_profile_arn = {
@@ -315,3 +316,5 @@ output "runtime_ids" { value = { for r, x in aws_bedrockagentcore_agent_runtime.
 output "ecr_repository_url" { value = aws_ecr_repository.runtime.repository_url }
 output "utility_invoke_arns" { value = local.invoke_arns["utility"] }
 output "utility_profile_arn" { value = local.app_profile_arn["utility"] }
+output "chief_of_staff_invoke_arns" { value = local.invoke_arns["chief_of_staff"] }
+output "chief_of_staff_profile_arn" { value = local.app_profile_arn["chief_of_staff"] }

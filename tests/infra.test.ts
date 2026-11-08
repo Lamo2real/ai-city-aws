@@ -833,3 +833,30 @@ describe("AIC's real-time voice (Nova Sonic, decision 120)", () => {
     expect(connect).toContain("wss://bedrock-agentcore.${var.region}.amazonaws.com");
   });
 });
+
+describe("the Chief of Staff (decision 124)", () => {
+  const api = readFileSync("infra/modules/api/main.tf", "utf8");
+  const agents = readFileSync("infra/modules/agents/main.tf", "utf8");
+  const prod = readFileSync("infra/envs/prod/main.tf", "utf8");
+  const models = JSON.parse(readFileSync("config/models.json", "utf8"));
+  const routes = api.slice(api.indexOf("routes = ["), api.indexOf("]", api.indexOf("routes = [")));
+  it("is Fable 5.1 with Opus 5.5 behind it, with its own tagged application inference profile", () => {
+    expect(models.roles.chief_of_staff).toMatchObject({ model: "fable-5-1", fallback: "opus-5-5" });
+    expect(agents).toMatch(/all_roles = concat\(local\.roles, \["utility", "chief_of_staff"\]\)/);
+    expect(prod).toMatch(/chief_of_staff_profile_arn = module\.agents\.chief_of_staff_profile_arn/);
+  });
+  it("GET /chief-of-staff sits behind the JWT authorizer", () => {
+    expect(routes).toContain('"GET /chief-of-staff"');
+  });
+  it("runs on each new question and approval, and sweeps every 5 minutes", () => {
+    expect(api).toMatch(/"detail-type" = \["question\.asked", "approval\.requested"\]/);
+    expect(api).toMatch(/chief-sweep\s+= \{ schedule = "rate\(5 minutes\)", fn = "chief-of-staff", input = \{ job = "sweep" \}, state = "ENABLED" \}/);
+    expect(api).toMatch(/chief-digest\s+= \{ schedule = "cron\(0 17 \* \* \? \*\)", fn = "chief-of-staff", input = \{ job = "digest" \}, state = "ENABLED" \}/);
+  });
+  it("least privilege: its model, the ledger, the bus and the api's live alias, nothing else", () => {
+    const block = api.slice(api.indexOf("    chief-of-staff = ["), api.indexOf("    ]", api.indexOf("    chief-of-staff = [")));
+    expect(block).toMatch(/bedrock:InvokeModel"\], Resource = var\.chief_of_staff_invoke_arns/);
+    expect(block).toMatch(/lambda:InvokeFunction"\], Resource = \["arn:aws:lambda:\$\{var\.region\}:\$\{var\.account_id\}:function:\$\{local\.api_name\}:live"\]/);
+    expect(block).not.toMatch(/s3:|secretsmanager|sqs:|states:|cloudfront/);
+  });
+});

@@ -13,6 +13,7 @@ def test_maps_every_role_to_its_pinned_model_on_global_profiles() -> None:
         "manager": "fable-5-1",
         "worker": "opus-5-5",
         "utility": "haiku-5-5",
+        "chief_of_staff": "fable-5-1",
     }
     for role in ROLES:
         r = resolve_role(role)

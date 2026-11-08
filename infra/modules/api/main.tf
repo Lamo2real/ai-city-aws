@@ -54,6 +54,8 @@ variable "runtime_version" {
 }
 variable "utility_invoke_arns" { type = list(string) }
 variable "utility_profile_arn" { type = string }
+variable "chief_of_staff_invoke_arns" { type = list(string) }
+variable "chief_of_staff_profile_arn" { type = string }
 variable "profile_prefix" { type = string }
 variable "knowledge_table" { type = string }
 variable "knowledge_table_arn" { type = string }
@@ -111,14 +113,17 @@ locals {
     scheduler     = { bundle = "app", handler = "aic.lambdas.scheduler.handler", timeout = 120, memory = 256, env = merge({ AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_VERSION = var.runtime_version, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod", AIC_CONNECTIONS_TABLE = var.connections_table }, local.scheduler_mail_env) }
     notifier      = { bundle = "app", handler = "aic.lambdas.notifier.handler", timeout = 30, memory = 256, env = local.apns_env }
     approvals     = { bundle = "app", handler = "aic.lambdas.approvals.handler", timeout = 30, memory = 256, env = {} }
-    ws-authorizer = { bundle = "app", handler = "aic.lambdas.ws.authorizer_handler", timeout = 10, memory = 256, env = { AIC_USER_POOL_ID = var.user_pool_id, AIC_USER_POOL_CLIENT_ID = var.client_id } }
-    ws-connection = { bundle = "app", handler = "aic.lambdas.ws.connection_handler", timeout = 10, memory = 256, env = { AIC_CONNECTIONS_TABLE = var.connections_table } }
-    apps          = { bundle = "app", handler = "aic.lambdas.apps.handler", timeout = 120, memory = 512, env = { AIC_APPS_BUCKET = var.apps_bucket, AIC_APPS_URL = var.apps_url, AIC_WORKSPACES_BUCKET = var.workspaces_bucket } }
-    app-bridge    = { bundle = "app", handler = "aic.lambdas.app_bridge.handler", timeout = 25, memory = 512, env = var.app_bridge_env }
-    ws-broadcast  = { bundle = "app", handler = "aic.lambdas.ws.broadcast_handler", timeout = 30, memory = 256, env = { AIC_CONNECTIONS_TABLE = var.connections_table, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod" } }
+    # The Chief of Staff (decision 124): decides Needs you items; carries each out through the api (live alias).
+    chief-of-staff = { bundle = "app", handler = "aic.lambdas.chief_of_staff.handler", timeout = 300, memory = 256, env = { AIC_APP_PROFILE_CHIEF_OF_STAFF = var.chief_of_staff_profile_arn, AIC_API_FUNCTION = "${local.api_name}:live" } }
+    ws-authorizer  = { bundle = "app", handler = "aic.lambdas.ws.authorizer_handler", timeout = 10, memory = 256, env = { AIC_USER_POOL_ID = var.user_pool_id, AIC_USER_POOL_CLIENT_ID = var.client_id } }
+    ws-connection  = { bundle = "app", handler = "aic.lambdas.ws.connection_handler", timeout = 10, memory = 256, env = { AIC_CONNECTIONS_TABLE = var.connections_table } }
+    apps           = { bundle = "app", handler = "aic.lambdas.apps.handler", timeout = 120, memory = 512, env = { AIC_APPS_BUCKET = var.apps_bucket, AIC_APPS_URL = var.apps_url, AIC_WORKSPACES_BUCKET = var.workspaces_bucket } }
+    app-bridge     = { bundle = "app", handler = "aic.lambdas.app_bridge.handler", timeout = 25, memory = 512, env = var.app_bridge_env }
+    ws-broadcast   = { bundle = "app", handler = "aic.lambdas.ws.broadcast_handler", timeout = 30, memory = 256, env = { AIC_CONNECTIONS_TABLE = var.connections_table, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod" } }
   }
   # Named, not referenced: the api function's env and policy name it, and both live in the same for_each.
   app_bridge_name = "${var.name}-app-bridge"
+  api_name        = "${var.name}-api"
   scheduler_name  = "${var.name}-scheduler"
   # The calendar import (job calendar_import) reads mail accounts the way the api does; its read path is attached
   # by the mail module (docs/MAIL_CALENDAR.md §12).
@@ -190,6 +195,14 @@ locals {
       # warm_ace: the "warm" ping to AIC's runtime only (never the other roles).
       { Action = ["bedrock-agentcore:InvokeAgentRuntime"], Resource = [var.runtime_arns["ace"], "${var.runtime_arns["ace"]}/*"] },
     ]
+    # Reads the inbox, the jobs and the owner's notes; writes only its own marks, turns and claims. Calls its model, and
+    # the api's live alias, which carries each decision out exactly as the owner's click does.
+    chief-of-staff = [
+      { Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] },
+      { Action = ["events:PutEvents"], Resource = [var.bus_arn] },
+      { Action = ["bedrock:InvokeModel"], Resource = var.chief_of_staff_invoke_arns },
+      { Action = ["lambda:InvokeFunction"], Resource = ["arn:aws:lambda:${var.region}:${var.account_id}:function:${local.api_name}:live"] },
+    ]
     notifier      = [{ Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] }] # push rights: modules/notifications
     approvals     = [{ Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] }, { Action = ["sqs:SendMessage"], Resource = values(var.queue_arns) }]
     ws-authorizer = [{ Action = ["cognito-idp:DescribeUserPool"], Resource = ["arn:aws:cognito-idp:${var.region}:${var.account_id}:userpool/${var.user_pool_id}"] }]
@@ -202,7 +215,7 @@ locals {
   routes = [
     "GET /city", "GET /city/agent", "POST /city/instruct", "POST /messages", "POST /wake-check", "GET /tickets", "GET /tickets/{id}", "GET /jobs",
     "GET /departments", "GET /departments/presets", "GET /agents", "GET /workforce", "GET /costs", "GET /health", "GET /questions", "POST /questions/{id}/answer",
-    "POST /questions/{id}/default", "POST /approvals/{id}", "GET /settings", "PUT /settings",
+    "POST /questions/{id}/default", "POST /approvals/{id}", "GET /settings", "PUT /settings", "GET /chief-of-staff",
     "POST /workers/home", "POST /tasks/{id}/cancel", "POST /city/reset", "POST /agents/{id}/home",
     "GET /memory", "POST /notes", "GET /apps", "DELETE /apps/{id}", "PUT /apps/{id}",
     "POST /apps/{id}/bridge", "POST /apps/{id}/proposals", "POST /apps/{id}/rollback", "GET /apps/{id}/activity",
@@ -247,6 +260,9 @@ locals {
     warm-ace = { schedule = "rate(2 minutes)", fn = "scheduler", input = { job = "warm_ace" }, state = "ENABLED" }
     # The owner's calendar: every connected account read every 15 minutes (skipped when the feature is off).
     calendar-import = { schedule = "rate(15 minutes)", fn = "scheduler", input = { job = "calendar_import" }, state = "ENABLED" }
+    # The Chief of Staff (decision 124): a sweep for anything still undecided, and the daily digest (18:00 Stockholm, winter).
+    chief-sweep  = { schedule = "rate(5 minutes)", fn = "chief-of-staff", input = { job = "sweep" }, state = "ENABLED" }
+    chief-digest = { schedule = "cron(0 17 * * ? *)", fn = "chief-of-staff", input = { job = "digest" }, state = "ENABLED" }
   }
 }
 
@@ -737,6 +753,29 @@ resource "aws_cloudwatch_event_target" "approval" {
 # ---------- recurring jobs: classic EventBridge rules ----------
 # EventBridge Scheduler could never invoke the Lambda in this account (every attempt a TargetError, with the
 # role's policy simulating as allowed: an organisation-level refusal of role-based service invocations).
+# The Chief of Staff decides each new question and approval the moment it is asked (decision 124).
+resource "aws_cloudwatch_event_rule" "chief" {
+  name           = "${var.name}-chief-of-staff"
+  event_bus_name = var.bus_name
+  event_pattern  = jsonencode({ source = ["aic.city"], "detail-type" = ["question.asked", "approval.requested"] })
+  tags           = local.tags
+}
+
+resource "aws_cloudwatch_event_target" "chief" {
+  rule           = aws_cloudwatch_event_rule.chief.name
+  event_bus_name = var.bus_name
+  target_id      = "chief-of-staff"
+  arn            = aws_lambda_function.fn["chief-of-staff"].arn
+}
+
+resource "aws_lambda_permission" "chief" {
+  statement_id  = "chief-of-staff-events"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.fn["chief-of-staff"].function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.chief.arn
+}
+
 # Rules invoke through the function's resource policy, which works here (the city-event rules do).
 resource "aws_cloudwatch_event_rule" "job" {
   for_each            = local.jobs

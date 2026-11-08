@@ -217,6 +217,16 @@ class ApprovalWithdrawn(_E):
     id: str
 
 
+class StewardDecided(_E):
+    """The Chief of Staff decided a Needs you item (``kind`` question or approval) for the owner."""
+
+    type: Literal["steward.decided"]
+    id: str
+    kind: Literal["question", "approval"]
+    choice: str
+    reason: str
+
+
 class AppFile(_M):
     path: str
     size: float
@@ -357,6 +367,7 @@ CityEventModel = Annotated[
     | ApprovalRequested
     | ApprovalDecided
     | ApprovalWithdrawn
+    | StewardDecided
     | ConnectorUpdated
     | ConnectSignin
     | MailAccountEvent

@@ -228,6 +228,10 @@ module "api" {
   }
   # Apps' granted connector reads run in the app-bridge Lambda, through the connectors Gateway (docs/APPS.md v2).
   app_bridge_env = { AIC_GATEWAY_URL = module.connectors.gateway_url }
+
+  # The Chief of Staff (decision 124): Fable 5.1, Opus 5.5 behind it.
+  chief_of_staff_invoke_arns = module.agents.chief_of_staff_invoke_arns
+  chief_of_staff_profile_arn = module.agents.chief_of_staff_profile_arn
 }
 
 # The owner's knowledge base (docs/KNOWLEDGE.md): bucket, S3 Vectors + Bedrock Knowledge Base, graph table,

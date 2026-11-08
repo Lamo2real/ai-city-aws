@@ -67,6 +67,11 @@
       "fallback": null,
       "cacheTtl": "5m"
     },
+    "chief_of_staff": {
+      "model": "fable-5-1",
+      "fallback": "opus-5-5",
+      "cacheTtl": "5m"
+    },
     "utility": {
       "model": "haiku-5-5",
       "fallback": null,

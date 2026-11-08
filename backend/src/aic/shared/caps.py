@@ -37,6 +37,8 @@ def default_settings() -> dict[str, Any]:
         "profile_prefix": "global",
         "notify_push": True,
         "first_run_done": False,
+        # The Chief of Staff decides Needs you items the moment they appear (decision 124); off = they wait.
+        "chief_of_staff_enabled": True,
     }
 
 

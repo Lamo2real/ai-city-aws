@@ -65,6 +65,7 @@ def main() -> int:
     shutil.copytree(ROOT / "config", OUT / "aic" / "_config")
     shutil.copytree(ROOT / "agents" / "utility", OUT / "aic" / "_agents" / "utility")
     shutil.copytree(ROOT / "agents" / "skills", OUT / "aic" / "_agents" / "skills")  # Settings -> Departments
+    shutil.copy(ROOT / "agents" / "chief_of_staff.md", OUT / "aic" / "_agents" / "chief_of_staff.md")
     for junk in OUT.rglob("__pycache__"):
         shutil.rmtree(junk, ignore_errors=True)
     size = sum(p.stat().st_size for p in OUT.rglob("*") if p.is_file())
