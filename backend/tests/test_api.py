@@ -402,6 +402,7 @@ async def test_post_city_reset_empties_the_city_only_with_a_clear_confirm() -> N
     assert r["statusCode"] == 200
     body = js(r)
     assert body["gone"]["AGENT"] == 3 and body["gone"]["TICKET"] >= 4 and body["records"] == sum(body["gone"].values())
+    assert body["done"] is True  # the HUD keeps calling until this says so
     assert await d.ledger.get_ticket(task_id) is None and await d.ledger.list_agents() == []
     assert await d.ledger.get_department("Writing") is None
     assert d.queue.purged == 1 and d.queue.pending == []
@@ -421,3 +422,21 @@ async def test_post_agents_home_sends_one_clicked_worker_home_and_nothing_else()
     assert (await d.ledger.get_ticket(task_id))["status"] == "in_progress"  # the job stays
     assert (await d.ledger.get_agent("mgr-writing"))["state"] == "active"
     assert (await handle_http(ev("POST", f"/agents/{w1}/home"), d))["statusCode"] == 409
+
+
+async def test_post_agents_home_releases_the_worker_even_when_its_ticket_cannot_be_cancelled() -> None:
+    d = make()
+    _task_id, (w1, _w2) = await _office(d)
+    d.ledger.table.fail_writes = 1  # the cancel of its part fails (a half-deleted ticket after a reset ran out of time)
+    r = await handle_http(ev("POST", f"/agents/{w1}/home"), d)
+    assert r["statusCode"] == 200 and js(r) == {"workers": 1, "parts": 0, "failed": 0}
+    assert (await d.ledger.get_agent(w1))["state"] == "retired"  # off its desk all the same
+
+
+async def test_post_agents_home_never_claims_a_worker_went_home_when_the_release_failed() -> None:
+    d = make()
+    _task_id, (w1, _w2) = await _office(d)
+    d.ledger.table.fail_writes = 2  # the cancel and then the release itself fail
+    r = await handle_http(ev("POST", f"/agents/{w1}/home"), d)
+    assert r["statusCode"] == 500 and "could not be sent home" in js(r)["error"]
+    assert (await d.ledger.get_agent(w1))["state"] == "active"

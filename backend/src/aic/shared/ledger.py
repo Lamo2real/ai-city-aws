@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import itertools
+import time
 from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -446,21 +447,32 @@ class Ledger:
         return it is not None
 
     # ---------- the owner's "start over" ----------
-    async def reset_city(self) -> dict[str, int]:
+    async def reset_city(self, budget_s: float | None = None) -> dict[str, Any]:
         """Empties the city: every agent (AIC and the Orchestrator are recreated on the next message),
         department, ticket with its history, turn, tool call, event, conversation line, question, approval,
         work lease, app draft, worker-slot counter, idempotency key and rate record. Everything the owner set
         up stays: settings (CONFIG), spend history, devices, connectors, skills, knowledge, apps and their
-        state, mail, notes, reminders, specialists, voice and notification flags. Returns what went, per kind."""
-        keys = await self.table.scan_keys()
-        gone = [(pk, sk) for pk, sk in keys if pk.split("#", 1)[0] in RESET_KINDS]
-        if gone:
-            await self.table.delete_many(gone)
+        state, mail, notes, reminders, specialists, voice and notification flags.
+
+        Works page by page and stops after ``budget_s`` seconds (a Lambda has 30; the first reset of a
+        400-agent city ran out of time halfway and left three departments standing). Returns ``gone`` (what
+        went, per kind) and ``done``: ``False`` means "call again, there is more", and every call picks up
+        where the table stands now."""
+        started = time.monotonic()
         counts: dict[str, int] = {}
-        for pk, _ in gone:
-            kind = pk.split("#", 1)[0]
-            counts[kind] = counts.get(kind, 0) + 1
-        return dict(sorted(counts.items()))
+        start: Any = None
+        while True:
+            keys, start = await self.table.scan_keys(start)
+            gone = [(pk, sk) for pk, sk in keys if pk.split("#", 1)[0] in RESET_KINDS]
+            if gone:
+                await self.table.delete_many(gone)
+            for pk, _ in gone:
+                kind = pk.split("#", 1)[0]
+                counts[kind] = counts.get(kind, 0) + 1
+            if start is None:
+                return {"gone": dict(sorted(counts.items())), "done": True}
+            if budget_s is not None and time.monotonic() - started >= budget_s:
+                return {"gone": dict(sorted(counts.items())), "done": False}
 
     # ---------- city settings ----------
     async def settings(self, defaults: Record) -> Record:

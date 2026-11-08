@@ -345,6 +345,7 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
   const [problem, setProblem] = useState<string | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
   const [resetProblem, setResetProblem] = useState<string | null>(null);
+  const [resetting, setResetting] = useState<number | null>(null); // records gone so far while a reset runs
   useEffect(() => {
     if (data) setForm(data.settings);
   }, [data]);
@@ -512,7 +513,13 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
         settings, phone, connectors, skills, knowledge and apps stay.
       </p>
       {resetProblem ? <Banner tone="bad">{resetProblem}</Banner> : null}
-      <Button variant="danger" onClick={() => setResetOpen(true)}>
+      {resetting !== null ? (
+        <Banner tone="info">
+          Clearing the city… {resetting.toLocaleString("sv-SE")} records gone so far. Keep this page open; it reloads
+          when the city is empty.
+        </Banner>
+      ) : null}
+      <Button variant="danger" disabled={resetting !== null} onClick={() => setResetOpen(true)}>
         Start over
       </Button>
       {resetOpen ? (
@@ -526,11 +533,13 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
           onCancel={() => setResetOpen(false)}
           onConfirm={async () => {
             setResetProblem(null);
+            setResetOpen(false);
+            setResetting(0);
             try {
-              await startOver();
+              await startOver(undefined, setResetting);
             } catch (e) {
-              setResetOpen(false);
-              setResetProblem(e instanceof ApiError ? e.message : "The city was not reset. Try again.");
+              setResetting(null);
+              setResetProblem(e instanceof Error ? e.message : "The city was not reset. Try again.");
             }
           }}
         />

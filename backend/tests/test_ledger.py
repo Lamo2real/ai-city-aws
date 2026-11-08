@@ -261,13 +261,29 @@ class _FakeScanDynamo:
         return _Writer()
 
 
-async def test_dynamo_table_scans_every_page_of_keys_and_deletes_in_a_batch() -> None:
+async def test_dynamo_table_scans_keys_one_page_at_a_time_and_deletes_in_batches() -> None:
     fake = _FakeScanDynamo()
     t = DynamoTable(fake)
-    assert await t.scan_keys() == [("AGENT#a", "META"), ("CONFIG", "city")]
+    page, nxt = await t.scan_keys()
+    assert page == [("AGENT#a", "META")] and nxt == {"pk": "AGENT#a", "sk": "META"}
+    page, nxt = await t.scan_keys(nxt)
+    assert page == [("CONFIG", "city")] and nxt is None
     assert all(kw["ProjectionExpression"] == "pk, sk" for kw in fake.scans) and len(fake.scans) == 2
     await t.delete_many([("AGENT#a", "META")])
     assert fake.deleted == [{"pk": "AGENT#a", "sk": "META"}]
+    many = [(f"TURN#{i}", "META") for i in range(300)]  # several writers side by side, every key exactly once
+    await t.delete_many(many)
+    assert sorted(k["pk"] for k in fake.deleted[1:]) == sorted(pk for pk, _ in many)
+
+
+async def test_reset_city_stops_at_its_time_budget_and_says_it_is_not_done() -> None:
+    fake = _FakeScanDynamo()  # page one holds an agent, page two only the settings
+    led = Ledger(DynamoTable(fake))
+    r = await led.reset_city(budget_s=0)
+    assert r == {"gone": {"AGENT": 1}, "done": False} and fake.deleted == [{"pk": "AGENT#a", "sk": "META"}]
+    assert len(fake.scans) == 1  # it answered after the first page instead of running the Lambda out of time
+    r = await led.reset_city()
+    assert r["done"] is True and len(fake.scans) == 3  # no budget: every page, settings kept
 
 
 async def test_reset_city_removes_the_work_and_keeps_what_the_owner_set_up() -> None:
@@ -293,12 +309,13 @@ async def test_reset_city_removes_the_work_and_keeps_what_the_owner_set_up() -> 
                  {"pk": "CONV#ace", "sk": "1"}, {"pk": "APPROVAL#a", "sk": "META"}, {"pk": "APPDRAFTS", "sk": "DRAFT#d"}):  # fmt: skip
         await table.put(gone)
 
-    counts = await led.reset_city()
+    r = await led.reset_city()
 
-    assert counts == {"AGENT": 1, "APPDRAFTS": 1, "APPROVAL": 1, "CONV": 1, "DEPT": 1, "EVENT": 1, "IDEMP": 1, "Q": 1,
+    assert r["done"] is True
+    assert r["gone"] == {"AGENT": 1, "APPDRAFTS": 1, "APPROVAL": 1, "CONV": 1, "DEPT": 1, "EVENT": 1, "IDEMP": 1, "Q": 1,
                       "RATE": 1, "SLOTS": 1, "TICKET": 2, "TOOL": 1, "TURN": 1, "WORK": 1}  # fmt: skip
     left = sorted(pk.split("#", 1)[0] for pk, _ in table.items)
     assert left == ["APP", "APPSTATE", "CONFIG", "CONN", "DEVICE", "NOTE", "NOTIFY", "SKILL", "SPEC", "SPEND", "VOICE"]
     assert await led.list_agents() == [] and await led.get_ticket(t["id"]) is None
     assert (await led.settings({}))["daily_global_usd"] == 5  # settings survive
-    assert await led.reset_city() == {}  # a second time: nothing left to remove
+    assert await led.reset_city() == {"gone": {}, "done": True}  # a second time: nothing left to remove

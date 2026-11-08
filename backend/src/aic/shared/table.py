@@ -64,8 +64,9 @@ class Table(Protocol):
         """Deletes the item if it exists; True when this call deleted it (so two callers can't both win)."""
         ...
 
-    async def scan_keys(self) -> list[tuple[str, str]]:
-        """Every ``(pk, sk)`` in the table. Only the owner's "start over" reads the whole table; everything
+    async def scan_keys(self, start: Any = None) -> tuple[list[tuple[str, str]], Any]:
+        """One page of ``(pk, sk)`` from ``start`` (``None``: the beginning) and where the next page starts
+        (``None``: that was the last one). Only the owner's "start over" reads the whole table; everything
         else queries one key."""
         ...
 
@@ -142,8 +143,8 @@ class MemoryTable:
         self._guard()
         return self.items.pop((pk, sk), None) is not None
 
-    async def scan_keys(self) -> list[tuple[str, str]]:
-        return sorted(self.items)
+    async def scan_keys(self, start: Any = None) -> tuple[list[tuple[str, str]], Any]:
+        return sorted(self.items), None  # one page holds everything
 
     async def delete_many(self, keys: list[tuple[str, str]]) -> None:
         self._guard()
@@ -329,23 +330,25 @@ class DynamoTable:
                 return False
             raise
 
-    async def scan_keys(self) -> list[tuple[str, str]]:
-        out: list[tuple[str, str]] = []
-        start: dict[str, Any] | None = None
-        while True:
-            args: dict[str, Any] = {"ProjectionExpression": "pk, sk", **({"ExclusiveStartKey": start} if start else {})}
-            r = await asyncio.to_thread(self._t.scan, **args)
-            out.extend((str(i["pk"]), str(i["sk"])) for i in r.get("Items", []))
-            start = r.get("LastEvaluatedKey")
-            if not start:
-                return out
+    async def scan_keys(self, start: Any = None) -> tuple[list[tuple[str, str]], Any]:
+        """One scan page (DynamoDB caps a page at 1 MB of *stored* items, projection or not, so a city full of
+        long turns takes many pages)."""
+        args: dict[str, Any] = {"ProjectionExpression": "pk, sk", **({"ExclusiveStartKey": start} if start else {})}
+        r = await asyncio.to_thread(self._t.scan, **args)
+        return [(str(i["pk"]), str(i["sk"])) for i in r.get("Items", [])], r.get("LastEvaluatedKey") or None
+
+    DELETE_LANES = 8
+    """Batch writers running side by side in ``delete_many``: a big city goes in seconds, not minutes."""
 
     async def delete_many(self, keys: list[tuple[str, str]]) -> None:
-        """BatchWriteItem in the resource's batch writer (25 a request, unprocessed ones retried)."""
+        """BatchWriteItem in the resource's batch writer (25 a request, unprocessed ones retried), several
+        writers at once."""
 
-        def run() -> None:
+        def run(part: list[tuple[str, str]]) -> None:
             with self._t.batch_writer() as batch:
-                for pk, sk in keys:
+                for pk, sk in part:
                     batch.delete_item(Key={"pk": pk, "sk": sk})
 
-        await asyncio.to_thread(run)
+        lanes = max(1, min(self.DELETE_LANES, len(keys) // 25))
+        parts = [keys[i::lanes] for i in range(lanes)]
+        await asyncio.gather(*(asyncio.to_thread(run, p) for p in parts if p))

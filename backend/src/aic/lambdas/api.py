@@ -68,6 +68,8 @@ from .skills_api import SkillsApi
 from .skills_api import route as skills_route
 
 LIVE = ("open", "in_progress", "in_review", "waiting_on_owner")
+RESET_ROUND_S = 18.0
+"""How long one `POST /city/reset` round deletes before answering `done: false` (the Lambda and API Gateway allow 30)."""
 ALL = (*LIVE, "parked", "done", "failed", "cancelled")
 
 ROUTES: list[tuple[str, str]] = [
@@ -723,16 +725,26 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
             return problem(404, "That is not a worker.", "Managers stay with their department; send its workers home.")
         if w.get("state") == "retired" or w.get("worker_state") == "released":
             return problem(409, "That worker is already home.")
-        return reply(200, await send_home(_action_deps(d), [w]))
+        r = await send_home(_action_deps(d), [w])
+        if not r["workers"]:  # the HUD must never say "walking home" about someone still at a desk
+            return problem(
+                500,
+                "That worker could not be sent home.",
+                "Try again. If it keeps failing, use Start over in Settings.",
+            )
+        return reply(200, r)
     if is_("POST", r"/city/reset"):
         # The owner's "start over" (Settings): the city is emptied and nothing runs afterwards. No model in the
         # loop; the HUD asks for a held button first and sends confirm=true, nothing else resets anything.
         if _body(event).get("confirm") is not True:
             return problem(400, "Nothing was reset.", "Hold the Start over button in Settings to confirm.")
-        gone = await d.ledger.reset_city()
-        await d.queue.purge()
-        log("info", "city.reset", records=sum(gone.values()), kinds=json.dumps(gone))
-        return reply(200, {"gone": gone, "records": sum(gone.values())})
+        # One round fits the Lambda's 30 s; a big city takes several, and the HUD keeps calling until `done`.
+        res = await d.ledger.reset_city(budget_s=RESET_ROUND_S)
+        cleared: dict[str, int] = res["gone"]
+        if res["done"]:
+            await d.queue.purge()
+        log("info", "city.reset", records=sum(cleared.values()), kinds=json.dumps(cleared), done=res["done"])
+        return reply(200, {"gone": cleared, "records": sum(cleared.values()), "done": res["done"]})
     if is_("POST", r"/tasks/[\w-]+/cancel"):
         task = await d.ledger.get_ticket(seg[1])
         if not task or task.get("kind") != "task":

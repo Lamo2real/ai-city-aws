@@ -93,19 +93,38 @@ async def send_home(d: CityDeps, workers: list[Record]) -> dict[str, int]:
     the other workers are untouched (that is `send_workers_home`)."""
     sent = parts = failed = 0
     for w in workers:
-        try:
-            stale = await d.ledger.tickets_of(w["id"], OPEN_ASSIGNMENT)
-            for t in stale:
-                await move(d, t["id"], "cancelled", f"{w['id']} {SENT_HOME_NOTE}")
-            await d.factory.release(w["id"], str(w.get("parent")))  # a no-op if a cancel above sent it home
-        except Exception as e:  # one worker that cannot be released never keeps the others at their desks
+        n = await _walk_home(d, w)
+        if n is None:
             failed += 1
-            log("warn", "worker.release_failed", worker=w["id"], error=type(e).__name__)
-            continue
-        parts += len(stale)
-        sent += 1
-        log("info", "worker.sent_home", worker=w["id"], department=w.get("department"), assignments=len(stale))
+        else:
+            parts += n
+            sent += 1
     return {"workers": sent, "parts": parts, "failed": failed}
+
+
+async def _walk_home(d: CityDeps, w: Record) -> int | None:
+    """Cancels ``w``'s open assignments (each on its own: one that cannot be cancelled is logged and skipped) and
+    releases ``w``, which is what takes it off its desk. Returns the parts stopped, or ``None`` when the release
+    itself failed. A half-deleted ticket from a reset that ran out of time never keeps a worker seated."""
+    try:
+        stale = await d.ledger.tickets_of(w["id"], OPEN_ASSIGNMENT)
+    except Exception as e:
+        log("warn", "assignments.lookup_failed", worker=w["id"], error=type(e).__name__)
+        stale = []
+    parts = 0
+    for t in stale:
+        try:
+            await move(d, t["id"], "cancelled", f"{w['id']} {SENT_HOME_NOTE}")
+            parts += 1
+        except Exception as e:
+            log("warn", "assignment.cancel_failed", worker=w["id"], ticket=t.get("id"), error=type(e).__name__)
+    try:
+        await d.factory.release(w["id"], str(w.get("parent")))  # a no-op if a cancel above sent it home
+    except Exception as e:  # one worker that cannot be released never keeps the others at their desks
+        log("warn", "worker.release_failed", worker=w["id"], error=type(e).__name__)
+        return None
+    log("info", "worker.sent_home", worker=w["id"], department=w.get("department"), assignments=parts)
+    return parts
 
 
 def _words(s: Any) -> set[str]:
@@ -167,19 +186,13 @@ async def send_workers_home(d: CityDeps) -> dict[str, int]:
         except Exception as e:  # one stuck job never keeps the rest running
             log("warn", "job.cancel_failed", task=job["id"], error=type(e).__name__)
     for w in at_work:
-        # One worker that cannot be released never keeps the others at their desks.
-        try:
-            stale = await d.ledger.tickets_of(w["id"], OPEN_ASSIGNMENT)
-            for t in stale:
-                await move(d, t["id"], "cancelled", f"{w['id']} {SENT_HOME_NOTE}")
-            await d.factory.release(w["id"], str(w.get("parent")))  # a no-op if a cancel above sent it home
-        except Exception as e:
+        # Every figure the City draws at a desk; one that fails never keeps the others seated.
+        n = await _walk_home(d, w)
+        if n is None:
             failed += 1
-            log("warn", "worker.release_failed", worker=w["id"], error=type(e).__name__)
-            continue
-        parts += len(stale)
-        sent += 1
-        log("info", "worker.sent_home", worker=w["id"], department=w.get("department"), assignments=len(stale))
+        else:
+            parts += n
+            sent += 1
     managers = 0
     for m in await d.ledger.list_agents():
         if m.get("kind") != "manager" or m.get("state") == "retired":
