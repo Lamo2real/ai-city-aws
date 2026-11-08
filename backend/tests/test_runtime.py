@@ -128,7 +128,7 @@ def test_aces_prompt_states_its_name_greetings_spoken_style_and_limits() -> None
         "can't",
     ):
         assert s in body
-    assert "buddy" in body and "informal" in body
+    assert "Jarvis" in body and "\"Sir\"" in body  # the owner's rule: always called Sir
     for s in ("get_task_status", "cancel_task", "confirm=true", "Never stop a job without the yes", "seven-year-old"):
         assert s in body
     for s in ("send_workers_home", "The three controls", "always on"):  # send home ≠ stop; no pause
