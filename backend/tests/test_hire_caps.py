@@ -73,3 +73,44 @@ async def test_the_owner_can_raise_the_goal_cap_in_settings() -> None:
     for _ in range(5):
         assert (await hire(SPEC)).startswith("Hired ")
     assert "cap is 5" in await hire(SPEC)
+
+
+def manager_tool(city: City, mgr: str, dept: str, ticket: str, name: str) -> Any:
+    ctx = TurnCtx(agent_id=mgr, role="manager", department=dept, ticket_id=ticket, task_id="task-1", conversation=None)
+    return next(t for t in tools_for(city.deps, ctx) if t.name == name).handler
+
+
+async def test_idle_leftover_workers_without_a_goal_never_block_a_new_goal() -> None:
+    # The Research bug (2026-11-08): three idle workers from earlier work, with no goal recorded, made every
+    # new goal "full", and the manager had no way to see or free them.
+    city = make_city(scripted_engine({}))
+    mgr = await manager(city, "Research")
+    hire = hire_tool(city, mgr, "Research", "goal-1")
+    for _ in range(3):
+        wid = (await hire(SPEC)).split()[1]
+        await city.ledger.update_agent(wid, {"goal_id": None, "worker_state": "hired"})
+    assert (await hire_tool(city, mgr, "Research", "goal-2")(SPEC)).startswith("Hired ")
+
+
+async def test_a_refusal_names_the_workers_and_the_manager_can_list_and_release_them() -> None:
+    city = make_city(scripted_engine({}))
+    mgr = await manager(city)
+    hire = hire_tool(city, mgr, "Writing", "goal-1")
+    ids = [(await hire(SPEC)).split()[1] for _ in range(3)]
+    refused = await hire(SPEC)
+    assert all(i in refused for i in ids) and "release_worker" in refused
+    listed = await manager_tool(city, mgr, "Writing", "goal-1", "my_workers")({})
+    assert all(i in listed for i in ids) and "this goal" in listed
+    assert (await manager_tool(city, mgr, "Writing", "goal-1", "release_worker")({"worker_id": ids[0]})).startswith(
+        "Released"
+    )
+    assert (await hire(SPEC)).startswith("Hired ")
+
+
+def test_hire_worker_offers_only_real_tool_names() -> None:
+    city = make_city(scripted_engine({}))
+    ctx = TurnCtx(agent_id="mgr-x", role="manager", department="X", ticket_id="g", task_id="t", conversation=None)
+    spec = next(t for t in tools_for(city.deps, ctx) if t.name == "hire_worker")
+    from aic.shared.hierarchy.factory import WORKER_TOOLS
+
+    assert spec.schema["properties"]["tools"]["items"]["enum"] == list(WORKER_TOOLS)

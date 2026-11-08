@@ -47,7 +47,7 @@ from aic.shared.hierarchy.actions import (
     status_summary,
     workers_at_work,
 )
-from aic.shared.hierarchy.factory import worker_spec
+from aic.shared.hierarchy.factory import WORKER_TOOLS, worker_spec
 from aic.shared.hierarchy.tasks import (
     cancel_preview,
     cancel_task,
@@ -882,12 +882,22 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             for w in await d.ledger.department_agents(dept)
             if w.get("kind") == "worker" and w.get("state") != "retired"
         ]
-        on_goal = [w for w in live if w.get("parent") == c.agent_id and w.get("goal_id") in (None, c.ticket_id)]
+        # On this goal: workers hired for it, and goal-less (older) workers only while they are actually working.
+        # An idle goal-less worker left over from earlier work never blocks a new goal.
+        on_goal = [
+            w
+            for w in live
+            if w.get("parent") == c.agent_id
+            and (w.get("goal_id") == c.ticket_id or (w.get("goal_id") is None and w.get("worker_state") == "working"))
+        ]
         if len(on_goal) >= goal_cap:
             log("info", "hire.refused", department=dept, goal=c.ticket_id, on_goal=len(on_goal), cap=goal_cap)
+            names = ", ".join(
+                f"{w['id']} ({w.get('specialty') or w.get('role')}, {w.get('worker_state')})" for w in on_goal
+            )
             return (
-                f"Hire refused: you already have {len(on_goal)} workers on this goal (the cap is {goal_cap}). "
-                "Wait for one to finish, or do it with the workers you have."
+                f"Hire refused: you already have {len(on_goal)} workers on this goal (the cap is {goal_cap}): {names}. "
+                "Assign one of them with `assign`, or free a place with `release_worker` (idle or finished ones)."
             )
         if len(live) >= dept_cap:
             log("info", "hire.refused", department=dept, live=len(live), cap=dept_cap)
@@ -1015,6 +1025,21 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         )
         return "FAIL recorded; sent back to the worker."
 
+    async def my_workers(_: dict[str, Any]) -> str:
+        rows = [
+            w
+            for w in await d.ledger.department_agents(dept)
+            if w.get("kind") == "worker" and w.get("parent") == c.agent_id and w.get("state") != "retired"
+        ]
+        if not rows:
+            return "You have no workers right now."
+        return "\n".join(
+            f"- {w['id']}: {w.get('specialty') or w.get('role')}, {w.get('worker_state')}"
+            f"{', this goal' if w.get('goal_id') == c.ticket_id else ', another goal' if w.get('goal_id') else ''}"
+            f"{', assignment ' + str(w['ticket_id']) if w.get('ticket_id') else ''}"
+            for w in rows
+        )
+
     async def release(a: dict[str, Any]) -> str:
         try:
             w = await d.factory.release(str(a["worker_id"]), c.agent_id)
@@ -1062,12 +1087,13 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
     return [
         ToolSpec(
             "hire_worker",
-            "Hire a worker consultant for one assignment.",
+            "Hire a worker consultant for one assignment. `tools` must come from the list given; `connectors` only "
+            "ids open to workers (leave it out when unsure; a refusal names the ones that are).",
             _obj(
                 {
                     "specialty": _s(),
                     "instructions": _s(),
-                    "tools": _STRS,
+                    "tools": {"type": "array", "items": {"type": "string", "enum": list(WORKER_TOOLS)}, "minItems": 1},
                     "budget_hint_usd": {"type": "number"},
                     "specialist_id": _s(),
                     "connectors": _STRS,
@@ -1091,7 +1117,18 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             _obj({"ticket_id": _s(), "verdict": _VERDICT, "reasons": _s(3)}),
             review,
         ),
-        ToolSpec("release_worker", "Release a worker whose work passed review.", _obj({"worker_id": _s()}), release),
+        ToolSpec(
+            "my_workers",
+            "List your current workers: id, specialty, state, and which goal or assignment they are on.",
+            _obj({}),
+            my_workers,
+        ),
+        ToolSpec(
+            "release_worker",
+            "Release one of your workers: one whose work passed review, or an idle one you no longer need.",
+            _obj({"worker_id": _s()}),
+            release,
+        ),
         ToolSpec(
             "save_specialist",
             "Save a worker's spec so it can be hired again later.",

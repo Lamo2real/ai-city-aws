@@ -98,7 +98,11 @@ class Factory:
             }
             unknown = [c for c in connectors if c not in open_to_workers]
             if unknown:
-                raise HireRefused(f"These connectors aren't open to workers: {', '.join(unknown)}.")
+                ok = ", ".join(sorted(open_to_workers)) or "none yet"
+                raise HireRefused(
+                    f"These connectors aren't open to workers: {', '.join(unknown)}. Open to workers: {ok}. "
+                    "Hire again without them, or with only those."
+                )
         at = now_iso(self._ledger.now())
         agent: Record = {
             "id": new_id(f"wkr-{department_key(dept['name'])}"),
