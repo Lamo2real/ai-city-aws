@@ -20,7 +20,7 @@ def test_nine_departments_and_everything_they_name_exists() -> None:
     names = [p["name"] for p in presets()]
     assert names == [
         "IT", "Data & Analytics", "Marketing", "Sales", "Customer Support", "Finance", "Legal", "Product", "Operations",
-        "Research",
+        "Research", "Media",
     ]  # fmt: skip
     cat = catalog()
     for p in [*presets(), shared()]:
@@ -49,6 +49,8 @@ def test_names_and_aliases_reach_the_preset() -> None:
     for name in ("Research", "R&D", "innovation", "market research"):
         assert preset_for(name)["key"] == "research", name  # type: ignore[index]
     assert preset_for("user research")["key"] == "product"  # type: ignore[index]
+    for name in ("Media", "YouTube", "video production", "TikTok", "podcast"):
+        assert preset_for(name)["key"] == "media", name  # type: ignore[index]
     assert preset_for("Gardening") is None
     assert preset_for("") is None
 

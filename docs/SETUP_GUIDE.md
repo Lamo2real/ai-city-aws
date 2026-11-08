@@ -24,13 +24,15 @@ For each tool: no account yet? Tap **Create an account**, sign up on the service
 - **Product**: essential Linear, Figma, PostHog; more Amplitude, Mixpanel, Typeform, SurveyMonkey, Fireflies.
 - **Operations**: essential Asana, monday.com, Airtable; more ClickUp, Shopify (store), Typeform.
 - **Research**: essential Hugging Face, Exa, Consensus; more OpenAlex, Parallel, Tavily, Jina AI, Firecrawl, Crunchbase, Product Hunt.
+- **Media**: essential Metricool, Higgsfield, ElevenLabs, Canva; more Opus Clip, Captions, Runway, HeyGen, Synthesia, Pika, Ideogram, Buffer, Ayrshare, Blotato, vidIQ, TubeBuddy, Artlist, Envato, Unsplash, Frame.io, Vimeo, Mux, Cloudinary.
 
 Special cases:
 - **Salesforce** needs an External Client App in your org (Setup → External Client App Manager → New, OAuth with the `mcp_api` scope and the callback URL the card shows); paste its consumer key and secret in the card.
 - **Google Analytics** and **BigQuery** need a Google OAuth client (Google Cloud console → APIs & Services → Credentials → OAuth client ID, type Web application, the callback URL the card shows).
 - **Shopify (store)** asks for your store's name (the part before `.myshopify.com`).
 - **Meta Ads** and **Google Ads** go through Pipeboard: sign in with your Meta or Google account on Pipeboard's page.
-- **Pipedrive** and **Gorgias** ask for an API token from their settings.
+- **Pipedrive**, **Gorgias** and **Ayrshare** ask for an API key from their settings.
+- **YouTube, TikTok, Instagram and Facebook**: switch on **Metricool** (Media), sign in, then connect each social account inside Metricool with the platform's own sign-in. The city never needs your social passwords.
 
 ## 4. Give IT your GitHub
 Make a classic GitHub token with every scope and paste it in **Settings → GitHub** (see `docs/GITHUB_ACCESS.md`). The city can then create repositories, push code, open pull requests and set repository secrets and variables.

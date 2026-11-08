@@ -610,6 +610,92 @@
         "crunchbase",
         "product-hunt"
       ]
+    },
+    {
+      "key": "media",
+      "name": "Media",
+      "aliases": [
+        "video",
+        "videos",
+        "video production",
+        "youtube",
+        "tiktok",
+        "instagram",
+        "creator",
+        "creators",
+        "content creation",
+        "studio",
+        "production",
+        "podcast",
+        "podcasts",
+        "channel",
+        "channels",
+        "social video",
+        "media production"
+      ],
+      "mission": "Make and publish media that earns: videos for YouTube, TikTok, Instagram and Facebook (long-form, Shorts, Reels), AI-generated video, images and voice-overs, editing, captions and thumbnails, scheduled uploads, channel growth and monetization.",
+      "teams": [
+        {
+          "name": "Script & concept",
+          "does": "Ideas, hooks, scripts, storyboards, series formats"
+        },
+        {
+          "name": "Generation",
+          "does": "AI video (Higgsfield, Runway, Pika), presenters (HeyGen, Synthesia), images (Ideogram, Canva), voice and music (ElevenLabs, Artlist)"
+        },
+        {
+          "name": "Editing",
+          "does": "Cuts, captions, clips from long videos (Opus Clip, Captions), thumbnails, review (Frame.io)"
+        },
+        {
+          "name": "Publishing",
+          "does": "Uploads and schedules to YouTube, TikTok, Instagram and Facebook (Metricool, Buffer, Ayrshare)"
+        },
+        {
+          "name": "Growth & monetization",
+          "does": "Titles, SEO, analytics (vidIQ, TubeBuddy), partner programs, sponsors, products sold with Stripe"
+        }
+      ],
+      "skills": [
+        "video-production",
+        "short-form-clips",
+        "youtube-channel-growth",
+        "social-publishing",
+        "creator-monetization",
+        "brand-and-copy",
+        "video-and-voice"
+      ],
+      "essential": [
+        "metricool",
+        "higgsfield",
+        "elevenlabs",
+        "canva"
+      ],
+      "connectors": [
+        "metricool",
+        "higgsfield",
+        "elevenlabs",
+        "canva",
+        "opus-clip",
+        "captions",
+        "runway",
+        "heygen",
+        "synthesia",
+        "pika",
+        "ideogram",
+        "buffer",
+        "ayrshare",
+        "blotato",
+        "vidiq",
+        "tubebuddy",
+        "artlist",
+        "envato",
+        "unsplash",
+        "frame-io",
+        "vimeo",
+        "mux",
+        "cloudinary"
+      ]
     }
   ],
   "connectors": {
@@ -1078,6 +1164,114 @@
       "label": "Product Hunt",
       "url": "https://mcp.producthunt.com/mcp",
       "what": "New product launches, what people upvote and say"
+    },
+    "metricool": {
+      "label": "Metricool",
+      "url": "https://ai.metricool.com/mcp",
+      "what": "Publish and schedule to YouTube, TikTok, Instagram, Facebook, LinkedIn and more, with analytics for every account (you connect each social account inside Metricool)",
+      "signup": "https://app.metricool.com/signup"
+    },
+    "opus-clip": {
+      "label": "Opus Clip",
+      "url": "https://mcp.opus.pro/mcp",
+      "what": "Turn long videos into viral short clips with captions and reframing",
+      "signup": "https://clip.opus.pro/"
+    },
+    "captions": {
+      "label": "Captions",
+      "url": "https://mcp.captions.ai/mcp",
+      "what": "AI video editing: captions, cuts, eye contact, dubbing",
+      "signup": "https://www.captions.ai/"
+    },
+    "runway": {
+      "label": "Runway",
+      "url": "https://mcp.runwayml.com/mcp",
+      "what": "Generate and edit video with AI (text or image to video)",
+      "signup": "https://app.runwayml.com/signup"
+    },
+    "synthesia": {
+      "label": "Synthesia",
+      "url": "https://mcp.synthesia.io/mcp",
+      "what": "Presenter videos with AI avatars in 140+ languages",
+      "signup": "https://www.synthesia.io/"
+    },
+    "pika": {
+      "label": "Pika",
+      "url": "https://mcp.pika.art/mcp",
+      "what": "AI video generation and effects",
+      "signup": "https://pika.art/"
+    },
+    "ideogram": {
+      "label": "Ideogram",
+      "url": "https://mcp.ideogram.ai/mcp",
+      "what": "AI images with readable text: thumbnails, posters, covers",
+      "signup": "https://ideogram.ai/"
+    },
+    "ayrshare": {
+      "label": "Ayrshare",
+      "url": "https://api.ayrshare.com/mcp",
+      "what": "Post to YouTube, TikTok, Instagram, Facebook, X, LinkedIn and more through one API (the card asks for your API key)",
+      "signup": "https://app.ayrshare.com/"
+    },
+    "blotato": {
+      "label": "Blotato",
+      "url": "https://mcp.blotato.com/mcp",
+      "what": "Create and publish faceless videos and posts to every social platform",
+      "signup": "https://www.blotato.com/"
+    },
+    "vidiq": {
+      "label": "vidIQ",
+      "url": "https://mcp.vidiq.com/mcp",
+      "what": "YouTube keyword research, video ideas, competitor channels, title scores",
+      "signup": "https://vidiq.com/"
+    },
+    "tubebuddy": {
+      "label": "TubeBuddy",
+      "url": "https://mcp.tubebuddy.com/mcp",
+      "what": "YouTube SEO, tags, thumbnail tests and channel analytics",
+      "signup": "https://www.tubebuddy.com/"
+    },
+    "artlist": {
+      "label": "Artlist",
+      "url": "https://mcp.artlist.io/mcp",
+      "what": "Licensed music, sound effects and stock footage for monetized videos",
+      "signup": "https://artlist.io/"
+    },
+    "envato": {
+      "label": "Envato",
+      "url": "https://mcp.envato.com/mcp",
+      "what": "Stock video, music, templates and graphics",
+      "signup": "https://elements.envato.com/"
+    },
+    "unsplash": {
+      "label": "Unsplash",
+      "url": "https://mcp.unsplash.com/mcp",
+      "what": "Free high-quality photos",
+      "signup": "https://unsplash.com/join"
+    },
+    "frame-io": {
+      "label": "Frame.io",
+      "url": "https://mcp.frame.io/mcp",
+      "what": "Video review: comments and approvals on cuts",
+      "signup": "https://frame.io/"
+    },
+    "vimeo": {
+      "label": "Vimeo",
+      "url": "https://mcp.vimeo.com/mcp",
+      "what": "Host and share videos, showcases and private review links",
+      "signup": "https://vimeo.com/join"
+    },
+    "mux": {
+      "label": "Mux",
+      "url": "https://mcp.mux.com",
+      "what": "Video hosting and streaming for apps and sites the city builds",
+      "signup": "https://dashboard.mux.com/signup"
+    },
+    "cloudinary": {
+      "label": "Cloudinary",
+      "url": "https://asset-management.mcp.cloudinary.com/mcp",
+      "what": "Media library: store, resize and transform images and video",
+      "signup": "https://cloudinary.com/users/register_free"
     }
   }
 }
