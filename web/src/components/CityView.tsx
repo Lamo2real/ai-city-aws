@@ -129,7 +129,7 @@ export function CityView({ go }: { go: (view: string) => void }) {
       />
       <div className="cityui citytop" role="status" aria-label="The city right now">
         <CityTabs on="city" />
-        <Stat k="Working now" v={String(t.agentsActive)} />
+        <Stat k="Agents working now" v={String(t.agentsActive)} />
         <Stat k="Jobs running" v={String(jobsRunning)} />
         <Stat k="Need you" v={String(waiting)} />
         <Stat k={REGION_CITY[region] ?? region} v={stockholmTime(now)} className="clock" />

@@ -637,12 +637,18 @@ export function departmentPanel(state, dept) {
 // How many agents stand at work in a department building (not HQ). The City counts lit windows the same way.
 export const agentsAtWork = (state) => Object.values(state.agents).filter((a) => !CORE.has(a.id) && a.kind !== "core" && placement(state, a.id).place === "station").length;
 
+const BUSY = new Set(["working", "waiting", "review", "blocked"]);
+/** Workers on a job right now: the number the owner asked for when they set how many agents a task gets. */
+export const workersWorking = (state) =>
+  Object.values(state.agents).filter((a) => a.kind === "worker" && a.state !== "retired" && BUSY.has(a.worker_state)).length;
+
 export function topBar(state) {
   const agents = Object.values(state.agents).filter((a) => !CORE.has(a.id) && a.kind !== "specialist");
   return {
     agentsTotal: agents.length,
-    // "Working now" = everyone the City draws at a desk (hired, idle or busy); a released one is home and not counted.
-    agentsActive: agentsAtWork(state),
+    // "Agents working now" = workers on a job right now (working, waiting on an answer, or in review). Managers,
+    // the Orchestrator and AIC never count, nor do idle or finished workers (the owner, 2026-11-08).
+    agentsActive: workersWorking(state),
     ticketsRunning: Object.values(state.tickets).filter((t) => t.status === "in_progress" || t.status === "in_review").length,
     questionsWaiting: Object.keys(state.questions).length + Object.keys(state.approvals).length,
     parked: Object.keys(state.parked).length,

@@ -166,6 +166,7 @@ export function placement(
 ): { place: "hq" | "station" | "home"; dept: string; why: string } | null;
 export function topBar(state: CityState): {
   agentsTotal: number;
+  /** Workers on a job right now (not managers, the Orchestrator or AIC). */
   agentsActive: number;
   ticketsRunning: number;
   questionsWaiting: number;
@@ -181,3 +182,5 @@ export function stockholmTime(t: number): string;
 export function ticketWords(status: string): string;
 export function plainText(text: string, max?: number): { short: string; whole: boolean };
 export function cityMessage(state: CityState): string | null;
+
+export function workersWorking(state: unknown): number;

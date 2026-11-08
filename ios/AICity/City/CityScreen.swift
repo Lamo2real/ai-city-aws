@@ -113,7 +113,7 @@ struct CityList: View {
         NavigationStack {
             List {
                 Section {
-                    LabeledContent("Agents", value: "\(top.agentsActive) active · \(top.agentsTotal) total")
+                    LabeledContent("Agents working now", value: "\(top.agentsActive) of \(top.agentsTotal)")
                     LabeledContent("Tickets running", value: "\(top.ticketsRunning)")
                     LabeledContent("On hold", value: "\(top.parked)")
                     if let m = City.cityMessage(s), model.hud.loaded { Text(m).foregroundStyle(.secondary) }

@@ -487,7 +487,10 @@ enum City {
     struct TopBar: Equatable { var agentsTotal: Int; var agentsActive: Int; var ticketsRunning: Int; var questionsWaiting: Int; var parked: Int }
     static func topBar(_ s: CityState) -> TopBar {
         let agents = s.agents.values.filter { !core.contains($0.id) && $0.kind != "specialist" }
-        return TopBar(agentsTotal: agents.count, agentsActive: agents.filter { $0.state == "active" }.count,
+        // "Agents working now": workers on a job right now, never managers, the Orchestrator or AIC (the owner, 2026-11-08).
+        let busy: Set<String> = ["working", "waiting", "review", "blocked"]
+        let working = agents.filter { $0.kind == "worker" && $0.state != "retired" && busy.contains($0.workerState ?? "") }.count
+        return TopBar(agentsTotal: agents.count, agentsActive: working,
                       ticketsRunning: s.tickets.values.filter { $0.status == "in_progress" || $0.status == "in_review" }.count,
                       questionsWaiting: s.questions.count + s.approvals.count, parked: s.parked.count)
     }

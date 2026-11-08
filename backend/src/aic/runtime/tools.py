@@ -129,6 +129,16 @@ def _obj(props: dict[str, dict[str, Any]], optional: tuple[str, ...] = ()) -> di
 
 _STRS = {"type": "array", "items": {"type": "string"}}
 _VERDICT = {"type": "string", "enum": ["PASS", "FAIL"]}
+# The exact number of workers the owner asked for on a task (the owner's choice, 2026-11-08); absent = the team decides.
+_WORKERS = {"type": "integer", "minimum": 1, "maximum": 100}
+
+
+def _workers(v: Any) -> int | None:
+    try:
+        n = int(v)
+    except (TypeError, ValueError):
+        return None
+    return n if 1 <= n <= 100 else None
 
 
 def validate_args(schema: dict[str, Any], args: dict[str, Any]) -> str | None:
@@ -268,6 +278,7 @@ def _run_command_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
 def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
     async def delegate(a: dict[str, Any]) -> str:
         cons = a.get("constraints")
+        workers = _workers(a.get("workers"))
         brief = str(a.get("brief") or "").strip()[:BRIEF_MAX]
         words = f"{a.get('owner_words') or ''}\n{a['goal']}"
         # Complaints, bug reports and questions about AI City itself are never jobs: nothing the team builds
@@ -330,10 +341,12 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 if verdict and verdict.department
                 else "the team"
             )
+            team = f" with {workers} agents working at once" if workers else ""
             return (
                 f"Ask the owner first, in one short sentence, whether the team should take this on, for example: "
-                f"“Want the team to build that? {who}, a few dollars.” Nothing was started. On a clear yes, call "
-                "delegate_to_orchestrator again with confirm=true; on a no or anything unclear, start nothing."
+                f"“Want the team to build that{team}? {who}, a few dollars.” Nothing was started. On a clear yes, "
+                "call delegate_to_orchestrator again with confirm=true (and the same workers); on a no or anything "
+                "unclear, start nothing."
             )
         t = await new_ticket(
             d,
@@ -348,6 +361,7 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 **({"conversation": c.conversation} if c.conversation else {}),
                 **({"app_id": target["app_id"]} if target else {}),
                 **({"brief": brief} if brief else {}),
+                **({"workers": workers} if workers else {}),
                 "owner_words": str(a.get("owner_words", ""))[:500],  # so "the Porsche thing" finds it later
             },
         )
@@ -361,6 +375,11 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             body += f"\nConstraints: {cons}"
         if brief:
             body += f"\n{brief_note(brief)}"
+        if workers:
+            body += (
+                f"\nThe owner asked for exactly {workers} worker{'s' if workers != 1 else ''} on this task, all working "
+                "at the same time. Pass workers on assign_to_department; across departments they add up to exactly that."
+            )
         body += hint
         msg: dict[str, Any] = {
             "role": "orchestrator",
@@ -375,7 +394,7 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         if c.conversation:
             msg["conversation"] = c.conversation
         await send(d, msg)
-        return f"Handed to the Orchestrator as task {t['id']}."
+        return f"Handed to the Orchestrator as task {t['id']}" + (f" ({workers} workers)." if workers else ".")
 
     async def offer_choices(a: dict[str, Any]) -> str:
         options = [str(o).strip()[:60] for o in a.get("options") or [] if str(o).strip()][:5]
@@ -512,7 +531,9 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             "again with confirm=true. To change one of the owner's apps, pass its app_id (from get_status; in an "
             "app's own chat it is that app). For an app or product, pass brief: the plan the owner agreed to, in "
             "plain words (who uses it, the screens, what happens on the key actions, the look, anything paid or "
-            "private); the team builds exactly that.",
+            "private); the team builds exactly that. If the owner said how many agents or workers to use "
+            '("use 5 agents", "put 3 people on it"), pass workers: exactly that many work on it at the same '
+            "time; otherwise leave it out and the team decides.",
             _obj(
                 {
                     "goal": _s(3),
@@ -520,9 +541,10 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                     "constraints": _s(),
                     "app_id": _s(1, 40),
                     "brief": _s(1, BRIEF_MAX),
+                    "workers": _WORKERS,
                     "confirm": {"type": "boolean"},
                 },
-                ("constraints", "app_id", "brief", "confirm"),
+                ("constraints", "app_id", "brief", "workers", "confirm"),
             ),
             delegate,
         ),
@@ -683,6 +705,12 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         await ensure_manager(dept)
         if dept.get("stood_down_at"):
             await d.ledger.stand_down_department(dept["name"], down=False)  # a new job from the owner lifts it
+        # The owner's exact worker count: given here, or what is left of the task's count.
+        workers = _workers(a.get("workers"))
+        task_t = await d.ledger.get_ticket(c.task_id)
+        if workers is None and task_t and (total := _workers(task_t.get("workers"))):
+            used = sum(_workers(k.get("workers")) or 0 for k in await d.ledger.child_tickets(c.task_id))
+            workers = max(1, total - used)
         t = await new_ticket(
             d,
             {
@@ -693,6 +721,7 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 "department": dept["name"],
                 "parent_id": c.task_id,
                 "kind": "assignment",
+                **({"workers": workers} if workers else {}),
                 **({"app_id": task_app} if (task_app := await _task_app(d, c.task_id)) else {}),
             },
         )
@@ -711,13 +740,19 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 "from": "orchestrator",
                 "body": f"Goal for {dept['name']}: {a['goal']}\nAcceptance: {a['acceptance']}"
                 + (
+                    f"\nThe owner asked for exactly {workers} worker{'s' if workers != 1 else ''} on this goal: hire "
+                    "exactly that many, give each its own part, and run them at the same time."
+                    if workers
+                    else ""
+                )
+                + (
                     f"\nThis changes the existing app {task_app}: workers start from its current version with load_app."
                     if task_app
                     else ""
                 ),
             },
         )
-        return f"Sent to {dept['name']} as {t['id']}."
+        return f"Sent to {dept['name']} as {t['id']}" + (f" ({workers} workers)." if workers else ".")
 
     async def get_reports(_: dict[str, Any]) -> str:
         import json
@@ -823,8 +858,12 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         ),
         ToolSpec(
             "assign_to_department",
-            "Send one goal to a department's manager.",
-            _obj({"department": _s(), "goal": _s(3), "acceptance": _s(3)}),
+            "Send one goal to a department's manager. workers: the exact number of workers for this goal when the "
+            "owner set one for the task (leave it out otherwise; with one department it defaults to the task's).",
+            _obj(
+                {"department": _s(), "goal": _s(3), "acceptance": _s(3), "workers": _WORKERS},
+                ("workers",),
+            ),
             assign,
         ),
         ToolSpec(
@@ -867,15 +906,17 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             log("info", "hire.refused", department=dept, reason="stood down")
             return f"Hire refused: {STAND_DOWN_NOTE}"
         s = await d.settings()
+        goal_t = await d.ledger.get_ticket(c.ticket_id) if c.ticket_id else None
+        asked = _workers((goal_t or {}).get("workers"))  # the owner's exact number: it replaces the caps below
         city_cap = int(s.get("max_live_workers_city") or 10)
         city_live = len(await workers_at_work(d))
-        if city_live >= city_cap:
+        if city_live >= city_cap and not asked:
             log("info", "hire.refused", department=dept, live_city=city_live, cap=city_cap)
             return (
                 f"Hire refused: the whole city already has {city_live} workers at work (the ceiling is {city_cap}). "
                 "Wait for one to finish, or do it with the workers you have."
             )
-        goal_cap = int(s.get("max_workers_per_goal") or 3)
+        goal_cap = asked or int(s.get("max_workers_per_goal") or 3)
         dept_cap = int(s.get("max_concurrent_workers_per_department") or 10)
         live = [
             w
@@ -895,11 +936,12 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             names = ", ".join(
                 f"{w['id']} ({w.get('specialty') or w.get('role')}, {w.get('worker_state')})" for w in on_goal
             )
+            why = f"the owner asked for exactly {asked}" if asked else f"the cap is {goal_cap}"
             return (
-                f"Hire refused: you already have {len(on_goal)} workers on this goal (the cap is {goal_cap}): {names}. "
+                f"Hire refused: you already have {len(on_goal)} workers on this goal ({why}): {names}. "
                 "Assign one of them with `assign`, or free a place with `release_worker` (idle or finished ones)."
             )
-        if len(live) >= dept_cap:
+        if len(live) >= dept_cap and not asked:
             log("info", "hire.refused", department=dept, live=len(live), cap=dept_cap)
             return (
                 f"Hire refused: the department already has {len(live)} workers at once (the ceiling is {dept_cap}). "
