@@ -360,9 +360,17 @@ export async function mockBackend(
           const timers = (w.__partials ?? []).map((p, i) => setTimeout(() => onPartial?.(p), 100 * (i + 1)));
           const delay = 100 * ((w.__partials ?? []).length + 1) + 200;
           if (!w.__micHold) timers.push(setTimeout(() => onText(w.__heard ?? "yo AIC, status?"), delay));
+          // The mic stays open in a voice conversation: whatever the test sets __heard to next is heard then.
+          let last = w.__heard;
+          const watch = setInterval(() => {
+            if (w.__micHold || w.__heard === last) return;
+            last = w.__heard;
+            if (last) onText(last);
+          }, 50);
           return () => {
             hearing = false;
             timers.forEach(clearTimeout);
+            clearInterval(watch);
           };
         },
         async speak(text: string) {

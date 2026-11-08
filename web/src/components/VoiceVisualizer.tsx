@@ -149,6 +149,13 @@ export function VoiceVisualizer(p: {
             <MicIcon size={26} />
           </button>
         )}
+        {p.bare ? (
+          // Unmistakable while the conversation is on: a live badge with a beating dot.
+          <span className="voice-on-pill">
+            <span className="voice-on-dot" aria-hidden="true" />
+            Voice on
+          </span>
+        ) : null}
         <p className="voice-label">
           {speaker === "you" || speaker === "aic" ? (
             <span className="voice-who" aria-hidden="true">

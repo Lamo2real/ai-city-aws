@@ -14,3 +14,22 @@ export function loopNext(on: boolean, e: LoopEvent): { on: boolean; reopen: bool
 export function isStopPhrase(text: string): boolean {
   return /^\s*(?:please\s+)?(?:stop|quit)\s+(?:listening|the\s+mic(?:rophone)?)[\s.!,]*$/i.test(text);
 }
+
+const words = (t: string) =>
+  t
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s']/gu, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+
+/** Whether what the mic heard is AIC's own reply coming back from the speakers (the mic stays open while AIC
+ *  talks): most of the heard words are words of the reply. Short owner interjections ("wait", "stop") that
+ *  are not in the reply always count as the owner. */
+export function isEcho(heard: string, reply: string): boolean {
+  const h = words(heard);
+  if (!h.length) return true;
+  const r = new Set(words(reply));
+  if (!r.size) return false;
+  const inReply = h.filter((w) => r.has(w)).length;
+  return inReply / h.length >= 0.7;
+}

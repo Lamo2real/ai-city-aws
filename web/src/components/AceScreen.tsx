@@ -193,7 +193,7 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
   const unsent = chat.filter((l) => l.who === "owner" && (l.state === "failed" || l.state === "queued")).length;
 
   return (
-    <section className="ace" aria-labelledby="ace-title">
+    <section className={`ace${voice.conversation ? " voice-live" : ""}`} aria-labelledby="ace-title">
       <h1 id="ace-title" className="sr">
         Talk to AIC
       </h1>

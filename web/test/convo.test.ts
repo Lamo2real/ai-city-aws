@@ -86,3 +86,15 @@ describe("the browser-voice fallback is remembered for the page session only", (
     expect(usingBrowserVoice()).toBe(false);
   });
 });
+
+describe("telling AIC's own voice from the owner's while the mic stays open", async () => {
+  const { isEcho } = await import("../src/voice/convo.ts");
+  it("AIC's words coming back from the speakers are an echo", () => {
+    expect(isEcho("nothing needs you", "All quiet. Nothing needs you.")).toBe(true);
+    expect(isEcho("All quiet", "All quiet. Nothing needs you.")).toBe(true);
+  });
+  it("the owner talking over AIC is not", () => {
+    expect(isEcho("wait, what about yesterday?", "About two dollars today, mostly research.")).toBe(false);
+    expect(isEcho("stop", "All quiet. Nothing needs you.")).toBe(false);
+  });
+});

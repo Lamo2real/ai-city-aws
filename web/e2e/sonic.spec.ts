@@ -97,7 +97,7 @@ test("when the real-time voice is not set up, the step-by-step voice takes over"
   expect(m.calls.find((c) => c.path === "/messages")?.body).toMatchObject({ text: "what's the status?", voice: true });
 });
 
-test("in the standard voice, talking over AIC stops it at once and the mic opens", async ({ page }) => {
+test("in the standard voice, the sound of the owner talking over AIC silences it at once", async ({ page }) => {
   const m = await mockBackend(page);
   await page.addInitScript(() => {
     const w = window as unknown as { __heard: string; __speakMs: number; __loud: (on: boolean) => void };
@@ -127,15 +127,15 @@ test("in the standard voice, talking over AIC stops it at once and the mic opens
   // The reason the real-time voice is not in use is shown, in plain words.
   await expect(page.getByText(/Real-time voice didn't connect \(Real-time voice is not set up\)/)).toBeVisible();
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
-  await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "wait, the costs?"));
   m.send({ type: "ace.reply", conversation: "main", text: "All quiet. Nothing needs you at the moment.", done: true });
   await expect(strip).toHaveAttribute("data-speaker", "aic");
   await page.waitForTimeout(500); // the listener learns the room's noise
   const cut = Date.now();
   await page.evaluate(() => (window as unknown as { __loud: (on: boolean) => void }).__loud(true));
-  await expect(strip).toHaveAttribute("data-speaker", "you", { timeout: 1500 });
+  await expect(strip).toHaveAttribute("data-speaker", "you", { timeout: 1500 }); // silent at once, listening
   expect(Date.now() - cut).toBeLessThan(1500);
   await page.evaluate(() => (window as unknown as { __loud: (on: boolean) => void }).__loud(false));
+  await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "wait, the costs?"));
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(2);
   expect(m.calls.filter((c) => c.path === "/messages")[1]?.body).toMatchObject({ text: "wait, the costs?" });
 });

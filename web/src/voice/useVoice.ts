@@ -19,7 +19,7 @@ import {
   rememberBrowserVoice,
   usingBrowserVoice,
 } from "./browserSpeech.ts";
-import { isStopPhrase, loopNext } from "./convo.ts";
+import { isEcho, isStopPhrase, loopNext } from "./convo.ts";
 import { SpeechQueue } from "./speech.ts";
 import { loadOpenAi, onVoiceNote, withOpenAi } from "./openai.ts";
 import { toast } from "../components/ui.tsx";
@@ -117,13 +117,18 @@ export function useVoice(dictation?: DictationTarget) {
       return;
     }
     // Done talking: with the hands-free loop on after a spoken reply, the mic reopens for the owner's next
-    // sentence; otherwise back to idle. AIC never listens while it talks, so there is no self-echo.
+    // sentence; otherwise back to idle. In the voice conversation the mic stays open throughout.
     const finish = (t: Talk, spokenAloud: boolean, askedVoice: boolean) => {
       if (t.cancelled || talk.current !== t) return; // cut off: whoever cut it off decides what's next
       stopBargeIn();
       const next = loopNext(loop.current, spokenAloud && askedVoice ? "reply_spoken" : "reply_silent");
       loop.current = next.on;
       // In a voice conversation the mic always opens again after AIC's answer; otherwise the City's loop decides.
+      // In a voice conversation the mic never closed: AIC simply goes back to listening.
+      if (convo.current && stop.current && !dictating.current) {
+        store.set({ presence: "listening" });
+        return;
+      }
       if ((convo.current || next.reopen) && !dictating.current) {
         getVoice().prime?.(); // best effort outside a tap; Safari may still want one (noted in PRODUCT.md)
         startRef.current?.(true);
@@ -137,12 +142,8 @@ export function useVoice(dictation?: DictationTarget) {
       const v = getVoice();
       // A voice conversation always answers aloud; otherwise only a message said into the City's mic is.
       const say = convo.current || shouldSpeak(speakMode, asked?.voice);
-      // AIC never listens while it talks (no self-echo): a mic still open in the conversation closes for now.
-      if (say && convo.current && stop.current && !dictating.current) {
-        stop.current();
-        stop.current = null;
-        setListening(false);
-      }
+      // In a voice conversation the mic stays open while AIC talks (the owner's wish: always listening); its own
+      // voice is told apart by echo cancellation and isEcho (convo.ts).
       const t: Talk = {
         id: last.id,
         queue: null,
@@ -179,8 +180,9 @@ export function useVoice(dictation?: DictationTarget) {
         barge.current = watchForBargeIn(() => {
           barge.current = null;
           if (talk.current !== t || t.cancelled || !convo.current) return;
-          stopTalking();
-          startRef.current?.(true);
+          stopTalking(); // silent at once; the open mic already hears the owner
+          if (stop.current) store.set({ presence: "listening" });
+          else startRef.current?.(true);
         });
       }
       if (say && !t.queue && last.state !== "done") return; // a voice without synth: speak it whole when done
@@ -269,6 +271,17 @@ export function useVoice(dictation?: DictationTarget) {
               endConversation();
               end();
               return;
+            }
+            if (convo.current && !dictate) {
+              // Always listening: words heard while AIC talks are the owner's, unless they are AIC's own
+              // words coming back from the speakers.
+              const t = talk.current;
+              if (t && !t.cancelled && t.started) {
+                const said = store.get().chat.find((l) => l.id === t.id)?.text ?? "";
+                if (isEcho(text, said)) return;
+              }
+              stopTalking();
+              return void sendMessage(text, { voice: true });
             }
             end();
             loop.current = loopNext(loop.current, "voice_sent").on; // the loop arms on a spoken send

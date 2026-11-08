@@ -17,7 +17,8 @@ again, or say "stop listening", to end the call.
 - **Long calls.** Bedrock ends a stream after eight minutes; the relay starts a fresh one after about seven and
   replays what was said.
 - **When Sonic is not available** the button falls back to the step-by-step voice below by itself, and a short notice says why (the model, region and AWS error), so the cause is visible without logs. A call that breaks part-way carries on in the step-by-step voice the same way.
-- **Talking over AIC in the step-by-step voice** works too: while AIC's reply plays, a quiet listener watches the mic with echo cancellation. When your voice stays above the room's noise for about a fifth of a second, the reply stops at once and the mic opens (`web/src/voice/bargeIn.ts`).
+- **AIC always listens in a voice conversation**, also while it talks (the owner's wish). In the step-by-step voice the mic stays open for the whole conversation. While AIC's reply plays, a level listener (echo cancellation, noise-relative threshold) silences it the moment the owner's voice rises, and what the owner says goes straight to AIC. Words that are mostly AIC's own reply coming back from the speakers are ignored (`isEcho` in `web/src/voice/convo.ts`). See `web/src/voice/bargeIn.ts`.
+- **Voice on is unmistakable**: the screen behind dims, the voice bar glows, a beating "Voice on" badge shows, and the voice button breathes.
 - **Logs.** The ace runtime logs `voice.*` lines (model chosen, rotation, failures).
 
 ## Step-by-step voice: OpenAI text-to-speech
