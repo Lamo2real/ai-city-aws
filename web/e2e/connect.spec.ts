@@ -171,7 +171,7 @@ test("Settings lists connectors and mail accounts; roles can be changed", async 
       calendars: [{ id: "c1", name: "Me" }],
     },
   ];
-  await page.goto("/#/settings");
+  await page.goto("/#/settings/connectors");
   const gh = page.getByRole("article", { name: "Connector GitHub" });
   await expect(gh).toContainText("On · 1 tools");
   await gh.getByLabel("Managers").selectOption("read");

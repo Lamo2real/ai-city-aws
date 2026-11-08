@@ -126,7 +126,7 @@ test("signing out clears the sign-in and this device's conversation", async ({ p
   await page.getByRole("textbox", { name: "Message to AIC" }).fill("remember me?");
   await page.keyboard.press("Enter");
   await expect.poll(() => page.evaluate(() => localStorage.getItem("aic.chat") ?? "")).toContain("remember me?");
-  await page.goto("/#/settings");
+  await page.goto("/#/settings/general");
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
   expect(
@@ -467,8 +467,8 @@ test("a three-sentence streamed reply plays three clips, in order, once each; Se
 
 test("Settings: an OpenAI key switches AIC to OpenAI's voice; the key is never shown back", async ({ page }) => {
   const m = await mockBackend(page);
-  await page.goto("/#/settings");
-  await expect(page.getByLabel("AIC's voice")).toHaveValue("Ruth"); // Polly until a key is in
+  await page.goto("/#/settings/voice");
+  await expect(page.getByRole("combobox", { name: "AIC's voice" })).toHaveValue("Ruth"); // Polly until a key is in
   await page.getByRole("button", { name: "Add an OpenAI key" }).click();
   const field = page.getByLabel("OpenAI key", { exact: true });
   await expect(field).toHaveAttribute("type", "password");
@@ -481,7 +481,7 @@ test("Settings: an OpenAI key switches AIC to OpenAI's voice; the key is never s
   await expect(page.getByLabel("OpenAI key", { exact: true })).toHaveCount(0); // the field closes
   expect(await page.content()).not.toContain("sk-test-123");
   expect(m.calls.filter((c) => c.path === "/voice/openai-key").at(-1)?.body).toEqual({ key: "sk-test-123" });
-  const voice = page.getByLabel("AIC's voice");
+  const voice = page.getByRole("combobox", { name: "AIC's voice" });
   await expect(voice).toHaveValue("alloy"); // OpenAI's default
   await voice.selectOption("nova");
   await page.getByRole("button", { name: "Test voice" }).click();
@@ -490,7 +490,7 @@ test("Settings: an OpenAI key switches AIC to OpenAI's voice; the key is never s
     .toEqual(["openai:nova:Hi, I'm AIC. This is how I'll sound when I answer you."]);
   await expect(page.getByText(/^Played\./)).toBeVisible();
   await page.reload();
-  await expect(page.getByLabel("AIC's voice")).toHaveValue("nova");
+  await expect(page.getByRole("combobox", { name: "AIC's voice" })).toHaveValue("nova");
   await expect(page.getByRole("button", { name: "Replace the OpenAI key" })).toBeVisible();
 });
 
@@ -533,8 +533,8 @@ test("with an OpenAI key, a spoken reply plays through OpenAI, sentence by sente
 
 test("Settings: pick AIC's voice; it is remembered on this device and can be heard", async ({ page }) => {
   await mockBackend(page);
-  await page.goto("/#/settings");
-  const voice = page.getByLabel("AIC's voice");
+  await page.goto("/#/settings/voice");
+  const voice = page.getByRole("combobox", { name: "AIC's voice" });
   await expect(voice).toHaveValue("Ruth"); // the deploy's default
   await voice.selectOption("Danielle");
   await page.getByRole("button", { name: "Test voice" }).click();
@@ -543,7 +543,7 @@ test("Settings: pick AIC's voice; it is remembered on this device and can be hea
     .toEqual(["Hi, I'm AIC. This is how I'll sound when I answer you."]);
   await expect(page.getByText(/^Played\./)).toBeVisible(); // the button says it worked
   await page.reload();
-  await expect(page.getByLabel("AIC's voice")).toHaveValue("Danielle");
+  await expect(page.getByRole("combobox", { name: "AIC's voice" })).toHaveValue("Danielle");
   expect(await page.evaluate(() => localStorage.getItem("aic.voice"))).toBe("Danielle");
 });
 
@@ -784,7 +784,7 @@ test("'speaking' shows only while sound plays, and a voice that fails says why",
   await expect(page.locator('.voice[data-speaker="aic"]')).toHaveCount(0);
 
   // The Test voice button reports the same failure, exactly.
-  await page.goto("/#/settings");
+  await page.goto("/#/settings/voice");
   await page.getByRole("button", { name: "Test voice" }).click();
   await expect(page.getByText(/AIC's voice could not play \(AccessDeniedException/)).toBeVisible();
 });
@@ -946,7 +946,7 @@ test("approving an action needs holding the button and approves exactly that act
 
 test("spend caps are optional: an impossible cap is refused, an empty field means no limit", async ({ page }) => {
   const m = await mockBackend(page);
-  await page.goto("/#/settings");
+  await page.goto("/#/settings/limits");
   const daily = page.getByLabel("Daily cap, all departments ($)");
   await daily.fill("-5");
   await expect(page.getByText("Caps must be zero or more dollars, or empty for no limit.")).toBeVisible();
@@ -1214,7 +1214,7 @@ test("Settings → Departments: a setup guide, shared tools, nine departments; a
   page,
 }) => {
   const m = await mockBackend(page);
-  await page.goto("/#/settings");
+  await page.goto("/#/settings/departments");
   const section = page.getByRole("region", { name: "Departments" });
   // The guide comes first and counts the essential tools.
   const guide = section.locator(".setup-guide");
@@ -1260,10 +1260,6 @@ test("Settings → Departments: a setup guide, shared tools, nine departments; a
   });
   await expect(essentials.getByText("Needs you to sign in")).toBeVisible();
   await expect(essentials.getByRole("button", { name: /Sign in/ })).toBeVisible();
-  // Under Connectors it keeps its roles and approvals, without a second sign-in button.
-  const listed = page.getByRole("article", { name: "Connector Canva" });
-  await expect(listed.getByText("Who may use it")).toBeVisible();
-  await expect(listed.getByRole("button", { name: /Sign in/ })).toHaveCount(0);
   await shot(page, "settings-departments");
   await noSeriousA11y(page, "Settings → Departments");
 
@@ -1287,4 +1283,59 @@ test("Settings → Departments: a setup guide, shared tools, nine departments; a
     label: "Shopify (store)",
   });
   await expect(shop).toBeChecked();
+});
+
+test("Settings is a menu of pages, each with its own address and a way back; Appearance switches to light and back", async ({
+  page,
+}) => {
+  await mockBackend(page);
+  await page.goto("/#/settings");
+  await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
+  const menu = page.getByRole("navigation", { name: "Settings pages" });
+  await expect(menu.getByRole("link")).toHaveText([
+    /^General/,
+    /^Departments & tools/,
+    /^Connectors/,
+    /^GitHub/,
+    /^AIC's voice/,
+    /^Apps/,
+    /^Limits & spending/,
+    /^Start over/,
+  ]);
+  // Nothing of the pages themselves on the menu: no switches, no fields, no Save.
+  await expect(page.getByRole("checkbox")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Save changes" })).toHaveCount(0);
+  await shot(page, "settings-menu");
+  await noSeriousA11y(page, "Settings menu");
+
+  // Into a page and back: the address follows, so the browser's Back works too.
+  await menu.getByRole("link", { name: /^Departments & tools/ }).click();
+  await expect(page).toHaveURL(/#\/settings\/departments$/);
+  await expect(page.getByRole("heading", { name: "Departments & tools", level: 1 })).toBeVisible();
+  await expect(page.locator(".setup-guide")).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("navigation", { name: "Settings pages" })).toBeVisible();
+  await menu.getByRole("link", { name: /^Connectors/ }).click();
+  await expect(page.getByRole("heading", { name: "Connectors", level: 1 })).toBeVisible();
+  await expect(page.locator(".setup-guide")).toHaveCount(0); // the switches live on their own page
+  await page.getByRole("link", { name: "‹ Settings" }).click();
+  await expect(page).toHaveURL(/#\/settings$/);
+
+  // General → Appearance: Light now, remembered on this device; Dark again.
+  await menu.getByRole("link", { name: /^General/ }).click();
+  await expect(page.getByRole("radio", { name: "Dark" })).toBeChecked(); // the default look
+  await page.getByText("Light", { exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(page.getByRole("radio", { name: "Light" })).toBeChecked();
+  await page.waitForTimeout(400); // the pill finishes its slide
+  await shot(page, "settings-general-light");
+  await noSeriousA11y(page, "Settings in light");
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await page.goto("/");
+  await noSeriousA11y(page, "AIC in light");
+  await shot(page, "ace-light");
+  await page.goto("/#/settings/general");
+  await page.getByText("Dark", { exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 });

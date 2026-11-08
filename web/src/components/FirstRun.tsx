@@ -18,7 +18,7 @@ const STEPS = [
   },
   {
     title: "Connect your tools",
-    text: "Settings → Departments has a setup guide: add your brand to Knowledge, then switch on each department's essential tools (Stripe, Canva, GitHub …) and sign in once. No account yet? Each tool has a Create an account link.",
+    text: "Settings → Departments & tools has a setup guide: add your brand to Knowledge, then switch on each department's essential tools (Stripe, Canva, GitHub …) and sign in once. No account yet? Each tool has a Create an account link.",
   },
 ];
 

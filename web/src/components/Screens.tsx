@@ -12,6 +12,7 @@ import { signOutHere } from "../lib/auth.ts";
 import { startOver } from "../lib/reset.ts";
 import { SettingsApps } from "./Apps.tsx";
 import { config } from "../lib/config.ts";
+import { readTheme, saveTheme, type Theme } from "../lib/theme.ts";
 import { readVoiceId, saveVoiceId, VOICES } from "../voice/modes.ts";
 import { getVoice, logVoiceError, speakProblem } from "../voice/voice.ts";
 import {
@@ -339,7 +340,108 @@ type S = Record<string, unknown> & {
   profile_prefix: string;
   notify_push: boolean;
 };
-export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
+/** Settings is a menu of pages, each at its own address (`#/settings/<page>`), like a phone's Settings app. */
+export const SETTINGS_PAGES = [
+  { id: "general", title: "General", about: "Appearance, notifications, where Claude runs, help and sign-out" },
+  {
+    id: "departments",
+    title: "Departments & tools",
+    about: "The setup guide and each department's tools: switch on, sign in",
+  },
+  {
+    id: "connectors",
+    title: "Connectors",
+    about: "Every connected service, who may use it, mail and calendars, add by link",
+  },
+  { id: "github", title: "GitHub", about: "Your GitHub token for repositories, pushes and secrets" },
+  { id: "voice", title: "AIC's voice", about: "The voice AIC speaks with, and the OpenAI key" },
+  { id: "apps", title: "Apps", about: "The apps the city built: pinned, removed, what they may read" },
+  { id: "limits", title: "Limits & spending", about: "Optional spend caps and how many workers at once" },
+  { id: "reset", title: "Start over", about: "Empty the city and start fresh" },
+] as const;
+type SettingsPage = (typeof SETTINGS_PAGES)[number]["id"];
+
+export function SettingsScreen({ page, reopenGuide }: { page: string | null; reopenGuide: () => void }) {
+  const current = SETTINGS_PAGES.find((x) => x.id === page);
+  if (!current) return <SettingsMenu />;
+  return <SettingsPageView key={current.id} page={current.id} title={current.title} reopenGuide={reopenGuide} />;
+}
+
+function SettingsMenu() {
+  return (
+    <section className="screen" aria-labelledby="set-title">
+      <h1 id="set-title">Settings</h1>
+      <nav aria-label="Settings pages">
+        <ul className="settings-menu">
+          {SETTINGS_PAGES.map((x) => (
+            <li key={x.id}>
+              <a href={`#/settings/${x.id}`} className={x.id === "reset" ? "danger" : undefined}>
+                <span className="settings-menu-title">{x.title}</span>
+                <span className="mute">{x.about}</span>
+                <span className="chev" aria-hidden="true">
+                  ›
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    </section>
+  );
+}
+
+function SettingsHead({ title }: { title: string }) {
+  return (
+    <header className="settings-head">
+      <a href="#/settings" className="back-link">
+        ‹ Settings
+      </a>
+      <h1 id="set-title">{title}</h1>
+    </header>
+  );
+}
+
+/** Appearance: System, Light or Dark, saved on this device at once (no Save needed). */
+function AppearanceSetting() {
+  const [t, setT] = useState<Theme>(readTheme);
+  const opts: Array<[Theme, string]> = [
+    ["system", "System"],
+    ["light", "Light"],
+    ["dark", "Dark"],
+  ];
+  return (
+    <fieldset className="speak-mode appearance">
+      <legend>Appearance</legend>
+      <div className="seg" style={{ "--i": opts.findIndex(([v]) => v === t) } as React.CSSProperties}>
+        {opts.map(([v, label]) => (
+          <label key={v} className={t === v ? "on" : ""}>
+            <input
+              type="radio"
+              name="appearance"
+              value={v}
+              checked={t === v}
+              onChange={() => {
+                setT(v);
+                saveTheme(v);
+              }}
+            />
+            {label}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function SettingsPageView({
+  page,
+  title,
+  reopenGuide,
+}: {
+  page: SettingsPage;
+  title: string;
+  reopenGuide: () => void;
+}) {
   const { data, error, retry } = useApi<{ settings: S }>("/settings");
   const [form, setForm] = useState<S | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -352,14 +454,14 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
   if (error)
     return (
       <section className="screen">
-        <h1>Settings</h1>
+        <SettingsHead title={title} />
         <Banner tone="bad" action={{ label: "Try again", onClick: retry }}>{`Settings did not load: ${error}`}</Banner>
       </section>
     );
   if (!data || !form)
     return (
       <section className="screen">
-        <h1>Settings</h1>
+        <SettingsHead title={title} />
         <Loading what="settings" />
       </section>
     );
@@ -392,170 +494,191 @@ export function SettingsScreen({ reopenGuide }: { reopenGuide: () => void }) {
       setProblem(e instanceof ApiError ? e.message : "Not saved. Nothing changed. Try again.");
     }
   };
+  const needsSave = page === "general" || page === "limits" || page === "connectors";
   return (
     <section className="screen" aria-labelledby="set-title">
-      <h1 id="set-title">Settings</h1>
+      <SettingsHead title={title} />
       {problem ? <Banner tone="bad">{problem}</Banner> : null}
-      <h2>Spend caps (optional)</h2>
-      <p className="mute">
-        No limit by default. Leave a field empty for no limit, or enter dollars to stop new work there.
-      </p>
-      <div className="fields">
-        <Field
-          label="Daily cap, all departments ($)"
-          value={form.daily_global_usd ?? Number.NaN}
-          onChange={(v) => cap("daily_global_usd", v)}
-          placeholder="No limit"
-        />
-        <Field
-          label="Daily cap per department ($)"
-          value={form.daily_department_usd ?? Number.NaN}
-          onChange={(v) => cap("daily_department_usd", v)}
-          placeholder="No limit"
-        />
-        <Field
-          label="Monthly cap ($)"
-          value={form.monthly_budget_usd ?? Number.NaN}
-          onChange={(v) => cap("monthly_budget_usd", v)}
-          placeholder="No limit"
-        />
-      </div>
-      {invalid ? (
-        <p className="field-error" role="alert">
-          Caps must be zero or more dollars, or empty for no limit.
-        </p>
+      {page === "general" ? (
+        <>
+          <AppearanceSetting />
+          <h2>Notifications</h2>
+          <p className="mute">
+            No emails. One message to your iPhone when a whole job is finished, nothing for its parts.
+          </p>
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={form.notify_push}
+              onChange={(e) => setForm({ ...form, notify_push: e.target.checked })}
+            />{" "}
+            Tell my iPhone when a job is finished
+          </label>
+          <ApnsCard />
+          <h2>Where Claude runs</h2>
+          <label className="field">
+            Model location
+            <select value={form.profile_prefix} onChange={(e) => setForm({ ...form, profile_prefix: e.target.value })}>
+              <option value="global">Worldwide (cheapest; prompts may leave the EU)</option>
+              <option value="eu">Europe only (about 10% more; Fable roles use Opus instead)</option>
+            </select>
+          </label>
+          <h2>Help</h2>
+          <Button variant="quiet" onClick={reopenGuide}>
+            Show the first-run guide again
+          </Button>
+          <Button
+            variant="quiet"
+            onClick={async () => {
+              await signOutHere();
+              location.reload();
+            }}
+          >
+            Sign out
+          </Button>
+          <p className="mute signout">
+            <button type="button" className="link" onClick={() => store.set({ chat: [] })}>
+              Forget this device's conversation
+            </button>
+          </p>
+        </>
       ) : null}
-      <h2>How many workers at once</h2>
-      <div className="fields">
-        <Field
-          label="Per goal (one manager's team)"
-          value={form.max_workers_per_goal}
-          onChange={(v) => num("max_workers_per_goal", v)}
-          step={1}
-        />
-        <Field
-          label="Per department"
-          value={form.max_concurrent_workers_per_department}
-          onChange={(v) => num("max_concurrent_workers_per_department", v)}
-          step={1}
-        />
-        <Field
-          label="In total"
-          value={form.max_concurrent_workers_global}
-          onChange={(v) => num("max_concurrent_workers_global", v)}
-          step={1}
-        />
-        <Field
-          label="At work in the whole city (hard ceiling)"
-          value={form.max_live_workers_city}
-          onChange={(v) => num("max_live_workers_city", v)}
-          step={1}
-        />
-        <Field
-          label="Jobs running at once (hard ceiling)"
-          value={form.max_open_jobs}
-          onChange={(v) => num("max_open_jobs", v)}
-          step={1}
-        />
-        <Field
-          label="Departments (hard ceiling)"
-          value={form.max_departments}
-          onChange={(v) => num("max_departments", v)}
-          step={1}
-        />
-        <Field
-          label="New workers per second (max 25)"
-          value={form.max_new_sessions_per_second}
-          onChange={(v) => num("max_new_sessions_per_second", v)}
-          step={1}
-        />
-      </div>
-      <h2>Where Claude runs</h2>
-      <label className="field">
-        Model location
-        <select value={form.profile_prefix} onChange={(e) => setForm({ ...form, profile_prefix: e.target.value })}>
-          <option value="global">Worldwide (cheapest; prompts may leave the EU)</option>
-          <option value="eu">Europe only (about 10% more; Fable roles use Opus instead)</option>
-        </select>
-      </label>
-      <h2>Notifications</h2>
-      <p className="mute">No emails. One message to your iPhone when a whole job is finished, nothing for its parts.</p>
-      <label className="switch">
-        <input
-          type="checkbox"
-          checked={form.notify_push}
-          onChange={(e) => setForm({ ...form, notify_push: e.target.checked })}
-        />{" "}
-        Tell my iPhone when a job is finished
-      </label>
-      <ApnsCard />
-      <GitHubSettings />
-      <ConnectorsSettings
-        mailAccess={(form as unknown as { mail_access?: Record<string, string> }).mail_access ?? {}}
-        onMailAccess={(mail_access) => setForm({ ...form, mail_access } as S)}
-      />
-      <SettingsApps />
-      <VoiceSettings />
-      <h2>Start over</h2>
-      <p className="mute">
-        Empties the city. Every agent, department, job and question goes, and nothing is running afterwards. Your
-        settings, phone, connectors, skills, knowledge and apps stay.
-      </p>
-      {resetProblem ? <Banner tone="bad">{resetProblem}</Banner> : null}
-      {resetting !== null ? (
-        <Banner tone="info">
-          Clearing the city… {resetting.toLocaleString("sv-SE")} records gone so far. Keep this page open; it reloads
-          when the city is empty.
-        </Banner>
-      ) : null}
-      <Button variant="danger" disabled={resetting !== null} onClick={() => setResetOpen(true)}>
-        Start over
-      </Button>
-      {resetOpen ? (
-        <Confirm
-          title="Start over?"
-          what="Every agent, department, job and question will be removed, and nothing will be running. Your settings, phone, connectors, skills, knowledge and apps stay."
-          cost="Nothing. Work in progress is lost."
-          confirmLabel="Start over"
-          hold
-          danger
-          onCancel={() => setResetOpen(false)}
-          onConfirm={async () => {
-            setResetProblem(null);
-            setResetOpen(false);
-            setResetting(0);
-            try {
-              await startOver(undefined, setResetting);
-            } catch (e) {
-              setResetting(null);
-              setResetProblem(e instanceof Error ? e.message : "The city was not reset. Try again.");
-            }
-          }}
+      {page === "departments" ? <ConnectorsSettings part="departments" /> : null}
+      {page === "connectors" ? (
+        <ConnectorsSettings
+          part="connectors"
+          mailAccess={(form as unknown as { mail_access?: Record<string, string> }).mail_access ?? {}}
+          onMailAccess={(mail_access) => setForm({ ...form, mail_access } as S)}
         />
       ) : null}
-      <h2>Help</h2>
-      <Button variant="quiet" onClick={reopenGuide}>
-        Show the first-run guide again
-      </Button>
-      <Button
-        variant="quiet"
-        onClick={async () => {
-          await signOutHere();
-          location.reload();
-        }}
-      >
-        Sign out
-      </Button>
-      <div className="savebar">
-        <Button variant="primary" disabled={invalid} onClick={() => save()}>
-          Save changes
-        </Button>
-      </div>
-      <p className="mute signout">
-        <button type="button" className="link" onClick={() => store.set({ chat: [] })}>
-          Forget this device's conversation
-        </button>
-      </p>
+      {page === "github" ? <GitHubSettings /> : null}
+      {page === "voice" ? <VoiceSettings /> : null}
+      {page === "apps" ? <SettingsApps /> : null}
+      {page === "limits" ? (
+        <>
+          <h2>Spend caps (optional)</h2>
+          <p className="mute">
+            No limit by default. Leave a field empty for no limit, or enter dollars to stop new work there.
+          </p>
+          <div className="fields">
+            <Field
+              label="Daily cap, all departments ($)"
+              value={form.daily_global_usd ?? Number.NaN}
+              onChange={(v) => cap("daily_global_usd", v)}
+              placeholder="No limit"
+            />
+            <Field
+              label="Daily cap per department ($)"
+              value={form.daily_department_usd ?? Number.NaN}
+              onChange={(v) => cap("daily_department_usd", v)}
+              placeholder="No limit"
+            />
+            <Field
+              label="Monthly cap ($)"
+              value={form.monthly_budget_usd ?? Number.NaN}
+              onChange={(v) => cap("monthly_budget_usd", v)}
+              placeholder="No limit"
+            />
+          </div>
+          {invalid ? (
+            <p className="field-error" role="alert">
+              Caps must be zero or more dollars, or empty for no limit.
+            </p>
+          ) : null}
+          <h2>How many workers at once</h2>
+          <div className="fields">
+            <Field
+              label="Per goal (one manager's team)"
+              value={form.max_workers_per_goal}
+              onChange={(v) => num("max_workers_per_goal", v)}
+              step={1}
+            />
+            <Field
+              label="Per department"
+              value={form.max_concurrent_workers_per_department}
+              onChange={(v) => num("max_concurrent_workers_per_department", v)}
+              step={1}
+            />
+            <Field
+              label="In total"
+              value={form.max_concurrent_workers_global}
+              onChange={(v) => num("max_concurrent_workers_global", v)}
+              step={1}
+            />
+            <Field
+              label="At work in the whole city (hard ceiling)"
+              value={form.max_live_workers_city}
+              onChange={(v) => num("max_live_workers_city", v)}
+              step={1}
+            />
+            <Field
+              label="Jobs running at once (hard ceiling)"
+              value={form.max_open_jobs}
+              onChange={(v) => num("max_open_jobs", v)}
+              step={1}
+            />
+            <Field
+              label="Departments (hard ceiling)"
+              value={form.max_departments}
+              onChange={(v) => num("max_departments", v)}
+              step={1}
+            />
+            <Field
+              label="New workers per second (max 25)"
+              value={form.max_new_sessions_per_second}
+              onChange={(v) => num("max_new_sessions_per_second", v)}
+              step={1}
+            />
+          </div>
+        </>
+      ) : null}
+      {page === "reset" ? (
+        <>
+          <p className="mute">
+            Empties the city. Every agent, department, job and question goes, and nothing is running afterwards. Your
+            settings, phone, connectors, skills, knowledge and apps stay.
+          </p>
+          {resetProblem ? <Banner tone="bad">{resetProblem}</Banner> : null}
+          {resetting !== null ? (
+            <Banner tone="info">
+              Clearing the city… {resetting.toLocaleString("sv-SE")} records gone so far. Keep this page open; it
+              reloads when the city is empty.
+            </Banner>
+          ) : null}
+          <Button variant="danger" disabled={resetting !== null} onClick={() => setResetOpen(true)}>
+            Start over
+          </Button>
+          {resetOpen ? (
+            <Confirm
+              title="Start over?"
+              what="Every agent, department, job and question will be removed, and nothing will be running. Your settings, phone, connectors, skills, knowledge and apps stay."
+              cost="Nothing. Work in progress is lost."
+              confirmLabel="Start over"
+              hold
+              danger
+              onCancel={() => setResetOpen(false)}
+              onConfirm={async () => {
+                setResetProblem(null);
+                setResetOpen(false);
+                setResetting(0);
+                try {
+                  await startOver(undefined, setResetting);
+                } catch (e) {
+                  setResetting(null);
+                  setResetProblem(e instanceof Error ? e.message : "The city was not reset. Try again.");
+                }
+              }}
+            />
+          ) : null}
+        </>
+      ) : null}
+      {needsSave ? (
+        <div className="savebar">
+          <Button variant="primary" disabled={invalid} onClick={() => save()}>
+            Save changes
+          </Button>
+        </div>
+      ) : null}
     </section>
   );
 }

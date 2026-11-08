@@ -4,11 +4,12 @@ import type { CityApp, CityApproval } from "../city/city-state.js";
 import { api } from "./api.ts";
 import { store } from "./store.ts";
 
-/** `#/apps/<slug>` → { view: "apps", slug }; a view not in `views` → the first one (AIC). */
+/** `#/apps/<slug>` → { view: "apps", slug }, `#/settings/<page>` → { view: "settings", slug: page }; a view not
+ *  in `views` → the first one (AIC). */
 export function route<V extends string>(hash: string, views: readonly V[]): { view: V; slug: string | null } {
   const [head = "", ...rest] = hash.replace(/^#\/?/, "").split("/");
   const view = (views as readonly string[]).includes(head) ? (head as V) : views[0]!;
-  if (view !== "apps" || !rest.length || !rest.join("")) return { view, slug: null };
+  if ((view !== "apps" && view !== "settings") || !rest.length || !rest.join("")) return { view, slug: null };
   let slug = rest.join("/");
   try {
     slug = decodeURIComponent(slug);

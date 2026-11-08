@@ -141,7 +141,7 @@ export function App() {
 
   return (
     <div
-      className={`app view-${view}${slug ? " view-app" : ""}`}
+      className={`app view-${view}${view === "apps" && slug ? " view-app" : ""}`}
       style={{ "--top-h": `${topH}px` } as React.CSSProperties}
     >
       <a className="skip" href="#main">
@@ -181,11 +181,11 @@ export function App() {
         {view === "knowledge" ? <KnowledgeScreen /> : null}
         {view === "costs" ? <CostsScreen /> : null}
         {view === "skills" ? <SkillsScreen /> : null}
-        {view === "settings" ? <SettingsScreen reopenGuide={() => setGuide(true)} /> : null}
+        {view === "settings" ? <SettingsScreen page={slug} reopenGuide={() => setGuide(true)} /> : null}
       </main>
       {guide ? <FirstRun onDone={finishGuide} /> : null}
       <Toaster />
-      {view !== "ace" && view !== "city" && !slug ? (
+      {view !== "ace" && view !== "city" && !(view === "apps" && slug) ? (
         <div className="fab">
           <Button variant="quiet" onClick={() => go("ace")} label="Talk to AIC">
             Talk to AIC

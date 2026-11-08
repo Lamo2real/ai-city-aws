@@ -16,8 +16,8 @@ test("Settings → GitHub: a token is saved once, says Connected as, is never sh
   page,
 }) => {
   const m = await mockBackend(page);
-  await page.goto("/#/settings");
-  await expect(page.getByRole("heading", { name: "GitHub" })).toBeVisible();
+  await page.goto("/#/settings/github");
+  await expect(page.getByRole("heading", { name: "GitHub", level: 1 })).toBeVisible();
   await expect(page.getByText(/No token yet/)).toBeVisible();
   await expect(page.getByRole("heading", { name: "Integrations" })).toHaveCount(0); // the dead switches are gone
   await page.getByRole("button", { name: "Add a GitHub token" }).click();

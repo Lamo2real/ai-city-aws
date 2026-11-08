@@ -1,6 +1,6 @@
 # Setting up AI City: step by step
 
-The same guide is in the app: **Settings → Departments → Setup guide**, with live counts of what is connected. Decisions 113 and 114 explain the design.
+The same guide is in the app: **Settings → Departments & tools → Setup guide**, with live counts of what is connected. Decisions 113 and 114 explain the design.
 
 ## 1. Teach the city your business (10 minutes)
 Open **Knowledge** and add what every department must follow: your brand guide and logo, tone of voice, prices and products, policies (refunds and returns, privacy, terms), product documentation, templates (proposals, contracts, emails) and anything else that is yours. Choose **Always include** for the brand guide and the most important policies. Every department searches Knowledge before it writes, designs or decides.

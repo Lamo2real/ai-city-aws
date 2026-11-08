@@ -60,6 +60,17 @@
   --rg: 18px; /* glass panels */
   --rg-s: 12px; /* rows, inputs, chips */
   --gfocus: #8ab4ff; /* the focus ring on dark glass */
+  --bar: rgba(27, 28, 54, 0.55); /* the top bar's glass */
+  --link: #ffd88a; /* links on the glass screens */
+  --panel: rgba(38, 40, 74, 0.76); /* dialogs, toasts, pop-overs */
+  --savebar: rgba(31, 33, 66, 0.9);
+  --pop: rgba(14, 15, 34, 0.88); /* menus over the chat */
+  --pop-2: rgba(14, 15, 34, 0.6);
+  --sky-bg:
+    radial-gradient(900px 620px at 12% -8%, rgba(242, 179, 61, 0.3), transparent 62%),
+    radial-gradient(820px 560px at 92% 8%, rgba(79, 143, 214, 0.3), transparent 62%),
+    radial-gradient(760px 520px at 50% 112%, rgba(168, 111, 64, 0.34), transparent 62%),
+    linear-gradient(180deg, #1b1c36 0%, #26284a 55%, #1f2142 100%);
   /* Status, as light text on tinted glass. */
   --bad-t: rgba(216, 57, 43, 0.24);
   --bad-l: #ffb3a9;
@@ -80,7 +91,7 @@ body,
   margin: 0;
 }
 body {
-  background: var(--night);
+  background: var(--night2);
   color: var(--gtext);
   font: 500 var(--fs-m) / 1.5 var(--font);
   -webkit-font-smoothing: antialiased;
@@ -93,11 +104,7 @@ body::before {
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background:
-    radial-gradient(900px 620px at 12% -8%, rgba(242, 179, 61, 0.3), transparent 62%),
-    radial-gradient(820px 560px at 92% 8%, rgba(79, 143, 214, 0.3), transparent 62%),
-    radial-gradient(760px 520px at 50% 112%, rgba(168, 111, 64, 0.34), transparent 62%),
-    linear-gradient(180deg, #1b1c36 0%, #26284a 55%, #1f2142 100%);
+  background: var(--sky-bg);
 }
 button,
 input,
@@ -159,7 +166,7 @@ textarea {
   align-items: center;
   gap: var(--s3);
   padding: var(--s2) var(--s3);
-  background: rgba(27, 28, 54, 0.55);
+  background: var(--bar);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
   border-bottom: 1px solid var(--edge);
@@ -358,7 +365,7 @@ main {
   align-items: center;
   justify-content: space-between;
   gap: var(--s3);
-  background: rgba(38, 40, 74, 0.78);
+  background: var(--panel);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
   color: var(--gtext);
@@ -401,7 +408,7 @@ main {
   padding: var(--s4);
 }
 .panel {
-  background: rgba(38, 40, 74, 0.72);
+  background: var(--panel);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
   color: var(--gtext);
@@ -1228,7 +1235,7 @@ main {
   padding: var(--s2);
   display: grid;
   gap: 2px;
-  background: rgba(14, 15, 34, 0.88); /* darker than a panel: it sits over the chat's text */
+  background: var(--pop); /* darker than a panel: it sits over the chat's text */
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
   border: 1px solid var(--edge-2);
@@ -1350,7 +1357,7 @@ main {
   display: grid;
   gap: 2px;
   padding: var(--s2);
-  background: rgba(14, 15, 34, 0.6);
+  background: var(--pop-2);
   border: 1px solid var(--edge-2);
   border-radius: var(--rg);
 }
@@ -1625,7 +1632,7 @@ table.costs tr:last-child td {
   border-bottom: 0;
 }
 .screen a {
-  color: #ffd88a;
+  color: var(--link);
 }
 .fields {
   display: grid;
@@ -1639,7 +1646,7 @@ table.costs tr:last-child td {
   position: sticky;
   bottom: 0;
   padding: var(--s3) 0;
-  background: linear-gradient(transparent, rgba(31, 33, 66, 0.9) 40%);
+  background: linear-gradient(transparent, var(--savebar) 40%);
   display: flex;
   justify-content: flex-end;
 }
@@ -2267,7 +2274,7 @@ table.costs tr:last-child td {
   align-items: center;
   gap: var(--s3);
   padding: var(--s2) var(--s4);
-  background: rgba(27, 28, 54, 0.55);
+  background: var(--bar);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
   color: var(--gtext);
@@ -2378,7 +2385,7 @@ a.pin:hover {
   top: 100%;
   z-index: 5;
   width: min(360px, 90vw);
-  background: rgba(38, 40, 74, 0.8);
+  background: var(--panel);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
   color: var(--gtext);
@@ -2878,5 +2885,165 @@ summary,
     background: #2b2d52;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
+  }
+}
+
+/* Light appearance (Settings → General → Appearance): the same glass over a daytime sky, ink text. The City scene
+   keeps its own parchment palette in both. */
+:root[data-theme="light"] {
+  --link: #7a4a00;
+  --panel: rgba(255, 255, 255, 0.92);
+  --savebar: rgba(240, 242, 250, 0.92);
+  --glass: rgba(255, 255, 255, 0.55);
+  --glass-2: rgba(255, 255, 255, 0.72);
+  --glass-3: rgba(255, 255, 255, 0.9);
+  --glass-deep: rgba(255, 255, 255, 0.85);
+  --edge: rgba(29, 28, 54, 0.14);
+  --edge-2: rgba(29, 28, 54, 0.26);
+  --gtext: #1d1c36;
+  --gmute: #4a4560;
+  --gsoft: #625c78;
+  --glow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --lift: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 18px 40px -24px rgba(29, 28, 54, 0.35);
+  --gfocus: #2257c5;
+  --bar: rgba(255, 255, 255, 0.62);
+  --pop: rgba(255, 255, 255, 0.96);
+  --pop-2: rgba(255, 255, 255, 0.85);
+  --bad-l: #a3271a;
+  --warn-l: #7a4f00;
+  --good-l: #1f6b40;
+  --you-l: #1f4a91;
+  --night2: #eef1fa;
+  --sky-bg:
+    radial-gradient(900px 620px at 12% -8%, rgba(242, 179, 61, 0.28), transparent 62%),
+    radial-gradient(820px 560px at 92% 8%, rgba(79, 143, 214, 0.24), transparent 62%),
+    radial-gradient(760px 520px at 50% 112%, rgba(168, 111, 64, 0.18), transparent 62%),
+    linear-gradient(180deg, #f6f1e6 0%, #eaf0fb 55%, #f3ece0 100%);
+}
+/* Settings: a menu of pages, then each page with a back link (decision 115). */
+.settings-menu {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s2);
+}
+.settings-menu a {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  min-height: 64px;
+  align-items: center;
+  border: 1px solid var(--edge);
+  border-radius: var(--rg-s);
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  color: var(--gtext);
+  text-decoration: none;
+  box-shadow: var(--glow);
+}
+.settings-menu a:hover {
+  background: var(--glass-2);
+}
+.settings-menu-title {
+  font-weight: 800;
+  font-size: var(--fs-l);
+}
+.settings-menu .mute {
+  grid-column: 1;
+  font-size: var(--fs-s);
+}
+.settings-menu .chev {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  font-size: 1.6em;
+  color: var(--gmute);
+}
+.settings-menu a.danger .settings-menu-title {
+  color: var(--bad-l);
+}
+.settings-head {
+  margin-bottom: var(--s4);
+}
+.settings-head h1 {
+  margin: var(--s1) 0 0;
+}
+.settings-head .back-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  color: var(--gtext);
+  font-weight: 700;
+  text-decoration: none;
+}
+/* A segmented choice (Appearance): one amber pill that glides to the chosen option, no lines between. */
+.speak-mode {
+  border: 0;
+  margin: var(--s2) 0 var(--s4);
+  padding: 0;
+  min-width: 0;
+}
+.speak-mode legend {
+  font-size: var(--fs-s);
+  font-weight: 700;
+  margin-bottom: var(--s1);
+}
+.speak-mode .seg {
+  --i: 0;
+  position: relative;
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  border: 1px solid var(--edge-2);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--glass);
+  box-shadow: var(--glow);
+}
+.speak-mode .seg::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(100% / 3);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(249, 201, 118, 0.96), rgba(232, 163, 61, 0.96));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  transform: translateX(calc(var(--i) * 100%));
+  transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.speak-mode .seg label {
+  position: relative;
+  z-index: 1;
+  min-height: var(--tap);
+  padding: 0 var(--s4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-s);
+  font-weight: 700;
+  color: var(--gtext);
+  transition: color 0.32s ease;
+}
+.speak-mode .seg label.on {
+  color: #2a1a08;
+}
+.speak-mode .seg input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+}
+.speak-mode .seg label:has(input:focus-visible) {
+  outline: 3px solid var(--gfocus);
+  outline-offset: -3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .speak-mode .seg::before,
+  .speak-mode .seg label {
+    transition: none;
   }
 }

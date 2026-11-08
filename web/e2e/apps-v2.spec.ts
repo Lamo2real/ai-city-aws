@@ -121,8 +121,8 @@ test("publishing with grants: the preview gets no data, switches decide the gran
 
 test("Settings → Apps: unpin and stop a permission", async ({ page }) => {
   const m = await mockBackend(page, { apps: [CAL()] });
-  await page.goto("/#/settings");
-  await expect(page.getByRole("heading", { name: "Apps" })).toBeVisible();
+  await page.goto("/#/settings/apps");
+  await expect(page.getByRole("heading", { name: "Apps", level: 1 })).toBeVisible();
   await page.getByRole("button", { name: "Unpin Star Calendar from the top bar" }).click();
   await expect.poll(() => m.calls.find((c) => c.method === "PUT")?.body).toEqual({ pinned: false });
   await expect(page.getByRole("navigation", { name: "Pinned apps" })).toHaveCount(0);
