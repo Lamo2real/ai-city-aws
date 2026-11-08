@@ -226,6 +226,45 @@ extension ButtonStyle where Self == GlassButtonStyle {
     static var glass: GlassButtonStyle { GlassButtonStyle() }
 }
 
+/// One glass pill with equal cells and no dividers; the amber highlight glides to the chosen option (the HUD's
+/// `.speak-mode .seg`). Under Reduce Motion it jumps.
+struct GlassSegmented<Option: Hashable & Identifiable>: View {
+    var options: [Option]
+    var label: (Option) -> String
+    @Binding var selection: Option
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let index = options.firstIndex(of: selection) ?? 0
+        GeometryReader { g in
+            let cell = g.size.width / CGFloat(max(1, options.count))
+            ZStack(alignment: .leading) {
+                Capsule().fill(Glass.primaryGradient)
+                    .overlay(Capsule().strokeBorder(Color.white.opacity(0.35), lineWidth: 1))
+                    .frame(width: cell)
+                    .offset(x: cell * CGFloat(index))
+                    .animation(reduceMotion ? nil : .timingCurve(0.4, 0, 0.2, 1, duration: 0.32), value: index)
+                HStack(spacing: 0) {
+                    ForEach(options) { o in
+                        Button { selection = o } label: {
+                            Text(label(o))
+                                .font(.footnote.weight(.bold))
+                                .foregroundStyle(o == selection ? Color(hex: 0x2a1a08) : Glass.text)
+                                .lineLimit(1).minimumScaleFactor(0.8)
+                                .frame(width: cell, height: g.size.height)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(o == selection ? [.isSelected] : [])
+                    }
+                }
+            }
+        }
+        .frame(height: 36)
+        .glassTint(Glass.fill, radius: 18, edge: Glass.edge2)
+        .clipShape(Capsule())
+    }
+}
+
 /// A bar at an edge of the screen (the composer, Settings' Save): material with a 1pt light edge on top.
 struct GlassBar: ViewModifier {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency

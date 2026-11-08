@@ -71,6 +71,8 @@ final class HudStore {
     @ObservationIgnored private(set) var lastSnapshot: JSONValue?
     /// Called once with AIC's whole reply when it is done (to read it aloud).
     @ObservationIgnored var onReplyDone: (String) -> Void = { _ in }
+    /// `knowledge.updated` events, for the files attached to the message being written.
+    @ObservationIgnored var onKnowledgeUpdated: (JSONValue) -> Void = { _ in }
 
     init(archive: ChatArchive = FileChatArchive()) {
         self.archive = archive
@@ -97,6 +99,7 @@ final class HudStore {
     func event(_ e: JSONValue) {
         let type = e["type"].string ?? ""
         if type == "ace.reply" { return aceReply(text: e["text"].string ?? "", done: e["done"].bool ?? false) }
+        if type == "knowledge.updated" { return onKnowledgeUpdated(e) }
         if type == "activity", e["id"].string == "ace" { aceStep(e["activity"].string ?? "", e["detail"].string) }
         during?.append(e)
         city = City.reduce(city, e, now: clock())

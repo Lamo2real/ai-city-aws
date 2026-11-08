@@ -79,6 +79,28 @@ final class APIClient: @unchecked Sendable {
         try await request("/settings", method: "PUT", body: patch)["settings"]
     }
 
+    // MARK: The + menu (web/src/lib/api.ts knowledgeApi, lib/connect.ts)
+
+    /// Starts a knowledge upload: the item and the ticket that says where the bytes go.
+    func startUpload(fileName: String, contentType: String, size: Int) async throws -> (KnowledgeItem, UploadTicket) {
+        let r = try await request("/knowledge/uploads", method: "POST",
+                                  body: ["file_name": .string(fileName), "content_type": .string(contentType), "size_bytes": .number(Double(size))])
+        guard let item = KnowledgeItem(json: r["item"]), let ticket = UploadTicket(json: r["upload"]) else {
+            throw APIError(message: "The upload could not start.", status: 0, fix: "Try again.")
+        }
+        return (item, ticket)
+    }
+    /// Multipart only: tells the server the parts are in, with their ETags in order.
+    func completeUpload(id: String, uploadId: String, etags: [String]) async throws -> KnowledgeItem {
+        let parts: [JSONValue] = etags.enumerated().map { ["part_number": .number(Double($0.offset + 1)), "etag": .string($0.element)] }
+        let r = try await request("/knowledge/uploads/\(Self.seg(id))/complete", method: "POST", body: ["upload_id": .string(uploadId), "parts": .array(parts)])
+        guard let item = KnowledgeItem(json: r["item"]) else { throw APIError(message: "The upload did not finish.", status: 0, fix: "Add it again.") }
+        return item
+    }
+    func removeKnowledge(_ id: String) async throws { try await request("/knowledge/\(Self.seg(id))", method: "DELETE") }
+    func connectors() async throws -> [Connector] { try await request("/connectors")["connectors"].array.compactMap(Connector.init(json:)) }
+    func skills() async throws -> [Skill] { try await request("/skills")["skills"].array.compactMap(Skill.init(json:)) }
+
     /// Registers this iPhone for notifications; returns the backend's id for it.
     func registerDevice(token: String, sandbox: Bool) async throws -> String {
         let r = try await request("/devices", method: "POST", body: ["token": .string(token), "platform": "ios", "sandbox": .bool(sandbox)])

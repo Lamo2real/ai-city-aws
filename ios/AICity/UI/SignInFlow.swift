@@ -23,8 +23,7 @@ struct SignInFlow: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    HStack { EyeView(size: 56); Text("AI CITY").font(.headline.monospaced()) }
-                        .accessibilityElement(children: .combine)
+                    Wordmark()
                     if let step = stepNumber {
                         Text("First sign-in · step \(step) of 3").font(.footnote).foregroundStyle(.secondary)
                     }
@@ -320,7 +319,7 @@ struct ConnectView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                EyeView(size: 96)
+                Wordmark()
                 Text("Connect to your AI City").font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
                 Text("Type the address of your AI City web site, the one you open in the browser (for example d1234abcd.cloudfront.net). The app reads the same public settings from it. You do this once.")
                     .foregroundStyle(.secondary)

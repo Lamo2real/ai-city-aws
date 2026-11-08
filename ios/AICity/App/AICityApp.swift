@@ -49,7 +49,7 @@ struct RootView: View {
         switch model.boot {
         case .starting:
             VStack(spacing: 16) {
-                EyeView(size: 120)
+                Wordmark()
                 Text("Starting…").foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)
@@ -61,7 +61,7 @@ struct RootView: View {
             SignInFlow()
         case .failed(let why):
             VStack(spacing: 16) {
-                EyeView(size: 96)
+                Wordmark()
                 Banner(tone: .bad, text: "AI City could not start: \(why) Nothing was lost.")
                 Button("Try again") { Task { await model.start() } }
                     .buttonStyle(.glassPrimary)

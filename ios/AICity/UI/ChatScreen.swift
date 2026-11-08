@@ -1,6 +1,9 @@
-// The landing screen (web AceScreen): AIC's eye and voice line on top, then the chat, then the composer
-// with push-to-talk. The owner's lines sit on the right in a filled bubble; AIC's on the left as plain
-// full-width text with its Markdown. While AIC works, its status row shows the current step and seconds.
+// The landing screen (web AceScreen, decisions 106–108): the conversation runs up under the glass top bar,
+// the clear button floats in its corner, and the voice strip (a small eye at the start of the voice line, the
+// Speak replies pill) sits above the composer with its + menu and push-to-talk. The owner's lines sit on the
+// right in a filled bubble; AIC's on the left as plain full-width text with its Markdown. While AIC works,
+// its status row shows the current step and seconds.
+import PhotosUI
 import SwiftUI
 
 struct ChatScreen: View {
@@ -8,33 +11,11 @@ struct ChatScreen: View {
     @AppStorage("aic.draft") private var draft = ""
     @FocusState private var focused: Bool
     @State private var confirmClear = false
+    @State private var menuOpen = false
 
     var body: some View {
         let hud = model.hud
         VStack(spacing: 0) {
-            VStack(spacing: 6) {
-                EyeView(size: 110)
-                VoiceLine(presence: hud.presence, listening: model.voice.listening, level: model.voice.inputLevel, speaking: model.voice.speaking)
-                    .frame(maxWidth: 260)
-                if model.voice.listening, !model.voice.partial.isEmpty {
-                    Text(model.voice.partial).font(.callout).foregroundStyle(.secondary).lineLimit(2)
-                }
-            }
-            .padding(.vertical, 8)
-
-            VStack(spacing: 8) {
-                if let p = model.voice.problem { Banner(tone: .bad, text: p) }
-                if hud.waitingCount > 0 {
-                    Banner(tone: .warn, text: hud.waitingCount == 1 ? "One thing needs you." : "\(hud.waitingCount) things need you.",
-                           action: ("Open", { model.open(.inbox) }))
-                }
-                if hud.live == .reconnecting { Banner(tone: .bad, text: "Connection lost. Your messages are saved. Reconnecting…") }
-                if !hud.unsent.isEmpty, hud.live == .online {
-                    Banner(tone: .info, text: (hud.unsent.count == 1 ? "One message is waiting to send." : "\(hud.unsent.count) messages are waiting to send.") + " They go out automatically.")
-                }
-            }
-            .padding(.horizontal)
-
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 14) {
@@ -53,28 +34,72 @@ struct ChatScreen: View {
                 .onAppear { proxy.scrollTo(hud.chat.last?.id, anchor: .bottom) }
             }
             .accessibilityLabel("Conversation with AIC")
+            // Under the bar: the notes that need the owner, and the quiet clear button in the corner.
+            .safeAreaInset(edge: .top, spacing: 0) { notes }
 
-            Composer(draft: $draft, focused: $focused)
+            Composer(draft: $draft, focused: $focused, menuOpen: $menuOpen)
         }
         .nightScreen()
-        .navigationTitle("AIC")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Menu {
-                    Toggle("Speak replies", isOn: Binding(get: { model.voice.speakReplies }, set: { model.voice.speakReplies = $0 }))
-                    Button("Clear conversation on this iPhone…", role: .destructive) { confirmClear = true }
-                        .disabled(hud.chat.isEmpty)
-                } label: {
-                    Image(systemName: "ellipsis.circle").frame(minWidth: 44, minHeight: 44)
-                }
-                .accessibilityLabel("Chat options")
-            }
-        }
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbar { ToolbarItem(placement: .principal) { Wordmark() } }
         .confirmationDialog("Clear the conversation on this iPhone?", isPresented: $confirmClear, titleVisibility: .visible) {
             Button("Clear", role: .destructive) { model.hud.chat = [] }
         } message: {
             Text("Only this iPhone forgets it. AIC keeps its own record, and it costs nothing.")
+        }
+        .sheet(isPresented: $menuOpen) {
+            PlusMenuSheet(onURLs: { urls, fromFolder in
+                Task {
+                    if fromFolder, let folder = urls.first {
+                        let r = await FilePicks.readFolder(folder)
+                        if let note = r.note { model.show(note) }
+                        await model.attach(r.files)
+                    } else {
+                        await model.attach(await FilePicks.read(urls))
+                    }
+                    focused = true
+                }
+            }, onPhotos: { items in
+                Task {
+                    await model.attach(await FilePicks.read(items))
+                    focused = true
+                }
+            }, onInsert: { i in
+                draft = Slash.insert(i.words, into: draft, atStart: i.atStart)
+                focused = true
+            })
+        }
+        .task { await model.loadLists() }
+    }
+
+    @ViewBuilder private var notes: some View {
+        let hud = model.hud
+        let banners = [
+            hud.waitingCount > 0 ? Banner(tone: .warn, text: hud.waitingCount == 1 ? "One thing needs you." : "\(hud.waitingCount) things need you.",
+                                          action: ("Open", { model.open(.inbox) })) : nil,
+            hud.live == .reconnecting ? Banner(tone: .bad, text: "Connection lost. Your messages are saved. Reconnecting…") : nil,
+            !hud.unsent.isEmpty && hud.live == .online
+                ? Banner(tone: .info, text: (hud.unsent.count == 1 ? "One message is waiting to send." : "\(hud.unsent.count) messages are waiting to send.") + " They go out automatically.")
+                : nil,
+        ].compactMap { $0 }
+        if !banners.isEmpty || !hud.chat.isEmpty {
+            HStack(alignment: .top, spacing: 4) {
+                VStack(spacing: 8) {
+                    ForEach(Array(banners.enumerated()), id: \.offset) { $0.element }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal)
+                .padding(.vertical, banners.isEmpty ? 0 : 8)
+                if !hud.chat.isEmpty {
+                    Button { confirmClear = true } label: {
+                        Image(systemName: "trash").font(.callout).foregroundStyle(Glass.mute).frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel("Clear conversation on this iPhone")
+                    .padding(.trailing, 4)
+                }
+            }
+            .background { if !banners.isEmpty { Rectangle().fill(.ultraThinMaterial) } }
         }
     }
 }
@@ -146,40 +171,109 @@ struct AicStatusRow: View {
     }
 }
 
+/// The bottom of the screen: the voice strip, what rides along with the message, and the box with its buttons.
 struct Composer: View {
     @Environment(AppModel.self) private var model
     @Binding var draft: String
     var focused: FocusState<Bool>.Binding
+    @Binding var menuOpen: Bool
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            Button {
-                model.voice.toggle()
-            } label: {
-                Image(systemName: model.voice.listening ? "stop.circle.fill" : "mic.circle")
-                    .font(.system(size: 30))
-                    .frame(width: 44, height: 44)
-                    .foregroundStyle(model.voice.listening ? Glass.badLight : Glass.amber)
+        let voice = model.voice
+        let attachments = model.attachments
+        let commands = Slash.allCommands(model.skills)
+        let suggestions = Slash.matchCommands(draft, commands)
+        VStack(spacing: 8) {
+            // A small eye at the start of the voice line (decision 107); the line keeps its bars, wave and dots.
+            HStack(spacing: 12) {
+                EyeView(size: 44)
+                VoiceLine(presence: model.hud.presence, listening: voice.listening, level: voice.inputLevel, speaking: voice.speaking)
+                    .frame(maxWidth: .infinity)
             }
-            .accessibilityLabel(model.voice.listening ? "Stop listening and send" : "Talk to AIC")
-            .accessibilityHint("Tap to talk, tap again to send what you said.")
-
-            TextField("Type your message…", text: $draft, axis: .vertical)
-                .lineLimit(1...5)
-                .focused(focused)
-                .padding(.horizontal, 12).padding(.vertical, 10)
-                .frame(minHeight: 44)
-                .glassWell(radius: 20)
-                .submitLabel(.send)
-                .onSubmit(send)
-                .accessibilityLabel("Message to AIC")
-
-            Button(action: send) {
-                Image(systemName: "arrow.up").font(.headline).frame(width: 44, height: 44)
+            if voice.listening, !voice.partial.isEmpty {
+                Text(voice.partial).font(.callout).foregroundStyle(.secondary).lineLimit(2)
             }
-            .buttonStyle(.glassPrimaryCircle)
-            .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .accessibilityLabel("Send to AIC")
+            if let p = voice.problem { Banner(tone: .bad, text: p) }
+            if !focused.wrappedValue {
+                // Speak replies: one glass pill, the amber highlight sliding to the choice (decision 106's look).
+                HStack(spacing: 12) {
+                    Text("Speak replies").font(.footnote.weight(.bold))
+                    GlassSegmented(options: VoiceController.SpeakMode.allCases, label: \.label,
+                                   selection: Binding(get: { voice.speakMode }, set: { voice.speakMode = $0 }))
+                        .frame(maxWidth: 270)
+                        .accessibilityLabel("Speak replies")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if !attachments.entries.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(attachments.entries) { e in
+                            AttachedChip(entry: e) { attachments.remove(e.id, api: model.api) }
+                        }
+                    }
+                }
+                .accessibilityLabel("Attached to your message")
+            }
+            if !suggestions.isEmpty {
+                // Typing "/" lists the commands above the box: one line each, and the list scrolls past four so
+                // the box stays above the keyboard.
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(suggestions.prefix(8)) { c in
+                            Button {
+                                draft = Slash.insert("/\(c.name) ", into: draft, atStart: true)
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Text("/\(c.name)").font(.body.weight(.semibold)).foregroundStyle(Glass.text)
+                                    Text(c.hint).font(.footnote).foregroundStyle(Glass.mute).lineLimit(1)
+                                    Spacer(minLength: 0)
+                                }
+                                .padding(.horizontal, 12)
+                                .frame(minHeight: 44)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .frame(maxHeight: 44 * 4)
+                .fixedSize(horizontal: false, vertical: suggestions.count <= 4)
+                .padding(.vertical, 4)
+                .glassPanel(radius: Glass.radius)
+                .accessibilityLabel("Slash commands")
+            }
+            HStack(alignment: .bottom, spacing: 8) {
+                PlusButton(open: $menuOpen)
+
+                TextField("Type your message…", text: $draft, axis: .vertical)
+                    .lineLimit(1...5)
+                    .focused(focused)
+                    .padding(.horizontal, 12).padding(.vertical, 10)
+                    .frame(minHeight: 44)
+                    .glassWell(radius: 20)
+                    .submitLabel(.send)
+                    .onSubmit(send)
+                    .accessibilityLabel("Message to AIC")
+
+                Button {
+                    voice.toggle()
+                } label: {
+                    Image(systemName: voice.listening ? "stop.circle.fill" : "mic.circle")
+                        .font(.system(size: 30))
+                        .frame(width: 44, height: 44)
+                        .foregroundStyle(voice.listening ? Glass.badLight : Glass.amber)
+                }
+                .accessibilityLabel(voice.listening ? "Stop listening and send" : "Talk to AIC")
+                .accessibilityHint("Tap to talk, tap again to send what you said.")
+
+                Button(action: send) {
+                    Image(systemName: "arrow.up").font(.headline).frame(width: 44, height: 44)
+                }
+                .buttonStyle(.glassPrimaryCircle)
+                .disabled((draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && attachments.entries.isEmpty) || !attachments.sendable)
+                .accessibilityLabel("Send to AIC")
+            }
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
@@ -187,9 +281,49 @@ struct Composer: View {
     }
 
     private func send() {
-        let t = draft
-        guard !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let t = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let attached = model.attachments.items
+        guard !t.isEmpty || !attached.isEmpty else { return }
+        guard model.attachments.sendable else { return model.show("Your files are still uploading. Send once they are in.") }
+        var body = t
+        switch Slash.expand(t, Slash.allCommands(model.skills)) {
+        case .clear:
+            model.hud.chat = []
+            draft = ""
+            return
+        case .needs(let c):
+            return model.show(Slash.needsWords(c))
+        case .send(let said):
+            body = said
+        case nil:
+            break
+        }
+        body = Attach.body(body, attached: attached)
         draft = ""
-        Task { await model.send(t) }
+        model.attachments.clear()
+        Task { await model.send(body) }
+    }
+}
+
+/// One file riding along with the message: its name, its live status, and × to leave it out (and delete it).
+struct AttachedChip: View {
+    var entry: Attachments.Entry
+    var remove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(entry.item.title).font(.footnote.weight(.semibold)).lineLimit(1).frame(maxWidth: 160)
+            Text(entry.words).font(.footnote)
+                .foregroundStyle(entry.failed ? Glass.badLight : entry.item.status == .ready ? Glass.goodLight : Glass.mute)
+                .lineLimit(1)
+            Button(action: remove) {
+                Image(systemName: "xmark").font(.footnote.weight(.semibold)).frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Remove \(entry.item.title)")
+        }
+        .padding(.leading, 12)
+        .frame(height: 44)
+        .glassTint(Glass.fill2, radius: 22)
+        .accessibilityElement(children: .contain)
     }
 }

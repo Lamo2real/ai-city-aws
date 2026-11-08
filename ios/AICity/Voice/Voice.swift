@@ -16,9 +16,31 @@ final class VoiceController {
     /// Loudness right now, 0…1, for the voice line.
     var inputLevel: Double = 0
     var speaking = false
-    var speakReplies = true {
-        didSet { UserDefaults.standard.set(speakReplies, forKey: "aic.voice.speak") }
+    /// When AIC reads its reply aloud (web/src/voice/modes.ts): only when the owner's message came by voice
+    /// (the default), always, or never.
+    enum SpeakMode: String, CaseIterable, Identifiable {
+        case auto, always, never
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .auto: return "When I talk"
+            case .always: return "Always"
+            case .never: return "Never"
+            }
+        }
     }
+    var speakMode: SpeakMode {
+        didSet { UserDefaults.standard.set(speakMode.rawValue, forKey: "aic.voice.speakMode") }
+    }
+
+    /// Reads the mode back; an owner who had turned the old on/off switch off stays muted, everyone else gets the new default.
+    static func readSpeakMode(_ defaults: UserDefaults = .standard) -> SpeakMode {
+        if let raw = defaults.string(forKey: "aic.voice.speakMode"), let m = SpeakMode(rawValue: raw) { return m }
+        return defaults.object(forKey: "aic.voice.speak") as? Bool == false ? .never : .auto
+    }
+
+    /// Whether AIC should read this reply aloud, given how the owner's message came in.
+    func shouldSpeak(askedByVoice: Bool) -> Bool { speakMode == .always || (speakMode == .auto && askedByVoice) }
 
     @ObservationIgnored private let engine = AVAudioEngine()
     @ObservationIgnored private var request: SFSpeechAudioBufferRecognitionRequest?
@@ -30,7 +52,7 @@ final class VoiceController {
     @ObservationIgnored var onSpeakingDone: () -> Void = {}
 
     init() {
-        speakReplies = UserDefaults.standard.object(forKey: "aic.voice.speak") as? Bool ?? true
+        speakMode = Self.readSpeakMode()
         let d = SpeechDelegate { [weak self] in self?.speaking = false; self?.onSpeakingDone() }
         delegate = d
         synth.delegate = d
@@ -108,7 +130,7 @@ final class VoiceController {
     }
 
     func speak(_ text: String) {
-        guard speakReplies, !text.isEmpty else { return }
+        guard speakMode != .never, !text.isEmpty else { return }
         let plain = text.replacingOccurrences(of: "[*`#|_]", with: "", options: .regularExpression)
             .replacingOccurrences(of: #"\bAIC\b"#, with: "Ace", options: .regularExpression) // written AIC, said "Ace" (the owner's rule, 2026-11-08)
         let u = AVSpeechUtterance(string: String(plain.prefix(2900)))

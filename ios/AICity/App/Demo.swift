@@ -110,6 +110,11 @@ enum Demo {
 final class DemoTransport: HTTPTransport, @unchecked Sendable {
     weak var model: AppModel?
 
+    func sendWithHeaders(_ request: URLRequest) async throws -> (Data, Int, [String: String]) {
+        let (data, status) = try await send(request)
+        return (data, status, request.httpMethod == "PUT" ? ["ETag": "\"demo-etag\""] : [:])
+    }
+
     func send(_ request: URLRequest) async throws -> (Data, Int) {
         if request.url?.host?.hasPrefix("cognito-idp.") == true { return try DemoCognito.answer(request) }
         if let bearer = request.value(forHTTPHeaderField: "Authorization") { DemoCognito.defaults.set(bearer, forKey: "lastBearer") }
@@ -127,12 +132,46 @@ final class DemoTransport: HTTPTransport, @unchecked Sendable {
         case ("GET", let p) where p.hasPrefix("/tickets/"):
             body = ["ticket": Demo.city["tickets"].array[0], "history": [["from": nil, "to": "open", "note": "", "at": Demo.iso(50)], ["from": "open", "to": "in_progress", "note": "hired an iOS developer", "at": Demo.iso(45)]], "children": []]
         case ("POST", "/devices"): body = ["device": ["id": "dev-demo"]]
+        // The + menu: uploads land in a fake bucket and are "ready" a moment later; two connectors, two skills.
+        case ("POST", "/knowledge/uploads"):
+            let req = request.httpBody.flatMap(JSONValue.parse) ?? .null
+            let id = "k-\(DemoCognito.defaults.integer(forKey: "knowledgeCount") + 1)"
+            DemoCognito.defaults.set(DemoCognito.defaults.integer(forKey: "knowledgeCount") + 1, forKey: "knowledgeCount")
+            let name = req["file_name"].string ?? "file"
+            let type = req["content_type"].string ?? ""
+            let kind = type.hasPrefix("image/") ? "image" : type.hasPrefix("video/") ? "video" : type.hasPrefix("audio/") ? "audio" : "document"
+            body = ["item": ["id": .string(id), "kind": .string(kind), "title": .string(name), "scope": "relevant", "status": "uploading"],
+                    "upload": ["method": "PUT", "url": .string("https://knowledge.demo.ai-city.invalid/put/\(id)"), "headers": ["Content-Type": .string(type)]]]
+        case ("PUT", let p) where p.hasPrefix("/put/"):
+            let id = String(p.dropFirst("/put/".count))
+            Task { @MainActor [weak self] in await self?.readyKnowledge(id) }
+            body = [:]
+        case ("DELETE", let p) where p.hasPrefix("/knowledge/"): body = ["ok": true]
+        case ("GET", "/connectors"):
+            body = ["connectors": [
+                ["id": "github", "label": "GitHub", "status": "ready", "tools": [["name": "search"], ["name": "read_file"], ["name": "open_pr"]]],
+                ["id": "heygen", "label": "HeyGen", "status": "needs_key"],
+            ]]
+        case ("GET", "/skills"):
+            body = ["skills": [
+                ["name": "pdf-report", "description": "Turns findings into a one-page PDF", "enabled": true, "roles": ["worker"]],
+                ["name": "old-one", "description": "Retired", "enabled": false, "roles": ["worker"]],
+            ]]
         case ("POST", "/messages"):
             Task { @MainActor [weak self] in await self?.streamReply() }
             body = ["accepted": true]
         default: body = ["ok": true]
         }
         return (try JSONEncoder().encode(body), method == "POST" && path == "/messages" ? 202 : 200)
+    }
+
+    /// The bucket told the server: the item is being read, then ready (two `knowledge.updated` events).
+    @MainActor private func readyKnowledge(_ id: String) async {
+        guard let hud = model?.hud else { return }
+        try? await Task.sleep(for: .milliseconds(600))
+        hud.event(["type": "knowledge.updated", "id": .string(id), "status": "processing", "title": "", "scope": "relevant"])
+        try? await Task.sleep(for: .seconds(2))
+        hud.event(["type": "knowledge.updated", "id": .string(id), "status": "ready", "title": "", "scope": "relevant"])
     }
 
     @MainActor private func streamReply() async {

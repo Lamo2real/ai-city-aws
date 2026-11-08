@@ -62,6 +62,13 @@ final class AppModel {
 
     let hud: HudStore
     let voice = VoiceController()
+    /// The files attached to the message being written, and the lists the + menu shows.
+    let attachments = Attachments()
+    var skills: [Skill] = []
+    var connectors: [Connector] = []
+    @ObservationIgnored private var listsLoadedAt: Double = 0
+    /// Whether the owner's last message came by voice (AIC answers aloud in "When I talk" only then).
+    private(set) var lastAskedByVoice = false
     /// Notifications when a large feature is done.
     let push: PushController
     /// The City scene: one web view for the app's lifetime, fed by the store.
@@ -106,12 +113,13 @@ final class AppModel {
         self.http = http
         self.makeAuth = makeAuth
         self.connectLive = connectLive
-        voice.onText = { [weak self] text in Task { await self?.send(text) } }
+        voice.onText = { [weak self] text in Task { await self?.send(text, byVoice: true) } }
         voice.onSpeakingDone = { [weak self] in if self?.hud.presence == .speaking { self?.hud.presence = .idle } }
         self.hud.onReplyDone = { [weak self] text in
             guard let self else { return }
-            if self.voice.speakReplies { self.voice.speak(text) } else { self.hud.presence = .idle }
+            if self.voice.shouldSpeak(askedByVoice: self.lastAskedByVoice) { self.voice.speak(text) } else { self.hud.presence = .idle }
         }
+        self.hud.onKnowledgeUpdated = { [weak self] e in self?.attachments.apply(event: e) }
     }
 
     // MARK: Boot
@@ -243,9 +251,10 @@ final class AppModel {
 
     private func newLineId() -> String { "o\(String(Int(nowMs()), radix: 36))\(UUID().uuidString.prefix(6).lowercased())" }
 
-    func send(_ text: String) async {
+    func send(_ text: String, byVoice: Bool = false) async {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return }
+        lastAskedByVoice = byVoice
         let line = ChatLine(id: newLineId(), who: .owner, text: clean, state: .queued, at: nowMs())
         hud.chat.append(line)
         hud.presence = .thinking
@@ -263,6 +272,26 @@ final class AppModel {
             hud.patchLine(line.id, state: .failed)
             if let e = error as? APIError, e.status != 0, e.status < 500 { show(e.errorDescription ?? "Not sent.", tone: .bad) }
         }
+    }
+
+    // MARK: The + menu: files to the knowledge base, and the skills and connectors it lists
+
+    /// Uploads the picked files; each becomes a chip under the message box. Problems become toasts.
+    func attach(_ files: [PickedFile]) async {
+        guard let api else { return show("No connection to AI City right now.", tone: .bad) }
+        let problems = await attachments.add(files, with: Uploader(api: api, http: http))
+        for p in problems { show(p, tone: .bad) }
+    }
+
+    /// Skills and connectors, read again at most once a minute (the menu asks each time it opens). Missing
+    /// pieces come back empty, never as an error.
+    func loadLists(fresh: Bool = false) async {
+        guard let api, fresh || nowMs() - listsLoadedAt > 60_000 else { return }
+        listsLoadedAt = nowMs()
+        async let s = api.skills()
+        async let c = api.connectors()
+        skills = (try? await s) ?? []
+        connectors = (try? await c) ?? []
     }
 
     /// Re-sends everything the outbox holds. The server ignores a line it already has (same client id).

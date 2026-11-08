@@ -1,6 +1,13 @@
 // Shared pieces: the eye, banners, the spend pill, toasts, the voice line, loading and empty states.
 import SwiftUI
 
+/// The brand: the AI CITY wordmark alone (decision 108; the eye drawing is only the small state eye on the AIC screen).
+struct Wordmark: View {
+    var body: some View {
+        Text("AI CITY").font(.headline.monospaced()).accessibilityLabel("AI City")
+    }
+}
+
 /// AIC's eye: the owner's own drawing, plain ink (no colour change or motion), adapting to Dark Mode.
 struct EyeView: View {
     var size: CGFloat = 80

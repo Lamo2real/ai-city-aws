@@ -74,7 +74,11 @@ Real pushes need the **Push Notifications capability**, which only Apple Develop
 
 ## Voice
 
-Tap the mic, talk, tap again to send. The words are recognised by Apple's Speech framework, on the iPhone when the model is available (no audio leaves the phone then); otherwise Apple's speech service. Replies are read aloud with the system voice (*AIC → ⋯ → Speak replies* turns it off). The web HUD uses Amazon Transcribe and Polly instead; see `docs/DECISIONS.md` (decision 69). The microphone is used only while listening.
+Tap the mic, talk, tap again to send. The words are recognised by Apple's Speech framework, on the iPhone when the model is available (no audio leaves the phone then); otherwise Apple's speech service. Replies are read aloud with the system voice; the **Speak replies** pill above the message box chooses *When I talk* (only after a spoken message, the default), *Always* or *Never*. There is no hands-free wake mode on the iPhone. The web HUD uses Amazon Transcribe and Polly instead; see `docs/DECISIONS.md` (decision 69). The microphone is used only while listening.
+
+## The + menu
+
+The + button beside the message box opens the same menu as the web HUD: **Add files or photos** (from Photos or Files), **Add folders** (every file inside, hidden ones skipped, at most 100), **Slash commands** (`/status`, `/stop`, `/home`, `/knowledge`, `/connect <service>`, `/clear`, plus one per enabled skill), **Connectors** and **Plugins**. Files go to the knowledge base through the same upload routes as the browser and show as chips under the box with their live status; the message then carries an "Attached (now in my knowledge base): …" line that AIC reads first. In demo mode the uploads land in a fake bucket and turn ready after two seconds.
 
 ## The City is the browser's City
 
