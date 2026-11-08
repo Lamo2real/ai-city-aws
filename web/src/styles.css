@@ -1242,6 +1242,90 @@ main {
   border-radius: var(--rg);
   box-shadow: var(--lift);
 }
+/* Opening: the menu grows up out of the + button with a soft spring; closing sinks back into it.
+   Moving between its lists slides the new list in from the side it comes from. */
+.plus-menu {
+  transform-origin: bottom left;
+  animation: plus-in 0.26s cubic-bezier(0.2, 0.9, 0.25, 1.15) both;
+}
+.plus-menu.leaving {
+  pointer-events: none;
+  animation: plus-out 0.16s ease-in both;
+}
+.plus-page {
+  display: grid;
+  gap: 2px;
+  animation: plus-page-in 0.22s ease-out both;
+}
+.plus-page.home {
+  animation: none; /* the home list's rows rise in one after another instead */
+}
+.plus-menu:not(.leaving) .plus-page.home > .plus-item {
+  animation: plus-item-in 0.3s ease-out both;
+}
+.plus-page.home > .plus-item:nth-child(2) {
+  animation-delay: 30ms;
+}
+.plus-page.home > .plus-item:nth-child(3) {
+  animation-delay: 60ms;
+}
+.plus-page.home > .plus-item:nth-child(4) {
+  animation-delay: 90ms;
+}
+.plus-page.home > .plus-item:nth-child(5) {
+  animation-delay: 120ms;
+}
+@keyframes plus-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.94);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+@keyframes plus-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+}
+@keyframes plus-page-in {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes plus-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plus-menu,
+  .plus-menu.leaving,
+  .plus-page,
+  .plus-page.home > .plus-item {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+  }
+}
 .plus-item {
   display: grid;
   grid-template-columns: 24px minmax(0, 1fr) auto;

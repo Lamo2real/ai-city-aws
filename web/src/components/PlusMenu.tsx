@@ -8,6 +8,8 @@ import { connectorStatus } from "../lib/connect.ts";
 import { BackIcon, FilesIcon, FolderIcon, PlugIcon, PlusIcon, PuzzleIcon, SlashIcon } from "./ui.tsx";
 
 type Page = "main" | "slash" | "connectors" | "plugins";
+/** How long the closing animation runs (matches .plus-menu.leaving in styles.css). */
+const LEAVE_MS = 160;
 /** Where inserted words go: before what is typed (a command), after it, or in place of it all. */
 export type Insert = { where: "start" | "end" | "all"; select?: [number, number] };
 
@@ -37,6 +39,9 @@ export function PlusMenu(p: {
   go: (view: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  // Closing plays a short exit (the menu sinks back into the button) before it leaves the page.
+  const [leaving, setLeaving] = useState(false);
+  const leaveTimer = useRef<number | undefined>(undefined);
   const [page, setPage] = useState<Page>("main");
   // The menu is drawn on <body> (a portal) and placed above the button, so the chat panel's own clipping and
   // blur never cut it off; on a phone it may reach over the voice strip. It scrolls when the space is short.
@@ -49,9 +54,22 @@ export function PlusMenu(p: {
     folder.current?.setAttribute("webkitdirectory", "");
   }, []);
   const close = () => {
-    setOpen(false);
-    setPage("main");
+    if (!open || leaving) return;
+    setLeaving(true);
+    leaveTimer.current = window.setTimeout(() => {
+      setOpen(false);
+      setLeaving(false);
+      setPage("main");
+    }, LEAVE_MS);
   };
+  const openMenu = () => {
+    window.clearTimeout(leaveTimer.current);
+    setLeaving(false);
+    setPage("main");
+    setOpen(true);
+  };
+  useEffect(() => () => window.clearTimeout(leaveTimer.current), []);
+  const showing = open && !leaving;
   useLayoutEffect(() => {
     if (!open) return;
     const place = () => {
@@ -132,17 +150,11 @@ export function PlusMenu(p: {
     <div className="plus" ref={root}>
       <button
         type="button"
-        className={`plus-btn${open ? " on" : ""}`}
+        className={`plus-btn${showing ? " on" : ""}`}
         aria-label="Add to your message"
         aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => {
-          if (open) close();
-          else {
-            setPage("main");
-            setOpen(true);
-          }
-        }}
+        aria-expanded={showing}
+        onClick={() => (showing ? close() : openMenu())}
       >
         <PlusIcon />
       </button>
@@ -167,109 +179,111 @@ export function PlusMenu(p: {
       {open && pos
         ? createPortal(
             <div
-              className="plus-menu"
+              className={`plus-menu${leaving ? " leaving" : ""}`}
               role="menu"
               aria-label="Add to your message"
               ref={menu}
               onKeyDown={onKey}
               style={{ left: pos.left, bottom: pos.bottom, width: pos.width, maxHeight: pos.maxHeight }}
             >
-              {page === "main" ? (
-                <>
-                  <Item
-                    icon={<FilesIcon />}
-                    label="Add files or photos"
-                    hint="Kept in Knowledge; AIC reads them with your message"
-                    onClick={() => pick(files.current)}
-                  />
-                  <Item
-                    icon={<FolderIcon />}
-                    label="Add folders"
-                    hint="Every file inside, up to 100"
-                    onClick={() => pick(folder.current)}
-                  />
-                  <Item
-                    icon={<SlashIcon />}
-                    label="Slash commands"
-                    hint="Quick things to say"
-                    more
-                    onClick={() => setPage("slash")}
-                  />
-                  <Item
-                    icon={<PlugIcon />}
-                    label="Connectors"
-                    hint={connectors.length ? `${connectors.length} connected` : "Outside services AIC can use"}
-                    more
-                    onClick={() => setPage("connectors")}
-                  />
-                  <Item
-                    icon={<PuzzleIcon />}
-                    label="Plugins"
-                    hint={skills.length ? `${skills.length} skills` : "Skills your agents follow"}
-                    more
-                    onClick={() => setPage("plugins")}
-                  />
-                </>
-              ) : null}
-              {page === "slash" ? (
-                <>
-                  {back("Slash commands")}
-                  {commands.map((c) => (
+              <div className={`plus-page${page === "main" ? " home" : ""}`} key={page}>
+                {page === "main" ? (
+                  <>
                     <Item
-                      key={c.name}
-                      icon={c.skill ? <PuzzleIcon /> : <SlashIcon />}
-                      label={`/${c.name}`}
-                      hint={c.hint}
-                      onClick={() => insert(`/${c.name} `, { where: "start" })}
+                      icon={<FilesIcon />}
+                      label="Add files or photos"
+                      hint="Kept in Knowledge; AIC reads them with your message"
+                      onClick={() => pick(files.current)}
                     />
-                  ))}
-                </>
-              ) : null}
-              {page === "connectors" ? (
-                <>
-                  {back("Connectors")}
-                  {connectors.length === 0 ? <p className="plus-none">No connectors yet.</p> : null}
-                  {connectors.map((c) => (
                     <Item
-                      key={c.id}
+                      icon={<FolderIcon />}
+                      label="Add folders"
+                      hint="Every file inside, up to 100"
+                      onClick={() => pick(folder.current)}
+                    />
+                    <Item
+                      icon={<SlashIcon />}
+                      label="Slash commands"
+                      hint="Quick things to say"
+                      more
+                      onClick={() => setPage("slash")}
+                    />
+                    <Item
                       icon={<PlugIcon />}
-                      label={c.label ?? c.id}
-                      hint={connectorStatus(c).text}
-                      onClick={() => insert(`Use ${c.label ?? c.id} to `, { where: "end" })}
+                      label="Connectors"
+                      hint={connectors.length ? `${connectors.length} connected` : "Outside services AIC can use"}
+                      more
+                      onClick={() => setPage("connectors")}
                     />
-                  ))}
-                  <Item
-                    icon={<PlusIcon size={20} />}
-                    label="Add a connector…"
-                    hint="Name the service; AIC sets it up"
-                    onClick={() => insert("Add ___ as a connector", { where: "all", select: [4, 7] })}
-                  />
-                </>
-              ) : null}
-              {page === "plugins" ? (
-                <>
-                  {back("Plugins")}
-                  {skills.length === 0 ? <p className="plus-none">No plugins yet.</p> : null}
-                  {skills.map((s) => (
                     <Item
-                      key={s.name}
                       icon={<PuzzleIcon />}
-                      label={s.name}
-                      hint={s.description || "A skill you added"}
-                      onClick={() => insert(`/${s.name} `, { where: "start" })}
+                      label="Plugins"
+                      hint={skills.length ? `${skills.length} skills` : "Skills your agents follow"}
+                      more
+                      onClick={() => setPage("plugins")}
                     />
-                  ))}
-                  <Item
-                    icon={<PlusIcon size={20} />}
-                    label="Add a plugin…"
-                    hint="Opens Skills"
-                    onClick={() => {
-                      close();
-                      p.go("skills");
-                    }}
-                  />
-                </>
-              ) : null}
+                  </>
+                ) : null}
+                {page === "slash" ? (
+                  <>
+                    {back("Slash commands")}
+                    {commands.map((c) => (
+                      <Item
+                        key={c.name}
+                        icon={c.skill ? <PuzzleIcon /> : <SlashIcon />}
+                        label={`/${c.name}`}
+                        hint={c.hint}
+                        onClick={() => insert(`/${c.name} `, { where: "start" })}
+                      />
+                    ))}
+                  </>
+                ) : null}
+                {page === "connectors" ? (
+                  <>
+                    {back("Connectors")}
+                    {connectors.length === 0 ? <p className="plus-none">No connectors yet.</p> : null}
+                    {connectors.map((c) => (
+                      <Item
+                        key={c.id}
+                        icon={<PlugIcon />}
+                        label={c.label ?? c.id}
+                        hint={connectorStatus(c).text}
+                        onClick={() => insert(`Use ${c.label ?? c.id} to `, { where: "end" })}
+                      />
+                    ))}
+                    <Item
+                      icon={<PlusIcon size={20} />}
+                      label="Add a connector…"
+                      hint="Name the service; AIC sets it up"
+                      onClick={() => insert("Add ___ as a connector", { where: "all", select: [4, 7] })}
+                    />
+                  </>
+                ) : null}
+                {page === "plugins" ? (
+                  <>
+                    {back("Plugins")}
+                    {skills.length === 0 ? <p className="plus-none">No plugins yet.</p> : null}
+                    {skills.map((s) => (
+                      <Item
+                        key={s.name}
+                        icon={<PuzzleIcon />}
+                        label={s.name}
+                        hint={s.description || "A skill you added"}
+                        onClick={() => insert(`/${s.name} `, { where: "start" })}
+                      />
+                    ))}
+                    <Item
+                      icon={<PlusIcon size={20} />}
+                      label="Add a plugin…"
+                      hint="Opens Skills"
+                      onClick={() => {
+                        close();
+                        p.go("skills");
+                      }}
+                    />
+                  </>
+                ) : null}
+              </div>
             </div>,
             document.body,
           )
