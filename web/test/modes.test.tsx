@@ -20,7 +20,7 @@ describe("when AIC speaks its reply", () => {
     localStorage.setItem("aic.sound", "on");
     expect(readSpeakMode()).toBe("auto");
     localStorage.setItem("aic.speak", "always");
-    expect(readSpeakMode()).toBe("always");
+    expect(readSpeakMode()).toBe("auto"); // "always" is gone with the voice button (decision 112): typed is text
   });
 });
 

@@ -17,15 +17,14 @@ import {
 import { addFiles, useKnowledge } from "../lib/knowledge.ts";
 import { store, useHud, waitingCount } from "../lib/store.ts";
 import { needsWords } from "../lib/needs.ts";
-import { appendDictation, type SpeakMode } from "../voice/modes.ts";
+import { appendDictation } from "../voice/modes.ts";
 import { useVoice } from "../voice/useVoice.ts";
-import { Eyes } from "./Eyes.tsx";
 import { AicStatus, AicSteps } from "./AicStatus.tsx";
 import { stepsRunning } from "../lib/steps.ts";
 import { statusWords } from "./Knowledge.tsx";
 import { PlusMenu, type Insert } from "./PlusMenu.tsx";
 import { StreamedText } from "./StreamedText.tsx";
-import { Banner, ClearIcon, DictateIcon, SendIcon, toast } from "./ui.tsx";
+import { Banner, ClearIcon, DictateIcon, SendIcon, toast, WaveIcon } from "./ui.tsx";
 import { VoiceVisualizer } from "./VoiceVisualizer.tsx";
 
 export { MicIcon } from "./ui.tsx";
@@ -51,13 +50,10 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
   const log = useRef<HTMLDivElement>(null);
   // Dictation writes into the box: `base` is the text before the words being spoken right now.
   const base = useRef(text);
-  const typed = useRef(text.trim() !== ""); // the keyboard touched the box since the last send
-  const dictated = useRef(false); // dictation added words since the last send
   const voice = useVoice({
     onPartial: (words) => setText(appendDictation(base.current, words)),
     onFinal: (words) => {
       base.current = appendDictation(base.current, words);
-      dictated.current = true;
       setText(base.current);
     },
     onStop: () => setText(base.current),
@@ -103,7 +99,6 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
   };
 
   const setTyped = (next: string) => {
-    typed.current = true;
     base.current = next;
     setText(next);
   };
@@ -169,23 +164,19 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
       return;
     }
     if (voice.dictating) voice.toggleDictate(); // stop dictating; send what is shown
-    // A dictated message counts as voice (AIC may answer aloud) only if the keyboard never touched it.
-    const byVoice = dictated.current && !typed.current && !items.length;
     let body = slash?.kind === "send" ? slash.text : t;
     if (items.length) body = `${body || "Take a look at what I attached."}\n\n${attachedLine(items)}`;
     setText("");
     base.current = "";
-    typed.current = false;
-    dictated.current = false;
     setAttached([]);
-    await sendMessage(body, { voice: byVoice });
+    // Typed or dictated, the message is text and AIC answers in text; the voice button is for talking.
+    await sendMessage(body);
     input.current?.focus();
   };
   const lastLine = chat.at(-1);
   // Right after the owner sends, AIC's status row (eye, current step, seconds) shows until its first words.
   const waitingForAic = presence === "thinking" && lastLine?.who === "owner" && lastLine.state !== "failed";
 
-  const shown = presence === "idle" && waiting ? "waiting" : presence;
   const unsent = chat.filter((l) => l.who === "owner" && (l.state === "failed" || l.state === "queued")).length;
 
   return (
@@ -193,50 +184,6 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
       <h1 id="ace-title" className="sr">
         Talk to AIC
       </h1>
-      <div className="ace-stage">
-        {/* A small eye beside the voice line (the owner found the big drawing too much; decision 107). */}
-        <Eyes presence={shown} small word={false} />
-        <VoiceVisualizer presence={presence} listening={voice.listening} onMic={voice.pushToTalk} />
-        {voice.problem ? <Banner tone="bad">{voice.problem}</Banner> : null}
-        <div className="toggles">
-          {/* A glass toggle in the brand's amber (the native checkbox is kept for assistive tech and the tests). */}
-          <label className="switch toggle" title="Listen for “hey AIC” (say “hey Ace”) and answer aloud">
-            <input type="checkbox" checked={voice.wakeMode} onChange={voice.toggleWake} />
-            <span className="toggle-track" aria-hidden="true">
-              <span className="toggle-knob" />
-            </span>
-            Hands-free
-          </label>
-          <fieldset className="speak-mode">
-            <legend>Speak replies</legend>
-            {/* The amber pill slides to the chosen option (`--i` is its index; see .seg::before). */}
-            <div
-              className="seg"
-              style={{ "--i": ["auto", "always", "never"].indexOf(voice.speakMode) } as React.CSSProperties}
-            >
-              {(
-                [
-                  ["auto", "When I talk"],
-                  ["always", "Always"],
-                  ["never", "Never"],
-                ] as Array<[SpeakMode, string]>
-              ).map(([m, label]) => (
-                <label key={m} className={voice.speakMode === m ? "on" : ""}>
-                  <input
-                    type="radio"
-                    name="speak-mode"
-                    value={m}
-                    checked={voice.speakMode === m}
-                    onChange={() => voice.setSpeakMode(m)}
-                  />
-                  {label}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        </div>
-      </div>
-
       <div className="talk" role="region" aria-label="Chat with AIC">
         {/* No header: the panel runs up behind the top bar (decision 108); the clear button floats in its corner. */}
         {chat.length ? (
@@ -251,6 +198,7 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
           </button>
         ) : null}
         <div className="talk-notes">
+          {voice.problem ? <Banner tone="bad">{voice.problem}</Banner> : null}
           {waiting ? (
             <Banner tone="warn" action={{ label: "Open", onClick: () => go("inbox") }}>
               {`${needsWords(waiting)}.`}
@@ -267,7 +215,7 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
           ) : null}
         </div>
         <div className="chat" ref={log} aria-live="polite" aria-label="Conversation with AIC">
-          {chat.length === 0 ? <p className="hello">Say hi. Try “yo AIC, what’s the status?” or tap the mic.</p> : null}
+          {chat.length === 0 ? <p className="hello">Say hi. Type, or tap the voice button and just talk.</p> : null}
           {chat.map((l) => (
             <article
               key={l.id}
@@ -297,6 +245,10 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
             </article>
           ) : null}
         </div>
+        {voice.conversation || voice.listening ? (
+          // While the voice conversation is on (or dictation listens): who is talking, as the moving line.
+          <VoiceVisualizer presence={presence} listening={voice.listening} onMic={voice.pushToTalk} bare />
+        ) : null}
         <form className="composer" onSubmit={submit}>
           {items.length ? (
             <ul className="attached" aria-label="Attached to your message">
@@ -363,6 +315,16 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
             title={voice.dictating ? "Stop dictating" : "Dictate into the box"}
           >
             <DictateIcon />
+          </button>
+          <button
+            type="button"
+            className={`voice-btn ${voice.conversation ? "on" : ""}`}
+            onClick={voice.toggleConversation}
+            aria-pressed={voice.conversation}
+            aria-label={voice.conversation ? "End the voice conversation" : "Talk to AIC"}
+            title={voice.conversation ? "End the voice conversation" : "Talk to AIC: speak, AIC answers aloud"}
+          >
+            <WaveIcon />
           </button>
           <button
             type="submit"

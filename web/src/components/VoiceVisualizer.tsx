@@ -18,7 +18,13 @@ const BARS = 36;
 const COLOR = { you: "#2a56a8", aic: "#7a4a2a", aicSoft: "#c98f55", thinking: "#5f4636", idle: "#8a7458" };
 const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 
-export function VoiceVisualizer(p: { presence: Presence; listening: boolean; onMic: () => void }) {
+export function VoiceVisualizer(p: {
+  presence: Presence;
+  listening: boolean;
+  onMic: () => void;
+  /** The line and the words only, no mic button (the AIC screen's voice bar; the button is in the message box). */
+  bare?: boolean;
+}) {
   const speaker = speakerOf(p.presence);
   const canvas = useRef<HTMLCanvasElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
@@ -120,22 +126,26 @@ export function VoiceVisualizer(p: { presence: Presence; listening: boolean; onM
         ? "AIC is talking"
         : speaker === "thinking"
           ? "AIC is thinking…"
-          : "Tap the mic or type";
+          : p.bare
+            ? "Your turn: just talk"
+            : "Tap the mic or type";
   return (
-    <div className={`voice voice-${speaker}`} ref={wrap} data-speaker={speaker}>
+    <div className={`voice voice-${speaker}${p.bare ? " voice-bare" : ""}`} ref={wrap} data-speaker={speaker}>
       <div className="voice-strip">
         <canvas ref={canvas} aria-hidden="true" />
       </div>
       <div className="voice-row">
-        <button
-          type="button"
-          className={`mic ${p.listening ? "on" : ""}`}
-          onClick={p.onMic}
-          aria-pressed={p.listening}
-          aria-label={p.listening ? "Stop listening" : "Talk to AIC"}
-        >
-          <MicIcon size={26} />
-        </button>
+        {p.bare ? null : (
+          <button
+            type="button"
+            className={`mic ${p.listening ? "on" : ""}`}
+            onClick={p.onMic}
+            aria-pressed={p.listening}
+            aria-label={p.listening ? "Stop listening" : "Talk to AIC"}
+          >
+            <MicIcon size={26} />
+          </button>
+        )}
         <p className="voice-label">
           {speaker === "you" || speaker === "aic" ? (
             <span className="voice-who" aria-hidden="true">

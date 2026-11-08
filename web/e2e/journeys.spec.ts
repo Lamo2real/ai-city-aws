@@ -183,7 +183,7 @@ test("lands on AIC with the input focused; asking something shows AIC's streamed
   await expect
     .poll(() => m.calls.find((c) => c.path === "/messages")?.body)
     .toMatchObject({ text: "yo AIC, what's 9 + 9?", conversation: "main" });
-  await expect(page.locator("section.ace").getByRole("img", { name: "AIC is thinking" })).toBeVisible();
+  await expect(page.locator(".msg-pending")).toBeVisible(); // AIC's status row while it works
   m.send({ type: "ace.reply", conversation: "main", text: "Eigh", done: false });
   m.send({ type: "ace.reply", conversation: "main", text: "Eighteen.", done: true });
   await expect(page.getByLabel("Conversation with AIC").getByText("Eighteen.")).toBeVisible();
@@ -229,45 +229,45 @@ test("push-to-talk sends what the owner said to AIC", async ({ page }) => {
     .toMatchObject({ text: "hey AIC, what's the status of the product?" });
 });
 
-test("the voice strip shows clearly who is talking: the owner, then AIC", async ({ page }) => {
+test("one voice button: the conversation stays on, the voice bar shows who is talking, a second tap ends it", async ({
+  page,
+}) => {
   const m = await mockBackend(page);
   await page.addInitScript(() => {
     (window as unknown as { __micHold: boolean }).__micHold = true;
     (window as unknown as { __speakMs: number }).__speakMs = 4000;
   });
   await page.goto("/");
+  // Only the chat: no left column, no hands-free switch, no Speak replies choices, no voice bar until it is on.
+  await expect(page.locator(".ace-stage")).toHaveCount(0);
+  await expect(page.getByRole("checkbox")).toHaveCount(0);
+  await expect(page.getByRole("radio")).toHaveCount(0);
+  await expect(page.locator(".voice")).toHaveCount(0);
+  const button = page.getByRole("button", { name: "Talk to AIC", exact: true });
+  await expect(button).toHaveAttribute("aria-pressed", "false");
+  await button.click();
   const strip = page.locator(".voice");
-  await expect(strip).toHaveAttribute("data-speaker", "idle");
-  // The eye is the owner's plain drawing: one ink colour, no motion, whatever the state.
-  const eye = () =>
-    page.locator("section.ace .eye-shape").evaluate((e) => {
-      const look = (n: Element) => getComputedStyle(n);
-      return [look(e).backgroundColor, look(e).animationName, look(e.parentElement!).animationName, look(e).transform];
-    });
-  const plain = await eye();
-  expect(plain.slice(1)).toEqual(["none", "none", "none"]);
-  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
   await expect(strip).toHaveAttribute("data-speaker", "you");
   await expect(strip.getByRole("status")).toHaveText("Listening to you");
   await expect(strip.getByText("You’re talking")).toBeVisible(); // the fake mic is loud
-  await expect(page.getByRole("button", { name: "Stop listening" })).toHaveAttribute("aria-pressed", "true");
-  expect(await eye()).toEqual(plain);
+  const end = page.getByRole("button", { name: "End the voice conversation" });
+  await expect(end).toHaveAttribute("aria-pressed", "true");
   await shot(page, "ace-you-talking");
-  await page.getByRole("button", { name: "Stop listening" }).click();
-  await expect(strip).toHaveAttribute("data-speaker", "idle");
+  await noSeriousA11y(page, "AIC in a voice conversation");
 
-  await page.getByRole("radio", { name: "Always" }).check(); // typed messages are answered silently otherwise
+  // AIC's answer in the conversation is spoken, and the bar says so.
   await page.getByRole("textbox", { name: "Message to AIC" }).fill("status?");
   await page.keyboard.press("Enter");
-  await expect(strip).toHaveAttribute("data-speaker", "thinking");
   await expect.poll(() => m.calls.some((c) => c.path === "/messages")).toBe(true);
-  await expect(page.getByText(/Not sent yet/)).toHaveCount(0);
   m.send({ type: "ace.reply", conversation: "main", text: "All quiet. Nothing needs you.", done: true });
   await expect(strip).toHaveAttribute("data-speaker", "aic");
   await expect(strip.getByRole("status")).toHaveText("AIC is talking");
-  expect(await eye()).toEqual(plain);
   await shot(page, "ace-aic-talking");
-  await noSeriousA11y(page, "AIC talking");
+
+  // A second tap ends it: AIC stops, the mic closes, the bar goes.
+  await end.click();
+  await expect(strip).toHaveCount(0);
+  await expect(button).toHaveAttribute("aria-pressed", "false");
 });
 
 test("a microphone failure names the real cause and logs it to the console", async ({ page }) => {
@@ -278,7 +278,9 @@ test("a microphone failure names the real cause and logs it to the console", asy
   await page.goto("/");
   await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Microphone access is blocked for this site");
-  await expect(page.locator(".voice")).toHaveAttribute("data-speaker", "idle");
+  // The conversation ends with the failure: the button is off again and the voice bar is gone.
+  await expect(page.getByRole("button", { name: "Talk to AIC", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator(".voice")).toHaveCount(0);
   expect(
     logged.some((t) => t.includes("[AIC voice] the microphone could not start:") && t.includes("NotAllowedError")),
   ).toBe(true);
@@ -341,12 +343,11 @@ test("with reduced motion the reply appears directly, without the typing effect"
   });
 });
 
-test("AIC answers aloud only when it was asked by voice", async ({ page }) => {
+test("typed and dictated messages get text; the voice conversation gets speech", async ({ page }) => {
   const m = await mockBackend(page);
   await page.addInitScript(() => ((window as unknown as { __heard: string }).__heard = "hey AIC, status?"));
   await page.goto("/");
   const spoken = () => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []);
-  await expect(page.getByRole("radio", { name: "When I talk" })).toBeChecked(); // the default: only when I talk
 
   // Typed: a text-only answer.
   await page.getByRole("textbox", { name: "Message to AIC" }).fill("status?");
@@ -357,16 +358,16 @@ test("AIC answers aloud only when it was asked by voice", async ({ page }) => {
   await page.waitForTimeout(300);
   expect(await spoken()).toEqual([]);
 
-  // Talk and send (the default mic mode): spoken back.
+  // The voice conversation: spoken back.
   await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(2);
+  expect(m.calls.filter((c) => c.path === "/messages")[1]?.body).toMatchObject({ voice: true });
+  await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "stop listening"));
   m.send({ type: "ace.reply", conversation: "main", text: "Spoken answer.", done: true });
   await expect.poll(spoken).toEqual(["Spoken answer."]);
 });
 
-test("Dictate: words land in the box live, nothing is sent until Send; an untouched dictation counts as voice", async ({
-  page,
-}) => {
+test("Dictate: words land in the box live, nothing is sent until Send, and the answer is text", async ({ page }) => {
   const m = await mockBackend(page);
   await page.addInitScript(() => {
     const w = window as unknown as { __partials: string[]; __heard: string; __micHold: boolean };
@@ -382,26 +383,13 @@ test("Dictate: words land in the box live, nothing is sent until Send; an untouc
   await shot(page, "ace-dictating");
   await page.getByRole("button", { name: "Stop dictating" }).click();
   expect(m.calls.filter((c) => c.path === "/messages")).toHaveLength(0); // nothing sent by itself
+  await box.press("End");
+  await box.pressSequentially(" tomorrow"); // the owner can fix the words before sending
   await page.getByRole("button", { name: "Send to AIC" }).click();
   await expect
     .poll(() => m.calls.find((c) => c.path === "/messages")?.body)
-    .toMatchObject({ text: "remind me to call the bank" });
-  m.send({ type: "ace.reply", conversation: "main", text: "I'll remind you.", done: true });
-  await expect
-    .poll(() => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []))
-    .toEqual(["I'll remind you."]);
-
-  // An edited dictation is a typed message, answered silently.
-  await page.reload();
-  await page.getByRole("button", { name: "Dictate into the box" }).click();
-  await expect(box).toHaveValue("remind me to call the bank");
-  await page.getByRole("button", { name: "Stop dictating" }).click();
-  await box.press("End");
-  await box.pressSequentially(" tomorrow");
-  await page.getByRole("button", { name: "Send to AIC" }).click();
-  await expect
-    .poll(() => m.calls.filter((c) => c.path === "/messages").at(-1)?.body)
     .toMatchObject({ text: "remind me to call the bank tomorrow" });
+  expect(m.calls.find((c) => c.path === "/messages")?.body).not.toHaveProperty("voice");
   m.send({ type: "ace.reply", conversation: "main", text: "Tomorrow it is.", done: true });
   await expect(page.getByLabel("Conversation with AIC").getByText("Tomorrow it is.")).toBeVisible();
   await page.waitForTimeout(300);
@@ -434,7 +422,7 @@ test("a spoken reply starts with its first sentence while the rest still streams
     done: true,
   });
   await expect.poll(spoken).toEqual(["All quiet in the city.", "Research has three workers.", "See the plan."]); // no code read out
-  await expect(page.locator(".voice")).toHaveAttribute("data-speaker", "idle");
+  await expect(page.locator(".voice")).toHaveCount(0); // "stop listening" ended the conversation
 });
 
 test("a three-sentence streamed reply plays three clips, in order, once each; Send cuts AIC off", async ({ page }) => {
@@ -459,8 +447,11 @@ test("a three-sentence streamed reply plays three clips, in order, once each; Se
   await page.waitForTimeout(700); // nothing more comes later
   expect(await w()).toEqual({ spoken: all, overlaps: 0 });
 
-  // A long reply to a typed "always" ask: the owner types and sends while AIC talks, and AIC stops.
-  await page.getByRole("radio", { name: "Always" }).check();
+  // A long reply in a new conversation: the owner types and sends while AIC talks, and AIC stops.
+  await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "status?"));
+  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(2);
+  await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "stop listening"));
   await page.getByRole("textbox", { name: "Message to AIC" }).fill("status?");
   await page.keyboard.press("Enter");
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(2);
@@ -707,7 +698,7 @@ test("the message box starts one line tall, grows with more lines up to a limit,
   expect(await height()).toBe(oneLine);
 });
 
-test("speech to speech: a spoken question gets a spoken answer, and the mic reopens until 'stop listening'", async ({
+test("speech to speech: AIC answers aloud, the mic opens again by itself, until 'stop listening' or a tap", async ({
   page,
 }) => {
   const m = await mockBackend(page);
@@ -719,36 +710,40 @@ test("speech to speech: a spoken question gets a spoken answer, and the mic reop
   const strip = page.locator(".voice");
   await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
-  // Whatever the mic hears next ends the conversation.
-  await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "stop listening"));
+  // The next thing the mic hears is a second question.
+  await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "and the costs?"));
   m.send({ type: "ace.reply", conversation: "main", text: "All quiet. Nothing needs you.", done: true });
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []), {
-      intervals: [50], // the second clip plays for 0.7 s after a short pause
+      intervals: [50],
     })
-    .toEqual(["All quiet.", "Nothing needs you."]); // the reply is spoken, sentence by sentence, no typing
-  await expect(strip).toHaveAttribute("data-speaker", "aic");
-  await expect(page.getByRole("button", { name: "Talk to AIC", exact: true })).toBeVisible(); // not listening while it talks
-  // AIC finished talking: the mic reopens by itself for the owner's next sentence.
-  await expect(strip).toHaveAttribute("data-speaker", "you");
-  await expect(page.getByRole("button", { name: "Stop listening" })).toBeVisible();
-  // It hears "stop listening": the conversation ends and nothing is sent.
-  await expect(strip).toHaveAttribute("data-speaker", "idle");
-  await page.waitForTimeout(200);
-  expect(m.calls.filter((c) => c.path === "/messages")).toHaveLength(1);
+    .toEqual(["All quiet.", "Nothing needs you."]); // spoken, sentence by sentence, no typing
+  await expect(strip).toHaveAttribute("data-speaker", "aic"); // the mic is closed while AIC talks
+  // AIC finished: the mic opens again and the second question goes out without a tap.
+  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(2);
+  expect(m.calls.filter((c) => c.path === "/messages")[1]?.body).toMatchObject({ text: "and the costs?", voice: true });
+  await expect(page.getByRole("button", { name: "End the voice conversation" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
 
-  // A typed message never reopens the mic, and its reply stays silent under "Only when I talk".
+  // "stop listening" ends it, and is not sent.
+  await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "stop listening"));
+  m.send({ type: "ace.reply", conversation: "main", text: "About two dollars.", done: true });
+  await expect(strip).toHaveCount(0);
+  await page.waitForTimeout(300);
+  expect(m.calls.filter((c) => c.path === "/messages")).toHaveLength(2);
+  await expect(page.getByRole("button", { name: "Talk to AIC", exact: true })).toHaveAttribute("aria-pressed", "false");
+
+  // Outside the conversation a typed message is answered in text, and the mic stays closed.
   await page.getByRole("textbox", { name: "Message to AIC" }).fill("hello");
   await page.keyboard.press("Enter");
-  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(2);
+  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(3);
   m.send({ type: "ace.reply", conversation: "main", text: "Hi.", done: true });
   await expect(page.getByLabel("Conversation with AIC").getByText("Hi.")).toBeVisible();
   await page.waitForTimeout(400);
-  expect(await page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken)).toEqual([
-    "All quiet.",
-    "Nothing needs you.",
-  ]);
-  await expect(strip).toHaveAttribute("data-speaker", "idle");
+  expect(await page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken)).not.toContain("Hi.");
+  await expect(strip).toHaveCount(0);
 });
 
 test("'speaking' shows only while sound plays, and a voice that fails says why", async ({ page }) => {
@@ -769,7 +764,7 @@ test("'speaking' shows only while sound plays, and a voice that fails says why",
   await expect(strip).not.toHaveAttribute("data-speaker", "aic");
   // The clip starts playing: now it is.
   await expect(strip).toHaveAttribute("data-speaker", "aic");
-  await expect(strip).not.toHaveAttribute("data-speaker", "aic", { timeout: 8000 }); // and it ends
+  await expect(strip).toHaveCount(0, { timeout: 8000 }); // it ends, and "stop listening" ends the conversation
 
   // Polly refuses: the voice line says so in plain words, and nothing pretends to speak.
   await page.evaluate(() => {
@@ -786,7 +781,7 @@ test("'speaking' shows only while sound plays, and a voice that fails says why",
   });
   m.send({ type: "ace.reply", conversation: "main", text: "Still quiet.", done: true });
   await expect(page.getByRole("alert")).toContainText("AIC's voice could not play (AccessDeniedException");
-  await expect(strip).not.toHaveAttribute("data-speaker", "aic");
+  await expect(page.locator('.voice[data-speaker="aic"]')).toHaveCount(0);
 
   // The Test voice button reports the same failure, exactly.
   await page.goto("/#/settings");
@@ -1213,13 +1208,4 @@ test("the + menu: files ride along with the message, slash commands become plain
   // The file stays in Knowledge afterwards.
   await page.goto("/#/knowledge");
   await expect(page.getByRole("listitem").filter({ hasText: "brief.pdf" })).toBeVisible();
-});
-
-test("Speak replies: three choices with no lines between them; the pill marks the one that is on", async ({ page }) => {
-  await mockBackend(page);
-  await page.goto("/");
-  const labels = page.locator(".speak-mode .seg label");
-  await expect(labels).toHaveCount(3);
-  for (let i = 0; i < 3; i++)
-    expect(await labels.nth(i).evaluate((el) => getComputedStyle(el).borderLeftWidth)).toBe("0px");
 });

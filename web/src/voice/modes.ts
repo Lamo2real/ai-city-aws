@@ -26,7 +26,9 @@ const write = (k: string, v: string) => {
 
 export function readSpeakMode(): SpeakMode {
   const v = read(SPEAK_KEY);
-  if (v === "auto" || v === "always" || v === "never") return v;
+  // "always" (spoken answers to typed messages) is gone with the voice button (decision 112): typed is text.
+  if (v === "auto" || v === "never") return v;
+  if (v === "always") return "auto";
   return read(OLD_SOUND_KEY) === "off" ? "never" : "auto"; // a muted owner stays muted; everyone else gets the new default
 }
 export const saveSpeakMode = (m: SpeakMode) => write(SPEAK_KEY, m);

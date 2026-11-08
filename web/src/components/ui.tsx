@@ -237,6 +237,14 @@ export function ClearIcon({ size = 20 }: { size?: number }) {
     </svg>
   );
 }
+/** Voice conversation: a small waveform (Claude's voice-mode mark). */
+export function WaveIcon({ size = 22 }: { size?: number }) {
+  return (
+    <svg {...icon} width={size} height={size} strokeLinecap="round">
+      <path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 10v4" />
+    </svg>
+  );
+}
 // The + menu's icons (PlusMenu.tsx).
 export function PlusIcon({ size = 24 }: { size?: number }) {
   return (

@@ -506,46 +506,20 @@ main {
   padding-top: 0;
 }
 .ace {
-  max-width: 1240px;
+  /* Only the chat (decision 112): one centred column the height of the screen, under the floating top bar. */
+  max-width: 960px;
   margin: 0 auto;
   padding: var(--s5);
-  /* Exactly the area under the top bar: the chat panel runs from the top to the bottom of it. */
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); /* a slim voice column; the chat gets the room */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
-  gap: var(--s5);
   color: var(--gtext);
 }
 .ace ::selection {
   background: #f4c63c;
   color: var(--text);
-}
-/* The stage: a small eye at the start of the voice line, then the mic row and the switches under them. */
-.ace-stage {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
-  align-items: start;
-  column-gap: var(--s3);
-  row-gap: var(--s4);
-  align-self: start;
-  position: sticky;
-  top: 0;
-  padding-top: calc(var(--top-h, 64px) + var(--s5));
-}
-.ace-stage > :not(.eyes):not(.voice) {
-  grid-column: 1 / -1;
-}
-.ace .eyes {
-  --eye: var(--paper3);
-  margin-top: 24px; /* centred on the 72px line beside it (the eye is 44 × 24) */
-}
-.ace .eyes-small .eye-pair {
-  width: 44px;
-}
-.ace .voice-strip {
-  height: 72px;
 }
 /* the voice strip */
 .voice {
@@ -630,83 +604,6 @@ main {
 .voice-aic .voice-who {
   background: var(--wood);
 }
-.ace .toggles {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  align-items: flex-start;
-  padding: 0 var(--s2);
-}
-/* Speak replies: three choices as one segmented glass control (no browser select). */
-.speak-mode {
-  border: 0;
-  margin: var(--s2) 0 0;
-  padding: 0;
-  min-width: 0;
-}
-.speak-mode legend {
-  font-size: var(--fs-s);
-  font-weight: 700;
-  margin-bottom: var(--s1);
-}
-.speak-mode .seg {
-  --i: 0; /* which option is on; AceScreen sets it */
-  position: relative;
-  display: inline-grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr; /* three equal cells, so the pill is one cell wide wherever it sits */
-  border: 1px solid var(--edge-2);
-  border-radius: 999px;
-  overflow: hidden;
-  background: var(--glass);
-  box-shadow: var(--glow);
-}
-/* The amber pill: one element that glides to the chosen option instead of three that switch. */
-.speak-mode .seg::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: calc(100% / 3);
-  border-radius: 999px;
-  background: linear-gradient(180deg, rgba(249, 201, 118, 0.96), rgba(232, 163, 61, 0.96));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
-  transform: translateX(calc(var(--i) * 100%));
-  transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.speak-mode .seg label {
-  position: relative;
-  z-index: 1;
-  min-height: var(--tap);
-  padding: 0 var(--s3);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--fs-s);
-  font-weight: 700;
-  color: var(--gtext);
-  transition: color 0.32s ease;
-}
-.speak-mode .seg label.on {
-  color: #2a1a08;
-}
-@media (prefers-reduced-motion: reduce) {
-  .speak-mode .seg::before,
-  .speak-mode .seg label {
-    transition: none;
-  }
-}
-.speak-mode .seg input {
-  position: absolute;
-  opacity: 0;
-  inset: 0;
-  margin: 0;
-}
-.speak-mode .seg label:has(input:focus-visible) {
-  outline: 3px solid var(--gfocus);
-  outline-offset: -3px;
-}
 .switch {
   display: inline-flex;
   align-items: center;
@@ -717,61 +614,6 @@ main {
   width: 22px;
   height: 22px;
   accent-color: var(--amber);
-}
-/* The hands-free toggle: a glass track whose knob slides and turns amber when on (the pill's gradient). */
-.toggle {
-  position: relative;
-  gap: var(--s3);
-  font-weight: 700;
-}
-.toggle input {
-  position: absolute;
-  opacity: 0;
-  width: 1px;
-  height: 1px;
-  margin: 0;
-}
-.toggle-track {
-  position: relative;
-  width: 46px;
-  height: 26px;
-  border-radius: 999px;
-  border: 1px solid var(--edge-2);
-  background: var(--glass);
-  box-shadow: var(--glow);
-  transition:
-    background 0.25s ease,
-    border-color 0.25s ease;
-}
-.toggle-knob {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 20px;
-  height: 20px;
-  border-radius: 999px;
-  background: var(--gsoft);
-  transition:
-    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-    background 0.25s ease;
-}
-.toggle input:checked + .toggle-track {
-  background: linear-gradient(180deg, rgba(249, 201, 118, 0.96), rgba(232, 163, 61, 0.96));
-  border-color: rgba(255, 255, 255, 0.3);
-}
-.toggle input:checked + .toggle-track .toggle-knob {
-  transform: translateX(20px);
-  background: #2a1a08;
-}
-.toggle input:focus-visible + .toggle-track {
-  outline: 3px solid var(--gfocus);
-  outline-offset: 2px;
-}
-@media (prefers-reduced-motion: reduce) {
-  .toggle-track,
-  .toggle-knob {
-    transition: none;
-  }
 }
 
 /* the conversation */
@@ -800,25 +642,23 @@ main {
 .talk-notes:empty {
   display: none;
 }
-@media (min-width: 900px) {
-  /* Side by side: the panel's top is under the bar; the first message and the banners start below it. */
-  .view-ace .talk {
-    border-top: 0;
-    border-top-left-radius: 0;
-    border-top-right-radius: 0;
-  }
-  .view-ace .chat {
-    padding-top: calc(var(--top-h, 64px) + var(--tap) + var(--s3)); /* below the bar and the clear button */
-  }
-  .view-ace .talk-notes:not(:empty) {
-    padding-top: calc(var(--top-h, 64px) + var(--s3));
-  }
-  .view-ace .talk-notes:not(:empty) + .chat {
-    padding-top: var(--s5);
-  }
-  .view-ace .talk-clear {
-    top: calc(var(--top-h, 64px) + var(--s2));
-  }
+/* The panel's top is under the bar; the first message and the banners start below it. */
+.view-ace .talk {
+  border-top: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+.view-ace .chat {
+  padding-top: calc(var(--top-h, 64px) + var(--tap) + var(--s3)); /* below the bar and the clear button */
+}
+.view-ace .talk-notes:not(:empty) {
+  padding-top: calc(var(--top-h, 64px) + var(--s3));
+}
+.view-ace .talk-notes:not(:empty) + .chat {
+  padding-top: var(--s5);
+}
+.view-ace .talk-clear {
+  top: calc(var(--top-h, 64px) + var(--s2));
 }
 .icon-btn {
   width: var(--tap);
@@ -1135,7 +975,61 @@ main {
 }
 /* The + menu (PlusMenu.tsx): a round glass button at the left of the box, its menu opening upwards. */
 .composer {
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+}
+/* The voice button: the conversation's switch. Quiet glass when off, the brand's amber while it is on. */
+.voice-btn {
+  width: 52px;
+  height: 52px;
+  border: 1px solid var(--edge-2);
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: var(--glass-2);
+  color: var(--gtext);
+  box-shadow: var(--glow);
+  transition:
+    background 0.25s ease,
+    color 0.25s ease;
+}
+.voice-btn.on {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: linear-gradient(180deg, rgba(249, 201, 118, 0.96), rgba(232, 163, 61, 0.96));
+  color: #2a1a08;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 10px 24px -12px rgba(232, 163, 61, 0.9);
+}
+/* The voice bar above the message box while the conversation is on: the moving line and who is talking. */
+.voice-bare {
+  padding: var(--s2) var(--s5) 0;
+  border-top: 1px solid var(--edge);
+  background: var(--glass);
+}
+.voice-bare .voice-strip {
+  height: 56px;
+}
+.voice-bare .voice-row {
+  justify-content: center;
+  padding: 0;
+  min-height: 0;
+}
+@media (max-width: 599px) {
+  /* Five controls on a phone: smaller squares so the message box keeps room to type. */
+  .composer {
+    gap: var(--s2);
+    padding: var(--s2) var(--s3) var(--s3);
+  }
+  .composer :is(.plus-btn, .dictate, .voice-btn, .send) {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .voice-btn {
+    transition: none;
+  }
 }
 .plus {
   position: relative;
@@ -1314,21 +1208,7 @@ main {
 }
 @media (max-width: 899px) {
   .ace {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr); /* the eye and voice line, then the chat to the bottom */
     padding: var(--s3);
-    gap: var(--s4);
-  }
-  .ace-stage {
-    position: static;
-    padding-top: calc(var(--top-h, 64px) + var(--s2));
-    gap: var(--s3);
-  }
-  .ace .eyes {
-    margin-top: 20px; /* centred on the 64px line */
-  }
-  .ace .voice-strip {
-    height: 64px;
   }
   .voice-row {
     padding: 0;
@@ -1337,14 +1217,6 @@ main {
   .voice .mic {
     width: 52px;
     height: 52px;
-  }
-  .ace .toggles {
-    flex-direction: row;
-    flex-wrap: wrap;
-    column-gap: var(--s4);
-  }
-  .ace .toggles {
-    padding: 0;
   }
   .talk {
     min-height: 320px; /* very short screens scroll the page rather than squash the chat */
@@ -2766,7 +2638,7 @@ input[type="range"],
 /* Buttons, links and chips fade a little (never below 4.5:1 for their text); whole rows lift their fill instead,
    because fading a row would dim the muted words in it. */
 @media (hover: hover) {
-  :is(a, button, summary, [role="button"], label.switch, .scope label, .speak-mode .seg label, .file-pick):not(
+  :is(a, button, summary, [role="button"], label.switch, .scope label, .file-pick):not(
       :disabled,
       [aria-disabled="true"],
       .listrow,
@@ -2776,7 +2648,7 @@ input[type="range"],
     ):hover {
     opacity: 0.85;
   }
-  :is(a, button, summary, [role="button"], label.switch, .scope label, .speak-mode .seg label, .file-pick):not(
+  :is(a, button, summary, [role="button"], label.switch, .scope label, .file-pick):not(
       :disabled,
       [aria-disabled="true"],
       .listrow,
