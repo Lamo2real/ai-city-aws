@@ -143,3 +143,22 @@ test("phone: Needs you and Work read well at 412px, with big answer buttons", as
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await noSeriousA11y(page, "Work at 412px");
 });
+
+test("phone: the + menu opens upwards inside the screen and its rows are easy to tap", async ({ page }) => {
+  await mockBackend(page);
+  await page.goto("/");
+  const plus = page.getByRole("button", { name: "Add to your message" });
+  await plus.click();
+  const menu = page.getByRole("menu", { name: "Add to your message" });
+  await expect(menu).toBeInViewport({ ratio: 1 });
+  const menuBox = (await menu.boundingBox())!;
+  const plusBox = (await plus.boundingBox())!;
+  expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(plusBox.y + 1);
+  for (const item of await menu.getByRole("menuitem").all())
+    expect((await item.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await page.screenshot({ path: `${SHOTS}/phone-plus-menu.png` });
+  await noSeriousA11y(page, "AIC at 412px with the + menu open");
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(plus).toBeFocused();
+});

@@ -1091,3 +1091,126 @@ test("knowledge: add files, paste a link, change how it's used, delete with Undo
   expect(m.calls.find((c) => c.method === "DELETE")?.path).toMatch(/^\/knowledge\/k-/);
   await expect(row("photo.png")).toHaveCount(0);
 });
+
+test("the + menu: files ride along with the message, slash commands become plain words, connectors and plugins listed", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  m.skills.push({
+    name: "pdf-report",
+    description: "Makes a PDF report",
+    roles: ["ace"],
+    enabled: true,
+    version: "v1",
+    files: [],
+    size_bytes: 10,
+    updated_at: at(),
+  });
+  m.connectors.push({ id: "heygen", label: "HeyGen", status: "ready", tools: [{ name: "make_video" }] });
+  await page.goto("/");
+  const box = page.getByRole("textbox", { name: "Message to AIC" });
+  const plus = page.getByRole("button", { name: "Add to your message" });
+  await expect(plus).toBeVisible();
+  await expect(plus).toHaveAttribute("aria-expanded", "false");
+
+  // The menu opens upwards with the five things Claude's own composer offers.
+  await plus.click();
+  const menu = page.getByRole("menu", { name: "Add to your message" });
+  await expect(menu.getByRole("menuitem")).toHaveText([
+    /Add files or photos/,
+    /Add folders/,
+    /Slash commands/,
+    /Connectors1 connected/,
+    /Plugins1 skills/,
+  ]);
+  const menuBox = (await menu.boundingBox())!;
+  const plusBox = (await plus.boundingBox())!;
+  expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(plusBox.y + 1); // a drop-up, above the button
+  await shot(page, "plus-menu");
+  await noSeriousA11y(page, "AIC with the + menu open");
+
+  // Connectors: each one with its status; "Add a connector…" writes the sentence with the name selected.
+  await menu.getByRole("menuitem", { name: /Connectors/ }).click();
+  await expect(menu.getByRole("menuitem", { name: /HeyGen/ })).toContainText("On · 1 tools");
+  await menu.getByRole("menuitem", { name: /Add a connector/ }).click();
+  await expect(box).toHaveValue("Add ___ as a connector");
+  await expect(box).toBeFocused();
+  expect(await box.evaluate((el: HTMLTextAreaElement) => [el.selectionStart, el.selectionEnd])).toEqual([4, 7]);
+  await page.keyboard.type("HeyGen");
+  await expect(box).toHaveValue("Add HeyGen as a connector");
+  await box.fill("");
+
+  // Plugins are the skills; picking one puts its slash command in front of the message.
+  await plus.click();
+  await menu.getByRole("menuitem", { name: /Plugins/ }).click();
+  await menu.getByRole("menuitem", { name: /pdf-report/ }).click();
+  await expect(box).toHaveValue("/pdf-report ");
+  await expect(box).toBeFocused();
+  await page.keyboard.type("one for Q3");
+  await page.getByRole("button", { name: "Send to AIC" }).click();
+  await expect
+    .poll(() => m.calls.filter((c) => c.path === "/messages").at(-1)?.body)
+    .toMatchObject({ text: "Use the “pdf-report” skill: one for Q3" });
+
+  // Typing "/" lists the commands; one without its words asks for them instead of sending.
+  await box.fill("/st");
+  const pop = page.getByRole("list", { name: "Slash commands" });
+  await expect(pop.getByRole("button")).toHaveText([/\/status/, /\/stop/]);
+  await pop.getByRole("button", { name: /\/status/ }).click();
+  await expect(box).toHaveValue("/status ");
+  await expect(box).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => m.calls.filter((c) => c.path === "/messages").at(-1)?.body)
+    .toMatchObject({ text: "What's the status of the city?" });
+  await box.fill("/connect");
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("Add the service after /connect")).toBeVisible();
+  await expect(box).toHaveValue("/connect");
+  await box.fill("");
+
+  // Files go into the knowledge base; the chips show their status; the message names them for AIC.
+  await plus.click();
+  await menu.getByRole("menuitem", { name: /Add files or photos/ }).click();
+  await page
+    .locator(".plus input[type=file]")
+    .first()
+    .setInputFiles([
+      { name: "brief.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.7 brief") },
+      { name: "whiteboard.png", mimeType: "image/png", buffer: Buffer.from("png") },
+    ]);
+  const chips = page.getByRole("list", { name: "Attached to your message" });
+  await expect(chips.getByRole("listitem")).toHaveCount(2);
+  await expect(chips.getByRole("listitem").filter({ hasText: "brief.pdf" }).getByRole("status")).toHaveText("Ready");
+  await expect(chips.getByRole("listitem").filter({ hasText: "whiteboard.png" }).getByRole("status")).toHaveText(
+    "Ready",
+  );
+  expect(m.knowledge.puts).toHaveLength(2);
+  await shot(page, "plus-attached");
+  // Removing a chip deletes the item it made.
+  await chips.getByRole("button", { name: "Remove whiteboard.png" }).click();
+  await expect(chips.getByRole("listitem")).toHaveCount(1);
+  await expect
+    .poll(() => m.calls.filter((c) => c.method === "DELETE" && c.path.startsWith("/knowledge/")).length)
+    .toBe(1);
+  await box.fill("What does the brief ask for?");
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => m.calls.filter((c) => c.path === "/messages").at(-1)?.body)
+    .toMatchObject({
+      text: "What does the brief ask for?\n\nAttached (now in my knowledge base): “brief.pdf” (document, ready).",
+    });
+  await expect(chips).toHaveCount(0);
+  // The file stays in Knowledge afterwards.
+  await page.goto("/#/knowledge");
+  await expect(page.getByRole("listitem").filter({ hasText: "brief.pdf" })).toBeVisible();
+});
+
+test("Speak replies: three choices with no lines between them; the pill marks the one that is on", async ({ page }) => {
+  await mockBackend(page);
+  await page.goto("/");
+  const labels = page.locator(".speak-mode .seg label");
+  await expect(labels).toHaveCount(3);
+  for (let i = 0; i < 3; i++)
+    expect(await labels.nth(i).evaluate((el) => getComputedStyle(el).borderLeftWidth)).toBe("0px");
+});

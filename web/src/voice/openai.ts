@@ -13,7 +13,8 @@ export interface OpenAiStatus {
   key_saved_at: string | null;
 }
 
-export const OPENAI_DEFAULT_VOICE = "alloy";
+/** Closest to ChatGPT's Sol (the server's `default` wins when it answers). */
+export const OPENAI_DEFAULT_VOICE = "marin";
 const VOICE_KEY = "aic.openaiVoice";
 
 let status: OpenAiStatus | null = null;

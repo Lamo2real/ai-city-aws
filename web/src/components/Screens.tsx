@@ -632,7 +632,7 @@ function VoiceSettings() {
       <h2>AIC's voice</h2>
       <p className="mute">
         {onOpenAi
-          ? "OpenAI's voice. The choice is remembered on this device."
+          ? "OpenAI's voice, styled after ChatGPT's Sol. The choice is remembered on this device."
           : "Natural, human-sounding voices. The choice is remembered on this device."}
       </p>
       <label className="field">
@@ -648,7 +648,7 @@ function VoiceSettings() {
           >
             {openai.voices.map((v) => (
               <option key={v} value={v}>
-                {v[0]!.toUpperCase() + v.slice(1) + (v === openai.default ? " (OpenAI's default)" : "")}
+                {v[0]!.toUpperCase() + v.slice(1) + (v === openai.default ? " (closest to ChatGPT's Sol)" : "")}
               </option>
             ))}
           </select>

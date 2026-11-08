@@ -3,6 +3,18 @@
 import { ChatCards } from "./ConnectCard.tsx";
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { sendMessage } from "../lib/actions.ts";
+import { knowledgeApi } from "../lib/api.ts";
+import {
+  allCommands,
+  attachedLine,
+  expandSlash,
+  folderFiles,
+  loadLists,
+  matchCommands,
+  sendable,
+  type Lists,
+} from "../lib/attach.ts";
+import { addFiles, useKnowledge } from "../lib/knowledge.ts";
 import { store, useHud, waitingCount } from "../lib/store.ts";
 import { needsWords } from "../lib/needs.ts";
 import { appendDictation, type SpeakMode } from "../voice/modes.ts";
@@ -10,8 +22,10 @@ import { useVoice } from "../voice/useVoice.ts";
 import { Eyes } from "./Eyes.tsx";
 import { AicStatus, AicSteps } from "./AicStatus.tsx";
 import { stepsRunning } from "../lib/steps.ts";
+import { statusWords } from "./Knowledge.tsx";
+import { PlusMenu, type Insert } from "./PlusMenu.tsx";
 import { StreamedText } from "./StreamedText.tsx";
-import { Banner, ClearIcon, DictateIcon, SendIcon } from "./ui.tsx";
+import { Banner, ClearIcon, DictateIcon, SendIcon, toast } from "./ui.tsx";
 import { VoiceVisualizer } from "./VoiceVisualizer.tsx";
 
 export { MicIcon } from "./ui.tsx";
@@ -48,6 +62,17 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
     },
     onStop: () => setText(base.current),
   });
+  // The + menu: skills and connectors to list, and the files attached to the message being written (they are
+  // knowledge items, so their live status comes from the knowledge store).
+  const [lists, setLists] = useState<Lists | null>(null);
+  const [attached, setAttached] = useState<string[]>([]);
+  const kn = useKnowledge((s) => s);
+  const items = attached.flatMap((id) => kn.items.filter((x) => x.id === id));
+  useEffect(() => {
+    void loadLists().then(setLists);
+  }, []);
+  const commands = allCommands(lists?.skills ?? []);
+  const suggestions = matchCommands(text, commands);
 
   useEffect(() => input.current?.focus(), []);
   // The message box is one line tall until the text needs more, then grows with it (typed or dictated) up to
@@ -77,18 +102,83 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
     if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 120) el.scrollTop = el.scrollHeight;
   };
 
+  const setTyped = (next: string) => {
+    typed.current = true;
+    base.current = next;
+    setText(next);
+  };
+  /** Words from the + menu: a command goes in front (replacing one already there), the rest at the end. */
+  const insert = (words: string, o: Insert) => {
+    const next =
+      o.where === "all"
+        ? words
+        : o.where === "start"
+          ? words + text.replace(/^\/\S*\s?/, "")
+          : (text ? text.replace(/\s*$/, " ") : "") + words;
+    setTyped(next);
+    input.current?.focus(); // now, before the menu unmounts and would drop the focus on the page
+    pendingSelection.current = o.select ?? [next.length, next.length];
+  };
+  const pendingSelection = useRef<[number, number] | null>(null);
+  useLayoutEffect(() => {
+    const sel = pendingSelection.current;
+    if (!sel || !input.current) return;
+    pendingSelection.current = null;
+    input.current.setSelectionRange(sel[0], sel[1]);
+  }, [text]);
+  /** Files or a folder from the + menu: uploaded to the knowledge base, each one a chip under the box. */
+  const onFiles = async (picked: File[], fromFolder: boolean) => {
+    let files = picked;
+    if (fromFolder) {
+      const r = folderFiles(picked);
+      files = r.files;
+      const notes = [
+        r.hidden ? `${r.hidden} hidden ${r.hidden === 1 ? "file was" : "files were"} left out` : "",
+        r.skipped ? `only the first ${files.length} files were added` : "",
+      ].filter(Boolean);
+      if (notes.length) toast({ tone: "info", text: `${notes.join("; ")}.` });
+    }
+    if (!files.length) return;
+    const problems = await addFiles(files, { onCreated: (item) => setAttached((a) => [...a, item.id]) });
+    for (const p of problems) toast({ tone: "bad", text: p });
+    input.current?.focus();
+  };
+  const unattach = (id: string) => {
+    setAttached((a) => a.filter((x) => x !== id));
+    knowledgeApi.remove(id).catch(() => undefined); // it was added for this message only
+  };
+
   const submit = async (e?: FormEvent) => {
     e?.preventDefault();
     const t = text.trim();
-    if (!t) return;
+    if (!t && !items.length) return;
+    if (!sendable(items)) {
+      toast({ tone: "info", text: "Your files are still uploading. Send once they are in." });
+      return;
+    }
+    const slash = expandSlash(t, commands);
+    if (slash?.kind === "clear") {
+      store.set({ chat: [] });
+      setTyped("");
+      return;
+    }
+    if (slash?.kind === "needs") {
+      const c = slash.command;
+      const example = c.name === "connect" ? "HeyGen" : "what you want done";
+      toast({ tone: "info", text: `Add the ${c.arg} after /${c.name}, like “/${c.name} ${example}”.` });
+      return;
+    }
     if (voice.dictating) voice.toggleDictate(); // stop dictating; send what is shown
     // A dictated message counts as voice (AIC may answer aloud) only if the keyboard never touched it.
-    const byVoice = dictated.current && !typed.current;
+    const byVoice = dictated.current && !typed.current && !items.length;
+    let body = slash?.kind === "send" ? slash.text : t;
+    if (items.length) body = `${body || "Take a look at what I attached."}\n\n${attachedLine(items)}`;
     setText("");
     base.current = "";
     typed.current = false;
     dictated.current = false;
-    await sendMessage(t, { voice: byVoice });
+    setAttached([]);
+    await sendMessage(body, { voice: byVoice });
     input.current?.focus();
   };
   const lastLine = chat.at(-1);
@@ -202,6 +292,45 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
           ) : null}
         </div>
         <form className="composer" onSubmit={submit}>
+          {items.length ? (
+            <ul className="attached" aria-label="Attached to your message">
+              {items.map((i) => (
+                <li key={i.id} className={`chip chip-${kn.localError[i.id] ? "failed" : i.status}`}>
+                  <span className="chip-name">{i.title}</span>
+                  <span className="st" role="status">
+                    {statusWords(i, kn.progress[i.id], kn.localError[i.id])}
+                  </span>
+                  <button
+                    type="button"
+                    className="chip-x"
+                    aria-label={`Remove ${i.title}`}
+                    title="Remove"
+                    onClick={() => unattach(i.id)}
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {suggestions.length ? (
+            <ul className="slash-pop" aria-label="Slash commands">
+              {suggestions.slice(0, 8).map((c) => (
+                <li key={c.name}>
+                  <button type="button" className="plus-item" onClick={() => insert(`/${c.name} `, { where: "start" })}>
+                    <span className="plus-ico" aria-hidden>
+                      /
+                    </span>
+                    <span className="plus-words">
+                      {`/${c.name}`}
+                      <span className="hint">{c.hint}</span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <PlusMenu lists={lists} onFiles={(f, folder) => void onFiles(f, folder)} onInsert={insert} go={go} />
           <label className="sr" htmlFor="say">
             Message to AIC
           </label>
@@ -211,11 +340,7 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
             rows={1}
             value={text}
             placeholder={voice.dictating ? "Listening… your words appear here" : "Type your message…"}
-            onChange={(e) => {
-              typed.current = true;
-              base.current = e.target.value;
-              setText(e.target.value);
-            }}
+            onChange={(e) => setTyped(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -233,7 +358,12 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
           >
             <DictateIcon />
           </button>
-          <button type="submit" className="send" aria-label="Send to AIC" disabled={!text.trim()}>
+          <button
+            type="submit"
+            className="send"
+            aria-label="Send to AIC"
+            disabled={(!text.trim() && !items.length) || !sendable(items)}
+          >
             <SendIcon />
           </button>
         </form>

@@ -168,7 +168,10 @@ function refreshSoon() {
 }
 
 /** Uploads every file; resolves with plain sentences for the ones that could not start or finish. */
-export async function addFiles(files: File[], o: Pick<UploadOptions, "put" | "retryDelayMs"> = {}): Promise<string[]> {
+export async function addFiles(
+  files: File[],
+  o: Pick<UploadOptions, "put" | "retryDelayMs" | "onCreated"> = {},
+): Promise<string[]> {
   const problems: string[] = [];
   await Promise.all(
     files.map(async (f) => {
@@ -184,6 +187,7 @@ export async function addFiles(files: File[], o: Pick<UploadOptions, "put" | "re
             id = item.id;
             knowledge.dispatch({ type: "upsert", item });
             knowledge.dispatch({ type: "progress", id, percent: 0 });
+            o.onCreated?.(item);
           },
           onProgress: (percent) => knowledge.dispatch({ type: "progress", id, percent }),
         });

@@ -667,9 +667,6 @@ main {
   color: var(--gtext);
   transition: color 0.32s ease;
 }
-.speak-mode .seg label + label {
-  border-left: 1px solid var(--edge);
-}
 .speak-mode .seg label.on {
   color: #2a1a08;
 }
@@ -1044,6 +1041,172 @@ main {
   color: var(--gsoft);
   border-color: var(--edge);
   box-shadow: none;
+}
+/* The + menu (PlusMenu.tsx): a round glass button at the left of the box, its menu opening upwards. */
+.composer {
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+}
+.plus {
+  position: relative;
+}
+.plus-btn {
+  width: 52px;
+  height: 52px;
+  border: 1px solid var(--edge-2);
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: var(--glass-2);
+  color: var(--gtext);
+  box-shadow: var(--glow);
+}
+.plus-btn.on {
+  background: var(--glass-3, var(--glass-2));
+  color: var(--amber);
+}
+.plus-btn svg {
+  transition: transform 0.25s ease;
+}
+.plus-btn.on svg {
+  transform: rotate(45deg);
+}
+.plus-menu {
+  position: fixed; /* left, bottom, width and max-height are set by PlusMenu from the button's place */
+  z-index: 30;
+  overflow: auto;
+  padding: var(--s2);
+  display: grid;
+  gap: 2px;
+  background: rgba(14, 15, 34, 0.88); /* darker than a panel: it sits over the chat's text */
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1px solid var(--edge-2);
+  border-radius: var(--rg);
+  box-shadow: var(--lift);
+}
+.plus-item {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  gap: var(--s3);
+  align-items: center;
+  text-align: left;
+  min-height: var(--tap);
+  padding: var(--s2) var(--s3);
+  border: 0;
+  border-radius: var(--rg-s);
+  background: transparent;
+  color: var(--gtext);
+  font: inherit;
+  font-weight: 600;
+}
+.plus-item:hover,
+.plus-item:focus-visible {
+  background: var(--glass-2);
+}
+.plus-ico {
+  display: grid;
+  place-items: center;
+  color: var(--gmute);
+}
+.plus-words {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.plus-words .hint {
+  display: block;
+  font-size: var(--fs-s);
+  font-weight: 500;
+  color: var(--gmute);
+}
+.plus-item .chev {
+  color: var(--gmute);
+  font-size: 1.3em;
+  line-height: 1;
+}
+.plus-head {
+  margin: var(--s1) 0 0;
+  padding: var(--s1) var(--s3);
+  font-size: var(--fs-s);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gmute);
+}
+.plus-none {
+  margin: 0;
+  padding: var(--s2) var(--s3);
+  color: var(--gmute);
+}
+/* What rides along with the message: one chip per file, with its live status. */
+.attached,
+.slash-pop {
+  grid-column: 1 / -1;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.attached {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  max-width: 100%;
+  padding: 3px var(--s1) 3px var(--s3);
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  background: var(--glass-2);
+  color: var(--gtext);
+  font-size: var(--fs-s);
+  font-weight: 600;
+}
+.chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 14rem;
+}
+.chip .st {
+  font-weight: 500;
+  color: var(--gmute);
+}
+.chip-ready .st {
+  color: var(--good-l);
+}
+.chip-failed .st {
+  color: var(--bad-l);
+}
+.chip-x {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--gtext);
+  font-size: 18px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+.chip-x:hover {
+  background: var(--glass);
+}
+/* Typing "/" lists the commands above the box. */
+.slash-pop {
+  display: grid;
+  gap: 2px;
+  padding: var(--s2);
+  background: rgba(14, 15, 34, 0.6);
+  border: 1px solid var(--edge-2);
+  border-radius: var(--rg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .plus-btn svg {
+    transition: none;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .aic-status-eye,

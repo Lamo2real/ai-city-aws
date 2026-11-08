@@ -237,3 +237,54 @@ export function ClearIcon({ size = 20 }: { size?: number }) {
     </svg>
   );
 }
+// The + menu's icons (PlusMenu.tsx).
+export function PlusIcon({ size = 24 }: { size?: number }) {
+  return (
+    <svg {...icon} width={size} height={size} strokeLinecap="round">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+export function FilesIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg {...icon} width={size} height={size} strokeLinecap="round" strokeLinejoin="round">
+      <path d="m20.5 11.5-8 8a5 5 0 0 1-7-7l8.5-8.5a3.2 3.2 0 0 1 4.5 4.5L10 17a1.4 1.4 0 0 1-2-2l7.5-7.5" />
+    </svg>
+  );
+}
+export function FolderIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg {...icon} width={size} height={size} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
+    </svg>
+  );
+}
+export function SlashIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg {...icon} width={size} height={size} strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="3" />
+      <path d="m14 8-4 8" />
+    </svg>
+  );
+}
+export function PlugIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg {...icon} width={size} height={size} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0V8ZM12 17v4" />
+    </svg>
+  );
+}
+export function PuzzleIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg {...icon} width={size} height={size} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 4a2 2 0 1 1 4 0v1h4v4h1a2 2 0 1 1 0 4h-1v4h-4v1a2 2 0 1 1-4 0v-1H6v-4H5a2 2 0 1 1 0-4h1V5h4V4Z" />
+    </svg>
+  );
+}
+export function BackIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg {...icon} width={size} height={size} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M15 5l-7 7 7 7" />
+    </svg>
+  );
+}

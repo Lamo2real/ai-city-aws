@@ -7,7 +7,15 @@ import httpx
 import pytest
 
 from aic.lambdas.api import handle_http
-from aic.shared.speech import DEFAULT_VOICE, MAX_CHARS, VOICES, SpeechDeps, openai_key_secret, synthesize
+from aic.shared.speech import (
+    DEFAULT_VOICE,
+    INSTRUCTIONS,
+    MAX_CHARS,
+    VOICES,
+    SpeechDeps,
+    openai_key_secret,
+    synthesize,
+)
 from test_api import ev, js, make
 
 KEY = "sk-" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6"
@@ -67,7 +75,7 @@ def audio(r: dict[str, Any]) -> bytes:
     return base64.b64decode(r["body"])
 
 
-async def test_speech_returns_mp3_bytes_with_openais_default_voice() -> None:
+async def test_speech_returns_mp3_bytes_in_the_sol_styled_default_voice() -> None:
     d, openai, _ = deps(KEY, (200, MP3, "audio/mpeg"))
     api = make(speech=d)
     r = await handle_http(ev("POST", "/speech", {"text": "Hi there. Anything fun today?"}), api)
@@ -80,7 +88,9 @@ async def test_speech_returns_mp3_bytes_with_openais_default_voice() -> None:
         "input": "Hi there. Anything fun today?",
         "voice": DEFAULT_VOICE,
         "response_format": "mp3",
+        "instructions": INSTRUCTIONS,
     }
+    assert DEFAULT_VOICE == "marin" and "Sol" in INSTRUCTIONS
     assert call["timeout"] == 15.0
 
 
@@ -97,6 +107,9 @@ async def test_the_newer_model_falls_back_to_tts_1_when_the_account_cannot_use_i
     )
     assert await synthesize(d, "Hello.") == MP3
     assert [c["body"]["model"] for c in openai.calls] == ["gpt-4o-mini-tts", "tts-1"]
+    # tts-1 knows no instructions and no marin: the Sol-styled default becomes its calmest voice.
+    assert "instructions" not in openai.calls[1]["body"]
+    assert openai.calls[1]["body"]["voice"] == "sage"
 
 
 async def test_text_is_required_and_capped() -> None:

@@ -10,8 +10,8 @@ Until the key is in, the HUD speaks through Amazon Polly as before.
    once; it starts with `sk-`.
 2. In AI City, open **Settings → Voice** and paste the key into the **OpenAI key** field. It goes straight to AWS
    Secrets Manager (`aic/prod/openai`), is never shown again, never logged, and never sent anywhere but OpenAI.
-3. Pick a voice (OpenAI's default, **alloy**, is preselected) and press **Test voice**: you should hear one
-   sentence. From then on AIC speaks through OpenAI.
+3. Pick a voice (**Marin (closest to ChatGPT's Sol)** is preselected, decision 105) and press **Test voice**: you
+   should hear one sentence. From then on AIC speaks through OpenAI.
 
 No redeploy is needed: the key is read when a reply is spoken.
 
@@ -22,10 +22,15 @@ three-sentence reply is well under a cent). Nothing is charged while the key is 
 
 ## How it works
 
-- `POST /speech` (owner only, like every route) takes `{"text": "...", "voice": "alloy"}` (text up to 2,000
+- `POST /speech` (owner only, like every route) takes `{"text": "...", "voice": "marin"}` (text up to 2,000
   characters, voice optional) and answers with the MP3 bytes (`Content-Type: audio/mpeg`, never cached).
-- The Lambda calls OpenAI's speech API with `gpt-4o-mini-tts` and falls back to `tts-1` if the account can't use
-  the newer model; 15-second timeout.
+- The Lambda calls OpenAI's speech API with `gpt-4o-mini-tts` plus an `instructions` line asking for ChatGPT's
+  Sol manner (savvy and relaxed), and falls back to `tts-1` if the account can't use the newer model (no
+  instructions there; marin, cedar, ballad and verse become `sage`); 15-second timeout.
+- ChatGPT's own voices (Sol, Cove, Juniper, …) are not offered by any OpenAI API and cannot be cloned from a
+  recording; marin with the Sol instructions is the closest the API allows.
+- OpenAI has announced that `tts-1`, `tts-1-hd` and `gpt-4o-mini-tts` shut down on **2027-01-06**; the
+  replacement is the Realtime API (`gpt-realtime-2.1-mini`), a different workflow. Plan that migration in 2026.
 - `GET /voice/openai` → `{configured, voices, default, key_saved_at}`; `PUT /voice/openai-key` with `{"key"}`
   stores the key.
 - Errors come back as `{"error": code, "message": plain words}`: `503 not_configured` (no key yet), `503 bad_key`

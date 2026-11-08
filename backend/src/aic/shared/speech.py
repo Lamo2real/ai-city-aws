@@ -22,9 +22,33 @@ OPENAI_SECRET_DEFAULT = "aic/prod/openai"  # noqa: S105  (a secret's name, not a
 SPEECH_URL = "https://api.openai.com/v1/audio/speech"
 MODELS = ("gpt-4o-mini-tts", "tts-1")
 """The first that answers wins: the newer model, then the plain one if the account can't use it."""
-VOICES = ("alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse")
-DEFAULT_VOICE = "alloy"
-"""OpenAI's default voice: what the owner asked for."""
+VOICES = (
+    "marin",
+    "cedar",
+    "alloy",
+    "ash",
+    "ballad",
+    "coral",
+    "echo",
+    "fable",
+    "nova",
+    "onyx",
+    "sage",
+    "shimmer",
+    "verse",
+)
+DEFAULT_VOICE = "marin"
+"""The voice closest to ChatGPT's "Sol" (the owner's choice, decision 105). ChatGPT's own voices (Sol, Cove, …)
+are not offered by any OpenAI API, so AIC uses ``marin``, one of the two voices OpenAI recommends, with
+``INSTRUCTIONS`` that ask for Sol's manner."""
+INSTRUCTIONS = (
+    "Speak like ChatGPT's Sol voice: savvy and relaxed. A warm, lower register; unhurried, natural "
+    "conversational pacing; dry, friendly confidence. Never sing-song, never performative, never rushed."
+)
+"""Sent with ``gpt-4o-mini-tts`` only (``tts-1`` has no instructions)."""
+TTS1_VOICES = ("alloy", "ash", "coral", "echo", "fable", "onyx", "nova", "sage", "shimmer")
+TTS1_FALLBACK = "sage"
+"""``tts-1`` has no marin, cedar, ballad or verse: those become ``sage``, the calmest voice it has."""
 MAX_CHARS = 2000
 TIMEOUT_S = 15.0
 KEY_TTL_S = 300.0
@@ -140,7 +164,11 @@ async def synthesize(d: SpeechDeps, text: Any, voice: Any = None) -> bytes:
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     started = time.monotonic()
     for model in MODELS:
-        body = {"model": model, "input": t, "voice": v, "response_format": "mp3"}
+        body: dict[str, Any] = {"model": model, "input": t, "voice": v, "response_format": "mp3"}
+        if model == "gpt-4o-mini-tts":
+            body["instructions"] = INSTRUCTIONS
+        elif v not in TTS1_VOICES:
+            body["voice"] = TTS1_FALLBACK
         try:
             status, content, _ = await d.post(SPEECH_URL, headers, body, TIMEOUT_S)
         except (httpx.TimeoutException, TimeoutError) as e:
