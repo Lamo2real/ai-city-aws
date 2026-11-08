@@ -3,6 +3,7 @@ import SwiftUI
 
 struct MarkdownText: View {
     var text: String
+    @Environment(\.glass) private var glass
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -45,7 +46,8 @@ struct MarkdownText: View {
             ScrollView(.horizontal) {
                 Text(code).font(.callout.monospaced()).padding(10)
             }
-            .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+            .background(glass ? Glass.deep : Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+            .overlay { if glass { RoundedRectangle(cornerRadius: 8).strokeBorder(Glass.edge, lineWidth: 1) } }
         case .table(let head, let rows):
             ScrollView(.horizontal) {
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
@@ -57,7 +59,8 @@ struct MarkdownText: View {
                 }
                 .padding(8)
             }
-            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+            .background(glass ? Glass.fill : Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+            .overlay { if glass { RoundedRectangle(cornerRadius: 8).strokeBorder(Glass.edge, lineWidth: 1) } }
         }
     }
 }

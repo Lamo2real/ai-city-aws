@@ -28,24 +28,29 @@ struct TicketsScreen: View {
             }
             .pickerStyle(.segmented)
             .listRowSeparator(.hidden)
-            if let e = loader.error {
-                Banner(tone: .bad, text: "Tickets did not load: \(e)", action: ("Try again", { Task { await reload() } }))
-            } else if loader.data == nil {
-                LoadingView(what: "tickets")
-            } else if tickets.isEmpty {
-                EmptyState(text: done ? "Nothing finished yet." : "Nothing is being worked on. Ask AIC for something.")
-            }
-            ForEach(tickets) { t in
-                NavigationLink(value: t.id) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        StatusTag(status: t.status)
-                        Text(t.goal).lineLimit(3)
-                        Text("\(City.displayName(t.to)) · \(Fmt.ago(City.parseISO(t.updatedAt)))").font(.caption).foregroundStyle(.secondary)
+            .listRowBackground(Color.clear)
+            Group {
+                if let e = loader.error {
+                    Banner(tone: .bad, text: "Tickets did not load: \(e)", action: ("Try again", { Task { await reload() } }))
+                } else if loader.data == nil {
+                    LoadingView(what: "tickets")
+                } else if tickets.isEmpty {
+                    EmptyState(text: done ? "Nothing finished yet." : "Nothing is being worked on. Ask AIC for something.")
+                }
+                ForEach(tickets) { t in
+                    NavigationLink(value: t.id) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            StatusTag(status: t.status)
+                            Text(t.goal).lineLimit(3)
+                            Text("\(City.displayName(t.to)) · \(Fmt.ago(City.parseISO(t.updatedAt)))").font(.caption).foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 4)
                     }
-                    .padding(.vertical, 4)
                 }
             }
+            .glassRows()
         }
+        .nightScreen()
         .navigationTitle("Tickets")
         .navigationDestination(for: String.self) { TicketDetail(id: $0) }
         .task(id: done) { await reload() }
@@ -60,10 +65,14 @@ struct TicketsScreen: View {
 
 struct StatusTag: View {
     var status: String
+    @Environment(\.glass) private var glass
     var body: some View {
         let color: Color = status == "done" ? .green : status == "failed" ? .red : status == "waiting_on_owner" ? .orange : .blue
+        let tint: Color = status == "done" ? Glass.goodTint : status == "failed" ? Glass.badTint : status == "waiting_on_owner" ? Glass.warnTint : Glass.infoTint
+        let light: Color = status == "done" ? Glass.goodLight : status == "failed" ? Glass.badLight : status == "waiting_on_owner" ? Glass.warnLight : Glass.infoLight
         Text(City.ticketWords(status)).font(.caption.weight(.semibold)).padding(.horizontal, 8).padding(.vertical, 3)
-            .background(color.opacity(0.15), in: Capsule()).foregroundStyle(color)
+            .background(glass ? tint : color.opacity(0.15), in: Capsule()).foregroundStyle(glass ? light : color)
+            .overlay { if glass { Capsule().strokeBorder(Glass.edge, lineWidth: 1) } }
     }
 }
 
@@ -75,34 +84,38 @@ struct TicketDetail: View {
 
     var body: some View {
         List {
-            if let e = loader.error { Banner(tone: .bad, text: e) }
-            if loader.data == nil && loader.error == nil { LoadingView(what: "the ticket") }
-            if let d = loader.data, let t = Ticket(json: d["ticket"]) {
-                Section {
-                    Text(t.goal).font(.title3.bold())
-                    HStack { StatusTag(status: t.status); Text("\(City.displayName(t.from)) → \(City.displayName(t.to))").foregroundStyle(.secondary) }
-                    if let r = t.result { Text(r).textSelection(.enabled) }
-                }
-                Section("What happened") {
-                    ForEach(Array(d["history"].array.enumerated()), id: \.offset) { _, h in
-                        let at = City.parseISO(h["at"].string).map { Date(timeIntervalSince1970: $0 / 1000).formatted(date: .abbreviated, time: .shortened) } ?? ""
-                        let note = h["note"].string ?? ""
-                        Text("\(at) — \(City.ticketWords(h["to"].string ?? ""))\(note.isEmpty ? "" : " (\(note))")").font(.callout)
+            Group {
+                if let e = loader.error { Banner(tone: .bad, text: e) }
+                if loader.data == nil && loader.error == nil { LoadingView(what: "the ticket") }
+                if let d = loader.data, let t = Ticket(json: d["ticket"]) {
+                    Section {
+                        Text(t.goal).font(.title3.bold())
+                        HStack { StatusTag(status: t.status); Text("\(City.displayName(t.from)) → \(City.displayName(t.to))").foregroundStyle(.secondary) }
+                        if let r = t.result { Text(r).textSelection(.enabled) }
                     }
-                }
-                let parts = d["children"].array.compactMap(Ticket.init(json:))
-                if !parts.isEmpty {
-                    Section("Parts") {
-                        ForEach(parts) { c in Text("\(City.ticketWords(c.status)): \(c.goal) — \(City.displayName(c.to))") }
+                    Section("What happened") {
+                        ForEach(Array(d["history"].array.enumerated()), id: \.offset) { _, h in
+                            let at = City.parseISO(h["at"].string).map { Date(timeIntervalSince1970: $0 / 1000).formatted(date: .abbreviated, time: .shortened) } ?? ""
+                            let note = h["note"].string ?? ""
+                            Text("\(at) — \(City.ticketWords(h["to"].string ?? ""))\(note.isEmpty ? "" : " (\(note))")").font(.callout)
+                        }
                     }
-                }
-                Section {
-                    DisclosureGroup("Details", isExpanded: $details) {
-                        Text(d["ticket"].pretty).font(.caption.monospaced()).textSelection(.enabled)
+                    let parts = d["children"].array.compactMap(Ticket.init(json:))
+                    if !parts.isEmpty {
+                        Section("Parts") {
+                            ForEach(parts) { c in Text("\(City.ticketWords(c.status)): \(c.goal) — \(City.displayName(c.to))") }
+                        }
+                    }
+                    Section {
+                        DisclosureGroup("Details", isExpanded: $details) {
+                            Text(d["ticket"].pretty).font(.caption.monospaced()).textSelection(.enabled)
+                        }
                     }
                 }
             }
+            .glassRows()
         }
+        .nightScreen()
         .navigationTitle("Ticket")
         .navigationBarTitleDisplayMode(.inline)
         .task { await loader.load { try await model.api?.ticket(id) } }
@@ -117,26 +130,30 @@ struct CostsScreen: View {
 
     var body: some View {
         List {
-            Text(City.costNote).font(.footnote).foregroundStyle(.secondary)
-            if let e = loader.error {
-                Banner(tone: .bad, text: "Costs did not load: \(e)", action: ("Try again", { Task { await load() } }))
-            } else if loader.data == nil {
-                LoadingView(what: "costs")
-            }
-            if let d = loader.data {
-                Section {
-                    Meter(label: "Today", spent: d["today"]["usd"].double ?? 0, cap: d["caps"]["daily_global_usd"].double)
-                    Meter(label: "This month", spent: d["month"]["usd"].double ?? 0, cap: d["caps"]["monthly_budget_usd"].double)
-                    Text("Prompt caching saved about \(Fmt.money(d["month"]["cache_savings_usd"].double ?? 0)) this month.")
+            Group {
+                Text(City.costNote).font(.footnote).foregroundStyle(.secondary).listRowBackground(Color.clear)
+                if let e = loader.error {
+                    Banner(tone: .bad, text: "Costs did not load: \(e)", action: ("Try again", { Task { await load() } }))
+                } else if loader.data == nil {
+                    LoadingView(what: "costs")
                 }
-                CostTable(title: "This month by department", rows: d["by_department"])
-                CostTable(title: "This month by role", rows: d["by_role"])
-                CostTable(title: "This month by model", rows: d["by_model"])
-                if let u = d["cost_explorer_url"].string.flatMap(Markdown.safeLink) {
-                    Section { Link("Open AWS Cost Explorer (the real bill)", destination: u).frame(minHeight: 44) }
+                if let d = loader.data {
+                    Section {
+                        Meter(label: "Today", spent: d["today"]["usd"].double ?? 0, cap: d["caps"]["daily_global_usd"].double)
+                        Meter(label: "This month", spent: d["month"]["usd"].double ?? 0, cap: d["caps"]["monthly_budget_usd"].double)
+                        Text("Prompt caching saved about \(Fmt.money(d["month"]["cache_savings_usd"].double ?? 0)) this month.")
+                    }
+                    CostTable(title: "This month by department", rows: d["by_department"])
+                    CostTable(title: "This month by role", rows: d["by_role"])
+                    CostTable(title: "This month by model", rows: d["by_model"])
+                    if let u = d["cost_explorer_url"].string.flatMap(Markdown.safeLink) {
+                        Section { Link("Open AWS Cost Explorer (the real bill)", destination: u).frame(minHeight: 44) }
+                    }
                 }
             }
+            .glassRows()
         }
+        .nightScreen()
         .navigationTitle("Costs (estimates)")
         .task { await load() }
         .refreshable { await load() }
@@ -161,11 +178,11 @@ struct Meter: View {
             if let cap {
                 let level = Fmt.spendLevel(spent: spent, cap: cap)
                 ProgressView(value: cap > 0 ? min(spent, cap) : 1, total: cap > 0 ? cap : 1)
-                    .tint(level == .red ? .red : level == .amber ? .orange : .accentColor)
+                    .tint(level == .red ? Glass.badLight : level == .amber ? Glass.warnLight : Glass.amber)
                     .accessibilityLabel("\(label): \(Fmt.money(spent)) of \(Fmt.money(cap))")
                 if level != .ok {
                     Text(level == .red ? "Cap reached: no new work starts." : "Close to the cap.").font(.callout)
-                        .foregroundStyle(level == .red ? .red : .orange)
+                        .foregroundStyle(level == .red ? Glass.badLight : Glass.warnLight)
                 }
             }
         }
@@ -261,14 +278,18 @@ struct SettingsScreen: View {
 
     var body: some View {
         Form {
-            if let e = loader.error {
-                Banner(tone: .bad, text: "Settings did not load: \(e)", action: ("Try again", { Task { await load() } }))
-            } else if loader.data == nil {
-                LoadingView(what: "settings")
-            } else {
-                content
+            Group {
+                if let e = loader.error {
+                    Banner(tone: .bad, text: "Settings did not load: \(e)", action: ("Try again", { Task { await load() } }))
+                } else if loader.data == nil {
+                    LoadingView(what: "settings")
+                } else {
+                    content
+                }
             }
+            .glassRows()
         }
+        .nightScreen()
         .navigationTitle("Settings")
         .task { await load() }
         .safeAreaInset(edge: .bottom) {
@@ -278,11 +299,11 @@ struct SettingsScreen: View {
                 } label: {
                     Text(saving ? "Saving…" : "Save changes").frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .buttonStyle(.glassPrimary)
                 .disabled(form.capsInvalid || form == saved || saving)
                 .padding()
-                .background(.bar)
+                .glassBar()
+                .environment(\.colorScheme, .dark)
             }
         }
         .confirmationDialog("Pause the city?", isPresented: $confirmPause, titleVisibility: .visible) {
@@ -312,7 +333,7 @@ struct SettingsScreen: View {
             CapField(label: "Daily cap per department ($)", text: $form.dailyDepartment)
             CapField(label: "Monthly cap ($)", text: $form.monthly)
             if form.capsInvalid {
-                Text("Caps must be zero or more dollars, or empty for no limit.").foregroundStyle(.red).font(.callout)
+                Text("Caps must be zero or more dollars, or empty for no limit.").foregroundStyle(Glass.badLight).font(.callout)
             }
         } header: { Text("Spend caps (optional)") } footer: {
             Text("No limit by default. Leave a field empty for no limit, or enter dollars to stop new work there.")
@@ -461,11 +482,11 @@ struct FirstRunGuide: View {
                 Button(i < steps.count - 1 ? "Next" : "Start") {
                     if i < steps.count - 1 { i += 1 } else { done() }
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .buttonStyle(.glassPrimary)
             }
         }
         .padding(24)
+        .nightSheet()
         .presentationDetents([.medium])
         .interactiveDismissDisabled()
     }

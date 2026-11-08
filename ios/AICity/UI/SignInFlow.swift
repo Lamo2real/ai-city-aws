@@ -34,10 +34,14 @@ struct SignInFlow: View {
                     content
                 }
                 .padding(24)
-                .frame(maxWidth: 520)
+                .glassPanel()
+                .padding(.horizontal, 16)
+                .padding(.vertical, 24)
+                .frame(maxWidth: 552)
                 .frame(maxWidth: .infinity)
             }
             .scrollDismissesKeyboard(.interactively)
+            .nightScreen()
         }
     }
 
@@ -115,7 +119,7 @@ struct SignInFlow: View {
             Field(label: "Type it again", text: $repeatPassword, kind: .password(new: true))
             RulesList(password: newPassword)
             if !repeatPassword.isEmpty, newPassword != repeatPassword {
-                Text("The two passwords are not the same.").foregroundStyle(.red).font(.callout)
+                Text("The two passwords are not the same.").foregroundStyle(Glass.badLight).font(.callout)
             }
             PrimaryButton(title: "Save my password", disabled: busy || PasswordRules.problem(newPassword) != nil || newPassword != repeatPassword) {
                 run { if let a = auth { await next(try await a.setNewPassword(newPassword)) } }
@@ -127,8 +131,8 @@ struct SignInFlow: View {
                 Text("1. Open an authenticator app, for example Microsoft Authenticator, Google Authenticator or 1Password.")
                 Text("2. Add AI City: open it in your authenticator app on this iPhone, or scan the code from another device.")
                 if let url = URL(string: uri) {
-                    Link(destination: url) { Label("Open in authenticator app", systemImage: "key.viewfinder").frame(maxWidth: .infinity, minHeight: 44) }
-                        .buttonStyle(.bordered)
+                    Link(destination: url) { Label("Open in authenticator app", systemImage: "key.viewfinder").frame(maxWidth: .infinity) }
+                        .buttonStyle(.glass)
                 }
                 if let qr = QRCode.image(uri) {
                     Image(uiImage: qr).interpolation(.none).resizable().frame(width: 200, height: 200)
@@ -227,7 +231,7 @@ private struct Field: View {
                 }
             }
             .padding(.horizontal, 12)
-            .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+            .glassWell()
         }
     }
 
@@ -256,7 +260,7 @@ private struct RulesList: View {
             ForEach(PasswordRules.rules, id: \.0) { rule in
                 let ok = rule.1(password)
                 Label(rule.0, systemImage: ok ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(ok ? .green : .secondary)
+                    .foregroundStyle(ok ? Glass.goodLight : Glass.mute)
                     .font(.callout)
                     .accessibilityLabel("\(rule.0), \(ok ? "done" : "not yet")")
             }
@@ -272,8 +276,7 @@ struct PrimaryButton: View {
     var action: () -> Void
     var body: some View {
         Button(action: action) { Text(title).frame(maxWidth: .infinity) }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(.glassPrimary)
             .disabled(disabled)
     }
 }
@@ -325,13 +328,17 @@ struct ConnectView: View {
                 TextField("Web address", text: $address)
                     .keyboardType(.URL).textContentType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
                     .padding(.horizontal, 12).frame(minHeight: 44)
-                    .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                    .glassWell()
                     .accessibilityLabel("Web address of your AI City")
                     .onSubmit(connect)
                 PrimaryButton(title: busy ? "Connecting…" : "Connect", disabled: busy || address.trimmingCharacters(in: .whitespaces).isEmpty, action: connect)
             }
             .padding(24)
+            .glassPanel()
+            .padding(.horizontal, 16)
+            .padding(.vertical, 24)
         }
+        .nightScreen()
     }
 
     private func connect() {

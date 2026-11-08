@@ -27,8 +27,17 @@ struct Banner: View {
         self.action = action
     }
 
+    @Environment(\.glass) private var glass
+
     private var color: Color {
         switch tone { case .good: return .green; case .info: return .blue; case .warn: return .orange; case .bad: return .red }
+    }
+    // On glass: light text on tinted glass (the HUD's --bad-t / --bad-l pairs).
+    private var tint: Color {
+        switch tone { case .good: return Glass.goodTint; case .info: return Glass.infoTint; case .warn: return Glass.warnTint; case .bad: return Glass.badTint }
+    }
+    private var light: Color {
+        switch tone { case .good: return Glass.goodLight; case .info: return Glass.infoLight; case .warn: return Glass.warnLight; case .bad: return Glass.badLight }
     }
     private var symbol: String {
         switch tone {
@@ -41,16 +50,21 @@ struct Banner: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: symbol).foregroundStyle(color).accessibilityHidden(true)
+            Image(systemName: symbol).foregroundStyle(glass ? light : color).accessibilityHidden(true)
             Text(text).font(.callout).frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal: false, vertical: true)
             if let action {
-                Button(action.label, action: action.run)
-                    .buttonStyle(.bordered)
-                    .frame(minHeight: 44)
+                if glass {
+                    Button(action.label, action: action.run).buttonStyle(.glass)
+                } else {
+                    Button(action.label, action: action.run)
+                        .buttonStyle(.bordered)
+                        .frame(minHeight: 44)
+                }
             }
         }
         .padding(12)
-        .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+        .background(glass ? tint : color.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay { if glass { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Glass.edge, lineWidth: 1) } }
         .accessibilityElement(children: .combine)
     }
 }
@@ -103,6 +117,7 @@ struct VoiceLine: View {
     var level: Double
     var speaking: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.glass) private var glass
 
     private var mode: String {
         if listening { return "listening" }
@@ -132,7 +147,7 @@ struct VoiceLine: View {
                         for i in 0..<n {
                             let wobble = reduceMotion ? 0.5 : (sin(t * 9 + Double(i) * 0.7) + 1) / 2
                             let h = max(3, CGFloat(0.15 + level * 0.85 * wobble) * size.height)
-                            g.fill(Path(roundedRect: CGRect(x: CGFloat(i) * w + w * 0.2, y: mid - h / 2, width: w * 0.6, height: h), cornerRadius: 2), with: .color(.blue))
+                            g.fill(Path(roundedRect: CGRect(x: CGFloat(i) * w + w * 0.2, y: mid - h / 2, width: w * 0.6, height: h), cornerRadius: 2), with: .color(glass ? Glass.lamp : .blue))
                         }
                     case "speaking":
                         var p = Path()
@@ -140,7 +155,7 @@ struct VoiceLine: View {
                             let y = mid + sin(Double(x) / 14 + t * 5) * Double(size.height) * 0.3 * sin(Double(x) / size.width * .pi)
                             if x == 0 { p.move(to: CGPoint(x: x, y: y)) } else { p.addLine(to: CGPoint(x: x, y: y)) }
                         }
-                        g.stroke(p, with: .color(Color(hex: 0x8b4a1f)), lineWidth: 3)
+                        g.stroke(p, with: .color(glass ? Glass.amber : Color(hex: 0x8b4a1f)), lineWidth: 3)
                     case "thinking":
                         for i in 0..<5 {
                             let phase = (t * 1.2 + Double(i) * 0.2).truncatingRemainder(dividingBy: 1)

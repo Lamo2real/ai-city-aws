@@ -56,6 +56,7 @@ struct ChatScreen: View {
 
             Composer(draft: $draft, focused: $focused)
         }
+        .nightScreen()
         .navigationTitle("AIC")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -87,10 +88,11 @@ struct MessageRow: View {
             HStack {
                 Spacer(minLength: 48)
                 VStack(alignment: .trailing, spacing: 4) {
+                    // The owner speaking: translucent lamplight blue, light text (the HUD's --you-t).
                     Text(line.text)
                         .padding(.horizontal, 14).padding(.vertical, 10)
-                        .foregroundStyle(.white)
-                        .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 18))
+                        .foregroundStyle(Glass.text)
+                        .glassTint(Glass.youTint, radius: 18, edge: Glass.edge2)
                         .textSelection(.enabled)
                     if line.state == .failed || line.state == .queued {
                         Label("Not sent yet. It will send when the connection is back.", systemImage: "clock")
@@ -157,7 +159,7 @@ struct Composer: View {
                 Image(systemName: model.voice.listening ? "stop.circle.fill" : "mic.circle")
                     .font(.system(size: 30))
                     .frame(width: 44, height: 44)
-                    .foregroundStyle(model.voice.listening ? Color.red : Color.accentColor)
+                    .foregroundStyle(model.voice.listening ? Glass.badLight : Glass.amber)
             }
             .accessibilityLabel(model.voice.listening ? "Stop listening and send" : "Talk to AIC")
             .accessibilityHint("Tap to talk, tap again to send what you said.")
@@ -167,23 +169,21 @@ struct Composer: View {
                 .focused(focused)
                 .padding(.horizontal, 12).padding(.vertical, 10)
                 .frame(minHeight: 44)
-                .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 20))
+                .glassWell(radius: 20)
                 .submitLabel(.send)
                 .onSubmit(send)
                 .accessibilityLabel("Message to AIC")
 
             Button(action: send) {
-                Image(systemName: "arrow.up").font(.headline).frame(width: 30, height: 30)
+                Image(systemName: "arrow.up").font(.headline).frame(width: 44, height: 44)
             }
-            .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.circle)
-            .frame(minWidth: 44, minHeight: 44)
+            .buttonStyle(.glassPrimaryCircle)
             .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             .accessibilityLabel("Send to AIC")
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
-        .background(.bar)
+        .glassBar()
     }
 
     private func send() {

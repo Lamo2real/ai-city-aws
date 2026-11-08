@@ -41,6 +41,8 @@ struct RootView: View {
                 Text("Starting…").foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .nightScreen()
         case .needsSite:
             ConnectView()
         case .signedOut:
@@ -50,11 +52,15 @@ struct RootView: View {
                 EyeView(size: 96)
                 Banner(tone: .bad, text: "AI City could not start: \(why) Nothing was lost.")
                 Button("Try again") { Task { await model.start() } }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                    .buttonStyle(.glassPrimary)
                 Button("Change the AI City address") { Task { await model.changeSite() } }
+                    .frame(minHeight: 44)
             }
-            .padding()
+            .padding(24)
+            .glassPanel()
+            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .nightScreen()
         case .ready:
             MainTabs()
         }
@@ -109,8 +115,9 @@ struct MainTabs: View {
 struct MoreList: View {
     var body: some View {
         List(AppSection.underMore) { s in
-            NavigationLink(value: s) { Label(s.title, systemImage: s.symbol).frame(minHeight: 44) }
+            NavigationLink(value: s) { Label(s.title, systemImage: s.symbol).frame(minHeight: 44) }.glassRows()
         }
+        .nightScreen()
         .navigationTitle("More")
     }
 }
