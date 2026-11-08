@@ -204,6 +204,15 @@ test("lands on AIC with the input focused; asking something shows AIC's streamed
   expect(theirs.x).toBeLessThan(panel.x + 40); // starts at the left edge
   expect(mine.x).toBeGreaterThan(theirs.x + 100);
   await expect(page.getByText(/Not sent yet/)).toHaveCount(0); // delivered, so nothing waits in the outbox
+  // The chat panel runs up behind the top bar (no "Chat with AIC" header); the first message starts below the
+  // bar; the brand is the wordmark alone, no eye.
+  const bar = (await page.locator("header.top").boundingBox())!;
+  const talkBox = (await page.locator(".talk").boundingBox())!;
+  expect(talkBox.y).toBeLessThanOrEqual(bar.y + 1);
+  expect((await log.locator(".msg").first().boundingBox())!.y).toBeGreaterThanOrEqual(bar.y + bar.height);
+  await expect(page.locator(".talk-head")).toHaveCount(0);
+  await expect(page.locator(".brand .eyes")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Clear conversation on this device" })).toBeVisible();
   await shot(page, "ace");
   await noSeriousA11y(page, "AIC");
 });

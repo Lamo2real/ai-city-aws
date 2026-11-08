@@ -1,5 +1,5 @@
 // The HUD shell: sign-in, the live connection, navigation and the always-visible spend pill.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { flushOutbox, loadCity, saveSettings } from "./lib/actions.ts";
 import { api } from "./lib/api.ts";
 import { bootAuth } from "./lib/auth.ts";
@@ -46,7 +46,16 @@ export function App() {
   const [{ view, slug }, setRoute] = useState<{ view: View; slug: string | null }>(() => route(location.hash, VIEWS));
   const [guide, setGuide] = useState(false);
   const waiting = useHud(waitingCount);
-  const presence = useHud((s) => s.presence);
+  // The top bar's height, as `--top-h`: on the AIC screen the chat runs up behind the bar (decision 108).
+  const top = useRef<HTMLElement>(null);
+  const [topH, setTopH] = useState(64);
+  useEffect(() => {
+    const el = top.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setTopH(el.getBoundingClientRect().height));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [boot]);
 
   const go = useCallback((v: string) => {
     location.hash = `/${v}`;
@@ -131,13 +140,15 @@ export function App() {
     );
 
   return (
-    <div className={`app view-${view}${slug ? " view-app" : ""}`}>
+    <div
+      className={`app view-${view}${slug ? " view-app" : ""}`}
+      style={{ "--top-h": `${topH}px` } as React.CSSProperties}
+    >
       <a className="skip" href="#main">
         Skip to content
       </a>
-      <header className="top">
+      <header className="top" ref={top}>
         <button type="button" className="brand" onClick={() => go("ace")} aria-label="AI City — talk to AIC">
-          <Eyes presence={presence} small />
           <span className="pixel">AI CITY</span>
         </button>
         <nav aria-label="Screens">

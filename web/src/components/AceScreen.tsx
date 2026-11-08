@@ -199,9 +199,13 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
         <VoiceVisualizer presence={presence} listening={voice.listening} onMic={voice.pushToTalk} />
         {voice.problem ? <Banner tone="bad">{voice.problem}</Banner> : null}
         <div className="toggles">
-          <label className="switch">
-            <input type="checkbox" checked={voice.wakeMode} onChange={voice.toggleWake} /> Hands-free: listen for “hey
-            AIC” (say “hey Ace”)
+          {/* A glass toggle in the brand's amber (the native checkbox is kept for assistive tech and the tests). */}
+          <label className="switch toggle" title="Listen for “hey AIC” (say “hey Ace”) and answer aloud">
+            <input type="checkbox" checked={voice.wakeMode} onChange={voice.toggleWake} />
+            <span className="toggle-track" aria-hidden="true">
+              <span className="toggle-knob" />
+            </span>
+            Hands-free
           </label>
           <fieldset className="speak-mode">
             <legend>Speak replies</legend>
@@ -234,33 +238,34 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
       </div>
 
       <div className="talk" role="region" aria-label="Chat with AIC">
-        <header className="talk-head">
-          <p className="talk-title">Chat with AIC</p>
+        {/* No header: the panel runs up behind the top bar (decision 108); the clear button floats in its corner. */}
+        {chat.length ? (
           <button
             type="button"
-            className="icon-btn"
+            className="icon-btn talk-clear"
             onClick={() => store.set({ chat: [] })}
             aria-label="Clear conversation on this device"
             title="Clear conversation on this device"
-            disabled={chat.length === 0}
           >
             <ClearIcon />
           </button>
-        </header>
-        {waiting ? (
-          <Banner tone="warn" action={{ label: "Open", onClick: () => go("inbox") }}>
-            {`${needsWords(waiting)}.`}
-          </Banner>
         ) : null}
-        {live === "reconnecting" ? (
-          <Banner tone="bad">Connection lost. Your messages are saved. Reconnecting…</Banner>
-        ) : null}
-        {unsent && live === "online" ? (
-          <Banner tone="info">
-            {unsent === 1 ? "One message is waiting to send." : `${unsent} messages are waiting to send.`} They go out
-            automatically.
-          </Banner>
-        ) : null}
+        <div className="talk-notes">
+          {waiting ? (
+            <Banner tone="warn" action={{ label: "Open", onClick: () => go("inbox") }}>
+              {`${needsWords(waiting)}.`}
+            </Banner>
+          ) : null}
+          {live === "reconnecting" ? (
+            <Banner tone="bad">Connection lost. Your messages are saved. Reconnecting…</Banner>
+          ) : null}
+          {unsent && live === "online" ? (
+            <Banner tone="info">
+              {unsent === 1 ? "One message is waiting to send." : `${unsent} messages are waiting to send.`} They go out
+              automatically.
+            </Banner>
+          ) : null}
+        </div>
         <div className="chat" ref={log} aria-live="polite" aria-label="Conversation with AIC">
           {chat.length === 0 ? <p className="hello">Say hi. Try “yo AIC, what’s the status?” or tap the mic.</p> : null}
           {chat.map((l) => (

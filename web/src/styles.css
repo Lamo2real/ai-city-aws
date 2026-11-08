@@ -152,6 +152,7 @@ textarea {
   display: flex;
   flex-direction: column;
   height: 100%;
+  position: relative;
 }
 .top {
   display: flex;
@@ -493,6 +494,17 @@ main {
   background: transparent;
   color: var(--gtext);
 }
+/* On the AIC screen the top bar floats over the page and the chat panel runs up behind it, its messages
+   fading into the bar's glass (decision 108). `--top-h` is the bar's measured height (App.tsx). */
+.view-ace .top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+.view-ace .ace {
+  padding-top: 0;
+}
 .ace {
   max-width: 1240px;
   margin: 0 auto;
@@ -520,7 +532,7 @@ main {
   align-self: start;
   position: sticky;
   top: 0;
-  padding-top: var(--s5);
+  padding-top: calc(var(--top-h, 64px) + var(--s5));
 }
 .ace-stage > :not(.eyes):not(.voice) {
   grid-column: 1 / -1;
@@ -706,9 +718,65 @@ main {
   height: 22px;
   accent-color: var(--amber);
 }
+/* The hands-free toggle: a glass track whose knob slides and turns amber when on (the pill's gradient). */
+.toggle {
+  position: relative;
+  gap: var(--s3);
+  font-weight: 700;
+}
+.toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+}
+.toggle-track {
+  position: relative;
+  width: 46px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid var(--edge-2);
+  background: var(--glass);
+  box-shadow: var(--glow);
+  transition:
+    background 0.25s ease,
+    border-color 0.25s ease;
+}
+.toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--gsoft);
+  transition:
+    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    background 0.25s ease;
+}
+.toggle input:checked + .toggle-track {
+  background: linear-gradient(180deg, rgba(249, 201, 118, 0.96), rgba(232, 163, 61, 0.96));
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.toggle input:checked + .toggle-track .toggle-knob {
+  transform: translateX(20px);
+  background: #2a1a08;
+}
+.toggle input:focus-visible + .toggle-track {
+  outline: 3px solid var(--gfocus);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .toggle-track,
+  .toggle-knob {
+    transition: none;
+  }
+}
 
 /* the conversation */
 .talk {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -721,22 +789,36 @@ main {
   box-shadow: var(--lift);
   overflow: hidden;
 }
-.talk-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s3);
-  padding: var(--s2) var(--s2) var(--s2) var(--s5);
-  border-bottom: 1px solid var(--edge);
-  background: var(--glass);
+/* The clear button floats in the panel's top corner (there is no header). */
+.talk-clear {
+  position: absolute;
+  top: var(--s2);
+  right: var(--s2);
+  z-index: 2;
+  color: var(--gmute);
 }
-.talk-title {
-  margin: 0;
-  font-size: var(--fs-l);
-  font-weight: 800;
+.talk-notes:empty {
+  display: none;
 }
-.talk-head .stop-all {
-  margin-left: auto;
+@media (min-width: 900px) {
+  /* Side by side: the panel's top is under the bar; the first message and the banners start below it. */
+  .view-ace .talk {
+    border-top: 0;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+  }
+  .view-ace .chat {
+    padding-top: calc(var(--top-h, 64px) + var(--tap) + var(--s3)); /* below the bar and the clear button */
+  }
+  .view-ace .talk-notes:not(:empty) {
+    padding-top: calc(var(--top-h, 64px) + var(--s3));
+  }
+  .view-ace .talk-notes:not(:empty) + .chat {
+    padding-top: var(--s5);
+  }
+  .view-ace .talk-clear {
+    top: calc(var(--top-h, 64px) + var(--s2));
+  }
 }
 .icon-btn {
   width: var(--tap);
@@ -1239,7 +1321,7 @@ main {
   }
   .ace-stage {
     position: static;
-    padding-top: var(--s2);
+    padding-top: calc(var(--top-h, 64px) + var(--s2));
     gap: var(--s3);
   }
   .ace .eyes {
