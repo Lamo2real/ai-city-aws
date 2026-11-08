@@ -50,7 +50,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
 @MainActor
 @Observable
 final class AppModel {
-    enum Boot: Equatable { case starting, needsSite, signedOut, ready, failed(String) }
+    enum Boot: Equatable { case starting, signedOut, ready, failed(String) }
 
     var boot: Boot = .starting
     var section: AppSection = .aic
@@ -124,8 +124,8 @@ final class AppModel {
 
     // MARK: Boot
 
+    /// The site address is built in (decision 111): a build without one fails with a plain sentence, never a form.
     func start() async {
-        guard configStore.site != nil else { boot = .needsSite; return }
         do {
             let c = try await configStore.load()
             config = c
@@ -140,23 +140,6 @@ final class AppModel {
         } catch {
             boot = .failed((error as? LocalizedError)?.errorDescription ?? "unknown problem")
         }
-    }
-
-    func connect(site typed: String) async throws {
-        let url = try ConfigStore.normalize(typed)
-        configStore.setSite(url)
-        do { _ = try await configStore.load() } catch {
-            configStore.forget()
-            throw error
-        }
-        await start()
-    }
-
-    func changeSite() async {
-        await signOut()
-        configStore.forget()
-        auth = nil
-        boot = .needsSite
     }
 
     private func ready() async {

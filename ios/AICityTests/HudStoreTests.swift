@@ -102,11 +102,31 @@ final class HudStoreTests: XCTestCase {
         XCTAssertEqual(model.boot, .signedOut)
     }
 
-    func testNoSiteAsksForTheAddress() async {
-        let cfg = ConfigStore(defaults: UserDefaults(suiteName: "aic.tests.\(UUID().uuidString)")!, http: FakeHTTP { _ in (.null, 500) }, bundleHost: nil)
-        let model = AppModel(configStore: cfg, hud: HudStore(archive: NoChatArchive()), makeAuth: { _ in FakeAuth() }, connectLive: false)
+    /// The address is built in (AIC_SITE_HOST → AICSiteHost): a build without it fails with a plain sentence, never a
+    /// form asking for a web address (decision 111).
+    func testNoBuiltInAddressFailsPlainly() async {
+        let http = FakeHTTP { _ in XCTFail("nothing is fetched without an address"); return (.null, 500) }
+        let cfg = ConfigStore(defaults: UserDefaults(suiteName: "aic.tests.\(UUID().uuidString)")!, http: http, bundleHost: nil)
+        let model = AppModel(configStore: cfg, hud: HudStore(archive: NoChatArchive()), http: http, makeAuth: { _ in FakeAuth() }, connectLive: false)
         await model.start()
-        XCTAssertEqual(model.boot, .needsSite)
+        XCTAssertEqual(model.boot, .failed("This build has no AI City address; set AIC_SITE_HOST in ios/Config/AICity.xcconfig"))
+        XCTAssertTrue(http.seen.isEmpty)
+    }
+
+    /// With the built-in address and no tokens, the first screen is the sign-in screen: config.json is read from
+    /// that host, and nothing asks the owner where their AI City is.
+    func testBuiltInAddressBootsToSignIn() async {
+        let http = FakeHTTP { s in
+            XCTAssertEqual(s.url, "https://d2lcjbjaz1khxz.cloudfront.net/config.json")
+            return (["region": "eu-north-1", "apiUrl": "https://api.example.test", "wsUrl": "wss://ws.example.test", "clientId": "c", "userPoolId": "eu-north-1_P"], 200)
+        }
+        let cfg = ConfigStore(defaults: UserDefaults(suiteName: "aic.tests.\(UUID().uuidString)")!, http: http, bundleHost: "d2lcjbjaz1khxz.cloudfront.net")
+        let auth = FakeAuth()
+        auth.token = nil
+        let model = AppModel(configStore: cfg, hud: HudStore(archive: NoChatArchive()), http: http, makeAuth: { _ in auth }, connectLive: false)
+        await model.start()
+        XCTAssertEqual(model.boot, .signedOut)
+        XCTAssertEqual(http.seen.count, 1)
     }
 
     func testSettingsFormMatchesTheAPI() {

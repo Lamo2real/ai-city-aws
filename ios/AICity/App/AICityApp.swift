@@ -55,8 +55,6 @@ struct RootView: View {
             .accessibilityElement(children: .combine)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .nightScreen()
-        case .needsSite:
-            ConnectView()
         case .signedOut:
             SignInFlow()
         case .failed(let why):
@@ -65,8 +63,6 @@ struct RootView: View {
                 Banner(tone: .bad, text: "AI City could not start: \(why) Nothing was lost.")
                 Button("Try again") { Task { await model.start() } }
                     .buttonStyle(.glassPrimary)
-                Button("Change the AI City address") { Task { await model.changeSite() } }
-                    .frame(minHeight: 44)
             }
             .padding(24)
             .glassPanel()
