@@ -22,6 +22,7 @@ export const BUILT_IN: SlashCommand[] = [
   { name: "stop", hint: "Stop the current job", says: "Stop the current job." },
   { name: "home", hint: "Send every worker home", says: "Send everyone home." },
   { name: "knowledge", hint: "What's in my knowledge base", says: "What's in my knowledge base?" },
+  { name: "leads", hint: "Find sales leads", arg: "how many and who", says: "Find me sales leads: $1" },
   { name: "connect", hint: "Add a connector", arg: "service", says: "Add $1 as a connector." },
   { name: "clear", hint: "Clear this conversation on this device", says: null },
 ];

@@ -43,6 +43,10 @@ describe("slash commands", () => {
       text: "What's the status of the city? please, in one line",
     });
     expect(expandSlash("/connect HeyGen", commands)).toEqual({ kind: "send", text: "Add HeyGen as a connector." });
+    expect(expandSlash("/leads 2 for Swedish fintechs hiring engineers", commands)).toEqual({
+      kind: "send",
+      text: "Find me sales leads: 2 for Swedish fintechs hiring engineers",
+    });
     expect(expandSlash("/pdf-report one for Q3", commands)).toEqual({
       kind: "send",
       text: "Use the “pdf-report” skill: one for Q3",
@@ -51,6 +55,7 @@ describe("slash commands", () => {
 
   it("asks for the missing words, clears locally, and leaves unknown slashes alone", () => {
     expect(expandSlash("/connect", commands)).toMatchObject({ kind: "needs", command: { name: "connect" } });
+    expect(expandSlash("/leads", commands)).toMatchObject({ kind: "needs", command: { name: "leads" } });
     expect(expandSlash("/pdf-report", commands)).toMatchObject({ kind: "needs", command: { name: "pdf-report" } });
     expect(expandSlash("/clear", commands)).toEqual({ kind: "clear" });
     expect(expandSlash("/old-one go", commands)).toBeNull(); // a disabled skill is not a command

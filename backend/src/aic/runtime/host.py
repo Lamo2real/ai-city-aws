@@ -19,6 +19,7 @@ from aic.shared.events import now_iso
 from aic.shared.hierarchy.actions import CityDeps, move
 from aic.shared.ids import manager_id
 from aic.shared.knowledge.search import always_block
+from aic.shared.leads import is_job_report, save_lead_csvs
 from aic.shared.log import log, metric
 from aic.shared.models import resolve_role_from_env
 from aic.shared.presets import orchestrator_note
@@ -168,6 +169,11 @@ class AgentHost:
             skills_dir = None
             if ctx.role != "ace" and skill_rows and self.o.skills:
                 skills_dir = await self.o.skills.materialize(skill_rows)
+            if is_job_report(ctx.role, inv) and self.d.knowledge is not None:
+                saved = await save_lead_csvs(ledger, self.d.knowledge.service, inv["taskId"])
+                if saved:  # lead-research: the table goes to the chat, the CSV is already in Knowledge
+                    inv = {**inv, "body": inv["body"] + "\n\n[Saved to the owner's knowledge base as a CSV: "
+                           + "; ".join(f"“{t}”" for t in saved) + "]"}  # fmt: skip
             prompt = await self._prompt(agent, inv)
             models = resolve_role_from_env(inv["role"], self.o.env if self.o.env is not None else os.environ)
             settings = await self.d.settings()

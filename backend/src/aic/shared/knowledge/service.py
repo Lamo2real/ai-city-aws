@@ -33,6 +33,8 @@ from .routing import route_file
 from .search import SearchCache
 from .store import KnowledgeStore
 
+MAX_CSV_BYTES = 1_000_000
+
 
 class KnowledgeError(ValueError):
     """Plain words for the owner."""
@@ -123,6 +125,21 @@ class KnowledgeService:
             "text", check_title(title), "pasted text", "text/markdown", len(body), check_scope(scope), "note.md"
         )
         await self.blobs.put(item["raw_key"], body, "text/markdown; charset=utf-8")
+        return item_json(item)
+
+    async def add_csv(self, csv: str, title: Any, scope: Any = None) -> dict[str, Any]:
+        """A CSV the city made (a lead list): stored as a ``.csv`` document, the same as an uploaded one."""
+        body = csv.encode()
+        if not body.strip():
+            raise KnowledgeError("The table is empty.")
+        if len(body) > MAX_CSV_BYTES:
+            raise KnowledgeError("That table is larger than 1 MB.")
+        name = "leads.csv"
+        item = await self._new(
+            route_file(name, "text/csv").kind, check_title(title, name), name, "text/csv", len(body),
+            check_scope(scope), name,
+        )  # fmt: skip
+        await self.blobs.put(item["raw_key"], body, "text/csv; charset=utf-8")
         return item_json(item)
 
     async def create_upload(self, b: dict[str, Any]) -> dict[str, Any]:

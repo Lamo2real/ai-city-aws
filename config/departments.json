@@ -320,13 +320,22 @@
         "revenue",
         "deals",
         "partnerships",
-        "account management"
+        "account management",
+        "bizdev",
+        "business developer",
+        "lead generation",
+        "lead gen",
+        "leads",
+        "sales leads",
+        "lead research",
+        "prospecting",
+        "prospects"
       ],
       "mission": "Win and grow customers: find and qualify leads, run outreach, book meetings, keep the CRM clean, write proposals and quotes, and close deals.",
       "teams": [
         {
           "name": "Prospecting",
-          "does": "Ideal customer profile, lead lists, enrichment"
+          "does": "Ideal customer profile, lead lists and lead research, enrichment"
         },
         {
           "name": "Outreach",
@@ -342,6 +351,7 @@
         }
       ],
       "skills": [
+        "lead-research",
         "prospecting",
         "outreach-sequences",
         "crm-hygiene",
@@ -363,7 +373,11 @@
         "close",
         "gong",
         "docusign",
-        "fireflies"
+        "fireflies",
+        "hunter",
+        "crunchbase",
+        "tavily",
+        "firecrawl"
       ]
     },
     {
@@ -1047,6 +1061,12 @@
       "url": "https://mcp.apollo.io/mcp",
       "what": "B2B contact and company search, enrichment, email sequences",
       "signup": "https://app.apollo.io/#/signup"
+    },
+    "hunter": {
+      "label": "Hunter",
+      "url": "https://mcp.hunter.io/mcp",
+      "what": "Find and verify professional email addresses by company domain (the card asks for your API key)",
+      "signup": "https://hunter.io/users/sign_up"
     },
     "pandadoc": {
       "label": "PandaDoc",
