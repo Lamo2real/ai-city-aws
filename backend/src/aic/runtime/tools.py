@@ -1085,9 +1085,19 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
     async def release(a: dict[str, Any]) -> str:
         try:
             w = await d.factory.release(str(a["worker_id"]), c.agent_id)
-            return f"Released {w['id']}."
         except Exception as e:
             return f"Not released: {e}"
+        n = await drop_orphans()  # its unfinished assignments on this goal stop with it
+        return f"Released {w['id']}." + (f" {n} unfinished assignment{'s' if n != 1 else ''} stopped." if n else "")
+
+    async def cancel_assignment(a: dict[str, Any]) -> str:
+        t = await d.ledger.get_ticket(str(a["ticket_id"]))
+        if not t or t.get("kind") != "assignment" or t.get("parent_id") != c.ticket_id:
+            return "That is not an assignment on your goal."
+        if t["status"] in DONE_OR_GONE:
+            return f"{t['id']} is already {t['status']}."
+        await move(d, t["id"], "cancelled", str(a.get("reason") or "stopped by its manager")[:200])
+        return f"Stopped {t['id']}."
 
     async def save_specialist(a: dict[str, Any]) -> str:
         w = await mine(str(a["worker_id"]))
@@ -1105,7 +1115,21 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         )
         return f"Saved as specialist {s['id']}."
 
+    async def drop_orphans() -> int:
+        """Assignments held by workers who are gone (released, retired or never there) can never finish:
+        they are stopped, so they never block the goal (the stuck Research goal, 2026-11-08)."""
+        stopped = 0
+        for k in await d.ledger.child_tickets(c.ticket_id):
+            if k.get("kind") != "assignment" or k["status"] in DONE_OR_GONE or k["status"] == "in_review":
+                continue
+            w = await d.ledger.get_agent(str(k.get("to") or ""))
+            if not w or w.get("state") == "retired":
+                await move(d, k["id"], "cancelled", "its worker is gone")
+                stopped += 1
+        return stopped
+
     async def report(a: dict[str, Any]) -> str:
+        await drop_orphans()
         kids = [k for k in await d.ledger.child_tickets(c.ticket_id) if k.get("kind") == "assignment"]
         unreviewed = [k for k in kids if k["status"] not in DONE_OR_GONE]
         if unreviewed:
@@ -1164,6 +1188,13 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             "List your current workers: id, specialty, state, and which goal or assignment they are on.",
             _obj({}),
             my_workers,
+        ),
+        ToolSpec(
+            "cancel_assignment",
+            "Stop one assignment on your goal that will not be finished (its worker is gone, or it is no longer "
+            "needed), so it no longer blocks reporting the goal.",
+            _obj({"ticket_id": _s(), "reason": _s()}, ("reason",)),
+            cancel_assignment,
         ),
         ToolSpec(
             "release_worker",

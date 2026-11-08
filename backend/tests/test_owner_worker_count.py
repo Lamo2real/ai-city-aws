@@ -72,3 +72,29 @@ async def test_without_a_number_the_usual_cap_applies() -> None:
     for _ in range(3):
         assert (await hire(SPEC)).startswith("Hired ")
     assert "cap is 3" in await hire(SPEC)
+
+
+async def test_assignments_of_released_workers_never_block_the_goal() -> None:
+    # The stuck Research goal (2026-11-08): assignments held by released workers stayed open forever, so the
+    # manager could never report the goal and kept asking the owner to "purge orphan tickets".
+    d = city_deps()
+    await d.ledger.create_ticket({"id": "t-task", "goal": "g", "from": "ace", "to": "orchestrator",
+                                  "department": None, "parent_id": None})  # fmt: skip
+    orch = TurnCtx(agent_id="orchestrator", role="orchestrator", department=None, ticket_id="t-task", task_id="t-task")
+    await tool(d, orch, "create_department")({"name": "Writing", "mission": "Writes research reports."})
+    await tool(d, orch, "assign_to_department")({"department": "Writing", "goal": "A report", "acceptance": "Done"})
+    (goal,) = await d.ledger.child_tickets("t-task")
+    mctx = TurnCtx(agent_id=goal["to"], role="manager", department="Writing", ticket_id=goal["id"], task_id="t-task")
+    w1 = (await tool(d, mctx, "hire_worker")(SPEC)).split()[1]
+    w2 = (await tool(d, mctx, "hire_worker")(SPEC)).split()[1]
+    for w in (w1, w2):
+        await tool(d, mctx, "assign")({"worker_id": w, "goal": "Part", "acceptance": "One page"})
+    assert "Not yet" in await tool(d, mctx, "report_to_orchestrator")({"summary": "All done here."})
+    # Releasing a worker stops its unfinished assignment; the manager can stop the other one itself.
+    assert "1 unfinished assignment stopped" in await tool(d, mctx, "release_worker")({"worker_id": w1})
+    left = [k for k in await d.ledger.child_tickets(goal["id"]) if k["status"] not in ("done", "failed", "cancelled")]
+    assert len(left) == 1
+    assert (await tool(d, mctx, "cancel_assignment")({"ticket_id": left[0]["id"]})).startswith("Stopped")
+    assert (
+        await tool(d, mctx, "report_to_orchestrator")({"summary": "All done here."}) == "Reported to the Orchestrator."
+    )

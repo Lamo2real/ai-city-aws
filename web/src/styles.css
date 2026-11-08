@@ -350,15 +350,34 @@ main {
   background: var(--good-t);
   color: var(--good-l);
 }
+/* Notices drop down from the top left, just under the top bar (the owner, 2026-11-08: not the middle). */
 .toasts {
   position: fixed;
-  left: 50%;
-  bottom: var(--s5);
-  transform: translateX(-50%);
+  left: var(--s4);
+  top: calc(var(--top-h, 64px) + var(--s2));
   display: grid;
   gap: var(--s2);
   z-index: 50;
-  width: min(520px, calc(100% - 32px));
+  width: min(420px, calc(100% - 32px));
+}
+.toasts .toast {
+  animation: toast-drop 0.28s cubic-bezier(0.2, 0.9, 0.25, 1.1) both;
+  transform-origin: top left;
+}
+@keyframes toast-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toasts .toast {
+    animation: none;
+  }
 }
 .toast {
   display: flex;
