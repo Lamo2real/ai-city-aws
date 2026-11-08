@@ -2082,7 +2082,7 @@ table.costs tr:last-child td {
   margin-top: var(--s4);
   display: grid;
   gap: var(--s2);
-  justify-items: start;
+  justify-items: center;
 }
 .small {
   font-size: 0.875rem;
@@ -2135,7 +2135,7 @@ table.costs tr:last-child td {
   user-select: all;
 }
 .signin-links .link {
-  text-align: left;
+  text-align: center;
 }
 
 /* ---------- connectors, mail accounts, skills (CONNECTORS_SKILLS.md §3) ---------- */

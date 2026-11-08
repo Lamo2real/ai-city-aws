@@ -285,7 +285,11 @@ private struct LinkButton: View {
     var action: () -> Void
     init(_ title: String, action: @escaping () -> Void) { self.title = title; self.action = action }
     var body: some View {
-        Button(title, action: action).frame(minHeight: 44)
+        // Centred across the card, also when the text wraps to two lines (the owner's ask, 2026-11-08).
+        Button(action: action) {
+            Text(title).multilineTextAlignment(.center).frame(maxWidth: .infinity)
+        }
+        .frame(minHeight: 44)
     }
 }
 
