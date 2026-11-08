@@ -1,9 +1,9 @@
 // AI City iOS build settings. Public values only; no secrets ever go here (or anywhere in the app).
 //
-// AIC_SITE_HOST: the host of your AI City web site (the CloudFront address the web HUD opens on), for
-// example d1234abcd.cloudfront.net. The app reads config.json from it, like the web HUD. Leave it empty and
-// the app asks for the address on first launch.
-AIC_SITE_HOST =
+// AIC_SITE_HOST: the host of this AI City's web site (Terraform's `hud_url` output, the CloudFront address the
+// web HUD opens on). The app reads config.json from it, like the web HUD, so installing the app and signing in
+// is all there is: nobody types an address (decision 111). A build without it cannot start and says so.
+AIC_SITE_HOST = d2lcjbjaz1khxz.cloudfront.net
 
 // Signing: set your Apple team ID (Xcode → Settings → Accounts) and a bundle ID prefix that is yours.
 // A free personal team needs a bundle ID nobody else uses.

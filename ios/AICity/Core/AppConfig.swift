@@ -28,23 +28,22 @@ struct AppConfig: Codable, Equatable, Sendable {
 }
 
 enum ConfigError: LocalizedError {
-    case invalid, notReachable, badAddress
+    case invalid, notReachable, noAddress
     var errorDescription: String? {
         switch self {
-        case .invalid: return "That site's settings don't look like AI City's. Check the address."
-        case .notReachable: return "AI City's settings could not be loaded. Check your connection and the address."
-        case .badAddress: return "Use the address of your AI City site, starting with https://."
+        case .invalid: return "AI City's settings don't look right. Install the app again."
+        case .notReachable: return "AI City's settings could not be loaded. Check your connection."
+        case .noAddress: return "This build has no AI City address; set AIC_SITE_HOST in ios/Config/AICity.xcconfig"
         }
     }
 }
 
-/// Loads and remembers the config. The site address comes from the build setting AIC_SITE_HOST (Info.plist
-/// key AICSiteHost) or, when that is empty, from what the owner typed on the Connect screen.
+/// Loads and remembers the config. The site address is built in: the build setting AIC_SITE_HOST (Info.plist
+/// key AICSiteHost). Nobody types it (decision 111); a build without it cannot start and says so.
 final class ConfigStore: @unchecked Sendable {
     private let defaults: UserDefaults
     private let http: HTTPTransport
     private let bundleHost: String?
-    private static let siteKey = "aic.site"
     private static let configKey = "aic.config"
 
     init(defaults: UserDefaults = .standard, http: HTTPTransport = URLSessionTransport(), bundleHost: String? = ConfigStore.hostFromBundle()) {
@@ -58,38 +57,15 @@ final class ConfigStore: @unchecked Sendable {
         return h.isEmpty || h.contains("$(") ? nil : h
     }
 
-    var site: URL? {
-        if let s = defaults.string(forKey: Self.siteKey), let u = URL(string: s) { return u }
-        if let h = bundleHost { return URL(string: "https://\(h)") }
-        return nil
-    }
+    var site: URL? { bundleHost.flatMap { URL(string: "https://\($0)") } }
 
     var cached: AppConfig? {
         defaults.data(forKey: Self.configKey).flatMap { try? JSONDecoder().decode(AppConfig.self, from: $0) }
     }
 
-    /// "d123.cloudfront.net", "https://d123.cloudfront.net/" → https://d123.cloudfront.net
-    static func normalize(_ typed: String) throws -> URL {
-        var t = typed.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !t.contains("://") { t = "https://" + t }
-        guard var c = URLComponents(string: t), c.scheme?.lowercased() == "https", let host = c.host, host.contains(".") else {
-            throw ConfigError.badAddress
-        }
-        c.path = ""; c.query = nil; c.fragment = nil
-        guard let u = c.url else { throw ConfigError.badAddress }
-        return u
-    }
-
-    func setSite(_ url: URL) { defaults.set(url.absoluteString, forKey: Self.siteKey) }
-
-    func forget() {
-        defaults.removeObject(forKey: Self.siteKey)
-        defaults.removeObject(forKey: Self.configKey)
-    }
-
     /// Fetches config.json from the site; falls back to the last good copy when offline.
     func load() async throws -> AppConfig {
-        guard let site else { throw ConfigError.badAddress }
+        guard let site else { throw ConfigError.noAddress }
         var req = URLRequest(url: site.appendingPathComponent("config.json"))
         req.cachePolicy = .reloadIgnoringLocalCacheData
         do {

@@ -91,8 +91,7 @@ final class APIClientTests: XCTestCase {
                      "cognitoDomain": "x", "clientId": "c", "userPoolId": "eu-north-1_P", "identityPoolId": "i", "redirectUri": "r",
                      "pollyVoice": "Matthew", "transcribeVocabulary": "v"], 200)
         }
-        let store = ConfigStore(defaults: defaults, http: http, bundleHost: nil)
-        store.setSite(try ConfigStore.normalize("d123.cloudfront.net/"))
+        let store = ConfigStore(defaults: defaults, http: http, bundleHost: "d123.cloudfront.net")  // the built-in AIC_SITE_HOST
         let c = try await store.load()
         XCTAssertEqual(c.apiUrl, "https://abc.execute-api.eu-north-1.amazonaws.com")
         XCTAssertEqual(c.poolName, "P")
@@ -102,7 +101,6 @@ final class APIClientTests: XCTestCase {
     }
 
     func testConfigRefusesPlainHTTP() {
-        XCTAssertThrowsError(try ConfigStore.normalize("http://d123.cloudfront.net"))
         XCTAssertThrowsError(try AppConfig(region: "r", apiUrl: "http://x.test", wsUrl: "wss://y.test", clientId: "c", userPoolId: "r_p").validated())
         XCTAssertThrowsError(try AppConfig(region: "r", apiUrl: "https://x.test", wsUrl: "ws://y.test", clientId: "c", userPoolId: "r_p").validated())
     }

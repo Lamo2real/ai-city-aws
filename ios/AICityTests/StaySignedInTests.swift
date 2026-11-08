@@ -69,8 +69,8 @@ final class StaySignedInTests: XCTestCase {
         }
     }
 
-    private func app(_ world: World, store: TokenStore, now: Date) -> AppModel {
-        let cfg = ConfigStore(defaults: UserDefaults(suiteName: "aic.tests.\(UUID().uuidString)")!, http: world.http, bundleHost: "site.example.test")
+    private func app(_ world: World, store: TokenStore, now: Date, defaults: UserDefaults? = nil) -> AppModel {
+        let cfg = ConfigStore(defaults: defaults ?? UserDefaults(suiteName: "aic.tests.\(UUID().uuidString)")!, http: world.http, bundleHost: "site.example.test")
         let model = AppModel(configStore: cfg, hud: HudStore(archive: NoChatArchive()), http: world.http,
                              makeAuth: { CognitoAuth(config: $0, http: world.http, store: store, now: { now }) }, connectLive: false)
         return model
@@ -119,16 +119,16 @@ final class StaySignedInTests: XCTestCase {
     /// Offline at launch with expired tokens: the app opens (with the cached settings) and stays signed in.
     func testOfflineLaunchStaysSignedIn() async {
         let world = World()
+        let defaults = UserDefaults(suiteName: "aic.tests.\(UUID().uuidString)")!  // the same phone: the cached config.json is here
         let store = MemoryTokenStore(Tokens(idToken: "id-1", accessToken: "a", refreshToken: "refresh-1", expiresAt: launchDay.addingTimeInterval(-60)))
-        let model = app(world, store: store, now: launchDay)
+        let model = app(world, store: store, now: launchDay, defaults: defaults)
         await model.start()  // online once, so the config is cached
         XCTAssertEqual(model.boot, .ready)
         store.save(Tokens(idToken: "id-2", accessToken: "a", refreshToken: world.validRefresh!, expiresAt: launchDay.addingTimeInterval(-60)))
         world.online = false
-        let again = app(world, store: store, now: launchDay)
-        again.configStore.setSite(model.configStore.site!)
+        let again = app(world, store: store, now: launchDay, defaults: defaults)
         await again.start()
-        XCTAssertNotEqual(again.boot, .signedOut, "no connection is not a reason to sign in again")
+        XCTAssertEqual(again.boot, .ready, "no connection is not a reason to sign in again: the cached settings open the app")
         XCTAssertNotNil(store.load())
     }
 

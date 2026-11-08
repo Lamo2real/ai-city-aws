@@ -367,7 +367,6 @@ struct SettingsScreen: View {
         Section("Help and this iPhone") {
             Button("Show the first-run guide again") { model.showGuide = true }.frame(minHeight: 44)
             Button("Forget this iPhone's conversation…") { confirmForget = true }.frame(minHeight: 44)
-            Button("Change the AI City address…") { Task { await model.changeSite() } }.frame(minHeight: 44)
             Button("Sign out…", role: .destructive) { confirmSignOut = true }.frame(minHeight: 44)
         }
     }

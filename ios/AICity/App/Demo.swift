@@ -7,9 +7,8 @@ enum Demo {
     @MainActor static func model() -> AppModel {
         let defaults = UserDefaults(suiteName: "aic.demo")!
         defaults.removePersistentDomain(forName: "aic.demo")
-        defaults.set("https://demo.ai-city.invalid", forKey: "aic.site")
         let http = DemoTransport()
-        let store = ConfigStore(defaults: defaults, http: http, bundleHost: nil)
+        let store = ConfigStore(defaults: defaults, http: http, bundleHost: "demo.ai-city.invalid")
         let args = ProcessInfo.processInfo.arguments
         let signedOut = args.contains("-signedout")
         let makeAuth: (AppConfig) -> AuthClient

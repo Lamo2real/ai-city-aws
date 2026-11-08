@@ -7,7 +7,7 @@ A native SwiftUI app that does what the web HUD (`web/`) does: sign in, talk to 
 | Folder | What |
 |---|---|
 | `AICity.xcodeproj` | The Xcode project (folders are synced: a new `.swift` file in `AICity/` is in the app automatically) |
-| `Config/AICity.xcconfig` | Your site address, team ID and bundle ID prefix (public values only) |
+| `Config/AICity.xcconfig` | The AI City's web address (built in; nobody types it), team ID and bundle ID prefix (public values only) |
 | `Config/Info.plist` | Microphone and speech-recognition wording, App Transport Security (HTTPS only) |
 | `AICity/Auth` | Cognito sign-in on the app's own screens: SRP, first-login password, authenticator app, forgot password, refresh, sign-out. Tokens in the Keychain |
 | `AICity/Core` | `config.json`, the HTTP API, the WebSocket, the store (chat, outbox, AIC's steps), Markdown |
@@ -24,8 +24,8 @@ Requires Xcode 26 or later; runs on iOS 17 or later.
 
 1. Open `ios/AICity.xcodeproj` in Xcode.
 2. Pick the **AICity** scheme and an iPhone simulator, then **Run** (⌘R).
-3. On first launch the app asks for your AI City web address, the one you open the HUD at (for example `d1234abcd.cloudfront.net`). It reads `config.json` from there, like the web HUD. To skip that screen, put the host in `Config/AICity.xcconfig` as `AIC_SITE_HOST`.
-4. Sign in with your email, password and 6-digit code, exactly as on the web.
+3. The app opens on the sign-in screen. Its AI City web address is built in (`AIC_SITE_HOST` in `Config/AICity.xcconfig`, the HUD's CloudFront host from Terraform's `hud_url` output); it reads `config.json` from there, like the web HUD. Nobody types an address (decision 111). A build with that setting empty cannot start and says so in one sentence.
+4. Sign in with your email, password and 6-digit code, exactly as on the web. The first time, use the temporary password from the "Welcome to AI City" email.
 
 **Demo mode (Debug builds only):** in Xcode, *Product → Scheme → Edit Scheme → Run → Arguments*, add `-demo` to see the app with a made-up city and no AWS at all (`-demo -signedout` shows the sign-in screens; the demo password `first` walks the first-login steps and the code is `123456`). `-demo -demo-cognito` uses the real sign-in code against a fake Cognito (any password, code `123456`, ID tokens that last 2 minutes) so you can quit and relaunch and see that you stay signed in; add `-reset` to start over. Release builds don't contain the demo.
 
@@ -36,6 +36,8 @@ cd ios && xcodebuild test -project AICity.xcodeproj -scheme AICity -destination 
 ```
 
 ## Install it on your iPhone
+
+Installing is all there is: the app knows its AI City, so the first screen is sign-in (or the first-login steps). If the deployment ever moves to another address, change `AIC_SITE_HOST` and install again.
 
 ### Option A: free, with your Apple Account (no developer program)
 
@@ -60,7 +62,7 @@ The app declares `ITSAppUsesNonExemptEncryption = false` (it uses only Apple's H
 ## Security
 
 - **Sign in once.** The tokens (ID, access, refresh) live only in the Keychain, on this iPhone only (never synced or backed up), readable after the phone's first unlock since it started. Opening the app, or coming back to it, refreshes them silently; you see the sign-in screen again only if Cognito refuses the refresh token (revoked, or past its validity). Sign-out revokes the refresh token at Cognito and deletes them.
-- **No secrets in the app.** The bundle holds only public values (the site host, if you set it). Cognito IDs and endpoints come from the public `config.json`.
+- **No secrets in the app.** The bundle holds only public values (the site host). Cognito IDs and endpoints come from the public `config.json`.
 - **HTTPS only.** App Transport Security is on with no exceptions; the app also refuses a `config.json` whose API isn't `https://` or whose WebSocket isn't `wss://`.
 - **Agent output is text.** AIC's Markdown is parsed into native text runs (bold, italic, code, lists, tables). AIC's replies never go into a web view; HTML stays visible as characters; only `http(s)` links open, in Safari. The one web view in the app is the City map: bundled code only, no network, no tokens.
 - **The password never leaves the phone:** SRP sends a proof, not the password.
