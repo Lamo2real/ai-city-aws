@@ -501,7 +501,7 @@ main {
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(300px, 400px) minmax(0, 1fr);
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); /* a slim voice column; the chat gets the room */
   grid-template-rows: minmax(0, 1fr);
   gap: var(--s5);
   color: var(--gtext);
@@ -510,21 +510,30 @@ main {
   background: #f4c63c;
   color: var(--text);
 }
+/* The stage: a small eye at the start of the voice line, then the mic row and the switches under them. */
 .ace-stage {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--s4);
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: start;
+  column-gap: var(--s3);
+  row-gap: var(--s4);
   align-self: start;
   position: sticky;
   top: 0;
   padding-top: var(--s5);
 }
+.ace-stage > :not(.eyes):not(.voice) {
+  grid-column: 1 / -1;
+}
 .ace .eyes {
   --eye: var(--paper3);
+  margin-top: 24px; /* centred on the 72px line beside it (the eye is 44 × 24) */
 }
-.ace .eye-pair {
-  width: min(300px, 70vw);
+.ace .eyes-small .eye-pair {
+  width: 44px;
+}
+.ace .voice-strip {
+  height: 72px;
 }
 /* the voice strip */
 .voice {
@@ -1233,19 +1242,10 @@ main {
     padding-top: var(--s2);
     gap: var(--s3);
   }
-  .ace-stage {
-    display: grid;
-    grid-template-columns: 96px minmax(0, 1fr);
-    align-items: center;
-    column-gap: var(--s3);
+  .ace .eyes {
+    margin-top: 20px; /* centred on the 64px line */
   }
-  .ace-stage > :not(.eyes):not(.voice) {
-    grid-column: 1 / -1;
-  }
-  .ace .eye-pair {
-    width: 96px;
-  }
-  .voice-strip {
+  .ace .voice-strip {
     height: 64px;
   }
   .voice-row {

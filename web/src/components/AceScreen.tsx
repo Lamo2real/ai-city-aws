@@ -194,7 +194,8 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
         Talk to AIC
       </h1>
       <div className="ace-stage">
-        <Eyes presence={shown} word={false} />
+        {/* A small eye beside the voice line (the owner found the big drawing too much; decision 107). */}
+        <Eyes presence={shown} small word={false} />
         <VoiceVisualizer presence={presence} listening={voice.listening} onMic={voice.pushToTalk} />
         {voice.problem ? <Banner tone="bad">{voice.problem}</Banner> : null}
         <div className="toggles">
