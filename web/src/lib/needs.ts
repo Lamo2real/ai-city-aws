@@ -16,6 +16,12 @@ export type Need =
 
 const open = (c: CityState, id: string) => c.tickets[id] ?? c.parked[id];
 
+/** Already decided by the Chief of Staff (lib/chief.ts): no longer waiting for the owner. */
+const decided = (r: unknown) => {
+  const x = r as { decided_by?: string; decision?: unknown };
+  return x.decided_by === "chief_of_staff" && x.decision !== undefined && x.decision !== null && x.decision !== "";
+};
+
 /** The job a part belongs to (its top-most open ancestor), null for no job, "gone" when the part is closed. */
 function jobOf(c: CityState, ticketId: string | undefined): Job | null | "gone" {
   if (!ticketId) return null;
@@ -33,11 +39,13 @@ function jobOf(c: CityState, ticketId: string | undefined): Job | null | "gone" 
 export function needs(c: CityState): Need[] {
   const out: Need[] = [];
   for (const q of Object.values(c.questions)) {
+    if (decided(q)) continue;
     const job = jobOf(c, q.ticket_id);
     if (job !== "gone")
       out.push({ kind: "question", id: q.id, at: q.created_at, who: plainWho(c, q.asked_by), q, job });
   }
   for (const a of Object.values(c.approvals)) {
+    if (decided(a)) continue;
     const job = jobOf(c, a.ticket_id);
     if (job === "gone") continue;
     const app = a.requested_by?.startsWith("app:") ? c.apps?.[a.requested_by.slice(4)] : undefined;

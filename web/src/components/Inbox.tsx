@@ -9,7 +9,9 @@ import { capKey, capLabel, capped, isPublish, publishApp, type Capability } from
 import { byJob, needs, needsWords, type Need } from "../lib/needs.ts";
 import { store, useHud } from "../lib/store.ts";
 import { plainText, type CityApproval, type CityQuestion } from "../city/city-state.js";
+import { useChief } from "../lib/chief.ts";
 import { AppFrame } from "./Apps.tsx";
+import { ChiefCard, DecidedList, NeedsOwnerWhy } from "./ChiefOfStaff.tsx";
 import { Banner, Button, Confirm, toast } from "./ui.tsx";
 
 /** How many cards show before "Show more": the few that matter first. */
@@ -62,9 +64,11 @@ export function Inbox() {
 
   if (!list.length)
     return (
-      <section className="screen" aria-labelledby="inbox-title">
+      <section className="screen needs" aria-labelledby="inbox-title">
         <h1 id="inbox-title">Needs you</h1>
+        <ChiefCard />
         <p className="empty">Nothing needs you right now. AIC will tell you when something does.</p>
+        <DecidedList />
       </section>
     );
 
@@ -83,6 +87,7 @@ export function Inbox() {
   return (
     <section className="screen needs" aria-labelledby="inbox-title">
       <h1 id="inbox-title">Needs you</h1>
+      <ChiefCard />
       <p className="lede">{`${needsWords(list.length)}. Answer and it's gone.`}</p>
       {error ? <Banner tone="bad">{error}</Banner> : null}
       {groups.map((g) => (
@@ -130,8 +135,15 @@ export function Inbox() {
           }}
         />
       ) : null}
+      <DecidedList />
     </section>
   );
+}
+
+/** Why the Chief of Staff left an item to the owner: from the live list, or the record itself. */
+function useWhy(id: string, record: unknown) {
+  const live = useChief((s) => s.needsOwner[id]);
+  return live ?? (record as { needs_owner_reason?: string }).needs_owner_reason;
 }
 
 type Settle = (n: Need, fn: () => Promise<unknown>, done: string) => Promise<void>;
@@ -141,10 +153,12 @@ function QuestionCard({ n, q, primary, settle }: { n: Need; q: CityQuestion; pri
   const [text, setText] = useState("");
   const [whole, setWhole] = useState(false);
   const ask = plainText(q.text, 160);
+  const why = useWhy(q.id, q);
   // The default first, then the other choices; at most four big buttons.
   const choices = [...new Set([q.default_answer, ...q.options].filter((o) => o && o.trim()))].slice(0, 4);
   return (
     <article className="card need" aria-label={`Question from ${n.who}`}>
+      <NeedsOwnerWhy why={why} />
       <p className="who">{`${n.who} asks`}</p>
       <p className="ask">
         {whole ? q.text : ask.short}{" "}
@@ -222,8 +236,10 @@ function ApprovalCard({
   settle: Settle;
   onYes: () => void;
 }) {
+  const why = useWhy(a.id, a);
   return (
     <article className="card need" aria-label={`Approval for ${n.who}`}>
+      <NeedsOwnerWhy why={why} />
       <p className="who">{`${n.who} wants your OK`}</p>
       <p className="ask">{`${whatHappens(a)}.`}</p>
       <details className="exact">

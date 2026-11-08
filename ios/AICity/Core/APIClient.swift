@@ -75,6 +75,8 @@ final class APIClient: @unchecked Sendable {
     func ticket(_ id: String) async throws -> JSONValue { try await request("/tickets/\(Self.seg(id))") }
     func costs() async throws -> JSONValue { try await request("/costs") }
     func settings() async throws -> JSONValue { try await request("/settings")["settings"] }
+    /// The Chief of Staff (a 404 throws: the backend has none yet).
+    func chiefOfStaff() async throws -> JSONValue { try await request("/chief-of-staff") }
     func saveSettings(_ patch: JSONValue) async throws -> JSONValue {
         try await request("/settings", method: "PUT", body: patch)["settings"]
     }

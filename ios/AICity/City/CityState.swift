@@ -64,6 +64,10 @@ struct Question: Equatable, Sendable, Identifiable {
     var options: [String]
     var defaultAnswer: String
     var createdAt: String
+    /// The Chief of Staff already decided it (it no longer waits for the owner).
+    var decidedByChief = false
+    /// Why the Chief of Staff left it to the owner (sign in, paste a key, pay).
+    var needsOwnerReason: String?
     init?(json j: JSONValue) {
         guard let id = j["id"].string else { return nil }
         self.id = id
@@ -73,6 +77,8 @@ struct Question: Equatable, Sendable, Identifiable {
         options = j["options"].array.compactMap(\.string)
         defaultAnswer = j["default_answer"].string ?? ""
         createdAt = j["created_at"].string ?? ""
+        decidedByChief = City.decidedByChief(j)
+        needsOwnerReason = j["needs_owner_reason"].string.flatMap { $0.isEmpty ? nil : $0 }
     }
 }
 
@@ -82,6 +88,10 @@ struct Approval: Equatable, Sendable, Identifiable {
     var action: String
     var reason: String
     var costHint: String?
+    var title: String?
+    var department: String?
+    var decidedByChief = false
+    var needsOwnerReason: String?
     init?(json j: JSONValue) {
         guard let id = j["id"].string else { return nil }
         self.id = id
@@ -89,6 +99,10 @@ struct Approval: Equatable, Sendable, Identifiable {
         action = j["action"].string ?? ""
         reason = j["reason"].string ?? ""
         costHint = j["cost_hint"].string
+        title = j["title"].string
+        department = j["department"].string
+        decidedByChief = City.decidedByChief(j)
+        needsOwnerReason = j["needs_owner_reason"].string.flatMap { $0.isEmpty ? nil : $0 }
     }
 }
 
@@ -180,6 +194,10 @@ enum City {
     static func deptOf(_ a: Agent) -> String { core.contains(a.id) ? "HQ" : (a.department ?? "other") }
     static func keyOf(_ name: String?) -> String {
         (name ?? "").trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression).lowercased()
+    }
+    /// A record the Chief of Staff already decided: `decided_by: "chief_of_staff"` with a decision.
+    static func decidedByChief(_ j: JSONValue) -> Bool {
+        j["decided_by"].string == "chief_of_staff" && !(j["decision"].string ?? "").isEmpty
     }
     static func displayName(_ id: String) -> String { id == "ace" ? "AIC" : id }
 

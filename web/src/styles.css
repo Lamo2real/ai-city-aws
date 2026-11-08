@@ -4464,3 +4464,94 @@ summary,
 .feature-open .feature-name {
   color: var(--gtext);
 }
+
+/* Needs you → the Chief of Staff: a calm card on top, the items it left to the owner say why, and "Decided for you". */
+.card.cos {
+  border-left: 3px solid var(--edge-2);
+}
+.card.cos.on {
+  border-left-color: var(--amber);
+}
+.cos-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2) var(--s4);
+}
+.cos-head h2 {
+  margin: 0;
+  font-size: var(--fs-l);
+}
+.card.cos p {
+  margin: var(--s2) 0 0;
+  max-width: 60ch;
+}
+.card.cos .cos-count {
+  font-weight: 700;
+}
+.cos-why {
+  margin: 0 0 var(--s2);
+  padding: var(--s2) var(--s3);
+  border-radius: var(--rg-s);
+  background: var(--warn-t);
+  color: var(--warn-l);
+  font-size: var(--fs-s);
+  font-weight: 700;
+  max-width: 60ch;
+}
+.decided {
+  margin-top: var(--s5);
+}
+.decided h2 {
+  margin-bottom: var(--s1);
+}
+.decided h2:focus {
+  outline: none;
+}
+.card.decided-item {
+  padding: 0;
+}
+.decided-item > summary {
+  display: grid;
+  gap: 2px;
+  padding: var(--s3) var(--s4);
+  min-height: var(--tap);
+  cursor: pointer;
+  list-style: none;
+}
+.decided-item > summary::-webkit-details-marker {
+  display: none;
+}
+.decided-item > summary:focus-visible {
+  outline: 3px solid var(--gfocus);
+  outline-offset: 2px;
+  border-radius: var(--rg);
+}
+.decided-item > summary > span {
+  min-width: 0;
+}
+.decided-title {
+  font-weight: 700;
+}
+.decided-reason,
+.decided-meta {
+  color: var(--gmute);
+  font-size: var(--fs-s);
+}
+.decided-meta {
+  font-size: var(--fs-xs);
+}
+.decided-item:not([open]) :is(.decided-title, .decided-reason) {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.decided-more {
+  padding: 0 var(--s4) var(--s3);
+}
+.decided-more p {
+  margin: var(--s1) 0;
+  max-width: 60ch;
+  overflow-wrap: anywhere;
+}

@@ -1,5 +1,6 @@
 // Needs you: every question shows its default with a one-tap "Use default"; approvals are bound to the exact
-// action and need holding the button on a confirmation that says what it may cost.
+// action and need holding the button on a confirmation that says what it may cost. On top, the Chief of Staff's
+// card (on/off, how many it decided this week); at the bottom, "Decided for you", newest first.
 import SwiftUI
 
 struct InboxScreen: View {
@@ -10,10 +11,18 @@ struct InboxScreen: View {
     @State private var busy: Set<String> = []
 
     var body: some View {
-        let questions = model.hud.city.questions.values.sorted { $0.createdAt < $1.createdAt }
-        let approvals = model.hud.city.approvals.values.sorted { $0.id < $1.id }
+        let questions = model.hud.openQuestions
+        let approvals = model.hud.openApprovals
+        let chief = model.hud.chief
+        ScrollViewReader { scroller in
         List {
             Group {
+                if chief.status == .ready {
+                    ChiefCard(chief: chief) { on in Task { await model.setChief(enabled: on) } } seeDecided: {
+                        withAnimation { scroller.scrollTo("decided", anchor: .top) }
+                    }
+                    .listRowSeparator(.hidden)
+                }
                 if let problem { Banner(tone: .bad, text: problem).listRowSeparator(.hidden).listRowBackground(Color.clear) }
                 if questions.isEmpty && approvals.isEmpty {
                     EmptyState(text: "Nothing is waiting for you. AIC will tell you when something is.").listRowSeparator(.hidden)
@@ -22,6 +31,7 @@ struct InboxScreen: View {
                     Section("Approvals") {
                         ForEach(approvals) { a in
                             VStack(alignment: .leading, spacing: 8) {
+                                NeedsOwnerWhy(why: chief.needsOwner[a.id] ?? a.needsOwnerReason)
                                 Text("\(City.displayName(a.agent)) wants to do exactly this, once:")
                                 Text(a.action).font(.callout.monospaced()).padding(8)
                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -48,7 +58,7 @@ struct InboxScreen: View {
                 if !questions.isEmpty {
                     Section("Questions") {
                         ForEach(Array(questions.enumerated()), id: \.element.id) { i, q in
-                            QuestionCard(q: q, first: i == 0, own: Binding(get: { own[q.id] ?? "" }, set: { own[q.id] = $0 }), busy: busy.contains(q.id)) { kind in
+                            QuestionCard(q: q, first: i == 0, why: chief.needsOwner[q.id] ?? q.needsOwnerReason, own: Binding(get: { own[q.id] ?? "" }, set: { own[q.id] = $0 }), busy: busy.contains(q.id)) { kind in
                                 switch kind {
                                 case .useDefault:
                                     run(q.id, done: "Answered with the default: \(q.defaultAnswer)") { try await model.api?.useDefault(question: q.id) }
@@ -63,8 +73,18 @@ struct InboxScreen: View {
                         }
                     }
                 }
+                if chief.status == .ready, !chief.decided.isEmpty {
+                    Section {
+                        ForEach(chief.decided) { d in DecidedRow(d: d) }
+                    } header: {
+                        Text("Decided for you").id("decided")
+                    } footer: {
+                        Text("Newest first. Tap one to read it all. If one isn't what you want, tell AIC what to do instead.")
+                    }
+                }
             }
             .glassRows()
+        }
         }
         .nightScreen()
         .navigationTitle("Needs you")
@@ -102,12 +122,14 @@ struct QuestionCard: View {
     enum Choice { case useDefault, option(String), own }
     var q: Question
     var first: Bool
+    var why: String? = nil
     @Binding var own: String
     var busy: Bool
     var choose: (Choice) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            NeedsOwnerWhy(why: why)
             Text("\(q.path) · \(Fmt.ago(City.parseISO(q.createdAt)))").font(.caption).foregroundStyle(.secondary)
             Text(q.text).font(.body.weight(.medium))
             if first {
@@ -135,6 +157,94 @@ struct QuestionCard: View {
         .disabled(busy)
         .buttonStyle(.borderless)
         .padding(.vertical, 4)
+    }
+}
+
+/// The Chief of Staff's calm card at the top of Needs you.
+struct ChiefCard: View {
+    var chief: ChiefState
+    var flip: (Bool) -> Void
+    var seeDecided: () -> Void
+
+    var body: some View {
+        let week = chief.decidedThisWeek()
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle(isOn: Binding(get: { chief.enabled }, set: { flip($0) })) {
+                Text(chief.enabled ? "Chief of Staff is handling these" : "Chief of Staff is off").font(.headline)
+            }
+            .tint(Glass.amber)
+            .disabled(chief.saving)
+            .accessibilityLabel("Chief of Staff")
+            .accessibilityValue(chief.enabled ? "On" : "Off")
+            Text(chief.enabled
+                 ? "It answers your team's questions and approvals for you, so nothing waits while you're away. What only you can do stays here."
+                 : "Everything waits here for you. Turn it on and it decides for you while you're away.")
+                .font(.callout)
+            Text(week == 0 ? "Nothing decided in the last 7 days." : "Decided \(week == 1 ? "1 thing" : "\(week) things") in the last 7 days.")
+                .font(.callout.weight(.semibold))
+            if !chief.decided.isEmpty {
+                Button("See what it decided", action: seeDecided)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(Glass.amber2)
+                    .frame(minHeight: 44)
+            }
+        }
+        .buttonStyle(.borderless)
+        .padding(.vertical, 6)
+        .overlay(alignment: .leading) {
+            Rectangle().fill(chief.enabled ? Glass.amber : Glass.edge2).frame(width: 3).offset(x: -12)
+        }
+    }
+}
+
+/// On an open item: why the Chief of Staff left it to the owner.
+struct NeedsOwnerWhy: View {
+    var why: String?
+    var body: some View {
+        if let why, !why.isEmpty {
+            Text("Chief of Staff: \(why)")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(Glass.warnLight)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .glassTint(Glass.warnTint)
+        }
+    }
+}
+
+/// One thing the Chief of Staff decided: the question, its choice, the one-line reason, when and which department;
+/// tap to read it all.
+struct DecidedRow: View {
+    var d: DecidedItem
+    @State private var open = false
+
+    var body: some View {
+        let meta = [Fmt.ago(City.parseISO(d.at)), d.department].filter { !$0.isEmpty }.joined(separator: " · ")
+        DisclosureGroup(isExpanded: $open) {
+            VStack(alignment: .leading, spacing: 6) {
+                if !d.reason.isEmpty { Text("Why: \(d.reason)") }
+                if let t = City.parseISO(d.at) {
+                    Text(Date(timeIntervalSince1970: t / 1000).formatted(date: .abbreviated, time: .shortened))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .font(.callout)
+            .padding(.top, 4)
+        } label: {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(d.title).font(.body.weight(.semibold)).lineLimit(open ? nil : 1)
+                (Text(d.kind == "approval" ? "It said: " : "It chose: ") + Text(d.choice.isEmpty ? "—" : d.choice).bold())
+                    .font(.callout)
+                if !d.reason.isEmpty, !open {
+                    Text(d.reason).font(.callout).foregroundStyle(.secondary).lineLimit(1)
+                }
+                if !meta.isEmpty { Text(meta).font(.caption).foregroundStyle(.secondary) }
+            }
+            .frame(minHeight: 44, alignment: .leading)
+        }
+        .tint(Glass.amber2)
+        .accessibilityLabel("Decided: \(d.title). \(d.kind == "approval" ? "It said" : "It chose") \(d.choice).")
     }
 }
 

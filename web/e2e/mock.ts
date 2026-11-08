@@ -122,6 +122,12 @@ export interface Mock {
   openai: { key: string | null; savedAt: string | null; error: { code: string; message: string } | null };
   /** The city's GitHub token (docs/GITHUB_ACCESS.md): stored or not, whose it is, when it was saved. */
   github: { token: string | null; login: string | null; savedAt: string | null };
+  /** The Chief of Staff (`GET /chief-of-staff`); null answers 404, as before the backend has one. */
+  chief: {
+    enabled: boolean;
+    decided: Array<Record<string, unknown>>;
+    needs_owner: Array<{ id: string; title: string; why: string }>;
+  } | null;
   /** City → Features and the owner's calendar (docs/MAIL_CALENDAR.md §12). */
   features: Array<{ id: string; name: string; blurb: string; enabled: boolean }>;
   calendar: {
@@ -234,6 +240,7 @@ export async function mockBackend(
     state: {},
     openai: { key: null, savedAt: null, error: null },
     github: { token: null, login: null, savedAt: null },
+    chief: null,
     features: [
       {
         id: "calendar",
@@ -540,8 +547,11 @@ export async function mockBackend(
     }
     if (path === "/devices" && req.method() === "GET") return ok({ devices: [] });
     if (path === "/settings" && req.method() === "GET") return ok({ settings: m.settings });
+    if (path === "/chief-of-staff")
+      return m.chief ? ok(m.chief) : ok({ error: "There is nothing here." }, 404);
     if (path === "/settings" && req.method() === "PUT") {
       Object.assign(m.settings, body);
+      if (m.chief && typeof body?.chief_of_staff_enabled === "boolean") m.chief.enabled = body.chief_of_staff_enabled;
       return ok({ settings: m.settings });
     }
     if (path === "/messages") return ok({ accepted: true, conversation: body?.conversation ?? "main" }, 202);

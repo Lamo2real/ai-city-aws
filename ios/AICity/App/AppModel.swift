@@ -289,6 +289,31 @@ final class AppModel {
             if (error as? APIError) == .signedOut, auth?.hasSession == false { return lostSession() }
             hud.loadError = (error as? LocalizedError)?.errorDescription ?? "The city could not load."
         }
+        await loadChief()  // after the snapshot, so what it decided leaves the open list
+    }
+
+    /// The Chief of Staff on Needs you; a 404 (no Chief of Staff on the backend yet) shows nothing about it.
+    func loadChief() async {
+        guard let api else { return }
+        do { hud.chiefLoaded(try await api.chiefOfStaff()) } catch {
+            hud.chief.status = (error as? APIError)?.status == 404 ? .missing : .failed
+        }
+    }
+
+    /// The owner's switch: flips at once, flips back with the reason if the server says no.
+    func setChief(enabled on: Bool) async {
+        guard let api else { return }
+        let was = hud.chief.enabled
+        hud.chief.enabled = on
+        hud.chief.saving = true
+        defer { hud.chief.saving = false }
+        do {
+            _ = try await api.saveSettings(["chief_of_staff_enabled": .bool(on)])
+            show(on ? "Chief of Staff is on. It decides for you now." : "Chief of Staff is off. Everything waits for you.", tone: .good)
+        } catch {
+            hud.chief.enabled = was
+            show(Self.plain(error), tone: .bad)
+        }
     }
 
     // MARK: Toasts

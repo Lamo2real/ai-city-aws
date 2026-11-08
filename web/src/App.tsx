@@ -5,6 +5,7 @@ import { api } from "./lib/api.ts";
 import { bootAuth } from "./lib/auth.ts";
 import { loadConfig } from "./lib/config.ts";
 import { store, useHud, waitingCount } from "./lib/store.ts";
+import { chief } from "./lib/chief.ts";
 import { live } from "./lib/ws.ts";
 import { route } from "./lib/apps.ts";
 import { forwardEvent } from "./lib/bridge.ts";
@@ -82,6 +83,7 @@ export function App() {
       }
       setBoot("ready");
       live.onEvent((e) => {
+        chief.event(e); // before the store, so a decision can still read the item it is about
         store.event(e);
         knowledge.event(e);
         projects.event(e);
@@ -91,7 +93,8 @@ export function App() {
         const was = store.get().live;
         store.set({ live: s });
         if (s === "online" && was !== "online") {
-          void loadCity(); // events may have been missed: start again from a fresh snapshot
+          // Events may have been missed: start again from a fresh snapshot (then what the Chief of Staff decided).
+          void loadCity().finally(() => void chief.load());
           void flushOutbox();
         }
       });

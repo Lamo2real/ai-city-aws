@@ -60,8 +60,11 @@ final class HudStore {
     var live: LiveStatus = .connecting
     var presence: Presence = .idle
     var turn: AceTurn?
+    /// The Chief of Staff on Needs you (Core/ChiefOfStaff.swift).
+    var chief = ChiefState()
 
     @ObservationIgnored private let archive: ChatArchive
+    @ObservationIgnored private var recentlyClosed: [String: DecidedItem] = [:]
     @ObservationIgnored private var during: [JSONValue]?
     @ObservationIgnored var clock: () -> Double = nowMs
     /// The City scene (the web HUD's own, in a web view) keeps its own animated copy: it gets the raw
@@ -79,7 +82,63 @@ final class HudStore {
         chat = archive.load()
     }
 
-    var waitingCount: Int { city.questions.count + city.approvals.count }
+    /// What still waits for the owner: not what the Chief of Staff already decided.
+    var openQuestions: [Question] { city.questions.values.filter { !$0.decidedByChief }.sorted { $0.createdAt < $1.createdAt } }
+    var openApprovals: [Approval] { city.approvals.values.filter { !$0.decidedByChief }.sorted { $0.id < $1.id } }
+    var waitingCount: Int { openQuestions.count + openApprovals.count }
+
+    // MARK: The Chief of Staff
+
+    func chiefLoaded(_ r: JSONValue) {
+        let decided = r["decided"].array.compactMap { DecidedItem(json: $0) }
+        let ids = Set(decided.map(\.id))
+        var needsOwner: [String: String] = [:]
+        for n in r["needs_owner"].array {
+            if let id = n["id"].string, let why = n["why"].string, !why.isEmpty { needsOwner[id] = why }
+        }
+        chief = ChiefState(status: .ready, enabled: r["enabled"].bool == true, saving: false,
+                           decided: ChiefState.newestFirst(decided + chief.decided.filter { !ids.contains($0.id) }),
+                           needsOwner: needsOwner)
+        for id in ids { dropOpen(id) }
+    }
+
+    /// `steward.decided`: the item leaves the open list and goes on top of "Decided for you"; one it could not do
+    /// (no choice, a `needs_owner_reason`) stays open with the reason.
+    func stewardDecided(_ e: JSONValue) {
+        guard let id = e["id"].string, !id.isEmpty else { return }
+        let choice = e["choice"].string ?? e["decision"].string ?? ""
+        if choice.isEmpty, let why = e["needs_owner_reason"].string, !why.isEmpty {
+            chief.needsOwner[id] = why
+            return
+        }
+        let at = e["at"].string ?? ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: clock() / 1000))
+        var known = describe(id, at: at) ?? recentlyClosed[id]
+        known?.at = at
+        guard let d = DecidedItem(json: e, fallback: known) else { return }
+        chief.needsOwner[id] = nil
+        chief.decided = [d] + chief.decided.filter { $0.id != id }
+        if chief.status != .ready { chief.status = .ready; chief.enabled = true }
+        dropOpen(id)
+    }
+
+    /// What the open item was about, so a decision that arrives live still says it.
+    private func describe(_ id: String, at: String) -> DecidedItem? {
+        if let q = city.questions[id] {
+            let dept = city.agents[q.askedBy].map { City.deptOf($0) } ?? ""
+            return DecidedItem(id: id, kind: "question", title: q.text, at: at, department: dept == "HQ" ? "" : dept)
+        }
+        if let a = city.approvals[id] {
+            let dept = a.department ?? city.agents[a.agent].map { City.deptOf($0) } ?? ""
+            return DecidedItem(id: id, kind: "approval", title: a.title ?? a.action, at: at, department: dept == "HQ" ? "" : dept)
+        }
+        return nil
+    }
+
+    private func dropOpen(_ id: String) {
+        guard city.questions[id] != nil || city.approvals[id] != nil else { return }
+        city.questions[id] = nil
+        city.approvals[id] = nil
+    }
 
     /// Events that arrive while a snapshot is loading are replayed on top of it, so none are lost.
     func beginSnapshot() { during = [] }
@@ -100,6 +159,13 @@ final class HudStore {
         let type = e["type"].string ?? ""
         if type == "ace.reply" { return aceReply(text: e["text"].string ?? "", done: e["done"].bool ?? false) }
         if type == "knowledge.updated" { return onKnowledgeUpdated(e) }
+        if type == "steward.decided" { return stewardDecided(e) }
+        // The backend answers first, then says `steward.decided`: remember what a closing item was about.
+        if ["question.answered", "approval.decided", "question.withdrawn", "approval.withdrawn"].contains(type),
+           let id = e["id"].string, let d = describe(id, at: "") {
+            if recentlyClosed.count >= 50 { recentlyClosed.removeAll() }
+            recentlyClosed[id] = d
+        }
         if type == "activity", e["id"].string == "ace" { aceStep(e["activity"].string ?? "", e["detail"].string) }
         during?.append(e)
         city = City.reduce(city, e, now: clock())

@@ -75,6 +75,19 @@ enum Demo {
         ]
     }
 
+    static var chief: JSONValue {
+        [
+            "enabled": true,
+            "decided": [
+                ["id": "q-0", "kind": "question", "title": "Which font should the sign-in screen use?", "choice": "The system font",
+                 "reason": "It matches iOS and needs no licence.", "at": iso(25), "department": "App"],
+                ["id": "ap-0", "kind": "approval", "title": "Run the unit tests on its work computer", "choice": "Approved",
+                 "reason": "Tests change nothing and cost almost nothing.", "at": iso(180), "department": "App"],
+            ],
+            "needs_owner": [["id": "ap-1", "title": "git push origin ios-app", "why": "Publishing a branch on GitHub is yours to decide."]],
+        ]
+    }
+
     static var settings: JSONValue {
         ["settings": [
             "paused": false, "daily_global_usd": 10, "monthly_budget_usd": nil, "daily_department_usd": nil,
@@ -126,6 +139,7 @@ final class DemoTransport: HTTPTransport, @unchecked Sendable {
         case ("GET", "/settings"): body = Demo.settings
         case ("PUT", "/settings"): body = Demo.settings
         case ("GET", "/costs"): body = Demo.costs
+        case ("GET", "/chief-of-staff"): body = Demo.chief
         case ("GET", "/tickets"):
             body = request.url?.query?.contains("done") == true ? ["tickets": []] : ["tickets": Demo.city["tickets"]]
         case ("GET", let p) where p.hasPrefix("/tickets/"):
