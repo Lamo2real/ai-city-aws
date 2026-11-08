@@ -16,21 +16,38 @@ import SwiftUI
 
 struct TicketsScreen: View {
     @Environment(AppModel.self) private var model
-    @State private var done = false
+    enum Which: Hashable { case live, done, decided }
+    @State private var which = Which.live
     @State private var loader = Loader()
+    private var done: Bool { which == .done }
 
     var body: some View {
-        let tickets = loader.data?["tickets"].array.compactMap(Ticket.init(json:)) ?? []
+        let tickets = which == .decided ? [] : loader.data?["tickets"].array.compactMap(Ticket.init(json:)) ?? []
         List {
-            Picker("Which tickets", selection: $done) {
-                Text("Working now").tag(false)
-                Text("Finished").tag(true)
+            Picker("Which tickets", selection: $which) {
+                Text("Working now").tag(Which.live)
+                Text("Finished").tag(Which.done)
+                Text("Decided").tag(Which.decided)
             }
             .pickerStyle(.segmented)
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)
             Group {
-                if let e = loader.error {
+                if which == .decided {
+                    // What the Chief of Staff decided for the owner, newest first (Autopilot).
+                    let decided = model.hud.chief.decided
+                    if decided.isEmpty {
+                        EmptyState(text: "Nothing decided yet. When your team asks something, the Chief of Staff decides it and it shows here.")
+                    } else {
+                        Section {
+                            ForEach(decided) { d in DecidedRow(d: d) }
+                        } header: {
+                            Text("Decided for you")
+                        } footer: {
+                            Text("Newest first. Tap one to read it all. If one isn't what you want, tell AIC what to do instead.")
+                        }
+                    }
+                } else if let e = loader.error {
                     Banner(tone: .bad, text: "Tickets did not load: \(e)", action: ("Try again", { Task { await reload() } }))
                 } else if loader.data == nil {
                     LoadingView(what: "tickets")
@@ -53,7 +70,9 @@ struct TicketsScreen: View {
         .nightScreen()
         .navigationTitle("Tickets")
         .navigationDestination(for: String.self) { TicketDetail(id: $0) }
-        .task(id: done) { await reload() }
+        .task(id: which) { if which != .decided { await reload() } }
+        .onAppear { if model.showDecided { which = .decided; model.showDecided = false } }
+        .onChange(of: model.showDecided) { _, v in if v { which = .decided; model.showDecided = false } }
         .refreshable { await reload() }
     }
 

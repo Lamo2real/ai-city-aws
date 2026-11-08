@@ -133,7 +133,7 @@ describe("timeline", () => {
       who: "AIC",
       text: "Version 3 is live",
     });
-    expect(eventWords({ type: "approval.requested", kind: "app.publish", replaces: "a1" })?.text).toMatch(/Needs you/);
+    expect(eventWords({ type: "approval.requested", kind: "app.publish", replaces: "a1" })?.text).toMatch(/Open items/);
     expect(eventWords({ type: "ticket.status", ticket: { app_id: "a1", status: "running" } })?.who).toBe("Builder");
     expect(eventWords({ type: "agent.hired" })).toBeNull();
   });

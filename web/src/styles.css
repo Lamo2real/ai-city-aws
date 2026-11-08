@@ -4574,3 +4574,128 @@ summary,
   max-width: 60ch;
   overflow-wrap: anywhere;
 }
+
+/* Autopilot: "While you were away" at the top of AIC's screen (its clock in the panel's top-left corner), and the
+   standing orders in Settings → While I'm away. Calm: no badges, no red. */
+.talk-away {
+  position: absolute;
+  top: var(--s2);
+  left: var(--s2);
+  z-index: 2;
+  color: var(--gmute);
+}
+.view-ace .talk-away {
+  top: calc(var(--top-h, 64px) + var(--s2));
+}
+.card.away {
+  margin: 0 var(--s3) var(--s2) calc(var(--tap) + var(--s3));
+  max-height: min(60vh, 560px);
+  overflow-y: auto;
+  border-left: 3px solid var(--amber);
+}
+.away-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+.away-head h2 {
+  margin: 0;
+  font-size: var(--fs-l);
+}
+.away-close {
+  font-size: 22px;
+  color: var(--gmute);
+}
+.card.away p {
+  margin: var(--s1) 0;
+  max-width: 60ch;
+}
+.away-part {
+  margin-top: var(--s3);
+}
+.away-part h3 {
+  margin: 0 0 var(--s1);
+  font-size: var(--fs-m);
+}
+.away-list {
+  margin: 0;
+  padding-left: var(--s4);
+  display: grid;
+  gap: 2px;
+}
+.away-back .away-list {
+  list-style: none;
+  padding: 0;
+  gap: var(--s2);
+}
+.away-backitem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2) var(--s3);
+  padding: var(--s2) var(--s3);
+  border-radius: var(--rg-s);
+  background: var(--glass-deep);
+}
+.away-backtext {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 200px;
+}
+.away-backtext .mute {
+  font-size: var(--fs-s);
+}
+.card.away-autopilot p {
+  margin: var(--s2) 0 0;
+  max-width: 60ch;
+}
+.orders {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--s3);
+}
+.card.order {
+  display: grid;
+  gap: var(--s2);
+}
+.card.order.off .order-words {
+  color: var(--gmute);
+}
+.order-words {
+  margin: 0;
+  font-weight: 700;
+  font-size: var(--fs-m);
+  max-width: 60ch;
+}
+.order-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+.card.order .tag {
+  justify-self: start;
+}
+.card.away a:not(.btn) {
+  color: var(--link);
+  font-weight: 700;
+}
+.order-more {
+  margin: 0;
+  font-size: var(--fs-s);
+  max-width: 60ch;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 599px) {
+  .card.away {
+    margin: var(--tap) var(--s2) var(--s2);
+    max-height: 60vh;
+  }
+}
+.card.away a.btn {
+  text-decoration: none;
+}

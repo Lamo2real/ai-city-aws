@@ -25,6 +25,8 @@ enum Demo {
         let model = AppModel(configStore: store, hud: HudStore(archive: NoChatArchive()), http: http, makeAuth: makeAuth, connectLive: false)
         http.model = model
         UserDefaults.standard.set(true, forKey: "aic.guide.done")
+        // `-away`: as if the owner was last here two days ago, so AIC opens with "While you were away".
+        if args.contains("-away") { UserDefaults.standard.set(nowMs() - 48 * 3_600_000, forKey: Away.seenKey) }
         return model
     }
 
@@ -74,6 +76,21 @@ enum Demo {
             "activities": ["wkr-ios-1": ["activity": "coding", "detail": "SignInFlow.swift"]],
         ]
     }
+
+    static var away: JSONValue {
+        [
+            "since": iso(2880),
+            "jobs_finished": [["id": "j1", "name": "Build the sign-in screens", "status": "Done"], ["id": "j2", "name": "Fix the login bug", "status": "Done"]],
+            "jobs_running": [["id": "j3", "name": "Write the launch post", "status": "Working on it"]],
+            "decided": 14,
+            "handled_by_standing_orders": [["source": "jira", "item": "SUP-12", "summary": "Customer Support answered 6 new Jira tickets"]],
+            "when_youre_back": [["id": "back-slack", "title": "Slack sign-in expired", "why": "Slack needs you to sign in again.", "service": "slack"]],
+        ]
+    }
+    static let orders: JSONValue = [
+        ["id": "so-1", "source": "jira", "instructions": "Answer new tickets in project SUP; hand bugs to App", "department": "Customer Support", "every_minutes": 15, "enabled": true],
+        ["id": "so-2", "source": "slack", "instructions": "Answer questions in #help", "department": "App", "every_minutes": 60, "enabled": false],
+    ]
 
     static var chief: JSONValue {
         [
@@ -140,6 +157,8 @@ final class DemoTransport: HTTPTransport, @unchecked Sendable {
         case ("PUT", "/settings"): body = Demo.settings
         case ("GET", "/costs"): body = Demo.costs
         case ("GET", "/chief-of-staff"): body = Demo.chief
+        case ("GET", "/away-summary"): body = Demo.away
+        case ("GET", "/standing-orders"): body = ["standing_orders": Demo.orders]
         case ("GET", "/tickets"):
             body = request.url?.query?.contains("done") == true ? ["tickets": []] : ["tickets": Demo.city["tickets"]]
         case ("GET", let p) where p.hasPrefix("/tickets/"):

@@ -16,6 +16,7 @@ struct AICityApp: App {
                 }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { Task { await model.becameActive() } }
+                    if phase == .background { model.wentToBackground() }
                 }
         }
     }
@@ -94,7 +95,6 @@ struct MainTabs: View {
                 }
                 .tabItem { Label(s.title, systemImage: s.symbol) }
                 .tag(s)
-                .badge(s == .inbox ? model.hud.waitingCount : 0)
             }
         }
         .overlay(alignment: .bottom) { ToastView().padding(.bottom, 60) }
@@ -112,6 +112,7 @@ struct MainTabs: View {
         case .aic: ChatScreen()
         case .city: CityScreen()
         case .inbox: InboxScreen()
+        case .away: AwaySettingsScreen()
         case .tickets: TicketsScreen()
         case .more: MoreList()
         case .costs: CostsScreen()

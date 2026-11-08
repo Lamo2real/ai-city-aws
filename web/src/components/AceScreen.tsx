@@ -15,8 +15,9 @@ import {
   type Lists,
 } from "../lib/attach.ts";
 import { addFiles, useKnowledge } from "../lib/knowledge.ts";
-import { store, useHud, waitingCount } from "../lib/store.ts";
-import { needsWords } from "../lib/needs.ts";
+import { store, useHud } from "../lib/store.ts";
+import { awayStart, cameBack } from "../lib/away.ts";
+import { AwayPanel } from "./Away.tsx";
 import { appendDictation } from "../voice/modes.ts";
 import { useVoice } from "../voice/useVoice.ts";
 import { AicStatus, AicSteps } from "./AicStatus.tsx";
@@ -24,7 +25,7 @@ import { stepsRunning } from "../lib/steps.ts";
 import { statusWords } from "./Knowledge.tsx";
 import { PlusMenu, type Insert } from "./PlusMenu.tsx";
 import { StreamedText } from "./StreamedText.tsx";
-import { Banner, ClearIcon, DictateIcon, SendIcon, toast, WaveIcon } from "./ui.tsx";
+import { Banner, ClearIcon, ClockIcon, DictateIcon, SendIcon, toast, WaveIcon } from "./ui.tsx";
 import { MicWave, VoiceVisualizer } from "./VoiceVisualizer.tsx";
 
 export { MicIcon } from "./ui.tsx";
@@ -42,7 +43,9 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
   const chat = useHud((s) => s.chat);
   const cards = useHud((s) => s.cards);
   const presence = useHud((s) => s.presence);
-  const waiting = useHud(waitingCount);
+  // "While you were away": opens by itself after more than 12 hours away, and from the clock any time.
+  const [away, setAway] = useState<number | null>(() => (cameBack() ? awayStart() : null));
+  const [noSummary, setNoSummary] = useState(false);
   const live = useHud((s) => s.live);
   const turn = useHud((s) => s.turn);
   const [text, setText] = useState(readDraft);
@@ -210,12 +213,22 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
             <ClearIcon />
           </button>
         ) : null}
+        {noSummary ? null : (
+          <button
+            type="button"
+            className="icon-btn talk-away"
+            onClick={() => setAway((a) => (a === null ? Math.min(awayStart() ?? Infinity, Date.now() - 24 * 3600_000) : null))}
+            aria-expanded={away !== null}
+            aria-label="While you were away"
+            title="While you were away"
+          >
+            <ClockIcon />
+          </button>
+        )}
         <div className="talk-notes">
           {voice.problem ? <Banner tone="bad">{voice.problem}</Banner> : null}
-          {waiting ? (
-            <Banner tone="warn" action={{ label: "Open", onClick: () => go("inbox") }}>
-              {`${needsWords(waiting)}.`}
-            </Banner>
+          {away !== null ? (
+            <AwayPanel since={away} onClose={() => setAway(null)} onMissing={() => (setNoSummary(true), setAway(null))} />
           ) : null}
           {live === "reconnecting" ? (
             <Banner tone="bad">Connection lost. Your messages are saved. Reconnecting…</Banner>
@@ -227,7 +240,7 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
             </Banner>
           ) : null}
         </div>
-        <div className="chat" ref={log} aria-live="polite" aria-label="Conversation with AIC">
+        <div className="chat" ref={log} aria-live="polite" aria-label="Conversation with AIC" tabIndex={0}>
           {chat.length === 0 ? <p className="hello">Say hi. Type, or tap the voice button and just talk.</p> : null}
           {chat.map((l) => (
             <article

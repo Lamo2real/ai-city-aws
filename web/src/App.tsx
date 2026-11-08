@@ -4,7 +4,8 @@ import { flushOutbox, loadCity, saveSettings } from "./lib/actions.ts";
 import { api } from "./lib/api.ts";
 import { bootAuth } from "./lib/auth.ts";
 import { loadConfig } from "./lib/config.ts";
-import { store, useHud, waitingCount } from "./lib/store.ts";
+import { store } from "./lib/store.ts";
+import { trackSeen } from "./lib/away.ts";
 import { chief } from "./lib/chief.ts";
 import { live } from "./lib/ws.ts";
 import { route } from "./lib/apps.ts";
@@ -15,7 +16,6 @@ import { AceScreen } from "./components/AceScreen.tsx";
 import { CityView } from "./components/CityView.tsx";
 import { FeaturesScreen } from "./components/Features.tsx";
 import { FirstRun } from "./components/FirstRun.tsx";
-import { Inbox } from "./components/Inbox.tsx";
 import { KnowledgeScreen } from "./components/Knowledge.tsx";
 import { knowledge } from "./lib/knowledge.ts";
 import { projects } from "./lib/projects.ts";
@@ -26,12 +26,11 @@ import { connectReturn } from "./lib/connectReturn.ts";
 import { Eyes } from "./components/Eyes.tsx";
 import { SignIn } from "./components/SignIn.tsx";
 
-const VIEWS = ["ace", "city", "inbox", "tickets", "apps", "knowledge", "skills", "costs", "settings"] as const;
+const VIEWS = ["ace", "city", "tickets", "apps", "knowledge", "skills", "costs", "settings"] as const;
 type View = (typeof VIEWS)[number];
 const LABEL: Record<View, string> = {
   ace: "AIC",
   city: "City",
-  inbox: "Needs you",
   tickets: "Work",
   apps: "Projects",
   knowledge: "Knowledge",
@@ -49,7 +48,6 @@ export function App() {
   const [signInNote, setSignInNote] = useState<string | null>(null);
   const [{ view, slug }, setRoute] = useState<{ view: View; slug: string | null }>(() => route(location.hash, VIEWS));
   const [guide, setGuide] = useState(false);
-  const waiting = useHud(waitingCount);
   // The top bar's height, as `--top-h`: on the AIC screen the chat runs up behind the bar (decision 108).
   const top = useRef<HTMLElement>(null);
   const [topH, setTopH] = useState(64);
@@ -64,8 +62,14 @@ export function App() {
   const go = useCallback((v: string) => {
     location.hash = `/${v}`;
   }, []);
+  useEffect(() => trackSeen(), []);
   useEffect(() => {
-    const on = () => setRoute(route(location.hash, VIEWS));
+    // Needs you is gone (Autopilot): an old link opens what is still open from before.
+    const on = () => {
+      if (/^#\/?inbox\b/.test(location.hash)) return location.replace("#/settings/open-items");
+      setRoute(route(location.hash, VIEWS));
+    };
+    on();
     window.addEventListener("hashchange", on);
     return () => window.removeEventListener("hashchange", on);
   }, []);
@@ -160,18 +164,8 @@ export function App() {
         </button>
         <nav aria-label="Screens">
           {VIEWS.map((v) => (
-            <a
-              key={v}
-              href={`#/${v}`}
-              aria-current={view === v ? "page" : undefined}
-              className={v === "inbox" && waiting ? "has-waiting" : undefined}
-            >
+            <a key={v} href={`#/${v}`} aria-current={view === v ? "page" : undefined}>
               {LABEL[v]}
-              {v === "inbox" && waiting ? (
-                <span className="badge" aria-label={`${waiting} waiting`}>
-                  {waiting}
-                </span>
-              ) : null}
             </a>
           ))}
           <PinnedApps inNav />
@@ -182,8 +176,7 @@ export function App() {
         {view === "ace" ? <AceScreen go={go} /> : null}
         {view === "city" && !slug ? <CityView go={go} /> : null}
         {view === "city" && slug ? <FeaturesScreen page={slug} go={go} /> : null}
-        {view === "inbox" ? <Inbox /> : null}
-        {view === "tickets" ? <Tickets /> : null}
+        {view === "tickets" ? <Tickets page={slug} /> : null}
         {view === "apps" && !slug ? <ProjectsScreen /> : null}
         {view === "apps" && slug ? <ProjectPage key={slug} slug={slug} go={go} /> : null}
         {view === "knowledge" ? <KnowledgeScreen /> : null}

@@ -15,12 +15,11 @@ import {
   visualState,
   type CityState,
 } from "../city/city-state.js";
-import { needsWords } from "../lib/needs.ts";
 import { mountCity, type CityScene } from "../city/scene.js";
 import { instruct, sendWorkerHome } from "../lib/actions.ts";
 import { appList, appsDepartment, capped, isPublish } from "../lib/apps.ts";
 import { api, ApiError } from "../lib/api.ts";
-import { store, useHud, waitingCount } from "../lib/store.ts";
+import { store, useHud } from "../lib/store.ts";
 import { useVoice } from "../voice/useVoice.ts";
 import { MicIcon } from "./ui.tsx";
 import { Banner, Button, Loading } from "./ui.tsx";
@@ -56,7 +55,6 @@ export function CityView({ go }: { go: (view: string) => void }) {
   const city = useHud((s) => s.city);
   const loaded = useHud((s) => s.loaded);
   const loadError = useHud((s) => s.loadError);
-  const waiting = useHud(waitingCount);
   const live = useHud((s) => s.live);
   const [open, setOpen] = useState<Open>(null);
   const [now, setNow] = useState(Date.now());
@@ -131,7 +129,6 @@ export function CityView({ go }: { go: (view: string) => void }) {
         <CityTabs on="city" />
         <Stat k="Agents working now" v={String(t.agentsActive)} />
         <Stat k="Jobs running" v={String(jobsRunning)} />
-        <Stat k="Need you" v={String(waiting)} />
         <Stat k={REGION_CITY[region] ?? region} v={stockholmTime(now)} className="clock" />
         <button
           type="button"
@@ -245,14 +242,6 @@ export function CityView({ go }: { go: (view: string) => void }) {
             <p className="mute">Quiet.</p>
           )}
         </div>
-        {waiting ? (
-          <div className="cityui inboxbar">
-            <span>{needsWords(waiting)}</span>
-            <Button variant="primary" onClick={() => go("inbox")} label={`Open Needs you: ${needsWords(waiting)}`}>
-              Open
-            </Button>
-          </div>
-        ) : null}
       </aside>
       <div className="citybottom" role="toolbar" aria-label="Map and actions">
         <div className="zoom">
@@ -272,9 +261,6 @@ export function CityView({ go }: { go: (view: string) => void }) {
           </button>
           <button type="button" className="tile" onClick={() => go("tickets")} aria-label="Tickets">
             <Glyph d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5" />
-          </button>
-          <button type="button" className="tile" onClick={() => go("inbox")} aria-label="Needs you inbox">
-            <Glyph d="M4 6h16v12H4zM4 13h5l1 2h4l1-2h5" />
           </button>
           <button
             type="button"
@@ -547,8 +533,8 @@ function DeptApps({ name, city }: { name: string; city: CityState }) {
     <div>
       {waiting.length ? (
         <p className="doing">
-          <b>Waiting for you.</b> {`${waiting.map((a) => capped(a.title, 40)).join(", ")} is ready to try in `}
-          <a href="#/inbox">Needs you</a>.
+          <b>Ready to try.</b> {`${waiting.map((a) => capped(a.title, 40)).join(", ")} is ready to try in `}
+          <a href="#/settings/open-items">Open items</a>.
         </p>
       ) : null}
       {apps.length ? (
@@ -592,7 +578,7 @@ function Legend() {
         <span className="mark">Arcade cabinet by a door</span> an app you published; tap it to open it
       </li>
       <li>
-        <span className="mark">“Waiting for you” sign</span> a new app is ready to try in Needs you
+        <span className="mark">“Waiting for you” sign</span> a new app is ready to try in Open items
       </li>
       {Object.entries(VISUALS).map(([k, v]) => (
         <li key={k}>

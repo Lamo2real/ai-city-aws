@@ -1,5 +1,8 @@
 // Tickets, Costs and Settings. Plain words in the main view; technical details behind "Details".
+import { AwaySettings } from "./Away.tsx";
+import { DecidedList } from "./ChiefOfStaff.tsx";
 import { ConnectorsSettings } from "./ConnectorsSettings.tsx";
+import { Inbox } from "./Inbox.tsx";
 import { GitHubSettings } from "./GitHubSettings.tsx";
 import { useEffect, useState } from "react";
 import { COST_NOTE, plainText, ticketWords } from "../city/city-state.js";
@@ -66,11 +69,20 @@ interface Job {
   updated_at: string;
   result?: string;
 }
-/** Work: the owner's jobs, one row each (name, what is happening, parts done, when). Details are a tap away. */
-export function Tickets() {
-  const [which, setWhich] = useState<"live" | "done">("live");
+/**
+ * Work: the owner's jobs, one row each (name, what is happening, parts done, when). Details are a tap away.
+ * "Decided for you" (`#/tickets/decided`) lists what the Chief of Staff decided.
+ */
+export function Tickets({ page = null }: { page?: string | null }) {
+  const [which, setWhich] = useState<"live" | "done" | "decided">(page === "decided" ? "decided" : "live");
+  useEffect(() => {
+    if (page === "decided") setWhich("decided");
+  }, [page]);
   const [open, setOpen] = useState<string | null>(null);
-  const { data, error, retry } = useApi<{ jobs: Job[] }>(`/jobs${which === "done" ? "?status=done" : ""}`);
+  const api_ = useApi<{ jobs: Job[] }>(which === "decided" ? null : `/jobs${which === "done" ? "?status=done" : ""}`);
+  const data = which === "decided" ? null : api_.data;
+  const error = which === "decided" ? null : api_.error;
+  const retry = api_.retry;
   if (open) return <TicketDetail id={open} back={() => setOpen(null)} />;
   return (
     <section className="screen" aria-labelledby="tk-title">
@@ -82,13 +94,17 @@ export function Tickets() {
         <button role="tab" aria-selected={which === "done"} onClick={() => setWhich("done")}>
           Finished
         </button>
+        <button role="tab" aria-selected={which === "decided"} onClick={() => setWhich("decided")}>
+          Decided for you
+        </button>
       </div>
+      {which === "decided" ? <DecidedList inWork /> : null}
       {error ? (
         <Banner tone="bad" action={{ label: "Try again", onClick: retry }}>
           Your work list did not load. Check the connection.
         </Banner>
       ) : null}
-      {!data && !error ? <Loading what="your work" /> : null}
+      {!data && !error && which !== "decided" ? <Loading what="your work" /> : null}
       {data && !data.jobs.length ? (
         <p className="empty">
           {which === "live" ? "Nothing is being worked on. Ask AIC for something." : "Nothing is finished yet."}
@@ -342,6 +358,11 @@ type S = Record<string, unknown> & {
 };
 /** Settings is a menu of pages, each at its own address (`#/settings/<page>`), like a phone's Settings app. */
 export const SETTINGS_PAGES = [
+  {
+    id: "away",
+    title: "While I'm away",
+    about: "Autopilot, standing orders, and anything still open from before",
+  },
   { id: "general", title: "General", about: "Appearance, notifications, where Claude runs, help and sign-out" },
   {
     id: "departments",
@@ -362,6 +383,8 @@ export const SETTINGS_PAGES = [
 type SettingsPage = (typeof SETTINGS_PAGES)[number]["id"];
 
 export function SettingsScreen({ page, reopenGuide }: { page: string | null; reopenGuide: () => void }) {
+  // What was in the old Needs you list stays reachable here until it is empty, so nothing is lost.
+  if (page === "open-items") return <Inbox />;
   const current = SETTINGS_PAGES.find((x) => x.id === page);
   if (!current) return <SettingsMenu />;
   return <SettingsPageView key={current.id} page={current.id} title={current.title} reopenGuide={reopenGuide} />;
@@ -543,6 +566,7 @@ function SettingsPageView({
           </p>
         </>
       ) : null}
+      {page === "away" ? <AwaySettings /> : null}
       {page === "departments" ? <ConnectorsSettings part="departments" /> : null}
       {page === "connectors" ? (
         <ConnectorsSettings

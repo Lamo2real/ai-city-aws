@@ -75,6 +75,19 @@ final class APIClient: @unchecked Sendable {
     func ticket(_ id: String) async throws -> JSONValue { try await request("/tickets/\(Self.seg(id))") }
     func costs() async throws -> JSONValue { try await request("/costs") }
     func settings() async throws -> JSONValue { try await request("/settings")["settings"] }
+    // Autopilot (Core/Away.swift); each throws a 404 while the backend has none yet.
+    func awaySummary(since: Date) async throws -> JSONValue {
+        let iso = ISO8601DateFormatter().string(from: since)
+        return try await request("/away-summary?since=\(iso.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? iso)")
+    }
+    func standingOrders() async throws -> [StandingOrder] {
+        let r = try await request("/standing-orders")
+        return (r["standing_orders"].array.isEmpty ? r["orders"].array : r["standing_orders"].array).compactMap(StandingOrder.init(json:))
+    }
+    func setStandingOrder(_ id: String, enabled: Bool) async throws {
+        try await request("/standing-orders/\(Self.seg(id))", method: "PUT", body: ["enabled": .bool(enabled)])
+    }
+    func deleteStandingOrder(_ id: String) async throws { try await request("/standing-orders/\(Self.seg(id))", method: "DELETE") }
     /// The Chief of Staff (a 404 throws: the backend has none yet).
     func chiefOfStaff() async throws -> JSONValue { try await request("/chief-of-staff") }
     func saveSettings(_ patch: JSONValue) async throws -> JSONValue {

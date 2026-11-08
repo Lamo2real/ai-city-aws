@@ -76,16 +76,23 @@ struct ChatScreen: View {
     @ViewBuilder private var notes: some View {
         let hud = model.hud
         let banners = [
-            hud.waitingCount > 0 ? Banner(tone: .warn, text: hud.waitingCount == 1 ? "One thing needs you." : "\(hud.waitingCount) things need you.",
-                                          action: ("Open", { model.open(.inbox) })) : nil,
             hud.live == .reconnecting ? Banner(tone: .bad, text: "Connection lost. Your messages are saved. Reconnecting…") : nil,
             !hud.unsent.isEmpty && hud.live == .online
                 ? Banner(tone: .info, text: (hud.unsent.count == 1 ? "One message is waiting to send." : "\(hud.unsent.count) messages are waiting to send.") + " They go out automatically.")
                 : nil,
         ].compactMap { $0 }
-        if !banners.isEmpty || !hud.chat.isEmpty {
+        if !banners.isEmpty || !hud.chat.isEmpty || !model.awayMissing {
             HStack(alignment: .top, spacing: 4) {
+                // "While you were away": by itself after more than 12 hours away, and from this clock any time.
+                if !model.awayMissing {
+                    Button { model.toggleAway() } label: {
+                        Image(systemName: "clock").font(.callout).foregroundStyle(Glass.mute).frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel("While you were away")
+                    .padding(.leading, 4)
+                }
                 VStack(spacing: 8) {
+                    if let since = model.awaySince { AwayPanel(since: since).padding(.top, 6) }
                     ForEach(Array(banners.enumerated()), id: \.offset) { $0.element }
                 }
                 .frame(maxWidth: .infinity)

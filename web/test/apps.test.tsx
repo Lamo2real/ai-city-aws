@@ -86,7 +86,7 @@ describe("routes", () => {
     ["#/apps/a%20b", "apps", "a b"],
     ["#/apps/%E0%A4%A", "apps", "%E0%A4%A"],
     ["#/tickets", "tickets", null],
-    ["#/tickets/x", "tickets", null],
+    ["#/tickets/decided", "tickets", "decided"],
     ["#/nope", "ace", null],
     ["", "ace", null],
   ])("%s → %s %s", (hash, view, slug) => {

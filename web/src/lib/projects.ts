@@ -255,7 +255,7 @@ export function eventWords(e: {
   if (e.type === "app.updated" && app?.app_id && app.version)
     return { conv: `app-${app.app_id}`, who: "AIC", text: `Version ${app.version} is live` };
   if (e.type === "approval.requested" && e.kind === "app.publish" && s(e.replaces))
-    return { conv: `app-${s(e.replaces)}`, who: "Builder", text: "A new version is ready for you to try in Needs you" };
+    return { conv: `app-${s(e.replaces)}`, who: "Builder", text: "A new version is ready for you to try in Open items (Settings → While I'm away)" };
   if (e.type === "app.draft" && s(e.replaces)) {
     const st = s(e.status);
     const text =

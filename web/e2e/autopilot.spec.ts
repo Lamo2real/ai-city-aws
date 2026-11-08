@@ -1,7 +1,8 @@
-// The Chief of Staff on Needs you, against the mocked backend: the calm card with its switch and weekly count,
-// "Decided for you" (newest first, expandable), the item it left to the owner with its reason on top, the badge that
-// counts only what still waits for the owner, the live `steward.decided` event, the phone layout, and a backend
-// without a Chief of Staff (404: nothing about it shows). Screenshots go to docs/screenshots/.
+// Autopilot, against the mocked backend: there is no Needs you tab and nothing nags; AIC's screen opens with
+// "While you were away" after more than 12 hours away (and from the clock any time) with one button per thing only
+// the owner can do; the Chief of Staff's decisions are under Work → "Decided for you"; Settings → While I'm away
+// holds the Autopilot switch, the standing orders and the open items from before. A backend without these routes
+// (404) shows none of it. Screenshots go to docs/screenshots/.
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { at, mockBackend, type Mock } from "./mock.ts";
@@ -26,21 +27,23 @@ const question = (id: string, text: string, extra: Record<string, unknown> = {})
   created_at: at(),
   ...extra,
 });
-const badge = (page: Page) => page.getByRole("link", { name: /Needs you/ }).first();
+/** The owner was last here `hours` ago on this device. */
+const awayFor = (page: Page, hours: number) =>
+  page.addInitScript((h) => localStorage.setItem("aic.lastSeen", String(Date.now() - h * 3600_000)), hours);
 
-async function setup(page: Page, enabled = true): Promise<Mock> {
+async function setup(page: Page): Promise<Mock> {
   const m = await mockBackend(page, {
     snapshot: {
       questions: [
         question("q-open", "Which database should the demo use?"),
-        question("q-key", "Paste the Stripe key so I can take payments?", { needs_owner_reason: "" }),
-        // Decided already but still in the snapshot: never counted.
+        // Decided already but still in the snapshot: never counted as open.
         question("q-old", "Use tabs or spaces?", { decided_by: "chief_of_staff", decision: "Spaces" }),
       ],
     },
   });
+  m.settings.autopilot = true;
   m.chief = {
-    enabled,
+    enabled: true,
     decided: [
       {
         id: "q-old",
@@ -60,114 +63,185 @@ async function setup(page: Page, enabled = true): Promise<Mock> {
         at: ago(2),
         department: "Engineering",
       },
-      {
-        id: "q-ancient",
-        kind: "question",
-        title: "Name the repo",
-        choice: "ai-city",
-        reason: "Short and matches the product.",
-        at: ago(24 * 10),
-        department: "Engineering",
-      },
     ],
-    needs_owner: [{ id: "q-key", title: "Paste the Stripe key", why: "Only you can paste a payment key." }],
+    needs_owner: [{ id: "q-open", title: "Which database", why: "Only you know which one you pay for." }],
   };
+  m.away = {
+    since: ago(60),
+    jobs_finished: [{ id: "j1", name: "Build the landing page" }, { id: "j2", name: "Fix the login bug" }],
+    jobs_running: [{ id: "j3", name: "Write the launch post" }],
+    decided: 14,
+    handled_by_standing_orders: [
+      { source: "jira", item: "SUP-12", summary: "Customer Support answered 6 new Jira tickets", at: ago(3) },
+    ],
+    when_youre_back: [
+      { id: "wb-1", title: "Slack sign-in expired", why: "Slack needs you to sign in again.", service: "slack" },
+      { id: "wb-2", title: "HeyGen key", why: "HeyGen needs a new API key.", service: "heygen" },
+    ],
+  };
+  m.orders = [
+    {
+      id: "so-1",
+      source: "jira",
+      what: "new Jira tickets",
+      department: "Customer Support",
+      every_minutes: 15,
+      enabled: true,
+    },
+    {
+      id: "so-2",
+      source: "slack",
+      instructions: "Answer questions in #help; hand bugs to Engineering",
+      department: "Engineering",
+      every_minutes: 60,
+      enabled: false,
+    },
+  ];
   return m;
 }
 
-test("Needs you shows the Chief of Staff, what it decided, and what still needs the owner", async ({ page }) => {
+test("back after two days: AIC opens with While you were away, calm, with one button per thing only you can do", async ({
+  page,
+}) => {
+  const m = await setup(page);
+  await awayFor(page, 48);
+  await page.goto("/");
+  const panel = page.getByRole("region", { name: "While you were away" });
+  await expect(panel).toBeVisible();
+  await expect(panel).toContainText("Build the landing page");
+  await expect(panel).toContainText("Write the launch post");
+  await expect(panel).toContainText("The Chief of Staff made 14 decisions for you.");
+  await expect(panel).toContainText("Customer Support answered 6 new Jira tickets");
+  await expect(panel.getByText("Slack needs you to sign in again.")).toBeVisible();
+  // No tab, no badge, no counts that nag.
+  await expect(page.getByRole("navigation", { name: "Screens" }).getByRole("link", { name: /Needs you/ })).toHaveCount(0);
+  await expect(page.locator(".badge")).toHaveCount(0);
+  await expect(page.getByText(/things? needs? you/)).toHaveCount(0);
+  await noSeriousA11y(page, "While you were away");
+  await shot(page, "away-panel");
+  expect(m.calls.find((c) => c.path.startsWith("/away-summary"))?.path).toMatch(/since=/);
+
+  // One button does it: Slack's sign-in starts; the key goes to Connectors.
+  const popup = page.waitForEvent("popup");
+  await panel.getByRole("button", { name: "Sign in to Slack" }).click();
+  await (await popup).close();
+  await expect.poll(() => m.calls.some((c) => c.method === "POST" && c.path === "/connectors/slack/login")).toBe(true);
+  await expect(panel.getByRole("link", { name: "Add the key for Heygen" })).toHaveAttribute("href", "#/settings/connectors");
+
+  // The decisions are under Work.
+  await panel.getByRole("link", { name: "See what it decided" }).click();
+  await expect(page).toHaveURL(/#\/tickets\/decided$/);
+  await expect(page.getByRole("tab", { name: "Decided for you" })).toHaveAttribute("aria-selected", "true");
+});
+
+test("here an hour ago: no panel by itself, but the clock opens it; Close hides it", async ({ page }) => {
   await setup(page);
-  await page.goto("/#/inbox");
-  const card = page.getByRole("region", { name: "Chief of Staff is handling these" });
-  await expect(card).toBeVisible();
-  await expect(card).toContainText("Decided 2 things in the last 7 days."); // the 10-day-old one is not counted
-  await expect(card.getByRole("switch", { name: "Chief of Staff on or off" })).toBeChecked();
+  await awayFor(page, 1);
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Talk to AIC" })).toBeAttached();
+  await expect(page.getByRole("region", { name: "While you were away" })).toHaveCount(0);
+  await page.getByRole("button", { name: "While you were away" }).click();
+  const panel = page.getByRole("region", { name: "While you were away" });
+  await expect(panel).toContainText("Fix the login bug");
+  await panel.getByRole("button", { name: "Close While you were away" }).click();
+  await expect(panel).toHaveCount(0);
+});
 
-  // The open list: only what waits for the owner; the badge agrees.
-  await expect(page.getByText("2 things need you")).toBeVisible();
-  await expect(badge(page)).toContainText("2");
-  const key = page.getByRole("article").filter({ hasText: "Paste the Stripe key" });
-  await expect(key.locator(".cos-why")).toHaveText("Chief of Staff: Only you can paste a payment key.");
-
-  // Decided for you: newest first, each expandable.
-  const decided = page.getByRole("region", { name: "Decided for you" });
-  const rows = decided.locator("details");
-  await expect(rows).toHaveCount(3);
+test("Work → Decided for you: newest first, expandable, and a live decision lands on top", async ({ page }) => {
+  const m = await setup(page);
+  await page.goto("/#/tickets/decided");
+  const rows = page.getByRole("region", { name: "Decided for you" }).locator("details");
+  await expect(rows).toHaveCount(2);
   await expect(rows.nth(0)).toContainText("Run the test suite on its work computer");
   await expect(rows.nth(0)).toContainText("It said: Approved");
   await expect(rows.nth(0)).toContainText("2 h ago · Engineering");
-  await expect(rows.nth(1)).toContainText("It chose: Spaces");
-  await expect(page.locator(".card.need").filter({ hasText: "Use tabs or spaces?" })).toHaveCount(0);
   await rows.nth(1).locator("summary").click();
   await expect(rows.nth(1).getByText("Why: The project's style guide already uses spaces.")).toBeVisible();
-  await expect(rows.nth(1)).toContainText("tell AIC what to do instead");
-
-  await card.getByRole("link", { name: "See what it decided" }).click();
-  await expect(decided.getByRole("heading", { name: "Decided for you" })).toBeFocused();
-  await noSeriousA11y(page, "Needs you with the Chief of Staff");
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await shot(page, "needs-you-chief");
-});
-
-test("the switch turns the Chief of Staff off and on through settings", async ({ page }) => {
-  const m = await setup(page);
-  await page.goto("/#/inbox");
-  const sw = page.getByRole("switch", { name: "Chief of Staff on or off" });
-  await sw.uncheck({ force: true });
-  await expect(page.getByRole("heading", { name: "Chief of Staff is off" })).toBeVisible();
-  await expect(page.getByText("Everything waits here for you.", { exact: false }).first()).toBeVisible();
-  await expect
-    .poll(() => m.calls.filter((c) => c.method === "PUT" && c.path === "/settings").map((c) => c.body))
-    .toEqual([{ chief_of_staff_enabled: false }]);
-  expect(m.chief?.enabled).toBe(false);
-  await sw.check({ force: true });
-  await expect(page.getByRole("heading", { name: "Chief of Staff is handling these" })).toBeVisible();
-  await expect.poll(() => m.chief?.enabled).toBe(true);
-});
-
-test("a decision arriving live moves the item into Decided for you and the badge drops", async ({ page }) => {
-  const m = await setup(page);
-  await page.goto("/#/inbox");
-  await expect(badge(page)).toContainText("2");
   // The backend's order: it answers through the same code as the owner's buttons, then says what it decided.
   m.send({ type: "question.answered", id: "q-open", answered_by: "chief_of_staff", answer: "SQLite" });
   m.send({ type: "steward.decided", id: "q-open", kind: "question", choice: "SQLite", reason: "Simplest for a demo." });
-  await expect(page.locator(".card.need").filter({ hasText: "Which database should the demo use?" })).toHaveCount(0);
-  const first = page.getByRole("region", { name: "Decided for you" }).locator("details").first();
-  await expect(first).toContainText("Which database should the demo use?"); // the title came from the open item
-  await expect(first).toContainText("It chose: SQLite");
-  await expect(first).toContainText("Simplest for a demo.");
-  await expect(page.getByText("1 thing needs you")).toBeVisible();
-  await expect(badge(page)).toContainText("1");
-  await expect(page.getByRole("region", { name: "Chief of Staff is handling these" })).toContainText(
-    "Decided 3 things in the last 7 days.",
-  );
+  await expect(rows).toHaveCount(3);
+  await expect(rows.first()).toContainText("Which database should the demo use?");
+  await expect(rows.first()).toContainText("It chose: SQLite");
+  await noSeriousA11y(page, "Work: Decided for you");
 });
 
-test("on a phone the card and the decided list fit the screen", async ({ page }) => {
+test("Settings → While I'm away: Autopilot, standing orders in plain words, and the open items from before", async ({
+  page,
+}) => {
+  const m = await setup(page);
+  await page.goto("/#/settings/away");
+  await expect(page.getByRole("heading", { name: "While I'm away", level: 1 })).toBeVisible();
+  const sw = page.getByRole("switch", { name: "Autopilot on or off" });
+  await expect(sw).toBeChecked();
+  const cards = page.locator(".card.order");
+  await expect(cards.nth(0)).toContainText("Every 15 minutes, Customer Support handles new Jira tickets.");
+  await expect(cards.nth(1)).toContainText("Every hour, Engineering handles new Slack messages.");
+  await noSeriousA11y(page, "While I'm away");
+  await shot(page, "settings-away");
+
+  await sw.uncheck({ force: true });
+  await expect.poll(() => m.settings.autopilot).toBe(false);
+  await expect(page.getByText("Off: your team's questions and approvals wait for you.")).toBeVisible();
+  await sw.check({ force: true });
+  await expect.poll(() => m.settings.autopilot).toBe(true);
+
+  await page.getByRole("switch", { name: /Engineering handles new Slack messages\. On or off/ }).check({ force: true });
+  await expect.poll(() => m.orders?.find((o) => o.id === "so-2")?.enabled).toBe(true);
+  await page.getByRole("button", { name: /^Delete: Every 15 minutes/ }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await expect(cards).toHaveCount(1);
+  expect(m.orders?.map((o) => o.id)).toEqual(["so-2"]);
+
+  // The open item from before is still reachable, with the Chief of Staff's reason on top.
+  await page.getByRole("link", { name: /Open items/ }).click();
+  await expect(page).toHaveURL(/#\/settings\/open-items$/);
+  const item = page.getByRole("article").filter({ hasText: "Which database should the demo use?" });
+  await expect(item.locator(".cos-why")).toHaveText("Chief of Staff: Only you know which one you pay for.");
+  await expect(page.getByText("Use tabs or spaces?")).toHaveCount(0); // already decided
+  await page.getByRole("link", { name: "‹ While I'm away" }).click();
+  await expect(page).toHaveURL(/#\/settings\/away$/);
+
+  // Add opens AIC's chat with the words started.
+  await page.getByRole("button", { name: "Add a standing order" }).click();
+  await expect(page.getByRole("textbox", { name: /message/i })).toHaveValue("While I'm away, ");
+});
+
+test("on a phone the panel and the standing orders fit the screen", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await setup(page);
-  await page.goto("/#/inbox");
-  await expect(page.getByRole("heading", { name: "Chief of Staff is handling these" })).toBeVisible();
-  const wide = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
-  expect(wide).toBe(false);
-  await noSeriousA11y(page, "Needs you on a phone");
-  await shot(page, "phone-needs-you-chief");
+  await awayFor(page, 48);
+  await page.goto("/");
+  await expect(page.getByRole("region", { name: "While you were away" })).toBeVisible();
+  const wide = () => page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+  expect(await wide()).toBe(false);
+  await noSeriousA11y(page, "While you were away on a phone");
+  await shot(page, "phone-away-panel");
+  await page.goto("/#/settings/away");
+  await expect(page.locator(".card.order").first()).toBeVisible();
+  expect(await wide()).toBe(false);
 });
 
 test("light appearance reads well", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("aic.theme", "light"));
   await setup(page);
-  await page.goto("/#/inbox");
-  await expect(page.getByRole("heading", { name: "Chief of Staff is handling these" })).toBeVisible();
-  await noSeriousA11y(page, "Needs you in light appearance");
-  await shot(page, "needs-you-chief-light");
+  await awayFor(page, 48);
+  await page.goto("/");
+  await expect(page.getByRole("region", { name: "While you were away" })).toBeVisible();
+  await noSeriousA11y(page, "While you were away in light appearance");
+  await shot(page, "away-panel-light");
 });
 
-test("without a Chief of Staff on the backend (404) Needs you looks as before", async ({ page }) => {
-  await mockBackend(page, { snapshot: { questions: [question("q-open", "Which database should the demo use?")] } });
-  await page.goto("/#/inbox");
-  await expect(page.getByText("1 thing needs you")).toBeVisible();
-  await expect(page.getByText(/Chief of Staff/)).toHaveCount(0);
-  await expect(page.getByRole("region", { name: "Decided for you" })).toHaveCount(0);
+test("without these routes on the backend (404) nothing about them shows and nothing breaks", async ({ page }) => {
+  await mockBackend(page);
+  await awayFor(page, 48);
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Talk to AIC" })).toBeAttached();
+  await expect(page.getByRole("button", { name: "While you were away" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "While you were away" })).toHaveCount(0);
+  await page.goto("/#/tickets/decided");
+  await expect(page.getByText(/Nothing decided yet/)).toBeVisible();
+  await page.goto("/#/settings/away");
+  await expect(page.getByText(/No standing orders yet/)).toBeVisible();
+  await expect(page.getByRole("switch", { name: "Autopilot on or off" })).toBeChecked(); // default on
 });

@@ -1,6 +1,6 @@
-// Needs you: every question shows its default with a one-tap "Use default"; approvals are bound to the exact
-// action and need holding the button on a confirmation that says what it may cost. On top, the Chief of Staff's
-// card (on/off, how many it decided this week); at the bottom, "Decided for you", newest first.
+// Open items (More → While I'm away → Open items; the Needs you tab before Autopilot): what is still open from
+// before, kept reachable until it is empty so nothing is lost. Every question shows its default with a one-tap "Use default"; approvals are bound to the exact
+// action and need holding the button on a confirmation that says what it may cost.
 import SwiftUI
 
 struct InboxScreen: View {
@@ -14,18 +14,11 @@ struct InboxScreen: View {
         let questions = model.hud.openQuestions
         let approvals = model.hud.openApprovals
         let chief = model.hud.chief
-        ScrollViewReader { scroller in
         List {
             Group {
-                if chief.status == .ready {
-                    ChiefCard(chief: chief) { on in Task { await model.setChief(enabled: on) } } seeDecided: {
-                        withAnimation { scroller.scrollTo("decided", anchor: .top) }
-                    }
-                    .listRowSeparator(.hidden)
-                }
                 if let problem { Banner(tone: .bad, text: problem).listRowSeparator(.hidden).listRowBackground(Color.clear) }
                 if questions.isEmpty && approvals.isEmpty {
-                    EmptyState(text: "Nothing is waiting for you. AIC will tell you when something is.").listRowSeparator(.hidden)
+                    EmptyState(text: "Nothing is open. Everything from before has been handled.").listRowSeparator(.hidden)
                 }
                 if !approvals.isEmpty {
                     Section("Approvals") {
@@ -73,21 +66,11 @@ struct InboxScreen: View {
                         }
                     }
                 }
-                if chief.status == .ready, !chief.decided.isEmpty {
-                    Section {
-                        ForEach(chief.decided) { d in DecidedRow(d: d) }
-                    } header: {
-                        Text("Decided for you").id("decided")
-                    } footer: {
-                        Text("Newest first. Tap one to read it all. If one isn't what you want, tell AIC what to do instead.")
-                    }
-                }
             }
             .glassRows()
         }
-        }
         .nightScreen()
-        .navigationTitle("Needs you")
+        .navigationTitle("Open items")
         .refreshable { await model.loadCity() }
         .sheet(item: $confirming) { a in
             HoldToApprove(approval: a) {
@@ -157,43 +140,6 @@ struct QuestionCard: View {
         .disabled(busy)
         .buttonStyle(.borderless)
         .padding(.vertical, 4)
-    }
-}
-
-/// The Chief of Staff's calm card at the top of Needs you.
-struct ChiefCard: View {
-    var chief: ChiefState
-    var flip: (Bool) -> Void
-    var seeDecided: () -> Void
-
-    var body: some View {
-        let week = chief.decidedThisWeek()
-        VStack(alignment: .leading, spacing: 10) {
-            Toggle(isOn: Binding(get: { chief.enabled }, set: { flip($0) })) {
-                Text(chief.enabled ? "Chief of Staff is handling these" : "Chief of Staff is off").font(.headline)
-            }
-            .tint(Glass.amber)
-            .disabled(chief.saving)
-            .accessibilityLabel("Chief of Staff")
-            .accessibilityValue(chief.enabled ? "On" : "Off")
-            Text(chief.enabled
-                 ? "It answers your team's questions and approvals for you, so nothing waits while you're away. What only you can do stays here."
-                 : "Everything waits here for you. Turn it on and it decides for you while you're away.")
-                .font(.callout)
-            Text(week == 0 ? "Nothing decided in the last 7 days." : "Decided \(week == 1 ? "1 thing" : "\(week) things") in the last 7 days.")
-                .font(.callout.weight(.semibold))
-            if !chief.decided.isEmpty {
-                Button("See what it decided", action: seeDecided)
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(Glass.amber2)
-                    .frame(minHeight: 44)
-            }
-        }
-        .buttonStyle(.borderless)
-        .padding(.vertical, 6)
-        .overlay(alignment: .leading) {
-            Rectangle().fill(chief.enabled ? Glass.amber : Glass.edge2).frame(width: 3).offset(x: -12)
-        }
     }
 }
 

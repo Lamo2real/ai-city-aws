@@ -1,4 +1,5 @@
-// Needs you: what the city is waiting on the owner for, grouped by job. Each item is one plain sentence (who
+// Open items (Settings → While I'm away → Open items; it was the Needs you tab before Autopilot): what is still
+// waiting on the owner from before, grouped by job, kept reachable until it is empty so nothing is lost. Each item is one plain sentence (who
 // asks, what) and big answer buttons: the 2–4 choices of a question (its default first), or Yes / No for an
 // approval, plus "Write my own answer". Answering removes the card at once (put back if the server refuses).
 // Approvals stay bound to the exact action and still need holding the button.
@@ -6,12 +7,12 @@ import { useState } from "react";
 import { answerQuestion, decideApproval } from "../lib/actions.ts";
 import { ApiError } from "../lib/api.ts";
 import { capKey, capLabel, capped, isPublish, publishApp, type Capability } from "../lib/apps.ts";
-import { byJob, needs, needsWords, type Need } from "../lib/needs.ts";
+import { byJob, needs, type Need } from "../lib/needs.ts";
 import { store, useHud } from "../lib/store.ts";
 import { plainText, type CityApproval, type CityQuestion } from "../city/city-state.js";
 import { useChief } from "../lib/chief.ts";
 import { AppFrame } from "./Apps.tsx";
-import { ChiefCard, DecidedList, NeedsOwnerWhy } from "./ChiefOfStaff.tsx";
+import { NeedsOwnerWhy } from "./ChiefOfStaff.tsx";
 import { Banner, Button, Confirm, toast } from "./ui.tsx";
 
 /** How many cards show before "Show more": the few that matter first. */
@@ -65,10 +66,8 @@ export function Inbox() {
   if (!list.length)
     return (
       <section className="screen needs" aria-labelledby="inbox-title">
-        <h1 id="inbox-title">Needs you</h1>
-        <ChiefCard />
-        <p className="empty">Nothing needs you right now. AIC will tell you when something does.</p>
-        <DecidedList />
+        <Head />
+        <p className="empty">Nothing is open. Everything from before has been handled.</p>
       </section>
     );
 
@@ -86,9 +85,8 @@ export function Inbox() {
 
   return (
     <section className="screen needs" aria-labelledby="inbox-title">
-      <h1 id="inbox-title">Needs you</h1>
-      <ChiefCard />
-      <p className="lede">{`${needsWords(list.length)}. Answer and it's gone.`}</p>
+      <Head />
+      <p className="lede">{`${openWords(list.length)} from before Autopilot. Answer and it's gone.`}</p>
       {error ? <Banner tone="bad">{error}</Banner> : null}
       {groups.map((g) => (
         <section
@@ -135,10 +133,21 @@ export function Inbox() {
           }}
         />
       ) : null}
-      <DecidedList />
     </section>
   );
 }
+
+function Head() {
+  return (
+    <header className="settings-head">
+      <a href="#/settings/away" className="back-link">
+        ‹ While I'm away
+      </a>
+      <h1 id="inbox-title">Open items</h1>
+    </header>
+  );
+}
+const openWords = (n: number) => (n === 1 ? "1 thing is still open" : `${n} things are still open`);
 
 /** Why the Chief of Staff left an item to the owner: from the live list, or the record itself. */
 function useWhy(id: string, record: unknown) {

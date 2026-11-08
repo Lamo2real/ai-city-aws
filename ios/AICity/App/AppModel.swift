@@ -15,19 +15,21 @@ struct Toast: Identifiable, Equatable {
 enum AppSection: String, CaseIterable, Identifiable, Hashable {
     // Tabs, in order: four areas and "More". Everything else lives in the More list, so new areas (apps,
     // knowledge, connectors, mail) are one case here, one row in `underMore` and one view in MainTabs.
-    case aic, city, inbox, tickets, more
+    // Autopilot: there is no Needs you tab; what was open before it is "Open items" under More → While I'm away.
+    case aic, city, tickets, more
     // Under More:
-    case costs, settings
+    case away, costs, settings, inbox
 
-    static let tabs: [AppSection] = [.aic, .city, .inbox, .tickets, .more]
-    static let underMore: [AppSection] = [.costs, .settings]
+    static let tabs: [AppSection] = [.aic, .city, .tickets, .more]
+    static let underMore: [AppSection] = [.away, .costs, .settings]
 
     var id: String { rawValue }
     var title: String {
         switch self {
         case .aic: return "AIC"
         case .city: return "City"
-        case .inbox: return "Needs you"
+        case .inbox: return "Open items"
+        case .away: return "While I'm away"
         case .tickets: return "Tickets"
         case .more: return "More"
         case .costs: return "Costs"
@@ -39,6 +41,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
         case .aic: return "bubble.left.and.text.bubble.right"
         case .city: return "building.2"
         case .inbox: return "tray.full"
+        case .away: return "airplane"
         case .tickets: return "ticket"
         case .more: return "ellipsis.circle"
         case .costs: return "dollarsign.circle"
@@ -144,6 +147,7 @@ final class AppModel {
 
     private func ready() async {
         boot = .ready
+        noteSeen()
         wireCityScene()  // the town loads in the background, so the City tab opens drawn
         guard let c = config, let a = auth else { return }
         if connectLive {
@@ -193,6 +197,7 @@ final class AppModel {
             return  // offline: the outbox and the live connection retry on their own
         }
         live?.resumeNow()
+        noteSeen()
         await loadCity()
         await push.refresh()  // notifications turned on or off in iOS Settings meanwhile
     }
@@ -209,8 +214,48 @@ final class AppModel {
     func open(_ s: AppSection) {
         if AppSection.tabs.contains(s) { section = s; return }
         section = .more
-        morePath = [s]
+        morePath = s == .inbox ? [.away, .inbox] : [s]
     }
+
+    // MARK: Autopilot
+
+    /// "While you were away" since this moment (ms), or nil when it is closed.
+    var awaySince: Double?
+    /// The backend has no away summary yet (404): the clock is hidden.
+    var awayMissing = false
+    /// Tickets opens on "Decided for you" (from the panel's link).
+    var showDecided = false
+
+    /// The app came to the front: open "While you were away" when the owner was gone more than 12 hours.
+    func noteSeen(now: Double = nowMs()) {
+        if let w = UserDefaults.standard.double(forKey: Away.seenKey).nonZero, now - w > Away.awayMs, awaySince == nil { awaySince = w }
+        UserDefaults.standard.set(now, forKey: Away.seenKey)
+    }
+    /// The app went to the background: the owner was here until now.
+    func wentToBackground() { UserDefaults.standard.set(nowMs(), forKey: Away.seenKey) }
+    /// The clock: since the last visit, and at least the last day.
+    func toggleAway(now: Double = nowMs()) {
+        awaySince = awaySince == nil ? min(UserDefaults.standard.double(forKey: Away.seenKey).nonZero ?? now, now - 24 * 3_600_000) : nil
+    }
+    func loadAway(since: Double) async throws -> AwaySummary? {
+        guard let api else { return nil }
+        do {
+            return AwaySummary(json: try await api.awaySummary(since: Date(timeIntervalSince1970: since / 1000)),
+                               since: ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: since / 1000)))
+        } catch let e as APIError where e.status == 404 {
+            awayMissing = true
+            awaySince = nil
+            return nil
+        }
+    }
+    /// "Add a standing order": AIC's chat opens with the words started.
+    func startStandingOrder() {
+        UserDefaults.standard.set(Away.addPrompt, forKey: "aic.draft")
+        morePath = []
+        section = .aic
+    }
+    /// The web HUD's page for something only a browser can finish (a provider's sign-in, a key).
+    var siteURL: URL? { ConfigStore.hostFromBundle().flatMap { URL(string: "https://\($0)/") } }
 
     func signOut() async {
         live?.stop()
@@ -332,4 +377,8 @@ final class AppModel {
     static func plain(_ e: Error) -> String {
         (e as? APIError)?.errorDescription ?? "That did not go through. Nothing changed. Try again."
     }
+}
+
+private extension Double {
+    var nonZero: Double? { self > 0 ? self : nil }
 }

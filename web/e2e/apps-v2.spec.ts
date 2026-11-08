@@ -57,17 +57,15 @@ test("a pinned calendar app reads granted events, gets not_granted after a revok
   await expect(app.locator("#out")).toHaveText("Error: not_granted");
   expect(bridgeCalls(m)).toHaveLength(1); // refused in the HUD, without the API
 
-  // A proposal: the app only learns it waits; the owner sees it in Needs you.
+  // A proposal: the app only learns it waits; the owner sees it under Open items.
   await app.getByRole("button", { name: "Accept the team sync" }).click();
   await expect(app.locator("#out")).toHaveText("Proposal: waiting_for_you");
   expect(m.calls.find((c) => c.path.endsWith("/proposals"))).toMatchObject({
     path: "/apps/app-cal000000001/proposals",
     body: { kind: "calendar.respond", params: { event_id: "evt-1", response: "accepted" } },
   });
-  await page
-    .getByRole("link", { name: /Needs you/ })
-    .first()
-    .click();
+  await page.goto("/#/settings/away");
+  await page.getByRole("link", { name: /Open items/ }).click();
   await expect(page.getByText("Star Calendar (an app) wants your OK")).toBeVisible();
   await page.getByText("Exactly what it will do").click();
   await expect(page.getByText("Accept the invitation: Team sync (Mon 10:00)")).toBeVisible();

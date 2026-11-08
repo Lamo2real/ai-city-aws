@@ -128,6 +128,17 @@ export interface Mock {
     decided: Array<Record<string, unknown>>;
     needs_owner: Array<{ id: string; title: string; why: string }>;
   } | null;
+  /** Autopilot: `GET /away-summary` (null answers 404) and the standing orders (null answers 404). */
+  away: Record<string, unknown> | null;
+  orders: Array<{
+    id: string;
+    source: string;
+    what?: string;
+    instructions?: string;
+    department: string;
+    every_minutes: number;
+    enabled: boolean;
+  }> | null;
   /** City → Features and the owner's calendar (docs/MAIL_CALENDAR.md §12). */
   features: Array<{ id: string; name: string; blurb: string; enabled: boolean }>;
   calendar: {
@@ -241,6 +252,8 @@ export async function mockBackend(
     openai: { key: null, savedAt: null, error: null },
     github: { token: null, login: null, savedAt: null },
     chief: null,
+    away: null,
+    orders: null,
     features: [
       {
         id: "calendar",
@@ -547,6 +560,21 @@ export async function mockBackend(
     }
     if (path === "/devices" && req.method() === "GET") return ok({ devices: [] });
     if (path === "/settings" && req.method() === "GET") return ok({ settings: m.settings });
+    if (path.startsWith("/away-summary"))
+      return m.away ? ok(m.away) : ok({ error: "There is nothing here." }, 404);
+    if (path === "/standing-orders" && req.method() === "GET")
+      return m.orders ? ok({ standing_orders: m.orders }) : ok({ error: "There is nothing here." }, 404);
+    if (/^\/standing-orders\/[\w-]+$/.test(path) && m.orders) {
+      const id = path.split("/")[2];
+      if (req.method() === "DELETE") {
+        m.orders = m.orders.filter((o) => o.id !== id);
+        return ok({ ok: true });
+      }
+      const o = m.orders.find((x) => x.id === id);
+      if (!o) return ok({ error: "That standing order doesn't exist." }, 404);
+      Object.assign(o, body);
+      return ok({ standing_order: o });
+    }
     if (path === "/chief-of-staff")
       return m.chief ? ok(m.chief) : ok({ error: "There is nothing here." }, 404);
     if (path === "/settings" && req.method() === "PUT") {

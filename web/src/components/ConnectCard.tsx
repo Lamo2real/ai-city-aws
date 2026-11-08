@@ -20,6 +20,24 @@ export type SignInCardProps = {
   tokenInstead?: string;
 };
 
+/** Starts a provider's sign-in in a new tab; returns the problem in plain words, or null. */
+export async function openSignIn(p: Pick<SignInCardProps, "kind" | "id" | "signinPath" | "completePath">) {
+  // Opened at once, inside the tap, so the browser doesn't block it; the address comes a moment later.
+  const tab = window.open("about:blank", "_blank");
+  try {
+    const r = await api<{ url: string; state?: string }>(p.signinPath, { method: "POST" });
+    rememberConnect({ kind: p.kind, id: p.id, state: r.state ?? "", completePath: p.completePath });
+    if (tab) {
+      tab.opener = null;
+      tab.location.href = r.url;
+    } else location.assign(r.url);
+    return null;
+  } catch (e) {
+    tab?.close();
+    return e instanceof ApiError ? e.message : "The sign-in didn't start. Try again.";
+  }
+}
+
 export function SignInCard(p: SignInCardProps) {
   const [problem, setProblem] = useState<string | null>(null);
   const [withToken, setWithToken] = useState(false);
@@ -39,19 +57,7 @@ export function SignInCard(p: SignInCardProps) {
     );
   const go = async () => {
     setProblem(null);
-    // Opened at once, inside the tap, so the browser doesn't block it; the address comes a moment later.
-    const tab = window.open("about:blank", "_blank");
-    try {
-      const r = await api<{ url: string; state?: string }>(p.signinPath, { method: "POST" });
-      rememberConnect({ kind: p.kind, id: p.id, state: r.state ?? "", completePath: p.completePath });
-      if (tab) {
-        tab.opener = null;
-        tab.location.href = r.url;
-      } else location.assign(r.url);
-    } catch (e) {
-      tab?.close();
-      setProblem(e instanceof ApiError ? e.message : "The sign-in didn't start. Try again.");
-    }
+    setProblem(await openSignIn(p));
   };
   return (
     <div className="connect-card" role="group" aria-label={p.title}>

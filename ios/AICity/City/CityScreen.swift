@@ -10,7 +10,6 @@ struct CityScreen: View {
 
     var body: some View {
         let s = model.hud.city
-        let top = City.topBar(s)
         ZStack(alignment: .top) {
             // The web HUD's own City scene (scene.js), full screen; it does its own pinch, pan and taps.
             CityWebView(controller: model.cityScene)
@@ -30,21 +29,6 @@ struct CityScreen: View {
             .padding(.horizontal)
             .padding(.top, 8)
             .background(.clear)
-        }
-        .overlay(alignment: .bottomLeading) {
-            // The one primary action, kept small and low so the town (HQ and its clock tower) stays in view.
-            if top.questionsWaiting > 0 {
-                Button { model.open(.inbox) } label: {
-                    Label(top.questionsWaiting == 1 ? "1 needs you" : "\(top.questionsWaiting) need you", systemImage: "exclamationmark.bubble.fill")
-                        .font(.headline)
-                        .padding(.horizontal, 6)
-                        .frame(minHeight: 36)
-                }
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.capsule)
-                .padding(12)
-                .accessibilityLabel(top.questionsWaiting == 1 ? "Open: one thing needs you" : "Open: \(top.questionsWaiting) things need you")
-            }
         }
         .overlay(alignment: .bottomTrailing) {
             VStack(spacing: 0) {

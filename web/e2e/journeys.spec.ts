@@ -870,7 +870,9 @@ test("watching the City: a department goes up and workers appear when hired", as
   expect(await primaries(page)).toBeLessThanOrEqual(1);
 });
 
-test("a question waits: '1 thing needs you · Open', then one tap answers it and the card is gone", async ({ page }) => {
+test("Autopilot: no Needs you tab, box or count; an open item from before is under Settings and one tap answers it", async ({
+  page,
+}) => {
   const m = await mockBackend(page);
   await page.goto("/#/city");
   await expect(page.locator("section.city")).toHaveAttribute("data-city-ready", "1");
@@ -919,28 +921,29 @@ test("a question waits: '1 thing needs you · Open', then one tap answers it and
       created_at: at(),
     },
   });
-  await expect(page.locator(".inboxbar")).toContainText("1 thing needs you"); // the stale one is not counted
-  await expect(page.locator(".citytop")).toContainText("Need you1");
-  await page.getByRole("button", { name: "Open Needs you: 1 thing needs you" }).click();
-  await expect(page.getByRole("heading", { name: "Needs you" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Needs you/ })).toHaveCount(0); // no tab, no badge, no box
+  await expect(page.locator(".inboxbar")).toHaveCount(0);
+  await expect(page.locator(".citytop")).not.toContainText("Need you");
+  await page.goto("/#/settings/away");
+  await page.getByRole("link", { name: /Open items.*1 thing from before/ }).click(); // the stale one is not counted
+  await expect(page.getByRole("heading", { name: "Open items" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "the demo app" })).toBeVisible(); // grouped by job
   await expect(page.getByText("A question nobody can answer any more")).toHaveCount(0);
   await shot(page, "needs-you");
-  await noSeriousA11y(page, "Needs you");
+  await noSeriousA11y(page, "Open items");
   expect(await primaries(page)).toBe(1);
   await page.getByRole("button", { name: "Write my own answer" }).click();
   await expect(page.getByRole("textbox", { name: "Your answer" })).toBeFocused();
   await page.getByRole("button", { name: "SQLite" }).click(); // the default, first and biggest
   await expect(page.getByText("Which database should the demo use?")).toHaveCount(0); // gone at once
-  await expect(page.getByRole("link", { name: /Needs you/ }).first()).not.toContainText("1");
   await expect.poll(() => m.calls.find((c) => c.path === "/questions/q1/answer")?.body).toEqual({ answer: "SQLite" });
   await expect(page.getByText("Answered: SQLite")).toBeVisible();
 });
 
 test("approving an action needs holding the button and approves exactly that action", async ({ page }) => {
   const m = await mockBackend(page);
-  await page.goto("/#/inbox");
-  await expect(page.getByText(/Nothing needs you right now/)).toBeVisible();
+  await page.goto("/#/inbox"); // an old link: it opens Open items
+  await expect(page.getByText(/Nothing is open/)).toBeVisible();
   m.send({
     type: "approval.requested",
     id: "ap-1",
@@ -1319,6 +1322,7 @@ test("Settings is a menu of pages, each with its own address and a way back; App
   await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
   const menu = page.getByRole("navigation", { name: "Settings pages" });
   await expect(menu.getByRole("link")).toHaveText([
+    /^While I'm away/,
     /^General/,
     /^Departments & tools/,
     /^Connectors/,

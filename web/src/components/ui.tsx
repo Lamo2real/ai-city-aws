@@ -237,6 +237,15 @@ export function ClearIcon({ size = 20 }: { size?: number }) {
     </svg>
   );
 }
+/** "While you were away": a small clock. */
+export function ClockIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg {...icon} width={size} height={size} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12l3 2" />
+    </svg>
+  );
+}
 /** Voice conversation: a small waveform (Claude's voice-mode mark). */
 export function WaveIcon({ size = 22 }: { size?: number }) {
   return (

@@ -71,7 +71,7 @@ test("approve a publish from Needs you: the preview runs sandboxed, then it is u
   await expect.poll(() => m.calls.find((c) => c.path === "/approvals/apr-app-1")?.body).toEqual({ approved: true });
   await expect(page.getByText("Approved. Star Sweeper is under Projects now.")).toBeVisible();
   m.send({ type: "approval.decided", id: "apr-app-1", approved: true });
-  await expect(page.getByText(/Nothing needs you right now/)).toBeVisible();
+  await expect(page.getByText(/Nothing is open/)).toBeVisible();
   await page.getByRole("link", { name: "Projects", exact: true }).click();
   await expect(page.getByRole("link", { name: /Star Sweeper/ })).toBeVisible();
 });
