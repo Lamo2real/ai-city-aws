@@ -201,7 +201,7 @@ locals {
     "POST /questions/{id}/default", "POST /approvals/{id}", "GET /settings", "PUT /settings",
     "POST /workers/home", "POST /tasks/{id}/cancel", "POST /city/reset", "POST /agents/{id}/home",
     "GET /memory", "POST /notes", "GET /apps", "DELETE /apps/{id}", "PUT /apps/{id}",
-    "POST /apps/{id}/bridge", "POST /apps/{id}/proposals", "POST /apps/{id}/rollback",
+    "POST /apps/{id}/bridge", "POST /apps/{id}/proposals", "POST /apps/{id}/rollback", "GET /apps/{id}/activity",
     "GET /knowledge", "GET /knowledge/{id}", "POST /knowledge/uploads", "POST /knowledge/uploads/{id}/complete", "POST /knowledge/links",
     "POST /knowledge/text", "PUT /knowledge/{id}", "DELETE /knowledge/{id}",
     # Connectors (docs/CONNECTORS_SKILLS.md §1.7), skills (§2.4) and mail accounts (docs/MAIL_CALENDAR.md §4).

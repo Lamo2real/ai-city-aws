@@ -255,6 +255,8 @@ class AppPublished(_E):
     url: str
     task_id: str
     department: str
+    conversation: str | None = None
+    """The ``app-new-…`` project chat it was built from; the chat goes on as ``app-<app_id>``."""
 
 
 class AppUpdated(_E):
@@ -315,6 +317,16 @@ class AceReply(_E):
     done: bool
 
 
+class AceQuestion(_E):
+    """AIC asks the owner a multiple-choice question: the HUD shows the options as tappable chips, and a tap
+    comes back as an ordinary owner message in the same conversation."""
+
+    type: Literal["ace.question"]
+    conversation: str
+    question: str
+    options: list[str]
+
+
 class KnowledgeUpdated(_E):
     """A knowledge item's status or scope changed (``docs/KNOWLEDGE.md`` §6)."""
 
@@ -351,6 +363,7 @@ CityEventModel = Annotated[
     | CalendarChanged
     | SpendCapReachedEvent
     | AceReply
+    | AceQuestion
     | AppSubmitted
     | AppDraft
     | AppPublished

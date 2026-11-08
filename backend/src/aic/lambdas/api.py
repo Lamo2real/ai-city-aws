@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal, cast
 
+from aic.shared.app_activity import app_activity
 from aic.shared.app_bridge import Invoke, api_bridge, file_proposal, run_proposal
 from aic.shared.app_caps import Invalid, MailProposals, proposals_from_env
 from aic.shared.apps import (
@@ -126,6 +127,7 @@ ROUTES: list[tuple[str, str]] = [
     ("POST", "/mail/rules"),
     ("DELETE", "/mail/rules/rule-1"),
     ("GET", "/apps"),
+    ("GET", "/apps/app-1/activity"),
     ("DELETE", "/apps/app-1"),
     ("PUT", "/apps/app-1"),
     ("POST", "/apps/app-1/bridge"),
@@ -755,6 +757,11 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         return reply(200, {"approval": a})
     if is_("GET", r"/apps"):
         return reply(200, {"apps": await list_apps(d.ledger)})
+    if is_("GET", r"/apps/[\w-]+/activity"):
+        items = await app_activity(d.ledger, seg[1])
+        if items is None:
+            return problem(404, "That app does not exist.")
+        return reply(200, {"items": items})
     if is_("DELETE", r"/apps/[\w-]+"):
         if d.apps is None:
             return problem(503, "Apps are not set up yet.")

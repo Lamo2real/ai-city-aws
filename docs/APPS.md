@@ -396,5 +396,45 @@ Two things the owner's "make me a game… a new feature" needs: a game must keep
   card for an update says "Update of <title>" and shows the version.
 - Remove still deletes the whole `live/<app_id>/` prefix (all versions), the record and the state.
 
+## Projects studio: agree the plan, then build (backend, 2026-11-08)
+The owner wants the Apps tab to work like a project studio for non-technical people: AIC asks before it builds,
+so it neither invents features nor drifts from the owner's vision. The HUD side is built by the `projects-hud`
+session against exactly this contract.
+
+### AIC asks before it builds (`agents/ace.md` § Projects)
+- A clear or small request ("a snake game") is summed up and built after one "Shall I build it?", with no questions.
+- An unclear one gets short, plain questions first, at most three per message, only about what is unclear: who
+  uses it, the must-have screens, what happens on the key actions, look and feel, anything paid or private. Never
+  about technology. Usually one to three rounds, never more than four; "you decide" gets simple defaults.
+- Then AIC sums up the plan and asks "Shall I build it?". On a clear yes it calls `delegate_to_orchestrator` with
+  `confirm=true` and `brief` = the agreed plan (≤ 4,000 characters).
+- The brief travels with the build: it is stored on the task ticket (`brief`), quoted in the Orchestrator's message,
+  and shown to the Orchestrator, every department manager and every worker of that job (`task_brief` walks up the
+  ticket's parents), with "build exactly this, nothing more; if something is missing, ask the owner". The
+  Orchestrator, manager and Apps prompts say the same.
+
+### Project chats
+- Conversation ids: `app-<app_id>` is an app's own chat; `app-new-<id>` is a project not built yet.
+- In `app-<app_id>`, `delegate_to_orchestrator` without `app_id` changes that app (a new version, § v3), and
+  AIC's prompt names the app, its version and its agreed brief.
+- A new app built from an `app-new-…` conversation is linked to it: the app record gets `conversation:
+  "app-new-…"` (and `brief`), and `app.published` carries `conversation`. The HUD then continues the chat as
+  `app-<app_id>`; AIC's prompt there includes the last lines of the `app-new-…` chat, so nothing said is lost.
+
+### Tappable choices: `ace.question`
+AIC's tool `offer_choices {question, options[2..5]}` puts
+`{"type": "ace.question", "conversation", "question", "options": [..]}` on the bus (options ≤ 60 characters
+each). The HUD shows the options as chips under AIC's reply; a tap is sent as an ordinary owner message
+(`POST /messages`) in the same conversation.
+
+### `GET /apps/<app_id>/activity`
+`{"items": [{"at": iso, "who": "AIC" | "Planner" | "Manager" | "Builder" | "Reviewer" | "App" | "You",
+"text": plain words}]}`, oldest first, the newest 100; 404 for an unknown app. Built from the ledger
+(`shared/app_activity.py`): the app's jobs (task tickets with its `app_id`, its first task, the tasks of its
+drafts) and all their parts (ticket history: created, started, sent for a check, finished, failed, stopped), their
+trace (review and sign-off verdicts, drafts handed in or refused, questions to the owner, the owner's
+instructions), its versions going live, publish approvals and the app's own proposals. Text never carries ids,
+links or code (`plain`). Route added to `ROUTES`, `infra/modules/api/main.tf` and `tests/infra.test.ts`.
+
 ## Not in v1 (suggested later)
 A custom domain for exact `frame-ancestors`.

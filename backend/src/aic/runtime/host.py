@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from aic.mail.service import MailService
-from aic.shared.apps import drafts_of_ticket
+from aic.shared.apps import drafts_of_ticket, get_app
 from aic.shared.connectors import ConnectorStore
 from aic.shared.events import now_iso
 from aic.shared.hierarchy.actions import CityDeps, move
@@ -33,7 +33,16 @@ from .live import LiveReply, Send
 from .mail_tools import mail_level, mail_tools
 from .prompts import department_template, load_prompt
 from .skills import SkillStore, empty_home, use_skill_tool
-from .tools import ToolSpec, TurnCtx, file_approval, gate_tools, tools_for
+from .tools import (
+    ToolSpec,
+    TurnCtx,
+    app_of_conversation,
+    brief_note,
+    file_approval,
+    gate_tools,
+    task_brief,
+    tools_for,
+)
 
 WORKER_BUILTINS: dict[str, list[str]] = {
     "Bash": ["Bash"],
@@ -254,6 +263,30 @@ class AgentHost:
             if inv["role"] == "worker" and inv.get("department"):
                 await ledger.release_worker_slot(inv["department"])
 
+    async def _project_lines(self, conversation: str, recent: list[dict[str, Any]]) -> list[str]:
+        """A project chat in the Apps studio: which app it is about (and the chat it began in), or that it is
+        a new project whose plan is still being agreed. Extends ``recent`` with the earlier chat."""
+        if conversation.startswith("app-new-"):
+            return [
+                "This chat is a new project in the owner's Apps studio. Agree the plan with the owner first "
+                "(see Projects in your instructions), then build it with delegate_to_orchestrator and the brief.",
+                "",
+            ]
+        app_id = app_of_conversation(conversation)
+        app = await get_app(self.d.ledger, app_id) if app_id else None
+        if not app:
+            return []
+        if app.get("conversation") and len(recent) < 12:
+            earlier = await self.d.ledger.recent_conversation(str(app["conversation"]), 12 - len(recent))
+            recent[:0] = earlier
+        out = [
+            f"This chat is about the owner's app “{app.get('title')}” (app_id {app['app_id']}, version "
+            f"{app.get('version') or 1}). Changes to it go to delegate_to_orchestrator, which already knows the app."
+        ]
+        if app.get("brief"):
+            out.append(f"The plan the owner agreed for it: {app['brief']}")
+        return [*out, ""]
+
     async def _owner_knowledge(self) -> str:
         """The ``always`` summaries, after the stable system prompt so the cached prefix stays the same."""
         k = self.d.knowledge
@@ -349,6 +382,7 @@ class AgentHost:
                 )
         if role == "ace" and inv.get("conversation"):
             recent = await ledger.recent_conversation(inv["conversation"])
+            lines = [*(await self._project_lines(inv["conversation"], recent)), *lines]
             if recent:
                 lines = [
                     "Conversation so far (most recent last):",
@@ -359,6 +393,8 @@ class AgentHost:
         elif role == "orchestrator":
             task = await ledger.get_ticket(inv["taskId"]) or {}
             lines.append(f"Task {inv['taskId']}: {task.get('goal', '')} [{task.get('status', '?')}]")
+            if task.get("brief"):
+                lines.append(brief_note(str(task["brief"])) + "\nPass it on whole in every assignment.")
             names = ", ".join(d["name"] for d in await ledger.list_departments()) or "none yet"
             lines.append(f"Departments: {names}")
             lines.append(orchestrator_note())
@@ -368,6 +404,8 @@ class AgentHost:
         elif role == "manager":
             mine = await ledger.get_ticket(inv["ticketId"]) or {}
             lines.append(f"Your goal {inv['ticketId']}: {mine.get('goal', '')} [{mine.get('status', '?')}]")
+            if brief := await task_brief(self.d, inv["ticketId"]):
+                lines.append(brief_note(brief))
             for w in await ledger.department_agents(inv.get("department") or ""):
                 if w.get("kind") == "worker" and w.get("parent") == agent["id"] and w.get("state") != "retired":
                     lines.append(f"- worker {w['id']} ({w['role']}) state {w.get('worker_state') or '?'}")
@@ -395,6 +433,8 @@ class AgentHost:
             lines.append(
                 f"Your assignment {inv['ticketId']}: {t.get('goal', '')}\nAcceptance: {t.get('acceptance', '')} [{t.get('status', '?')}]"
             )
+            if brief := await task_brief(self.d, inv["ticketId"]):
+                lines.append(brief_note(brief))
             lines += [_draft_line(dr, "") for dr in await drafts_of_ticket(ledger, inv["ticketId"])]
         return "\n".join(lines)
 

@@ -464,6 +464,7 @@ describe("apps API routes", () => {
       '"POST /apps/{id}/bridge"',
       '"POST /apps/{id}/proposals"',
       '"POST /apps/{id}/rollback"',
+      '"GET /apps/{id}/activity"',
     ])
       expect(routes).toContain(r);
     expect(api).toMatch(/allow_methods = \["GET", "POST", "PUT", "DELETE"\]/);

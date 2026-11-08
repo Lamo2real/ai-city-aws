@@ -268,6 +268,7 @@ def _run_command_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
 def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
     async def delegate(a: dict[str, Any]) -> str:
         cons = a.get("constraints")
+        brief = str(a.get("brief") or "").strip()[:BRIEF_MAX]
         words = f"{a.get('owner_words') or ''}\n{a['goal']}"
         # Complaints, bug reports and questions about AI City itself are never jobs: nothing the team builds
         # changes AI City, and the owner's last "the voice is bugged" became three departments.
@@ -278,6 +279,9 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 "no job for the team. Answer the owner yourself, and say that changes to AI City are made in "
                 "their builder session, not by the team. No task was created."
             )
+        # A project chat about one app (conversation "app-<app_id>") changes that app unless AIC says otherwise.
+        if not a.get("app_id") and (own := app_of_conversation(c.conversation)):
+            a = {**a, "app_id": own}
         target = await get_app(d.ledger, str(a["app_id"])) if a.get("app_id") else None
         if a.get("app_id") and not target:
             return "There is no app with that id. Check get_status for the apps and their ids."
@@ -343,6 +347,7 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 **({"acceptance": str(cons)} if cons else {}),
                 **({"conversation": c.conversation} if c.conversation else {}),
                 **({"app_id": target["app_id"]} if target else {}),
+                **({"brief": brief} if brief else {}),
                 "owner_words": str(a.get("owner_words", ""))[:500],  # so "the Porsche thing" finds it later
             },
         )
@@ -354,6 +359,8 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             )
         if cons:
             body += f"\nConstraints: {cons}"
+        if brief:
+            body += f"\n{brief_note(brief)}"
         body += hint
         msg: dict[str, Any] = {
             "role": "orchestrator",
@@ -369,6 +376,20 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             msg["conversation"] = c.conversation
         await send(d, msg)
         return f"Handed to the Orchestrator as task {t['id']}."
+
+    async def offer_choices(a: dict[str, Any]) -> str:
+        options = [str(o).strip()[:60] for o in a.get("options") or [] if str(o).strip()][:5]
+        if len(options) < 2:
+            return "Give at least two options."
+        await d.bus.put(
+            {
+                "type": "ace.question",
+                "conversation": c.conversation or "main",
+                "question": str(a["question"]).strip()[:200],
+                "options": options,
+            }
+        )
+        return "The options are on the owner's screen. Ask the question in your reply now and stop."
 
     async def task_status(a: dict[str, Any]) -> str:
         task, candidates = await find_task(d.ledger, str(a.get("query") or ""))
@@ -488,18 +509,35 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             "delegate_to_orchestrator",
             "Hand real work to the Orchestrator, only when the owner asked for a deliverable. First call with "
             "confirm=false: it tells you what to ask the owner (nothing starts); on the owner's clear yes, call "
-            "again with confirm=true. To change one of the owner's apps, pass its app_id (from get_status).",
+            "again with confirm=true. To change one of the owner's apps, pass its app_id (from get_status; in an "
+            "app's own chat it is that app). For an app or product, pass brief: the plan the owner agreed to, in "
+            "plain words (who uses it, the screens, what happens on the key actions, the look, anything paid or "
+            "private); the team builds exactly that.",
             _obj(
                 {
                     "goal": _s(3),
                     "owner_words": _s(),
                     "constraints": _s(),
                     "app_id": _s(1, 40),
+                    "brief": _s(1, BRIEF_MAX),
                     "confirm": {"type": "boolean"},
                 },
-                ("constraints", "app_id", "confirm"),
+                ("constraints", "app_id", "brief", "confirm"),
             ),
             delegate,
+        ),
+        ToolSpec(
+            "offer_choices",
+            "Show the owner tappable answers for the one question you are asking right now (2 to 5 short "
+            "options, a few words each). Call it, then ask the same question in your reply and stop; the owner's "
+            "tap comes back as their next message.",
+            _obj(
+                {
+                    "question": _s(3, 200),
+                    "options": {"type": "array", "items": _s(1, 60), "minItems": 2, "maxItems": 5},
+                }
+            ),
+            offer_choices,
         ),
         ToolSpec("get_status", "Jobs, departments, live agents and spend, in one summary.", _obj({}), get_status),
         ToolSpec(
@@ -1207,6 +1245,35 @@ def _worker_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             load_app,
         ),
     ]
+
+
+BRIEF_MAX = 4000
+_APP_CHAT = re.compile(r"app-(?!new-)([\w-]{1,40})")
+
+
+def app_of_conversation(conversation: str | None) -> str | None:
+    """``app-<app_id>`` is that app's own project chat; ``app-new-<id>`` is a project not built yet."""
+    m = _APP_CHAT.fullmatch(conversation or "")
+    return m.group(1) if m else None
+
+
+def brief_note(brief: str) -> str:
+    return (
+        "The owner's agreed brief (build exactly this, nothing more; if something it needs is missing, ask the "
+        f"owner with ask_owner instead of guessing):\n{brief}"
+    )
+
+
+async def task_brief(d: CityDeps, ticket_id: str) -> str | None:
+    """The brief the owner agreed with AIC, from the job a ticket belongs to (its parts up to three levels down)."""
+    t = await d.ledger.get_ticket(ticket_id) if ticket_id else None
+    for _ in range(4):
+        if not t:
+            return None
+        if t.get("brief"):
+            return str(t["brief"])
+        t = await d.ledger.get_ticket(str(t["parent_id"])) if t.get("parent_id") else None
+    return None
 
 
 async def _task_app(d: CityDeps, task_id: str) -> str | None:

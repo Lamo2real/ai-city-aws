@@ -513,6 +513,11 @@ async def publish_draft(
         )
     taken = [str(a.get("slug")) for a in apps_now]
     icon = dr.get("icon")
+    # A project started in the Apps studio (conversation "app-new-…") is linked to the app it became, so its
+    # chat goes on as "app-<app_id>" with what was said before.
+    task = await ledger.get_ticket(str(dr["task_id"])) if dr.get("task_id") else None
+    chat = str((task or {}).get("conversation") or "")
+    brief = (task or {}).get("brief")
     app: Record = {
         "app_id": app_id,
         "slug": slugify(str(dr["title"]), taken),
@@ -531,6 +536,8 @@ async def publish_draft(
         "history": [],
         "revoked": [],
         "published_at": now_iso(ledger.now()),
+        **({"conversation": chat} if chat.startswith("app-new-") else {}),
+        **({"brief": str(brief)} if brief else {}),
     }
     await ledger.table.put({"pk": APPS_PK, "sk": f"APP#{app_id}", **app})
     await update_draft(ledger, draft_id, {"status": "published"})
@@ -545,6 +552,8 @@ async def publish_draft(
     }
     if app["icon_url"]:
         event["icon_url"] = app["icon_url"]
+    if app.get("conversation"):
+        event["conversation"] = app["conversation"]
     await bus.put(event)
     return app
 

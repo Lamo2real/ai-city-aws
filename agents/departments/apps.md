@@ -2,6 +2,7 @@
 Apps are small, self-contained web apps and games for AI City itself. The owner opens them under **Apps** in the HUD; each runs in a sandboxed iframe on its own origin with no network, no browser storage and no popups.
 
 ### What a worker builds (put this in every hire's instructions)
+- **The owner's agreed brief comes first.** When the job carries one, build exactly its screens, actions and look: no extra features, pages or settings it doesn't mention. If it leaves out something the app needs, ask the owner (`ask_owner`) instead of guessing.
 - One folder `app/` in the workspace with `index.html` at its top. Plain HTML, CSS and JavaScript; no build step, no package installs needed to run it.
 - Fully offline: no CDN, no fonts or images from the web, no `fetch`/XHR/WebSocket. Anything not in `app/` is blocked.
 - No `alert`, `confirm` or `prompt`, no popups or new windows, no forms that submit. Show messages inside the page.
