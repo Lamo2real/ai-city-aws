@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { initialState, reduce } from "../src/city/city-state.js";
-import { AppPage } from "../src/components/Apps.tsx";
+import { ProjectPage } from "../src/components/Projects.tsx";
 import { Inbox } from "../src/components/Inbox.tsx";
 import { capLabel } from "../src/lib/apps.ts";
 import { granted } from "../src/lib/bridge.ts";
@@ -86,22 +86,24 @@ describe("new versions", () => {
 
   it("the app page shows the version and goes back after a confirm", async () => {
     act(() => store.setApps([snake({ version: 2, history: [{ version: 1, title: "Snake" }] })]));
-    render(<AppPage slug="snake" go={() => undefined} />);
+    render(<ProjectPage slug="snake" go={() => undefined} />);
     expect(screen.getByText("Version 2")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Back to version 1" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Versions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Go back to version 1" }));
     expect(screen.getByText(/Version 2 is deleted and Snake opens as it was before/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Go back" }));
     await waitFor(() =>
       expect(calls).toEqual([{ url: "https://api.aic.test/apps/app-snake/rollback", method: "POST" }]),
     );
     await waitFor(() => expect(store.get().city.apps["app-snake"]?.version).toBe(1));
-    expect(screen.queryByRole("button", { name: /Back to version/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Go back to version/ })).toBeNull();
   });
 
   it("an app with one version has no version label and no way back", () => {
     act(() => store.setApps([snake()]));
-    render(<AppPage slug="snake" go={() => undefined} />);
-    expect(screen.queryByText(/^Version/)).toBeNull();
-    expect(screen.queryByRole("button", { name: /Back to version/ })).toBeNull();
+    render(<ProjectPage slug="snake" go={() => undefined} />);
+    expect(screen.queryByText(/^Version \d/)).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Versions" }));
+    expect(screen.queryByRole("button", { name: /Go back to version/ })).toBeNull();
   });
 });

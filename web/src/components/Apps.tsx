@@ -15,8 +15,6 @@ import {
   MAX_PINS,
   onAppsOrigin,
   pinnedApps,
-  removeApp,
-  rollbackApp,
   updateApp,
   type Capability,
 } from "../lib/apps.ts";
@@ -24,7 +22,7 @@ import { registerFrame } from "../lib/bridge.ts";
 import { ApiError } from "../lib/api.ts";
 import { config } from "../lib/config.ts";
 import { useHud } from "../lib/store.ts";
-import { Banner, Button, Confirm, toast } from "./ui.tsx";
+import { Button, Confirm, toast } from "./ui.tsx";
 
 const appsUrl = () => {
   try {
@@ -66,7 +64,7 @@ export function AppFrame({
   );
 }
 
-function AppIcon({ app, size = 64 }: { app: CityApp; size?: number }) {
+export function AppIcon({ app, size = 64 }: { app: CityApp; size?: number }) {
   const [broken, setBroken] = useState(false);
   if (app.icon_url && !broken && onAppsOrigin(app.icon_url, appsUrl()))
     return (
@@ -102,153 +100,7 @@ function AppIcon({ app, size = 64 }: { app: CityApp; size?: number }) {
   );
 }
 
-export function AppsScreen() {
-  const appsMap = useHud((s) => s.city.apps);
-  const apps = appList(appsMap);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    loadApps().catch((e: Error) => setError(e.message));
-  }, []);
-  return (
-    <section className="screen" aria-labelledby="apps-title">
-      <h1 id="apps-title">Apps</h1>
-      {error ? (
-        <Banner tone="bad">{`Could not refresh the apps (${error}). Showing what the city last sent.`}</Banner>
-      ) : null}
-      {apps.length ? (
-        <ul className="appgrid">
-          {apps.map((a) => (
-            <li key={a.app_id}>
-              <a className="apptile" href={`#/apps/${encodeURIComponent(a.slug)}`}>
-                <AppIcon app={a} />
-                <b>{capped(a.title, 40)}</b>
-                {a.description ? <span className="mute">{capped(a.description, 200)}</span> : null}
-              </a>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <div className="emptystate">
-          <p className="empty">No apps yet. Ask AIC for a game or a tool, and it lands here when it's ready.</p>
-          <a
-            className="btn btn-primary"
-            href="#/"
-            onClick={() => {
-              try {
-                if (!localStorage.getItem("aic.draft")) localStorage.setItem("aic.draft", "Build me a small app that ");
-              } catch {
-                /* the link still opens AIC */
-              }
-            }}
-          >
-            Ask AIC for an app
-          </a>
-        </div>
-      )}
-    </section>
-  );
-}
-
-export function AppPage({ slug, go }: { slug: string; go: (view: string) => void }) {
-  const appsMap = useHud((s) => s.city.apps);
-  const loaded = useHud((s) => s.loaded);
-  const app = Object.values(appsMap).find((a) => a.slug === slug);
-  const [asking, setAsking] = useState(false);
-  const [goingBack, setGoingBack] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    if (!app) loadApps().catch(() => undefined); // maybe published after the last snapshot
-  }, [app]);
-
-  const back = (
-    <a className="back" href="#/apps">
-      ← Apps
-    </a>
-  );
-  if (!app)
-    return (
-      <section className="screen" aria-labelledby="app-title">
-        {back}
-        <h1 id="app-title">{loaded ? "This app is gone" : "Opening the app…"}</h1>
-        {loaded ? <p className="empty">It was removed, or the link is wrong. Your other apps are under Apps.</p> : null}
-      </section>
-    );
-  const title = capped(app.title, 40);
-  const version = app.version ?? 1;
-  const previous = app.history?.[0];
-  return (
-    <section className="apppage" aria-labelledby="app-title">
-      <header className="apphead">
-        {back}
-        <h1 id="app-title">{title}</h1>
-        {version > 1 ? <span className="mute appversion">{`Version ${version}`}</span> : null}
-        <PinButton app={app} />
-        <details className="appperms">
-          <summary>{`Allowed (${(app.grants ?? []).length})`}</summary>
-          <div className="appperms-body">
-            <GrantList app={app} />
-          </div>
-        </details>
-        {previous ? (
-          <Button variant="quiet" onClick={() => setGoingBack(true)}>
-            {`Back to version ${previous.version ?? version - 1}`}
-          </Button>
-        ) : null}
-        <Button variant="quiet" onClick={() => setAsking(true)}>
-          Remove
-        </Button>
-      </header>
-      {error ? <Banner tone="bad">{error}</Banner> : null}
-      <AppFrame src={app.url} title={`${title} (app built by the city)`} appId={app.app_id} />
-      {goingBack && previous ? (
-        <Confirm
-          title={`Go back to version ${previous.version ?? version - 1}?`}
-          what={`Version ${version} is deleted and ${title} opens as it was before. Its saved data (such as scores) stays.`}
-          cost={`Nothing to pay. Version ${version} can't be brought back, but you can ask AIC for the change again.`}
-          confirmLabel="Go back"
-          onCancel={() => setGoingBack(false)}
-          onConfirm={async () => {
-            setGoingBack(false);
-            setError(null);
-            try {
-              await rollbackApp(app.app_id);
-              toast({ text: `${title} is back to version ${previous.version ?? version - 1}.`, tone: "good" });
-            } catch (e) {
-              setError(problem(e));
-            }
-          }}
-        />
-      ) : null}
-      {asking ? (
-        <Confirm
-          title={`Remove ${title}?`}
-          what="It disappears from Apps and its files are deleted. To get it back, ask AIC to build it again."
-          cost="Nothing to pay; it can't be undone."
-          confirmLabel="Remove"
-          danger
-          onCancel={() => setAsking(false)}
-          onConfirm={async () => {
-            setAsking(false);
-            setError(null);
-            try {
-              await removeApp(app.app_id);
-              toast({ text: `${title} was removed.`, tone: "good" });
-              go("apps");
-            } catch (e) {
-              setError(
-                e instanceof ApiError
-                  ? `${e.message}${e.fix ? ` ${e.fix}` : ""}`
-                  : "That did not go through. Nothing changed. Try again.",
-              );
-            }
-          }}
-        />
-      ) : null}
-    </section>
-  );
-}
-
-const problem = (e: unknown) =>
+export const problem = (e: unknown) =>
   e instanceof ApiError
     ? `${e.message}${e.fix ? ` ${e.fix}` : ""}`
     : e instanceof Error && e.message

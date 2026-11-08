@@ -2,7 +2,8 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { applySnapshot, initialState, reduce } from "../src/city/city-state.js";
-import { AppFrame, AppPage, AppsScreen } from "../src/components/Apps.tsx";
+import { AppFrame } from "../src/components/Apps.tsx";
+import { ProjectPage, ProjectsScreen } from "../src/components/Projects.tsx";
 import { Inbox } from "../src/components/Inbox.tsx";
 import { capped, onAppsOrigin, route } from "../src/lib/apps.ts";
 import { loadConfig } from "../src/lib/config.ts";
@@ -126,27 +127,27 @@ describe("the app frame", () => {
 });
 
 describe("screens", () => {
-  it("Apps shows a tile per app, newest first, and an empty state", () => {
+  it("Projects shows a card per app, newest first, and an empty state", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response(JSON.stringify({ apps: [] }))),
     );
     act(() => store.setApps([app(1), app(2)]));
-    render(<AppsScreen />);
+    render(<ProjectsScreen />);
     const links = screen.getAllByRole("link");
     expect(links.map((l) => l.getAttribute("href"))).toEqual(["#/apps/game-2", "#/apps/game-1"]);
     cleanup();
     act(() => store.setApps([]));
-    render(<AppsScreen />);
-    expect(screen.getByText(/No apps yet. Ask AIC for a game/)).toBeTruthy();
+    render(<ProjectsScreen />);
+    expect(screen.getByText(/No apps yet. Describe one in a sentence/)).toBeTruthy();
     vi.unstubAllGlobals();
   });
   it("an app page frames the app and never listens for messages", () => {
     act(() => store.setApps([app(1)]));
     const spy = vi.spyOn(window, "addEventListener");
-    render(<AppPage slug="game-1" go={() => undefined} />);
+    render(<ProjectPage slug="game-1" go={() => undefined} />);
     expect(screen.getByRole("heading", { name: "Game 1" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "← Apps" }).getAttribute("href")).toBe("#/apps");
+    expect(screen.getByRole("link", { name: "← Projects" }).getAttribute("href")).toBe("#/apps");
     expect(screen.getByTitle(/Game 1/).getAttribute("sandbox")).toBe("allow-scripts");
     expect(spy.mock.calls.some(([t]) => t === "message")).toBe(false);
     spy.mockRestore();
@@ -157,7 +158,7 @@ describe("screens", () => {
       vi.fn(async () => new Response(JSON.stringify({ apps: [] }))),
     );
     act(() => store.snapshot({ agents: [], apps: [] }));
-    render(<AppPage slug="nope" go={() => undefined} />);
+    render(<ProjectPage slug="nope" go={() => undefined} />);
     expect(screen.getByRole("heading", { name: "This app is gone" })).toBeTruthy();
     vi.unstubAllGlobals();
   });

@@ -438,3 +438,15 @@ links or code (`plain`). Route added to `ROUTES`, `infra/modules/api/main.tf` an
 
 ## Not in v1 (suggested later)
 A custom domain for exact `frame-ancestors`.
+
+## Projects studio (HUD, 2026-11-08)
+The HUD side of the section above (decision 122; `web/src/components/Projects.tsx`, `web/src/lib/projects.ts`).
+- `#/apps` lists projects: drafts started here (`app-new-<id>`, kept in `localStorage` `aic.projects.new`) and the
+  published apps, newest first, as a snapping row of cards with "+ New project" first.
+- `#/apps/<slug>` (an app) or `#/apps/new-<id>` (a draft) opens the studio. Chat lines per conversation are kept in
+  `aic.projects.chats`. `ace.reply` and `ace.question` with a conversation starting `app-` go only there.
+- On `app.published` with `conversation: "app-new-…"` (or an app record carrying it), the draft's lines, timeline
+  and open question move to `app-<app_id>`, and a draft page open at that moment follows to the app's page.
+- The preview frames `app.url` exactly as the app page did (`AppFrame`, bridge registered with the app id);
+  device sizes scale a fixed-size box with `transform`, so the app's own window has the device's width.
+

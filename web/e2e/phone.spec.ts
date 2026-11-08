@@ -87,8 +87,11 @@ test("phone: Apps, an app page and a publish preview fit at 412px wide", async (
   await expect(page.getByRole("link", { name: /Star Sweeper/ })).toBeVisible();
   expect(await fits()).toBe(true);
   await page.getByRole("link", { name: /Star Sweeper/ }).click();
-  await expect(page.getByRole("link", { name: "← Apps" })).toBeInViewport();
+  await expect(page.getByRole("link", { name: "← Projects" })).toBeInViewport();
   await expect(page.getByRole("button", { name: "Remove" })).toBeInViewport();
+  // On a phone the chat comes first and the preview is the tab beside it.
+  await expect(page.getByRole("textbox", { name: "Message AIC about Star Sweeper" })).toBeInViewport();
+  await page.getByRole("tab", { name: "Preview" }).click();
   const frame = (await page.locator("iframe.appframe").boundingBox())!;
   expect(frame.width).toBeGreaterThanOrEqual(page.viewportSize()!.width - 1);
   expect(frame.height).toBeGreaterThan(400);
@@ -114,7 +117,7 @@ test("phone: pinned apps move into the nav row", async ({ page }) => {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await pin.click();
   await expect(page).toHaveURL(/#\/apps\/star-calendar$/);
-  await expect(page.getByRole("link", { name: "← Apps" })).toBeInViewport();
+  await expect(page.getByRole("link", { name: "← Projects" })).toBeInViewport();
 });
 
 test("phone: Needs you and Work read well at 412px, with big answer buttons", async ({ page }) => {

@@ -512,7 +512,7 @@ export async function mockBackend(
       Object.assign(m.settings, body);
       return ok({ settings: m.settings });
     }
-    if (path === "/messages") return ok({ accepted: true, conversation: "main" }, 202);
+    if (path === "/messages") return ok({ accepted: true, conversation: body?.conversation ?? "main" }, 202);
     if (/^\/tasks\/[\w-]+\/cancel$/.test(path)) return ok({ jobs: 2, workers: 1 });
     if (path.startsWith("/questions/"))
       return ok({ answered: true, answer: path.endsWith("/default") ? "SQLite" : body?.answer });

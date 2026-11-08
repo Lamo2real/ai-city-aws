@@ -384,7 +384,7 @@ function PublishCard({
       <p className="mute">
         {update
           ? `A new version${a.version ? ` (version ${a.version})` : ""} of one of your apps. Try it here; approve it and it replaces the current one, which is kept so you can go back.`
-          : "The city built this. Try it here; approve it and it appears under Apps."}
+          : "The city built this. Try it here; approve it and it appears under Projects."}
       </p>
       <h3 className="apptitle">{title}</h3>
       {a.description ? <p>{capped(a.description, 200)}</p> : null}
@@ -429,7 +429,7 @@ function PublishCard({
           onClick={() =>
             run(
               () => publishApp(a.id, caps.length ? known.filter((c) => on[capKey(c)]) : null, pin),
-              `Approved. ${title} is under Apps now.`,
+              `Approved. ${title} is under Projects now.`,
             )
           }
         >

@@ -149,6 +149,9 @@ class Store {
     });
   }
   event(e: { type: string; [k: string]: unknown }) {
+    // A project's chat (`app-…`, lib/projects.ts) is not AIC's main chat.
+    if ((e.type === "ace.reply" || e.type === "ace.question") && String(e.conversation ?? "").startsWith("app-"))
+      return;
     if (e.type === "ace.reply")
       return this.aceReply(e as unknown as { conversation: string; text: string; done: boolean });
     if (e.type === "activity" && e.id === "ace") this.aceStep(String(e.activity ?? ""), e.detail as string | null);

@@ -2376,7 +2376,7 @@ table.costs tr:last-child td {
   white-space: nowrap;
 }
 a.back {
-  color: #ffd88a;
+  color: var(--link);
   min-height: var(--tap);
   display: inline-flex;
   align-items: center;
@@ -3170,4 +3170,673 @@ summary,
   width: 100%;
   height: 36px;
   color: var(--gtext);
+}
+
+/* ---------- Projects: every app is a project (decision 121) ---------- */
+.screen.projects {
+  max-width: 1180px;
+}
+.projects-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+.rail-arrows {
+  display: flex;
+  gap: var(--s2);
+  padding-bottom: var(--s3);
+}
+.rail-arrow {
+  width: var(--tap);
+  height: var(--tap);
+  border-radius: 999px;
+  border: 1px solid var(--edge-2);
+  background: var(--glass-2);
+  color: var(--gtext);
+  font-size: 26px;
+  line-height: 1;
+  box-shadow: var(--glow);
+}
+.rail-arrow:disabled {
+  opacity: 0.35;
+}
+/* A row of big cards that snaps card by card; on a phone it is a swipe, on a laptop the arrows or a trackpad. */
+.rail {
+  list-style: none;
+  margin: var(--s2) calc(-1 * var(--s4)) 0;
+  padding: var(--s3) var(--s4) var(--s5);
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(220px, 260px);
+  gap: var(--s4);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: var(--s4);
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+.rail > li {
+  scroll-snap-align: start;
+  display: flex;
+}
+.proj-card {
+  --h: 38;
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  min-height: 300px;
+  padding: var(--s4);
+  border-radius: 22px;
+  border: 1px solid var(--edge);
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--lift);
+  color: var(--gtext);
+  text-decoration: none;
+  text-align: left;
+  font: inherit;
+  overflow: hidden;
+  transition:
+    transform 0.18s ease,
+    background 0.18s ease;
+}
+.proj-card:hover {
+  background: var(--glass-2);
+  transform: translateY(-2px);
+}
+.proj-art {
+  display: grid;
+  place-items: center;
+  height: 150px;
+  margin: calc(-1 * var(--s4)) calc(-1 * var(--s4)) var(--s2);
+  background:
+    radial-gradient(120px 90px at 30% 30%, hsl(var(--h) 85% 70% / 0.55), transparent 70%),
+    radial-gradient(140px 100px at 80% 80%, hsl(calc(var(--h) + 60) 75% 60% / 0.45), transparent 70%),
+    hsl(var(--h) 35% 22% / 0.6);
+  border-bottom: 1px solid var(--edge);
+}
+.proj-title {
+  font-size: var(--fs-l);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.proj-desc {
+  font-size: var(--fs-s);
+  flex: 1;
+}
+.proj-status {
+  align-self: start;
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  padding: 2px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.proj-status.is-live {
+  background: var(--good-t);
+  color: var(--good-l);
+}
+.proj-status.is-planning {
+  background: var(--warn-t);
+  color: var(--warn-l);
+}
+.proj-new {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  border: 2px dashed var(--edge-2);
+  background: var(--glass);
+  cursor: pointer;
+}
+.proj-new b {
+  font-size: var(--fs-l);
+}
+.proj-plus {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  font-size: 42px;
+  font-weight: 400;
+  line-height: 1;
+  color: #2a1a08;
+  background: linear-gradient(180deg, rgba(249, 201, 118, 0.96), rgba(232, 163, 61, 0.96));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 10px 24px -12px rgba(232, 163, 61, 0.9);
+}
+/* A project being planned: a small blueprint that draws itself. */
+.proj-blueprint {
+  width: 64px;
+  height: 84px;
+  border-radius: 10px;
+  border: 2px dashed var(--edge-2);
+  background:
+    linear-gradient(var(--edge) 1px, transparent 1px) 0 0 / 100% 12px,
+    linear-gradient(90deg, var(--edge) 1px, transparent 1px) 0 0 / 12px 100%;
+  animation: blueprint 2.4s ease-in-out infinite alternate;
+}
+.proj-blueprint.big {
+  width: 120px;
+  height: 200px;
+  border-radius: 18px;
+}
+@keyframes blueprint {
+  from {
+    opacity: 0.55;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+.choice {
+  min-height: var(--tap);
+  padding: var(--s2) var(--s4);
+  border-radius: 999px;
+  border: 1px solid var(--edge-2);
+  background: var(--glass-2);
+  color: var(--gtext);
+  text-align: left;
+  box-shadow: var(--glow);
+}
+.choice:hover {
+  background: var(--glass-3);
+}
+.choice-big {
+  font-weight: 800;
+}
+.newproj {
+  width: min(560px, 100%);
+}
+.newproj textarea,
+.pj-composer textarea {
+  width: 100%;
+  padding: var(--s3);
+  border: 1px solid var(--edge-2);
+  border-radius: var(--rg-s);
+  background: var(--glass-deep);
+  color: var(--gtext);
+  font-size: var(--fs-l);
+  resize: vertical;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+.newproj textarea::placeholder,
+.pj-composer textarea::placeholder {
+  color: var(--gsoft);
+}
+.newproj .choices {
+  margin-top: var(--s3);
+}
+.newproj .choice {
+  font-size: var(--fs-s);
+}
+
+/* The studio: chat and its tabs on the left, the live preview on the right; on a phone the preview is a tab. */
+.view-app main {
+  overflow: hidden;
+}
+.studio {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.studio-head {
+  flex-wrap: wrap;
+}
+.studio-head .appicon {
+  width: 32px;
+  height: 32px;
+}
+.studio-head .openapp {
+  padding: 0 var(--s5);
+}
+.studio-tabs {
+  display: flex;
+  gap: var(--s1);
+  padding: var(--s2) var(--s4) 0;
+  overflow-x: auto;
+}
+.studio-tab {
+  min-height: var(--tap);
+  padding: 0 var(--s4);
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--gtext);
+  font-weight: 800;
+  white-space: nowrap;
+}
+.studio-tab[aria-selected="true"] {
+  background: var(--glass-3);
+  border-color: var(--edge-2);
+  box-shadow: var(--glow);
+}
+.studio-tab.phone-only {
+  display: none;
+}
+.studio-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(320px, 400px) minmax(0, 1fr);
+  gap: var(--s3);
+  padding: var(--s2) var(--s3) var(--s3);
+}
+.studio-side,
+.studio-preview {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--rg);
+  border: 1px solid var(--edge);
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--glow);
+  overflow: hidden;
+}
+.pj-chat {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pj-log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--s4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+.pj-hello p {
+  margin-top: 0;
+  color: var(--gmute);
+}
+.pj-msg {
+  max-width: 88%;
+  padding: var(--s2) var(--s3);
+  border-radius: 16px;
+  overflow-wrap: anywhere;
+}
+.pj-msg p {
+  margin: 0.2em 0;
+}
+.pj-owner {
+  align-self: end;
+  background: var(--you-t);
+  border: 1px solid var(--edge);
+  border-bottom-right-radius: 4px;
+}
+.pj-ace {
+  align-self: start;
+  background: var(--glass-2);
+  border: 1px solid var(--edge);
+  border-bottom-left-radius: 4px;
+}
+.pj-note {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--bad-l);
+}
+.pj-note .btn {
+  min-height: 32px;
+  padding: 0 var(--s1);
+  color: inherit;
+}
+.dots {
+  display: inline-flex;
+  gap: 5px;
+  padding: 6px 2px;
+}
+.dots i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--gmute);
+  animation: dot 1.2s ease-in-out infinite;
+}
+.dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: none;
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+.pj-ask {
+  padding: var(--s3);
+  border-radius: 16px;
+  border: 1px solid var(--edge-2);
+  background: var(--warn-t);
+}
+.pj-ask-q {
+  margin: 0 0 var(--s2);
+  font-weight: 800;
+}
+.pj-composer {
+  display: flex;
+  gap: var(--s2);
+  align-items: end;
+  padding: var(--s3);
+  border-top: 1px solid var(--edge);
+}
+.pj-composer textarea {
+  font-size: var(--fs-m);
+  resize: none;
+  min-height: var(--tap);
+  max-height: 160px;
+  field-sizing: content;
+}
+.pj-send {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid var(--edge-2);
+  background: var(--glass-3);
+  color: var(--gtext);
+  display: grid;
+  place-items: center;
+}
+.pj-send:disabled {
+  opacity: 0.45;
+}
+.pj-pane {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--s4);
+}
+.pj-pane h2 {
+  margin: 0 0 var(--s3);
+  font-size: var(--fs-l);
+}
+.pj-now {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  font-weight: 800;
+}
+.pulse {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--amber);
+  animation: blueprint 0.9s ease-in-out infinite alternate;
+}
+.timeline,
+.versions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s2);
+}
+.timeline li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--s2);
+  padding: var(--s2) 0;
+  border-bottom: 1px solid var(--edge);
+}
+.timeline time {
+  grid-column: 2;
+  font-size: var(--fs-xs);
+}
+.tl-who {
+  grid-row: span 2;
+  align-self: start;
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--glass-2);
+}
+.tl-you {
+  background: var(--you-t);
+  color: var(--you-l);
+}
+.tl-aic {
+  background: var(--warn-t);
+  color: var(--warn-l);
+}
+.tl-builder {
+  background: var(--good-t);
+  color: var(--good-l);
+}
+.versions li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  padding: var(--s3);
+  border-radius: var(--rg-s);
+  border: 1px solid var(--edge);
+  background: var(--glass);
+}
+.versions li.is-current {
+  border-color: var(--edge-2);
+  background: var(--glass-2);
+}
+.pv-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  align-items: center;
+  padding: var(--s2) var(--s3);
+  border-bottom: 1px solid var(--edge);
+}
+.pv-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s1);
+}
+.pv-chip {
+  min-height: var(--tap);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 var(--s3);
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--gtext);
+  font-weight: 800;
+  font-size: var(--fs-s);
+}
+.pv-chip[aria-checked="true"] {
+  background: var(--glass-3);
+  border-color: var(--edge-2);
+  box-shadow: var(--glow);
+}
+.pv-custom {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+}
+.pv-custom input,
+.pv-zoom select {
+  min-height: var(--tap);
+  border: 1px solid var(--edge-2);
+  border-radius: var(--rg-s);
+  background: var(--glass-deep);
+  color: var(--gtext);
+  padding: 0 var(--s2);
+}
+.pv-custom input {
+  width: 84px;
+}
+.pv-zoom {
+  margin-left: auto;
+}
+.pv-zoom option {
+  background: var(--night2);
+  color: var(--gtext);
+}
+.pv-stage {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+}
+.pv-stage > .appframe {
+  flex: 1;
+  height: auto;
+}
+.pv-stage.is-device {
+  display: grid;
+  place-items: center;
+  padding: var(--s4);
+  overflow: auto;
+}
+.pv-device {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 1px var(--edge-2),
+    0 24px 60px -30px rgba(0, 0, 0, 0.8);
+  transition:
+    width 0.25s ease,
+    height 0.25s ease;
+}
+.pv-device.pv-phone {
+  border-radius: 28px;
+  box-shadow:
+    0 0 0 8px #11121f,
+    0 0 0 9px var(--edge-2),
+    0 24px 60px -30px rgba(0, 0, 0, 0.8);
+}
+.pv-device.pv-tablet {
+  border-radius: 18px;
+  box-shadow:
+    0 0 0 10px #11121f,
+    0 0 0 11px var(--edge-2),
+    0 24px 60px -30px rgba(0, 0, 0, 0.8);
+}
+.pv-scaled {
+  transform-origin: 0 0;
+}
+.pv-scaled .appframe {
+  width: 100%;
+  height: 100%;
+}
+.pv-waiting {
+  margin: auto;
+  display: grid;
+  justify-items: center;
+  gap: var(--s3);
+  padding: var(--s5);
+  text-align: center;
+  color: var(--gmute);
+  max-width: 34ch;
+}
+@media (max-width: 799px) {
+  .studio-tab.phone-only {
+    display: inline-flex;
+    align-items: center;
+  }
+  .studio-tabs {
+    padding: var(--s2) var(--s2) 0;
+  }
+  .studio-body {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--s2);
+  }
+  .studio[data-tab="preview"] .studio-side,
+  .studio:not([data-tab="preview"]) .studio-preview {
+    display: none;
+  }
+  .studio-head .appperms,
+  .studio-head .appversion {
+    display: none;
+  }
+  .proj-card {
+    min-height: 260px;
+  }
+  .rail {
+    grid-auto-columns: 78%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .proj-blueprint,
+  .dots i,
+  .pulse {
+    animation: none;
+  }
+  .proj-card,
+  .pv-device {
+    transition: none;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .proj-card,
+  .studio-side,
+  .studio-preview {
+    background: #2b2d52;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+@media (max-width: 799px) {
+  /* The preview tab on a phone: the app edge to edge, like opening it. */
+  .studio[data-tab="preview"] .studio-body {
+    padding: var(--s2) 0 0;
+  }
+  .studio[data-tab="preview"] .studio-preview {
+    border-radius: 0;
+    border-width: 1px 0 0;
+  }
+}
+.pv-bar[hidden] {
+  display: none;
+}
+@media (max-width: 799px) {
+  /* The phone header: the name gets the room (two lines if needed); the sizes are one row you swipe. */
+  .studio-head .appicon {
+    display: none;
+  }
+  .studio-head h1 {
+    white-space: normal;
+    font-size: 16px;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .studio-head {
+    gap: var(--s1) var(--s2);
+    padding: var(--s1) var(--s2);
+  }
+  .studio-head .openapp {
+    flex: 1 1 100%;
+  }
+  .pv-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    flex: 1 1 100%;
+  }
+  .pv-chip {
+    flex: 0 0 auto;
+  }
 }

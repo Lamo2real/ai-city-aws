@@ -44,12 +44,13 @@ test("a new version shows its number and can go back to the previous one", async
   await page.goto("/#/apps/snake");
   await expect(page.getByRole("heading", { name: "Snake Turbo" })).toBeVisible();
   await expect(page.getByText("Version 2")).toBeVisible();
-  await page.getByRole("button", { name: "Back to version 1" }).click();
+  await page.getByRole("tab", { name: "Versions" }).click();
+  await page.getByRole("button", { name: "Go back to version 1" }).click();
   const dialog = page.getByRole("dialog", { name: "Go back to version 1?" });
   await expect(dialog).toContainText("Its saved data (such as scores) stays.");
   await dialog.getByRole("button", { name: "Go back" }).click();
   await expect(page.getByRole("heading", { name: "Snake", exact: true })).toBeVisible();
   await expect(page.getByText("Version 2")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /Back to version/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Go back to version/ })).toHaveCount(0);
   expect(m.calls.some((c) => c.method === "POST" && c.path === "/apps/app-snake0000001/rollback")).toBe(true);
 });

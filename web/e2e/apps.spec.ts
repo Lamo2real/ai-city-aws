@@ -37,21 +37,22 @@ const PUBLISH = {
   department: "Apps",
 };
 
-test("Apps is in the nav after Work, with an empty state that says how to get one", async ({ page }) => {
+test("Projects is in the nav after Work, with an empty state that says how to get one", async ({ page }) => {
   await mockBackend(page);
   await page.goto("/");
-  await expect(page.getByRole("link", { name: "Apps", exact: true })).toBeVisible(); // the menu has rendered
+  await expect(page.getByRole("link", { name: "Projects", exact: true })).toBeVisible(); // the menu has rendered
   const names = await page.getByRole("navigation", { name: "Screens" }).getByRole("link").allTextContents();
-  expect(names.indexOf("Apps")).toBe(names.indexOf("Work") + 1);
-  await page.getByRole("link", { name: "Apps", exact: true }).click();
+  expect(names.indexOf("Projects")).toBe(names.indexOf("Work") + 1);
+  await page.getByRole("link", { name: "Projects", exact: true }).click();
   await expect(page).toHaveURL(/#\/apps$/);
-  await expect(page.getByRole("heading", { name: "Apps" })).toBeVisible();
-  await expect(page.getByText(/No apps yet. Ask AIC for a game/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
+  await expect(page.getByText(/No apps yet. Describe one in a sentence/)).toBeVisible();
+  await expect(page.getByRole("button", { name: /New project/ })).toBeVisible();
   await noSeriousA11y(page, "Apps empty");
   expect(await primaries(page)).toBeLessThanOrEqual(1);
 });
 
-test("approve a publish from Needs you: the preview runs sandboxed, then it is under Apps", async ({ page }) => {
+test("approve a publish from Needs you: the preview runs sandboxed, then it is under Projects", async ({ page }) => {
   const m = await mockBackend(page, { snapshot: { approvals: [PUBLISH] } });
   await page.goto("/#/inbox");
   const card = page.getByRole("article", { name: "New app: Star Sweeper" });
@@ -68,10 +69,10 @@ test("approve a publish from Needs you: the preview runs sandboxed, then it is u
   await page.screenshot({ path: `${SHOTS}/needs-you-app.png` });
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect.poll(() => m.calls.find((c) => c.path === "/approvals/apr-app-1")?.body).toEqual({ approved: true });
-  await expect(page.getByText("Approved. Star Sweeper is under Apps now.")).toBeVisible();
+  await expect(page.getByText("Approved. Star Sweeper is under Projects now.")).toBeVisible();
   m.send({ type: "approval.decided", id: "apr-app-1", approved: true });
   await expect(page.getByText(/Nothing needs you right now/)).toBeVisible();
-  await page.getByRole("link", { name: "Apps", exact: true }).click();
+  await page.getByRole("link", { name: "Projects", exact: true }).click();
   await expect(page.getByRole("link", { name: /Star Sweeper/ })).toBeVisible();
 });
 
@@ -84,7 +85,7 @@ test("refusing a publish publishes nothing", async ({ page }) => {
   expect(m.apps).toEqual([]);
 });
 
-test("open an app from Apps, play it, and come back", async ({ page }) => {
+test("open an app from Projects, play it, and come back", async ({ page }) => {
   await mockBackend(page, {
     apps: [
       appRecord("app-0000000000aa", "star-sweeper", "Star Sweeper"),
@@ -110,13 +111,13 @@ test("open an app from Apps, play it, and come back", async ({ page }) => {
   await noSeriousA11y(page, "App page");
   expect(await primaries(page)).toBeLessThanOrEqual(1);
   await page.screenshot({ path: `${SHOTS}/app-page.png` });
-  await page.getByRole("link", { name: "← Apps" }).click();
+  await page.getByRole("link", { name: "← Projects" }).click();
   await expect(page).toHaveURL(/#\/apps$/);
-  await expect(page.getByRole("heading", { name: "Apps" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
   // A slug that is gone says so and offers the way back.
   await page.goto("/#/apps/not-here");
   await expect(page.getByRole("heading", { name: "This app is gone" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "← Apps" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "← Projects" })).toBeVisible();
 });
 
 test("remove an app: it asks first, deletes it and goes back to Apps", async ({ page }) => {

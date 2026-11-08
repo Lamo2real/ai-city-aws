@@ -8,13 +8,15 @@ import { store, useHud, waitingCount } from "./lib/store.ts";
 import { live } from "./lib/ws.ts";
 import { route } from "./lib/apps.ts";
 import { forwardEvent } from "./lib/bridge.ts";
-import { AppPage, AppsScreen, PinnedApps } from "./components/Apps.tsx";
+import { PinnedApps } from "./components/Apps.tsx";
+import { ProjectPage, ProjectsScreen } from "./components/Projects.tsx";
 import { AceScreen } from "./components/AceScreen.tsx";
 import { CityView } from "./components/CityView.tsx";
 import { FirstRun } from "./components/FirstRun.tsx";
 import { Inbox } from "./components/Inbox.tsx";
 import { KnowledgeScreen } from "./components/Knowledge.tsx";
 import { knowledge } from "./lib/knowledge.ts";
+import { projects } from "./lib/projects.ts";
 import { CostsScreen, SettingsScreen, Tickets } from "./components/Screens.tsx";
 import { SkillsScreen } from "./components/SkillsScreen.tsx";
 import { Banner, Button, Toaster, toast } from "./components/ui.tsx";
@@ -29,7 +31,7 @@ const LABEL: Record<View, string> = {
   city: "City",
   inbox: "Needs you",
   tickets: "Work",
-  apps: "Apps",
+  apps: "Projects",
   knowledge: "Knowledge",
   costs: "Costs",
   skills: "Skills",
@@ -81,6 +83,7 @@ export function App() {
       live.onEvent((e) => {
         store.event(e);
         knowledge.event(e);
+        projects.event(e);
         forwardEvent(e); // only calendar.changed, only to apps granted the calendar
       });
       live.onStatus((s) => {
@@ -176,8 +179,8 @@ export function App() {
         {view === "city" ? <CityView go={go} /> : null}
         {view === "inbox" ? <Inbox /> : null}
         {view === "tickets" ? <Tickets /> : null}
-        {view === "apps" && !slug ? <AppsScreen /> : null}
-        {view === "apps" && slug ? <AppPage key={slug} slug={slug} go={go} /> : null}
+        {view === "apps" && !slug ? <ProjectsScreen /> : null}
+        {view === "apps" && slug ? <ProjectPage key={slug} slug={slug} go={go} /> : null}
         {view === "knowledge" ? <KnowledgeScreen /> : null}
         {view === "costs" ? <CostsScreen /> : null}
         {view === "skills" ? <SkillsScreen /> : null}
