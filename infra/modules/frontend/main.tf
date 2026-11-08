@@ -34,7 +34,7 @@ locals {
     "font-src 'self'",
     "img-src 'self' data: blob: ${var.apps_url}",
     "media-src 'self' blob:",
-    "connect-src 'self' https://*.execute-api.${var.region}.amazonaws.com wss://*.execute-api.${var.region}.amazonaws.com https://*.auth.${var.region}.amazoncognito.com https://cognito-idp.${var.region}.amazonaws.com https://cognito-identity.${var.region}.amazonaws.com https://transcribestreaming.${var.transcribe_region}.amazonaws.com wss://transcribestreaming.${var.transcribe_region}.amazonaws.com:8443 https://polly.${var.polly_region}.amazonaws.com https://${var.name}-knowledge.s3.${var.region}.amazonaws.com https://${var.name}-knowledge.s3.amazonaws.com",
+    "connect-src 'self' https://*.execute-api.${var.region}.amazonaws.com wss://*.execute-api.${var.region}.amazonaws.com https://*.auth.${var.region}.amazoncognito.com https://cognito-idp.${var.region}.amazonaws.com https://cognito-identity.${var.region}.amazonaws.com https://transcribestreaming.${var.transcribe_region}.amazonaws.com wss://transcribestreaming.${var.transcribe_region}.amazonaws.com:8443 wss://bedrock-agentcore.${var.region}.amazonaws.com https://polly.${var.polly_region}.amazonaws.com https://${var.name}-knowledge.s3.${var.region}.amazonaws.com https://${var.name}-knowledge.s3.amazonaws.com",
     "frame-src ${var.apps_url}",
     "frame-ancestors 'none'",
     "base-uri 'none'",

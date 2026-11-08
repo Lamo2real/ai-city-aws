@@ -1133,6 +1133,8 @@ test("the + menu: files ride along with the message, slash commands become plain
     /Connectors1 connected/,
     /Plugins1 skills/,
   ]);
+  // It rises out of the button: measure where it lands, once the animation is over.
+  await menu.evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)));
   const menuBox = (await menu.boundingBox())!;
   const plusBox = (await plus.boundingBox())!;
   expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(plusBox.y + 1); // a drop-up, above the button

@@ -494,7 +494,8 @@ describe("app-bridge Lambda (docs/APPS.md v2)", () => {
     const tf = api();
     const apiPerms = block(tf, "    api = [");
     expect(apiPerms).toContain('function:${local.app_bridge_name}"');
-    expect(apiPerms).not.toMatch(/bedrock-agentcore/);
+    // Its one AgentCore right is signing the voice address to AIC's runtime (decision 120).
+    expect(apiPerms.replace(/bedrock-agentcore:InvokeAgentRuntimeWithWebSocketStream/, "")).not.toMatch(/bedrock-agentcore/);
     const invokes = [...tf.matchAll(/app_bridge_name\}"\]/g)].length;
     expect(invokes).toBe(1);
     expect(tf).not.toMatch(/aws_lambda_permission"[^{]*\{[^}]*app-bridge/);
@@ -522,7 +523,7 @@ describe("app-bridge Lambda (docs/APPS.md v2)", () => {
     expect(mail).toMatch(/Statement = local\.read_path \}\)\n\}/);
     expect(mail).toMatch(/workload_arn\s+= "\$\{local\.directory\}\/workload-identity\/\$\{local\.workload\}"/);
     expect(mail).toMatch(/app_passwords\s+= "\$\{local\.sm\}:aic\/prod\/mail\/\*"/);
-    expect(block(tf, "    api = [")).not.toMatch(/bedrock-agentcore/);
+    expect(block(tf, "    api = [").replace(/bedrock-agentcore:InvokeAgentRuntimeWithWebSocketStream/, "")).not.toMatch(/bedrock-agentcore/);
     // The bridge's Gateway access is attached by the connectors module, on the gateway ARN only, never the api role.
     const conn = readFileSync(join(import.meta.dirname, "..", "infra", "modules", "connectors", "main.tf"), "utf8");
     expect(conn).toMatch(
@@ -782,5 +783,28 @@ describe("pre-configured departments (decision 113)", () => {
   });
   it("the Lambda package carries the bundled skills", () => {
     expect(readFileSync("backend/scripts/build_lambdas.py", "utf8")).toContain('"agents" / "skills"');
+  });
+});
+
+describe("AIC's real-time voice (Nova Sonic, decision 120)", () => {
+  const apiTf = readFileSync("infra/modules/api/main.tf", "utf8");
+  const agentsTf = readFileSync("infra/modules/agents/main.tf", "utf8");
+  const boundary = readFileSync("infra/modules/security/main.tf", "utf8");
+  const fe = readFileSync("infra/modules/frontend/main.tf", "utf8");
+  it("only AIC's role opens the two-way audio stream, on the voice models in config/models.json", () => {
+    expect(boundary).toContain('"bedrock:InvokeModelWithBidirectionalStream"');
+    const voice = agentsTf.slice(agentsTf.indexOf('resource "aws_iam_role_policy" "voice"'));
+    expect(voice).toMatch(/role = aws_iam_role\.agent\["ace"\]\.id/);
+    expect(voice).toContain("local.models.voice.speech");
+    expect(agentsTf.match(/InvokeModelWithBidirectionalStream/g)).toHaveLength(1);
+  });
+  it("the API signs the browser's address to AIC's runtime only, and the HUD may open it", () => {
+    expect(apiTf).toContain('"POST /voice/session"');
+    expect(apiTf).toMatch(
+      /"bedrock-agentcore:InvokeAgentRuntimeWithWebSocketStream"\], Resource = \[var\.runtime_arns\["ace"\], "\$\{var\.runtime_arns\["ace"\]\}\/\*"\]/,
+    );
+    expect(apiTf).toMatch(/AIC_RUNTIME_ARN_ACE = var\.runtime_arns\["ace"\], AIC_RUNTIME_VERSION = var\.runtime_version \}/);
+    const connect = fe.split("\n").find((l) => l.includes('"connect-src')) ?? "";
+    expect(connect).toContain("wss://bedrock-agentcore.${var.region}.amazonaws.com");
   });
 });

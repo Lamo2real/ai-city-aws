@@ -5,6 +5,9 @@
 //   dictate (the box):  the dictate icon beside Send: the words go into the box (live partials too) until you tap
 //                       again; nothing is sent by itself, and the answer to a dictated message is text only.
 //   the City's mic:     tap, talk, sent when you stop talking; the answer is spoken unless the City is muted.
+// The voice conversation runs on Nova 2 Sonic when it can (decision 120, sonic.ts): real-time, the owner can talk
+// over AIC and it stops at once, short spoken cues while AIC works. Sonic is only the voice; every request is
+// an ordinary AIC turn. When Sonic cannot start, the step-by-step loop above takes over.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { sendMessage } from "../lib/actions.ts";
 import { store, useHud } from "../lib/store.ts";
@@ -21,6 +24,7 @@ import { SpeechQueue } from "./speech.ts";
 import { loadOpenAi, onVoiceNote, withOpenAi } from "./openai.ts";
 import { toast } from "../components/ui.tsx";
 import { getVoice, logVoiceError, micProblem, speakProblem } from "./voice.ts";
+import { primeSonic, sonicWanted, startSonic, type SonicCall } from "./sonic.ts";
 
 /** Where dictated words go: each partial while talking, then each final piece. */
 export interface DictationTarget {
@@ -49,6 +53,11 @@ const loop = { current: false };
 // The voice conversation (the AIC screen's voice button): on until the owner taps it off.
 const convo = { current: false };
 const startRef: { current: ((reopened?: boolean) => void) | null } = { current: null };
+// The real-time call while it runs (one for the whole page).
+const sonic: { current: SonicCall | null } = { current: null };
+/** Loudness of the real-time call, for the visualizer; null when no call runs. */
+export const sonicLevels = () => sonic.current?.levels() ?? null;
+const lineId = () => `v${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 // Replies already in the chat when the page opens (restored after a reload) are never read aloud again.
 const spoken: { current: string | null | undefined } = { current: undefined };
 
@@ -93,6 +102,11 @@ export function useVoice(dictation?: DictationTarget) {
       return;
     }
     if (!last || last.who !== "ace" || spoken.current === last.id) return;
+    // In a real-time call Sonic already says the answer: nothing is read aloud a second time.
+    if (sonic.current) {
+      if (last.state === "done") spoken.current = last.id;
+      return;
+    }
     // Done talking: with the hands-free loop on after a spoken reply, the mic reopens for the owner's next
     // sentence; otherwise back to idle. AIC never listens while it talks, so there is no self-echo.
     const finish = (t: Talk, spokenAloud: boolean, askedVoice: boolean) => {
@@ -255,6 +269,65 @@ export function useVoice(dictation?: DictationTarget) {
   );
   startRef.current = (reopened?: boolean) => void start(reopened);
 
+  const stopLive = useCallback(() => {
+    sonic.current?.stop();
+    sonic.current = null;
+  }, []);
+
+  /** The voice conversation on Nova Sonic; falls back to the step-by-step loop when it cannot start. */
+  const startLive = useCallback(async () => {
+    setProblem(null);
+    stopTalking();
+    end();
+    store.set({ presence: "thinking" });
+    const add = (who: "owner" | "ace", text: string) => {
+      const line = { id: lineId(), who, text, at: Date.now(), state: who === "owner" ? "sent" : "done" } as const;
+      store.set({ chat: [...store.get().chat, who === "owner" ? { ...line, voice: true } : line] });
+      if (who === "owner") store.beginTurn();
+      else spoken.current = line.id;
+    };
+    const presence = (p: "listening" | "thinking" | "speaking") => sonic.current && store.set({ presence: p });
+    try {
+      const call = await startSonic({
+        onUserText: (text) => {
+          if (!isStopPhrase(text)) return add("owner", text);
+          endConversation(); // "stop listening" ends the call and is not sent
+          stopLive();
+          setListening(false);
+          store.set({ presence: "idle" });
+        },
+        // AIC's own answer reaches the chat from AIC; only Sonic's small talk (a greeting, "sure") is added here.
+        onAssistantText: (text, aic) => !aic && add("ace", text),
+        onThinking: (on) => presence(on ? "thinking" : "listening"),
+        onSpeaking: (on) => presence(on ? "speaking" : "listening"),
+        onEnd: (e) => {
+          sonic.current = null;
+          endConversation();
+          setListening(false);
+          store.set({ presence: "idle" });
+          if (e) {
+            logVoiceError("the voice call stopped", e);
+            setProblem(`${(e as Error).message || "AIC's voice stopped."} Tap the voice button to talk again.`);
+          }
+        },
+      });
+      if (!convo.current) return call.stop(); // tapped off while it was connecting
+      sonic.current = call;
+      setListening(true);
+      store.set({ presence: "listening" });
+    } catch (e) {
+      logVoiceError("the real-time voice could not start; using the step-by-step voice", e);
+      if (store.get().presence === "thinking") store.set({ presence: "idle" });
+      if (!convo.current) return;
+      if ((e as { name?: string } | null)?.name === "NotAllowedError") {
+        setProblem(micProblem(e));
+        return endConversation();
+      }
+      getVoice().prime?.();
+      void start();
+    }
+  }, [end, endConversation, start, stopLive]);
+
   const setSpeakMode = (m: SpeakMode) => {
     setSpeakModeState(m);
     saveSpeakMode(m);
@@ -284,11 +357,16 @@ export function useVoice(dictation?: DictationTarget) {
       if (convo.current) {
         loop.current = false;
         endConversation();
+        stopLive();
         stopTalking();
         return end();
       }
       convo.current = true;
       setConversation(true);
+      if (sonicWanted()) {
+        primeSonic(); // synchronously, inside the tap (Safari)
+        return void startLive();
+      }
       getVoice().prime?.(); // synchronously, inside the tap (Safari)
       if (!listening) void start();
     },
@@ -302,6 +380,7 @@ export function useVoice(dictation?: DictationTarget) {
       }
       loop.current = false; // dictation never arms the hands-free loop, and it ends a voice conversation
       endConversation();
+      stopLive();
       getVoice().prime?.();
       void start(false, true);
     },

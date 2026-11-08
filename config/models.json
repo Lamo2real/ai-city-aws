@@ -5,18 +5,37 @@
     "sonnet-5-5": {
       "label": "Claude Sonnet 5.5",
       "modelId": "anthropic.claude-sonnet-5-5",
-      "prefixes": ["global", "us", "eu"]
+      "prefixes": [
+        "global",
+        "us",
+        "eu"
+      ]
     },
     "opus-5-5": {
       "label": "Claude Opus 5.5",
       "modelId": "anthropic.claude-opus-5-5",
-      "prefixes": ["global", "us", "eu"]
+      "prefixes": [
+        "global",
+        "us",
+        "eu"
+      ]
     },
-    "fable-5-1": { "label": "Claude Fable 5.1", "modelId": "anthropic.claude-fable-5-1", "prefixes": ["global", "us"] },
+    "fable-5-1": {
+      "label": "Claude Fable 5.1",
+      "modelId": "anthropic.claude-fable-5-1",
+      "prefixes": [
+        "global",
+        "us"
+      ]
+    },
     "haiku-5-5": {
       "label": "Claude Haiku 5.5",
       "modelId": "anthropic.claude-haiku-5-5",
-      "prefixes": ["global", "us", "eu"]
+      "prefixes": [
+        "global",
+        "us",
+        "eu"
+      ]
     }
   },
   "embeddings": {
@@ -28,19 +47,82 @@
     }
   },
   "roles": {
-    "ace": { "model": "haiku-5-5", "fallback": null, "cacheTtl": "5m" },
-    "orchestrator": { "model": "fable-5-1", "fallback": "opus-5-5", "cacheTtl": "1h" },
-    "manager": { "model": "fable-5-1", "fallback": "opus-5-5", "cacheTtl": "1h" },
-    "worker": { "model": "opus-5-5", "fallback": null, "cacheTtl": "5m" },
-    "utility": { "model": "haiku-5-5", "fallback": null, "cacheTtl": "5m" }
+    "ace": {
+      "model": "haiku-5-5",
+      "fallback": null,
+      "cacheTtl": "5m"
+    },
+    "orchestrator": {
+      "model": "fable-5-1",
+      "fallback": "opus-5-5",
+      "cacheTtl": "1h"
+    },
+    "manager": {
+      "model": "fable-5-1",
+      "fallback": "opus-5-5",
+      "cacheTtl": "1h"
+    },
+    "worker": {
+      "model": "opus-5-5",
+      "fallback": null,
+      "cacheTtl": "5m"
+    },
+    "utility": {
+      "model": "haiku-5-5",
+      "fallback": null,
+      "cacheTtl": "5m"
+    }
   },
   "prices": {
-    "haiku-5-5": { "input": 0.1, "output": 0.5, "cacheRead": 0.01 },
-    "sonnet-5-5": { "input": 2, "output": 10, "cacheRead": 0.1 },
-    "opus-5-5": { "input": 4, "output": 20, "cacheRead": 0.2 },
-    "fable-5-1": { "input": 10, "output": 50, "cacheRead": 0.25 }
+    "haiku-5-5": {
+      "input": 0.1,
+      "output": 0.5,
+      "cacheRead": 0.01
+    },
+    "sonnet-5-5": {
+      "input": 2,
+      "output": 10,
+      "cacheRead": 0.1
+    },
+    "opus-5-5": {
+      "input": 4,
+      "output": 20,
+      "cacheRead": 0.2
+    },
+    "fable-5-1": {
+      "input": 10,
+      "output": 50,
+      "cacheRead": 0.25
+    }
   },
-  "cacheWriteMultiplier": { "5m": 1.25, "1h": 2 },
+  "cacheWriteMultiplier": {
+    "5m": 1.25,
+    "1h": 2
+  },
   "geoSurchargePct": 10,
-  "longContext": { "haiku-5-5": { "thresholdTokens": 100000, "multiplier": 5 } }
+  "longContext": {
+    "haiku-5-5": {
+      "thresholdTokens": 100000,
+      "multiplier": 5
+    }
+  },
+  "voice": {
+    "$comment": "Owner's exception to Anthropic-only (2026-11-08, decision 120): Amazon Nova 2 Sonic is AIC's real-time voice (speech in, speech out, turn-taking, barge-in). It is only the voice: every request goes to AIC (Haiku) through the ask_aic tool. Tried in this order until one opens (Nova 2 Sonic's regions vary by account); the first is the default.",
+    "speech": [
+      {
+        "modelId": "amazon.nova-2-sonic-v1:0",
+        "region": "eu-north-1"
+      },
+      {
+        "modelId": "amazon.nova-2-sonic-v1:0",
+        "region": "us-east-1"
+      },
+      {
+        "modelId": "amazon.nova-sonic-v1:0",
+        "region": "eu-north-1"
+      }
+    ],
+    "voiceId": "tiffany",
+    "endpointingSensitivity": "MEDIUM"
+  }
 }

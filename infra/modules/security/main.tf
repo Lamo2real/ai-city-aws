@@ -65,7 +65,7 @@ resource "aws_iam_policy" "boundary" {
         Sid    = "CityServices"
         Effect = "Allow"
         Action = [
-          "bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream", "bedrock:GetInferenceProfile", "bedrock:ListInferenceProfiles",
+          "bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream", "bedrock:InvokeModelWithBidirectionalStream", "bedrock:GetInferenceProfile", "bedrock:ListInferenceProfiles",
           "bedrock-agentcore:*", "dynamodb:*", "sqs:*", "events:PutEvents", "s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket",
           "logs:*", "xray:*", "cloudwatch:PutMetricData", "kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey*", "kms:DescribeKey",
           "secretsmanager:GetSecretValue", "secretsmanager:CreateSecret", "secretsmanager:PutSecretValue", "secretsmanager:DeleteSecret", "secretsmanager:TagResource", "sns:Publish", "states:*", "lambda:InvokeFunction", "execute-api:ManageConnections",

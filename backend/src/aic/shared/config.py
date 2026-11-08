@@ -44,6 +44,11 @@ def caps_config() -> dict[str, Any]:
     return _load("caps.json")
 
 
+def voice_config() -> dict[str, Any]:
+    """AIC's real-time voice (Nova 2 Sonic, decision 120): the models to try in order, the voice and endpointing."""
+    return dict(models_config().get("voice") or {})
+
+
 def policy_config() -> dict[str, Any]:
     return _load("policy.json")
 

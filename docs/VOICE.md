@@ -1,4 +1,25 @@
-# AIC's voice: OpenAI text-to-speech
+# AIC's voice
+
+## Real-time voice: Nova 2 Sonic (decision 120)
+
+The voice button on the AIC screen opens a real-time call. Talk naturally; talk over AIC and it stops at once
+and listens. While AIC works on something longer it says a short cue ("one sec, checking"). Tap the button
+again, or say "stop listening", to end the call.
+
+- **The brain stays AIC.** Amazon Nova 2 Sonic only hears and speaks. Its one tool, `ask_aic`, runs a normal
+  AIC turn, so departments, the Orchestrator, the policy gate and the ledger work as before. AIC's answer
+  appears in the chat as usual; Sonic says it in its own words.
+- **How it connects.** The HUD calls `POST /voice/session` and gets a five-minute signed WebSocket address to
+  AIC's own runtime (`/ws` in `backend/src/aic/runtime/server.py`). The relay (`backend/src/aic/runtime/voice.py`)
+  streams 16 kHz microphone audio to Bedrock and 24 kHz speech back (`web/src/voice/sonic.ts`).
+- **Models and regions** are in `config/models.json` under `voice`: Nova 2 Sonic in Stockholm, then Virginia,
+  then Nova Sonic 1. The voice is `voiceId`; how quickly it decides you finished is `endpointingSensitivity`.
+- **Long calls.** Bedrock ends a stream after eight minutes; the relay starts a fresh one after about seven and
+  replays what was said.
+- **When Sonic is not available** the button falls back to the step-by-step voice below by itself.
+- **Logs.** The ace runtime logs `voice.*` lines (model chosen, rotation, failures).
+
+## Step-by-step voice: OpenAI text-to-speech
 
 The owner chose OpenAI's voice for AIC's spoken replies ("use OpenAI's voice, whatever they have as
 default"). This is a voice service only: the agents keep running on Anthropic models through Amazon Bedrock.

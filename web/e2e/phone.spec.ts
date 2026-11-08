@@ -151,6 +151,8 @@ test("phone: the + menu opens upwards inside the screen and its rows are easy to
   await plus.click();
   const menu = page.getByRole("menu", { name: "Add to your message" });
   await expect(menu).toBeInViewport({ ratio: 1 });
+  // It rises out of the button: measure where it lands, once the animation is over.
+  await menu.evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)));
   const menuBox = (await menu.boundingBox())!;
   const plusBox = (await plus.boundingBox())!;
   expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(plusBox.y + 1);

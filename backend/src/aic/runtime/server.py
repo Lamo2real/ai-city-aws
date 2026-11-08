@@ -17,7 +17,8 @@ from typing import Any, Protocol
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from starlette.routing import Route
+from starlette.routing import Route, WebSocketRoute
+from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from aic.shared.apps import workspace_from_env
 from aic.shared.aws import LambdaFactoryClient, aws_city, require_env
@@ -39,14 +40,21 @@ class TurnRunner(Protocol):
 
 
 Warm = Callable[[dict[str, Any]], Awaitable[Any]]
+VoiceFactory = Callable[[Callable[[dict[str, Any]], Awaitable[None]], dict[str, str]], Any]
+"""``voice(send, live)``: a voice session (``aic.runtime.voice.SonicSession``) for one browser connection. ``live`` is
+where AIC streams replies to the HUD, as last seen on an invocation."""
 
 
 def create_app(
-    host: TurnRunner, warm: Warm | None = None, on_startup: list[Callable[[], Any]] | None = None
+    host: TurnRunner,
+    warm: Warm | None = None,
+    on_startup: list[Callable[[], Any]] | None = None,
+    voice: VoiceFactory | None = None,
 ) -> Starlette:
     """``warm`` runs in the background on every warm-keeper ping (AIC only); ``on_startup`` runs when the server
     starts (eager client creation). Neither may fail a request: both are logged and dropped."""
     state = {"running": 0, "last_update": int(time.time())}
+    live: dict[str, str] = {}  # where AIC's replies stream to the HUD, remembered from invocations for voice turns
     background: set[asyncio.Task[Any]] = set()
 
     def spawn(coro: Awaitable[Any], what: str) -> None:
@@ -85,6 +93,8 @@ def create_app(
                 if warm is not None:
                     spawn(warm(inv), "aic.warm")
                 return JSONResponse({"status": "warm"})
+            if isinstance(inv, dict) and inv.get("wsEndpoint") and inv.get("connectionsTable"):
+                live.update(wsEndpoint=str(inv["wsEndpoint"]), connectionsTable=str(inv["connectionsTable"]))
             if not isinstance(inv, dict) or not inv.get("id") or not inv.get("role") or not inv.get("agentId"):
                 raise ValueError("bad invocation")
         except ValueError:
@@ -120,6 +130,47 @@ def create_app(
             )
             return JSONResponse({"status": "error", "error": type(e).__name__}, status_code=500)
 
+    async def voice_ws(ws: WebSocket) -> None:
+        """AIC's real-time voice (decision 120): one Nova Sonic session per connection, AIC as its tool."""
+        await ws.accept()
+        if voice is None:
+            await ws.send_text(json.dumps({"type": "error", "message": "Voice is not available here."}))
+            await ws.close()
+            return
+        lock = asyncio.Lock()
+
+        async def send(msg: dict[str, Any]) -> None:
+            async with lock:
+                await ws.send_text(json.dumps(msg))
+
+        session = voice(send, live)
+        state["running"] += 1  # HealthyBusy while someone talks, so the session is never recycled mid-sentence
+        try:
+            try:
+                await session.start()
+            except Exception as e:
+                log("warn", "voice.start_failed", error=type(e).__name__)
+                await send({"type": "error", "message": "AIC's voice could not start (Nova Sonic is not available)."})
+                return
+            while True:
+                raw = await ws.receive_text()
+                try:
+                    msg = json.loads(raw)
+                except ValueError:
+                    continue
+                if isinstance(msg, dict):
+                    await session.on_client(msg)
+                    if msg.get("type") == "stop":
+                        break
+        except WebSocketDisconnect:
+            pass
+        finally:
+            state["running"] -= 1
+            state["last_update"] = int(time.time())
+            await session.close()
+            with contextlib.suppress(Exception):
+                await ws.close()
+
     async def not_found(_: Request, __: Exception) -> JSONResponse:
         return JSONResponse({"error": "not found"}, status_code=404)
 
@@ -135,7 +186,11 @@ def create_app(
         yield
 
     return Starlette(
-        routes=[Route("/ping", ping, methods=["GET"]), Route("/invocations", invocations, methods=["POST"])],
+        routes=[
+            Route("/ping", ping, methods=["GET"]),
+            Route("/invocations", invocations, methods=["POST"]),
+            WebSocketRoute("/ws", voice_ws),
+        ],
         exception_handlers={404: not_found, 405: not_found},
         lifespan=lifespan,
     )
@@ -212,7 +267,54 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
         warmer.prepare()
     log("info", "runtime.started", role=role)
     startup = ([warmer.warm] if warmer else []) + ([git_auth.ensure] if git_auth else [])
-    return create_app(host, warm=warmer.warm if warmer else None, on_startup=startup or None)
+    return create_app(
+        host,
+        warm=warmer.warm if warmer else None,
+        on_startup=startup or None,
+        voice=_voice(host, city) if role == "ace" else None,
+    )
+
+
+def _voice(host: TurnRunner, city: Any) -> VoiceFactory:
+    """AIC's voice: Nova Sonic speaks and listens; every request runs as a normal AIC turn, here, in-process."""
+    from aic.shared.config import voice_config
+    from aic.shared.ids import new_id
+
+    from .prompts import load_prompt
+    from .voice import SonicSession, bedrock_opener
+
+    cfg = voice_config()
+    opener = bedrock_opener(city.session)
+    prompt = load_prompt("voice.md").body
+
+    def make(send: Callable[[dict[str, Any]], Awaitable[None]], live: dict[str, str]) -> SonicSession:
+        async def ask(text: str) -> str:
+            inv = {
+                "id": new_id("voice"),
+                "role": "ace",
+                "agentId": "ace",
+                "department": None,
+                "ticketId": "conv-main",
+                "taskId": "conv-main",
+                "kind": "task",
+                "from": "owner",
+                "body": text,
+                "conversation": "main",
+                "voice": True,
+                **live,
+            }
+            return await host.run_turn(inv)
+
+        return SonicSession(
+            send_client=send,
+            ask_aic=ask,
+            open_stream=opener,
+            system_prompt=prompt,
+            voice_id=str(cfg.get("voiceId") or "tiffany"),
+            sensitivity=str(cfg.get("endpointingSensitivity") or "MEDIUM"),
+        )
+
+    return make
 
 
 def _git_auth(city: Any, e: Mapping[str, str]) -> Any:

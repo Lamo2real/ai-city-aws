@@ -60,6 +60,7 @@ from aic.shared.speech import (
 )
 from aic.shared.turn import ModelRunner
 from aic.shared.utility import UtilityDeps, bedrock_converse_runner, is_addressed_to_ace
+from aic.shared.voice_url import EXPIRES_S, VoiceUrlDeps, presigned_voice_url
 
 from ._runtime import run
 from .connectors_api import ConnectorsApi, on_connector_approval
@@ -146,6 +147,7 @@ ROUTES: list[tuple[str, str]] = [
     ("POST", "/speech"),
     ("GET", "/voice/openai"),
     ("PUT", "/voice/openai-key"),
+    ("POST", "/voice/session"),
     ("GET", "/github"),
     ("PUT", "/github/token"),
     ("DELETE", "/github/token"),
@@ -185,6 +187,8 @@ class ApiDeps:
     """iPhone notifications: device registration and the owner's Apple key; None = not deployed (503)."""
     speech: SpeechDeps | None = None
     """AIC's voice through OpenAI text-to-speech (``/speech``, ``/voice/openai*``); None = not configured (503)."""
+    voice: VoiceUrlDeps | None = None
+    """AIC's real-time voice (Nova Sonic on AIC's runtime): presigned WebSocket URLs; None = not deployed (503)."""
     github: GitHubDeps | None = None
     """The owner's GitHub token (``/github``, ``/github/token``); None = not configured (503 on store)."""
 
@@ -648,6 +652,15 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
             d.ledger.ticket_history(t["id"]), d.ledger.trace(t["id"]), d.ledger.child_tickets(t["id"])
         )
         return reply(200, {"ticket": t, "history": history, "trace": trace, "children": children})
+    if is_("POST", r"/voice/session"):
+        if d.voice is None:
+            return reply(503, {"error": "not_configured", "message": "AIC's real-time voice isn't set up here."})
+        try:
+            url = await asyncio.to_thread(presigned_voice_url, d.voice)
+        except Exception as e:
+            log("warn", "voice.presign_failed", error=type(e).__name__)
+            return reply(503, {"error": "unavailable", "message": "AIC's voice could not start. Try again."})
+        return reply(200, {"url": url, "expires_in": EXPIRES_S})
     if is_("GET", r"/departments/presets"):
         return reply(200, public_presets())
     if is_("GET", r"/departments"):
@@ -1137,6 +1150,23 @@ def build_deps() -> ApiDeps:
         push=_push_from_env(city),
         speech=_speech_from_env(city),
         github=github,
+        voice=_voice_from_env(city),
+    )
+
+
+def _voice_from_env(city: Any) -> VoiceUrlDeps | None:
+    arn = os.environ.get("AIC_RUNTIME_ARN_ACE")
+    if not arn:
+        return None
+    from .dispatcher import session_id_for
+
+    owner, version = os.environ.get("AIC_OWNER_ID", "owner"), os.environ.get("AIC_RUNTIME_VERSION", "")
+    return VoiceUrlDeps(
+        session=city.session,
+        region=city.region,
+        runtime_arn=arn,
+        # AIC's warm session (the same id the dispatcher uses), so the voice starts next to warm clients.
+        session_id=lambda: session_id_for(cast(WorkMessage, {"role": "ace", "conversation": "main"}), owner, version),
     )
 
 

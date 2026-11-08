@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Presence } from "../lib/store.ts";
 import { getVoice } from "../voice/voice.ts";
+import { sonicLevels } from "../voice/useVoice.ts";
 import { MicIcon } from "./ui.tsx";
 
 export type Speaker = "you" | "aic" | "thinking" | "idle";
@@ -48,7 +49,9 @@ export function VoiceVisualizer(p: {
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
       g.clearRect(0, 0, w, h);
       const mid = h / 2;
-      const lv = still ? { input: 0.5, output: 0.5 } : (getVoice().levels?.() ?? { input: 0, output: 0 });
+      const lv = still
+        ? { input: 0.5, output: 0.5 }
+        : (sonicLevels() ?? getVoice().levels?.() ?? { input: 0, output: 0 });
       const level = speaker === "you" ? lv.input : speaker === "aic" ? lv.output : 0;
       smooth += (level - smooth) * 0.25;
       wrap.current?.style.setProperty("--lvl", still ? "0" : smooth.toFixed(3));

@@ -16,6 +16,7 @@ dependencies = [
 [project.optional-dependencies]
 # Only the AgentCore runtime image needs these; Lambdas ship without them.
 runtime = [
+  "aws-sdk-bedrock-runtime>=0.12",  # Nova 2 Sonic's bidirectional stream: AIC's real-time voice (decision 120)
   "claude-agent-sdk>=0.1",
   "starlette>=0.47",
   "uvicorn>=0.35",

@@ -104,7 +104,7 @@ locals {
   }
   # name => bundle, handler, timeout, memory, extra env
   functions = {
-    api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 1024, env = merge(local.apns_env, { AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_USER_POOL_ID = var.user_pool_id, AIC_OWNER_EMAIL = var.owner_email, KNOWLEDGE_TABLE = var.knowledge_table, KNOWLEDGE_BUCKET = var.knowledge_bucket, KNOWLEDGE_BASE_ID = var.knowledge_base_id, KNOWLEDGE_DATA_SOURCE_ID = var.knowledge_data_source_id, KNOWLEDGE_GRAPH_ID = var.knowledge_graph_id, AIC_APPS_BUCKET = var.apps_bucket, AIC_APPS_URL = var.apps_url, AIC_APPS_DISTRIBUTION_ID = var.apps_distribution_id, AIC_APP_BRIDGE_FUNCTION = local.app_bridge_name }, var.api_env) }
+    api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 1024, env = merge(local.apns_env, { AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_USER_POOL_ID = var.user_pool_id, AIC_OWNER_EMAIL = var.owner_email, KNOWLEDGE_TABLE = var.knowledge_table, KNOWLEDGE_BUCKET = var.knowledge_bucket, KNOWLEDGE_BASE_ID = var.knowledge_base_id, KNOWLEDGE_DATA_SOURCE_ID = var.knowledge_data_source_id, KNOWLEDGE_GRAPH_ID = var.knowledge_graph_id, AIC_APPS_BUCKET = var.apps_bucket, AIC_APPS_URL = var.apps_url, AIC_APPS_DISTRIBUTION_ID = var.apps_distribution_id, AIC_APP_BRIDGE_FUNCTION = local.app_bridge_name, AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_VERSION = var.runtime_version }, var.api_env) }
     dispatcher    = { bundle = "app", handler = "aic.lambdas.dispatcher.handler", timeout = 120, memory = 1024, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_ARN_ORCHESTRATOR = var.runtime_arns["orchestrator"], AIC_RUNTIME_ARN_MANAGER = var.runtime_arns["manager"], AIC_RUNTIME_ARN_WORKER = var.runtime_arns["worker"], AIC_RUNTIME_VERSION = var.runtime_version, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod", AIC_CONNECTIONS_TABLE = var.connections_table } }
     factory       = { bundle = "app", handler = "aic.lambdas.factory.handler", timeout = 30, memory = 256, env = {} }
     ledger-writer = { bundle = "app", handler = "aic.lambdas.ledger_writer.handler", timeout = 30, memory = 256, env = {} }
@@ -132,6 +132,8 @@ locals {
       { Action = ["sqs:PurgeQueue"], Resource = values(var.queue_arns) },
       { Action = ["states:SendTaskSuccess", "states:SendTaskFailure"], Resource = [aws_sfn_state_machine.approval.arn] },
       { Action = ["bedrock:InvokeModel"], Resource = var.utility_invoke_arns },
+      # AIC's real-time voice (decision 120): signs the browser's WebSocket address to AIC's runtime only.
+      { Action = ["bedrock-agentcore:InvokeAgentRuntimeWithWebSocketStream"], Resource = [var.runtime_arns["ace"], "${var.runtime_arns["ace"]}/*"] },
       # "Send me a new first-login email": re-sends the owner's invitation, nothing else.
       { Action = ["cognito-idp:AdminCreateUser"], Resource = [var.user_pool_arn] },
       # The knowledge base (docs/KNOWLEDGE.md section 9): items, presigned uploads (single and multipart) under raw/,
@@ -215,6 +217,8 @@ locals {
     "POST /speech", "GET /voice/openai", "PUT /voice/openai-key",
     # The owner's GitHub token (docs/GITHUB_ACCESS.md): who it belongs to, store it, remove it.
     "GET /github", "PUT /github/token", "DELETE /github/token",
+    # AIC's real-time voice (decision 120): a five-minute signed address to AIC's own runtime.
+    "POST /voice/session",
   ]
   queue_batch = { ace = 1, orchestrator = 5, manager = 5, worker = 10 }
   queue_conc  = { ace = 5, orchestrator = 10, manager = 20, worker = var.worker_queue_concurrency }

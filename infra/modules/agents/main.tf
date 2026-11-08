@@ -182,6 +182,21 @@ resource "aws_iam_role_policy" "knowledge_aic" {
   })
 }
 
+# AIC's real-time voice (decision 120): only AIC's role may open Nova Sonic's two-way audio stream.
+resource "aws_iam_role_policy" "voice" {
+  name = "voice"
+  role = aws_iam_role.agent["ace"].id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid      = "SpeakWithNovaSonic"
+      Effect   = "Allow"
+      Action   = ["bedrock:InvokeModelWithBidirectionalStream"]
+      Resource = distinct([for c in local.models.voice.speech : "arn:aws:bedrock:${c.region}::foundation-model/${c.modelId}"])
+    }]
+  })
+}
+
 resource "aws_iam_role_policy" "factory" {
   name   = "agent-factory"
   role   = aws_iam_role.agent["manager"].id
