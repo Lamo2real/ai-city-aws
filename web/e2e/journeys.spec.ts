@@ -1210,30 +1210,56 @@ test("the + menu: files ride along with the message, slash commands become plain
   await expect(page.getByRole("listitem").filter({ hasText: "brief.pdf" })).toBeVisible();
 });
 
-test("Settings → Departments: IT and Marketing with their skills; a switch connects a service and asks to sign in", async ({
+test("Settings → Departments: a setup guide, shared tools, nine departments; a switch connects a tool and asks to sign in", async ({
   page,
 }) => {
   const m = await mockBackend(page);
   await page.goto("/#/settings");
   const section = page.getByRole("region", { name: "Departments" });
-  await expect(section.getByRole("heading", { name: "IT", exact: true })).toBeVisible();
-  await expect(section.getByRole("heading", { name: "Marketing", exact: true })).toBeVisible();
-  const marketing = section.getByRole("article", { name: "Marketing department" });
+  // The guide comes first and counts the essential tools.
+  const guide = section.locator(".setup-guide");
+  await expect(guide).toHaveAttribute("open", "");
+  await expect(guide.getByText(/^0 of \d+ essential tools connected$/)).toBeVisible();
+  await expect(guide.getByRole("link", { name: "Knowledge" })).toHaveAttribute("href", "#/knowledge");
+  for (const name of [
+    "Shared by every department",
+    "IT",
+    "Data & Analytics",
+    "Marketing",
+    "Sales",
+    "Customer Support",
+    "Finance",
+    "Legal",
+    "Product",
+    "Operations",
+  ])
+    await expect(section.getByRole("heading", { name, exact: true })).toBeVisible();
+
+  // Marketing: open it; its skills and its essential tools, each with a Create an account link.
+  const marketing = section.locator("details.preset", {
+    has: page.getByRole("heading", { name: "Marketing", exact: true }),
+  });
+  await marketing.getByRole("heading", { name: "Marketing" }).click();
   await expect(marketing.getByText(/Design · Video & voice/)).toBeVisible();
   await marketing.getByText(/skills built in/).click();
   await expect(marketing.getByText("canva-design", { exact: true })).toBeVisible();
+  const essentials = marketing.getByRole("list", { name: "Marketing essential tools" });
+  await expect(essentials.getByRole("checkbox")).toHaveCount(4);
+  await expect(essentials.getByRole("link", { name: "Create a Canva account" })).toHaveAttribute(
+    "href",
+    "https://www.canva.com/signup/",
+  );
 
-  // Canva: off → on adds the connector with its link and label, and its sign-in shows right there.
-  const canva = marketing.getByRole("checkbox", { name: "Canva" });
-  await expect(canva).not.toBeChecked();
-  await marketing.getByText("Canva", { exact: true }).click();
+  // Canva: off → on adds the connector, and its sign-in shows right there.
+  const canva = essentials.getByRole("checkbox", { name: "Canva" });
+  await essentials.getByText("Canva", { exact: true }).click();
   await expect(canva).toBeChecked();
   expect(m.calls.filter((c) => c.path === "/connectors" && c.method === "POST").at(-1)?.body).toEqual({
     url: "https://mcp.canva.com/mcp",
     label: "Canva",
   });
-  await expect(marketing.getByText("Needs you to sign in")).toBeVisible();
-  await expect(marketing.getByRole("button", { name: /Sign in/ })).toBeVisible();
+  await expect(essentials.getByText("Needs you to sign in")).toBeVisible();
+  await expect(essentials.getByRole("button", { name: /Sign in/ })).toBeVisible();
   // Under Connectors it keeps its roles and approvals, without a second sign-in button.
   const listed = page.getByRole("article", { name: "Connector Canva" });
   await expect(listed.getByText("Who may use it")).toBeVisible();
@@ -1242,8 +1268,23 @@ test("Settings → Departments: IT and Marketing with their skills; a switch con
   await noSeriousA11y(page, "Settings → Departments");
 
   // On → off asks first, then removes it.
-  await marketing.getByText("Canva", { exact: true }).click();
+  await essentials.getByText("Canva", { exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Remove connector" }).click();
   await expect(canva).not.toBeChecked();
   expect(m.calls.some((c) => c.method === "DELETE" && c.path === "/connectors/canva")).toBe(true);
+
+  // A store-specific tool asks for the store's name first and fills it into the link.
+  const support = section.locator("details.preset", {
+    has: page.getByRole("heading", { name: "Customer Support", exact: true }),
+  });
+  await support.getByRole("heading", { name: "Customer Support" }).click();
+  const shop = support.getByRole("checkbox", { name: "Shopify (store)" });
+  await expect(shop).toBeDisabled();
+  await support.getByLabel(/Your store's name/).fill("Lamo-Shop");
+  await support.getByText("Shopify (store)", { exact: true }).click();
+  expect(m.calls.filter((c) => c.path === "/connectors" && c.method === "POST").at(-1)?.body).toEqual({
+    url: "https://lamo-shop.myshopify.com/api/mcp",
+    label: "Shopify (store)",
+  });
+  await expect(shop).toBeChecked();
 });

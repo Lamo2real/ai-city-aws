@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field, replace
 
+from aic.shared.presets import preset_for
 from aic.shared.utility import agents_dir
 
 
@@ -45,7 +46,8 @@ def load_prompt(file: str, vars: dict[str, str] | None = None) -> Prompt:
 
 
 def department_template(department: str) -> str:
-    key = re.sub(r"[^a-z0-9]+", "-", department.lower())
+    preset = preset_for(department)  # "Data & Analytics", "Customer Support", "Engineering" → data, support, it
+    key = preset["key"] if preset else re.sub(r"[^a-z0-9]+", "-", department.lower())
     d = agents_dir() / "departments"
     f = d / f"{key}.md"
     return (f if f.is_file() else d / "default.md").read_text(encoding="utf-8").strip()

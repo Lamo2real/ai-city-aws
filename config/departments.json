@@ -1,59 +1,964 @@
 {
-  "$comment": "Pre-configured departments (decision 113). The Orchestrator uses these names when work fits; any other department is still created as data. Each department's manager prompt is agents/departments/<key>.md, its skills are agents/skills/<name>/SKILL.md, and its connectors are switched on in Settings -> Departments (POST /connectors with the url). Read by backend/src/aic/shared/presets.py and served to the HUD by GET /departments/presets.",
+  "$comment": "Pre-configured departments (decisions 113, 114). The Orchestrator uses these names when work fits; any other department is still created as data. Each department's manager prompt is agents/departments/<key>.md and its skills are agents/skills/<name>/SKILL.md. 'shared' tools and skills belong to every department. 'essential' marks the tools most businesses in that field use: Settings -> Departments and its setup guide put them first. Every url answered an MCP initialize on 2026-11-08 (401 with OAuth resource metadata, or 200). Read by backend/src/aic/shared/presets.py; served by GET /departments/presets.",
+  "shared": {
+    "name": "Shared by every department",
+    "mission": "Tools every team uses: one Stripe account for everything sold, one place for tickets, chat, docs, files and meetings.",
+    "skills": [
+      "knowledge-first",
+      "sell-with-stripe",
+      "cross-team-work"
+    ],
+    "essential": [
+      "stripe",
+      "atlassian",
+      "slack",
+      "notion"
+    ],
+    "connectors": [
+      "stripe",
+      "atlassian",
+      "slack",
+      "notion",
+      "zapier",
+      "box",
+      "dropbox",
+      "calendly",
+      "miro",
+      "granola"
+    ]
+  },
   "departments": [
     {
       "key": "it",
       "name": "IT",
-      "aliases": ["engineering", "it infrastructure", "infrastructure", "application", "software", "development", "devops"],
-      "mission": "Build, run and fix the owner's software and infrastructure: cloud infrastructure as code, backends, web frontends, iOS and Android apps, CI/CD, security and monitoring.",
-      "teams": [
-        { "name": "Cloud & infrastructure", "does": "AWS, Terraform, networking, CI/CD pipelines, cost and security" },
-        { "name": "Backend", "does": "APIs, services, data stores, integrations" },
-        { "name": "Frontend", "does": "Web apps and sites: React, TypeScript, accessibility, performance" },
-        { "name": "iOS", "does": "SwiftUI apps for iPhone and iPad, App Store readiness" },
-        { "name": "Android", "does": "Kotlin and Jetpack Compose apps, Play Store readiness" },
-        { "name": "QA & security", "does": "Tests, reviews, dependency and secret scanning" }
+      "aliases": [
+        "engineering",
+        "it infrastructure",
+        "infrastructure",
+        "application",
+        "applications",
+        "software",
+        "development",
+        "devops",
+        "sre",
+        "platform",
+        "mobile",
+        "web"
       ],
-      "skills": ["aws-well-architected", "terraform-iac", "backend-services", "web-frontend", "ios-swiftui", "android-kotlin", "ci-cd-github", "security-baseline", "current-docs"],
-      "connectors": ["github", "aws-knowledge", "context7", "microsoft-learn", "cloudflare-docs", "linear", "atlassian", "sentry", "vercel", "supabase", "figma"]
+      "mission": "Build, run and protect the owner's software and infrastructure: cloud infrastructure as code, backends, web frontends, iOS and Android apps, CI/CD, monitoring, on-call and security.",
+      "teams": [
+        {
+          "name": "Cloud & infrastructure",
+          "does": "AWS, Terraform, networking, CI/CD pipelines, cost"
+        },
+        {
+          "name": "Backend",
+          "does": "APIs, services, databases, integrations, payments"
+        },
+        {
+          "name": "Frontend",
+          "does": "Web apps and sites: React, TypeScript, accessibility, performance"
+        },
+        {
+          "name": "Mobile",
+          "does": "iOS (SwiftUI) and Android (Kotlin) apps, store readiness"
+        },
+        {
+          "name": "Reliability",
+          "does": "Monitoring, alerts, incidents, on-call"
+        },
+        {
+          "name": "Security",
+          "does": "Reviews, dependency and secret scanning, compliance evidence"
+        }
+      ],
+      "skills": [
+        "aws-well-architected",
+        "terraform-iac",
+        "backend-services",
+        "web-frontend",
+        "ios-swiftui",
+        "android-kotlin",
+        "ci-cd-github",
+        "security-baseline",
+        "current-docs",
+        "incident-response"
+      ],
+      "essential": [
+        "github",
+        "aws-knowledge",
+        "context7",
+        "sentry"
+      ],
+      "connectors": [
+        "github",
+        "aws-knowledge",
+        "context7",
+        "sentry",
+        "linear",
+        "vercel",
+        "supabase",
+        "figma",
+        "pagerduty",
+        "datadog",
+        "grafana",
+        "microsoft-learn",
+        "cloudflare-docs",
+        "shopify-dev",
+        "vanta"
+      ]
+    },
+    {
+      "key": "data",
+      "name": "Data & Analytics",
+      "aliases": [
+        "data",
+        "analytics",
+        "data and analytics",
+        "business intelligence",
+        "bi",
+        "reporting",
+        "insights",
+        "data science",
+        "data and ai",
+        "data & ai",
+        "ai",
+        "machine learning",
+        "ml"
+      ],
+      "mission": "Turn the owner's data into answers: metrics and dashboards, product and marketing analytics, SQL and spreadsheets, forecasts, experiments and data quality.",
+      "teams": [
+        {
+          "name": "Analytics",
+          "does": "Questions answered with numbers, KPIs, weekly reports"
+        },
+        {
+          "name": "Product analytics",
+          "does": "Funnels, retention, experiments in PostHog, Amplitude or Mixpanel"
+        },
+        {
+          "name": "Data engineering",
+          "does": "Warehouse tables, pipelines, data quality (with IT for infrastructure)"
+        }
+      ],
+      "skills": [
+        "data-analysis",
+        "metrics-and-dashboards",
+        "experiments-ab",
+        "current-docs"
+      ],
+      "essential": [
+        "google-analytics",
+        "bigquery",
+        "posthog"
+      ],
+      "connectors": [
+        "google-analytics",
+        "bigquery",
+        "posthog",
+        "amplitude",
+        "mixpanel",
+        "hex",
+        "airtable",
+        "supabase"
+      ]
     },
     {
       "key": "marketing",
       "name": "Marketing",
-      "aliases": ["design", "brand", "content", "social", "ads", "advertising", "growth"],
-      "mission": "Grow the owner's brands: strategy, copy, design, images, video, voice-overs, social posts, ad campaigns, SEO, email and reporting.",
-      "teams": [
-        { "name": "Strategy", "does": "Positioning, audiences, campaign plans, budgets and calendars" },
-        { "name": "Design", "does": "Canva designs: social posts, ads, presentations, layouts, resumes, brand kits" },
-        { "name": "Video & voice", "does": "Higgsfield and HeyGen videos, ElevenLabs voice-overs" },
-        { "name": "Copy & content", "does": "Posts, landing pages, emails, scripts, blog articles" },
-        { "name": "Paid ads", "does": "Meta (Facebook, Instagram) campaigns: audiences, creatives, budgets, reporting" },
-        { "name": "SEO & analytics", "does": "Keywords, site audits, competitors, performance reports" }
+      "aliases": [
+        "design",
+        "brand",
+        "content",
+        "social",
+        "social media",
+        "ads",
+        "advertising",
+        "growth",
+        "seo",
+        "communications"
       ],
-      "skills": ["brand-and-copy", "canva-design", "video-and-voice", "meta-ads-campaigns", "seo-content", "campaign-planning"],
-      "connectors": ["canva", "higgsfield", "heygen", "elevenlabs", "meta-ads", "ahrefs", "hubspot", "notion", "figma", "stripe"]
+      "mission": "Grow the owner's brands: strategy, copy, design, images, video, voice-overs, social posts, ad campaigns, SEO, email, websites and reporting.",
+      "teams": [
+        {
+          "name": "Strategy",
+          "does": "Positioning, audiences, campaign plans, budgets and calendars"
+        },
+        {
+          "name": "Design",
+          "does": "Canva designs: social posts, ads, presentations, layouts, resumes, brand kits"
+        },
+        {
+          "name": "Video & voice",
+          "does": "Higgsfield and HeyGen videos, ElevenLabs voice-overs"
+        },
+        {
+          "name": "Copy & content",
+          "does": "Posts, landing pages, emails, scripts, blog articles"
+        },
+        {
+          "name": "Paid ads",
+          "does": "Meta (Facebook, Instagram) and Google Ads campaigns"
+        },
+        {
+          "name": "Email & lifecycle",
+          "does": "Newsletters and automated flows in Klaviyo or HubSpot"
+        },
+        {
+          "name": "SEO & web",
+          "does": "Keywords, audits, Webflow or Wix pages, analytics"
+        }
+      ],
+      "skills": [
+        "brand-and-copy",
+        "canva-design",
+        "video-and-voice",
+        "meta-ads-campaigns",
+        "google-ads-campaigns",
+        "email-marketing",
+        "seo-content",
+        "campaign-planning"
+      ],
+      "essential": [
+        "canva",
+        "meta-ads",
+        "google-ads",
+        "google-analytics"
+      ],
+      "connectors": [
+        "canva",
+        "meta-ads",
+        "google-ads",
+        "google-analytics",
+        "higgsfield",
+        "heygen",
+        "elevenlabs",
+        "klaviyo",
+        "hubspot",
+        "semrush",
+        "ahrefs",
+        "buffer",
+        "webflow",
+        "wix",
+        "typeform",
+        "figma"
+      ]
+    },
+    {
+      "key": "sales",
+      "name": "Sales",
+      "aliases": [
+        "business development",
+        "biz dev",
+        "bd",
+        "revenue",
+        "deals",
+        "partnerships",
+        "account management"
+      ],
+      "mission": "Win and grow customers: find and qualify leads, run outreach, book meetings, keep the CRM clean, write proposals and quotes, and close deals.",
+      "teams": [
+        {
+          "name": "Prospecting",
+          "does": "Ideal customer profile, lead lists, enrichment"
+        },
+        {
+          "name": "Outreach",
+          "does": "Email and LinkedIn sequences, follow-ups, meetings booked"
+        },
+        {
+          "name": "Deals",
+          "does": "Pipeline, calls, proposals, quotes, e-signatures"
+        },
+        {
+          "name": "Sales operations",
+          "does": "CRM hygiene, forecasts, reports"
+        }
+      ],
+      "skills": [
+        "prospecting",
+        "outreach-sequences",
+        "crm-hygiene",
+        "proposals-and-quotes"
+      ],
+      "essential": [
+        "salesforce",
+        "hubspot",
+        "apollo",
+        "pandadoc"
+      ],
+      "connectors": [
+        "salesforce",
+        "hubspot",
+        "apollo",
+        "pandadoc",
+        "pipedrive",
+        "attio",
+        "close",
+        "gong",
+        "docusign",
+        "fireflies"
+      ]
+    },
+    {
+      "key": "support",
+      "name": "Customer Support",
+      "aliases": [
+        "support",
+        "customer service",
+        "customer success",
+        "help desk",
+        "helpdesk",
+        "cx",
+        "customer experience"
+      ],
+      "mission": "Keep customers happy: answer tickets and chats, solve problems, handle refunds and orders, write help articles, and turn feedback into fixes.",
+      "teams": [
+        {
+          "name": "Frontline",
+          "does": "Tickets, chat and email replies, first-contact resolution"
+        },
+        {
+          "name": "Escalations",
+          "does": "Bugs to IT, refunds to Finance, angry customers"
+        },
+        {
+          "name": "Knowledge",
+          "does": "Help center articles, saved replies, FAQ"
+        },
+        {
+          "name": "Voice of the customer",
+          "does": "Satisfaction surveys, feedback themes for Product"
+        }
+      ],
+      "skills": [
+        "support-replies",
+        "refunds-and-orders",
+        "help-center-articles",
+        "feedback-to-product"
+      ],
+      "essential": [
+        "intercom",
+        "gorgias",
+        "help-scout"
+      ],
+      "connectors": [
+        "intercom",
+        "gorgias",
+        "help-scout",
+        "shopify-store",
+        "typeform",
+        "surveymonkey",
+        "hubspot"
+      ]
+    },
+    {
+      "key": "finance",
+      "name": "Finance",
+      "aliases": [
+        "accounting",
+        "bookkeeping",
+        "billing",
+        "payments",
+        "invoicing",
+        "treasury",
+        "fp&a",
+        "money"
+      ],
+      "mission": "Keep the money right: bookkeeping, invoices and bills, payments and payouts, expenses, budgets, cash-flow forecasts and reports, VAT and tax preparation.",
+      "teams": [
+        {
+          "name": "Bookkeeping",
+          "does": "Transactions categorised, reconciliations, month-end close"
+        },
+        {
+          "name": "Billing & payments",
+          "does": "Invoices, payment links, subscriptions, refunds, payouts"
+        },
+        {
+          "name": "Spend",
+          "does": "Cards, expenses, bills, vendors"
+        },
+        {
+          "name": "Planning",
+          "does": "Budgets, cash flow, forecasts, board-ready reports"
+        }
+      ],
+      "skills": [
+        "bookkeeping",
+        "invoicing-and-payments",
+        "budgets-and-forecasts",
+        "tax-and-vat-prep"
+      ],
+      "essential": [
+        "xero",
+        "paypal",
+        "ramp"
+      ],
+      "connectors": [
+        "xero",
+        "paypal",
+        "ramp",
+        "square",
+        "plaid",
+        "shopify-store",
+        "airtable"
+      ]
+    },
+    {
+      "key": "legal",
+      "name": "Legal",
+      "aliases": [
+        "compliance",
+        "contracts",
+        "privacy",
+        "gdpr",
+        "risk",
+        "legal and compliance",
+        "policy"
+      ],
+      "mission": "Protect the owner: draft and review contracts, terms and privacy policies, track obligations and renewals, prepare GDPR and compliance work, and flag what needs a licensed lawyer.",
+      "teams": [
+        {
+          "name": "Contracts",
+          "does": "Drafts, reviews, redlines, e-signatures, renewals"
+        },
+        {
+          "name": "Privacy & compliance",
+          "does": "GDPR, cookie and privacy policies, records of processing, SOC 2 evidence"
+        },
+        {
+          "name": "Corporate",
+          "does": "Company documents, trademarks, policies"
+        }
+      ],
+      "skills": [
+        "contract-review",
+        "privacy-gdpr",
+        "policies-and-terms"
+      ],
+      "essential": [
+        "docusign",
+        "pandadoc",
+        "vanta"
+      ],
+      "connectors": [
+        "docusign",
+        "pandadoc",
+        "vanta"
+      ]
+    },
+    {
+      "key": "product",
+      "name": "Product",
+      "aliases": [
+        "product management",
+        "pm",
+        "ux",
+        "ui",
+        "user research",
+        "roadmap",
+        "design research"
+      ],
+      "mission": "Decide what to build and why: user research, specs and roadmaps, designs and prototypes, prioritisation, launches, and learning from usage.",
+      "teams": [
+        {
+          "name": "Product management",
+          "does": "Specs, roadmap, priorities, launch plans"
+        },
+        {
+          "name": "Design",
+          "does": "Figma flows, prototypes, design system"
+        },
+        {
+          "name": "Research",
+          "does": "Interviews, surveys, usability tests, insights"
+        }
+      ],
+      "skills": [
+        "product-specs",
+        "user-research",
+        "roadmap-and-prioritisation"
+      ],
+      "essential": [
+        "linear",
+        "figma",
+        "posthog"
+      ],
+      "connectors": [
+        "linear",
+        "figma",
+        "posthog",
+        "amplitude",
+        "mixpanel",
+        "typeform",
+        "surveymonkey",
+        "fireflies"
+      ]
+    },
+    {
+      "key": "operations",
+      "name": "Operations",
+      "aliases": [
+        "ops",
+        "business operations",
+        "bizops",
+        "project management",
+        "pmo",
+        "admin",
+        "administration",
+        "procurement",
+        "logistics",
+        "office"
+      ],
+      "mission": "Make the business run smoothly: projects and processes, standard operating procedures, automations between tools, vendors and procurement, scheduling, orders and logistics.",
+      "teams": [
+        {
+          "name": "Projects",
+          "does": "Plans, timelines, status across departments"
+        },
+        {
+          "name": "Processes",
+          "does": "SOPs, checklists, automations in Zapier"
+        },
+        {
+          "name": "Vendors & procurement",
+          "does": "Suppliers, quotes, purchase orders, renewals"
+        },
+        {
+          "name": "Orders & logistics",
+          "does": "Store orders, fulfilment, inventory"
+        }
+      ],
+      "skills": [
+        "sops-and-processes",
+        "project-management",
+        "automation-design",
+        "vendor-management"
+      ],
+      "essential": [
+        "asana",
+        "monday",
+        "airtable"
+      ],
+      "connectors": [
+        "asana",
+        "monday",
+        "airtable",
+        "clickup",
+        "shopify-store",
+        "typeform"
+      ]
     }
   ],
   "connectors": {
-    "github": { "label": "GitHub", "url": "https://api.githubcopilot.com/mcp/", "what": "Repositories, issues, pull requests, Actions (uses the GitHub token from Settings when it is saved)" },
-    "aws-knowledge": { "label": "AWS Knowledge", "url": "https://knowledge-mcp.global.api.aws", "what": "AWS documentation, the Well-Architected Framework, regional availability, What's New" },
-    "context7": { "label": "Context7", "url": "https://mcp.context7.com/mcp", "what": "Current docs for any library or tool: Terraform providers, Swift, Kotlin, React, Python and more" },
-    "microsoft-learn": { "label": "Microsoft Learn", "url": "https://learn.microsoft.com/api/mcp", "what": "Azure, .NET, TypeScript and Microsoft 365 documentation" },
-    "cloudflare-docs": { "label": "Cloudflare Docs", "url": "https://docs.mcp.cloudflare.com/mcp", "what": "Cloudflare documentation: DNS, Workers, CDN" },
-    "linear": { "label": "Linear", "url": "https://mcp.linear.app/mcp", "what": "Issues, projects and cycles" },
-    "atlassian": { "label": "Jira & Confluence", "url": "https://mcp.atlassian.com/v1/mcp", "what": "Jira issues and Confluence pages" },
-    "sentry": { "label": "Sentry", "url": "https://mcp.sentry.dev/mcp", "what": "Errors and performance from your apps" },
-    "vercel": { "label": "Vercel", "url": "https://mcp.vercel.com", "what": "Deployments, projects and logs" },
-    "supabase": { "label": "Supabase", "url": "https://mcp.supabase.com/mcp", "what": "Postgres databases, auth and storage" },
-    "figma": { "label": "Figma", "url": "https://mcp.figma.com/mcp", "what": "Design files and components for building UIs" },
-    "canva": { "label": "Canva", "url": "https://mcp.canva.com/mcp", "what": "Create, edit, autofill and export designs: posts, ads, presentations, resumes" },
-    "higgsfield": { "label": "Higgsfield", "url": "https://mcp.higgsfield.ai/mcp", "what": "AI video and image generation" },
-    "heygen": { "label": "HeyGen", "url": "https://mcp.heygen.com/mcp/v1/", "what": "Avatar and presenter videos" },
-    "elevenlabs": { "label": "ElevenLabs", "url": "https://api.us.elevenlabs.io/v1/mcp", "what": "Voice-overs, voice design, sound effects" },
-    "meta-ads": { "label": "Meta Ads", "url": "https://mcp.pipeboard.co/meta-ads-mcp", "what": "Facebook and Instagram ads: campaigns, audiences, creatives, budgets, insights (through Pipeboard, signed in with your Meta account)" },
-    "ahrefs": { "label": "Ahrefs", "url": "https://api.ahrefs.com/mcp/mcp", "what": "Keywords, backlinks, site audits, competitors" },
-    "hubspot": { "label": "HubSpot", "url": "https://mcp.hubspot.com/anthropic", "what": "Contacts, deals, email campaigns" },
-    "notion": { "label": "Notion", "url": "https://mcp.notion.com/mcp", "what": "Briefs, content calendars and docs" },
-    "stripe": { "label": "Stripe", "url": "https://mcp.stripe.com", "what": "Products, prices, payment links and revenue" }
+    "stripe": {
+      "label": "Stripe",
+      "url": "https://mcp.stripe.com",
+      "what": "One account for everything you sell: products, prices, payment links, checkout, subscriptions, invoices, refunds, payouts",
+      "signup": "https://dashboard.stripe.com/register"
+    },
+    "atlassian": {
+      "label": "Jira & Confluence",
+      "url": "https://mcp.atlassian.com/v1/mcp",
+      "what": "Tickets every team shares, and the company wiki",
+      "signup": "https://www.atlassian.com/try/cloud/signup?bundle=jira-software"
+    },
+    "slack": {
+      "label": "Slack",
+      "url": "https://mcp.slack.com/mcp",
+      "what": "Read and post in your team's channels",
+      "signup": "https://slack.com/get-started"
+    },
+    "notion": {
+      "label": "Notion",
+      "url": "https://mcp.notion.com/mcp",
+      "what": "Docs, briefs, wikis and databases",
+      "signup": "https://www.notion.so/signup"
+    },
+    "zapier": {
+      "label": "Zapier",
+      "url": "https://mcp.zapier.com/api/v1/connect",
+      "what": "8,000+ apps through one connector (Gmail, Sheets, Zendesk, QuickBooks, Mailchimp …)",
+      "signup": "https://zapier.com/sign-up"
+    },
+    "box": {
+      "label": "Box",
+      "url": "https://mcp.box.com/mcp",
+      "what": "Company files and folders",
+      "signup": "https://account.box.com/signup"
+    },
+    "dropbox": {
+      "label": "Dropbox",
+      "url": "https://mcp.dropbox.com/mcp",
+      "what": "Files and shared folders",
+      "signup": "https://www.dropbox.com/register"
+    },
+    "calendly": {
+      "label": "Calendly",
+      "url": "https://mcp.calendly.com",
+      "what": "Booking links and scheduled meetings",
+      "signup": "https://calendly.com/signup"
+    },
+    "miro": {
+      "label": "Miro",
+      "url": "https://mcp.miro.com/",
+      "what": "Whiteboards, diagrams, workshops",
+      "signup": "https://miro.com/signup/"
+    },
+    "granola": {
+      "label": "Granola",
+      "url": "https://mcp.granola.ai/mcp",
+      "what": "Meeting notes and transcripts",
+      "signup": "https://www.granola.ai/"
+    },
+    "github": {
+      "label": "GitHub",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "what": "Repositories, issues, pull requests, Actions, secrets (uses the GitHub token from Settings when it is saved)",
+      "signup": "https://github.com/signup"
+    },
+    "aws-knowledge": {
+      "label": "AWS Knowledge",
+      "url": "https://knowledge-mcp.global.api.aws",
+      "what": "AWS documentation, the Well-Architected Framework, regional availability, What's New (no account needed)"
+    },
+    "context7": {
+      "label": "Context7",
+      "url": "https://mcp.context7.com/mcp",
+      "what": "Current docs for any library or tool: Terraform providers, Swift, Kotlin, React, Python (no account needed)"
+    },
+    "sentry": {
+      "label": "Sentry",
+      "url": "https://mcp.sentry.dev/mcp",
+      "what": "Errors and performance from your apps",
+      "signup": "https://sentry.io/signup/"
+    },
+    "linear": {
+      "label": "Linear",
+      "url": "https://mcp.linear.app/mcp",
+      "what": "Issues, projects and cycles",
+      "signup": "https://linear.app/signup"
+    },
+    "vercel": {
+      "label": "Vercel",
+      "url": "https://mcp.vercel.com",
+      "what": "Deployments, projects and logs for web apps",
+      "signup": "https://vercel.com/signup"
+    },
+    "supabase": {
+      "label": "Supabase",
+      "url": "https://mcp.supabase.com/mcp",
+      "what": "Postgres databases, auth and storage",
+      "signup": "https://supabase.com/dashboard/sign-up"
+    },
+    "figma": {
+      "label": "Figma",
+      "url": "https://mcp.figma.com/mcp",
+      "what": "Design files, components and prototypes",
+      "signup": "https://www.figma.com/signup"
+    },
+    "pagerduty": {
+      "label": "PagerDuty",
+      "url": "https://mcp.pagerduty.com/mcp",
+      "what": "On-call schedules and incidents",
+      "signup": "https://www.pagerduty.com/sign-up/"
+    },
+    "datadog": {
+      "label": "Datadog",
+      "url": "https://mcp.datadoghq.com/api/unstable/mcp-server/mcp",
+      "what": "Metrics, logs, traces and monitors",
+      "signup": "https://www.datadoghq.com/free-datadog-trial/"
+    },
+    "grafana": {
+      "label": "Grafana Cloud",
+      "url": "https://mcp.grafana.com/mcp",
+      "what": "Dashboards, alerts and logs",
+      "signup": "https://grafana.com/auth/sign-up/create-user"
+    },
+    "microsoft-learn": {
+      "label": "Microsoft Learn",
+      "url": "https://learn.microsoft.com/api/mcp",
+      "what": "Azure, .NET, TypeScript and Microsoft 365 documentation (no account needed)"
+    },
+    "cloudflare-docs": {
+      "label": "Cloudflare Docs",
+      "url": "https://docs.mcp.cloudflare.com/mcp",
+      "what": "Cloudflare documentation: DNS, Workers, CDN (no account needed)"
+    },
+    "shopify-dev": {
+      "label": "Shopify Dev Docs",
+      "url": "https://mcp.shopify.com/mcp",
+      "what": "Shopify API and theme documentation for building stores (no account needed)"
+    },
+    "vanta": {
+      "label": "Vanta",
+      "url": "https://mcp.vanta.com/mcp",
+      "what": "SOC 2, ISO 27001 and GDPR controls, tests and evidence",
+      "signup": "https://www.vanta.com/"
+    },
+    "google-analytics": {
+      "label": "Google Analytics",
+      "url": "https://analyticsadmin.googleapis.com/mcp",
+      "what": "Website and app traffic, conversions and audiences (GA4). Signs in with a Google OAuth client: the card asks for its id and secret",
+      "signup": "https://analytics.google.com/"
+    },
+    "bigquery": {
+      "label": "BigQuery",
+      "url": "https://bigquery.googleapis.com/mcp",
+      "what": "Google's data warehouse: run SQL on your data. Signs in with a Google OAuth client: the card asks for its id and secret",
+      "signup": "https://console.cloud.google.com/bigquery"
+    },
+    "posthog": {
+      "label": "PostHog",
+      "url": "https://mcp.posthog.com/mcp",
+      "what": "Product analytics, funnels, session replays, feature flags, experiments",
+      "signup": "https://us.posthog.com/signup"
+    },
+    "amplitude": {
+      "label": "Amplitude",
+      "url": "https://mcp.amplitude.com/mcp",
+      "what": "Product analytics: events, funnels, retention, cohorts",
+      "signup": "https://amplitude.com/signup"
+    },
+    "mixpanel": {
+      "label": "Mixpanel",
+      "url": "https://mcp.mixpanel.com/mcp",
+      "what": "Product analytics: events, funnels, retention",
+      "signup": "https://mixpanel.com/register/"
+    },
+    "hex": {
+      "label": "Hex",
+      "url": "https://app.hex.tech/mcp",
+      "what": "SQL and Python notebooks, data apps and reports",
+      "signup": "https://app.hex.tech/signup"
+    },
+    "airtable": {
+      "label": "Airtable",
+      "url": "https://mcp.airtable.com/mcp",
+      "what": "Spreadsheet-databases for trackers, inventories and lists",
+      "signup": "https://airtable.com/signup"
+    },
+    "canva": {
+      "label": "Canva",
+      "url": "https://mcp.canva.com/mcp",
+      "what": "Create, edit, autofill and export designs: posts, ads, presentations, resumes",
+      "signup": "https://www.canva.com/signup/"
+    },
+    "meta-ads": {
+      "label": "Meta Ads",
+      "url": "https://mcp.pipeboard.co/meta-ads-mcp",
+      "what": "Facebook and Instagram ads: campaigns, audiences, creatives, budgets, insights (through Pipeboard, signed in with your Meta account)",
+      "signup": "https://www.facebook.com/business/tools/ads-manager"
+    },
+    "google-ads": {
+      "label": "Google Ads",
+      "url": "https://google-ads.mcp.pipeboard.co/",
+      "what": "Search, YouTube and Performance Max campaigns, keywords, budgets, reports (through Pipeboard, signed in with your Google account)",
+      "signup": "https://ads.google.com/home/"
+    },
+    "higgsfield": {
+      "label": "Higgsfield",
+      "url": "https://mcp.higgsfield.ai/mcp",
+      "what": "AI video and image generation",
+      "signup": "https://higgsfield.ai/"
+    },
+    "heygen": {
+      "label": "HeyGen",
+      "url": "https://mcp.heygen.com/mcp/v1/",
+      "what": "Avatar and presenter videos",
+      "signup": "https://app.heygen.com/signup"
+    },
+    "elevenlabs": {
+      "label": "ElevenLabs",
+      "url": "https://api.us.elevenlabs.io/v1/mcp",
+      "what": "Voice-overs, voice design, sound effects",
+      "signup": "https://elevenlabs.io/app/sign-up"
+    },
+    "klaviyo": {
+      "label": "Klaviyo",
+      "url": "https://mcp.klaviyo.com/mcp",
+      "what": "Email and SMS campaigns and automated flows",
+      "signup": "https://www.klaviyo.com/sign-up"
+    },
+    "hubspot": {
+      "label": "HubSpot",
+      "url": "https://mcp.hubspot.com/",
+      "what": "CRM: contacts, companies, deals, tickets, email marketing",
+      "signup": "https://app.hubspot.com/signup-hubspot/crm"
+    },
+    "semrush": {
+      "label": "Semrush",
+      "url": "https://mcp.semrush.com/v1/mcp",
+      "what": "SEO and paid-search research, competitors, keywords",
+      "signup": "https://www.semrush.com/signup/"
+    },
+    "ahrefs": {
+      "label": "Ahrefs",
+      "url": "https://api.ahrefs.com/mcp/mcp",
+      "what": "Keywords, backlinks, site audits, competitors",
+      "signup": "https://ahrefs.com/signup"
+    },
+    "buffer": {
+      "label": "Buffer",
+      "url": "https://mcp.buffer.com/mcp",
+      "what": "Schedule posts to Instagram, Facebook, LinkedIn, TikTok, X",
+      "signup": "https://login.buffer.com/signup"
+    },
+    "webflow": {
+      "label": "Webflow",
+      "url": "https://mcp.webflow.com/mcp",
+      "what": "Website pages, CMS collections and publishing",
+      "signup": "https://webflow.com/signup"
+    },
+    "wix": {
+      "label": "Wix",
+      "url": "https://mcp.wix.com/mcp",
+      "what": "Wix sites, stores, bookings and blog",
+      "signup": "https://users.wix.com/signin/signup"
+    },
+    "typeform": {
+      "label": "Typeform",
+      "url": "https://api.typeform.com/mcp",
+      "what": "Forms, surveys and their responses",
+      "signup": "https://admin.typeform.com/signup"
+    },
+    "salesforce": {
+      "label": "Salesforce",
+      "url": "https://api.salesforce.com/platform/mcp/v1/platform/sobject-all",
+      "what": "CRM: accounts, contacts, leads, opportunities, reports. Needs a Salesforce External Client App with the mcp_api scope: the card asks for its consumer key and secret",
+      "signup": "https://www.salesforce.com/form/signup/freetrial-sales/"
+    },
+    "apollo": {
+      "label": "Apollo.io",
+      "url": "https://mcp.apollo.io/mcp",
+      "what": "B2B contact and company search, enrichment, email sequences",
+      "signup": "https://app.apollo.io/#/signup"
+    },
+    "pandadoc": {
+      "label": "PandaDoc",
+      "url": "https://mcp.pandadoc.com/v1/mcp",
+      "what": "Proposals, quotes and contracts with e-signature",
+      "signup": "https://app.pandadoc.com/signup/"
+    },
+    "pipedrive": {
+      "label": "Pipedrive",
+      "url": "https://mcp.pipedrive.com/mcp",
+      "what": "CRM pipeline for small sales teams (the card asks for your API token)",
+      "signup": "https://www.pipedrive.com/en/register"
+    },
+    "attio": {
+      "label": "Attio",
+      "url": "https://mcp.attio.com/mcp",
+      "what": "Flexible CRM for startups",
+      "signup": "https://app.attio.com/welcome/sign-in"
+    },
+    "close": {
+      "label": "Close",
+      "url": "https://mcp.close.com/mcp",
+      "what": "CRM with calling and email for inside sales",
+      "signup": "https://app.close.com/signup/"
+    },
+    "gong": {
+      "label": "Gong",
+      "url": "https://mcp.gong.io/mcp",
+      "what": "Call recordings, deal insights and forecasts",
+      "signup": "https://www.gong.io/"
+    },
+    "docusign": {
+      "label": "Docusign",
+      "url": "https://mcp.docusign.com/mcp",
+      "what": "Send, sign and track agreements",
+      "signup": "https://www.docusign.com/products/electronic-signature/free-trial"
+    },
+    "fireflies": {
+      "label": "Fireflies",
+      "url": "https://mcp.fireflies.ai/mcp",
+      "what": "Meeting recordings, transcripts and summaries",
+      "signup": "https://app.fireflies.ai/signup"
+    },
+    "intercom": {
+      "label": "Intercom",
+      "url": "https://mcp.intercom.com/mcp",
+      "what": "Customer chat, conversations, help center",
+      "signup": "https://app.intercom.com/admins/sign_up"
+    },
+    "gorgias": {
+      "label": "Gorgias",
+      "url": "https://mcp.gorgias.com/mcp",
+      "what": "Help desk for online stores: tickets, orders, macros (the card asks for your API key)",
+      "signup": "https://www.gorgias.com/signup"
+    },
+    "help-scout": {
+      "label": "Help Scout",
+      "url": "https://mcp.helpscout.net/mcp",
+      "what": "Shared inbox, docs and customer profiles",
+      "signup": "https://secure.helpscout.net/members/register/"
+    },
+    "shopify-store": {
+      "label": "Shopify (store)",
+      "url": "https://{store}.myshopify.com/api/mcp",
+      "what": "Your store's catalog, cart and policies, as shoppers see them (orders and customers go through Zapier)",
+      "signup": "https://www.shopify.com/free-trial",
+      "ask": {
+        "name": "store",
+        "label": "Your store's name (the part before .myshopify.com)",
+        "pattern": "^[a-z0-9][a-z0-9-]{1,60}$"
+      }
+    },
+    "surveymonkey": {
+      "label": "SurveyMonkey",
+      "url": "https://mcp.surveymonkey.com/mcp",
+      "what": "Surveys, NPS and CSAT responses",
+      "signup": "https://www.surveymonkey.com/user/sign-up/"
+    },
+    "xero": {
+      "label": "Xero",
+      "url": "https://mcp.xero.com/mcp",
+      "what": "Accounting: invoices, bills, bank reconciliation, reports, VAT",
+      "signup": "https://www.xero.com/signup/"
+    },
+    "paypal": {
+      "label": "PayPal",
+      "url": "https://mcp.paypal.com/mcp",
+      "what": "Invoices, payments, disputes, refunds",
+      "signup": "https://www.paypal.com/business/open-business-account"
+    },
+    "ramp": {
+      "label": "Ramp",
+      "url": "https://mcp.ramp.com/mcp",
+      "what": "Corporate cards, expenses, bills and spend reports",
+      "signup": "https://ramp.com/"
+    },
+    "square": {
+      "label": "Square",
+      "url": "https://mcp.squareup.com/sse",
+      "what": "In-person and online payments, catalog, customers",
+      "signup": "https://squareup.com/signup"
+    },
+    "plaid": {
+      "label": "Plaid",
+      "url": "https://mcp.plaid.com/mcp",
+      "what": "Bank account connections and transactions",
+      "signup": "https://dashboard.plaid.com/signup"
+    },
+    "asana": {
+      "label": "Asana",
+      "url": "https://mcp.asana.com/v2/mcp",
+      "what": "Projects, tasks, timelines and goals",
+      "signup": "https://asana.com/create-account"
+    },
+    "monday": {
+      "label": "monday.com",
+      "url": "https://mcp.monday.com/mcp",
+      "what": "Boards for projects, operations and CRM",
+      "signup": "https://auth.monday.com/users/sign_up_new"
+    },
+    "clickup": {
+      "label": "ClickUp",
+      "url": "https://mcp.clickup.com/mcp",
+      "what": "Tasks, docs and goals in one place",
+      "signup": "https://app.clickup.com/signup"
+    }
   }
 }

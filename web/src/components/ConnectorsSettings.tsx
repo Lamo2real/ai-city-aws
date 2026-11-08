@@ -12,8 +12,9 @@ import {
   removeConnector,
   ROLE_LABEL,
   ROLES,
-  sameServer,
+  matchesPreset,
   type Connector,
+  type PresetConnector,
   type Role,
 } from "../lib/connect.ts";
 import { KeyCard, SignInCard } from "./ConnectCard.tsx";
@@ -35,7 +36,7 @@ export function ConnectorsSettings(p: {
   const [error, setError] = useState<string | null>(null);
   const [url, setUrl] = useState<string | null>(null);
   const [removing, setRemoving] = useState<Connector | null>(null);
-  const [presetUrls, setPresetUrls] = useState<string[]>([]);
+  const [presetLinks, setPresetLinks] = useState<PresetConnector[]>([]);
   const load = () =>
     listConnectors().then(
       (r) => {
@@ -58,10 +59,10 @@ export function ConnectorsSettings(p: {
     }
   };
   // A connector a department's switch stands for signs in there (Settings → Departments), not a second time here.
-  const inPreset = (c: Connector) => presetUrls.some((u) => sameServer(u, c.url));
+  const inPreset = (c: Connector) => presetLinks.some((x) => matchesPreset(x, c.url));
   return (
     <div className="connectors">
-      <DepartmentPresets connectors={list} reload={load} onRemove={setRemoving} onUrls={setPresetUrls} />
+      <DepartmentPresets connectors={list} reload={load} onRemove={setRemoving} onPresets={setPresetLinks} />
       <h2>Connectors</h2>
       <p className="mute">
         Outside services your agents can use. Ask AIC to add any one ("add Higgsfield as an MCP"). Keys go straight to

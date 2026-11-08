@@ -670,8 +670,68 @@ main {
   outline-offset: 2px;
 }
 /* Settings → Departments */
-.preset h3 {
-  margin: 0 0 var(--s1);
+.preset > summary,
+.setup-guide > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s1) var(--s3);
+  min-height: var(--tap);
+  list-style-position: outside;
+}
+.preset > summary::-webkit-details-marker,
+.setup-guide > summary::-webkit-details-marker {
+  display: none;
+}
+/* A chevron on the right says "tap to open"; it turns down when the card is open. */
+.preset > summary::after,
+.setup-guide > summary::after {
+  content: "›";
+  margin-left: auto;
+  font-size: 1.4em;
+  line-height: 1;
+  color: var(--gmute);
+  transition: transform 0.2s ease;
+}
+.preset[open] > summary::after,
+.setup-guide[open] > summary::after {
+  transform: rotate(90deg);
+}
+.preset > summary h3 {
+  margin: 0;
+  display: inline;
+}
+.preset[open] > summary,
+.setup-guide[open] > summary {
+  margin-bottom: var(--s3);
+}
+.preset-sub {
+  margin: var(--s4) 0 var(--s2);
+  font-size: var(--fs-s);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gmute);
+}
+.preset-state a {
+  color: var(--gtext);
+  white-space: nowrap;
+}
+.preset-ask {
+  grid-column: 1 / -1;
+}
+.setup-guide .steps {
+  margin: 0;
+  padding-left: var(--s5);
+  display: grid;
+  gap: var(--s3);
+}
+.setup-guide a {
+  color: var(--gtext);
+}
+.guide-counts {
+  margin: var(--s2) 0 0;
+  padding-left: var(--s4);
+  color: var(--gmute);
 }
 .preset-teams {
   margin: var(--s2) 0;
@@ -700,7 +760,7 @@ main {
   padding: var(--s1) 0;
   border-top: 1px solid var(--edge);
 }
-.preset-row > :is(.signin, .connect-card, form, .card) {
+.preset-row > :is(.signin, .connect-card, form, .card, .preset-ask) {
   grid-column: 1 / -1;
 }
 .preset-what {

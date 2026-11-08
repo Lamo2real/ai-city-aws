@@ -771,12 +771,13 @@ describe("pre-configured departments (decision 113)", () => {
   it("the presets route is routed", () => {
     expect(apiTf).toContain('"GET /departments/presets"');
   });
-  it("IT and Marketing exist, each skill has a SKILL.md and each connector is in the catalog with an https url", () => {
-    expect(presets.departments.map((d: { name: string }) => d.name)).toEqual(["IT", "Marketing"]);
-    for (const d of presets.departments) {
-      expect(existsSync(`agents/departments/${d.key}.md`)).toBe(true);
+  it("nine departments and the shared tools: each skill has a SKILL.md and each connector an https url", () => {
+    expect(presets.departments).toHaveLength(9);
+    for (const d of [...presets.departments, presets.shared]) {
+      if (d.key) expect(existsSync(`agents/departments/${d.key}.md`)).toBe(true);
       for (const s of d.skills) expect(existsSync(`agents/skills/${s}/SKILL.md`)).toBe(true);
       for (const c of d.connectors) expect(presets.connectors[c]?.url).toMatch(/^https:\/\//);
+      for (const e of d.essential) expect(d.connectors).toContain(e);
     }
   });
   it("the Lambda package carries the bundled skills", () => {

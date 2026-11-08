@@ -7,7 +7,7 @@ from aic.lambdas.api import ROUTES, handle_http
 from aic.runtime.prompts import department_template
 from aic.runtime.skills import SkillStore
 from aic.runtime.tools import TurnCtx
-from aic.shared.presets import catalog, orchestrator_note, preset_for, presets, public_presets
+from aic.shared.presets import catalog, orchestrator_note, preset_for, presets, public_presets, shared
 from aic.shared.skills_bundled import bundled_skill, department_skills
 from aic.shared.table import MemoryTable
 from test_api import ev, js, make
@@ -16,15 +16,25 @@ from test_apps import city_deps, tool
 ORCH = TurnCtx(agent_id="orchestrator", role="orchestrator", department=None, ticket_id="t-task", task_id="t-task")
 
 
-def test_it_and_marketing_are_the_presets_and_everything_they_name_exists() -> None:
-    assert [p["name"] for p in presets()] == ["IT", "Marketing"]
+def test_nine_departments_and_everything_they_name_exists() -> None:
+    names = [p["name"] for p in presets()]
+    assert names == [
+        "IT", "Data & Analytics", "Marketing", "Sales", "Customer Support", "Finance", "Legal", "Product", "Operations",
+    ]  # fmt: skip
     cat = catalog()
-    for p in presets():
+    for p in [*presets(), shared()]:
         assert all(c in cat and cat[c]["url"].startswith("https://") for c in p["connectors"])
+        assert set(p["essential"]) <= set(p["connectors"]) and p["essential"]
         assert all(bundled_skill(s) for s in p["skills"]), p["skills"]
+    for p in presets():
         assert department_template(p["name"]).startswith(f"## {p['name']} playbook")
-    assert {"canva", "higgsfield", "elevenlabs", "heygen", "meta-ads"} <= set(presets()[1]["connectors"])
-    assert {"github", "aws-knowledge", "context7"} <= set(presets()[0]["connectors"])
+    by = {p["key"]: p for p in presets()}
+    assert {"canva", "higgsfield", "elevenlabs", "heygen", "meta-ads", "google-ads"} <= set(
+        by["marketing"]["connectors"]
+    )
+    assert {"github", "aws-knowledge", "context7"} <= set(by["it"]["connectors"])
+    assert "salesforce" in by["sales"]["essential"]
+    assert {"stripe", "atlassian"} <= set(shared()["essential"])  # one Stripe account and Jira for everyone
 
 
 def test_names_and_aliases_reach_the_preset() -> None:
@@ -32,6 +42,9 @@ def test_names_and_aliases_reach_the_preset() -> None:
         assert preset_for(name)["key"] == "it", name  # type: ignore[index]
     for name in ("Marketing", "design", "Ads", "brand"):
         assert preset_for(name)["key"] == "marketing", name  # type: ignore[index]
+    for name, key in (("Data & AI", "data"), ("analytics", "data"), ("customer service", "support"),
+                      ("Accounting", "finance"), ("GDPR", "legal"), ("UX", "product"), ("ops", "operations")):  # fmt: skip
+        assert preset_for(name)["key"] == key, name  # type: ignore[index]
     assert preset_for("Research") is None
     assert preset_for("") is None
 
@@ -39,8 +52,9 @@ def test_names_and_aliases_reach_the_preset() -> None:
 def test_a_departments_skills_come_from_its_preset_only() -> None:
     it = [r["name"] for r in department_skills("Engineering")]
     assert "terraform-iac" in it and "aws-well-architected" in it and "canva-design" not in it
-    assert [r["name"] for r in department_skills("Marketing")][:2] == ["brand-and-copy", "canva-design"]
-    assert department_skills("Research") == []
+    shared_skills = ["knowledge-first", "sell-with-stripe", "cross-team-work"]
+    assert [r["name"] for r in department_skills("Marketing")][:5] == [*shared_skills, "brand-and-copy", "canva-design"]
+    assert [r["name"] for r in department_skills("Research")] == shared_skills  # every department gets these
     row = bundled_skill("terraform-iac")
     assert row and row["builtin"] and row["version"].startswith("builtin-") and "Terraform" in row["description"]
     assert row["files"] == [{"path": "SKILL.md", "size": row["files"][0]["size"]}]
@@ -72,12 +86,18 @@ async def test_the_orchestrator_lands_engineering_work_in_it() -> None:
 async def test_the_presets_route_lists_departments_teams_skills_and_connectors() -> None:
     assert ("GET", "/departments/presets") in ROUTES
     body = js(await handle_http(ev("GET", "/departments/presets"), make()))
-    assert body["departments"] == public_presets()
-    it, mk = body["departments"]
-    assert it["name"] == "IT" and any(t["name"] == "iOS" for t in it["teams"])
+    assert body == public_presets()
+    assert body["shared"]["connectors"][0]["id"] == "stripe" and body["shared"]["connectors"][0]["essential"]
+    it, mk = body["departments"][0], body["departments"][2]
+    assert it["name"] == "IT" and any(t["name"] == "Mobile" for t in it["teams"])
     assert any(s["name"] == "current-docs" for s in it["skills"])
     canva = next(c for c in mk["connectors"] if c["id"] == "canva")
-    assert canva == {"id": "canva", "label": "Canva", "url": "https://mcp.canva.com/mcp", "what": canva["what"]}
+    assert canva == {
+        "id": "canva", "label": "Canva", "url": "https://mcp.canva.com/mcp", "what": canva["what"],
+        "signup": "https://www.canva.com/signup/", "essential": True,
+    }  # fmt: skip
+    shop = next(c for d in body["departments"] for c in d["connectors"] if c["id"] == "shopify-store")
+    assert shop["ask"]["name"] == "store" and "{store}" in shop["url"]
 
 
 async def test_work_sent_to_an_alias_reaches_the_preset() -> None:

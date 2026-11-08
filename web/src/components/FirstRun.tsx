@@ -1,4 +1,4 @@
-// A three-step guide on first login: meet AIC, see the City, where the money is. Skippable, and it
+// A four-step guide on first login: meet AIC, see the City, where the money is, connect the tools. Skippable, and it
 // can be opened again from Settings.
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./ui.tsx";
@@ -15,6 +15,10 @@ const STEPS = [
   {
     title: "Costs stay out of the way",
     text: "Chat and the City never show prices. The Costs tab has all of it when you want a look.",
+  },
+  {
+    title: "Connect your tools",
+    text: "Settings → Departments has a setup guide: add your brand to Knowledge, then switch on each department's essential tools (Stripe, Canva, GitHub …) and sign in once. No account yet? Each tool has a Create an account link.",
   },
 ];
 

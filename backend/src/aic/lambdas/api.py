@@ -644,7 +644,7 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         )
         return reply(200, {"ticket": t, "history": history, "trace": trace, "children": children})
     if is_("GET", r"/departments/presets"):
-        return reply(200, {"departments": public_presets()})
+        return reply(200, public_presets())
     if is_("GET", r"/departments"):
         return reply(200, {"departments": await d.ledger.list_departments()})
     if is_("GET", r"/agents"):

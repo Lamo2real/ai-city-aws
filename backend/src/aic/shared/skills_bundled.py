@@ -12,7 +12,7 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
-from .presets import preset_for
+from .presets import preset_for, shared
 from .skills import reduce_frontmatter
 from .utility import agents_dir
 
@@ -43,9 +43,9 @@ def bundled_skill(name: str) -> dict[str, Any] | None:
 
 
 def department_skills(department_name: str) -> list[dict[str, Any]]:
-    """The bundled skills of the preset this department belongs to (none for any other department)."""
+    """The shared skills every department gets, then the bundled skills of the preset this department belongs to
+    (a department that is no preset gets only the shared ones)."""
     p = preset_for(department_name)
-    if not p:
-        return []
-    rows = [bundled_skill(s) for s in p.get("skills") or []]
+    names = list(dict.fromkeys([*(shared().get("skills") or []), *((p or {}).get("skills") or [])]))
+    rows = [bundled_skill(s) for s in names]
     return [r for r in rows if r]

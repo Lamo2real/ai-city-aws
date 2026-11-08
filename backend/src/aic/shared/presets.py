@@ -1,9 +1,10 @@
-"""The pre-configured departments (decision 113): IT and Marketing, with their teams, skills and connectors.
+"""The pre-configured departments (decisions 113, 114): IT, Data & Analytics, Marketing, Sales, Customer Support,
+Finance, Legal, Product and Operations, plus the tools and skills every department shares.
 
-``config/departments.json`` is the one source. The Orchestrator is told the preset names so IT or marketing work
-lands in the right department; a department created under a preset's name or alias gets that preset's manager
-template (``agents/departments/<key>.md``) and its bundled skills (``agents/skills/<name>/SKILL.md``); the HUD
-reads ``GET /departments/presets`` for Settings -> Departments, whose switches add the listed connectors.
+``config/departments.json`` is the one source. The Orchestrator is told the preset names so work lands in the right
+department; a department created under a preset's name or alias gets that preset's manager template
+(``agents/departments/<key>.md``) and its bundled skills (``agents/skills/<name>/SKILL.md``), plus the shared skills;
+the HUD reads ``GET /departments/presets`` for Settings -> Departments, whose switches add the listed connectors.
 """
 
 from __future__ import annotations
@@ -16,8 +17,8 @@ from .config import _load
 Preset = dict[str, Any]
 
 
-def _norm(s: str) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", s.lower()).strip()
+def _key(s: str) -> str:
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", s.lower().replace("&", " and ")).split())
 
 
 def presets_config() -> dict[str, Any]:
@@ -28,46 +29,64 @@ def presets() -> list[Preset]:
     return list(presets_config().get("departments") or [])
 
 
+def shared() -> Preset:
+    return dict(presets_config().get("shared") or {})
+
+
 def catalog() -> dict[str, dict[str, Any]]:
     return dict(presets_config().get("connectors") or {})
 
 
 def preset_for(name: str) -> Preset | None:
-    """The preset a department name belongs to: its name, its key or one of its aliases (case and punctuation
-    ignored), so "IT", "it-infrastructure" or "Engineering" all reach IT."""
-    n = _norm(name or "")
+    """The preset a department name belongs to: its name, its key or one of its aliases (case, punctuation and
+    "&"/"and" ignored), so "IT", "it-infrastructure" or "Engineering" all reach IT."""
+    n = _key(name or "")
     if not n:
         return None
     for p in presets():
-        names = {_norm(p["name"]), _norm(p["key"]), *(_norm(a) for a in p.get("aliases") or [])}
-        if n in names:
+        if n in {_key(p["name"]), _key(p["key"]), *(_key(a) for a in p.get("aliases") or [])}:
             return p
     return None
 
 
-def public_presets() -> list[Preset]:
-    """What the HUD shows: each department with its teams, skills (name and description) and connectors."""
+def _connectors(ids: list[str], essential: list[str]) -> list[dict[str, Any]]:
+    cat = catalog()
+    return [{"id": c, **cat[c], "essential": c in essential} for c in ids if c in cat]
+
+
+def _skills(names: list[str]) -> list[dict[str, str]]:
     from .skills_bundled import bundled_skill  # late: reads files from agents/
 
-    cat = catalog()
-    out: list[Preset] = []
-    for p in presets():
-        skills = []
-        for s in p.get("skills") or []:
-            b = bundled_skill(s)
-            if b:
-                skills.append({"name": b["name"], "description": b["description"]})
-        out.append(
+    out = []
+    for s in names:
+        b = bundled_skill(s)
+        if b:
+            out.append({"name": b["name"], "description": b["description"]})
+    return out
+
+
+def public_presets() -> dict[str, Any]:
+    """What the HUD shows: the shared tools, then each department with its teams, skills and connectors."""
+    sh = shared()
+    return {
+        "shared": {
+            "name": sh.get("name", "Shared by every department"),
+            "mission": sh.get("mission", ""),
+            "skills": _skills(sh.get("skills") or []),
+            "connectors": _connectors(sh.get("connectors") or [], sh.get("essential") or []),
+        },
+        "departments": [
             {
                 "key": p["key"],
                 "name": p["name"],
                 "mission": p["mission"],
                 "teams": p.get("teams") or [],
-                "skills": skills,
-                "connectors": [{"id": c, **cat[c]} for c in p.get("connectors") or [] if c in cat],
+                "skills": _skills(p.get("skills") or []),
+                "connectors": _connectors(p.get("connectors") or [], p.get("essential") or []),
             }
-        )
-    return out
+            for p in presets()
+        ],
+    }
 
 
 def orchestrator_note() -> str:

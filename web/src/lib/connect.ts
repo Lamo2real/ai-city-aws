@@ -42,8 +42,13 @@ export const listConnectors = () => api<{ connectors: Connector[] }>("/connector
 export interface PresetConnector {
   id: string;
   label: string;
+  /** May hold a `{name}` the owner fills in (a Shopify store's name), described by `ask`. */
   url: string;
   what: string;
+  essential: boolean;
+  /** Where to create an account, when the service needs one. */
+  signup?: string;
+  ask?: { name: string; label: string; pattern: string };
 }
 export interface DepartmentPreset {
   key: string;
@@ -53,7 +58,22 @@ export interface DepartmentPreset {
   skills: Array<{ name: string; description: string }>;
   connectors: PresetConnector[];
 }
-export const listPresets = () => api<{ departments: DepartmentPreset[] }>("/departments/presets");
+export interface Presets {
+  shared: Omit<DepartmentPreset, "key" | "teams">;
+  departments: DepartmentPreset[];
+}
+export const listPresets = () => api<Presets>("/departments/presets");
+/** A switch's server link with the owner's answer filled in (`{store}` → their store's name). */
+export const fillUrl = (c: PresetConnector, answer: string) =>
+  c.ask ? c.url.replace(`{${c.ask.name}}`, answer.trim().toLowerCase()) : c.url;
+/** Whether a connector stands for this switch: the same link, or (with a `{name}` in it) the same pattern. */
+export function matchesPreset(c: PresetConnector, url?: string): boolean {
+  if (!url) return false;
+  if (!c.ask) return sameServer(c.url, url);
+  const [head, tail] = c.url.split(`{${c.ask.name}}`) as [string, string];
+  const u = url.trim().toLowerCase();
+  return u.startsWith(head.toLowerCase()) && u.replace(/\/+$/, "").endsWith(tail.toLowerCase().replace(/\/+$/, ""));
+}
 /** The connector a department's switch stands for: the same server link (a trailing slash doesn't matter). */
 export const sameServer = (a?: string, b?: string) =>
   !!a && !!b && a.trim().replace(/\/+$/, "").toLowerCase() === b.trim().replace(/\/+$/, "").toLowerCase();

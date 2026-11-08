@@ -7,31 +7,33 @@ import { readFileSync, readdirSync } from "node:fs";
 import type { Page, WebSocketRoute } from "@playwright/test";
 
 // Settings → Departments: the real presets file, shaped as GET /departments/presets answers it.
-const PRESETS_FILE = JSON.parse(readFileSync(`${import.meta.dirname}/../../config/departments.json`, "utf8")) as {
-  departments: Array<{
-    key: string;
-    name: string;
-    mission: string;
-    teams: unknown[];
-    skills: string[];
-    connectors: string[];
-  }>;
-  connectors: Record<string, { label: string; url: string; what: string }>;
+type Group = {
+  key?: string;
+  name: string;
+  mission: string;
+  teams?: unknown[];
+  skills: string[];
+  essential: string[];
+  connectors: string[];
 };
+const PRESETS_FILE = JSON.parse(readFileSync(`${import.meta.dirname}/../../config/departments.json`, "utf8")) as {
+  shared: Group;
+  departments: Group[];
+  connectors: Record<string, Record<string, unknown>>;
+};
+const SKILLS_DIR = `${import.meta.dirname}/../../agents/skills`;
 const skillDescription = (name: string) =>
-  /description: "(.*)"/.exec(
-    readFileSync(`${import.meta.dirname}/../../agents/skills/${name}/SKILL.md`, "utf8"),
-  )?.[1] ?? "";
-const PRESETS = PRESETS_FILE.departments.map((d) => ({
-  key: d.key,
-  name: d.name,
-  mission: d.mission,
-  teams: d.teams,
-  skills: d.skills
-    .filter((s) => readdirSync(`${import.meta.dirname}/../../agents/skills`).includes(s))
+  /description: "(.*)"/.exec(readFileSync(`${SKILLS_DIR}/${name}/SKILL.md`, "utf8"))?.[1] ?? "";
+const group = (g: Group) => ({
+  ...(g.key ? { key: g.key, teams: g.teams } : {}),
+  name: g.name,
+  mission: g.mission,
+  skills: g.skills
+    .filter((s) => readdirSync(SKILLS_DIR).includes(s))
     .map((s) => ({ name: s, description: skillDescription(s) })),
-  connectors: d.connectors.map((c) => ({ id: c, ...PRESETS_FILE.connectors[c]! })),
-}));
+  connectors: g.connectors.map((c) => ({ id: c, ...PRESETS_FILE.connectors[c]!, essential: g.essential.includes(c) })),
+});
+const PRESETS = { shared: group(PRESETS_FILE.shared), departments: PRESETS_FILE.departments.map(group) };
 
 export const CONFIG = {
   region: "eu-north-1",
@@ -697,7 +699,7 @@ export async function mockBackend(
     // ---------- connectors, skills, mail (CONNECTORS_SKILLS.md §1.7, §2.4; MAIL_CALENDAR.md §4) ----------
     const method = req.method();
     if (path === "/connectors" && method === "GET") return ok({ connectors: m.connectors });
-    if (path === "/departments/presets") return ok({ departments: PRESETS });
+    if (path === "/departments/presets") return ok(PRESETS);
     if (path === "/connectors" && method === "POST") {
       // Added by link or by a department's switch: a service that needs the owner's account asks to sign in.
       const b = body as { url: string; label?: string };
