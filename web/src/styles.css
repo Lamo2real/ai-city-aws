@@ -3047,3 +3047,43 @@ summary,
     transition: none;
   }
 }
+/* Dictating (like Claude's composer): the box stays on top with the words as they come; under it one row with
+   cancel, the live wave of your voice, stop and send. */
+.composer.is-dictating {
+  grid-template-columns: minmax(0, 1fr);
+}
+.dictation-bar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--s3);
+}
+.dict-cancel,
+.dict-stop {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--edge-2);
+  background: var(--glass-2);
+  color: var(--gtext);
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  line-height: 1;
+}
+.dict-stop span {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: currentColor;
+}
+.dict-send {
+  border-radius: 999px;
+  width: 44px;
+  height: 44px;
+}
+.mic-wave {
+  width: 100%;
+  height: 36px;
+  color: var(--gtext);
+}

@@ -161,3 +161,53 @@ export function VoiceVisualizer(p: {
     </div>
   );
 }
+
+/** The dictation row's wave, like Claude's: a bar per moment of your voice scrolling left, dots while you are
+ *  quiet. It reads the mic level (getVoice().levels().input) about 20 times a second. */
+export function MicWave() {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const c = canvas.current;
+    const g = c?.getContext("2d");
+    if (!c || !g) return;
+    const still = reducedMotion();
+    const hist: number[] = [];
+    let raf = 0;
+    let lastPush = 0;
+    let smooth = 0;
+    const draw = (t: number) => {
+      const dpr = window.devicePixelRatio || 1;
+      const w = c.clientWidth;
+      const h = c.clientHeight;
+      if (c.width !== Math.round(w * dpr)) c.width = Math.round(w * dpr);
+      if (c.height !== Math.round(h * dpr)) c.height = Math.round(h * dpr);
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      g.clearRect(0, 0, w, h);
+      const level = getVoice().levels?.().input ?? 0;
+      smooth += (level - smooth) * 0.4;
+      const step = 5;
+      const n = Math.max(1, Math.floor(w / step));
+      while (hist.length < n) hist.unshift(0); // quiet dots across the whole row until you speak
+      if (t - lastPush > 50 || still) {
+        hist.push(still ? 0.5 : smooth);
+        while (hist.length > n) hist.shift();
+        lastPush = t;
+      }
+      g.fillStyle = getComputedStyle(c).color;
+      const mid = h / 2;
+      hist.forEach((v, i) => {
+        const x = w - (hist.length - i) * step + 1;
+        if (v < 0.06)
+          g.fillRect(x, mid - 1, 2, 2); // quiet: a dot
+        else {
+          const bh = Math.max(4, Math.min(h - 2, v * (h - 2) * 1.6));
+          g.fillRect(x, mid - bh / 2, 3, bh);
+        }
+      });
+      if (!still) raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return <canvas ref={canvas} className="mic-wave" aria-hidden="true" />;
+}

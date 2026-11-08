@@ -379,8 +379,14 @@ test("Dictate: words land in the box live, nothing is sent until Send, and the a
   await page.getByRole("button", { name: "Dictate into the box" }).click(); // the icon beside Send
   await expect(box).toHaveValue("remind me to call"); // a live partial
   await expect(box).toHaveValue("remind me to call the bank");
-  await expect(page.locator(".voice")).toHaveAttribute("data-speaker", "you"); // still listening: tap to stop
+  // Like Claude's composer: under the words, cancel, the live wave of your voice, stop and send.
+  const bar = page.getByRole("group", { name: "Dictation" });
+  await expect(bar.getByRole("button", { name: "Cancel dictation" })).toBeVisible();
+  await expect(bar.locator("canvas.mic-wave")).toBeVisible();
+  await expect(bar.getByRole("button", { name: "Send to AIC" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Add to your message" })).toHaveCount(0); // the row is the bar now
   await shot(page, "ace-dictating");
+  await noSeriousA11y(page, "AIC while dictating");
   await page.getByRole("button", { name: "Stop dictating" }).click();
   expect(m.calls.filter((c) => c.path === "/messages")).toHaveLength(0); // nothing sent by itself
   await box.press("End");
@@ -1339,4 +1345,32 @@ test("Settings is a menu of pages, each with its own address and a way back; App
   await page.goto("/#/settings/general");
   await page.getByText("Dark", { exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+});
+
+test("dictation: × puts the box back as it was, and send goes out at once without stopping first", async ({ page }) => {
+  const m = await mockBackend(page);
+  await page.addInitScript(() => {
+    const w = window as unknown as { __partials: string[]; __heard: string; __micHold: boolean };
+    w.__partials = ["book a"];
+    w.__heard = "book a table for two";
+  });
+  await page.goto("/");
+  const box = page.getByRole("textbox", { name: "Message to AIC" });
+  await box.fill("Hi,");
+  await page.getByRole("button", { name: "Dictate into the box" }).click();
+  await expect(box).toHaveValue("Hi, book a table for two");
+  await page.getByRole("button", { name: "Cancel dictation" }).click();
+  await expect(box).toHaveValue("Hi,"); // exactly what was there before
+  await expect(page.getByRole("group", { name: "Dictation" })).toHaveCount(0);
+  expect(m.calls.filter((c) => c.path === "/messages")).toHaveLength(0);
+
+  await box.fill("");
+  await page.getByRole("button", { name: "Dictate into the box" }).click();
+  await expect(box).toHaveValue("book a table for two");
+  await page.getByRole("group", { name: "Dictation" }).getByRole("button", { name: "Send to AIC" }).click();
+  await expect
+    .poll(() => m.calls.filter((c) => c.path === "/messages").at(-1)?.body)
+    .toMatchObject({ text: "book a table for two" });
+  await expect(page.getByRole("group", { name: "Dictation" })).toHaveCount(0); // listening stopped
+  await expect(box).toHaveValue("");
 });

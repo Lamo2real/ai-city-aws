@@ -25,7 +25,7 @@ import { statusWords } from "./Knowledge.tsx";
 import { PlusMenu, type Insert } from "./PlusMenu.tsx";
 import { StreamedText } from "./StreamedText.tsx";
 import { Banner, ClearIcon, DictateIcon, SendIcon, toast, WaveIcon } from "./ui.tsx";
-import { VoiceVisualizer } from "./VoiceVisualizer.tsx";
+import { MicWave, VoiceVisualizer } from "./VoiceVisualizer.tsx";
 
 export { MicIcon } from "./ui.tsx";
 
@@ -98,6 +98,19 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
     if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 120) el.scrollTop = el.scrollHeight;
   };
 
+  // The box before dictation started, so × puts it back exactly as it was.
+  const beforeDictation = useRef("");
+  const startDictation = () => {
+    beforeDictation.current = text;
+    voice.toggleDictate();
+  };
+  const cancelDictation = () => {
+    voice.toggleDictate();
+    base.current = beforeDictation.current;
+    setText(beforeDictation.current);
+    requestAnimationFrame(() => setText(beforeDictation.current)); // after the recognizer's last word lands
+    input.current?.focus();
+  };
   const setTyped = (next: string) => {
     base.current = next;
     setText(next);
@@ -245,11 +258,11 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
             </article>
           ) : null}
         </div>
-        {voice.conversation || voice.listening ? (
+        {voice.conversation || (voice.listening && !voice.dictating) ? (
           // While the voice conversation is on (or dictation listens): who is talking, as the moving line.
           <VoiceVisualizer presence={presence} listening={voice.listening} onMic={voice.pushToTalk} bare />
         ) : null}
-        <form className="composer" onSubmit={submit}>
+        <form className={`composer${voice.dictating ? " is-dictating" : ""}`} onSubmit={submit}>
           {items.length ? (
             <ul className="attached" aria-label="Attached to your message">
               {items.map((i) => (
@@ -288,7 +301,9 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
               ))}
             </ul>
           ) : null}
-          <PlusMenu lists={lists} onFiles={(f, folder) => void onFiles(f, folder)} onInsert={insert} go={go} />
+          {voice.dictating ? null : (
+            <PlusMenu lists={lists} onFiles={(f, folder) => void onFiles(f, folder)} onInsert={insert} go={go} />
+          )}
           <label className="sr" htmlFor="say">
             Message to AIC
           </label>
@@ -306,34 +321,71 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
               }
             }}
           />
-          <button
-            type="button"
-            className={`dictate ${voice.dictating ? "on" : ""}`}
-            onClick={voice.toggleDictate}
-            aria-pressed={voice.dictating}
-            aria-label={voice.dictating ? "Stop dictating" : "Dictate into the box"}
-            title={voice.dictating ? "Stop dictating" : "Dictate into the box"}
-          >
-            <DictateIcon />
-          </button>
-          <button
-            type="button"
-            className={`voice-btn ${voice.conversation ? "on" : ""}`}
-            onClick={voice.toggleConversation}
-            aria-pressed={voice.conversation}
-            aria-label={voice.conversation ? "End the voice conversation" : "Talk to AIC"}
-            title={voice.conversation ? "End the voice conversation" : "Talk to AIC: speak, AIC answers aloud"}
-          >
-            <WaveIcon />
-          </button>
-          <button
-            type="submit"
-            className="send"
-            aria-label="Send to AIC"
-            disabled={(!text.trim() && !items.length) || !sendable(items)}
-          >
-            <SendIcon />
-          </button>
+          {voice.dictating ? (
+            // Dictating, like Claude's composer: the words stream into the box above; here a cancel, the live
+            // sound of your voice, stop (keep the words to edit) and send at once.
+            <div className="dictation-bar" role="group" aria-label="Dictation">
+              <button
+                type="button"
+                className="dict-cancel"
+                onClick={cancelDictation}
+                aria-label="Cancel dictation"
+                title="Cancel dictation"
+              >
+                ×
+              </button>
+              <MicWave />
+              <button
+                type="button"
+                className="dict-stop"
+                onClick={voice.toggleDictate}
+                aria-label="Stop dictating"
+                title="Stop dictating (keep the words)"
+              >
+                <span aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="send dict-send"
+                onClick={() => void submit()}
+                aria-label="Send to AIC"
+                disabled={!text.trim() && !items.length}
+              >
+                <SendIcon />
+              </button>
+            </div>
+          ) : (
+            <>
+              <button
+                type="button"
+                className={`dictate ${voice.dictating ? "on" : ""}`}
+                onClick={startDictation}
+                aria-pressed={voice.dictating}
+                aria-label={voice.dictating ? "Stop dictating" : "Dictate into the box"}
+                title={voice.dictating ? "Stop dictating" : "Dictate into the box"}
+              >
+                <DictateIcon />
+              </button>
+              <button
+                type="button"
+                className={`voice-btn ${voice.conversation ? "on" : ""}`}
+                onClick={voice.toggleConversation}
+                aria-pressed={voice.conversation}
+                aria-label={voice.conversation ? "End the voice conversation" : "Talk to AIC"}
+                title={voice.conversation ? "End the voice conversation" : "Talk to AIC: speak, AIC answers aloud"}
+              >
+                <WaveIcon />
+              </button>
+              <button
+                type="submit"
+                className="send"
+                aria-label="Send to AIC"
+                disabled={(!text.trim() && !items.length) || !sendable(items)}
+              >
+                <SendIcon />
+              </button>
+            </>
+          )}
         </form>
       </div>
     </section>
