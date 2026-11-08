@@ -11,7 +11,7 @@ The owner has **one** Stripe account. Every product, app, site, game or service 
 2. Create a **Product** with a clear name, description and image, and `metadata`: `app` (the app or site it is sold in), `department`, `sku` if the owner uses them.
 3. Create a **Price**: one-time or recurring, currency (the owner's default, often SEK or EUR), tax behaviour (`exclusive` or `inclusive`, as the owner sells).
 4. The simplest way to take money: a **Payment Link** for that price. Put the link in the site, app, email, ad or post.
-5. Inside an app the city builds (IT): Stripe Checkout or Payment Element, with the server-side secret key stored as a deployment secret (GitHub Actions secret or the host's secret store; the owner pastes it there once), a webhook for `checkout.session.completed`, and test mode first.
+5. Inside an app the city builds (Application): Stripe Checkout or Payment Element, with the server-side secret key stored as a deployment secret (GitHub Actions secret or the host's secret store; the owner pastes it there once), a webhook for `checkout.session.completed`, and test mode first.
 6. Many products: keep them in one catalogue, distinguished by `metadata.app`; reports filter on it.
 
 ## Always

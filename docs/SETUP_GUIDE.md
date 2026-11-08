@@ -14,8 +14,9 @@ For each tool: no account yet? Tap **Create an account**, sign up on the service
 
 ## 3. Connect each department's essential tools
 
-- **IT**: essential GitHub, AWS Knowledge, Context7, Sentry; more Linear, Vercel, Supabase, Figma, PagerDuty, Datadog, Grafana Cloud, Microsoft Learn, Cloudflare Docs, Shopify Dev Docs, Vanta.
-- **Data & Analytics**: essential Google Analytics, BigQuery, PostHog; more Amplitude, Mixpanel, Hex, Airtable, Supabase.
+- **Application**: essential GitHub, Context7, Sentry, Vercel; more Supabase, Figma, Linear, Shopify Dev Docs, Microsoft Learn.
+- **IT Infrastructure**: essential AWS Knowledge, GitHub, Datadog, PagerDuty; more Grafana Cloud, Sentry, Cloudflare Docs, Microsoft Learn, Context7, Vanta.
+- **Data & AI**: essential Google Analytics, BigQuery, PostHog; more Amplitude, Mixpanel, Hex, Airtable, Supabase, Hugging Face, Context7.
 - **Marketing**: essential Canva, Meta Ads, Google Ads, Google Analytics; more Higgsfield, HeyGen, ElevenLabs, Klaviyo, HubSpot, Semrush, Ahrefs, Buffer, Webflow, Wix, Typeform, Figma.
 - **Sales**: essential Salesforce, HubSpot, Apollo.io, PandaDoc; more Pipedrive, Attio, Close, Gong, Docusign, Fireflies.
 - **Customer Support**: essential Intercom, Gorgias, Help Scout; more Shopify (store), Typeform, SurveyMonkey, HubSpot.

@@ -13,6 +13,7 @@ from aic.shared.cost import Usage
 from aic.shared.events import MemoryBus
 from aic.shared.hierarchy.queue import MemoryQueue
 from aic.shared.ledger import Ledger
+from aic.shared.presets import presets
 from aic.shared.table import MemoryTable, UpdateOptions
 from aic.shared.turn import TurnInput, TurnOutput
 from aic.shared.utility import wake_match
@@ -407,7 +408,10 @@ async def test_post_city_reset_empties_the_city_only_with_a_clear_confirm() -> N
     assert await d.ledger.get_department("Writing") is None
     assert d.queue.purged == 1 and d.queue.pending == []
     city = js(await handle_http(ev("GET", "/city"), d))
-    assert city["agents"] == [] and city["departments"] == [] and city["tickets"] == []
+    assert city["agents"] == [] and city["tickets"] == []
+    # Only the pre-configured departments stand again (decision 119): empty towers, ready for work.
+    assert {x["name"] for x in city["departments"]} == {p["name"] for p in presets()}
+    assert all(x["name"] != "Writing" for x in city["departments"])
 
 
 async def test_post_agents_home_sends_one_clicked_worker_home_and_nothing_else() -> None:

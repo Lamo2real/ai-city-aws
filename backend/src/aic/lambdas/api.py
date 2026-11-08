@@ -46,7 +46,7 @@ from aic.shared.knowledge.wiring import knowledge_from_env
 from aic.shared.ledger import Ledger, Record
 from aic.shared.log import log
 from aic.shared.models import model_label
-from aic.shared.presets import public_presets
+from aic.shared.presets import ensure_presets, public_presets
 from aic.shared.push import DeviceStore, PushApps, PushDeps, apns_key_secret, store_apns_secret
 from aic.shared.speech import (
     DEFAULT_VOICE,
@@ -288,6 +288,11 @@ async def _sweep(d: ApiDeps) -> None:
 async def city_snapshot(d: ApiDeps) -> dict[str, Any]:
     s = await d.settings()
     await _sweep(d)
+    try:
+        if made := await ensure_presets(d.ledger):  # the preset departments stand from the start (decision 119)
+            log("info", "departments.seeded", names=json.dumps(made))
+    except Exception as e:  # the City still loads; the next snapshot tries again
+        log("warn", "departments.seed_failed", error=type(e).__name__)
     results: list[Any] = await asyncio.gather(
         d.ledger.list_agents(),
         d.ledger.list_departments(),

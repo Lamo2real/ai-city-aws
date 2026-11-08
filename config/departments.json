@@ -29,28 +29,27 @@
   },
   "departments": [
     {
-      "key": "it",
-      "name": "IT",
+      "key": "application",
+      "name": "Application",
       "aliases": [
-        "engineering",
-        "it infrastructure",
-        "infrastructure",
-        "application",
         "applications",
+        "app development",
+        "application development",
+        "engineering",
         "software",
+        "software engineering",
         "development",
-        "devops",
-        "sre",
-        "platform",
+        "dev",
+        "web",
         "mobile",
-        "web"
+        "ios",
+        "android",
+        "backend",
+        "frontend",
+        "full stack"
       ],
-      "mission": "Build, run and protect the owner's software and infrastructure: cloud infrastructure as code, backends, web frontends, iOS and Android apps, CI/CD, monitoring, on-call and security.",
+      "mission": "Build the owner's software: web apps and sites, iOS and Android apps, backends and APIs, payments and integrations, tested and shipped through GitHub.",
       "teams": [
-        {
-          "name": "Cloud & infrastructure",
-          "does": "AWS, Terraform, networking, CI/CD pipelines, cost"
-        },
         {
           "name": "Backend",
           "does": "APIs, services, databases, integrations, payments"
@@ -60,73 +59,133 @@
           "does": "Web apps and sites: React, TypeScript, accessibility, performance"
         },
         {
-          "name": "Mobile",
-          "does": "iOS (SwiftUI) and Android (Kotlin) apps, store readiness"
+          "name": "iOS",
+          "does": "SwiftUI apps for iPhone and iPad, App Store readiness"
         },
         {
-          "name": "Reliability",
-          "does": "Monitoring, alerts, incidents, on-call"
+          "name": "Android",
+          "does": "Kotlin and Jetpack Compose apps, Play Store readiness"
         },
         {
-          "name": "Security",
-          "does": "Reviews, dependency and secret scanning, compliance evidence"
+          "name": "QA",
+          "does": "Tests, reviews, release checks"
         }
       ],
       "skills": [
-        "aws-well-architected",
-        "terraform-iac",
         "backend-services",
         "web-frontend",
         "ios-swiftui",
         "android-kotlin",
         "ci-cd-github",
         "security-baseline",
-        "current-docs",
-        "incident-response"
+        "current-docs"
       ],
       "essential": [
         "github",
-        "aws-knowledge",
         "context7",
-        "sentry"
+        "sentry",
+        "vercel"
       ],
       "connectors": [
         "github",
-        "aws-knowledge",
         "context7",
         "sentry",
-        "linear",
         "vercel",
         "supabase",
         "figma",
-        "pagerduty",
-        "datadog",
-        "grafana",
-        "microsoft-learn",
-        "cloudflare-docs",
+        "linear",
         "shopify-dev",
+        "microsoft-learn"
+      ]
+    },
+    {
+      "key": "infrastructure",
+      "name": "IT Infrastructure",
+      "aliases": [
+        "it",
+        "it infrastructure",
+        "infrastructure",
+        "infra",
+        "cloud",
+        "devops",
+        "sre",
+        "platform",
+        "platform engineering",
+        "security",
+        "cybersecurity",
+        "networking",
+        "it operations",
+        "itops",
+        "systems"
+      ],
+      "mission": "Run and protect everything the software stands on: AWS and other clouds as code (Terraform), networks and domains, CI/CD pipelines, monitoring, on-call and incidents, security, backups and costs.",
+      "teams": [
+        {
+          "name": "Cloud",
+          "does": "AWS, Terraform, networking, domains, costs"
+        },
+        {
+          "name": "DevOps",
+          "does": "CI/CD pipelines, environments, releases"
+        },
+        {
+          "name": "Reliability",
+          "does": "Monitoring, alerts, incidents, on-call, backups"
+        },
+        {
+          "name": "Security",
+          "does": "Access, secrets, scanning, compliance evidence"
+        }
+      ],
+      "skills": [
+        "aws-well-architected",
+        "terraform-iac",
+        "ci-cd-github",
+        "incident-response",
+        "security-baseline",
+        "current-docs"
+      ],
+      "essential": [
+        "aws-knowledge",
+        "github",
+        "datadog",
+        "pagerduty"
+      ],
+      "connectors": [
+        "aws-knowledge",
+        "github",
+        "datadog",
+        "pagerduty",
+        "grafana",
+        "sentry",
+        "cloudflare-docs",
+        "microsoft-learn",
+        "context7",
         "vanta"
       ]
     },
     {
       "key": "data",
-      "name": "Data & Analytics",
+      "name": "Data & AI",
       "aliases": [
-        "data",
-        "analytics",
-        "data and analytics",
-        "business intelligence",
-        "bi",
-        "reporting",
-        "insights",
-        "data science",
-        "data and ai",
-        "data & ai",
         "ai",
+        "analytics",
+        "artificial intelligence",
+        "bi",
+        "business intelligence",
+        "data",
+        "data & ai",
+        "data & analytics",
+        "data and ai",
+        "data and analytics",
+        "data science",
+        "insights",
+        "llm",
         "machine learning",
-        "ml"
+        "ml",
+        "reporting"
       ],
-      "mission": "Turn the owner's data into answers: metrics and dashboards, product and marketing analytics, SQL and spreadsheets, forecasts, experiments and data quality.",
+      "mission": "Turn the owner's data into answers and AI into features: metrics and dashboards, product and marketing analytics, SQL, experiments, forecasts, and AI and machine-learning features built on open models and Amazon Bedrock.",
       "teams": [
         {
           "name": "Analytics",
@@ -138,13 +197,18 @@
         },
         {
           "name": "Data engineering",
-          "does": "Warehouse tables, pipelines, data quality (with IT for infrastructure)"
+          "does": "Warehouse tables, pipelines, data quality"
+        },
+        {
+          "name": "AI & ML",
+          "does": "LLM features, retrieval, evaluations, open models from Hugging Face"
         }
       ],
       "skills": [
         "data-analysis",
         "metrics-and-dashboards",
         "experiments-ab",
+        "ai-features",
         "current-docs"
       ],
       "essential": [
@@ -160,7 +224,9 @@
         "mixpanel",
         "hex",
         "airtable",
-        "supabase"
+        "supabase",
+        "hugging-face",
+        "context7"
       ]
     },
     {
@@ -320,7 +386,7 @@
         },
         {
           "name": "Escalations",
-          "does": "Bugs to IT, refunds to Finance, angry customers"
+          "does": "Bugs to Application, refunds to Finance, angry customers"
         },
         {
           "name": "Knowledge",
@@ -583,7 +649,7 @@
         },
         {
           "name": "Validation",
-          "does": "Cheap tests before building: landing page, waitlist, interviews (with Product, IT and Marketing)"
+          "does": "Cheap tests before building: landing page, waitlist, interviews (with Product, Application and Marketing)"
         }
       ],
       "skills": [

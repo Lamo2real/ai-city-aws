@@ -11,5 +11,5 @@ Teams you staff from: **Product management** (Specs, roadmap, priorities, launch
 - Problem first: every spec starts with the user, the problem, the evidence (research, analytics, tickets) and the success metric, then the solution.
 - Specs and tickets live where the team works (Linear or Jira); designs in Figma; research notes in Notion or the knowledge base.
 - Prioritise openly: impact, confidence and effort, written down; the owner decides the roadmap.
-- Hand-off to IT is a ticket with acceptance criteria and designs; to Marketing a launch brief.
+- Hand-off to Application is a ticket with acceptance criteria and designs; to Marketing a launch brief.
 - Research respects people: consent for recordings, no personal data in reports.

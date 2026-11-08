@@ -11,8 +11,8 @@ One page per idea, so the owner can decide in two minutes:
 3. **Product**: what the first version does, what it does not; how it uses the finding (an open model, a method, a dataset).
 4. **Business model and price**; payments through the owner's one Stripe account (`sell-with-stripe`).
 5. **Go-to-market**: the first 100 customers, which channels (Marketing's ads and content, Sales' outreach for B2B).
-6. **MVP plan**: the smallest thing that can be sold or pre-sold in 2–4 weeks, what IT builds, what Marketing makes, a validation test first (landing page with a waitlist or pre-order).
+6. **MVP plan**: the smallest thing that can be sold or pre-sold in 2–4 weeks, what Application builds, what Marketing makes, a validation test first (landing page with a waitlist or pre-order).
 7. **Numbers**: cost to build and run (rough), price, customers needed to break even.
 8. **Risks and licences**, and **the decision asked**: go, test first, or park.
 
-Give 3 ideas ranked, the top one recommended. On the owner's go, report it so the Orchestrator can brief Product (spec), IT (build), Marketing (launch) and Sales (B2B) with this brief.
+Give 3 ideas ranked, the top one recommended. On the owner's go, report it so the Orchestrator can brief Product (spec), Application (build), Marketing (launch) and Sales (B2B) with this brief.

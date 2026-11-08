@@ -579,22 +579,12 @@ def _ask_owner(d: CityDeps, c: TurnCtx) -> ToolSpec:
 
 # ---------- Orchestrator ----------
 def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
-    async def create_department(a: dict[str, Any]) -> str:
-        name = str(a["name"]).strip()
-        if preset := preset_for(name):  # "Engineering", "IT infrastructure", "Design" → the preset IT / Marketing
-            name = preset["name"]
-            a = {**a, "mission": str(a.get("mission") or "").strip() or preset["mission"]}
-        dept_cap = int((await d.settings()).get("max_departments") or 6)
-        existing = await d.ledger.list_departments()
-        if len(existing) >= dept_cap and not any(str(x.get("name", "")).lower() == name.lower() for x in existing):
-            log("info", "department.refused", name=name, departments=len(existing), cap=dept_cap)
-            return (
-                f"Refused: the city already has {len(existing)} departments (the ceiling is {dept_cap}). "
-                "Use one of them: " + ", ".join(str(x.get("name", "")) for x in existing) + "."
-            )
-        dept, created = await d.ledger.create_department(name, str(a["mission"]), manager_id(name))
-        if not created:
-            return f"{dept['name']} already exists; use it."
+    async def ensure_manager(dept: dict[str, Any]) -> dict[str, Any]:
+        """A department's manager: hired the first time the department gets a goal (a preset stands empty until
+        then), dormant until its first turn."""
+        mgr = await d.ledger.get_agent(dept["manager_id"])
+        if mgr:
+            return mgr
         mgr = {
             "id": dept["manager_id"],
             "kind": "manager",
@@ -608,10 +598,41 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             "hired_at": now_iso(d.ledger.now()),
         }
         await d.ledger.put_agent(mgr)
-        await d.bus.put(
-            {"type": "department.created", "name": dept["name"], "mission": dept["mission"], "manager_id": mgr["id"]}
-        )
         await d.bus.put({"type": "agent.hired", "agent": mgr})
+        return mgr
+
+    async def create_department(a: dict[str, Any]) -> str:
+        name = str(a["name"]).strip()
+        preset = preset_for(name)
+        if preset:  # "Engineering", "IT", "Design" → the preset Application, IT Infrastructure, Marketing
+            name = preset["name"]
+            a = {**a, "mission": str(a.get("mission") or "").strip() or preset["mission"]}
+        # The ceiling counts only departments beyond the presets (those exist from the start).
+        dept_cap = int((await d.settings()).get("max_departments") or 6)
+        existing = await d.ledger.list_departments()
+        extra = [x for x in existing if not preset_for(str(x.get("name", "")))]
+        known = any(department_key(str(x.get("name", ""))) == department_key(name) for x in existing)
+        if not preset and not known and len(extra) >= dept_cap:
+            log("info", "department.refused", name=name, departments=len(extra), cap=dept_cap)
+            return (
+                f"Refused: the city already has {len(extra)} departments of its own beyond the pre-configured ones "
+                f"(the ceiling is {dept_cap}). Use one of them: "
+                + ", ".join(str(x.get("name", "")) for x in existing)
+                + "."
+            )
+        dept, created = await d.ledger.create_department(name, str(a["mission"]), manager_id(name))
+        if created:  # the building first, then its manager
+            await d.bus.put(
+                {
+                    "type": "department.created",
+                    "name": dept["name"],
+                    "mission": dept["mission"],
+                    "manager_id": dept["manager_id"],
+                }
+            )
+        mgr = await ensure_manager(dept)
+        if not created:
+            return f"{dept['name']} already exists; use it."
         return f"Created {dept['name']}, managed by {mgr['id']}."
 
     async def assign(a: dict[str, Any]) -> str:
@@ -621,6 +642,7 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             a = {**a, "department": preset["name"]}
         if not dept:
             return f"There is no department called {a['department']}. Create it first."
+        await ensure_manager(dept)
         if dept.get("stood_down_at"):
             await d.ledger.stand_down_department(dept["name"], down=False)  # a new job from the owner lifts it
         t = await new_ticket(

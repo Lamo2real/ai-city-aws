@@ -1229,8 +1229,9 @@ test("Settings → Departments: a setup guide, shared tools, nine departments; a
   await expect(guide.getByRole("link", { name: "Knowledge" })).toHaveAttribute("href", "#/knowledge");
   for (const name of [
     "Shared by every department",
-    "IT",
-    "Data & Analytics",
+    "Application",
+    "IT Infrastructure",
+    "Data & AI",
     "Marketing",
     "Sales",
     "Customer Support",

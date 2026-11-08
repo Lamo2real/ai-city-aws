@@ -56,7 +56,8 @@ async def test_no_more_departments_than_the_ceiling() -> None:
     ctx = TurnCtx(agent_id="orchestrator", role="orchestrator", department=None, ticket_id="t1", task_id="t1")
     create = {t.name: t for t in tools_for(c.host.d, ctx)}["create_department"].handler
     out = await create({"name": "Voice Engineering", "mission": "voices"})
-    assert out.startswith("Refused: the city already has 3 departments (the ceiling is 3)") and "Dept0" in out
+    assert out.startswith("Refused: the city already has 3 departments of its own") and "(the ceiling is 3)" in out
+    assert "Dept0" in out
     assert len(await c.ledger.list_departments()) == 3
     assert (await create({"name": "Dept1", "mission": "again"})).endswith("already exists; use it.")
 

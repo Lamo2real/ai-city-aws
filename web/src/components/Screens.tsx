@@ -618,7 +618,7 @@ function SettingsPageView({
               step={1}
             />
             <Field
-              label="Departments (hard ceiling)"
+              label="Your own departments, beyond the 12 built in (hard ceiling)"
               value={form.max_departments}
               onChange={(v) => num("max_departments", v)}
               step={1}

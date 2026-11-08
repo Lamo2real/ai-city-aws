@@ -13,6 +13,7 @@ import re
 from typing import Any
 
 from .config import _load
+from .ids import department_key, manager_id
 
 Preset = dict[str, Any]
 
@@ -98,3 +99,19 @@ def orchestrator_note() -> str:
         "Pre-configured departments (create them with exactly these names when the work fits; they come with "
         "their own playbook, skills and connectors):\n" + "\n".join(lines)
     )
+
+
+async def ensure_presets(ledger: Any) -> list[str]:
+    """Every preset department exists from the start (the owner's rule, decision 119): the ones missing are
+    created, in the presets' order, so their towers stand in the City before any work arrives (and again after a
+    Start over). Their managers are hired with the first goal (`ensure_manager` in the city tools), so an idle city
+    shows empty towers, not a crowd of idle managers. Returns the names it created."""
+    have = {department_key(str(x.get("name", ""))) for x in await ledger.list_departments()}
+    made = []
+    for p in presets():
+        if department_key(p["name"]) in have:
+            continue
+        _, created = await ledger.create_department(p["name"], p["mission"], manager_id(p["name"]))
+        if created:
+            made.append(p["name"])
+    return made
