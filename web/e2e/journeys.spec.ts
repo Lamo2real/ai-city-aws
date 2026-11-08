@@ -1232,6 +1232,7 @@ test("Settings → Departments: a setup guide, shared tools, nine departments; a
     "Legal",
     "Product",
     "Operations",
+    "Research",
   ])
     await expect(section.getByRole("heading", { name, exact: true })).toBeVisible();
 

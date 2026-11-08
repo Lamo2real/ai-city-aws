@@ -549,6 +549,67 @@
         "shopify-store",
         "typeform"
       ]
+    },
+    {
+      "key": "research",
+      "name": "Research",
+      "aliases": [
+        "r&d",
+        "r and d",
+        "research and development",
+        "innovation",
+        "ventures",
+        "venture studio",
+        "new business",
+        "market research",
+        "opportunities",
+        "ideas",
+        "labs",
+        "research lab"
+      ],
+      "mission": "Find what is worth building: scan new research papers (arXiv, Hugging Face, journals, IBM, Google, Meta, Microsoft, OpenAI and university labs) and markets, then turn the best findings into business opportunities with a summary, a B2B or B2C model and a plan the owner can say yes to.",
+      "teams": [
+        {
+          "name": "Paper scouting",
+          "does": "New papers and preprints, research labs' publications, open models and code"
+        },
+        {
+          "name": "Market & trends",
+          "does": "Demand, competitors, pricing, what already makes money"
+        },
+        {
+          "name": "Venture design",
+          "does": "Opportunity briefs: customer, product, business model, B2B or B2C, go-to-market"
+        },
+        {
+          "name": "Validation",
+          "does": "Cheap tests before building: landing page, waitlist, interviews (with Product, IT and Marketing)"
+        }
+      ],
+      "skills": [
+        "research-papers",
+        "trend-scouting",
+        "market-opportunity",
+        "business-idea-brief",
+        "current-docs"
+      ],
+      "essential": [
+        "hugging-face",
+        "exa",
+        "consensus"
+      ],
+      "connectors": [
+        "hugging-face",
+        "exa",
+        "consensus",
+        "openalex",
+        "parallel",
+        "tavily",
+        "jina",
+        "firecrawl",
+        "crunchbase",
+        "product-hunt"
+      ]
     }
   ],
   "connectors": {
@@ -959,6 +1020,64 @@
       "url": "https://mcp.clickup.com/mcp",
       "what": "Tasks, docs and goals in one place",
       "signup": "https://app.clickup.com/signup"
+    },
+    "hugging-face": {
+      "label": "Hugging Face",
+      "url": "https://huggingface.co/mcp",
+      "what": "Daily AI papers, models, datasets and demos (works without an account; sign in for more)",
+      "signup": "https://huggingface.co/join"
+    },
+    "exa": {
+      "label": "Exa",
+      "url": "https://mcp.exa.ai/mcp",
+      "what": "Search built for AI: research papers, companies, people and the web, with full text",
+      "signup": "https://dashboard.exa.ai/"
+    },
+    "consensus": {
+      "label": "Consensus",
+      "url": "https://mcp.consensus.app/mcp",
+      "what": "Answers from 200M+ peer-reviewed papers, with citations",
+      "signup": "https://consensus.app/sign-up/"
+    },
+    "openalex": {
+      "label": "OpenAlex",
+      "url": "https://mcp.openalex.org/mcp",
+      "what": "The open catalogue of scholarly works, authors, institutions and citations"
+    },
+    "parallel": {
+      "label": "Parallel",
+      "url": "https://mcp.parallel.ai/mcp",
+      "what": "Deep web research tasks that read many sources and cite them",
+      "signup": "https://platform.parallel.ai/"
+    },
+    "tavily": {
+      "label": "Tavily",
+      "url": "https://mcp.tavily.com/mcp/",
+      "what": "Web search and extraction for research agents",
+      "signup": "https://app.tavily.com/"
+    },
+    "jina": {
+      "label": "Jina AI",
+      "url": "https://mcp.jina.ai/v1",
+      "what": "Read any page or PDF as clean text, search arXiv and the web",
+      "signup": "https://jina.ai/"
+    },
+    "firecrawl": {
+      "label": "Firecrawl",
+      "url": "https://mcp.firecrawl.dev/mcp",
+      "what": "Scrape and crawl whole websites into clean text (the card asks for your API key)",
+      "signup": "https://www.firecrawl.dev/signin"
+    },
+    "crunchbase": {
+      "label": "Crunchbase",
+      "url": "https://mcp.crunchbase.com/mcp",
+      "what": "Companies, funding rounds, investors and competitors",
+      "signup": "https://www.crunchbase.com/register"
+    },
+    "product-hunt": {
+      "label": "Product Hunt",
+      "url": "https://mcp.producthunt.com/mcp",
+      "what": "New product launches, what people upvote and say"
     }
   }
 }

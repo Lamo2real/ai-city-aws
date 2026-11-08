@@ -771,8 +771,8 @@ describe("pre-configured departments (decision 113)", () => {
   it("the presets route is routed", () => {
     expect(apiTf).toContain('"GET /departments/presets"');
   });
-  it("nine departments and the shared tools: each skill has a SKILL.md and each connector an https url", () => {
-    expect(presets.departments).toHaveLength(9);
+  it("ten departments and the shared tools: each skill has a SKILL.md and each connector an https url", () => {
+    expect(presets.departments).toHaveLength(10);
     for (const d of [...presets.departments, presets.shared]) {
       if (d.key) expect(existsSync(`agents/departments/${d.key}.md`)).toBe(true);
       for (const s of d.skills) expect(existsSync(`agents/skills/${s}/SKILL.md`)).toBe(true);

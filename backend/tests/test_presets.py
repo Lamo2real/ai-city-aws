@@ -20,6 +20,7 @@ def test_nine_departments_and_everything_they_name_exists() -> None:
     names = [p["name"] for p in presets()]
     assert names == [
         "IT", "Data & Analytics", "Marketing", "Sales", "Customer Support", "Finance", "Legal", "Product", "Operations",
+        "Research",
     ]  # fmt: skip
     cat = catalog()
     for p in [*presets(), shared()]:
@@ -45,7 +46,10 @@ def test_names_and_aliases_reach_the_preset() -> None:
     for name, key in (("Data & AI", "data"), ("analytics", "data"), ("customer service", "support"),
                       ("Accounting", "finance"), ("GDPR", "legal"), ("UX", "product"), ("ops", "operations")):  # fmt: skip
         assert preset_for(name)["key"] == key, name  # type: ignore[index]
-    assert preset_for("Research") is None
+    for name in ("Research", "R&D", "innovation", "market research"):
+        assert preset_for(name)["key"] == "research", name  # type: ignore[index]
+    assert preset_for("user research")["key"] == "product"  # type: ignore[index]
+    assert preset_for("Gardening") is None
     assert preset_for("") is None
 
 
@@ -54,7 +58,8 @@ def test_a_departments_skills_come_from_its_preset_only() -> None:
     assert "terraform-iac" in it and "aws-well-architected" in it and "canva-design" not in it
     shared_skills = ["knowledge-first", "sell-with-stripe", "cross-team-work"]
     assert [r["name"] for r in department_skills("Marketing")][:5] == [*shared_skills, "brand-and-copy", "canva-design"]
-    assert [r["name"] for r in department_skills("Research")] == shared_skills  # every department gets these
+    assert [r["name"] for r in department_skills("Gardening")] == shared_skills  # every department gets these
+    assert "business-idea-brief" in [r["name"] for r in department_skills("R&D")]
     row = bundled_skill("terraform-iac")
     assert row and row["builtin"] and row["version"].startswith("builtin-") and "Terraform" in row["description"]
     assert row["files"] == [{"path": "SKILL.md", "size": row["files"][0]["size"]}]

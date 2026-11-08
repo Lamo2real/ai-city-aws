@@ -23,6 +23,7 @@ For each tool: no account yet? Tap **Create an account**, sign up on the service
 - **Legal**: essential Docusign, PandaDoc, Vanta; more .
 - **Product**: essential Linear, Figma, PostHog; more Amplitude, Mixpanel, Typeform, SurveyMonkey, Fireflies.
 - **Operations**: essential Asana, monday.com, Airtable; more ClickUp, Shopify (store), Typeform.
+- **Research**: essential Hugging Face, Exa, Consensus; more OpenAlex, Parallel, Tavily, Jina AI, Firecrawl, Crunchbase, Product Hunt.
 
 Special cases:
 - **Salesforce** needs an External Client App in your org (Setup → External Client App Manager → New, OAuth with the `mcp_api` scope and the callback URL the card shows); paste its consumer key and secret in the card.
