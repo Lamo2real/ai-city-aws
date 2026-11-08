@@ -110,7 +110,7 @@ final class VoiceController {
     func speak(_ text: String) {
         guard speakReplies, !text.isEmpty else { return }
         let plain = text.replacingOccurrences(of: "[*`#|_]", with: "", options: .regularExpression)
-            .replacingOccurrences(of: #"\bAIC\b"#, with: "A.I.C.", options: .regularExpression)
+            .replacingOccurrences(of: #"\bAIC\b"#, with: "Ace", options: .regularExpression) // written AIC, said "Ace" (the owner's rule, 2026-11-08)
         let u = AVSpeechUtterance(string: String(plain.prefix(2900)))
         u.voice = AVSpeechSynthesisVoice(language: "en-US")
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])

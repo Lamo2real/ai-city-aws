@@ -1,6 +1,6 @@
 # AI City (AIC) on AWS: project rules
 
-AI City is the owner's personal organization of AI agents, running only in the owner's AWS account. The owner talks to **AIC** (said as the letters A-I-C; never "Ace"). AIC hands work to the **Orchestrator**, which sends it to one **Department Manager** per department, which hires **Worker** consultants on demand. Agents run on Amazon Bedrock AgentCore; everything else is serverless (Lambda, API Gateway, DynamoDB, SQS, EventBridge, Step Functions, S3, CloudFront, Cognito). Infrastructure is Terraform in `infra/`, single environment `prod`.
+AI City is the owner's personal organization of AI agents, running only in the owner's AWS account. The owner talks to **AIC** (written AIC, pronounced "Ace": the owner's rule since 2026-11-08; spoken replies say "Ace", the wake word answers to "hey Ace" and "hey AIC"). AIC hands work to the **Orchestrator**, which sends it to one **Department Manager** per department, which hires **Worker** consultants on demand. Agents run on Amazon Bedrock AgentCore; everything else is serverless (Lambda, API Gateway, DynamoDB, SQS, EventBridge, Step Functions, S3, CloudFront, Cognito). Infrastructure is Terraform in `infra/`, single environment `prod`.
 
 ## Models (pinned in `config/models.json`; nowhere else)
 - AIC: Claude Haiku 5.5 (fast replies; it routes, answers status from the ledger, and hands real work to the Orchestrator)

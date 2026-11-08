@@ -154,14 +154,15 @@ struct HoldToApprove: View {
             Label(approval.costHint ?? "This may cost money or be hard to undo; that is why it needs you.", systemImage: "dollarsign.circle")
                 .foregroundStyle(Glass.warnLight)
             Spacer(minLength: 0)
+            // The primary action: amber on ink, like every primary button; the hold fills it with light.
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Glass.amber.opacity(0.2))
+                RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Glass.primaryGradient)
                 GeometryReader { g in
-                    RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Glass.primaryGradient).frame(width: g.size.width * progress)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white.opacity(0.45)).frame(width: g.size.width * progress)
                 }
-                RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Glass.edge2, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.white.opacity(0.35), lineWidth: 1)
                 Text(holding ? "Keep holding…" : "Hold to approve").font(.headline).frame(maxWidth: .infinity)
-                    .foregroundStyle(progress > 0.5 ? Glass.ink : Glass.text)
+                    .foregroundStyle(Glass.ink)
             }
             .frame(height: 56)
             .contentShape(Rectangle())

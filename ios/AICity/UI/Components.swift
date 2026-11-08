@@ -85,12 +85,31 @@ struct ToastView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 6)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-            .shadow(radius: 6)
+            .modifier(ToastSurface(glass: model.section != .city))
             .padding(.horizontal)
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .accessibilityElement(children: .contain)
             .onAppear { UIAccessibility.post(notification: .announcement, argument: t.text) }
+        }
+    }
+}
+
+/// The toast's surface: dark glass over the glass screens (whatever the phone's appearance), the system
+/// material over the City tab, which keeps its own look.
+private struct ToastSurface: ViewModifier {
+    var glass: Bool
+    func body(content: Content) -> some View {
+        if glass {
+            content
+                .foregroundStyle(Glass.text)
+                .tint(Glass.amber)
+                .glassPanel(radius: 14, raised: true)
+                .shadow(color: .black.opacity(0.35), radius: 8, y: 4)
+                .environment(\.colorScheme, .dark) // after the panel, so its material is the dark one
+        } else {
+            content
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                .shadow(radius: 6)
         }
     }
 }

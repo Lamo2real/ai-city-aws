@@ -33,7 +33,19 @@ struct AICityApp: App {
 struct RootView: View {
     @Environment(AppModel.self) private var model
 
+    /// The glass screens are dark whatever the phone's appearance (decision 103), and so is everything the system
+    /// presents over them (alerts, confirmation dialogs, menus, popovers), which follows the window's scheme. Only
+    /// the City tab keeps the phone's own appearance, so it looks exactly as before.
+    private var scheme: ColorScheme? {
+        if case .ready = model.boot, model.section == .city { return nil }
+        return .dark
+    }
+
     var body: some View {
+        content.preferredColorScheme(scheme)
+    }
+
+    @ViewBuilder private var content: some View {
         switch model.boot {
         case .starting:
             VStack(spacing: 16) {

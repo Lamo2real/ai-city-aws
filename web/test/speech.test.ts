@@ -34,9 +34,9 @@ describe("splitting a streamed reply into sentences", () => {
 });
 
 describe("what gets said", () => {
-  it("drops Markdown, emoji and URLs, and says AIC as letters", () => {
+  it("drops Markdown, emoji and URLs, and says AIC as Ace", () => {
     expect(speakable("**AIC** here 🎉: see [the docs](https://x.y) or https://a.b/c.")).toBe(
-      "A.I.C. here: see the docs or a link.",
+      "Ace here: see the docs or a link.",
     );
     expect(speakable("## Today")).toBe("Today");
     expect(speakable("- `npm test` passed ✅")).toBe("npm test passed");

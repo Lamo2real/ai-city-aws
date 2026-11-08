@@ -35,7 +35,7 @@
     },
     {
       "text": "I have an ace",
-      "want": "no"
+      "want": "yes"
     },
     {
       "text": "AIC hello",
@@ -59,14 +59,34 @@
     },
     {
       "text": "I placed an ace in the deck",
-      "want": "no"
+      "want": "unclear"
     },
     {
       "text": "yo Ace",
-      "want": "no"
+      "want": "yes"
     },
     {
       "text": "hey A I C, status",
+      "want": "yes"
+    },
+    {
+      "text": "hey Ace",
+      "want": "yes"
+    },
+    {
+      "text": "yo ace, what's up",
+      "want": "yes"
+    },
+    {
+      "text": "Ace",
+      "want": "yes"
+    },
+    {
+      "text": "ace, send everyone home",
+      "want": "yes"
+    },
+    {
+      "text": "thanks Ace",
       "want": "yes"
     }
   ]

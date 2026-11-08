@@ -132,11 +132,14 @@ struct GlassRows: ViewModifier {
     }
 }
 
-/// A sheet (the chat's dialogs, hold-to-approve, the first-run guide): the same glass, over whatever is behind.
+/// A sheet (hold-to-approve, the first-run guide): its own night sky with dark material over it, and the dark
+/// scheme for the whole presentation. The system sheet background would follow the phone's appearance and come
+/// up white in light mode, with the glass text unreadable on it.
 struct NightSheet: ViewModifier {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     func body(content: Content) -> some View {
         content
+            .preferredColorScheme(.dark)
             .environment(\.colorScheme, .dark)
             .environment(\.glass, true)
             .tint(Glass.amber)
@@ -144,7 +147,11 @@ struct NightSheet: ViewModifier {
                 if reduceTransparency {
                     Glass.solid
                 } else {
-                    ZStack { Rectangle().fill(.regularMaterial); Glass.fill2 }
+                    ZStack {
+                        NightSky()
+                        Rectangle().fill(.ultraThinMaterial).environment(\.colorScheme, .dark)
+                        Glass.fill
+                    }
                 }
             }
     }

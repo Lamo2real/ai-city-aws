@@ -76,7 +76,7 @@ export function speakable(md: string): string {
       .replace(/\s*\|\s*/g, ", ");
   t = t
     .replace(EMOJI, "")
-    .replace(/\bAIC\b/g, "A.I.C.") // said as letters, never "Ace"
+    .replace(/\bAIC\b/g, "Ace") // written AIC, said "Ace" (the owner's rule)
     .replace(/\s+/g, " ")
     .replace(/\s+([.,!?;:])/g, "$1")
     .trim();

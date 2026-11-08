@@ -110,7 +110,7 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
         <div className="toggles">
           <label className="switch">
             <input type="checkbox" checked={voice.wakeMode} onChange={voice.toggleWake} /> Hands-free: listen for “hey
-            AIC”
+            AIC” (say “hey Ace”)
           </label>
           <fieldset className="speak-mode">
             <legend>Speak replies</legend>

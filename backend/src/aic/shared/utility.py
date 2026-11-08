@@ -28,7 +28,7 @@ _GREETING = (
     r"(?:yo|hi|hey|hello|hiya|ok|okay|morning|good (?:morning|afternoon|evening)|what'?s up|whats up|sup|"
     r"how'?s it going|hows it going)"
 )
-_NAME = r"(?:aic|a\.?\s?i\.?\s?c\.?)"
+_NAME = r"(?:aic|a\.?\s?i\.?\s?c\.?|ace)"  # written AIC, said "Ace": both are its name
 _ADDRESSED = re.compile(rf"^\s*(?:{_GREETING}[\s,!.]*)?{_NAME}\b", re.I)
 _ENDS_WITH_NAME = re.compile(rf"[,\s]{_NAME}[\s?.!]*$", re.I)
 _MENTIONS = re.compile(rf"\b{_NAME}\b", re.I)
