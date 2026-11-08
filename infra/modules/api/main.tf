@@ -203,8 +203,14 @@ locals {
       { Action = ["bedrock:InvokeModel"], Resource = var.chief_of_staff_invoke_arns },
       { Action = ["lambda:InvokeFunction"], Resource = ["arn:aws:lambda:${var.region}:${var.account_id}:function:${local.api_name}:live"] },
     ]
-    notifier      = [{ Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] }] # push rights: modules/notifications
-    approvals     = [{ Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] }, { Action = ["sqs:SendMessage"], Resource = values(var.queue_arns) }]
+    notifier = [{ Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] }] # push rights: modules/notifications
+    approvals = [
+      { Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] },
+      { Action = ["sqs:SendMessage"], Resource = values(var.queue_arns) },
+      # An approval decided before its token was stored (decision 125): this function sends the result itself.
+      # Named, not referenced: the state machine already depends on this function.
+      { Action = ["states:SendTaskSuccess", "states:SendTaskFailure"], Resource = ["arn:aws:states:${var.region}:${var.account_id}:stateMachine:${var.name}-approval"] },
+    ]
     ws-authorizer = [{ Action = ["cognito-idp:DescribeUserPool"], Resource = ["arn:aws:cognito-idp:${var.region}:${var.account_id}:userpool/${var.user_pool_id}"] }]
     ws-connection = [{ Action = ["dynamodb:PutItem", "dynamodb:DeleteItem", "dynamodb:UpdateItem"], Resource = [var.connections_arn] }]
     ws-broadcast = [
@@ -216,6 +222,8 @@ locals {
     "GET /city", "GET /city/agent", "POST /city/instruct", "POST /messages", "POST /wake-check", "GET /tickets", "GET /tickets/{id}", "GET /jobs",
     "GET /departments", "GET /departments/presets", "GET /agents", "GET /workforce", "GET /costs", "GET /health", "GET /questions", "POST /questions/{id}/answer",
     "POST /questions/{id}/default", "POST /approvals/{id}", "GET /settings", "PUT /settings", "GET /chief-of-staff",
+    # Autopilot (decision 125): while the owner is away.
+    "GET /away-summary", "GET /standing-orders", "POST /standing-orders", "PUT /standing-orders/{id}", "DELETE /standing-orders/{id}",
     "POST /workers/home", "POST /tasks/{id}/cancel", "POST /city/reset", "POST /agents/{id}/home",
     "GET /memory", "POST /notes", "GET /apps", "DELETE /apps/{id}", "PUT /apps/{id}",
     "POST /apps/{id}/bridge", "POST /apps/{id}/proposals", "POST /apps/{id}/rollback", "GET /apps/{id}/activity",
@@ -261,8 +269,10 @@ locals {
     # The owner's calendar: every connected account read every 15 minutes (skipped when the feature is off).
     calendar-import = { schedule = "rate(15 minutes)", fn = "scheduler", input = { job = "calendar_import" }, state = "ENABLED" }
     # The Chief of Staff (decision 124): a sweep for anything still undecided, and the daily digest (18:00 Stockholm, winter).
-    chief-sweep  = { schedule = "rate(5 minutes)", fn = "chief-of-staff", input = { job = "sweep" }, state = "ENABLED" }
-    chief-digest = { schedule = "cron(0 17 * * ? *)", fn = "chief-of-staff", input = { job = "digest" }, state = "ENABLED" }
+    chief-sweep = { schedule = "rate(5 minutes)", fn = "chief-of-staff", input = { job = "sweep" }, state = "ENABLED" }
+    # Standing orders (decision 125): each due order starts one job for its department.
+    standing-orders = { schedule = "rate(5 minutes)", fn = "scheduler", input = { job = "standing_orders" }, state = "ENABLED" }
+    chief-digest    = { schedule = "cron(0 17 * * ? *)", fn = "chief-of-staff", input = { job = "digest" }, state = "ENABLED" }
   }
 }
 

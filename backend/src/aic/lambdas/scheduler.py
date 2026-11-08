@@ -13,6 +13,8 @@ again (within the cap) when work resumes.
 - calendar_import: every 15 minutes, the owner's one calendar is read from every connected account (and the
   invitation emails of plain IMAP accounts), merged and stored (docs/MAIL_CALENDAR.md §12). Skipped when the
   Calendar feature is off. "Refresh now" in the HUD starts the same job.
+- standing_orders: every 5 minutes, each due standing order starts one ordinary job for its department
+  (decision 125); one live job per order at a time.
 - warm_ace: keeps AIC's runtime container running (a "warm" ping every few minutes on the owner's conversation
   session), so a message never pays the container's cold start. Created ENABLED: an idle container costs nothing.
 """
@@ -33,13 +35,14 @@ from aic.shared.hierarchy.factory import Factory, FactoryClient
 from aic.shared.hierarchy.queue import Queue
 from aic.shared.ledger import Ledger, Record
 from aic.shared.log import log
+from aic.shared.standing_orders import run_due
 from aic.shared.table import UpdateOptions
 
 from ._runtime import run
 from .dispatcher import AgentCoreInvoker, AgentInvoker, session_id_for
 from .improve import improvement_allowed
 
-Job = Literal["sweep", "retire_idle", "reminders", "improve", "warm_ace", "calendar_import"]
+Job = Literal["sweep", "retire_idle", "reminders", "improve", "warm_ace", "calendar_import", "standing_orders"]
 
 # The conversations the HUD talks to AIC on (see api.py: POST /messages uses "main").
 WARM_CONVERSATIONS = ("main",)
@@ -188,6 +191,21 @@ async def run_job(
         return await warm_ace(invoker, os.environ if env is None else env)
     if job == "calendar_import":
         return await calendar_import(ledger, bus, os.environ if env is None else env)
+    if job == "standing_orders":
+        # Standing orders (decision 125): each due order starts one ordinary job for its department.
+
+        async def city_settings() -> dict[str, Any]:
+            return await ledger.settings(default_settings())
+
+        d = CityDeps(
+            ledger=ledger,
+            bus=bus,
+            queue=queue,
+            factory=factory or Factory(ledger, bus, city_settings),
+            settings=city_settings,
+            max_review_rounds=3,
+        )
+        return dict(await run_due(d))
     if job in ("sweep", "retire_idle"):
         settings: Record = await ledger.settings(default_settings())
         minutes = int(settings.get("worker_idle_release_minutes") or 15)

@@ -39,6 +39,8 @@ def default_settings() -> dict[str, Any]:
         "first_run_done": False,
         # The Chief of Staff decides Needs you items the moment they appear (decision 124); off = they wait.
         "chief_of_staff_enabled": True,
+        # Autopilot (decision 125): nothing waits on the owner; off = the behaviour before it.
+        "autopilot": True,
     }
 
 

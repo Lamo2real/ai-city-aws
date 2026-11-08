@@ -860,3 +860,18 @@ describe("the Chief of Staff (decision 124)", () => {
     expect(block).not.toMatch(/s3:|secretsmanager|sqs:|states:|cloudfront/);
   });
 });
+
+describe("Autopilot (decision 125)", () => {
+  const api = readFileSync("infra/modules/api/main.tf", "utf8");
+  const routes = api.slice(api.indexOf("routes = ["), api.indexOf("]", api.indexOf("routes = [")));
+  it("the away summary and standing-order routes sit behind the JWT authorizer", () => {
+    for (const r of ['"GET /away-summary"', '"GET /standing-orders"', '"POST /standing-orders"', '"PUT /standing-orders/{id}"', '"DELETE /standing-orders/{id}"'])
+      expect(routes).toContain(r);
+  });
+  it("the scheduler starts due standing orders every 5 minutes, enabled", () => {
+    expect(api).toMatch(/standing-orders = \{ schedule = "rate\(5 minutes\)", fn = "scheduler", input = \{ job = "standing_orders" \}, state = "ENABLED" \}/);
+  });
+  it("the approvals function may finish only its own workflow's task (an approval decided before its token)", () => {
+    expect(api).toMatch(/Action = \["states:SendTaskSuccess", "states:SendTaskFailure"\], Resource = \["arn:aws:states:\$\{var\.region\}:\$\{var\.account_id\}:stateMachine:\$\{var\.name\}-approval"\]/);
+  });
+});

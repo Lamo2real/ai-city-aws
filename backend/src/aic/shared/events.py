@@ -55,6 +55,8 @@ class TicketRecord(_M):
     review_rounds: float = 0
     conversation: str | None = None
     """AIC's conversation the task came from, so the result is spoken back there."""
+    standing_order: str | None = None
+    """The standing order that started this job (decision 125); None for the owner's own jobs."""
     created_at: str
     updated_at: str
 

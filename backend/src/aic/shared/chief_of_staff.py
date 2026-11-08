@@ -32,17 +32,31 @@ from .utility import agents_dir
 
 CHIEF: Final = "chief_of_staff"
 Kind = Literal["question", "approval"]
-KEEP_DAYS = 8
-"""How long a decision stays listed (``GET /chief-of-staff`` shows the last 7 days)."""
-CLAIM_S = 600
+KEEP_DAYS = 62
+"""How long a decision is kept: two months away still adds up in ``GET /away-summary`` (the list shows 7 days)."""
+CLAIM_S = 240
 """One review per item at a time; a failed review is tried again by a sweep once this runs out."""
+MAX_TRIES = 3
+"""Autopilot: after this many reviews without a usable decision the item is decided anyway (decision 125)."""
+LOOP_LIMIT = 5
+"""Autopilot: a part that already had this many decisions in a day is a loop; its job is stopped, no model call."""
+CARRY_ON = (
+    "Carry on without that part: use another source or skip it, and say in your result what was left out "
+    "and what the owner can do when they are back. Do not ask about it again."
+)
 
 Apply = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
 """Carries out one decision through the api Lambda (``api.steward_apply``); returns ``{"ok": bool, ...}``."""
 
 
+def autopilot(settings: dict[str, Any]) -> bool:
+    """Autopilot (decision 125, default on): nothing waits on the owner. Off = the behaviour before it."""
+    return settings.get("autopilot") is not False
+
+
 def enabled(settings: dict[str, Any]) -> bool:
-    return settings.get("chief_of_staff_enabled") is not False
+    """The Chief of Staff decides when it is switched on, and always under Autopilot (nobody else would)."""
+    return settings.get("chief_of_staff_enabled") is not False or autopilot(settings)
 
 
 def _prompt() -> str:
@@ -62,6 +76,7 @@ class Decision:
     answer: str = ""
     reason: str = ""
     why: str = ""
+    service: str = ""
 
 
 _DECISIONS = ("answer", "approve", "refuse", "stop_job", "needs_owner")
@@ -86,6 +101,7 @@ def parse_decision(text: str, kind: Kind) -> Decision | None:
         answer=str(j.get("answer") or "").strip()[:4000],
         reason=" ".join(str(j.get("reason") or "").split())[:240],
         why=" ".join(str(j.get("why") or "").split())[:240],
+        service=" ".join(str(j.get("service") or "").split())[:60],
     )
     if d == "answer" and not out.answer:
         return None
@@ -188,27 +204,71 @@ async def record_decision(ledger: Ledger, bus: EventBus, kind: Kind, item: Recor
     await bus.put({"type": "steward.decided", "id": item["id"], "kind": kind, "choice": choice, "reason": reason})
 
 
-async def mark_needs_owner(ledger: Ledger, kind: Kind, item: Record, why: str) -> None:
+async def mark_needs_owner(ledger: Ledger, kind: Kind, item: Record, why: str, service: str = "") -> None:
     pk = f"Q#{item['id']}" if kind == "question" else f"APPROVAL#{item['id']}"
+    at = now_iso(ledger.now())
     await ledger.table.update(
-        pk, "META", UpdateOptions(set={"needs_owner_reason": why, "needs_owner_at": now_iso(ledger.now())})
+        pk, "META", UpdateOptions(set={"needs_owner_reason": why, "needs_owner_service": service, "needs_owner_at": at})
     )
 
 
+def service_key(service: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", service.lower()).strip("-")[:40] or "other"
+
+
+async def when_back(ledger: Ledger, service: str, why: str, title: str, item_id: str) -> None:
+    """One entry per service on the owner's "When you're back" list (decision 125); a repeat only updates it."""
+    key = service_key(service)
+    await ledger.table.update(
+        "BACK",
+        key,
+        UpdateOptions(
+            set={
+                "id": f"back-{key}",
+                "service": service or "Other",
+                "why": why,
+                "title": title,
+                "item_id": item_id,
+                "at": now_iso(ledger.now()),
+                "ttl": ledger.now_ms() // 1000 + KEEP_DAYS * 86_400,
+            },
+            add={"count": 1},
+        ),
+    )
+
+
+async def when_back_list(ledger: Ledger) -> list[dict[str, Any]]:
+    rows = sorted(await ledger.table.query("BACK"), key=lambda r: str(r.get("at", "")), reverse=True)
+    return [
+        {"id": r["id"], "title": r.get("title", ""), "why": r.get("why", ""), "service": r.get("service", "")}
+        for r in rows
+    ]
+
+
 async def status(ledger: Ledger, settings: dict[str, Any]) -> dict[str, Any]:
-    """``GET /chief-of-staff``: on or off, what it decided in the last 7 days, what it left for the owner."""
+    """``GET /chief-of-staff``: on or off, what it decided in the last 7 days, what is left for the owner."""
     decided = [
         {k: r.get(k, "") for k in ("id", "kind", "title", "choice", "reason", "at", "department")}
         for r in await recent_decisions(ledger)
     ][:200]
-    left: list[dict[str, str]] = []
+    left: list[dict[str, Any]] = await when_back_list(ledger)
     for kind, items in (("question", await ledger.open_questions()), ("approval", await ledger.pending_approvals())):
         for it in items:
-            if it.get("needs_owner_reason"):
+            if it.get("needs_owner_reason"):  # Autopilot off: the item itself still waits
                 left.append(
-                    {"id": it["id"], "title": title_of(kind, it), "why": str(it["needs_owner_reason"])}  # type: ignore[arg-type]
+                    {
+                        "id": it["id"],
+                        "title": title_of(kind, it),  # type: ignore[arg-type]
+                        "why": str(it["needs_owner_reason"]),
+                        "service": str(it.get("needs_owner_service") or ""),
+                    }
                 )
-    return {"enabled": enabled(settings), "decided": decided, "needs_owner": left}
+    return {
+        "enabled": enabled(settings),
+        "autopilot": autopilot(settings),
+        "decided": decided,
+        "needs_owner": left,
+    }
 
 
 # ---------- the review ----------
@@ -232,9 +292,53 @@ def _op(kind: Kind, item: Record, d: Decision) -> dict[str, Any]:
     return {**base, "op": d.decision}
 
 
-async def decide(d: ChiefDeps, kind: Kind, item: Record) -> dict[str, Any]:
-    """One item: the model's decision, then carried out (or left for the owner). Never raises for a bad reply."""
+def _pk(kind: Kind, item: Record) -> str:
+    return f"Q#{item['id']}" if kind == "question" else f"APPROVAL#{item['id']}"
+
+
+async def _decided(d: ChiefDeps, kind: Kind, item: Record, op: dict[str, Any], result: str) -> dict[str, Any]:
+    out = await d.apply(op)
+    log("info", "chief.decided", id=item["id"], kind=kind, decision=result, ok=bool(out.get("ok")))
+    return {"id": item["id"], "result": result if out.get("ok") else "not_applied"}
+
+
+async def _fallback(d: ChiefDeps, kind: Kind, item: Record, why: str) -> dict[str, Any]:
+    """Autopilot never leaves an item waiting: the default answer for a question, a refusal for an approval."""
+    if kind == "question":
+        op = {"kind": kind, "id": item["id"], "op": "default", "reason": f"{why} Took the default so work goes on."}
+    else:
+        op = {"kind": kind, "id": item["id"], "op": "refuse", "reason": f"{why} Refused; the agent carries on."}
+    return await _decided(d, kind, item, op, "fallback")
+
+
+async def _hands(d: ChiefDeps, kind: Kind, item: Record, service: str, why: str, instead: str) -> dict[str, Any]:
+    """Autopilot: what needs the owner's own hands never blocks. The agent carries on; the owner gets one line."""
+    await when_back(d.ledger, service, why, title_of(kind, item), item["id"])
+    reason = f"Needs you later: {why}"[:240]
+    if kind == "question":
+        op = {"kind": kind, "id": item["id"], "op": "answer", "answer": instead or CARRY_ON, "reason": reason}
+    else:
+        op = {"kind": kind, "id": item["id"], "op": "refuse", "reason": reason}
+    return await _decided(d, kind, item, op, "carry_on")
+
+
+async def _loop(d: ChiefDeps, item: Record) -> bool:
+    if not item.get("ticket_id"):
+        return False
+    rows = await recent_decisions(d.ledger, days=1)
+    return sum(1 for r in rows if r.get("ticket_id") == item["ticket_id"]) >= LOOP_LIMIT
+
+
+async def decide(d: ChiefDeps, kind: Kind, item: Record, tries: int = 1) -> dict[str, Any]:
+    """One item: the model's decision, then carried out. Under Autopilot every item ends decided or its job
+    stopped; with Autopilot off an item may be left for the owner. Never raises for a bad reply."""
     settings = await d.settings()
+    auto = autopilot(settings)
+    if auto and await _loop(d, item):
+        why = f"This part already had {LOOP_LIMIT} decisions today: it is going round in circles."
+        out = await d.apply({"kind": kind, "id": item["id"], "op": "stop_job", "reason": f"{why} Stopped the job."})
+        if out.get("ok"):
+            return {"id": item["id"], "result": "stop_job"}
     prompt = (
         f"{_prompt()}\n\n<item>\n{json.dumps(_item_view(kind, item), ensure_ascii=False)}\n</item>\n\n"
         f"<context>\n{json.dumps(await context(d.ledger, kind, item), ensure_ascii=False, default=str)}\n</context>"
@@ -257,38 +361,60 @@ async def decide(d: ChiefDeps, kind: Kind, item: Record) -> dict[str, Any]:
     )
     dec = parse_decision(r.output.text, kind)
     if dec is None:
-        log("warn", "chief.unparsed", id=item["id"], kind=kind)
+        log("warn", "chief.unparsed", id=item["id"], kind=kind, tries=tries)
+        if auto and tries >= MAX_TRIES:
+            return await _fallback(d, kind, item, f"No clear decision after {tries} tries.")
         return {"id": item["id"], "result": "unparsed"}
     if dec.decision == "needs_owner":
-        await mark_needs_owner(d.ledger, kind, item, dec.why)
+        if auto:
+            return await _hands(d, kind, item, dec.service, dec.why, dec.answer)
+        await mark_needs_owner(d.ledger, kind, item, dec.why, dec.service)
         return {"id": item["id"], "result": "needs_owner"}
-    out = await d.apply(_op(kind, item, dec))
-    log("info", "chief.decided", id=item["id"], kind=kind, decision=dec.decision, ok=bool(out.get("ok")))
-    return {"id": item["id"], "result": dec.decision if out.get("ok") else "not_applied"}
+    res = await _decided(d, kind, item, _op(kind, item, dec), dec.decision)
+    if auto and res["result"] == "not_applied" and dec.decision == "stop_job":
+        return await _fallback(d, kind, item, "There was no running job to stop.")
+    return res
 
 
-def _waiting(item: Record) -> bool:
-    return not item.get("needs_owner_reason") and item.get("decided_by") != CHIEF
+def _waiting(item: Record, auto: bool) -> bool:
+    if item.get("decided_by") == CHIEF:
+        return False
+    return auto or not item.get("needs_owner_reason")
 
 
 async def review(d: ChiefDeps, only: str | None = None) -> dict[str, Any]:
-    """Every open item (or just ``only``) not yet decided and not left for the owner. Off = nothing happens."""
-    if not enabled(await d.settings()):
+    """Every open item (or just ``only``) not yet decided. Off = nothing happens. With Autopilot off, items left
+    for the owner are skipped; under Autopilot they are decided too (the agent carries on without that part)."""
+    settings = await d.settings()
+    if not enabled(settings):
         return {"skipped": "chief of staff is off"}
+    auto = autopilot(settings)
     items: list[tuple[Kind, Record]] = [
         *(("question", q) for q in await d.ledger.open_questions()),
         *(("approval", a) for a in await d.ledger.pending_approvals()),
     ]
     results: list[dict[str, Any]] = []
     for kind, item in items:
-        if (only and item["id"] != only) or not _waiting(item):
+        if (only and item["id"] != only) or not _waiting(item, auto):
             continue
         if not await d.ledger.claim(f"chief:{item['id']}", CLAIM_S):
             continue
+        tries = int(item.get("chief_tries") or 0) + 1
+        await d.ledger.table.update(_pk(kind, item), "META", UpdateOptions(set={"chief_tries": tries}))
         try:
-            results.append(await decide(d, kind, item))
+            if auto and item.get("needs_owner_reason"):  # left for the owner before Autopilot: carry on now
+                why = str(item["needs_owner_reason"])
+                results.append(await _hands(d, kind, item, str(item.get("needs_owner_service") or ""), why, ""))
+            else:
+                results.append(await decide(d, kind, item, tries))
         except Exception as e:  # one bad item never stops the rest; the next sweep tries it again
-            log("warn", "chief.failed", id=item["id"], error=type(e).__name__)
+            log("warn", "chief.failed", id=item["id"], error=type(e).__name__, tries=tries)
+            if auto and tries >= MAX_TRIES:
+                try:
+                    results.append(await _fallback(d, kind, item, f"The decision failed {tries} times."))
+                    continue
+                except Exception as e2:
+                    log("warn", "chief.fallback_failed", id=item["id"], error=type(e2).__name__)
             results.append({"id": item["id"], "result": "error"})
     return {"reviewed": len(results), "results": results}
 
@@ -315,3 +441,37 @@ async def digest(ledger: Ledger, bus: EventBus) -> dict[str, Any]:
     await ledger.add_conversation_line("main", "ace", text)
     await bus.put({"type": "ace.reply", "conversation": "main", "text": text, "done": True})
     return {"digest": "sent", "decided": len(rows)}
+
+
+# ---------- while you were away (decision 125) ----------
+async def away_summary(ledger: Ledger, since: str) -> dict[str, Any]:
+    """``GET /away-summary``: what finished, what is still going, how much the Chief of Staff decided, what the
+    standing orders handled, and the short "When you're back" list. Plain words, no ids in the names."""
+    from .hierarchy.tasks import JOB_WORDS, short_name
+    from .standing_orders import handled_since
+
+    tasks = [
+        t
+        for t in await ledger.list_tickets(
+            ("open", "in_progress", "in_review", "waiting_on_owner", "parked", "done", "failed", "cancelled")
+        )
+        if t.get("kind", "task") == "task" and not t.get("parent_id") and not t.get("standing_order")
+    ]
+
+    def row(t: Record) -> dict[str, Any]:
+        return {"id": t["id"], "name": short_name(t), "status": JOB_WORDS.get(t["status"], t["status"]),
+                "at": t.get("updated_at", "")}  # fmt: skip
+
+    finished = [row(t) for t in tasks if t["status"] in ("done", "failed", "cancelled") and t["updated_at"] >= since]
+    running = [row(t) for t in tasks if t["status"] not in ("done", "failed", "cancelled")]
+    decided = [r for r in await recent_decisions(ledger, days=KEEP_DAYS) if str(r.get("at", "")) >= since]
+    return {
+        "since": since,
+        "jobs_finished": sorted(finished, key=lambda r: str(r["at"]), reverse=True),
+        "jobs_running": sorted(running, key=lambda r: str(r["at"]), reverse=True),
+        "decided": len(decided),
+        "handled_by_standing_orders": [
+            {k: h.get(k) for k in ("source", "item", "summary", "at")} for h in await handled_since(ledger, since)
+        ][:500],
+        "when_youre_back": await when_back_list(ledger),
+    }

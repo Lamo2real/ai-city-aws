@@ -16,6 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from aic.shared import standing_orders as standing
 from aic.shared.apps import (
     MAX_FILE_BYTES,
     MAX_FILES,
@@ -29,6 +30,7 @@ from aic.shared.apps import (
     validate_files,
     version_files,
 )
+from aic.shared.chief_of_staff import autopilot
 from aic.shared.events import now_iso
 from aic.shared.github import redact
 from aic.shared.hierarchy.actions import (
@@ -325,7 +327,8 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 else ""
             ) + (f" ({verdict.reason})" if verdict.reason else "")
         open_cap = int((await d.settings()).get("max_open_jobs") or 3)
-        open_jobs = len(await running_jobs(d))
+        # Standing orders' rounds (decision 125) don't take the owner's job slots.
+        open_jobs = len([j for j in await running_jobs(d) if not j.get("standing_order")])
         if open_jobs >= open_cap and not target:
             log("info", "delegate.refused", open_jobs=open_jobs, cap=open_cap)
             return (
@@ -625,6 +628,15 @@ def _ask_owner(d: CityDeps, c: TurnCtx) -> ToolSpec:
                 "default_answer": str(a["default_answer"]),
             }
         )
+        if autopilot(await d.settings()):
+            # Autopilot (decision 125): nothing waits on the owner. The Chief of Staff decides within seconds and
+            # the part stays in progress.
+            await d.bus.put({"type": "question.asked", "question": q})
+            return (
+                f"The Chief of Staff decides this for the owner within seconds (question {q['id']}). End your turn; "
+                "the answer arrives as a new message. Anything that needs the owner's own hands (a sign-in, a key, "
+                "a payment) will not happen while they are away: plan to carry on without it."
+            )
         await move(d, c.ticket_id, "waiting_on_owner", "question for the owner")
         await d.bus.put({"type": "question.asked", "question": q})
         return f"Asked the owner (question {q['id']}). End your turn; the answer arrives as a new message."
@@ -1036,7 +1048,9 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 return f"PASS recorded. {t['to']} has finished and gone home."
             return f"PASS recorded. {t['to']} still has other work; it goes home when that passes."
         if rnd >= d.max_review_rounds:
-            await move(d, t["id"], "waiting_on_owner", "too many review rounds", {"review_rounds": rnd})
+            # Under Autopilot the Chief of Staff answers at once, so the part isn't parked for the owner.
+            park = "in_review" if autopilot(await d.settings()) else "waiting_on_owner"
+            await move(d, t["id"], park, "too many review rounds", {"review_rounds": rnd})
             q = await d.ledger.ask_question(
                 {
                     "asked_by": c.agent_id,
@@ -1583,8 +1597,80 @@ def tools_for(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         "manager": _manager_tools,
         "worker": _worker_tools,
     }[c.role](d, c)
-    extra = [*_ace_knowledge_tools(d), _calendar_agenda_tool(d)] if c.role == "ace" else []
+    extra = (
+        [*_ace_knowledge_tools(d), _calendar_agenda_tool(d), *_standing_order_tools(d)]
+        if c.role == "ace"
+        else [_record_handled_tool(d, c)]
+        if c.role in ("manager", "worker")
+        else []
+    )
     return [*own, _search_tool(d), *extra]
+
+
+# ---------- standing orders (decision 125) ----------
+def _standing_order_tools(d: CityDeps) -> list[ToolSpec]:
+    async def add(a: dict[str, Any]) -> str:
+        try:
+            o = await standing.add_order(d.ledger, a)
+        except standing.Invalid as e:
+            return str(e)
+        return (
+            f"Standing order {o['id']} is on: every {o['every_minutes']} minutes the {o['department']} department "
+            f"checks {o['source']} and handles what is new. It keeps running while the owner is away."
+        )
+
+    async def listing(_: dict[str, Any]) -> str:
+        orders = await standing.list_orders(d.ledger)
+        if not orders:
+            return "No standing orders."
+        return "\n".join(
+            f"{o['id']}: {'on' if o.get('enabled') else 'off'}, every {o.get('every_minutes')} min, "
+            f"{o['department']} watches {o['source']}: {o['instructions'][:160]}"
+            for o in orders
+        )
+
+    async def stop(a: dict[str, Any]) -> str:
+        o = await standing.update_order(d.ledger, str(a.get("id") or ""), {"enabled": False})
+        return f"Standing order {o['id']} is off." if o else "There is no standing order with that id."
+
+    return [
+        ToolSpec(
+            "add_standing_order",
+            "On the owner's request (\"while I'm away, handle new Jira tickets\"): watch a source and handle what is "
+            'new, again and again, without asking. source: the connector, channel or inbox ("Jira project SUP", '
+            '"Slack #support"); instructions: what to do with each new item; department: who does it (default '
+            "Customer Support); every_minutes: how often (default 15).",
+            _obj(
+                {"source": _s(2), "instructions": _s(3), "department": _s(), "every_minutes": {"type": "integer"}},
+                ("department", "every_minutes"),
+            ),
+            add,
+        ),
+        ToolSpec("list_standing_orders", "The owner's standing orders, on or off.", _obj({}), listing),
+        ToolSpec("stop_standing_order", "Turn one standing order off (by its id).", _obj({"id": _s(3)}), stop),
+    ]
+
+
+def _record_handled_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
+    async def record(a: dict[str, Any]) -> str:
+        oid = str(a.get("order_id") or "")
+        if not await standing.get_order(d.ledger, oid):
+            return "There is no standing order with that id."
+        try:
+            new = await standing.record_handled(
+                d.ledger, oid, str(a.get("item") or ""), str(a.get("summary") or ""), c.ticket_id
+            )
+        except standing.Invalid as e:
+            return str(e)
+        return "Recorded." if new else "Already handled earlier: skip this item."
+
+    return ToolSpec(
+        "record_handled",
+        "For a standing order's job: record one item you handled (its own key, and one line of what you did), so "
+        'it is never handled twice. Answers "Already handled" for an item done before: skip it then.',
+        _obj({"order_id": _s(3), "item": _s(1), "summary": _s(1)}),
+        record,
+    )
 
 
 async def file_approval(

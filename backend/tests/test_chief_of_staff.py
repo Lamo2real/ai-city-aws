@@ -115,8 +115,9 @@ async def test_refuses_an_approval() -> None:
     assert got is not None and got["status"] == "denied" and got["decision"] == "Refused"
 
 
-async def test_items_that_need_the_owners_hands_stay_open_with_one_sentence_why() -> None:
+async def test_with_autopilot_off_items_that_need_the_owners_hands_stay_open_with_one_sentence_why() -> None:
     d = make()
+    await d.ledger.update_settings({"autopilot": False})
     q = await d.ledger.ask_question(
         {
             "asked_by": "w1",
@@ -132,7 +133,7 @@ async def test_items_that_need_the_owners_hands_stay_open_with_one_sentence_why(
     got = await d.ledger.get_question(q["id"])
     assert got is not None and got["status"] == "open" and "Stripe key" in got["needs_owner_reason"]
     s = js(await handle_http(ev("GET", "/chief-of-staff"), d))
-    assert s["needs_owner"] == [{"id": q["id"], "title": q["text"], "why": got["needs_owner_reason"]}]
+    assert s["needs_owner"] == [{"id": q["id"], "title": q["text"], "why": got["needs_owner_reason"], "service": ""}]
     # Later sweeps leave it alone: no second model call.
     await d.ledger.table.delete(f"IDEMP#chief:{q['id']}", "META")
     await review(chief(d, model))
@@ -142,7 +143,8 @@ async def test_items_that_need_the_owners_hands_stay_open_with_one_sentence_why(
 async def test_off_means_items_wait_for_the_owner() -> None:
     d = make()
     await _stuck_research(d)
-    assert (await handle_http(ev("PUT", "/settings", {"chief_of_staff_enabled": False}), d))["statusCode"] == 200
+    off = {"chief_of_staff_enabled": False, "autopilot": False}
+    assert (await handle_http(ev("PUT", "/settings", off), d))["statusCode"] == 200
     model = Model({"decision": "answer", "answer": "Wait", "reason": "r"})
     assert (await review(chief(d, model)))["skipped"]
     assert model.calls == []

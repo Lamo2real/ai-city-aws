@@ -14,9 +14,10 @@ import os
 import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Literal, cast
 
+from aic.shared import standing_orders as standing
 from aic.shared.app_activity import app_activity
 from aic.shared.app_bridge import Invoke, api_bridge, file_proposal, run_proposal
 from aic.shared.app_caps import Invalid, MailProposals, proposals_from_env
@@ -33,7 +34,7 @@ from aic.shared.apps import (
 )
 from aic.shared.aws import aws_city
 from aic.shared.caps import validate_caps
-from aic.shared.chief_of_staff import CHIEF, record_decision
+from aic.shared.chief_of_staff import CHIEF, away_summary, record_decision
 from aic.shared.chief_of_staff import status as chief_status
 from aic.shared.clients import client
 from aic.shared.config import caps_config
@@ -102,6 +103,11 @@ ROUTES: list[tuple[str, str]] = [
     ("GET", "/settings"),
     ("PUT", "/settings"),
     ("GET", "/chief-of-staff"),
+    ("GET", "/away-summary?since=2026-11-01T00:00:00Z"),
+    ("GET", "/standing-orders"),
+    ("POST", "/standing-orders"),
+    ("PUT", "/standing-orders/so-1"),
+    ("DELETE", "/standing-orders/so-1"),
     ("POST", "/workers/home"),
     ("POST", "/tasks/t-1/cancel"),
     ("POST", "/city/reset"),
@@ -759,6 +765,28 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         return reply(ans.status, ans.body)
     if is_("GET", r"/chief-of-staff"):
         return reply(200, await chief_status(d.ledger, await d.settings()))
+    if is_("GET", r"/away-summary"):
+        since = str(q.get("since") or "")
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}(T[\d:.]+Z?)?", since):
+            since = now_iso(d.ledger.now() - timedelta(days=7))
+        return reply(200, await away_summary(d.ledger, since))
+    if is_("GET", r"/standing-orders"):
+        return reply(200, {"standing_orders": await standing.list_orders(d.ledger)})
+    if is_("POST", r"/standing-orders"):
+        try:
+            return reply(201, {"standing_order": await standing.add_order(d.ledger, _body(event))})
+        except standing.Invalid as e:
+            return problem(400, str(e))
+    if is_("PUT", r"/standing-orders/[\w-]+"):
+        try:
+            o = await standing.update_order(d.ledger, seg[1], _body(event))
+        except standing.Invalid as e:
+            return problem(400, str(e))
+        return reply(200, {"standing_order": o}) if o else problem(404, "That standing order does not exist.")
+    if is_("DELETE", r"/standing-orders/[\w-]+"):
+        if not await standing.delete_order(d.ledger, seg[1]):
+            return problem(404, "That standing order does not exist.")
+        return reply(200, {"removed": seg[1]})
     if is_("GET", r"/settings"):
         return reply(200, {"settings": await d.settings()})
     if is_("PUT", r"/settings"):
@@ -926,17 +954,23 @@ async def decide_approval(
         # Only a yes (the owner's or the Chief of Staff's, decision 124) moves an add-connector request on (§1.3.4);
         # a no deletes the record.
         await on_connector_approval(_connectors(d), cur, approved)
-    if cur.get("task_token") and d.sfn is not None:
-        if approved:
-            await asyncio.to_thread(
-                d.sfn.send_task_success,
-                taskToken=cur["task_token"],
-                output=json.dumps({"approved": True, "id": cur["id"]}),
-            )
-        else:
-            await asyncio.to_thread(
-                d.sfn.send_task_failure, taskToken=cur["task_token"], error="Refused", cause="The owner refused."
-            )
+    # Re-read for the token: the workflow may have stored it after ``cur`` was read (approvals.py sends the result
+    # itself when it stores the token after this decision).
+    token = (await d.ledger.get_approval(cur["id"]) or {}).get("task_token")
+    if token and d.sfn is not None:
+        try:
+            if approved:
+                await asyncio.to_thread(
+                    d.sfn.send_task_success,
+                    taskToken=token,
+                    output=json.dumps({"approved": True, "id": cur["id"]}),
+                )
+            else:
+                await asyncio.to_thread(
+                    d.sfn.send_task_failure, taskToken=token, error="Refused", cause="The owner refused."
+                )
+        except Exception as e:  # the workflow already got the result from approvals.py
+            log("info", "approval.sfn_already_sent", id=cur["id"], error=type(e).__name__)
     await d.bus.put({"type": "approval.decided", "id": a["id"], "approved": approved})
     if approved and str(cur.get("requested_by", "")).startswith("app:"):
         # An app's proposal: run that one tool once, exactly as the owner saw it.
@@ -1019,6 +1053,8 @@ async def _put_settings(b: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         patch["first_run_done"] = b["first_run_done"]
     if isinstance(b.get("chief_of_staff_enabled"), bool):
         patch["chief_of_staff_enabled"] = b["chief_of_staff_enabled"]
+    if isinstance(b.get("autopilot"), bool):
+        patch["autopilot"] = b["autopilot"]
     if isinstance(b.get("mail_access"), dict):
         # Orchestrator and managers may read mail when the owner turns it on; workers never (decision 79).
         ma = b["mail_access"]

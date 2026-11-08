@@ -41,6 +41,8 @@ def finished_job(detail: Any) -> dict[str, Any] | None:
         return None
     if e.get("previous") in FINAL:
         return None  # already final before: a no-op move, not a second finish
+    if ticket.get("standing_order"):
+        return None  # a standing order's round (every 15 minutes): what it handled is in the away summary
     return dict(ticket)
 
 
