@@ -24,8 +24,18 @@ function triggers(text: string): string[] {
 }
 
 describe("GitHub workflows", () => {
-  it("exist: ci.yml and deploy.yml", () => {
-    expect(files.sort()).toEqual(["ci.yml", "deploy.yml"]);
+  it("exist: ci.yml, deploy.yml and the iPhone app's ios-testflight.yml", () => {
+    expect(files.sort()).toEqual(["ci.yml", "deploy.yml", "ios-testflight.yml"]);
+  });
+  it("ios-testflight.yml builds only the iPhone app: pushes to main touching ios/, never AWS", () => {
+    const text = readFileSync(join(WF, "ios-testflight.yml"), "utf8");
+    expect(triggers(text)).toEqual(["push", "workflow_dispatch"]);
+    expect(text).toMatch(/branches: \[main\]/);
+    expect(text).toMatch(/paths: \["ios\/\*\*"/);
+    expect(text).not.toMatch(/aws-actions|id-token: write|role-to-assume|terraform|\baws /);
+    expect(text).toMatch(/permissions:\s*\n\s*contents: read/);
+    // The App Store Connect key lives only in a temp file that is removed at the end.
+    expect(text).toMatch(/rm -rf "\$RUNNER_TEMP\/asc"/);
   });
   it("ci.yml is started only by hand (workflow_dispatch)", () => {
     const text = readFileSync(join(WF, "ci.yml"), "utf8");
