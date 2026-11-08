@@ -482,10 +482,14 @@ export function identity(id) {
 // ---------- The map, in tiles of 16 art pixels ----------
 export const TILE = 16;
 export const BUILDING_H = 5;
-const PLOT_W = 9, SEAT_PITCH = 40, SEATS_PER_ROW = 4, STREET = 3, HQ_W = 12, HQ_H = 11, HOUSES_PER_ROW = 4, HOUSE_W = 3, HOUSE_ROW_H = 4;
+// Every department is one tower of the same size, however many work inside (the owner's choice, decision 117):
+// workers walk in through the door and are counted on the roof instead of sitting on a terrace that grows.
+export const TOWER_H = 12;
+const PLOT_W = 9, SEATS_PER_ROW = 4, STREET = 3, HQ_W = 12, HQ_H = 11, HOUSES_PER_ROW = 4, HOUSE_W = 3, HOUSE_ROW_H = 4;
 
 // An archived department keeps its slot, so a building never lands on another; it isn't drawn unless work is still open there.
-// `seats` is { dept: the highest seat in use + 1 }, so a crowded row of offices gets a deeper terrace.
+// `seats` is { dept: the highest seat in use + 1 }; it only adds a department the registry no longer lists (the
+// towers never grow).
 export function layout(state, { portrait = false, seats = {}, houses = 0 } = {}) {
   const names = departmentNames(state);
   for (const d of Object.keys(seats)) if (d !== "HQ" && !names.includes(d)) names.push(d); // someone works in a department the registry no longer lists
@@ -499,9 +503,7 @@ export function layout(state, { portrait = false, seats = {}, houses = 0 } = {})
   const streets = [portrait ? { y: 1 + HQ_H, x0: 0, x1: width } : { y: 1 + HQ_H, x0: 0, x1: avenueX }];
   let y = portrait ? 1 + HQ_H + STREET : 1;
   for (let r = 0; r < rows; r++) {
-    let most = 2 * SEATS_PER_ROW;
-    for (let c = 0; c < cols; c++) most = Math.max(most, seats[names[r * cols + c]] ?? 0);
-    const h = BUILDING_H + Math.ceil((Math.ceil(most / SEATS_PER_ROW) * SEAT_PITCH) / TILE);
+    const h = TOWER_H;
     for (let c = 0; c < cols; c++) {
       const name = names[r * cols + c], x = originX + c * (PLOT_W + STREET);
       if (!name) { lots.push({ x, y, w: PLOT_W, h }); continue; }
@@ -523,12 +525,14 @@ export function layout(state, { portrait = false, seats = {}, houses = 0 } = {})
   return { hq, buildings, lots, streets, hqStreet: 1 + HQ_H, officesEnd, avenue: avenueX, width, height: Math.max(y, homesY + homesH + 1), homes: { x: 1, y: homesY, w: homesW, h: homesH, houses: home }, portrait };
 }
 
-// The art-pixel spot for a seat on a department's terrace: where the figure's feet are.
-export const seatRows = (building) => Math.floor(((building.h - BUILDING_H) * TILE) / SEAT_PITCH);
+// Where a worker at work is: inside the tower, just behind its door (drawn hidden; the roof counts them). The seat
+// number still keys who is who, so a worker keeps its place between snapshots.
+export const seatRows = () => 0;
 export function seatSpot(building, seat) {
-  const r = Math.floor(seat / SEATS_PER_ROW), c = seat % SEATS_PER_ROW;
-  const pitch = (building.w * TILE - 8) / SEATS_PER_ROW;
-  return { x: building.x * TILE + 4 + Math.round(pitch * (c + 0.5)), y: (building.y + BUILDING_H) * TILE + r * SEAT_PITCH + 24 };
+  void seat;
+  void SEATS_PER_ROW;
+  const d = doorOf(building);
+  return { x: d.x, y: d.y - 2, inside: true };
 }
 
 // Two spots in each house's front yard.
@@ -545,9 +549,9 @@ export function walkRoute(world, from, to) {
   return a === b ? [{ x: from.x, y: a }, { x: to.x, y: a }, to] : [{ x: from.x, y: a }, { x: ax, y: a }, { x: ax, y: b }, { x: to.x, y: b }, to];
 }
 
-// The street-side door of a building: everyone enters and leaves here (the manager also stands at it).
+// The street-side door at the foot of a tower: everyone enters and leaves here (the manager stands beside it).
 export function doorOf(building) {
-  return { x: (building.x + building.w / 2) * TILE + 14, y: building.y * TILE + 78 };
+  return { x: (building.x + building.w / 2) * TILE, y: (building.y + building.h) * TILE - 6 };
 }
 
 // A commute keeps to the streets and uses doors: out through the door of the building being left, along the
