@@ -18,6 +18,7 @@ from aic.shared import workflows as wf
 from aic.shared.apps import drafts_of_ticket, get_app
 from aic.shared.connectors import ConnectorStore
 from aic.shared.events import now_iso
+from aic.shared.executives import ensure_executives
 from aic.shared.hierarchy.actions import CityDeps, move
 from aic.shared.ids import manager_id
 from aic.shared.knowledge.search import always_block
@@ -88,6 +89,7 @@ class AgentHost:
         self.o = o
 
     async def ensure_core(self) -> None:
+        await ensure_executives(self.d.ledger)  # decision 140: permanent, at home until the Orchestrator calls them in
         at = now_iso(self.d.ledger.now())
         for id, role, model in (("ace", "AIC", "haiku-5-5"), ("orchestrator", "Orchestrator", "fable-5-1")):
             if not await self.d.ledger.get_agent(id):

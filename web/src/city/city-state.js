@@ -19,7 +19,7 @@ export function initialState(now = Date.now()) {
   return { agents: {}, activities: {}, tickets: {}, questions: {}, approvals: {}, departments: {}, reviews: {}, costs: {}, usage: null, spend: {}, caps: null, parked: {}, city: null, capHit: null, feed: [], recent: {}, apps: {}, now };
 }
 
-export const deptOf = (agent) => (CORE.has(agent.id) ? "HQ" : agent.department || "other");
+export const deptOf = (agent) => (CORE.has(agent.id) || agent.kind === "executive" ? "HQ" : agent.department || "other");
 export const deptColor = (name) => DEPT_COLOR[name] ?? DEPT_COLOR.other;
 export function propFor(agent) {
   if (agent.kind !== "worker") return null;
@@ -107,6 +107,7 @@ export function plainWho(state, id) {
   const a = state.agents?.[id];
   if (!a) return "Someone on the team";
   if (a.kind === "manager") return `The ${deptOf(a)} manager`;
+  if (a.kind === "executive") return `The ${a.role}`;
   return a.role ? `The ${inSentence(a.role)} in ${deptOf(a)}` : `A worker in ${deptOf(a)}`;
 }
 
@@ -121,6 +122,9 @@ function storyOf(event, s) {
       const role = a.role ? inSentence(a.role) : "worker";
       return { key: `hire:${d}`, one: `${d} hired ${an(role)} ${role}`, many: `${d} hired {n} workers` };
     }
+    case "executive.office":
+      // Decision 140: called in to HQ to advise. Going home again stays off the panel.
+      return event.at_hq ? { key: `exec:${event.id}`, one: `The ${event.agent?.role ?? "executive"} came in to HQ to advise` } : null;
     case "agent.retired": {
       const a = s.agents[event.id];
       if (!a || a.kind !== "worker") return null;
@@ -193,6 +197,12 @@ export function stories(feedLines, limit = 8) {
 
 function reduceEvent(state, event, now) {
   switch (event.type) {
+    case "executive.office": {
+      // An executive (decision 140) was called in to HQ (state active) or went home (dormant). Never a worker.
+      const a = event.agent ?? state.agents[event.id];
+      if (!a) return state;
+      return { ...state, now, agents: { ...state.agents, [a.id]: { ...a, state: event.at_hq ? "active" : "dormant" } } };
+    }
     case "agent.hired": {
       const a = filed(state.departments, event.agent);
       return { ...state, now, agents: { ...state.agents, [a.id]: a }, departments: touch(state, deptOf(a), now), recent: { ...state.recent, [a.id]: { kind: "hired", at: now } }, feed: feed(state, `${a.role} ${event.revived ? "is back" : "hired"} in ${deptOf(a)}`, "hire", now) };
@@ -376,6 +386,8 @@ export function placement(state, id) {
   if (!a) return null;
   if (a.kind === "core" || CORE.has(id)) return { place: "hq", dept: "HQ", why: "core" };
   if (a.kind === "specialist") return { place: "home", dept: deptOf(a), why: "saved specialist" };
+  // The executives (decision 140): permanent, at home until the Orchestrator calls them in, at HQ while they advise.
+  if (a.kind === "executive") return a.state === "active" ? { place: "hq", dept: "HQ", why: "called in" } : { place: "home", dept: "HQ", why: "off duty" };
   const dept = deptOf(a);
   if (hasOpenWork(state, id)) return { place: "station", dept, why: "ticket" };
   if (a.awaiting_merge) return { place: "station", dept, why: "merge" };
@@ -695,7 +707,7 @@ export function limits(state) {
   const caps = state.caps ?? {};
   const cap = (k) => (typeof caps[k] === "number" ? caps[k] : null);
   const agents = Object.values(state.agents);
-  const active = agents.filter((a) => a.kind !== "core" && a.state === "active").length; // the rule runtime.ts applies when hiring
+  const active = agents.filter((a) => a.kind !== "core" && a.kind !== "executive" && a.state === "active").length; // the rule runtime.ts applies when hiring
   const workersMax = agents.filter((a) => a.kind === "manager").reduce((m, mgr) => Math.max(m, agents.filter((a) => a.parent === mgr.id && a.state === "active").length), 0);
   const spendCap = cap("daily_spend_usd_per_department");
   const departments = Object.entries(state.spend ?? {}).map(([dept, usd]) => ({ dept, usd, cap: spendCap, over: spendCap !== null && usd > spendCap, pct: spendCap ? Math.min(100, (usd / spendCap) * 100) : null }));

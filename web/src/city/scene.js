@@ -428,6 +428,8 @@ function freeLot(g, l, text) {
 // Where the four of the core stand on the plaza, in art pixels from the corner of HQ's plot.
 // The Orchestrator stands on the podium at the HQ entrance; AIC in the plaza, by the fountain.
 const CORE_SPOT = { orchestrator: [96, 100], ace: [62, 152] };
+// The executives' places at HQ while they advise (decision 140): in front of the boardroom window, left of the door.
+const EXEC_SPOT = { "exec-ceo": [22, 92], "exec-coo": [36, 92], "exec-cfo": [22, 106], "exec-cto": [36, 106] };
 const FOUNTAIN = [112, 140];
 const CORE_DESK = new Set();
 function headquarters(g, q) {
@@ -548,7 +550,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   // ---------- Who stands where: placement from the state, seats and houses kept stable, journeys only for real changes ----------
   function spotOf(id) {
     const where = placement(state, id);
-    if (where.place === "hq") { const [x, y] = CORE_SPOT[id] ?? CORE_SPOT.ace; return { x: world.hq.x * TILE + x, y: world.hq.y * TILE + y, key: `hq:${id}`, seated: CORE_DESK.has(id) }; }
+    if (where.place === "hq") { const [x, y] = EXEC_SPOT[id] ?? CORE_SPOT[id] ?? CORE_SPOT.ace; return { x: world.hq.x * TILE + x, y: world.hq.y * TILE + y, key: `hq:${id}`, seated: CORE_DESK.has(id) }; }
     const agent = state.agents[id];
     if (where.place === "station" && agent?.kind === "manager") {
       const b = world.buildings.find((x) => x.dept === where.dept);
@@ -605,6 +607,18 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
         p.waitUntil = b ? queueAt(`door:${b.dept}`, 150) : performance.now();
         p.homecoming = true; // lights the house on arrival (step() clears it)
         p.say = { text: "CHECKED OUT", until: performance.now() + 1800 };
+      } else if (state.agents[id]?.kind === "executive" && (to.key === "home" || fromKey === "home")) {
+        // An executive called in to HQ, or going home after advising (decision 140): the streets, by cab where it can.
+        const from = { x: p.x, y: p.y };
+        p.move = null;
+        p.route = commuteRoute(world, from, to);
+        p.ride = rideLegs(world, p.route, from);
+        p.speed = walkSpeed(p.route, from);
+        p.waitUntil = performance.now() + (to.key === "home" ? 300 : 500);
+        p.homecoming = to.key === "home";
+        if (to.key !== "home") lightHouse(id, 900);
+        else p.say = { text: "HOME", until: performance.now() + 1500 };
+        setInside(p, false);
       } else if (to.key === "home") { p.x = to.x; p.y = to.y; p.move = null; p.route = null; setInside(p, false); } // any other move home is instant
       else if (to.key.startsWith("desk:") && (fresh || fromKey === "home") && buildingOfKey(to.key)) {
         // Hired: the house lights up, then the worker walks out, along the streets and in through the door.
@@ -683,7 +697,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   function markApps() { const m = appMarkers().filter((x) => x.app); root.dataset.apps = String(m.length); root.dataset.appsWaiting = String(waitingBuildings().size); }
 
   // ---------- Live events ----------
-  const PLACEMENT_EVENTS = new Set(["agent.hired", "agent.retired", "department.created", "department.demolished", "department.updated", "ticket.status", "worker.state", "worker.merge_waiting", "worker.merged", "tickets.parked"]);
+  const PLACEMENT_EVENTS = new Set(["agent.hired", "agent.retired", "department.created", "department.demolished", "department.updated", "ticket.status", "worker.state", "worker.merge_waiting", "worker.merged", "tickets.parked", "executive.office"]);
   function onEvent(e) {
     const feedBefore = state.feed;
     const before = e.type === "department.created" ? state.departments[e.name] : null;

@@ -162,6 +162,45 @@ def route(question: str, who: list[str] | None = None) -> list[str]:
     return hits or ["ceo"]
 
 
+# ---------- permanent agents, at home until called in (the owner, 2026-11-09) ----------
+def agent_id(who: str) -> str:
+    return f"exec-{who}"
+
+
+async def ensure_executives(ledger: Ledger) -> None:
+    """The four always exist (never hired, released or retired like workers), each with its own record, cost and
+    history. They live at home (``dormant``) and come to HQ (``active``) only while they advise."""
+    for who in ORDER:
+        if await ledger.get_agent(agent_id(who)):
+            continue
+        await ledger.put_agent(
+            {
+                "id": agent_id(who),
+                "kind": "executive",
+                "role": EXECUTIVES[who]["title"],
+                "department": None,
+                "model": str(models_config()["roles"][ROLE]["model"]),
+                "parent": None,
+                "state": "dormant",
+                "worker_state": None,
+                "total_cost_usd": 0,
+                "hired_at": now_iso(ledger.now()),
+            }
+        )
+
+
+async def _office(d: ExecDeps, who: str, at_hq: bool) -> None:
+    """Called in to HQ, or home again. The City shows the commute (cab or walk) from the event."""
+    await ensure_executives(d.ledger)
+    patch: dict[str, Any] = {"state": "active" if at_hq else "dormant"}
+    if at_hq:
+        patch["last_active_at"] = now_iso(d.ledger.now())
+    await d.ledger.update_agent(agent_id(who), patch)
+    a = await d.ledger.get_agent(agent_id(who))
+    if a:
+        await d.bus.put({"type": "executive.office", "id": a["id"], "at_hq": at_hq, "agent": a})
+
+
 # ---------- the owner's switches ----------
 async def config(ledger: Ledger) -> dict[str, Any]:
     """Which executives are on (all by default: they only speak when asked) and which reviews (none by default)."""
@@ -390,19 +429,41 @@ def parse_advice(text: str) -> dict[str, Any]:
 async def advise(
     d: ExecDeps, who: str, question: str, asked_by: str, ticket_id: str | None = None, review: str | None = None
 ) -> dict[str, Any]:
-    """One executive's recommendation, filed with ``send_recommendation``. Never raises for a bad reply."""
+    """One executive's recommendation, filed with ``send_recommendation``. Never raises for a bad reply. The
+    executive is called in to HQ for it and goes home afterwards, whatever happens."""
+    await _office(d, who, True)
+    try:
+        return await _advise(d, who, question, asked_by, ticket_id, review)
+    finally:
+        await _office(d, who, False)
+
+
+async def _advise(
+    d: ExecDeps, who: str, question: str, asked_by: str, ticket_id: str | None, review: str | None
+) -> dict[str, Any]:
     records = await read_records(d, who, question)
+    # Its own memory: what it advised before, so it stays consistent or says why it changed its mind.
+    earlier = [
+        {k: r.get(k) for k in ("at", "question", "recommendation")}
+        for r in await recent(d.ledger, days=KEEP_DAYS, limit=200)
+        if r.get("executive") == who
+    ][:5]
     settings = await d.settings()
     prompt = (
         f'{prompt_of(who)}\n\n<question asked_by="{asked_by}">\n{question[:MAX_QUESTION]}\n</question>\n\n'
         f'<records read_at="{now_iso(d.ledger.now())}">\n'
         f"{json.dumps(records, ensure_ascii=False, default=str)[:60_000]}\n</records>"
+        + (
+            f"\n\n<your_earlier_advice>\n{json.dumps(earlier, ensure_ascii=False)}\n</your_earlier_advice>"
+            if earlier
+            else ""
+        )
     )
     r = await run_gated_turn(
         GatedTurn(
             kind=ROLE,
             role=ROLE,
-            agent_id=f"exec-{who}",
+            agent_id=agent_id(who),
             session_id="executive-calls-are-stateless-000",
             department=None,
             ticket_id=ticket_id,
@@ -562,7 +623,9 @@ async def _mark_run(ledger: Ledger, review: str, at: str) -> None:
 
 async def status(ledger: Ledger) -> dict[str, Any]:
     """``GET /executives``: the four, on or off; the latest recommendations; the optional reviews."""
+    await ensure_executives(ledger)
     cfg = await config(ledger)
+    agents = {e: await ledger.get_agent(agent_id(e)) or {} for e in ORDER}
     return {
         "executives": [
             {
@@ -571,6 +634,8 @@ async def status(ledger: Ledger) -> dict[str, Any]:
                 "name": EXECUTIVES[e]["name"],
                 "about": EXECUTIVES[e]["about"],
                 "enabled": cfg["enabled"][e],
+                "at_hq": agents[e].get("state") == "active",
+                "total_cost_usd": round(float(agents[e].get("total_cost_usd") or 0), 2),
                 "model": model_label(str(models_config()["roles"][ROLE]["model"])),
             }
             for e in ORDER

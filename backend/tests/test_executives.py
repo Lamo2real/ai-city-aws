@@ -61,7 +61,8 @@ async def snapshot(c: City) -> tuple[int, int, int]:
     tickets = await c.ledger.list_tickets(
         ("open", "in_progress", "in_review", "waiting_on_owner", "parked", "done", "failed", "cancelled")
     )
-    return len(tickets), len(await c.ledger.list_agents()), len(c.queue.sent)
+    others = [a for a in await c.ledger.list_agents() if a.get("kind") != "executive"]
+    return len(tickets), len(others), len(c.queue.sent)
 
 
 def tools(c: City, role: str, from_owner: bool = True) -> dict[str, Any]:
@@ -285,3 +286,61 @@ async def test_the_chief_of_staff_can_weigh_recent_advice() -> None:
     q = await c.ledger.ask_question({"asked_by": "orchestrator", "text": "Go on?", "options": ["Yes", "No"]})
     ctx = await chief_context(c.ledger, "question", q)
     assert ctx["executive_advice"][0]["recommendation"].startswith("Go ahead")
+
+
+# ---------- permanent, at home, called in to HQ (the owner, 2026-11-09) ----------
+async def test_the_four_are_permanent_and_live_at_home() -> None:
+    c = city()
+    await c.host.ensure_core()
+    execs = [a for a in await c.ledger.list_agents() if a.get("kind") == "executive"]
+    assert sorted(a["id"] for a in execs) == ["exec-ceo", "exec-cfo", "exec-coo", "exec-cto"]
+    assert {(a["state"], a["model"], a["department"]) for a in execs} == {("dormant", "fable-5-1", None)}
+    await c.host.ensure_core()  # never twice
+    assert len([a for a in await c.ledger.list_agents() if a.get("kind") == "executive"]) == 4
+
+
+async def test_called_in_to_hq_while_advising_then_home_again() -> None:
+    seen: list[str] = []
+    c = city()
+
+    async def model(i: TurnInput) -> TurnOutput:
+        seen.append((await c.ledger.get_agent(i.agent_id) or {}).get("state", "?"))
+        return TurnOutput(text=json.dumps(ADVICE))
+
+    await ex.consult(ex.ExecDeps(ledger=c.ledger, bus=c.bus, runner=model, settings=c.deps.settings, env={}),
+                     "Does it pay off?", ["cfo"], "orchestrator")  # fmt: skip
+    assert seen == ["active"]  # at the office while it thinks
+    cfo = await c.ledger.get_agent("exec-cfo")
+    assert cfo is not None and cfo["state"] == "dormant"  # home again
+    assert len(await c.ledger.turns_of("exec-cfo")) == 1  # its own history
+    moves = [(e["id"], e["at_hq"]) for e in c.bus.of_type("executive.office")]
+    assert moves == [("exec-cfo", True), ("exec-cfo", False)]
+    assert (await c.ledger.get_agent("exec-ceo"))["state"] == "dormant"  # type: ignore[index]  # not called, never came
+
+
+async def test_home_again_even_when_the_call_fails() -> None:
+    async def boom(_: TurnInput) -> TurnOutput:
+        raise RuntimeError("bedrock down")
+
+    c = city()
+    await ex.consult(ex.ExecDeps(ledger=c.ledger, bus=c.bus, runner=boom, settings=c.deps.settings, env={}),
+                     "cost?", ["cto"], "owner")  # fmt: skip
+    assert (await c.ledger.get_agent("exec-cto"))["state"] == "dormant"  # type: ignore[index]
+
+
+async def test_each_remembers_its_own_earlier_advice() -> None:
+    m = Model()
+    c = city(m)
+    await ex.consult(deps(c, m), "Is the pilot worth it?", ["cfo"], "owner")
+    await ex.consult(deps(c, m), "Is the database secure?", ["cto"], "owner")
+    await ex.consult(deps(c, m), "And now, a month later?", ["cfo"], "owner")
+    third = m.calls[2].prompt
+    assert "<your_earlier_advice>\n" in third and "Is the pilot worth it?" in third
+    assert "Is the database secure?" not in third  # the CTO's advice is the CTO's
+    assert "<your_earlier_advice>\n" not in m.calls[0].prompt
+
+
+async def test_get_executives_says_who_is_at_hq() -> None:
+    c = city()
+    s = js(await handle_http(ev("GET", "/executives"), c.deps))  # type: ignore[arg-type]
+    assert [(e["id"], e["at_hq"]) for e in s["executives"]] == [(x, False) for x in ("ceo", "coo", "cfo", "cto")]

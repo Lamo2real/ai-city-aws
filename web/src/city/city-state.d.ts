@@ -173,6 +173,7 @@ export const WALK_PX_S: number;
 export const COMMUTE_MS: number;
 export function staggerMs(i: number): number;
 export function walksOut(state: CityState, id: string, walked: Set<string>): boolean;
+export function residents(state: CityState): { ids: string[]; hidden: number };
 export function placement(
   state: CityState,
   id: string,

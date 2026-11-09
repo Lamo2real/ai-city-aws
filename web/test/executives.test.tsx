@@ -145,3 +145,30 @@ describe("Settings → Executives", () => {
     expect(screen.queryByRole("switch")).toBeNull();
   });
 });
+
+describe("the executives in the City (permanent, home until called in)", () => {
+  const exec = (state: "active" | "dormant") => ({
+    id: "exec-cfo",
+    kind: "executive",
+    role: "CFO",
+    department: null,
+    model: "fable-5-1",
+    parent: null,
+    state,
+    worker_state: null,
+  });
+  it("live at home, come to HQ while advising, go home after, and never count as working", async () => {
+    const { initialState, reduce, placement, topBar, deptOf, plainWho, residents } =
+      await import("../src/city/city-state.js");
+    let s = reduce(initialState(), { type: "executive.office", id: "exec-cfo", at_hq: false, agent: exec("dormant") });
+    expect(placement(s, "exec-cfo")).toMatchObject({ place: "home", dept: "HQ" });
+    expect(residents(s).ids).toContain("exec-cfo"); // it has a house of its own
+    s = reduce(s, { type: "executive.office", id: "exec-cfo", at_hq: true, agent: exec("dormant") });
+    expect(placement(s, "exec-cfo")).toMatchObject({ place: "hq", dept: "HQ", why: "called in" });
+    expect(topBar(s).agentsActive).toBe(0); // "Agents working now" counts workers only
+    expect(deptOf(s.agents["exec-cfo"]!)).toBe("HQ");
+    expect(plainWho(s, "exec-cfo")).toBe("The CFO");
+    s = reduce(s, { type: "executive.office", id: "exec-cfo", at_hq: false, agent: exec("active") });
+    expect(placement(s, "exec-cfo")).toMatchObject({ place: "home" });
+  });
+});

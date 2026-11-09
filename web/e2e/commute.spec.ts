@@ -85,3 +85,41 @@ test("with reduced motion, placement is instant: hired sits at once, retired is 
   m.send({ type: "agent.retired", id: "wkr-research-a1" });
   await expect.poll(() => person(page, "wkr-research-a1")).toMatchObject({ key: "home", walking: false });
 });
+
+test("an executive lives at home, rides to HQ when called in, and goes home after advising", async ({ page }) => {
+  test.slow();
+  const m = await mockBackend(page);
+  await page.goto("/#/city");
+  await expect(page.locator("section.city")).toHaveAttribute("data-city-ready", "1");
+  await expect(page.getByText(/No departments yet/)).toBeVisible();
+  await page.waitForTimeout(250);
+  const cfo = (state: "active" | "dormant") => ({
+    id: "exec-cfo",
+    kind: "executive",
+    role: "CFO",
+    department: null,
+    model: "fable-5-1",
+    parent: null,
+    state,
+    worker_state: null,
+  });
+  m.send({ type: "executive.office", id: "exec-cfo", at_hq: false, agent: cfo("dormant") });
+  await expect.poll(() => person(page, "exec-cfo")).toMatchObject({ key: "home" });
+  const home = (await person(page, "exec-cfo"))!;
+  m.send({ type: "executive.office", id: "exec-cfo", at_hq: true, agent: cfo("active") });
+  await expect.poll(() => person(page, "exec-cfo")).toMatchObject({ key: "hq:exec-cfo" });
+  const going = (await person(page, "exec-cfo"))!;
+  expect(going.walking || going.waiting).toBe(true); // a commute, not a teleport
+  await expect
+    .poll(() => person(page, "exec-cfo").then((p) => !p!.walking && !p!.waiting), { timeout: 10_000 })
+    .toBe(true);
+  const office = (await person(page, "exec-cfo"))!;
+  expect(Math.hypot(office.x - home.x, office.y - home.y)).toBeGreaterThan(30);
+  await page.screenshot({ path: `${SHOTS}/city-boardroom.png` });
+  await expect(page.locator("section.city")).not.toHaveAttribute("data-taxi-rides", "0");
+  m.send({ type: "executive.office", id: "exec-cfo", at_hq: false, agent: cfo("dormant") });
+  await expect.poll(() => person(page, "exec-cfo")).toMatchObject({ key: "home" });
+  await expect
+    .poll(() => person(page, "exec-cfo").then((p) => !p!.walking && !p!.waiting), { timeout: 10_000 })
+    .toBe(true);
+});

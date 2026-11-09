@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 TicketStatus = Literal["open", "in_progress", "in_review", "waiting_on_owner", "parked", "done", "failed", "cancelled"]
 TERMINAL: tuple[str, ...] = ("done", "failed", "cancelled")
-AgentKind = Literal["core", "manager", "worker"]
+AgentKind = Literal["core", "manager", "worker", "executive"]
 WorkerState = Literal["hired", "working", "waiting", "reporting", "review", "completed", "released", "failed"]
 
 
@@ -358,6 +358,15 @@ class WorkflowUpdated(_E):
     run: dict[str, Any]
 
 
+class ExecutiveOffice(_E):
+    """An executive was called in to HQ (``at_hq`` true) or went home after advising (decision 140)."""
+
+    type: Literal["executive.office"]
+    id: str
+    at_hq: bool
+    agent: AgentRecord
+
+
 class ExecutiveRecommended(_E):
     """An executive's recommendation was filed (decision 140): advice only, never work. Settings → Executives shows it."""
 
@@ -405,6 +414,7 @@ CityEventModel = Annotated[
     | ApprovalWithdrawn
     | StewardDecided
     | ExecutiveRecommended
+    | ExecutiveOffice
     | ConnectorUpdated
     | ConnectSignin
     | MailAccountEvent
