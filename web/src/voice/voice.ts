@@ -37,6 +37,10 @@ export interface Voice {
   levels?(): { input: number; output: number };
 }
 
+/** A tenth of a second of silence (8 kHz mono WAV), played inside the tap to unlock the media element. */
+const SILENCE =
+  "data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==";
+
 const awsSays = (e: unknown) => {
   const m = ((e as { message?: string } | null)?.message ?? "").trim();
   return m ? `: ${m.slice(0, 140)}` : "";
@@ -203,6 +207,11 @@ class AwsVoice implements Voice {
   private outMeter: AnalyserNode | null = null;
   private outBuf: Float32Array<ArrayBuffer> | null = null;
   private outFallback = false;
+  /** A media element unlocked inside the owner's tap (Safari then lets it play later, without a gesture): the
+   *  second way to play AIC's voice when Safari has paused the Web Audio context, e.g. after the microphone
+   *  opened (the owner heard nothing, 2026-11-09). */
+  private el: HTMLAudioElement | null = null;
+  private elUrl: string | null = null;
 
   levels() {
     let output = loudness(this.outMeter, this.outBuf);
@@ -227,6 +236,22 @@ class AwsVoice implements Voice {
       // play at any later moment, which a fresh, un-gestured element would not be allowed to do.
       this.outCtx ??= new AudioContext();
       void this.outCtx.resume().catch(() => undefined);
+      // A new tap tries AIC's own voice again, even if this visit fell back to the browser's once.
+      try {
+        sessionStorage.removeItem("aic.voice.tts");
+      } catch {
+        /* storage blocked */
+      }
+      // Unlock the media element too: a moment of silence played inside the tap.
+      this.el ??= new Audio();
+      this.el.src = SILENCE;
+      void this.el.play().catch(() => undefined);
+      // And the browser's own voice, the last resort: Safari unlocks speechSynthesis with an utterance in a tap.
+      try {
+        window.speechSynthesis?.speak(new SpeechSynthesisUtterance(""));
+      } catch {
+        /* no browser voice */
+      }
     } catch {
       this.primed = null; // listen() reports the real problem
     }
@@ -425,7 +450,8 @@ class AwsVoice implements Voice {
     const gen = this.generation;
     const ctx = (this.outCtx ??= new AudioContext());
     if (ctx.state !== "running") await ctx.resume().catch(() => undefined);
-    if (ctx.state !== "running") throw named("AudioSuspended", `the sound context is ${ctx.state}`);
+    // Safari paused Web Audio (it does when the microphone opens): play through the unlocked media element.
+    if (ctx.state !== "running") return this.playElement(clip, gen, onBegin);
     const bytes = await clip.arrayBuffer();
     if (!bytes.byteLength) throw named("EmptyAudio", "the speech service returned no audio");
     let buffer: AudioBuffer;
@@ -460,6 +486,33 @@ class AwsVoice implements Voice {
     }
   }
 
+  /** The second way to play a clip: the media element unlocked in the tap. Throws AudioSuspended only when that is
+   *  blocked too. */
+  private async playElement(clip: Blob, gen: number, onBegin?: () => void) {
+    if (!clip.size) throw named("EmptyAudio", "the speech service returned no audio");
+    this.stopSpeaking();
+    this.generation = gen;
+    const el = (this.el ??= new Audio());
+    if (this.elUrl) URL.revokeObjectURL(this.elUrl);
+    this.elUrl = URL.createObjectURL(clip);
+    el.src = this.elUrl;
+    try {
+      await el.play();
+    } catch (e) {
+      throw named("AudioSuspended", `the browser kept sound paused (${(e as Error)?.name ?? "blocked"})`);
+    }
+    this.playing = true;
+    this.outFallback = true; // the voice line follows a stand-in envelope
+    onBegin?.();
+    await new Promise<void>((resolve) => {
+      const done = () => resolve();
+      el.onended = done;
+      el.onpause = done; // stopSpeaking() pauses it
+      el.onerror = done;
+    });
+    this.playing = false;
+  }
+
   async speak(text: string) {
     const clip = await this.synth(speakable(text));
     if (clip) await this.play(clip);
@@ -467,6 +520,11 @@ class AwsVoice implements Voice {
 
   stopSpeaking() {
     this.generation++;
+    try {
+      if (this.el && !this.el.paused) this.el.pause();
+    } catch {
+      /* not playing */
+    }
     try {
       this.current?.stop();
     } catch {

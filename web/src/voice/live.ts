@@ -206,7 +206,7 @@ export async function startLive(h: LiveHandlers): Promise<SonicCall> {
     }
     const sdp = pc.localDescription?.sdp;
     if (!sdp) throw new Error("the browser made no connection offer");
-    const answer = await api<{ sdp: string }>("/voice/live", { method: "POST", body: JSON.stringify({ sdp }) });
+    const answer = await api<{ sdp: string }>("/voice/live", { method: "POST", body: { sdp } });
     await pc.setRemoteDescription({ type: "answer", sdp: answer.sdp });
     await Promise.race([
       started,

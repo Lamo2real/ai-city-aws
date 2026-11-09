@@ -81,11 +81,33 @@ describe("AIC's reply plays through the tap-unlocked AudioContext", () => {
     v.stopSpeaking();
     await done; // resolves instead of hanging
   });
+  it("when Safari keeps Web Audio paused, the reply plays through the media element unlocked in the tap", async () => {
+    const played: string[] = [];
+    const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(function (this: HTMLMediaElement) {
+      played.push(this.src.slice(0, 15));
+      if (this.src.startsWith("blob:")) setTimeout(() => this.dispatchEvent(new Event("ended")), 10);
+      return Promise.resolve();
+    });
+    const v = getVoice();
+    ctxState = "suspended";
+    v.prime?.(); // unlocks the element with a moment of silence, inside the tap
+    expect(played[0]).toBe("data:audio/wav;");
+    let began = false;
+    await v.play!(mp3(), () => (began = true));
+    expect(began).toBe(true);
+    expect(played.at(-1)).toMatch(/^blob:/);
+    play.mockRestore();
+  });
+
   it("names each failure: sound kept paused, empty audio, an undecodable clip", async () => {
     const v = getVoice();
     ctxState = "suspended";
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockRejectedValue(Object.assign(new Error("no"), { name: "NotAllowedError" }));
     v.prime?.();
     await expect(v.play!(mp3())).rejects.toMatchObject({ name: "AudioSuspended" });
+    play.mockRestore();
     ctxState = "running";
     v.prime?.();
     await expect(v.play!(new Blob([]))).rejects.toMatchObject({ name: "EmptyAudio" });

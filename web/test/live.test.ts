@@ -4,8 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const posted: Array<{ path: string; body: unknown }> = [];
 vi.mock("../src/lib/api.ts", () => ({
-  api: async (path: string, init: { body: string }) => {
-    posted.push({ path, body: JSON.parse(init.body) });
+  api: async (path: string, init: { body: unknown }) => {
+    // api() JSON-encodes the body itself: an object must arrive here, never a string (it was double-encoded once).
+    posted.push({ path, body: init.body });
     return { sdp: "v=0 answer", session_id: "live_1" };
   },
 }));

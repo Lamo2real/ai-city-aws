@@ -189,9 +189,23 @@ export function browserSpeak(text: string, onBegin?: () => void): Promise<void> 
   return new Promise((resolve) => {
     try {
       const u = new SpeechSynthesisUtterance(text);
-      u.onstart = () => onBegin?.();
-      u.onend = () => resolve();
-      u.onerror = () => resolve();
+      // Safari can refuse silently (no start, no error): give up after a few seconds so the HUD can say why.
+      const silent = window.setTimeout(() => {
+        window.speechSynthesis.cancel();
+        resolve();
+      }, 4000);
+      u.onstart = () => {
+        window.clearTimeout(silent);
+        onBegin?.();
+      };
+      u.onend = () => {
+        window.clearTimeout(silent);
+        resolve();
+      };
+      u.onerror = () => {
+        window.clearTimeout(silent);
+        resolve();
+      };
       window.speechSynthesis.speak(u);
     } catch {
       resolve();

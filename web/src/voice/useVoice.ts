@@ -12,13 +12,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { sendMessage } from "../lib/actions.ts";
 import { store, useHud } from "../lib/store.ts";
 import { readSpeakMode, saveSpeakMode, shouldSpeak, type SpeakMode } from "./modes.ts";
-import {
-  browserSpeak,
-  browserStopSpeaking,
-  browserVoiceAvailable,
-  rememberBrowserVoice,
-  usingBrowserVoice,
-} from "./browserSpeech.ts";
+import { browserSpeak, browserStopSpeaking, browserVoiceAvailable, usingBrowserVoice } from "./browserSpeech.ts";
 import { isEcho, isStopPhrase, loopNext } from "./convo.ts";
 import { SpeechQueue } from "./speech.ts";
 import { loadOpenAi, onVoiceNote, withOpenAi } from "./openai.ts";
@@ -277,9 +271,9 @@ export function useVoice(dictation?: DictationTarget) {
           }
           // Nothing played at all (Polly refused, or the clip was blocked): the browser's own voice takes
           // over for the rest of this page session, like the recognition fallback.
+          // Only for this reply: the next one tries AIC's own voice again (a sticky switch once left Safari silent
+          // for the whole visit, the owner, 2026-11-09).
           if (!usingBrowserVoice() && browserVoiceAvailable()) {
-            rememberBrowserVoice();
-            toast({ text: "Using your browser's voice.", tone: "info" });
             const q = new SpeechQueue<string>(
               async (s) => s,
               (s, onBegin) => browserSpeak(s, onBegin),
@@ -291,6 +285,7 @@ export function useVoice(dictation?: DictationTarget) {
             );
             t.queue = q; // a mic tap can still stop it
             await q.end(text);
+            if (!t.started && !t.cancelled) setProblem(speakProblem(t.problem)); // the browser's voice was silent too
           } else setProblem(speakProblem(t.problem));
         })
         .finally(() => finish(t, t.started, t.askedVoice));
