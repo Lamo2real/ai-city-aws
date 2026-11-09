@@ -68,8 +68,8 @@
       "cacheTtl": "5m"
     },
     "chief_of_staff": {
-      "model": "opus-5-5",
-      "fallback": null,
+      "model": "fable-5-1",
+      "fallback": "opus-5-5",
       "cacheTtl": "5m"
     },
     "utility": {
@@ -79,7 +79,7 @@
     }
   },
   "departmentModels": {
-    "$comment": "The owner's rules (2026-11-09, decision 129): Claude Fable 5.1 for the Orchestrator and every Department Manager (roles above), and for the workers of the Media, Research and Legal departments (here); every other worker and the Chief of Staff use Opus 5.5. Department names as in config/departments.json.",
+    "$comment": "The owner's rules (2026-11-09, decision 129): Claude Fable 5.1 for the Orchestrator and every Department Manager (roles above), and for the workers of the Media, Research and Legal departments (here); the Chief of Staff is on Fable too; every other worker uses Opus 5.5. Department names as in config/departments.json.",
     "roles": [
       "worker"
     ],

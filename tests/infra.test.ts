@@ -845,8 +845,8 @@ describe("the Chief of Staff (decision 124)", () => {
   const prod = readFileSync("infra/envs/prod/main.tf", "utf8");
   const models = JSON.parse(readFileSync("config/models.json", "utf8"));
   const routes = api.slice(api.indexOf("routes = ["), api.indexOf("]", api.indexOf("routes = [")));
-  it("is Opus 5.5 (Fable for the Orchestrator, managers and Media/Research/Legal workers), with its own profile", () => {
-    expect(models.roles.chief_of_staff).toMatchObject({ model: "opus-5-5", fallback: null });
+  it("is Fable 5.1 with Opus 5.5 behind it, with its own tagged application inference profile", () => {
+    expect(models.roles.chief_of_staff).toMatchObject({ model: "fable-5-1", fallback: "opus-5-5" });
     // Decision 129: every manager on Fable; workers may call the departments' model too.
     expect(models.roles.manager).toMatchObject({ model: "fable-5-1", fallback: "opus-5-5" });
     expect(models.departmentModels).toMatchObject({

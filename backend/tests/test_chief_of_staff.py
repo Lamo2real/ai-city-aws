@@ -74,7 +74,7 @@ async def test_answers_the_stuck_research_question_as_if_the_owner_clicked() -> 
     # The model saw the item, the job and the owner's words, as data.
     prompt = model.calls[0].prompt
     assert "<item>" in prompt and "Phantom workers" in prompt and "find me leads" in prompt
-    assert model.calls[0].model.name == "opus-5-5"  # Fable only for the Orchestrator, Media, Research, Legal
+    assert model.calls[0].model.name == "fable-5-1"
     # Listed for the HUD.
     s = js(await handle_http(ev("GET", "/chief-of-staff"), d))
     assert s["enabled"] is True and s["needs_owner"] == []
@@ -160,12 +160,12 @@ async def test_a_reply_that_is_not_a_decision_changes_nothing() -> None:
     assert got is not None and got["status"] == "open" and "decided_by" not in got
 
 
-async def test_runs_on_opus_with_no_fable_anywhere() -> None:
+async def test_falls_back_to_opus_once_when_fable_refuses() -> None:
     d = make()
     await _stuck_research(d)
     model = Model({"decision": "answer", "answer": "Wait", "reason": "r"}, refuse_primary=True)
     await review(chief(d, model))
-    assert [c.model.name for c in model.calls] == ["opus-5-5"]
+    assert [c.model.name for c in model.calls] == ["fable-5-1", "opus-5-5"]
 
 
 async def test_stops_a_job_stuck_in_a_loop() -> None:
