@@ -919,6 +919,17 @@ export const CAB_FADE_PX = 6 * TILE;
 export function edgeAlpha(pos, from, to) {
   return Math.max(0, Math.min(1, Math.min(pos - from, to - pos) / CAB_FADE_PX));
 }
+// One cab in a thousand that arrives is the owner's car instead (2026-11-09): a black pixel sports car with chrome
+// rims, otherwise exactly a cab (same lane, speed, fade, roof light and passengers). Decided per arrival from a
+// seed, so the same arrival is always the same car.
+export const RARE_CAB_ODDS = 1000;
+export function seededRandom(seed) {
+  let t = (hashOf(seed) + 0x6d2b79f5) >>> 0; // mulberry32, one step
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+export const rareCab = (seed) => seededRandom(seed) < 1 / RARE_CAB_ODDS;
 // The cabs cruising on their own, placed by the clock alone (a slow frame never bunches them up). Cabs sharing a
 // lane share its speed, so they keep their distance; about one per 22 tiles of road each way.
 export const CAB_PX_S = 34, CAB_GAP_PX = 22 * TILE;
@@ -927,8 +938,9 @@ export function trafficAt(world, now) {
   const lane = (id, from, to, place) => {
     const span = to - from, n = Math.max(1, Math.round(span / CAB_GAP_PX)), speed = CAB_PX_S * (0.85 + (hashOf(id) % 30) / 100);
     for (let k = 0; k < n; k++) {
-      const d = ((now / 1000) * speed + (k * span) / n + (hashOf(`${id}:${k}`) % Math.max(1, Math.round(span / n / 2)))) % span;
-      out.push({ ...place(d), alpha: edgeAlpha(d, 0, span), id: `${id}:${k}` });
+      const run = (now / 1000) * speed + (k * span) / n + (hashOf(`${id}:${k}`) % Math.max(1, Math.round(span / n / 2)));
+      const d = run % span, lap = Math.floor(run / span); // each lap past the border is a new cab arriving
+      out.push({ ...place(d), alpha: edgeAlpha(d, 0, span), id: `${id}:${k}`, rare: rareCab(`${id}:${k}:${lap}`) });
     }
   };
   streetLanes(world).forEach((l, i) => {

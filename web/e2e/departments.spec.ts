@@ -205,3 +205,26 @@ test("the map runs on: zoomed out and panned to a corner, the roads go on and fa
   await page.waitForTimeout(400);
   await expect.poll(() => towers(page)).toEqual(["Research", "Sales", "Legal", "Media"]);
 });
+
+test("the rare cab: forced for a look, it drives the same lanes as every cab, black with chrome rims", async ({
+  page,
+}) => {
+  const created_at = new Date(Date.now() - 86_400_000).toISOString();
+  const departments = ["Research", "Sales"].map((name) => ({
+    key: name.toLowerCase(),
+    name,
+    mission: "x",
+    manager_id: `mgr-${name.toLowerCase()}`,
+    state: "active",
+    created_at,
+  }));
+  await openCity(page, { departments });
+  await expect.poll(() => hooks(page, (h) => h._anims?.size ?? 0), { timeout: 6000 }).toBe(0);
+  const before = Number(await hooks(page, (h) => h.dataset.cabs));
+  await page.evaluate(() => ((document.querySelector("section.city") as HTMLElement).dataset.rareCabs = "all"));
+  await expect.poll(() => hooks(page, (h) => Number(h.dataset.rareShown ?? 0))).toBeGreaterThan(0);
+  expect(Number(await hooks(page, (h) => h.dataset.cabs))).toBe(before); // the same traffic, only the car differs
+  for (let i = 0; i < 3; i++) await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: `${SHOTS}/city-rare-cab.png` });
+});

@@ -5610,3 +5610,8 @@ button.hub-status {
   align-items: center;
   gap: 0.5rem;
 }
+/* The Build form inside the City's cream panel: the labels in the panel's own ink, not the glass pages' light text. */
+.citypanel .builddept .field {
+  color: inherit;
+  font-weight: 600;
+}

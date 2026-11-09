@@ -4,7 +4,7 @@
 // Reviewer; each department's manager stands at its door; panels are React (see CityView.tsx).
 // The City View: a small game world of the agents, drawn pixel by pixel on a canvas from city-state.js.
 // All of the art is drawn here in code. Every person on screen is a real agent; only the scenery moves on its own.
-import { COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, standFraction, mailFor, enqueueMail, bikeSpeed, trafficAt, rideLegs } from "./city-state.js";
+import { COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, standFraction, mailFor, enqueueMail, bikeSpeed, trafficAt, rideLegs, rareCab } from "./city-state.js";
 
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const INK = "#1d1c36";
@@ -226,6 +226,47 @@ function cab(view) {
   }));
   return cabs.get(view);
 }
+// The rare one (1 in RARE_CAB_ODDS arrivals, the owner's wish): a low, wide black sports coupé with chrome rims, a
+// tall swan-neck wing and a full-width rear light bar, still wearing the cab's roof light. An original drawing:
+// no badges or marks. Side on, nose on (coming down the avenue) and tail on (going up it).
+const GT_BODY = "#17171d", GT_DARK = "#0b0b10", GT_SHINE = "#3d3f50", GT_GLASS = "#283450", CHROME = "#d6dce8", CHROME_D = "#8f97a8";
+function rareCabSprite(view) {
+  const key = `rare-${view}`;
+  if (cabs.has(key)) return cabs.get(key);
+  const wheel = (g, x, y, w) => { R(g, x, y, w, 3, INK); R(g, x + 1, y, w - 2, 3, CHROME_D); R(g, x + 1, y + 1, w - 2, 1, CHROME); R(g, x + Math.floor(w / 2), y, 1, 3, CHROME); };
+  const img = view === "side" ? outlined(24, 14, (g) => {
+    g.translate(1, 1);
+    R(g, 1, 6, 21, 3, GT_BODY); R(g, 2, 9, 18, 1, GT_DARK); // the low body and its sills
+    R(g, 14, 5, 7, 1, GT_BODY); R(g, 5, 4, 9, 2, GT_BODY); R(g, 7, 3, 6, 1, GT_BODY); // bonnet, the fastback roof
+    R(g, 12, 4, 2, 1, GT_GLASS); R(g, 8, 4, 4, 1, GT_GLASS); R(g, 9, 4, 2, 1, "#4f6b8e"); // windscreen and side glass
+    R(g, 2, 6, 19, 1, GT_SHINE); R(g, 8, 3, 4, 1, GT_SHINE); // light along the shoulder and the roof
+    R(g, 0, 1, 7, 1, GT_BODY); R(g, 0, 0, 1, 2, GT_BODY); R(g, 3, 2, 1, 3, GT_BODY); R(g, 5, 2, 1, 2, GT_BODY); // the swan-neck wing
+    R(g, 9, 1, 3, 2, "#fff3b0"); R(g, 10, 1, 1, 1, "#e6a53c"); // the cab's roof light, as on every cab
+    R(g, 21, 6, 1, 1, "#e8eef8"); R(g, 1, 6, 1, 2, "#e0302a"); // headlight, tail light
+    wheel(g, 3, 9, 5); wheel(g, 15, 9, 5);
+  }) : view === "front" ? outlined(18, 17, (g) => {
+    g.translate(1, 1);
+    R(g, 0, 6, 16, 6, GT_BODY); R(g, 2, 4, 12, 2, GT_BODY); R(g, 4, 1, 8, 1, GT_BODY);
+    R(g, 3, 2, 10, 2, GT_GLASS); R(g, 4, 2, 8, 1, "#4f6b8e"); R(g, 2, 4, 12, 1, GT_SHINE);
+    R(g, 6, 0, 4, 1, "#fff3b0"); // roof light
+    R(g, 1, 6, 3, 2, "#e8eef8"); R(g, 12, 6, 3, 2, "#e8eef8"); R(g, 2, 6, 1, 1, "#ffffff"); R(g, 13, 6, 1, 1, "#ffffff"); // round lamps
+    R(g, 4, 9, 8, 2, GT_DARK); for (let x = 5; x < 12; x += 2) R(g, x, 9, 1, 2, "#26262e"); // the wide intake
+    R(g, 0, 11, 16, 1, GT_DARK);
+    wheel(g, 0, 12, 3); wheel(g, 13, 12, 3);
+  }) : outlined(18, 17, (g) => {
+    g.translate(1, 1);
+    R(g, 0, 0, 16, 1, GT_BODY); R(g, 0, 0, 1, 2, GT_BODY); R(g, 15, 0, 1, 2, GT_BODY); R(g, 4, 1, 1, 3, GT_BODY); R(g, 11, 1, 1, 3, GT_BODY); // the wing
+    R(g, 7, 1, 2, 1, "#fff3b0"); // roof light, between the wing's necks
+    R(g, 3, 3, 10, 1, GT_BODY); R(g, 4, 4, 8, 2, GT_GLASS); R(g, 1, 6, 14, 6, GT_BODY); R(g, 0, 7, 16, 4, GT_BODY);
+    R(g, 0, 7, 16, 1, "#e0302a"); R(g, 4, 7, 8, 1, "#ff5a48"); // the full-width light bar
+    R(g, 3, 10, 10, 2, GT_DARK); R(g, 7, 11, 2, 1, CHROME_D); // diffuser and the twin pipes
+    wheel(g, 0, 12, 3); wheel(g, 13, 12, 3);
+  });
+  cabs.set(key, img);
+  return img;
+}
+// A cab sprite: side on, or along the avenue nose on (coming down) / from behind (going up; the cab looks the same).
+const cabImg = (rare, view) => (rare ? rareCabSprite(view) : cab(view === "side" ? "side" : "front"));
 const bikes = new Map();
 // The mailman on his bicycle, facing right: postal blue, a cap, a satchel, letters in the front basket.
 function bike(frame, carrying) {
@@ -1051,8 +1092,9 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       const to = p.route[0], along = Math.abs(to.x - p.x) >= Math.abs(to.y - p.y), x = Math.round(p.x) - OX, y = Math.round(p.y) - OY;
       ctx.fillStyle = "rgba(20,18,40,.3)"; ctx.fillRect(x - 9, y + 1, 18, 2);
       ctx.globalAlpha = Math.min(1, (now - (p.rideAt ?? 0)) / 260); // the cab pulls up rather than popping in
-      if (!along) ctx.drawImage(cab("front"), x - 9, y - 15);
-      else if (p.flip) { ctx.save(); ctx.scale(-1, 1); ctx.drawImage(cab("side"), -x - 12, y - 12); ctx.restore(); } else ctx.drawImage(cab("side"), x - 12, y - 12);
+      const rare = p.rareCab || root.dataset.rareCabs === "all";
+      if (!along) ctx.drawImage(cabImg(rare, to.y < p.y ? "rear" : "front"), x - 9, y - 15);
+      else if (p.flip) { ctx.save(); ctx.scale(-1, 1); ctx.drawImage(cabImg(rare, "side"), -x - 12, y - 12); ctx.restore(); } else ctx.drawImage(cabImg(rare, "side"), x - 12, y - 12);
       ctx.globalAlpha = 1;
       return;
     }
@@ -1149,19 +1191,22 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     for (const b of world.buildings) if (!b.archived && !anims.has(b.dept)) drawTowerLive(b, now, ox, oy);
     for (const [d, a] of anims) drawAnim(d, a, now, ox, oy);
     // Yellow cabs cruising the streets (parked where they are with reduced motion), and the ones driving off.
-    const side = cab("side");
     const traffic = trafficAt(world, reduced() ? 0 : now);
     if (root.dataset.cabs !== String(traffic.length)) root.dataset.cabs = String(traffic.length); // for tests
-    const nose = cab("front");
+    const allRare = root.dataset.rareCabs === "all"; // a test hook: every cab is the rare one, for its screenshot
+    let rareShown = 0;
     for (const c of traffic) {
       const x = Math.round(c.x) - 12 - ox, y = Math.round(c.y) - 12 - oy;
       if (c.alpha <= 0 || x < -30 || x > w + 30 || y < -20 || y > h + 20) continue;
       ctx.globalAlpha = c.alpha; // fading in from beyond the map's edge, or out past it
-      if (c.vertical) { R(ctx, x + 3, y + 14, 14, 2, "rgba(20,18,40,.3)"); ctx.drawImage(nose, x + 3, y - 3); }
-      else { R(ctx, x + 3, y + 12, 18, 2, "rgba(20,18,40,.3)"); if (c.east) ctx.drawImage(side, x, y); else { ctx.save(); ctx.scale(-1, 1); ctx.drawImage(side, -x - 24, y); ctx.restore(); } }
+      const rare = c.rare || allRare, img = cabImg(rare, c.vertical ? (c.east ? "rear" : "front") : "side");
+      if (c.vertical) { R(ctx, x + 3, y + 14, 14, 2, "rgba(20,18,40,.3)"); ctx.drawImage(img, x + 3, y - 3); }
+      else { R(ctx, x + 3, y + 12, 18, 2, "rgba(20,18,40,.3)"); if (c.east) ctx.drawImage(img, x, y); else { ctx.save(); ctx.scale(-1, 1); ctx.drawImage(img, -x - 24, y); ctx.restore(); } }
+      if (rare) rareShown += 1;
     }
     ctx.globalAlpha = 1;
-    for (const c of leaving) { const x = Math.round(c.x) - 12 - ox, y = Math.round(c.y) - 12 - oy; ctx.globalAlpha = Math.max(0, 1 - c.t / 1.4); if (c.east) ctx.drawImage(side, x, y); else { ctx.save(); ctx.scale(-1, 1); ctx.drawImage(side, -x - 24, y); ctx.restore(); } ctx.globalAlpha = 1; }
+    if (root.dataset.rareShown !== String(rareShown)) root.dataset.rareShown = String(rareShown); // for tests
+    for (const c of leaving) { const x = Math.round(c.x) - 12 - ox, y = Math.round(c.y) - 12 - oy, img = cabImg(c.rare || allRare, "side"); ctx.globalAlpha = Math.max(0, 1 - c.t / 1.4); if (c.east) ctx.drawImage(img, x, y); else { ctx.save(); ctx.scale(-1, 1); ctx.drawImage(img, -x - 24, y); ctx.restore(); } ctx.globalAlpha = 1; }
     // The apps' cabinets stand in front of the Apps building; the people walk in front of them.
     const marks = appMarkers();
     for (const m of marks) { if (m.app) { ctx.drawImage(cabinet(m.tint), Math.round(m.x) - OX, Math.round(m.y) - OY); } else label(`+${m.more}`, m.x + 10, m.y, INK, "#ffd84a"); }
@@ -1228,8 +1273,8 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       }
       // Hailing a cab at the kerb, and its driving off after the drop.
       const riding = !!(p.route && !p.waitUntil && p.ride?.[0]);
-      if (riding && !p.wasRiding) { p.rideAt = now; root.dataset.taxiRides = String(Number(root.dataset.taxiRides ?? 0) + 1); dust(p.x, p.y, 6, ["#f4c63c", "#fff6e0"], 24, 0.35); }
-      if (!riding && p.wasRiding && !p.inside) leaving.push({ x: p.x, y: p.y, east: !p.flip, t: 0 });
+      if (riding && !p.wasRiding) { p.rideAt = now; p.rareCab = rareCab(`${p.id}:${Math.round(now)}`); root.dataset.taxiRides = String(Number(root.dataset.taxiRides ?? 0) + 1); dust(p.x, p.y, 6, ["#f4c63c", "#fff6e0"], 24, 0.35); }
+      if (!riding && p.wasRiding && !p.inside) leaving.push({ x: p.x, y: p.y, east: !p.flip, t: 0, rare: p.rareCab });
       p.wasRiding = riding;
     }
     if (stepMail(dt, now)) busy = true;

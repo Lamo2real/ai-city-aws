@@ -229,5 +229,8 @@ export function avenueLanes(world: CityWorld): Array<{ x0: number; x1: number; y
 export function trafficAt(
   world: CityWorld,
   now: number,
-): Array<{ x: number; y: number; east: boolean; vertical: boolean; alpha: number; id: string }>;
+): Array<{ x: number; y: number; east: boolean; vertical: boolean; alpha: number; id: string; rare: boolean }>;
+export const RARE_CAB_ODDS: number;
+export function seededRandom(seed: string): number;
+export function rareCab(seed: string): boolean;
 export function rideLegs(world: CityWorld, route: CityPoint[], from: CityPoint): boolean[];
