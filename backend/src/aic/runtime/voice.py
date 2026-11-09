@@ -433,6 +433,7 @@ def bedrock_opener(session: Any) -> Opener:
         from aws_sdk_bedrock_runtime.client import AsyncBedrockRuntimeClient
         from aws_sdk_bedrock_runtime.config import AsyncBedrockRuntimeConfig
         from aws_sdk_bedrock_runtime.models import InvokeModelWithBidirectionalStreamOperationInput
+        from smithy_http.aio.crt import AWSCRTHTTPClient
 
         creds = session.get_credentials().get_frozen_credentials()
         config = await AsyncBedrockRuntimeConfig.resolve(
@@ -440,6 +441,8 @@ def bedrock_opener(session: Any) -> Opener:
             aws_access_key_id=creds.access_key,
             aws_secret_access_key=creds.secret_key,
             aws_session_token=creds.token,
+            # The bidirectional stream needs a duplex HTTP/2 transport; the SDK's default (aiohttp) is one-way only.
+            transport=AWSCRTHTTPClient(),
         )
         client = AsyncBedrockRuntimeClient(config=config)
         stream = await client.invoke_model_with_bidirectional_stream(

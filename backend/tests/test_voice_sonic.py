@@ -411,3 +411,40 @@ async def test_the_real_uvicorn_server_accepts_the_voice_websocket() -> None:
     finally:
         server.should_exit = True
         await task
+
+
+async def test_nova_sonic_is_opened_on_the_duplex_crt_transport(monkeypatch: Any) -> None:
+    """The bidirectional stream needs HTTP/2 both ways: on the SDK's default aiohttp transport Bedrock refused with
+    "UnsupportedTransportError ... does not support duplex" and the owner had no real-time voice (2026-11-09)."""
+    from aws_sdk_bedrock_runtime import client as client_mod
+    from aws_sdk_bedrock_runtime.config import AsyncBedrockRuntimeConfig
+    from smithy_http.aio.crt import AWSCRTHTTPClient
+
+    from aic.runtime.voice import bedrock_opener
+
+    seen: dict[str, Any] = {}
+
+    async def resolve(**kw: Any) -> Any:
+        seen.update(kw)
+        return object()
+
+    class Client:
+        def __init__(self, config: Any) -> None:
+            pass
+
+        async def invoke_model_with_bidirectional_stream(self, _input: Any) -> Any:
+            return object()
+
+    monkeypatch.setattr(AsyncBedrockRuntimeConfig, "resolve", staticmethod(resolve))
+    monkeypatch.setattr(client_mod, "AsyncBedrockRuntimeClient", Client)
+
+    class Frozen:
+        access_key, secret_key, token = "AKIA", "s", "t"
+
+    class Session:
+        def get_credentials(self) -> Any:
+            return type("C", (), {"get_frozen_credentials": lambda self: Frozen()})()
+
+    await bedrock_opener(Session())("amazon.nova-2-sonic-v1:0", "eu-north-1")
+    assert isinstance(seen["transport"], AWSCRTHTTPClient)
+    assert seen["region"] == "eu-north-1"

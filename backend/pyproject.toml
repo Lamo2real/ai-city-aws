@@ -17,6 +17,9 @@ dependencies = [
 # Only the AgentCore runtime image needs these; Lambdas ship without them.
 runtime = [
   "aws-sdk-bedrock-runtime>=0.12",  # Nova 2 Sonic's bidirectional stream: AIC's real-time voice (decision 120)
+  # The duplex HTTP/2 transport Nova Sonic's bidirectional stream needs: the SDK's default (aiohttp) cannot stream
+  # both ways ("UnsupportedTransportError ... does not support duplex", the owner's voice, 2026-11-09).
+  "smithy-http[awscrt]>=0.3",
   "claude-agent-sdk>=0.1",
   "starlette>=0.47",
   "uvicorn>=0.35",
