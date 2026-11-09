@@ -1,30 +1,11 @@
 // The + button beside the message box and its menu, in the style of Claude's own composer (the web HUD's
 // PlusMenu.tsx, decision 106): add files or photos, add folders, slash commands, connectors and plugins
-// (skills). The menu is a glass sheet that rises from the bottom; each list opens in place with a Back row.
+// (skills). The + button itself is the composer's (ChatScreen.swift); the menu is a glass sheet that rises from the
+// bottom; each list opens in place with a Back row.
 // The pure parts (commands, the folder filter, the attached line) are in Core/Attach.swift.
 import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
-
-/// The round glass + button; the sheet is presented by the screen that owns the box.
-struct PlusButton: View {
-    @Binding var open: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        Button { open = true } label: {
-            Image(systemName: "plus")
-                .font(.system(size: 20, weight: .medium))
-                .foregroundStyle(open ? Glass.amber : Glass.text)
-                .rotationEffect(.degrees(open ? 45 : 0))
-                .animation(reduceMotion ? nil : Glass.ease(Glass.durS), value: open)
-                .frame(width: 44, height: 44)
-                .glassTint(Glass.fill2, radius: 22, edge: Glass.edge2)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Add to your message")
-    }
-}
 
 /// What the menu puts into the box: a command in front (replacing one already there), other words at the end.
 struct MenuInsert: Equatable {

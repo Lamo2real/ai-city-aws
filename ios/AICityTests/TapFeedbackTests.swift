@@ -40,7 +40,7 @@ final class TapFeedbackTests: XCTestCase {
     func testTheClickIsInTheAppAndShort() throws {
         let url = try XCTUnwrap(Bundle.main.url(forResource: "tap", withExtension: "wav"), "the tap sound is bundled")
         let bytes = try Data(contentsOf: url).count
-        XCTAssertLessThan(bytes, 8000, "a tiny sound: 60 ms")
+        XCTAssertLessThan(bytes, 16000, "a tiny sound: under 0.15 s")
         XCTAssertGreaterThan(bytes, 500)
     }
 

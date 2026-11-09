@@ -43,8 +43,22 @@ final class VoiceController {
         synth.delegate = d
     }
 
-    func toggle() {
-        if listening { stop(send: true) } else { Task { await start() } }
+    /// Two ways to listen (decision 157's composer): talk (what is said is sent and answered aloud) or dictate
+    /// (the words go into the message box as they are heard, to edit and send by hand).
+    enum Mode { case talk, dictate }
+    private(set) var mode: Mode = .talk
+    var dictating: Bool { listening && mode == .dictate }
+    /// While dictating: the words heard so far, then `true` once with the final words when listening stops.
+    @ObservationIgnored var onDictation: (String, Bool) -> Void = { _, _ in }
+
+    /// Starts listening in `mode`, or stops: talking sends what was said, dictating leaves it in the box.
+    func toggle(_ mode: Mode = .talk) {
+        if listening {
+            stop(send: self.mode == .talk)
+        } else {
+            self.mode = mode
+            Task { await start() }
+        }
     }
 
     private func start() async {
@@ -88,7 +102,10 @@ final class VoiceController {
             recognition = recognizer.recognitionTask(with: req) { [weak self] result, error in
                 Task { @MainActor in
                     guard let self else { return }
-                    if let result { self.partial = SpeechClean.clean(result.bestTranscription.formattedString) }
+                    if let result {
+                        self.partial = SpeechClean.clean(result.bestTranscription.formattedString)
+                        if self.mode == .dictate { self.onDictation(self.partial, false) }
+                    }
                     if error != nil, self.listening { self.stop(send: !self.partial.isEmpty) }
                 }
             }
@@ -111,7 +128,7 @@ final class VoiceController {
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         let text = SpeechClean.clean(partial) // no "um", "uh" or stammers; quoted words stay as said
         partial = ""
-        if send, !text.isEmpty { onText(text) }
+        if mode == .dictate { onDictation(text, true) } else if send, !text.isEmpty { onText(text) }
     }
 
     /// The name as written, old or new: it is said "Vice" (the web's `speakable`).
@@ -161,4 +178,15 @@ private final class SpeechDelegate: NSObject, AVSpeechSynthesizerDelegate {
     }
     func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) { Task { @MainActor in done() } }
     func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) { Task { @MainActor in done() } }
+}
+
+/// Dictated words joining what is already in the box (the web's `appendDictation`): one space between, nothing
+/// added when nothing was heard.
+enum Dictation {
+    static func append(_ box: String, _ words: String) -> String {
+        let w = words.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !w.isEmpty else { return box }
+        let b = box.replacing(/\s+$/, with: "")
+        return b.isEmpty ? w : "\(b) \(w)"
+    }
 }

@@ -248,7 +248,20 @@ struct AicStatusRow: View {
     }
 }
 
-/// The bottom of the screen: what rides along with the message, and the box with its buttons (+, voice, Send).
+/// The message box's two layouts (decision 157, ChatGPT's way): the words use the whole width on one row; once
+/// they need a second line the text takes the full top row and the buttons move under it, and it stays that
+/// way until the box is empty again, so the layout never flickers while typing.
+enum ComposerLayout {
+    /// Whether the box is in its two-row shape now, from whether it was, whether it is empty, and whether the
+    /// text needs more than one line.
+    static func tall(was: Bool, empty: Bool, wraps: Bool) -> Bool { empty ? false : (was || wraps) }
+    /// A text field taller than this many single lines has wrapped (the web's 1.4).
+    static let wrapFactor: CGFloat = 1.4
+    static func wraps(height: CGFloat, oneLine: CGFloat) -> Bool { height > oneLine * wrapFactor }
+}
+
+/// The bottom of the screen: what rides along with the message, and one rounded glass field that holds the +
+/// button, the words, a plain dictate mic, the voice button and Send (decision 157).
 struct Composer: View {
     @Environment(AppModel.self) private var model
     @Binding var draft: String
@@ -257,6 +270,8 @@ struct Composer: View {
     /// Who is talking right now: VoiceOver hears it as the voice button's value (the light itself is decoration).
     var speaker: AuroraSpeaker = .idle
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var tall = false
+    @State private var fieldHeight: CGFloat = 0
 
     var body: some View {
         let voice = model.voice
@@ -264,7 +279,7 @@ struct Composer: View {
         let commands = Slash.allCommands(model.skills)
         let suggestions = Slash.matchCommands(draft, commands)
         VStack(spacing: 8) {
-            if voice.listening, !voice.partial.isEmpty {
+            if voice.listening, !voice.dictating, !voice.partial.isEmpty {
                 Text(voice.partial).font(.callout).foregroundStyle(.secondary).lineLimit(2)
             }
             if let p = voice.problem { Banner(tone: .bad, text: p) }
@@ -306,48 +321,125 @@ struct Composer: View {
                 .glassPanel(radius: Glass.radius)
                 .accessibilityLabel("Slash commands")
             }
-            HStack(alignment: .bottom, spacing: 8) {
-                PlusButton(open: $menuOpen)
-
-                TextField("Type your message…", text: $draft, axis: .vertical)
-                    .lineLimit(1...5)
-                    .focused(focused)
-                    .padding(.horizontal, 12).padding(.vertical, 10)
-                    .frame(minHeight: 44)
-                    .glassWell(radius: 20)
-                    .submitLabel(.send)
-                    .onSubmit(send)
-                    .accessibilityLabel("Message to VAIC")
-
-                // The one voice button: quiet glass when off, the accent while it listens (the web's .voice-btn).
-                // What is said is answered aloud; what is typed is answered in text.
-                Button {
-                    voice.toggle()
-                } label: {
-                    Image(systemName: voice.listening ? "stop.fill" : "mic.fill")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(voice.listening ? Glass.accentInk : Glass.text)
-                        .frame(width: 44, height: 44)
-                        .background { if voice.listening { Circle().fill(Glass.accentFill) } else { Circle().fill(Glass.fill2) } }
-                        .overlay(Circle().strokeBorder(voice.listening ? Glass.accentEdge : Glass.edge2, lineWidth: 1))
-                        .animation(reduceMotion ? nil : Glass.ease(Glass.durS), value: voice.listening)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(voice.listening ? "Stop listening and send" : "Talk to VAIC")
-                .accessibilityValue(Aurora.words(speaker))
-                .accessibilityHint("Tap to talk, tap again to send what you said. VAIC answers aloud.")
-
-                Button(action: send) {
-                    Image(systemName: "arrow.up").font(.headline).frame(width: 44, height: 44)
-                }
-                .buttonStyle(.glassPrimaryCircle)
-                .disabled((draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && attachments.entries.isEmpty) || !attachments.sendable)
-                .accessibilityLabel("Send to VAIC")
-            }
+            field
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
         .glassBar()
+    }
+
+    /// One rounded field. Short words: everything on one row. Wrapped words: the text on top, the buttons under it.
+    @ViewBuilder private var field: some View {
+        let shape = RoundedRectangle(cornerRadius: tall ? 24 : 28, style: .continuous)
+        // One tree for both shapes, so the text field keeps its identity (and the keyboard its focus) when the
+        // buttons move from beside the words to under them.
+        VStack(spacing: 0) {
+            HStack(alignment: .bottom, spacing: 2) {
+                if !tall { plus }
+                textField
+                if !tall {
+                    dictate
+                    talk
+                    sendButton
+                }
+            }
+            if tall {
+                HStack(spacing: 2) {
+                    plus
+                    Spacer(minLength: 0)
+                    dictate
+                    talk
+                    sendButton
+                }
+            }
+        }
+        .padding(4)
+        .background(shape.fill(Glass.deep))
+        .overlay(shape.strokeBorder(focused.wrappedValue ? Glass.amber : Glass.edge2, lineWidth: 1))
+        .animation(reduceMotion ? nil : Glass.ease(Glass.durS), value: focused.wrappedValue)
+        .onChange(of: draft) { _, text in
+            if text.isEmpty { tall = false }
+        }
+    }
+
+    private var textField: some View {
+        TextField(model.voice.dictating ? "Listening… your words appear here" : "Type your message…", text: $draft, axis: .vertical)
+            .lineLimit(1...6)
+            .focused(focused)
+            .padding(.horizontal, 8).padding(.vertical, 9)
+            .frame(minHeight: 44)
+            .submitLabel(.send)
+            .onSubmit(send)
+            .accessibilityLabel("Message to VAIC")
+            // The field's own height says whether the words wrapped; the two-row shape then stays until the box is empty.
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { h in
+                let oneLine = UIFont.preferredFont(forTextStyle: .body).lineHeight + 18
+                tall = ComposerLayout.tall(was: tall, empty: draft.isEmpty, wraps: ComposerLayout.wraps(height: h, oneLine: oneLine))
+            }
+    }
+
+    private var plus: some View {
+        Button { menuOpen = true } label: { icon("plus", on: menuOpen) }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Add to your message")
+    }
+
+    /// The plain mic: words into the box (ChatGPT's mic); blue while it listens, like the web's dictate button.
+    private var dictate: some View {
+        let voice = model.voice
+        return Button(action: toggleDictation) {
+            icon(voice.dictating ? "stop.fill" : "mic", on: voice.dictating, fill: voice.dictating ? Glass.lamp.opacity(0.9) : nil, ink: voice.dictating ? .white : nil)
+        }
+        .buttonStyle(.plain)
+        .disabled(voice.listening && !voice.dictating)
+        .accessibilityLabel(voice.dictating ? "Stop dictating" : "Dictate into the box")
+        .accessibilityHint("Your words appear in the box as you speak; stop, then edit or send.")
+    }
+
+    /// The voice button (the waveform): what is said is sent and answered aloud; the accent while it listens.
+    private var talk: some View {
+        let voice = model.voice
+        let on = voice.listening && !voice.dictating
+        return Button { voice.toggle(.talk) } label: {
+            icon(on ? "stop.fill" : "waveform", on: on, accent: on)
+        }
+        .buttonStyle(.plain)
+        .disabled(voice.dictating)
+        .accessibilityLabel(on ? "Stop listening and send" : "Talk to VAIC")
+        .accessibilityValue(Aurora.words(speaker))
+        .accessibilityHint("Tap to talk, tap again to send what you said. VAIC answers aloud.")
+    }
+
+    private var sendButton: some View {
+        Button(action: send) {
+            Image(systemName: "arrow.up").font(.headline).frame(width: 44, height: 44)
+        }
+        .buttonStyle(.glassPrimaryCircle)
+        .disabled((draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && model.attachments.entries.isEmpty) || !model.attachments.sendable)
+        .accessibilityLabel("Send to VAIC")
+    }
+
+    /// A borderless icon in a 44 pt circle: no edge, no fill, unless it is on.
+    private func icon(_ symbol: String, on: Bool, fill: Color? = nil, ink: Color? = nil, accent: Bool = false) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 20, weight: .medium))
+            .foregroundStyle(accent ? Glass.accentInk : (ink ?? (on ? Glass.amber : Glass.text)))
+            .frame(width: 44, height: 44)
+            .background {
+                if accent { Circle().fill(Glass.accentFill) } else if let fill { Circle().fill(fill) }
+            }
+            .contentShape(Circle())
+            .animation(reduceMotion ? nil : Glass.ease(Glass.durS), value: on)
+    }
+
+    /// Dictation: the words stream into the box after what was already there; stopping keeps them to edit.
+    private func toggleDictation() {
+        let voice = model.voice
+        if voice.listening { return voice.toggle() }
+        let base = draft
+        voice.onDictation = { words, _ in draft = Dictation.append(base, words) }
+        voice.toggle(.dictate)
+        focused.wrappedValue = true
     }
 
     private func send() {
