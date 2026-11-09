@@ -1,0 +1,396 @@
+{
+  "$comment": "AI workflows (decision 126): known processes as data. Read by backend/src/aic/shared/workflows.py. A workflow is recognised in the owner's words (match.subjects; with match.actions it starts straight away, without them AIC asks 'Is this what you mean'; match.not_when words mean it is something else, like a report). inputs are asked one at a time, in this order, only when missing; types: text, choice (options with words that mean them), money (an amount per day), date (start), end (a date, a number of days, or open), url. steps are the pages of the walkthrough: 'guide' is what the owner does by hand, 'do' is how the team does it through the connector; {key} is replaced with the owner's answer. spend names the inputs that make the money shown before anything is created. connector is a key of config/departments.json connectors; department is the preset that does the work. Add a workflow by adding an entry here; no code.",
+  "workflows": [
+    {
+      "id": "meta-ads-campaign",
+      "name": "Meta Ads campaign",
+      "summary": "A Facebook and Instagram ad campaign, from goal to live ads.",
+      "department": "Marketing",
+      "connector": "meta-ads",
+      "skill": "meta-ads-campaigns",
+      "app_url": "https://adsmanager.facebook.com/",
+      "match": {
+        "subjects": [
+          "meta ads",
+          "meta ad",
+          "meta campaign",
+          "meta ad campaign",
+          "meta ads campaign",
+          "facebook ads",
+          "facebook ad",
+          "facebook campaign",
+          "facebook ad campaign",
+          "instagram ads",
+          "instagram ad",
+          "instagram campaign",
+          "instagram ad campaign",
+          "fb ads",
+          "ig ads",
+          "ads on facebook",
+          "ads on instagram",
+          "ads on meta",
+          "advertise on facebook",
+          "advertise on instagram",
+          "ads manager"
+        ],
+        "actions": [
+          "create",
+          "make",
+          "set up",
+          "setup",
+          "launch",
+          "start",
+          "run",
+          "build",
+          "new",
+          "lets",
+          "let us",
+          "i want",
+          "i need",
+          "we need",
+          "put up",
+          "get"
+        ],
+        "not_when": [
+          "how are",
+          "how is",
+          "how did",
+          "how many",
+          "report",
+          "results",
+          "performance",
+          "performing",
+          "pause",
+          "stop",
+          "cancel",
+          "delete",
+          "turn off",
+          "what is",
+          "what are"
+        ]
+      },
+      "inputs": [
+        {
+          "key": "objective",
+          "label": "Goal",
+          "type": "choice",
+          "question": "What should the ads achieve, Sir: sales, leads, website visits or awareness?",
+          "options": [
+            {
+              "label": "Sales",
+              "words": ["sales", "sell", "purchases", "purchase", "buy", "buyers", "conversions", "orders"]
+            },
+            {
+              "label": "Leads",
+              "words": ["leads", "lead", "sign ups", "signups", "sign up", "contacts", "enquiries", "inquiries"]
+            },
+            {
+              "label": "Website visits",
+              "words": ["traffic", "visits", "visitors", "clicks", "website visits", "link clicks"]
+            },
+            {
+              "label": "Awareness",
+              "words": ["awareness", "reach", "brand", "branding", "get known", "visibility"]
+            }
+          ]
+        },
+        {
+          "key": "offer",
+          "label": "What you advertise",
+          "type": "text",
+          "question": "What are you advertising? A product, a service or an offer, in a few words."
+        },
+        {
+          "key": "link",
+          "label": "Landing page",
+          "type": "url",
+          "question": "Which web page should people land on when they tap the ad?"
+        },
+        {
+          "key": "audience",
+          "label": "Who sees it",
+          "type": "text",
+          "question": "Who should see the ads: where they live, their ages and what they are into?"
+        },
+        {
+          "key": "creative",
+          "label": "Images and videos",
+          "type": "choice",
+          "question": "Should Marketing make the images and videos, or will you attach your own?",
+          "options": [
+            {
+              "label": "Make them for me",
+              "words": ["make them", "you make them", "create them", "generate them", "design them"]
+            },
+            {
+              "label": "I'll attach my own",
+              "words": ["attach", "my own", "i have", "ill send", "i will send", "upload", "mine"]
+            }
+          ]
+        },
+        {
+          "key": "daily_budget",
+          "label": "Daily budget",
+          "type": "money",
+          "question": "What's your daily budget?"
+        },
+        {
+          "key": "start_date",
+          "label": "Starts",
+          "type": "date",
+          "question": "When should the ads start?",
+          "suggest": ["Today", "Tomorrow", "Next Monday"]
+        },
+        {
+          "key": "end_date",
+          "label": "Ends",
+          "type": "end",
+          "question": "When should they stop: a date, after a number of days, or keep running?",
+          "suggest": ["After 7 days", "After 30 days", "Keep running"]
+        }
+      ],
+      "spend": { "daily": "daily_budget", "start": "start_date", "end": "end_date" },
+      "steps": [
+        {
+          "id": "account",
+          "title": "Open Ads Manager",
+          "inputs": [],
+          "guide": "Open Meta Ads Manager (adsmanager.facebook.com), pick the ad account you pay from, and click + Create.",
+          "do": "Through the Meta Ads connector, list the owner's ad accounts and use the active one (if there are several and the owner named none, use the one with recent spend and say which)."
+        },
+        {
+          "id": "goal",
+          "title": "Pick the goal",
+          "inputs": ["objective", "offer"],
+          "guide": "Choose the objective {objective}. Name the campaign \"{offer} - {objective}\". If the ads are about housing, jobs, credit or politics, tick the special ad category.",
+          "do": "Create the campaign with the objective for {objective} (Sales = OUTCOME_SALES, Leads = OUTCOME_LEADS, Website visits = OUTCOME_TRAFFIC, Awareness = OUTCOME_AWARENESS), named \"{offer} - {objective}\", with any special ad category that applies declared."
+        },
+        {
+          "id": "budget",
+          "title": "Budget and dates",
+          "inputs": ["daily_budget", "start_date", "end_date"],
+          "guide": "In the ad set, set a daily budget of {daily_budget}. Schedule: start {start_date}, end {end_date}.",
+          "do": "One ad set with a daily budget of {daily_budget} (in the ad account's currency unless the owner named one), starting {start_date}, ending {end_date}."
+        },
+        {
+          "id": "audience",
+          "title": "Who sees the ads",
+          "inputs": ["audience"],
+          "guide": "Set the audience: {audience}. Leave placements on Advantage+ (Facebook and Instagram).",
+          "do": "Target {audience}; Advantage+ placements on Facebook and Instagram; no overlapping ad sets."
+        },
+        {
+          "id": "ads",
+          "title": "The ads",
+          "inputs": ["link", "creative"],
+          "guide": "Create two or three ads that send people to {link}: images or videos ({creative}), a short headline, the main text about {offer}, and a button that fits the goal.",
+          "do": "Two or three ads pointing to {link} about {offer}: images and videos ({creative}; if the owner makes them, use the files they attached in the knowledge base, else have Design and Video & voice make 1:1, 4:5 and 9:16 versions), headline, primary text and a call to action fitting {objective}."
+        },
+        {
+          "id": "publish",
+          "title": "Check and publish",
+          "inputs": [],
+          "guide": "Check the summary, then click Publish. Meta reviews the ads, usually within a day, and they start on {start_date}.",
+          "do": "Check everything matches the owner's answers, then publish so it delivers from {start_date}: the owner approved exactly this budget and these dates in AI City, and their stated budget is the authorisation to spend it. Never raise the budget or add funds. Report the campaign, ad set and ad names and ids, and when results can first be read."
+        }
+      ]
+    },
+    {
+      "id": "google-ads-campaign",
+      "name": "Google Ads campaign",
+      "summary": "A Google Search, Performance Max or YouTube campaign, from goal to live ads.",
+      "department": "Marketing",
+      "connector": "google-ads",
+      "skill": "google-ads-campaigns",
+      "app_url": "https://ads.google.com/",
+      "match": {
+        "subjects": [
+          "google ads",
+          "google ad",
+          "google campaign",
+          "google ad campaign",
+          "google ads campaign",
+          "adwords",
+          "search ads",
+          "search campaign",
+          "youtube ads",
+          "youtube ad campaign",
+          "performance max",
+          "pmax",
+          "ads on google",
+          "ads on youtube",
+          "advertise on google",
+          "advertise on youtube"
+        ],
+        "actions": [
+          "create",
+          "make",
+          "set up",
+          "setup",
+          "launch",
+          "start",
+          "run",
+          "build",
+          "new",
+          "lets",
+          "let us",
+          "i want",
+          "i need",
+          "we need",
+          "put up",
+          "get"
+        ],
+        "not_when": [
+          "how are",
+          "how is",
+          "how did",
+          "how many",
+          "report",
+          "results",
+          "performance report",
+          "performing",
+          "pause",
+          "stop",
+          "cancel",
+          "delete",
+          "turn off",
+          "what is",
+          "what are"
+        ]
+      },
+      "inputs": [
+        {
+          "key": "objective",
+          "label": "Goal",
+          "type": "choice",
+          "question": "What should the ads achieve, Sir: sales, leads, website visits or awareness?",
+          "options": [
+            {
+              "label": "Sales",
+              "words": ["sales", "sell", "purchases", "purchase", "buy", "buyers", "conversions", "orders"]
+            },
+            {
+              "label": "Leads",
+              "words": [
+                "leads",
+                "lead",
+                "sign ups",
+                "signups",
+                "sign up",
+                "contacts",
+                "enquiries",
+                "inquiries",
+                "calls"
+              ]
+            },
+            {
+              "label": "Website visits",
+              "words": ["traffic", "visits", "visitors", "clicks", "website visits"]
+            },
+            {
+              "label": "Awareness",
+              "words": ["awareness", "reach", "brand", "branding", "get known", "visibility", "views"]
+            }
+          ]
+        },
+        {
+          "key": "campaign_type",
+          "label": "Campaign type",
+          "type": "choice",
+          "question": "Where should the ads show: Google Search, everywhere on Google (Performance Max) or YouTube?",
+          "options": [
+            { "label": "Search", "words": ["search", "search ads", "google search", "keywords", "text ads"] },
+            {
+              "label": "Performance Max",
+              "words": ["performance max", "pmax", "everywhere", "all of google", "all google"]
+            },
+            { "label": "YouTube", "words": ["youtube", "video", "videos", "video ads"] }
+          ]
+        },
+        {
+          "key": "offer",
+          "label": "What you advertise",
+          "type": "text",
+          "question": "What are you advertising? A product, a service or an offer, in a few words."
+        },
+        {
+          "key": "link",
+          "label": "Landing page",
+          "type": "url",
+          "question": "Which web page should people land on when they click the ad?"
+        },
+        {
+          "key": "audience",
+          "label": "Who sees it",
+          "type": "text",
+          "question": "Where should the ads show, and what would your customers search for or be into?"
+        },
+        {
+          "key": "daily_budget",
+          "label": "Daily budget",
+          "type": "money",
+          "question": "What's your daily budget?"
+        },
+        {
+          "key": "start_date",
+          "label": "Starts",
+          "type": "date",
+          "question": "When should the ads start?",
+          "suggest": ["Today", "Tomorrow", "Next Monday"]
+        },
+        {
+          "key": "end_date",
+          "label": "Ends",
+          "type": "end",
+          "question": "When should they stop: a date, after a number of days, or keep running?",
+          "suggest": ["After 7 days", "After 30 days", "Keep running"]
+        }
+      ],
+      "spend": { "daily": "daily_budget", "start": "start_date", "end": "end_date" },
+      "steps": [
+        {
+          "id": "account",
+          "title": "Open Google Ads",
+          "inputs": [],
+          "guide": "Open Google Ads (ads.google.com), pick the account you pay from, and click + New campaign.",
+          "do": "Through the Google Ads connector, list the owner's accessible customer accounts and use the active one (if there are several and the owner named none, use the one with recent spend and say which). Check conversion tracking for Sales or Leads and say so if it is missing."
+        },
+        {
+          "id": "goal",
+          "title": "Goal and type",
+          "inputs": ["objective", "campaign_type", "offer"],
+          "guide": "Choose the objective {objective} and the campaign type {campaign_type}. Name it \"{offer} - {campaign_type}\".",
+          "do": "Create a {campaign_type} campaign for the goal {objective}, named \"{offer} - {campaign_type}\"."
+        },
+        {
+          "id": "budget",
+          "title": "Budget and dates",
+          "inputs": ["daily_budget", "start_date", "end_date"],
+          "guide": "Set an average daily budget of {daily_budget}, start {start_date}, end {end_date}. Bidding: maximise conversions for Sales or Leads, maximise clicks for visits.",
+          "do": "Average daily budget {daily_budget} (in the account's currency unless the owner named one), start {start_date}, end {end_date}; bidding that fits {objective}."
+        },
+        {
+          "id": "audience",
+          "title": "Where and who",
+          "inputs": ["audience"],
+          "guide": "Set locations and languages, then keywords or audience signals from: {audience}.",
+          "do": "Locations, languages and, for Search, tightly themed ad groups with keywords and negatives (for Performance Max and YouTube, audience signals) from: {audience}."
+        },
+        {
+          "id": "ads",
+          "title": "The ads",
+          "inputs": ["link"],
+          "guide": "Write the ads that send people to {link}: for Search, 10 to 15 headlines and 4 descriptions about {offer}; for Performance Max or YouTube, add images and videos.",
+          "do": "Ads pointing to {link} about {offer}: responsive search ads with 10 to 15 headlines and 4 descriptions plus sitelinks and callouts for Search; images (1.91:1, 1:1, 4:5) and videos (16:9, 9:16) from Design and Video & voice for Performance Max or YouTube."
+        },
+        {
+          "id": "publish",
+          "title": "Check and publish",
+          "inputs": [],
+          "guide": "Check the summary, then click Publish campaign. Google reviews the ads, usually within a day, and they start on {start_date}.",
+          "do": "Check everything matches the owner's answers, then enable the campaign so it serves from {start_date}: the owner approved exactly this budget and these dates in AI City, and their stated budget is the authorisation to spend it. Never raise the budget or change billing. Report the campaign, ad group and ad names and ids, and when results can first be read."
+        }
+      ]
+    }
+  ]
+}

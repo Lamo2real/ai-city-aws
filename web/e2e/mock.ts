@@ -764,6 +764,7 @@ export async function mockBackend(
         return ok({ ok: true });
       }
     }
+    if (path === "/workflows" && req.method() === "GET") return ok({ workflows: [], runs: [] });
     if (path === "/workforce") return ok({ workers: [], specialists: [] });
     if (path === "/health") return ok({ workers_busy: 0, worker_ceiling: 2450, stale_turns: 0 });
     // ---------- connectors, skills, mail (CONNECTORS_SKILLS.md §1.7, §2.4; MAIL_CALENDAR.md §4) ----------

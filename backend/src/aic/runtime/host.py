@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from aic.mail.service import MailService
+from aic.shared import workflows as wf
 from aic.shared.apps import drafts_of_ticket, get_app
 from aic.shared.connectors import ConnectorStore
 from aic.shared.events import now_iso
@@ -293,6 +294,26 @@ class AgentHost:
             out.append(f"The plan the owner agreed for it: {app['brief']}")
         return [*out, ""]
 
+    async def _workflow_lines(self, inv: dict[str, Any]) -> list[str]:
+        """AI workflows (decision 126): the run in progress in this chat, and the workflow the owner's words point
+        at, so AIC asks "Is this what you mean" or starts it, and never asks for an answer it already has."""
+        ledger = self.d.ledger
+        runs = wf.Runs(ledger.table, ledger.now)
+        live = await runs.live_in(str(inv.get("conversation") or "main"))
+        from_owner = inv.get("from") == "owner" and inv.get("kind") == "task"
+        found = wf.recognise(str(inv.get("body") or "")) if from_owner else []
+        if not live and not found:
+            return []
+        records = await ConnectorStore(ledger.table).list()
+        out: list[str] = []
+        if live and (w := wf.definition(str(live.get("workflow_id")))):
+            out.append(wf.run_line(live, w, wf.connector_info(w, records)))
+        if found and not (live and all(f["id"] == live.get("workflow_id") for f in found)):
+            conn_of = {x["id"]: wf.connector_info(x, records) for x in wf.definitions()}
+            if line := wf.match_line(str(inv.get("body") or ""), conn_of):
+                out.append(line)
+        return out
+
     async def _owner_knowledge(self) -> str:
         """The ``always`` summaries, after the stable system prompt so the cached prefix stays the same."""
         k = self.d.knowledge
@@ -386,6 +407,8 @@ class AgentHost:
                         for c in conns
                     )
                 )
+        if role == "ace":
+            lines += await self._workflow_lines(inv)
         if role == "ace" and inv.get("conversation"):
             recent = await ledger.recent_conversation(inv["conversation"])
             lines = [*(await self._project_lines(inv["conversation"], recent)), *lines]

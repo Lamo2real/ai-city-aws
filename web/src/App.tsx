@@ -19,6 +19,7 @@ import { FirstRun } from "./components/FirstRun.tsx";
 import { KnowledgeScreen } from "./components/Knowledge.tsx";
 import { knowledge } from "./lib/knowledge.ts";
 import { projects } from "./lib/projects.ts";
+import { workflows } from "./lib/workflows.ts";
 import { CostsScreen, SettingsScreen, Tickets } from "./components/Screens.tsx";
 import { SkillsScreen } from "./components/SkillsScreen.tsx";
 import { Banner, Button, Toaster, toast } from "./components/ui.tsx";
@@ -91,6 +92,7 @@ export function App() {
         store.event(e);
         knowledge.event(e);
         projects.event(e);
+        workflows.event(e);
         forwardEvent(e); // only calendar.changed, only to apps granted the calendar
       });
       live.onStatus((s) => {

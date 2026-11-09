@@ -108,6 +108,11 @@ ROUTES: list[tuple[str, str]] = [
     ("POST", "/standing-orders"),
     ("PUT", "/standing-orders/so-1"),
     ("DELETE", "/standing-orders/so-1"),
+    ("GET", "/workflows"),
+    ("GET", "/workflows/runs/wf-1"),
+    ("POST", "/workflows/runs/wf-1/step"),
+    ("POST", "/workflows/runs/wf-1/mode"),
+    ("POST", "/workflows/runs/wf-1/cancel"),
     ("POST", "/workers/home"),
     ("POST", "/tasks/t-1/cancel"),
     ("POST", "/city/reset"),
@@ -560,6 +565,70 @@ async def _push_routes(method: str, path: str, event: dict[str, Any], d: ApiDeps
     return problem(404, "No such route.")
 
 
+async def _workflow_routes(method: str, path: str, event: dict[str, Any], d: ApiDeps) -> dict[str, Any] | None:
+    """AI workflows (decision 126): the walkthrough's pages, its mode and Stop. Saying yes to the money is never a
+    route: it is the owner's own words to AIC (``run_workflow``)."""
+    if not path.startswith("/workflows"):
+        return None
+    from aic.shared import workflows as wf
+    from aic.shared.connectors import ConnectorStore
+
+    runs = wf.Runs(d.ledger.table, d.ledger.now)
+    records = await ConnectorStore(d.ledger.table).list()
+
+    async def shown(r: dict[str, Any]) -> dict[str, Any] | None:
+        w = wf.definition(str(r.get("workflow_id")))
+        if not w:
+            return None
+        if r.get("status") == "running" and r.get("task_id"):
+            t = await d.ledger.get_ticket(str(r["task_id"]))
+            if t and t.get("status") in ("done", "failed", "cancelled"):
+                status = "done" if t["status"] == "done" else "cancelled"
+                r = await runs.update(r["id"], {"status": status}) or r
+        return wf.public(wf.strip(r), w, wf.connector_info(w, records))
+
+    if method == "GET" and path == "/workflows":
+        out = [p for r in (await runs.list())[: wf.MAX_RUNS_SHOWN] if (p := await shown(r))]
+        defs = [
+            {
+                "id": w["id"],
+                "name": w["name"],
+                "summary": w.get("summary", ""),
+                "connector": wf.connector_info(w, records),
+                "steps": [{"id": s["id"], "title": s["title"]} for s in w.get("steps") or []],
+            }
+            for w in wf.definitions()
+        ]
+        return reply(200, {"workflows": defs, "runs": out})
+    m = re.fullmatch(r"/workflows/runs/(wf-[\w-]{1,40})(?:/(step|mode|cancel))?", path)
+    if not m:
+        return problem(404, "No such route.")
+    run = await runs.get(m.group(1))
+    w = wf.definition(str(run.get("workflow_id"))) if run else None
+    if not run or not w:
+        return problem(404, "That workflow doesn't exist.")
+    action = m.group(2)
+    if method == "GET" and not action:
+        return reply(200, {"run": await shown(run)})
+    if method != "POST" or not action:
+        return problem(404, "No such route.")
+    b = _body(event)
+    try:
+        if action == "step":
+            run = await wf.move(runs, run, w, str(b.get("to") or "next"))
+        elif action == "mode":
+            run = await wf.set_mode(runs, run, str(b.get("mode") or ""))
+        else:
+            run = await wf.cancel(runs, run)
+    except wf.Invalid as e:
+        return problem(400, str(e))
+    pub = wf.public(wf.strip(run), w, wf.connector_info(w, records))
+    if pub["next"]["kind"] == "confirm":  # the card now shows the money: the owner's next message may say yes
+        await runs.update(run["id"], {"confirm_shown_in": "hud"})
+    await d.bus.put({"type": "workflow.updated", "run": pub})
+    return reply(200, {"run": pub})
+
+
 async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
     method = event["requestContext"]["http"]["method"].upper()
     path = event.get("rawPath", "/").rstrip("/") or "/"
@@ -578,6 +647,9 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
     gh = await _github_routes(method, path, event, d)
     if gh is not None:
         return gh
+    flows = await _workflow_routes(method, path, event, d)
+    if flows is not None:
+        return flows
     if is_("GET", r"/city"):
         return reply(200, await city_snapshot(d))
     if is_("GET", r"/city/agent"):

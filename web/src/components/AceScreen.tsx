@@ -27,6 +27,8 @@ import { PlusMenu, type Insert } from "./PlusMenu.tsx";
 import { StreamedText } from "./StreamedText.tsx";
 import { Banner, ClearIcon, ClockIcon, DictateIcon, SendIcon, toast, WaveIcon } from "./ui.tsx";
 import { MicWave, VoiceVisualizer } from "./VoiceVisualizer.tsx";
+import { WorkflowCard } from "./WorkflowCard.tsx";
+import { workflows } from "../lib/workflows.ts";
 
 export { MicIcon } from "./ui.tsx";
 
@@ -70,6 +72,11 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
   useEffect(() => {
     void loadLists().then(setLists);
   }, []);
+  // Workflow runs: on open and after a reconnect (events may have been missed).
+  const online = live === "online";
+  useEffect(() => {
+    void workflows.load();
+  }, [online]);
   const commands = allCommands(lists?.skills ?? []);
   const suggestions = matchCommands(text, commands);
 
@@ -265,6 +272,7 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
             </article>
           ))}
           <ChatCards cards={cards} />
+          <WorkflowCard />
           {waitingForAic && turn ? (
             <article className="msg msg-ace msg-pending">
               <AicStatus turn={turn} />

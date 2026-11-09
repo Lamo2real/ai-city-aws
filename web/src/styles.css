@@ -2452,6 +2452,64 @@ table.costs tr:last-child td {
 .connect-card .field {
   margin: 0;
 }
+/* The workflow walkthrough card (AI workflows): a collapsible header, one page at a time. */
+.wf-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: 44px;
+  width: 100%;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.wf-head > :first-child {
+  flex: 1;
+}
+.wf-body {
+  display: grid;
+  gap: var(--s2);
+}
+.wf-title {
+  margin: 0;
+  font-size: var(--fs-m);
+}
+.wf-guide {
+  margin: 0;
+  white-space: pre-line;
+}
+.wf-inputs {
+  margin: 0;
+  display: grid;
+  gap: var(--s1);
+}
+.wf-inputs > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--s2);
+}
+.wf-inputs dt {
+  font-weight: 600;
+}
+.wf-inputs dd {
+  margin: 0;
+}
+.wf-spend {
+  margin: 0;
+  font-weight: 700;
+  font-size: var(--fs-m);
+}
+@media (max-width: 640px) {
+  .wf-body {
+    max-height: 45vh;
+    overflow-y: auto;
+  }
+}
 .roles {
   border: 0;
   padding: 0;

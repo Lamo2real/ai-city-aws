@@ -879,3 +879,13 @@ describe("Autopilot (decision 125)", () => {
     expect(api).toMatch(/Action = \["states:SendTaskSuccess", "states:SendTaskFailure"\], Resource = \["arn:aws:states:\$\{var\.region\}:\$\{var\.account_id\}:stateMachine:\$\{var\.name\}-approval"\]/);
   });
 });
+
+describe("AI workflows (decision 126)", () => {
+  const api = readFileSync("infra/modules/api/main.tf", "utf8");
+  const routes = api.slice(api.indexOf("routes = ["), api.indexOf("]", api.indexOf("routes = [")));
+  it("the walkthrough routes sit behind the JWT authorizer, and no route spends money", () => {
+    for (const r of ['"GET /workflows"', '"GET /workflows/runs/{id}"', '"POST /workflows/runs/{id}/step"', '"POST /workflows/runs/{id}/mode"', '"POST /workflows/runs/{id}/cancel"'])
+      expect(routes).toContain(r);
+    expect(routes).not.toMatch(/workflows[^"]*\/(run|confirm|go)"/);
+  });
+});

@@ -339,6 +339,13 @@ class AceQuestion(_E):
     options: list[str]
 
 
+class WorkflowUpdated(_E):
+    """A workflow run changed (decision 126): the HUD's walkthrough card redraws from ``run`` (its public form)."""
+
+    type: Literal["workflow.updated"]
+    run: dict[str, Any]
+
+
 class KnowledgeUpdated(_E):
     """A knowledge item's status or scope changed (``docs/KNOWLEDGE.md`` §6)."""
 
@@ -382,7 +389,8 @@ CityEventModel = Annotated[
     | AppPublished
     | AppUpdated
     | AppRemoved
-    | KnowledgeUpdated,
+    | KnowledgeUpdated
+    | WorkflowUpdated,
     Field(discriminator="type"),
 ]
 _ADAPTER: TypeAdapter[Any] = TypeAdapter(CityEventModel)
