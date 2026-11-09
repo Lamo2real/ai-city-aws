@@ -13,8 +13,8 @@ import { sendMessage } from "../lib/actions.ts";
 import { store, useHud } from "../lib/store.ts";
 import { readSpeakMode, saveSpeakMode, shouldSpeak, type SpeakMode } from "./modes.ts";
 import { browserSpeak, browserStopSpeaking, browserVoiceAvailable, usingBrowserVoice } from "./browserSpeech.ts";
-import { isEcho, isStopPhrase, loopNext } from "./convo.ts";
-import { isOwnerSpeech, type Span } from "./heard.ts";
+import { isReplyTail, isStopPhrase, loopNext } from "./convo.ts";
+import { duringAic, isOwnerSpeech, stripEcho, type Span } from "./heard.ts";
 import { SpeechQueue } from "./speech.ts";
 import { loadOpenAi, onVoiceNote, withOpenAi } from "./openai.ts";
 import { toast } from "../components/ui.tsx";
@@ -69,22 +69,31 @@ function stopCues() {
   window.clearTimeout(cue.timer);
   cue.timer = undefined;
 }
-/** Says one short cue with whatever voice VAIC is using; never throws. */
+/** Says one short cue with whatever voice VAIC is using; never throws. While it plays, VAIC counts as audible, so
+ *  the cue coming back from the speakers is judged like the reply's echo (heard.ts), never sent as the owner's. */
 function sayCue(text: string) {
   cue.last = text;
   cue.at = Date.now();
   const v = getVoice();
-  const done = (p: Promise<unknown>) => void p.catch(() => undefined);
-  if (usingBrowserVoice() && browserVoiceAvailable()) return done(browserSpeak(text));
+  const begin = () => aicSpeaks();
+  // The cue is over; unless a reply is playing by now (it shares the same open span), VAIC is quiet again.
+  const done = (p: Promise<unknown>) =>
+    void p.catch(() => undefined).finally(() => store.get().presence !== "speaking" && aicQuiet());
+  if (usingBrowserVoice() && browserVoiceAvailable()) return done(browserSpeak(text, begin));
   if (v.synth && v.play) {
     const synth = withOpenAi(v.synth.bind(v));
-    return done(synth(text).then((clip) => (clip ? v.play!(clip) : undefined)));
+    return done(synth(text).then((clip) => (clip ? v.play!(clip, begin) : undefined)));
   }
+  begin();
   done(v.speak(text));
 }
 
-// While VAIC talks in a voice conversation, a quiet listener for the owner talking over it (bargeIn.ts).
-const barge: { current: (() => void) | null } = { current: null };
+// While VAIC talks in a voice conversation, a quiet listener for the owner talking over it (bargeIn.ts), and when
+// the owner last cut VAIC off that way (their interrupting phrase is then taken even if it is short).
+const barge: { current: (() => void) | null; at: number | null } = { current: null, at: null };
+// The streamed text of a reply the owner talked over while it was still arriving: the rest of it lands on a new
+// line after the owner's message, and is not read aloud (isReplyTail, convo.ts).
+const cut = { text: "" };
 function stopBargeIn() {
   barge.current?.();
   barge.current = null;
@@ -202,6 +211,18 @@ export function useVoice(dictation?: DictationTarget) {
       if (last.state === "done") spoken.current = last.id;
       return;
     }
+    // The owner talked over a reply that was still arriving: the next reply line may be the rest of that old
+    // answer. Wait until it is complete, then say it only if it is not (the owner's new question comes next).
+    if (cut.text && convo.current && talk.current?.id !== last.id) {
+      if (last.state !== "done") return;
+      const tail = isReplyTail(cut.text, last.text);
+      cut.text = "";
+      if (tail) {
+        spoken.current = last.id;
+        if (store.get().presence !== "listening" && stop.current) store.set({ presence: "listening" });
+        return;
+      }
+    }
     // Done talking: with the hands-free loop on after a spoken reply, the mic reopens for the owner's next
     // sentence; otherwise back to idle. In the voice conversation the mic stays open throughout.
     const finish = (t: Talk, spokenAloud: boolean, askedVoice: boolean) => {
@@ -265,13 +286,17 @@ export function useVoice(dictation?: DictationTarget) {
       // Talking over VAIC stops it at once and opens the mic (in the voice conversation).
       if (say && convo.current && !dictating.current) {
         stopBargeIn();
-        barge.current = watchForBargeIn(() => {
-          barge.current = null;
-          if (talk.current !== t || t.cancelled || !convo.current) return;
-          stopTalking(); // silent at once; the open mic already hears the owner
-          if (stop.current) store.set({ presence: "listening" });
-          else startRef.current?.(true);
-        });
+        barge.current = watchForBargeIn(
+          () => {
+            barge.current = null;
+            if (talk.current !== t || t.cancelled || !convo.current) return;
+            barge.at = Date.now();
+            stopTalking(); // silent at once; the open mic already hears the owner
+            if (stop.current) store.set({ presence: "listening" });
+            else startRef.current?.(true);
+          },
+          () => getVoice().micLevel?.() ?? null, // the open mic's own level: no second microphone
+        );
       }
       if (say && !t.queue && last.state !== "done") return; // a voice without synth: speak it whole when done
     }
@@ -339,6 +364,8 @@ export function useVoice(dictation?: DictationTarget) {
     stopCues();
     window.clearTimeout(thought.timer); // a half-said thought is dropped with the conversation
     thought.parts = [];
+    cut.text = "";
+    barge.at = null;
     convo.current = false;
     setEngine(null);
     setConversation(false);
@@ -369,14 +396,12 @@ export function useVoice(dictation?: DictationTarget) {
             return;
           }
           if (convo.current) {
-            // Always listening: words heard while VAIC talks are the owner's, unless they are VAIC's own
-            // words coming back from the speakers.
-            const t = talk.current;
-            if (t && !t.cancelled && t.started) {
-              const reply = store.get().chat.find((l) => l.id === t.id)?.text ?? "";
-              if (isEcho(text, reply)) return;
-            }
-            if (cue.last && Date.now() - cue.at < 6000 && isEcho(text, cue.last)) return; // a cue's echo
+            // Always listening. VAIC's own voice was already told apart from the owner's, piece by piece, when
+            // it was heard (isOwnerSpeech); what reaches here is the owner's, said now, and is answered as said.
+            // (A check here against VAIC's last reply, even after it had finished, once dropped answers like
+            // "yes, send the email to John" for repeating VAIC's words.)
+            const now = store.get().chat.at(-1);
+            if (now?.who === "ace") cut.text = now.state === "streaming" ? now.text : "";
             stopTalking();
             return void sendMessage(text, { voice: true });
           }
@@ -398,7 +423,13 @@ export function useVoice(dictation?: DictationTarget) {
             }
             if (!convo.current) return said(text);
             // VAIC's own voice coming back from the speakers is not the owner (the owner, 2026-11-09).
-            if (!isOwnerSpeech(text, aicWords(), heard?.startedAt ?? null, spans)) return;
+            const startedAt = heard?.startedAt ?? null;
+            const aic = aicWords();
+            if (!isOwnerSpeech(text, aic, startedAt, spans, { bargedAt: barge.at })) return;
+            // Said over VAIC: VAIC's last words that Transcribe joined to the front of the owner's are cut off.
+            const overlapped = startedAt === null ? spans.some((s) => s.end === Infinity) : duringAic(startedAt, spans);
+            if (overlapped) text = stripEcho(text, aic);
+            if (!text) return;
             if (isStopPhrase(cleanSpeech(text))) {
               thought.parts = []; // "stop listening" acts at once, never joined to what follows
               return said(text);
@@ -412,7 +443,14 @@ export function useVoice(dictation?: DictationTarget) {
             : (text) => {
                 // The owner talks over VAIC with words of their own: VAIC stops at once.
                 const t = talk.current;
-                if (convo.current && t && t.started && !t.cancelled && isOwnerSpeech(text, aicWords(), null, spans)) {
+                if (
+                  convo.current &&
+                  t &&
+                  t.started &&
+                  !t.cancelled &&
+                  isOwnerSpeech(text, aicWords(), null, spans, { partial: true })
+                ) {
+                  barge.at = Date.now();
                   stopTalking();
                   store.set({ presence: "listening" });
                 }

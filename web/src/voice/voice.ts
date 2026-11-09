@@ -41,6 +41,9 @@ export interface Voice {
   stopSpeaking(): void;
   /** Loudness right now, 0..1: the owner's microphone and VAIC's spoken reply. Drives the voice visualizer. */
   levels?(): { input: number; output: number };
+  /** The open microphone's loudness (0..1), or null when listen() has no level of its own (the browser's
+   *  recognition). Talking over VAIC is watched on this, so no second microphone is opened while it speaks. */
+  micLevel?(): number | null;
 }
 
 /** A tenth of a second of silence (8 kHz mono WAV), played inside the tap to unlock the media element. */
@@ -229,6 +232,10 @@ class AwsVoice implements Voice {
     return { input: loudness(this.inMeter, this.inBuf), output };
   }
 
+  micLevel(): number | null {
+    return this.inMeter ? loudness(this.inMeter, this.inBuf) : null;
+  }
+
   private primed: AudioContext | null = null;
 
   /** In the tap itself: create and resume the mic's AudioContext (and the reply's), which Safari otherwise keeps
@@ -414,8 +421,11 @@ class AwsVoice implements Voice {
           // background (music, a TV, people further away), is dropped (the owner, 2026-11-09).
           const sure = confidence(r.Alternatives?.[0]?.Items);
           if (sure !== null && sure < MIN_CONFIDENCE) continue;
-          if (!standsOut(levels, Date.now())) continue;
+          // The phrase's own moment, from Transcribe's timings (seconds since the first audio went out).
           const startedAt = audioT0 && typeof r.StartTime === "number" ? audioT0 + r.StartTime * 1000 : undefined;
+          const endedAt = audioT0 && typeof r.EndTime === "number" ? audioT0 + r.EndTime * 1000 : undefined;
+          const now = Date.now();
+          if (!standsOut(levels, startedAt ?? now - 3000, endedAt ?? now)) continue;
           onText(text, { startedAt });
         }
       }

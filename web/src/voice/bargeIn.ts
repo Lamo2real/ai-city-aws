@@ -33,8 +33,21 @@ export function speechDetector(holdMs = 400, calibrateMs = 300) {
 }
 
 /** Starts watching the mic; calls onSpeech once when the owner talks. Returns a stop function. Never throws:
- *  without a microphone it simply does nothing. */
-export function watchForBargeIn(onSpeech: () => void): () => void {
+ *  without a microphone it simply does nothing. `level` is the open listener's own microphone (0..1, null when
+ *  it has none): watched instead of opening a second microphone, which on an iPhone can silence the first one
+ *  (the one Transcribe hears the owner through) and makes the browser re-tune its echo cancellation mid-reply. */
+export function watchForBargeIn(onSpeech: () => void, level?: () => number | null): () => void {
+  if (level && level() !== null) {
+    const heard = speechDetector();
+    const timer = window.setInterval(() => {
+      const v = level();
+      if (v !== null && heard(v, performance.now())) {
+        window.clearInterval(timer);
+        onSpeech();
+      }
+    }, 30);
+    return () => window.clearInterval(timer);
+  }
   let stopped = false;
   let cleanup = () => undefined as void;
   void (async () => {

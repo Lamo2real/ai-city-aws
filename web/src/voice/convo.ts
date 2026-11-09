@@ -33,3 +33,13 @@ export function isEcho(heard: string, reply: string): boolean {
   const inReply = h.filter((w) => r.has(w)).length;
   return inReply / h.length >= 0.7;
 }
+
+/** Whether a finished reply is the rest of the one the owner talked over: the chat puts the part that streams in
+ *  after the owner's new message on a new line, and its finished text starts with what had streamed before the
+ *  owner spoke. That answer is to the old question, so it is not read aloud (the owner, 2026-11-09: "it should
+ *  only answer what I'm saying"). */
+export function isReplyTail(cut: string, done: string): boolean {
+  const a = words(cut).join(" ");
+  if (a.split(" ").length < 3) return false; // too little streamed to tell: speak it rather than drop an answer
+  return words(done).join(" ").startsWith(a);
+}
