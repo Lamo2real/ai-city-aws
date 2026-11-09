@@ -1597,12 +1597,12 @@ def tools_for(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         "manager": _manager_tools,
         "worker": _worker_tools,
     }[c.role](d, c)
-    from .workflow_tools import workflow_tools  # late: it builds on this module's ToolSpec
+    from .workflow_tools import ask_taste_tool, workflow_tools  # late: they build on this module's ToolSpec
 
     extra = (
         [*_ace_knowledge_tools(d), _calendar_agenda_tool(d), *_standing_order_tools(d), *workflow_tools(d, c)]
         if c.role == "ace"
-        else [_record_handled_tool(d, c)]
+        else [_record_handled_tool(d, c), ask_taste_tool(d, c)]
         if c.role in ("manager", "worker")
         else []
     )

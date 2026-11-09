@@ -887,5 +887,6 @@ describe("AI workflows (decision 126)", () => {
     for (const r of ['"GET /workflows"', '"GET /workflows/runs/{id}"', '"POST /workflows/runs/{id}/step"', '"POST /workflows/runs/{id}/mode"', '"POST /workflows/runs/{id}/cancel"'])
       expect(routes).toContain(r);
     expect(routes).not.toMatch(/workflows[^"]*\/(run|confirm|go)"/);
+    for (const r of ['"GET /workflows/taste"', '"POST /workflows/taste/{id}"']) expect(routes).toContain(r);
   });
 });

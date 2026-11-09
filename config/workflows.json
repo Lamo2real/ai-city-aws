@@ -1,5 +1,5 @@
 {
-  "$comment": "AI workflows (decision 126): known processes as data. Read by backend/src/aic/shared/workflows.py. A workflow is recognised in the owner's words (match.subjects; with match.actions it starts straight away, without them AIC asks 'Is this what you mean'; match.not_when words mean it is something else, like a report). inputs are asked one at a time, in this order, only when missing; types: text, choice (options with words that mean them), money (an amount per day), date (start), end (a date, a number of days, or open), url. steps are the pages of the walkthrough: 'guide' is what the owner does by hand, 'do' is how the team does it through the connector; {key} is replaced with the owner's answer. spend names the inputs that make the money shown before anything is created. connector is a key of config/departments.json connectors; department is the preset that does the work. Add a workflow by adding an entry here; no code.",
+  "$comment": "AI workflows (decision 126): known processes as data. Read by backend/src/aic/shared/workflows.py. A workflow is recognised in the owner's words (match.subjects; with match.actions it starts straight away, without them AIC asks 'Is this what you mean'; match.not_when words mean it is something else, like a report). inputs are asked one at a time, in this order, only when missing; types: text, choice (options with words that mean them), money (an amount per day), date (start), end (a date, a number of days, or open), url. steps are the pages of the walkthrough: 'guide' is what the owner does by hand, 'do' is how the team does it through the connector; {key} is replaced with the owner's answer. spend names the inputs that make the money shown before anything is created. connector is a key of config/departments.json connectors; department is the preset that does the work. Add a workflow by adding an entry here; no code. Also: modes (default both), away_by_default (the owner is away unless they say they are here: inputs with a default are assumed, not asked, and become taste questions; nothing paid starts without a question), match.direct_only (only with an action word), input default and from_words (the owner's sentence is the answer), connector null (nothing outside the city), taste_topics (what the team asks the owner along the way with ask_taste, never waiting; decision 127).",
   "workflows": [
     {
       "id": "meta-ads-campaign",
@@ -149,7 +149,11 @@
           "suggest": ["After 7 days", "After 30 days", "Keep running"]
         }
       ],
-      "spend": { "daily": "daily_budget", "start": "start_date", "end": "end_date" },
+      "spend": {
+        "daily": "daily_budget",
+        "start": "start_date",
+        "end": "end_date"
+      },
       "steps": [
         {
           "id": "account",
@@ -193,6 +197,12 @@
           "guide": "Check the summary, then click Publish. Meta reviews the ads, usually within a day, and they start on {start_date}.",
           "do": "Check everything matches the owner's answers, then publish so it delivers from {start_date}: the owner approved exactly this budget and these dates in AI City, and their stated budget is the authorisation to spend it. Never raise the budget or add funds. Report the campaign, ad set and ad names and ids, and when results can first be read."
         }
+      ],
+      "taste_topics": [
+        "the ad's headline and its call-to-action button (Shop now, Learn more, Sign up)",
+        "which image or video leads",
+        "the main text's tone",
+        "the audience's details"
       ]
     },
     {
@@ -299,12 +309,18 @@
           "type": "choice",
           "question": "Where should the ads show: Google Search, everywhere on Google (Performance Max) or YouTube?",
           "options": [
-            { "label": "Search", "words": ["search", "search ads", "google search", "keywords", "text ads"] },
+            {
+              "label": "Search",
+              "words": ["search", "search ads", "google search", "keywords", "text ads"]
+            },
             {
               "label": "Performance Max",
               "words": ["performance max", "pmax", "everywhere", "all of google", "all google"]
             },
-            { "label": "YouTube", "words": ["youtube", "video", "videos", "video ads"] }
+            {
+              "label": "YouTube",
+              "words": ["youtube", "video", "videos", "video ads"]
+            }
           ]
         },
         {
@@ -346,7 +362,11 @@
           "suggest": ["After 7 days", "After 30 days", "Keep running"]
         }
       ],
-      "spend": { "daily": "daily_budget", "start": "start_date", "end": "end_date" },
+      "spend": {
+        "daily": "daily_budget",
+        "start": "start_date",
+        "end": "end_date"
+      },
       "steps": [
         {
           "id": "account",
@@ -390,6 +410,203 @@
           "guide": "Check the summary, then click Publish campaign. Google reviews the ads, usually within a day, and they start on {start_date}.",
           "do": "Check everything matches the owner's answers, then enable the campaign so it serves from {start_date}: the owner approved exactly this budget and these dates in AI City, and their stated budget is the authorisation to spend it. Never raise the budget or change billing. Report the campaign, ad group and ad names and ids, and when results can first be read."
         }
+      ],
+      "taste_topics": [
+        "the headlines and the call to action",
+        "the keywords to leave out",
+        "which image or video leads (Performance Max, YouTube)"
+      ]
+    },
+    {
+      "id": "app-build",
+      "name": "App build",
+      "summary": "A whole app built and finished by the team, from your idea to a working app under Projects.",
+      "department": "Apps",
+      "connector": null,
+      "skill": "web-frontend",
+      "modes": ["do"],
+      "away_by_default": true,
+      "match": {
+        "direct_only": true,
+        "subjects": [
+          "app",
+          "an app",
+          "apps",
+          "web app",
+          "webapp",
+          "website",
+          "web site",
+          "site",
+          "game",
+          "a game",
+          "tool",
+          "dashboard",
+          "tracker",
+          "calculator",
+          "landing page",
+          "portal",
+          "platform"
+        ],
+        "actions": [
+          "create",
+          "make",
+          "build",
+          "develop",
+          "code",
+          "new",
+          "lets",
+          "let us",
+          "i want",
+          "i need",
+          "we need",
+          "put together",
+          "whip up"
+        ],
+        "not_when": [
+          "change",
+          "update",
+          "fix",
+          "improve",
+          "harder",
+          "easier",
+          "bug",
+          "broken",
+          "slow",
+          "crash",
+          "existing",
+          "iphone app",
+          "ai city",
+          "aic",
+          "hud",
+          "how",
+          "what",
+          "why",
+          "delete",
+          "remove",
+          "publish",
+          "approve",
+          "meta ads",
+          "google ads",
+          "facebook",
+          "instagram",
+          "ads",
+          "campaign"
+        ]
+      },
+      "inputs": [
+        {
+          "key": "idea",
+          "label": "The idea",
+          "type": "text",
+          "from_words": true,
+          "question": "What should the app do, in a sentence or two?"
+        },
+        {
+          "key": "users",
+          "label": "Who uses it",
+          "type": "choice",
+          "default": "Just me",
+          "question": "Who will use it: just you, your family or team, or your customers?",
+          "options": [
+            {
+              "label": "Just me",
+              "words": ["just me", "only me", "just for me", "only for me", "personal use"]
+            },
+            {
+              "label": "Family or team",
+              "words": ["family", "team", "friends", "colleagues", "staff", "kids"]
+            },
+            {
+              "label": "My customers",
+              "words": ["customers", "clients", "public", "users", "everyone", "visitors"]
+            }
+          ]
+        },
+        {
+          "key": "must_have",
+          "label": "Must-have parts",
+          "type": "text",
+          "default": "The smallest version that does the idea well",
+          "question": "Which screens or parts must it have?"
+        },
+        {
+          "key": "look",
+          "label": "Look",
+          "type": "choice",
+          "default": "Clean and light",
+          "question": "How should it look: clean and light, dark and sleek, or playful and colourful?",
+          "options": [
+            {
+              "label": "Clean and light",
+              "words": ["clean", "light", "minimal", "simple", "white"]
+            },
+            {
+              "label": "Dark and sleek",
+              "words": ["dark", "sleek", "black", "night"]
+            },
+            {
+              "label": "Playful and colourful",
+              "words": ["playful", "colourful", "colorful", "fun", "bright"]
+            }
+          ]
+        },
+        {
+          "key": "paid_private",
+          "label": "Paid or private",
+          "type": "choice",
+          "default": "Nothing paid or private",
+          "question": "Does it take payments or keep accounts or private data?",
+          "options": [
+            {
+              "label": "Nothing paid or private",
+              "words": ["nothing", "no", "none", "neither", "free"]
+            },
+            {
+              "label": "Takes payments",
+              "words": ["payments", "payment", "paid", "pay", "checkout", "stripe", "sell"]
+            },
+            {
+              "label": "Accounts or private data",
+              "words": ["accounts", "login", "sign in", "private", "personal data", "passwords"]
+            }
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "id": "plan",
+          "title": "Plan",
+          "inputs": ["idea", "users", "must_have"],
+          "guide": "AIC sums up what will be built: {idea}, for {users}, with {must_have}.",
+          "do": "Turn the idea into a short plan: {idea}, for {users}, must have {must_have}. Keep to what was asked; choose sensible simple defaults for anything unclear and note them."
+        },
+        {
+          "id": "build",
+          "title": "Build",
+          "inputs": ["look", "paid_private"],
+          "guide": "The Apps team builds it: {look}, {paid_private}.",
+          "do": "Build it as a self-contained web app, look {look}; {paid_private} (anything paid or private follows the city's app rules). Ask taste questions as you go and never wait for the answers."
+        },
+        {
+          "id": "check",
+          "title": "Check",
+          "inputs": [],
+          "guide": "The manager checks every screen and action.",
+          "do": "Review every screen and key action against the plan; fix what fails, up to the usual review rounds."
+        },
+        {
+          "id": "publish",
+          "title": "Publish",
+          "inputs": [],
+          "guide": "It appears under Projects once approved.",
+          "do": "Submit the finished app with submit_app so it is published under Projects (the Chief of Staff approves it while the owner is away). Report what was built, the defaults you chose and the taste questions you asked."
+        }
+      ],
+      "taste_topics": [
+        "whether the owner likes a feature as built (keep, change or drop)",
+        "how one page should behave compared with another",
+        "the words on buttons and the main call to action",
+        "colours and layout of the main screen"
       ]
     }
   ]

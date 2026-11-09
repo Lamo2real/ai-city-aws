@@ -113,6 +113,8 @@ ROUTES: list[tuple[str, str]] = [
     ("POST", "/workflows/runs/wf-1/step"),
     ("POST", "/workflows/runs/wf-1/mode"),
     ("POST", "/workflows/runs/wf-1/cancel"),
+    ("GET", "/workflows/taste"),
+    ("POST", "/workflows/taste/tq-1"),
     ("POST", "/workers/home"),
     ("POST", "/tasks/t-1/cancel"),
     ("POST", "/city/reset"),
@@ -570,6 +572,7 @@ async def _workflow_routes(method: str, path: str, event: dict[str, Any], d: Api
     route: it is the owner's own words to AIC (``run_workflow``)."""
     if not path.startswith("/workflows"):
         return None
+    from aic.shared import workflow_jobs as jobs
     from aic.shared import workflows as wf
     from aic.shared.connectors import ConnectorStore
 
@@ -585,8 +588,22 @@ async def _workflow_routes(method: str, path: str, event: dict[str, Any], d: Api
             if t and t.get("status") in ("done", "failed", "cancelled"):
                 status = "done" if t["status"] == "done" else "cancelled"
                 r = await runs.update(r["id"], {"status": status}) or r
-        return wf.public(wf.strip(r), w, wf.connector_info(w, records))
+        return await jobs.shown(cd, r, w, wf.connector_info(w, records))
 
+    cd = _action_deps(d)
+    m = re.fullmatch(r"/workflows/taste/(tq-[\w-]{1,40})", path)
+    if m and method == "POST":
+        # A tap on the card: the owner's own choice, applied like their words to AIC (decision 127).
+        b = _body(event)
+        try:
+            said = await jobs.answer(cd, m.group(1), str(b.get("answer") or ""))
+        except wf.Invalid as e:
+            return problem(400, str(e))
+        if said.startswith("That question was already answered"):
+            return problem(409, said)
+        return reply(200, {"result": said})
+    if method == "GET" and path == "/workflows/taste":
+        return reply(200, {"taste": [wf.taste_public(q) for q in await wf.Taste(d.ledger.table).all(open_only=True)]})
     if method == "GET" and path == "/workflows":
         out = [p for r in (await runs.list())[: wf.MAX_RUNS_SHOWN] if (p := await shown(r))]
         defs = [
@@ -622,7 +639,10 @@ async def _workflow_routes(method: str, path: str, event: dict[str, Any], d: Api
             run = await wf.cancel(runs, run)
     except wf.Invalid as e:
         return problem(400, str(e))
-    pub = wf.public(wf.strip(run), w, wf.connector_info(w, records))
+    conn = wf.connector_info(w, records)
+    if wf.next_need(run, w, bool(conn["connected"]))["kind"] == "go":  # away, nothing paid: the team starts
+        run, _ = await jobs.hand_off(cd, runs, run, w)
+    pub = await jobs.shown(cd, run, w, conn)
     if pub["next"]["kind"] == "confirm":  # the card now shows the money: the owner's next message may say yes
         await runs.update(run["id"], {"confirm_shown_in": "hud"})
     await d.bus.put({"type": "workflow.updated", "run": pub})

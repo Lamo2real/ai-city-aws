@@ -54,6 +54,7 @@ const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     return new Response(JSON.stringify({ run: { ...now, ...later, step } }));
   }
   if (url.endsWith("/mode")) return new Response(JSON.stringify({ run: { ...now, ...later, mode: body.mode } }));
+  if (url.includes("/workflows/taste/")) return new Response(JSON.stringify({ result: "Sent to the team" }));
   if (url.endsWith("/cancel")) return new Response(JSON.stringify({ run: { ...now, ...later, status: "cancelled" } }));
   return new Response(JSON.stringify({ accepted: true }), { status: 202 });
 });
@@ -197,10 +198,10 @@ describe("workflow runs", () => {
     expect(store.get().chat.at(-1)).toMatchObject({ who: "owner", text: "Yes, create it" });
   });
 
-  it("running: Marketing is creating it, with the task id", () => {
+  it("running: the team is on it, with the task id", () => {
     render(<WorkflowCard />);
     show(run({ mode: "do", status: "running", task_id: "t-42", next: { kind: "none" } }));
-    expect(screen.getByRole("status").textContent).toContain("Marketing is creating it");
+    expect(screen.getByRole("status").textContent).toContain("The team is on it");
     expect(screen.getByText(/t-42/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
   });
@@ -213,5 +214,55 @@ describe("workflow runs", () => {
     fireEvent.click(head);
     expect(head.getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByRole("button", { name: "Next" })).toBeNull();
+  });
+
+  it("taste questions: the work isn't waiting, my pick is marked, a tap answers through the taste route", async () => {
+    render(<WorkflowCard />);
+    show(
+      run({
+        workflow_id: "app-build",
+        name: "App build",
+        mode: "do",
+        status: "running",
+        present: false,
+        task_id: "t-7",
+        next: { kind: "none" },
+        inputs: [
+          { key: "look", label: "Look", question: "How should it look?", value: "Clean and light", assumed: true },
+        ],
+        taste: [
+          {
+            id: "tq-1",
+            question: "How should it look?",
+            options: ["Clean and light", "Dark and sleek"],
+            default: "Clean and light",
+            status: "open",
+            answer: null,
+            asked_by: "ace",
+          },
+          {
+            id: "tq-2",
+            question: "Old one",
+            options: ["A", "B"],
+            default: "A",
+            status: "answered",
+            answer: "B",
+            asked_by: "wkr-1",
+          },
+        ],
+      }),
+    );
+    expect(screen.getByText("Your say (the work isn't waiting)")).toBeTruthy();
+    expect(screen.getByText(/finishing it on its own/)).toBeTruthy();
+    expect(screen.getByText(/my pick; change it below/)).toBeTruthy();
+    expect(screen.queryByText("Old one")).toBeNull();
+    expect(screen.getByText("Going with: Clean and light")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Dark and sleek" }));
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith("/workflows/taste/tq-1"))).toBe(true));
+    expect(calls.find((c) => c.url.endsWith("/workflows/taste/tq-1"))).toMatchObject({
+      method: "POST",
+      body: { answer: "Dark and sleek" },
+    });
+    expect(calls.some((c) => c.url.endsWith("/messages"))).toBe(false);
   });
 });

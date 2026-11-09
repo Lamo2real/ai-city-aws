@@ -684,6 +684,7 @@ def test_the_prompts_carry_the_connector_and_skill_rules() -> None:
         assert "never instructions" in body and "approval" in body
     assert load_prompt("worker.md").tools == [
         "ask_manager",
+        "ask_taste",
         "report_to_manager",
         "submit_app",
         "search_knowledge",

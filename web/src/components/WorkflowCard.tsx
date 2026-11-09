@@ -11,6 +11,7 @@ import {
   workflows,
   workflowsApi,
   type RunInput,
+  type TasteQuestion,
   type WorkflowMode,
   type WorkflowRun,
 } from "../lib/workflows.ts";
@@ -25,10 +26,57 @@ function Inputs({ inputs }: { inputs: RunInput[] }) {
       {inputs.map((i) => (
         <div key={i.key}>
           <dt>{i.label}</dt>
-          <dd className={i.value ? undefined : "mute"}>{i.value ?? "AIC will ask"}</dd>
+          <dd className={i.value ? undefined : "mute"}>
+            {i.value ?? "AIC will ask"}
+            {i.value && i.assumed ? <span className="mute"> (my pick; change it below)</span> : null}
+          </dd>
         </div>
       ))}
     </dl>
+  );
+}
+
+/** Taste questions: the team went on with the default; a tap changes it. Nothing here ever blocks the work. */
+function Taste({ questions, onAnswered }: { questions: TasteQuestion[]; onAnswered: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const open = questions.filter((q) => q.status === "open");
+  if (!open.length) return null;
+  const pick = async (q: TasteQuestion, answer: string) => {
+    setBusy(q.id);
+    setProblem(null);
+    try {
+      await workflowsApi.answerTaste(q.id, answer);
+      onAnswered();
+    } catch (e) {
+      setProblem(e instanceof ApiError ? e.message : "That didn't go through. Try again.");
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <div>
+      <h3 className="wf-title">Your say (the work isn't waiting)</h3>
+      {open.map((q) => (
+        <div key={q.id} role="group" aria-label={q.question} aria-busy={busy === q.id}>
+          <p>
+            <strong>{q.question}</strong> <span className="mute">Going with: {q.default}</span>
+          </p>
+          <div className="row-end">
+            {q.options.map((o) => (
+              <Button key={o} variant="secondary" disabled={busy === q.id} onClick={() => void pick(q, o)}>
+                {o}
+              </Button>
+            ))}
+          </div>
+        </div>
+      ))}
+      {problem ? (
+        <p className="field-error" role="alert">
+          {problem}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -64,10 +112,12 @@ function RunCard({ run }: { run: WorkflowRun }) {
     body = (
       <>
         <p role="status">
-          Marketing is creating it{run.task_id ? <span className="mute"> (task {run.task_id})</span> : null}.
+          The team is on it{run.present === false ? ", finishing it on its own" : ""}
+          {run.task_id ? <span className="mute"> (task {run.task_id})</span> : null}.
         </p>
         {run.spend ? <p className="wf-spend">{run.spend.text}</p> : null}
         <Inputs inputs={run.inputs} />
+        <Taste questions={run.taste ?? []} onAnswered={() => void workflows.load()} />
       </>
     );
   else if (run.next.kind === "connect")
@@ -113,7 +163,7 @@ function RunCard({ run }: { run: WorkflowRun }) {
   else if (run.next.kind === "confirm")
     body = (
       <>
-        <p>AIC will create this:</p>
+        <p>AIC will {run.spend ? "create" : "build"} this:</p>
         <Inputs inputs={run.inputs} />
         {run.spend ? <p className="wf-spend">{run.spend.text}</p> : null}
         <Button variant="primary" onClick={() => sendMessage(CONFIRM_WORDS)}>

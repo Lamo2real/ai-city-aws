@@ -302,10 +302,15 @@ class AgentHost:
         live = await runs.live_in(str(inv.get("conversation") or "main"))
         from_owner = inv.get("from") == "owner" and inv.get("kind") == "task"
         found = wf.recognise(str(inv.get("body") or "")) if from_owner else []
-        if not live and not found:
-            return []
-        records = await ConnectorStore(ledger.table).list()
+        conversation = str(inv.get("conversation") or "main")
+        if conversation.startswith("app-") and not conversation.startswith("app-new-"):
+            found = [f for f in found if f["id"] != "app-build"]  # in an app's own chat, "make…" changes that app
         out: list[str] = []
+        if from_owner and (line := wf.taste_line(await wf.Taste(ledger.table, ledger.now).all(open_only=True))):
+            out.append(line)
+        if not live and not found:
+            return out
+        records = await ConnectorStore(ledger.table).list()
         if live and (w := wf.definition(str(live.get("workflow_id")))):
             out.append(wf.run_line(live, w, wf.connector_info(w, records)))
         if found and not (live and all(f["id"] == live.get("workflow_id") for f in found)):

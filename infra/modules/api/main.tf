@@ -227,6 +227,8 @@ locals {
     # AI workflows (decision 126): the walkthrough's pages, its mode and Stop.
     "GET /workflows", "GET /workflows/runs/{id}", "POST /workflows/runs/{id}/step",
     "POST /workflows/runs/{id}/mode", "POST /workflows/runs/{id}/cancel",
+    # Taste questions (decision 127): asked along the way, answered from the card, never waited on.
+    "GET /workflows/taste", "POST /workflows/taste/{id}",
     "POST /workers/home", "POST /tasks/{id}/cancel", "POST /city/reset", "POST /agents/{id}/home",
     "GET /memory", "POST /notes", "GET /apps", "DELETE /apps/{id}", "PUT /apps/{id}",
     "POST /apps/{id}/bridge", "POST /apps/{id}/proposals", "POST /apps/{id}/rollback", "GET /apps/{id}/activity",

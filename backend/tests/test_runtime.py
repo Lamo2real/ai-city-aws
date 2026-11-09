@@ -107,6 +107,7 @@ def test_managers_hire_few_and_the_orchestrator_never_staffs_a_one_off() -> None
     assert "never more than three per goal" in orchestrator
     assert load_prompt("worker.md").tools == [
         "ask_manager",
+        "ask_taste",
         "report_to_manager",
         "submit_app",
         "search_knowledge",

@@ -68,7 +68,7 @@ def test_each_workflow_needs_a_connector_from_the_catalog() -> None:
     from aic.shared.presets import catalog
 
     for w in wf.definitions():
-        assert w["connector"] in catalog(), w["id"]
+        assert w["connector"] is None or w["connector"] in catalog(), w["id"]  # None: nothing outside the city
 
 
 # ---------- recognising ----------
@@ -417,3 +417,193 @@ async def test_the_money_shown_on_the_card_counts_as_shown() -> None:
     assert run["next"]["kind"] == "confirm" and "300 per day from Mon 9 Nov 2026" in run["spend"]["text"]
     out = await tool(d, ace(), "run_workflow")({"confirm": True})  # the owner tapped "Yes, create it"
     assert out.startswith("Handed to the Marketing department")
+
+
+# ---------- decision 127: apps are built while the owner is away; taste questions never block ----------
+APP = "app-build"
+
+
+@pytest.mark.parametrize(
+    ("words", "found"),
+    [
+        ("build me an app where my family can share a shopping list", APP),
+        ("make me a snake game", APP),
+        ("make my snake game harder", None),
+        ("the iphone app is slow", None),
+        ("I have an idea for an app", None),  # no action word: "app" alone never asks "Is this what you mean"
+        ("let's create Meta ads", META),
+    ],
+)
+def test_app_build_is_recognised_only_when_asked_for(words: str, found: str | None) -> None:
+    assert [m["id"] for m in wf.recognise(words)] == ([found] if found else [])
+
+
+@pytest.mark.parametrize(
+    ("words", "here"),
+    [("build it, I'm here, ask me", True), ("you decide, I'm away", False), ("make a game", None)],
+)
+def test_the_owner_says_whether_they_are_here(words: str, here: bool | None) -> None:
+    assert wf.presence_in(words) is here
+
+
+async def test_an_app_is_built_to_the_end_while_the_owner_is_away() -> None:
+    d = deps()
+    words = "Build me an app where my family can share a shopping list"
+    out = await tool(d, ace(), "start_workflow")({"workflow_id": APP, "owner_words": words})
+    assert "Handed to the Apps department as task" in out and "will finish it on its own" in out
+    assert "what you went with for must-have parts, look, paid or private" in out  # "my family" was said
+    assert not d.bus.of_type("ace.question")  # nothing was asked
+    (msg,) = d.queue.sent
+    assert "Apps department" in msg["body"] and "without waiting for them" in msg["body"]
+    (t,) = [t for t in await d.ledger.list_tickets(("open",)) if t.get("kind") == "task"]
+    assert words in t["brief"] and "The owner is away" in t["brief"] and "ask_taste" in t["brief"]
+    assert "Look: Clean and light (assumed)" in t["brief"] and "how one page should behave" in t["brief"]
+    run = (await wf.Runs(d.ledger.table).list())[0]
+    assert run["status"] == "running" and run["mode"] == "do" and run["present"] is False
+    qs = await wf.Taste(d.ledger.table).all(open_only=True)
+    assert {q["default"] for q in qs} == {"The smallest version that does the idea well", "Clean and light",
+                                          "Nothing paid or private"}  # fmt: skip
+    assert "Who uses it: Family or team\n" in t["brief"]
+    assert all(q["run_id"] == run["id"] and q["task_id"] == t["id"] and q["asked_by"] == "ace" for q in qs)
+    (e,) = d.bus.of_type("workflow.updated")
+    assert len(e["run"]["taste"]) == 3 and e["run"]["inputs"][2]["assumed"] is True
+
+
+async def test_when_the_owner_is_here_the_app_is_planned_with_them_first() -> None:
+    d = deps()
+    out = await tool(d, ace(), "start_workflow")(
+        {"workflow_id": APP, "owner_words": "create a website for my bakery, I'm here, ask me"}
+    )
+    assert "Who will use it" in out and not d.queue.sent  # the idea came from their words: never asked
+    update = tool(d, ace(), "update_workflow")
+    await update({"values": {"users": "my customers"}})
+    await update({"values": {"must_have": "menu, opening hours, order form"}})
+    await update({"values": {"look": "playful"}})
+    out = await update({"values": {"paid_private": "Nothing paid or private"}})
+    assert "Shall I build it, Sir?" in out and not d.queue.sent
+    out = await tool(d, ace(), "run_workflow")({"confirm": True})
+    assert out.startswith("Handed to the Apps department") and len(d.queue.sent) == 1
+    assert await wf.Taste(d.ledger.table).all() == []  # nothing assumed, nothing to ask later
+
+
+async def test_saying_im_off_mid_way_lets_the_team_start() -> None:
+    d = deps()
+    await tool(d, ace(), "start_workflow")(
+        {"workflow_id": APP, "owner_words": "make me a habit tracker", "present": True}
+    )
+    assert not d.queue.sent
+    out = await tool(d, ace(), "update_workflow")({"present": False})
+    assert "Handed to the Apps department" in out and len(d.queue.sent) == 1
+
+
+async def test_ads_are_never_assumed_away_their_money_is_always_asked() -> None:
+    d = deps()
+    await connect(d)
+    out = await tool(d, ace(), "start_workflow")(
+        {"workflow_id": META, "owner_words": "create meta ads, do it for me, you decide, I'm away"}
+    )
+    assert "Handed" not in out and not d.queue.sent
+    run = await live(d)
+    assert "daily_budget" not in run["values"]
+
+
+async def a_running_app(d: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+    await tool(d, ace(), "start_workflow")({"workflow_id": APP, "owner_words": "make me a snake game"})
+    (t,) = [t for t in await d.ledger.list_tickets(("open",)) if t.get("kind") == "task"]
+    await d.ledger.create_ticket({"id": "t-dept", "goal": "g", "from": "orchestrator", "to": "mgr-apps",
+                                  "department": "Apps", "parent_id": t["id"], "kind": "assignment"})  # fmt: skip
+    await d.ledger.create_ticket({"id": "t-wkr", "goal": "g", "from": "mgr-apps", "to": "wkr-1", "department": "Apps",
+                                  "parent_id": "t-dept", "kind": "assignment"})  # fmt: skip
+    await d.ledger.put_agent({"id": "wkr-1", "kind": "worker", "role": "Game developer", "department": "Apps",
+                              "model": "opus-5-5", "parent": "mgr-apps", "state": "active", "worker_state": "working",
+                              "ticket_id": "t-wkr", "total_cost_usd": 0, "hired_at": "2026-11-09T10:00:00Z"})  # fmt: skip
+    return t, (await wf.Runs(d.ledger.table).list())[0]
+
+
+def worker(task_id: str) -> TurnCtx:
+    return TurnCtx(agent_id="wkr-1", role="worker", department="Apps", ticket_id="t-wkr", task_id=task_id)
+
+
+async def test_the_team_asks_taste_questions_and_goes_on_with_its_default() -> None:
+    d = deps()
+    t, run = await a_running_app(d)
+    sent = len(d.queue.sent)
+    out = await tool(d, worker(t["id"]), "ask_taste")(
+        {
+            "question": "Do you like walls that wrap around?",
+            "options": ["Wrap around", "Walls end the game"],
+            "default": "Walls end the game",
+        }
+    )
+    assert "Don't wait: go on with “Walls end the game” now" in out
+    assert len(d.queue.sent) == sent  # nobody is woken, nothing waits
+    q = next(q for q in await wf.Taste(d.ledger.table).all() if q["asked_by"] == "wkr-1")
+    assert q["run_id"] == run["id"] and q["task_id"] == t["id"] and q["status"] == "open"
+    assert "at least 2" in await tool(d, worker(t["id"]), "ask_taste")(
+        {"question": "Colour?", "options": ["Red"], "default": "Red"}
+    )
+    with pytest.raises(wf.Invalid):
+        await wf.Taste(d.ledger.table).add({"question": "Colour?", "options": ["Red", "Blue"], "default": ""})
+
+
+async def test_an_answer_that_differs_reaches_whoever_can_still_change_it() -> None:
+    d = deps()
+    t, _ = await a_running_app(d)
+    await tool(d, worker(t["id"]), "ask_taste")(
+        {"question": "Walls?", "options": ["Wrap around", "Walls end the game"], "default": "Walls end the game"}
+    )
+    qs = {q["question"]: q for q in await wf.Taste(d.ledger.table).all()}
+    answer = tool(d, ace(), "answer_taste")
+    assert "Only the owner" in await tool(d, ace(from_owner=False), "answer_taste")(
+        {"id": qs["Walls?"]["id"], "answer": "wrap around"}
+    )
+    sent = len(d.queue.sent)
+    out = await answer({"id": qs["Walls?"]["id"], "answer": "wrap around"})
+    assert out == "Sent to wkr-1: they change it to “Wrap around”."
+    (msg,) = d.queue.sent[sent:]
+    assert msg["agentId"] == "wkr-1" and msg["kind"] == "instruction" and "“Wrap around”" in msg["body"]
+    assert "already answered" in await answer({"id": qs["Walls?"]["id"], "answer": "no"})
+    # Same as the default: kept, nobody disturbed.
+    look = next(q for q in qs.values() if q["default"] == "Clean and light")
+    assert (await answer({"id": look["id"], "answer": "clean and light"})).startswith("Kept")
+    assert len(d.queue.sent) == sent + 1
+    # AIC's own assumption goes to the Orchestrator, who passes it on.
+    users = next(q for q in qs.values() if q["default"] == "Just me")
+    assert (
+        await answer({"id": users["id"], "answer": "My customers"})
+    ) == "Sent to the team: they change it to “My customers”."
+    assert d.queue.sent[-1]["role"] == "orchestrator" and d.queue.sent[-1]["taskId"] == t["id"]
+    # After the job: noted, and AIC offers a change.
+    await d.ledger.set_ticket_status(t["id"], "done")
+    must = next(q for q in qs.values() if q["default"].startswith("The smallest"))
+    assert "the job has finished" in await answer({"id": must["id"], "answer": "add a high score table"})
+
+
+async def test_the_card_answers_taste_questions_and_aic_is_told_about_open_ones() -> None:
+    d = deps()
+    _t, _run = await a_running_app(d)
+    a = api_deps(d)
+    open_ = js(await handle_http(ev("GET", "/workflows/taste"), a))["taste"]
+    assert len(open_) == 4
+    (shown,) = js(await handle_http(ev("GET", "/workflows"), a))["runs"]
+    assert len(shown["taste"]) == 4 and shown["status"] == "running"
+    look = next(q for q in open_ if q["default"] == "Clean and light")
+    r = await handle_http(ev("POST", f"/workflows/taste/{look['id']}", {"answer": "Dark and sleek"}), a)
+    assert r["statusCode"] == 200 and "Dark and sleek" in js(r)["result"]
+    assert (await handle_http(ev("POST", f"/workflows/taste/{look['id']}", {"answer": "x"}), a))["statusCode"] == 409
+    host = AgentHost(d, HostOptions(engine=None))  # type: ignore[arg-type]
+    inv = {"role": "ace", "kind": "task", "from": "owner", "conversation": "main", "body": "hi Ace"}
+    (line, progress) = await host._workflow_lines(inv)
+    assert line.startswith("Taste questions from the work in progress") and "answer_taste" in line
+    assert "Dark and sleek" not in line and "Just me" in line
+    assert "The team is doing it as task" in progress
+    # In an existing app's own chat, "make…" changes that app: no App build match.
+    assert not [x for x in await host._workflow_lines({**inv, "conversation": "app-app-snake", "body": "make a game"})
+                if x.startswith("Workflow:")]  # fmt: skip
+
+
+def test_the_team_and_aic_are_told_about_taste_questions() -> None:
+    assert "ask_taste" in load_prompt("worker.md", {"id": "w", "specialty": "s", "parent": "p"}).body
+    assert "ask_taste" in load_prompt("manager.md", {"department": "Apps"}).body
+    p = load_prompt("ace.md")
+    assert "answer_taste" in p.tools and "The owner is usually away" in p.body and "never waited on" in p.body

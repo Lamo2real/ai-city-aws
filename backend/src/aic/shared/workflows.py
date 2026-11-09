@@ -15,7 +15,7 @@ never asked again, and the owner's own words are read for every input before any
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -51,9 +51,13 @@ def definition(workflow_id: str) -> Definition | None:
 def check_definition(w: Mapping[str, Any]) -> list[str]:
     """What is wrong with one definition (empty = fine). Used by the tests on every entry in the config."""
     errs: list[str] = []
-    for k in ("id", "name", "summary", "department", "connector", "inputs", "steps", "match"):
+    for k in ("id", "name", "summary", "department", "inputs", "steps", "match"):
         if not w.get(k):
             errs.append(f"missing {k}")
+    if any(m not in MODES for m in modes_of(w)) or not modes_of(w):
+        errs.append("modes must be guide and/or do")
+    if "do" in modes_of(w) and not w.get("connector") and w.get("connector") is not None:
+        errs.append("connector must be a catalog key or null")
     keys = [str(i.get("key")) for i in w.get("inputs") or []]
     if len(set(keys)) != len(keys):
         errs.append("duplicate input keys")
@@ -64,6 +68,11 @@ def check_definition(w: Mapping[str, Any]) -> list[str]:
             errs.append(f"input {i.get('key')}: needs a label and a question")
         if i.get("type") == "choice" and len(i.get("options") or []) < 2:
             errs.append(f"input {i.get('key')}: a choice needs two options")
+        if i.get("default") is not None:
+            try:
+                parse_answer(i, str(i["default"]), date(2026, 1, 1))
+            except Invalid:
+                errs.append(f"input {i.get('key')}: its default can't be read")
     for s in w.get("steps") or []:
         for k in s.get("inputs") or []:
             if k not in keys:
@@ -104,8 +113,32 @@ def recognise(text: str) -> list[Record]:
             continue
         if any(_has(t, x) for x in m.get("not_when") or []):
             continue
-        out.append({"id": w["id"], "name": w["name"], "direct": any(_has(t, a) for a in m.get("actions") or [])})
+        direct = any(_has(t, a) for a in m.get("actions") or [])
+        if m.get("direct_only") and not direct:
+            continue  # words like "app" are too common to ask "Is this what you mean" on their own
+        out.append({"id": w["id"], "name": w["name"], "direct": direct})
     return sorted(out, key=lambda r: not r["direct"])
+
+
+def modes_of(w: Mapping[str, Any]) -> list[str]:
+    """The ways this workflow can run: guide (the owner by hand) and/or do (the team). Both unless it says."""
+    return list(w.get("modes") or MODES)
+
+
+_PRESENT = ("im here", "i am here", "im around", "i am around", "ask me", "check with me", "with me", "together",
+            "walk me", "guide me", "step by step", "lets discuss", "let me decide", "i want to decide")  # fmt: skip
+_AWAY = ("im away", "i am away", "ill be away", "i will be away", "im out", "without me", "dont ask", "do not ask",
+         "by yourself", "on your own", "yourself", "you decide", "surprise me", "just build", "just do it")  # fmt: skip
+
+
+def presence_in(text: str) -> bool | None:
+    """True when the owner said they are here to decide with AIC, False when they said they are away; else None."""
+    t = norm(text)
+    if any(_has(t, p) for p in _AWAY):
+        return False
+    if any(_has(t, p) for p in _PRESENT):
+        return True
+    return None
 
 
 def mode_in(text: str) -> str | None:
@@ -261,6 +294,9 @@ def _parse_text(text: str, _: date) -> Record | None:
 
 def _choice(inp: Mapping[str, Any], text: str) -> Record | None:
     t = norm(text)
+    exact = [o["label"] for o in inp.get("options") or [] if norm(o["label"]) == t]
+    if exact:  # tapping an option sends its exact words
+        return {"text": exact[0]}
     hits = []
     for o in inp.get("options") or []:
         if _has(t, o["label"]) or any(_has(t, w) for w in o.get("words") or []):
@@ -396,6 +432,8 @@ def connector_info(w: Mapping[str, Any], records: Iterable[Mapping[str, Any]]) -
     from .presets import catalog
 
     key = str(w.get("connector") or "")
+    if not key:  # nothing outside the city is needed (an app the city builds)
+        return {"id": None, "label": None, "connected": True, "where": None}
     cat = catalog().get(key) or {}
     url = str(cat.get("url") or "").rstrip("/")
     ready = any(
@@ -441,6 +479,8 @@ def next_need(run: Mapping[str, Any], w: Mapping[str, Any], connected: bool) -> 
         for k, inp in inputs.items():
             if k not in values:
                 return {"kind": "input", "key": k, "question": inp["question"], "options": _options(inp)}
+        if spend(w, values) is None and not run.get("present"):
+            return {"kind": "go"}  # nothing paid and the owner is away: the team starts now (decision 127)
         return {"kind": "confirm", "question": "Shall I create it, Sir?", "options": ["Yes, create it", "Not yet"]}
     steps = w.get("steps") or []
     i = min(int(run.get("step") or 0), max(len(steps) - 1, 0))
@@ -456,6 +496,19 @@ def next_need(run: Mapping[str, Any], w: Mapping[str, Any], connected: bool) -> 
     }
 
 
+def assume_defaults(w: Mapping[str, Any], values: Mapping[str, Record], present: bool) -> dict[str, Record]:
+    """While the owner is away, an input with a default is not asked: the default is used and marked ``assumed``,
+    so it becomes a taste question the owner can change later. Inputs without a default are always asked."""
+    out = dict(values)
+    if present:
+        return out
+    for inp in w.get("inputs") or []:
+        if inp["key"] not in out and inp.get("default") is not None:
+            v = parse_answer(inp, str(inp["default"]), date(2026, 1, 1))
+            out[inp["key"]] = {**v, "assumed": True}
+    return out
+
+
 def fill(template: str, w: Mapping[str, Any], values: Mapping[str, Record]) -> str:
     inputs = _inputs(w)
 
@@ -469,7 +522,9 @@ def fill(template: str, w: Mapping[str, Any], values: Mapping[str, Record]) -> s
     return re.sub(r"\{(\w+)\}", one, template)
 
 
-def public(run: Mapping[str, Any], w: Mapping[str, Any], conn: Mapping[str, Any]) -> Record:
+def public(
+    run: Mapping[str, Any], w: Mapping[str, Any], conn: Mapping[str, Any], taste: Iterable[Mapping[str, Any]] = ()
+) -> Record:
     """The run as the HUD and the ``workflow.updated`` event show it (``workflows-contract.md``)."""
     values = run.get("values") or {}
     step = int(run.get("step") or 0)
@@ -481,6 +536,7 @@ def public(run: Mapping[str, Any], w: Mapping[str, Any], conn: Mapping[str, Any]
         "summary": w.get("summary", ""),
         "connector": dict(conn),
         "mode": run.get("mode") if run.get("mode") in MODES else None,
+        "present": bool(run.get("present")),
         "status": run.get("status"),
         "inputs": [
             {
@@ -488,6 +544,7 @@ def public(run: Mapping[str, Any], w: Mapping[str, Any], conn: Mapping[str, Any]
                 "label": i["label"],
                 "question": i["question"],
                 "value": (values.get(i["key"]) or {}).get("text"),
+                "assumed": bool((values.get(i["key"]) or {}).get("assumed")),
             }
             for i in w.get("inputs") or []
         ],
@@ -505,6 +562,7 @@ def public(run: Mapping[str, Any], w: Mapping[str, Any], conn: Mapping[str, Any]
         ],
         "spend": {k: v for k, v in sp.items() if k != "per_day"} if sp else None,
         "task_id": run.get("task_id"),
+        "taste": [taste_public(q) for q in taste],
         "conversation": run.get("conversation") or "main",
         "created_at": run.get("created_at"),
         "updated_at": run.get("updated_at"),
@@ -514,12 +572,27 @@ def public(run: Mapping[str, Any], w: Mapping[str, Any], conn: Mapping[str, Any]
 def brief(run: Mapping[str, Any], w: Mapping[str, Any], limit: int = 4000) -> str:
     """The team's brief for ``do`` mode: the owner's answers, the approved spend and how each step is done."""
     values = run.get("values") or {}
+    tools = f"the {w['connector']} connector (give it to the worker)" if w.get("connector") else "no connector"
     lines = [
-        f"Workflow: {w['name']} (the owner chose “do it for me”). Use the {w.get('skill') or 'matching'} skill and "
-        f"the {w.get('connector')} connector (give it to the worker).",
-        "The owner's answers:",
-        *[f"- {i['label']}: {(values.get(i['key']) or {}).get('text', '')}" for i in w.get("inputs") or []],
+        f"Workflow: {w['name']}, done by the team. Use the {w.get('skill') or 'matching'} skill and {tools}.",
+        "The owner's answers (“assumed” = the owner is away and this is the default; they may change it later):",
+        *[
+            f"- {i['label']}: {(values.get(i['key']) or {}).get('text', '')}"
+            + (" (assumed)" if (values.get(i["key"]) or {}).get("assumed") else "")
+            for i in w.get("inputs") or []
+        ],
     ]
+    if not run.get("present"):
+        lines.append(
+            "The owner is away: build it to the end yourselves, never wait for them. Decide what is unclear with "
+            "sensible simple defaults."
+        )
+    topics = "; ".join(w.get("taste_topics") or []) or "choices the owner may have an opinion on"
+    lines.append(
+        f"Taste questions: whenever you make a choice the owner may care about ({topics}), ask it with ask_taste "
+        "(the question, two to five options, the default you are going with) and carry on with that default at "
+        "once. If the owner picks something else, you get a message: change it then."
+    )
     if sp := spend(w, values):
         lines.append(f"Spend the owner approved (their authorisation for this campaign, no more): {sp['text']}.")
     lines.append("Steps:")
@@ -554,15 +627,24 @@ class Runs:
         )
 
     async def create(self, w: Mapping[str, Any], conversation: str, owner_words: str, values: dict[str, Record],
-                     mode: str | None) -> Record:  # fmt: skip
+                     mode: str | None, present: bool | None = None) -> Record:  # fmt: skip
+        """``present``: the owner is here to decide (ask every input, confirm before the team starts); None = the
+        workflow's own default (``away_by_default``: apps are built while the owner is away)."""
         at = self._iso()
+        if len(modes_of(w)) == 1:
+            mode = modes_of(w)[0]
+        here = (not w.get("away_by_default")) if present is None else present
+        for inp in w.get("inputs") or []:  # "build me an app where…": the owner's sentence is the idea
+            if inp.get("from_words") and inp["key"] not in values and str(owner_words or "").strip():
+                values = {**values, inp["key"]: {"text": " ".join(str(owner_words).split())[:MAX_TEXT]}}
         rec: Record = {
             "id": new_id("wf"),
             "workflow_id": w["id"],
             "conversation": conversation,
             "status": "active",
             "mode": mode if mode in MODES else None,
-            "values": values,
+            "present": here,
+            "values": assume_defaults(w, values, here),
             "asked": [],
             "step": 0,
             "owner_words": " ".join(str(owner_words or "").split())[:500],
@@ -692,3 +774,100 @@ def run_line(run: Mapping[str, Any], w: Mapping[str, Any], conn: Mapping[str, An
     elif run.get("status") == "running":
         line += f" The team is doing it as task {run.get('task_id')}."
     return line + " If the owner wants to stop it, cancel_workflow."
+
+
+# ---------- taste questions (decision 127): asked along the way, never waited on ----------
+TASTE = "TASTE"
+MAX_TASTE_SHOWN = 20
+
+
+def taste_public(q: Mapping[str, Any]) -> Record:
+    return {k: q.get(k) for k in ("id", "question", "options", "default", "status", "answer", "asked_by", "run_id",
+                                  "task_id", "created_at")}  # fmt: skip
+
+
+class Taste:
+    """``TASTE`` / ``<id>``: ``{id, task_id, run_id, conversation, question, options, default, asked_by, status
+    (open | answered), answer, created_at, answered_at}``. The work never waits on one: the asker goes on with the
+    default, and an answer that differs is sent to whoever can still change it."""
+
+    def __init__(self, table: Table, now: Any = None) -> None:
+        self.table = table
+        self._now = now
+
+    def _iso(self) -> str:
+        return now_iso(self._now() if self._now else None)
+
+    async def add(self, q: Mapping[str, Any]) -> Record:
+        options = [" ".join(str(o).split())[:60] for o in q.get("options") or [] if str(o).strip()][:5]
+        default = " ".join(str(q.get("default") or "").split())[:120]
+        question = " ".join(str(q.get("question") or "").split())[:300]
+        if not question or len(options) < 2 or not default:
+            raise Invalid("Give the question, two to five options and the default you are going with.")
+        if default not in options:
+            options = [default, *options][:5]
+        rec: Record = {
+            "id": new_id("tq"),
+            "task_id": q.get("task_id"),
+            "run_id": q.get("run_id"),
+            "conversation": q.get("conversation") or "main",
+            "question": question,
+            "options": options,
+            "default": default,
+            "asked_by": q.get("asked_by") or "ace",
+            "status": "open",
+            "created_at": self._iso(),
+        }
+        await self.table.put({"pk": TASTE, "sk": rec["id"], **rec})
+        return rec
+
+    async def get(self, id: str) -> Record | None:
+        r = await self.table.get(TASTE, id) if re.fullmatch(r"tq-[\w-]{1,40}", id or "") else None
+        return strip(r) if r else None
+
+    async def all(self, open_only: bool = False) -> list[Record]:
+        rows = [strip(r) for r in await self.table.query(TASTE)]
+        rows.sort(key=lambda r: str(r.get("created_at", "")), reverse=True)
+        return [r for r in rows if r.get("status") == "open"] if open_only else rows
+
+    async def of_run(self, run_id: str) -> list[Record]:
+        return [r for r in await self.all() if r.get("run_id") == run_id][:MAX_TASTE_SHOWN]
+
+    async def answer(self, id: str, answer: str) -> Record | None:
+        """None when it doesn't exist or was already answered."""
+        a = " ".join(str(answer or "").split())[:300]
+        if not a:
+            raise Invalid("Say the answer.")
+        try:
+            r = await self.table.update(
+                TASTE,
+                id,
+                UpdateOptions(
+                    set={"status": "answered", "answer": a, "answered_at": self._iso()},
+                    must_exist=True,
+                    expect={"status": "open"},
+                ),
+            )
+        except Exception:
+            return None
+        return strip(r) if r else None
+
+
+def same_choice(a: str, b: str) -> bool:
+    return norm(a) == norm(b)
+
+
+def taste_line(open_qs: Sequence[Mapping[str, Any]]) -> str | None:
+    """For AIC's prompt: the open taste questions, so it can raise them while the owner is talking to it."""
+    if not open_qs:
+        return None
+    shown = "; ".join(
+        f"[{q['id']}] “{q['question']}” (going with “{q['default']}”; options: {', '.join(q.get('options') or [])})"
+        for q in open_qs[:5]
+    )
+    more = f" and {len(open_qs) - 5} more" if len(open_qs) > 5 else ""
+    return (
+        f"Taste questions from the work in progress (nothing waits on them): {shown}{more}. When the owner is "
+        "talking with you and it fits, ask one at a time, saying what the team went with; pass their answer with "
+        "answer_taste."
+    )

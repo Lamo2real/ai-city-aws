@@ -1,5 +1,5 @@
 // AI workflows (docs/PRODUCT.md "AI workflows"): AIC recognises a workflow in the owner's words (a Meta Ads or
-// Google Ads campaign), and once the owner says yes it walks the owner through it one page at a time (mode
+// Google Ads campaign, an App build), and once the owner says yes it walks the owner through it one page at a time (mode
 // "guide") or does it (mode "do"). Missing inputs are asked one at a time in AIC's chat. Runs come from
 // `GET /workflows` and stay current through `workflow.updated` events. A 404 means the backend is not deployed
 // yet: nothing to show.
@@ -9,10 +9,21 @@ import { api, ApiError } from "./api.ts";
 export type WorkflowMode = "guide" | "do";
 export type RunStatus = "proposed" | "active" | "running" | "done" | "cancelled";
 export interface WorkflowConnector {
-  id: string;
-  label: string;
+  /** null: the workflow needs nothing outside the city (an app the city builds). */
+  id: string | null;
+  label: string | null;
   connected: boolean;
-  where: string;
+  where: string | null;
+}
+/** A taste question (decision 127): the team asks, goes on with `default`, and the owner's pick adjusts it later. */
+export interface TasteQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  default: string;
+  status: "open" | "answered";
+  answer: string | null;
+  asked_by: string;
 }
 export interface RunInput {
   key: string;
@@ -20,9 +31,11 @@ export interface RunInput {
   question: string;
   /** Display text ("300 per day"), or null while AIC still has to ask. */
   value: string | null;
+  /** The owner is away and this is the default; it is also a taste question they can change. */
+  assumed?: boolean;
 }
 export interface RunNext {
-  kind: "confirm_workflow" | "connect" | "mode" | "input" | "confirm" | "step" | "none";
+  kind: "confirm_workflow" | "connect" | "mode" | "input" | "confirm" | "go" | "step" | "none";
   key?: string;
   question?: string;
   options?: string[];
@@ -60,6 +73,9 @@ export interface WorkflowRun {
   steps: RunStep[];
   spend: RunSpend | null;
   task_id: string | null;
+  /** True when the owner said they are here to decide; false = away (things with a default are assumed). */
+  present?: boolean;
+  taste?: TasteQuestion[];
   conversation: string;
   created_at: string;
   updated_at: string;
@@ -81,6 +97,8 @@ export const workflowsApi = {
   mode: (id: string, mode: WorkflowMode) =>
     api<{ run: WorkflowRun }>(`${path(id)}/mode`, { method: "POST", body: { mode } }),
   cancel: (id: string) => api<{ run: WorkflowRun }>(`${path(id)}/cancel`, { method: "POST" }),
+  answerTaste: (id: string, answer: string) =>
+    api<{ result: string }>(`/workflows/taste/${encodeURIComponent(id)}`, { method: "POST", body: { answer } }),
 };
 
 const OPEN: RunStatus[] = ["proposed", "active", "running"];
