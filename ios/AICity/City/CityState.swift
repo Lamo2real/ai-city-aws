@@ -199,7 +199,7 @@ enum City {
     static func decidedByChief(_ j: JSONValue) -> Bool {
         j["decided_by"].string == "chief_of_staff" && !(j["decision"].string ?? "").isEmpty
     }
-    static func displayName(_ id: String) -> String { id == "ace" ? "AIC" : id }
+    static func displayName(_ id: String) -> String { id == "ace" ? "VAIC" : id }
 
     private static func filed(_ departments: [String: Department], _ a: Agent) -> Agent {
         guard let dep = a.department, let d = departments.values.first(where: { keyOf($0.name) == keyOf(dep) }), d.name != dep else { return a }

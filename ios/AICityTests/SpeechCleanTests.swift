@@ -19,10 +19,26 @@ final class SpeechCleanTests: XCTestCase {
         XCTAssertEqual(SpeechClean.clean("Yes."), "Yes.")
     }
 
-    func testAceIsAlwaysWrittenAIC() {
-        XCTAssertEqual(SpeechClean.clean("Hey Ace, what's the status?"), "Hey AIC, what's the status?")
-        XCTAssertEqual(SpeechClean.clean("A-C-E, ship it"), "AIC, ship it")
+    func testViceHeardOrSpelledIsAlwaysWrittenVAICAndOrdinaryUsesStay() {
+        XCTAssertEqual(SpeechClean.clean("Hey Vice, what's the status?"), "Hey VAIC, what's the status?")
+        XCTAssertEqual(SpeechClean.clean("yo vice can you check V A I C's tasks"), "yo VAIC can you check VAIC's tasks")
+        XCTAssertEqual(SpeechClean.clean("the vice president said it's vice versa"), "the vice president said it's vice versa")
+        XCTAssertEqual(SpeechClean.clean("like Vice City in GTA"), "like Vice City in GTA")
+        XCTAssertEqual(SpeechClean.clean("AIC, ship it"), "VAIC, ship it")
+        XCTAssertEqual(SpeechClean.clean("Name the button \"Vice\""), "Name the button \"Vice\"")
+        XCTAssertEqual(SpeechClean.clean("advice and device stay"), "advice and device stay")
+    }
+
+    func testAceHeardOrSpelledIsAlwaysWrittenVAICAndQuotedWordsStay() {
+        XCTAssertEqual(SpeechClean.clean("Hey Ace, what's the status?"), "Hey VAIC, what's the status?")
+        XCTAssertEqual(SpeechClean.clean("ace can you check A C E's tasks"), "VAIC can you check VAIC's tasks")
+        XCTAssertEqual(SpeechClean.clean("A-C-E, ship it"), "VAIC, ship it")
         XCTAssertEqual(SpeechClean.clean("Name the button \"Ace\""), "Name the button \"Ace\"")
         XCTAssertEqual(SpeechClean.clean("Grace and Candace are here"), "Grace and Candace are here")
+    }
+
+    func testTheNameIsSaidVice() {
+        XCTAssertEqual(VoiceController.speakable("VAIC here. **Done**, and `AIC` too."), "Vice here. Done, and Vice too.")
+        XCTAssertEqual(VoiceController.speakable("AI City and AICity stay"), "AI City and AICity stay")
     }
 }

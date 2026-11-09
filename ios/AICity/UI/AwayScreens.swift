@@ -149,7 +149,7 @@ struct AwaySettingsScreen: View {
                 } header: {
                     Text("Standing orders")
                 } footer: {
-                    Text("Work the city picks up on its own, on a schedule. Add opens AIC's chat with “While I'm away, …”: say what to handle and how often.")
+                    Text("Work the city picks up on its own, on a schedule. Add opens VAIC's chat with “While I'm away, …”: say what to handle and how often.")
                 }
                 if open > 0 {
                     Section {
@@ -173,7 +173,7 @@ struct AwaySettingsScreen: View {
         .confirmationDialog("Delete this standing order?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
                             titleVisibility: .visible, presenting: removing) { o in
             Button("Delete", role: .destructive) { Task { await delete(o) } }
-        } message: { o in Text("\(Away.words(o)) You can add it again any time by asking AIC.") }
+        } message: { o in Text("\(Away.words(o)) You can add it again any time by asking VAIC.") }
     }
 
     private func orderRow(_ o: StandingOrder) -> some View {

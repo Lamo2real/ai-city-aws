@@ -56,7 +56,7 @@ final class CityWebTests: XCTestCase {
         let ready = expectation(description: "page ready")
         c.onReady = { ready.fulfill() }
         await fulfillment(of: [ready], timeout: 20)
-        c.load(snapshot: ["agents": [["id": "ace", "kind": "core", "role": "AIC", "department": nil, "model": "haiku-5-5", "parent": nil, "state": "active"],
+        c.load(snapshot: ["agents": [["id": "ace", "kind": "core", "role": "VAIC", "department": nil, "model": "haiku-5-5", "parent": nil, "state": "active"],
                                      ["id": "wkr-1", "kind": "worker", "role": "Dev", "department": "App", "model": "opus-5-5", "parent": nil, "state": "active", "worker_state": "working"]],
                           "departments": [["name": "App", "key": "app", "state": "active", "created_at": "2026-11-01T00:00:00Z"]],
                           "tickets": [], "questions": [], "approvals": []])
@@ -69,7 +69,7 @@ final class CityWebTests: XCTestCase {
         // The scene took a snapshot, drew it, and its frame loop runs (scene.js reports frames per second).
         let diag = try await c.webView.callAsyncJavaScript("""
             let err = 'ok'
-            try { aicCity.load({agents: [{id: 'ace', kind: 'core', role: 'AIC', department: null, model: 'haiku-5-5', parent: null, state: 'active'}], departments: [], tickets: [], questions: [], approvals: []}) } catch (e) { err = String(e) }
+            try { aicCity.load({agents: [{id: 'ace', kind: 'core', role: 'VAIC', department: null, model: 'haiku-5-5', parent: null, state: 'active'}], departments: [], tickets: [], questions: [], approvals: []}) } catch (e) { err = String(e) }
             await new Promise(r => setTimeout(r, 2500))
             const c = document.querySelector('canvas')
             return [err, c.width > 0 && c.height > 0, Number(document.getElementById('city').dataset.fps || 0) > 0].join(' ')

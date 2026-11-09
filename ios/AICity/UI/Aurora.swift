@@ -22,8 +22,8 @@ enum Aurora {
     static func words(_ s: AuroraSpeaker) -> String {
         switch s {
         case .you: return "You’re talking"
-        case .aic: return "AIC is talking"
-        case .thinking: return "AIC is thinking"
+        case .aic: return "VAIC is talking"
+        case .thinking: return "VAIC is thinking"
         case .idle: return ""
         }
     }

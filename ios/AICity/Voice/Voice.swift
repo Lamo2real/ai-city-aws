@@ -69,7 +69,7 @@ final class VoiceController {
             try session.setActive(true, options: .notifyOthersOnDeactivation)
             let req = SFSpeechAudioBufferRecognitionRequest()
             req.shouldReportPartialResults = true
-            req.contextualStrings = ["AIC", "AI City", "Orchestrator"]
+            req.contextualStrings = ["VAIC", "Vice", "AI City", "Orchestrator"]
             if recognizer.supportsOnDeviceRecognition { req.requiresOnDeviceRecognition = true }
             request = req
             let input = engine.inputNode
@@ -114,10 +114,18 @@ final class VoiceController {
         if send, !text.isEmpty { onText(text) }
     }
 
+    /// The name as written, old or new: it is said "Vice" (the web's `speakable`).
+    nonisolated static let spokenName = #"\bV?AIC\b"#
+
+    /// What the system voice is given: no Markdown marks, and the name as it is said.
+    nonisolated static func speakable(_ text: String) -> String {
+        text.replacingOccurrences(of: "[*`#|_]", with: "", options: .regularExpression)
+            .replacingOccurrences(of: spokenName, with: "Vice", options: .regularExpression)
+    }
+
     func speak(_ text: String) {
         guard !text.isEmpty else { return }
-        let plain = text.replacingOccurrences(of: "[*`#|_]", with: "", options: .regularExpression)
-            .replacingOccurrences(of: #"\bAIC\b"#, with: "Ace", options: .regularExpression) // written AIC, said "Ace" (the owner's rule, 2026-11-08)
+        let plain = Self.speakable(text)
         let u = AVSpeechUtterance(string: String(plain.prefix(2900)))
         u.voice = AVSpeechSynthesisVoice(language: "en-US")
         u.volume = volume

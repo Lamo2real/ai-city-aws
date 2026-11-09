@@ -110,7 +110,7 @@ struct CityList: View {
                                 Circle().fill(CityPalette.color(d)).frame(width: 12, height: 12).accessibilityHidden(true)
                                 Text(d)
                                 Spacer()
-                                Text(d == "HQ" ? "AIC, Orchestrator" : "\(p.workers.count) at work").foregroundStyle(.secondary)
+                                Text(d == "HQ" ? "VAIC, Orchestrator" : "\(p.workers.count) at work").foregroundStyle(.secondary)
                             }
                             .frame(minHeight: 44)
                         }
@@ -149,7 +149,7 @@ struct CityPanel: View {
         let s = model.hud.city
         NavigationStack {
             List {
-                if let a = s.agents[id] ?? (id == "ace" ? Agent(id: "ace", kind: "core", role: "AIC", department: nil, model: "", state: "active") : nil) {
+                if let a = s.agents[id] ?? (id == "ace" ? Agent(id: "ace", kind: "core", role: "VAIC", department: nil, model: "", state: "active") : nil) {
                     let v = City.visualState(s, id)
                     let detail = s.activities[id].flatMap { $0.activity == v ? $0.detail : nil }.map { City.plainText($0, max: 120).short }
                     Section {
@@ -194,7 +194,7 @@ struct CityPanel: View {
                     }
                 }
             }
-            .navigationTitle(id == "ace" ? "AIC" : id)
+            .navigationTitle(id == "ace" ? "VAIC" : id)
             .navigationBarTitleDisplayMode(.inline)
         }
     }
@@ -211,7 +211,7 @@ struct Legend: View {
                     Label("Working: the dot has its model's colour", systemImage: "circle.fill").foregroundStyle(.blue)
                 }
                 Section {
-                    Text("HQ: AIC stands by the fountain in the plaza, the Orchestrator at the HQ entrance.")
+                    Text("HQ: VAIC stands by the fountain in the plaza, the Orchestrator at the HQ entrance.")
                     Text("Each department has its own office with its manager at the door and its workers inside. Lit windows mean someone is at work.")
                     Text("Houses: released workers and saved specialists. A FREE LOT sign marks where the next department goes up.")
                     Text("Pinch to zoom, drag to look around, tap anyone or any building. The map is the same one the web HUD shows.")

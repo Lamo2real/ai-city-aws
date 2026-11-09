@@ -26,7 +26,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .aic: return "AIC"
+        case .aic: return "VAIC"
         case .city: return "City"
         case .inbox: return "Open items"
         case .away: return "While I'm away"

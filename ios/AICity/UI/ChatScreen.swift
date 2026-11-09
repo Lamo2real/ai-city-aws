@@ -26,7 +26,7 @@ struct ChatScreen: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 14) {
                         if hud.chat.isEmpty {
-                            Text("Say hi. Try “yo AIC, what’s the status?” or tap the mic.")
+                            Text("Say hi. Type, or tap the mic and just talk.")
                                 .foregroundStyle(.secondary).padding(.top, 24).frame(maxWidth: .infinity)
                         }
                         ForEach(hud.chat) { line in MessageRow(line: line).id(line.id) }
@@ -39,7 +39,7 @@ struct ChatScreen: View {
                 .onChange(of: hud.chat.count) { _, _ in withAnimation { proxy.scrollTo(hud.waitingForAic ? "status" : hud.chat.last?.id, anchor: .bottom) } }
                 .onAppear { proxy.scrollTo(hud.chat.last?.id, anchor: .bottom) }
             }
-            .accessibilityLabel("Conversation with AIC")
+            .accessibilityLabel("Conversation with VAIC")
             // Under the status bar: the two floating buttons, and the notes that need the owner.
             .safeAreaInset(edge: .top, spacing: 0) { notes }
 
@@ -58,7 +58,7 @@ struct ChatScreen: View {
         .confirmationDialog("Clear the conversation on this iPhone?", isPresented: $confirmClear, titleVisibility: .visible) {
             Button("Clear", role: .destructive) { model.hud.chat = [] }
         } message: {
-            Text("Only this iPhone forgets it. AIC keeps its own record, and it costs nothing.")
+            Text("Only this iPhone forgets it. VAIC keeps its own record, and it costs nothing.")
         }
         .sheet(isPresented: $menuOpen) {
             PlusMenuSheet(onURLs: { urls, fromFolder in
@@ -199,7 +199,7 @@ struct MessageRow: View {
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 StreamedText(text: line.text, streaming: line.state == .streaming)
-                    .accessibilityLabel("AIC: \(line.text)")
+                    .accessibilityLabel("VAIC: \(line.text)")
                 if line.state == .done, let steps = line.steps, steps.count >= 2 {
                     DisclosureGroup(isExpanded: $showSteps) {
                         VStack(alignment: .leading, spacing: 2) {
@@ -236,7 +236,7 @@ struct AicStatusRow: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("AIC: \(turn.steps.last ?? "Working on it")")
+        .accessibilityLabel("VAIC: \(turn.steps.last ?? "Working on it")")
     }
 }
 
@@ -309,7 +309,7 @@ struct Composer: View {
                     .glassWell(radius: 20)
                     .submitLabel(.send)
                     .onSubmit(send)
-                    .accessibilityLabel("Message to AIC")
+                    .accessibilityLabel("Message to VAIC")
 
                 // The one voice button: quiet glass when off, the accent while it listens (the web's .voice-btn).
                 // What is said is answered aloud; what is typed is answered in text.
@@ -325,16 +325,16 @@ struct Composer: View {
                         .animation(reduceMotion ? nil : Glass.ease(Glass.durS), value: voice.listening)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(voice.listening ? "Stop listening and send" : "Talk to AIC")
+                .accessibilityLabel(voice.listening ? "Stop listening and send" : "Talk to VAIC")
                 .accessibilityValue(Aurora.words(speaker))
-                .accessibilityHint("Tap to talk, tap again to send what you said. AIC answers aloud.")
+                .accessibilityHint("Tap to talk, tap again to send what you said. VAIC answers aloud.")
 
                 Button(action: send) {
                     Image(systemName: "arrow.up").font(.headline).frame(width: 44, height: 44)
                 }
                 .buttonStyle(.glassPrimaryCircle)
                 .disabled((draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && attachments.entries.isEmpty) || !attachments.sendable)
-                .accessibilityLabel("Send to AIC")
+                .accessibilityLabel("Send to VAIC")
             }
         }
         .padding(.horizontal)

@@ -56,11 +56,11 @@ struct PlusMenuSheet: View {
             VStack(spacing: 2) {
                 switch page {
                 case .main:
-                    MenuRow(symbol: "doc.on.doc", label: "Add files or photos", hint: "Kept in Knowledge; AIC reads them with your message", more: true) { page = .files }
+                    MenuRow(symbol: "doc.on.doc", label: "Add files or photos", hint: "Kept in Knowledge; VAIC reads them with your message", more: true) { page = .files }
                     MenuRow(symbol: "folder", label: "Add folders", hint: "Every file inside, up to \(Attach.maxFolderFiles)") { pickingFolder = true }
                     MenuRow(symbol: "command", label: "Slash commands", hint: "Quick things to say", more: true) { page = .slash }
                     MenuRow(symbol: "powerplug", label: "Connectors",
-                            hint: connectors.isEmpty ? "Outside services AIC can use" : "\(connectors.count) connected", more: true) { page = .connectors }
+                            hint: connectors.isEmpty ? "Outside services VAIC can use" : "\(connectors.count) connected", more: true) { page = .connectors }
                     MenuRow(symbol: "puzzlepiece.extension", label: "Plugins",
                             hint: skills.isEmpty ? "Skills your agents follow" : "\(skills.count) \(skills.count == 1 ? "skill" : "skills")", more: true) { page = .plugins }
                 case .files:
@@ -84,7 +84,7 @@ struct PlusMenuSheet: View {
                     }
                     // The browser writes "Add ___ as a connector" with the blank selected; a phone's box cannot
                     // select, so the /connect command does the same with the service typed after it.
-                    MenuRow(symbol: "plus", label: "Add a connector…", hint: "Name the service; AIC sets it up") {
+                    MenuRow(symbol: "plus", label: "Add a connector…", hint: "Name the service; VAIC sets it up") {
                         insert(MenuInsert(words: "/connect ", atStart: true))
                     }
                 case .plugins:

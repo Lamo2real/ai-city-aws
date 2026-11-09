@@ -1,6 +1,6 @@
 # AI City for iPhone
 
-A native SwiftUI app that does what the web HUD (`web/`) does: sign in, talk to AIC (typed or by voice), watch the City, answer what needs you, follow tickets and costs, change settings. It talks to the same backend as the web HUD: the same `config.json`, the same Cognito user pool and app client, the same owner-only HTTP API and the same WebSocket events. Nothing in AWS changes for it.
+A native SwiftUI app that does what the web HUD (`web/`) does: sign in, talk to VAIC (typed or by voice), watch the City, answer what needs you, follow tickets and costs, change settings. It talks to the same backend as the web HUD: the same `config.json`, the same Cognito user pool and app client, the same owner-only HTTP API and the same WebSocket events. Nothing in AWS changes for it.
 
 ## What's inside
 
@@ -10,7 +10,7 @@ A native SwiftUI app that does what the web HUD (`web/`) does: sign in, talk to 
 | `Config/AICity.xcconfig` | The AI City's web address (built in; nobody types it), team ID and bundle ID prefix (public values only) |
 | `Config/Info.plist` | Microphone and speech-recognition wording, App Transport Security (HTTPS only) |
 | `AICity/Auth` | Cognito sign-in on the app's own screens: SRP, first-login password, authenticator app, forgot password, refresh, sign-out. Tokens in the Keychain |
-| `AICity/Core` | `config.json`, the HTTP API, the WebSocket, the store (chat, outbox, AIC's steps), Markdown |
+| `AICity/Core` | `config.json`, the HTTP API, the WebSocket, the store (chat, outbox, VAIC's steps), Markdown |
 | `AICity/City` | The City screen and its locked-down web view; the event reducer (a Swift port of `web/src/city/city-state.js`) for the native lists and sheets |
 | `AICity/CityWeb` | The web HUD's own City scene, built from `web/src/city/` (do not edit; rebuild it) |
 | `AICity/Voice` | Push-to-talk with Apple's Speech framework (on the iPhone when it can) and spoken replies |
@@ -67,23 +67,23 @@ The app declares `ITSAppUsesNonExemptEncryption = false` (it uses only Apple's H
 - **Sign in once.** The tokens (ID, access, refresh) live only in the Keychain, on this iPhone only (never synced or backed up), readable after the phone's first unlock since it started. Opening the app, or coming back to it, refreshes them silently; you see the sign-in screen again only if Cognito refuses the refresh token (revoked, or past its validity). Sign-out revokes the refresh token at Cognito and deletes them.
 - **No secrets in the app.** The bundle holds only public values (the site host). Cognito IDs and endpoints come from the public `config.json`.
 - **HTTPS only.** App Transport Security is on with no exceptions; the app also refuses a `config.json` whose API isn't `https://` or whose WebSocket isn't `wss://`.
-- **Agent output is text.** AIC's Markdown is parsed into native text runs (bold, italic, code, lists, tables). AIC's replies never go into a web view; HTML stays visible as characters; only `http(s)` links open, in Safari. The one web view in the app is the City map: bundled code only, no network, no tokens.
+- **Agent output is text.** VAIC's Markdown is parsed into native text runs (bold, italic, code, lists, tables). VAIC's replies never go into a web view; HTML stays visible as characters; only `http(s)` links open, in Safari. The one web view in the app is the City map: bundled code only, no network, no tokens.
 - **The password never leaves the phone:** SRP sends a proof, not the password.
 - The chat is kept on the iPhone (last 60 lines, file protection "complete"); *Settings → Forget this iPhone's conversation* clears it.
 
 ## Notifications
 
-After the first sign-in the app asks, in one sentence, whether this iPhone should get a notification when the city finishes a **large feature** (never small steps). Allow it and the app registers with Apple's push service on every launch and sends the token to the backend (`POST /devices`); the push itself is sent by the backend through SNS → APNs when a top-level job finishes, with the job, outcome and cost in the text. Tapping it opens AIC. Sign-out removes this iPhone from the backend; so does turning notifications off in iOS Settings. "Not now" is never asked again — Settings → Notifications offers it later.
+After the first sign-in the app asks, in one sentence, whether this iPhone should get a notification when the city finishes a **large feature** (never small steps). Allow it and the app registers with Apple's push service on every launch and sends the token to the backend (`POST /devices`); the push itself is sent by the backend through SNS → APNs when a top-level job finishes, with the job, outcome and cost in the text. Tapping it opens VAIC. Sign-out removes this iPhone from the backend; so does turning notifications off in iOS Settings. "Not now" is never asked again — Settings → Notifications offers it later.
 
 Real pushes need the **Push Notifications capability**, which only Apple Developer Program teams have (option B above): set `AIC_ENTITLEMENTS = Config/AICity-Push.entitlements` in `Config/AICity.xcconfig`. With a free personal team the app still builds and runs; Settings → Notifications explains that this build can't receive them. The simulator always has the entitlement and `xcrun simctl push booted <bundle-id> payload.json` shows a notification end to end, but a push from the real backend needs a real iPhone.
 
 ## Voice
 
-Tap the mic, talk, tap again to send. The words are recognised by Apple's Speech framework, on the iPhone when the model is available (no audio leaves the phone then); otherwise Apple's speech service. A message you spoke is answered aloud with the system voice; a typed one is answered in text. While you talk a soft blue light rises from the message box behind the chat, amber while AIC talks, and nothing shows when nobody does. There is no hands-free wake mode on the iPhone. The web HUD uses Amazon Transcribe and Polly instead; see `docs/DECISIONS.md` (decision 69). The microphone is used only while listening.
+Tap the mic, talk, tap again to send. The words are recognised by Apple's Speech framework, on the iPhone when the model is available (no audio leaves the phone then); otherwise Apple's speech service. A message you spoke is answered aloud with the system voice; a typed one is answered in text. While you talk a soft blue light rises from the message box behind the chat, amber while VAIC talks, and nothing shows when nobody does. There is no hands-free wake mode on the iPhone. The web HUD uses Amazon Transcribe and Polly instead; see `docs/DECISIONS.md` (decision 69). The microphone is used only while listening.
 
 ## The + menu
 
-The + button beside the message box opens the same menu as the web HUD: **Add files or photos** (from Photos or Files), **Add folders** (every file inside, hidden ones skipped, at most 100), **Slash commands** (`/status`, `/stop`, `/home`, `/knowledge`, `/connect <service>`, `/clear`, plus one per enabled skill), **Connectors** and **Plugins**. Files go to the knowledge base through the same upload routes as the browser and show as chips under the box with their live status; the message then carries an "Attached (now in my knowledge base): …" line that AIC reads first. In demo mode the uploads land in a fake bucket and turn ready after two seconds.
+The + button beside the message box opens the same menu as the web HUD: **Add files or photos** (from Photos or Files), **Add folders** (every file inside, hidden ones skipped, at most 100), **Slash commands** (`/status`, `/stop`, `/home`, `/knowledge`, `/connect <service>`, `/clear`, plus one per enabled skill), **Connectors** and **Plugins**. Files go to the knowledge base through the same upload routes as the browser and show as chips under the box with their live status; the message then carries an "Attached (now in my knowledge base): …" line that VAIC reads first. In demo mode the uploads land in a fake bucket and turn ready after two seconds.
 
 ## The City is the browser's City
 

@@ -64,7 +64,7 @@ enum Demo {
     static var city: JSONValue {
         [
             "agents": [
-                ["id": "ace", "kind": "core", "role": "AIC", "department": nil, "model": "haiku-5-5", "parent": nil, "state": "active"],
+                ["id": "ace", "kind": "core", "role": "VAIC", "department": nil, "model": "haiku-5-5", "parent": nil, "state": "active"],
                 ["id": "orchestrator", "kind": "core", "role": "Orchestrator", "department": nil, "model": "fable-5-1", "parent": "ace", "state": "active"],
                 ["id": "mgr-app", "kind": "manager", "role": "App manager", "department": "App", "model": "fable-5-1", "parent": "orchestrator", "state": "active"],
                 ["id": "wkr-ios-1", "kind": "worker", "role": "iOS developer", "department": "App", "model": "opus-5-5", "parent": "mgr-app", "state": "active", "worker_state": "working", "total_cost_usd": 1.42],

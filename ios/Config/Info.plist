@@ -5,9 +5,9 @@
 	<key>AICSiteHost</key>
 	<string>$(AIC_SITE_HOST)</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>AI City uses the microphone only while you hold the mic button, so you can talk to AIC.</string>
+	<string>AI City uses the microphone only while you hold the mic button, so you can talk to VAIC.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>AI City turns what you say to AIC into text, on this iPhone when it can.</string>
+	<string>AI City turns what you say to VAIC into text, on this iPhone when it can.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

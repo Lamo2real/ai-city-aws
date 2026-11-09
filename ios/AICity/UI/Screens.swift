@@ -44,7 +44,7 @@ struct TicketsScreen: View {
                         } header: {
                             Text("Decided for you")
                         } footer: {
-                            Text("Newest first. Tap one to read it all. If one isn't what you want, tell AIC what to do instead.")
+                            Text("Newest first. Tap one to read it all. If one isn't what you want, tell VAIC what to do instead.")
                         }
                     }
                 } else if let e = loader.error {
@@ -52,7 +52,7 @@ struct TicketsScreen: View {
                 } else if loader.data == nil {
                     LoadingView(what: "tickets")
                 } else if tickets.isEmpty {
-                    EmptyState(text: done ? "Nothing finished yet." : "Nothing is being worked on. Ask AIC for something.")
+                    EmptyState(text: done ? "Nothing finished yet." : "Nothing is being worked on. Ask VAIC for something.")
                 }
                 ForEach(tickets) { t in
                     NavigationLink(value: t.id) {
@@ -489,7 +489,7 @@ struct FirstRunGuide: View {
     var done: () -> Void
     @State private var i = 0
     private let steps = [
-        ("Meet AIC", "AIC is the only one you talk to. Type or tap the mic and just ask: “yo AIC, what’s the status?”. AIC hands real work to the team and tells you when it is done."),
+        ("Meet VAIC", "Talk to VAIC like a friend. Type, or tap the mic and speak. Ask for anything. VAIC tells you when it is done."),
         ("See the City", "The City shows your organization live: the Orchestrator at HQ, one building per department, and workers who walk in when hired and leave when done. Tap anyone to see what they are doing."),
         ("Where the money is", "Costs stay out of the way: everything about spend lives under More → Costs, and nowhere else. Figures there are estimates; the AWS bill is the truth."),
     ]

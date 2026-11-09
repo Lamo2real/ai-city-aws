@@ -13,8 +13,8 @@ final class AuroraTests: XCTestCase {
 
     func testVoiceOverHearsWhoIsTalkingOnTheVoiceButton() {
         XCTAssertEqual(Aurora.words(.you), "You’re talking")
-        XCTAssertEqual(Aurora.words(.aic), "AIC is talking")
-        XCTAssertEqual(Aurora.words(.thinking), "AIC is thinking")
+        XCTAssertEqual(Aurora.words(.aic), "VAIC is talking")
+        XCTAssertEqual(Aurora.words(.thinking), "VAIC is thinking")
         XCTAssertEqual(Aurora.words(.idle), "")
     }
 

@@ -1,10 +1,12 @@
 import Foundation
 
 /// What the owner said, without the stumbles (the owner's rule, 2026-11-08): fillers ("um", "uh", "er", "hmm"),
-/// stammered repeats ("I I think", "the the") and filler-only utterances never reach the chat or AIC. Words inside
+/// stammered repeats ("I I think", "the the") and filler-only utterances never reach the chat or VAIC. Words inside
 /// quotation marks are the owner's on purpose and stay exactly as said. A Swift port of `web/src/voice/clean.ts`.
 enum SpeechClean {
     private static let filler = "(?:uh[- ]huh|u+h*m+|u+h+|e+r+m*|a+h+|h+m+|m+h*m+|mhm)"
+    /// The same pattern as `ACE` in web/src/voice/clean.ts.
+    private static let name = "\\b(?:vaic|v[-. ]a[-. ]i[-. ]c|vais|vice(?!\\s+(?:president|presidents|versa|chair|chairman|principal|admiral|captain|squad|city|grip|presidency)\\b)|aic|a[-. ]i[-. ]c|ace|a[-. ]c[-. ]e)\\b"
     private static let soft: Set<String> = ["well", "so", "like", "maybe", "actually", "basically", "anyway", "and", "but", "i", "mean"]
 
     private static func replace(_ s: String, _ pattern: String, _ with: String) -> String {
@@ -13,8 +15,9 @@ enum SpeechClean {
     }
 
     private static func scrub(_ s: String) -> String {
-        // "Ace" heard, or spelled "A C E": always written AIC (the owner's rule, 2026-11-09).
-        var t = replace(s, "\\b(?:ace|a[-. ]c[-. ]e)\\b", "AIC")
+        // "Vice" heard, "VAIC" spelled out, or the retired name ("AIC", "Ace"): always written VAIC (decision 152).
+        // Ordinary uses of the word stay: "vice president", "vice versa", "vice chair", "Vice City".
+        var t = replace(s, name, "VAIC")
         t = replace(t, ",\\s*\(filler)\\s*,\\s*", " ")
         t = replace(t, "(^|[\\s,.;!?…-])\(filler)(?=$|[\\s,.;!?…-])", "$1")
         t = replace(t, "\\b(\\w{1,3})-\\s+(?=\\1)", "")
