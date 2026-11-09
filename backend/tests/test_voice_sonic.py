@@ -332,3 +332,38 @@ async def test_quick_answers_get_no_cue_and_a_cue_never_starts_while_the_owner_t
     await asyncio.sleep(0.3)
     assert len(statuses(r)) == 1
     await r.s.close()
+
+
+async def test_the_api_says_why_aws_refused_the_voice_connection(monkeypatch: Any) -> None:
+    import aic.lambdas.api as api_mod
+
+    class Creds:
+        def get_frozen_credentials(self) -> Any:
+            from botocore.credentials import ReadOnlyCredentials
+
+            return ReadOnlyCredentials("AKIAEXAMPLE", "secret", "token")
+
+    class Session:
+        def get_credentials(self) -> Any:
+            return Creds()
+
+    arn = "arn:aws:bedrock-agentcore:eu-north-1:111122223333:runtime/aic_prod_ace-abc"
+    deps = VoiceUrlDeps(session=Session(), region="eu-north-1", runtime_arn=arn, session_id=lambda: "s" * 40)
+    seen: list[str] = []
+
+    async def refused(url: str, timeout_s: float = 8.0) -> tuple[int, str]:
+        seen.append(url)
+        return 403, '{"message":"not authorized to perform: bedrock-agentcore:InvokeAgentRuntimeWithWebSocketStream"}'
+
+    monkeypatch.setattr(api_mod, "check_voice_url", refused)
+    assert ("POST", "/voice/check") in ROUTES
+    r = js(await handle_http(ev("POST", "/voice/check"), make(voice=deps)))
+    assert r["ok"] is False and r["status"] == 403 and "InvokeAgentRuntimeWithWebSocketStream" in r["reason"]
+    assert seen and seen[0].startswith("wss://bedrock-agentcore.eu-north-1.amazonaws.com/runtimes/")
+
+    async def accepted(url: str, timeout_s: float = 8.0) -> tuple[int, str]:
+        return 101, ""
+
+    monkeypatch.setattr(api_mod, "check_voice_url", accepted)
+    r = js(await handle_http(ev("POST", "/voice/check"), make(voice=deps)))
+    assert r["ok"] is True

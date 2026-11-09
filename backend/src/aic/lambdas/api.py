@@ -68,7 +68,7 @@ from aic.shared.speech import (
 )
 from aic.shared.turn import ModelRunner
 from aic.shared.utility import UtilityDeps, bedrock_converse_runner, is_addressed_to_ace
-from aic.shared.voice_url import EXPIRES_S, VoiceUrlDeps, presigned_voice_url
+from aic.shared.voice_url import EXPIRES_S, VoiceUrlDeps, check_voice_url, presigned_voice_url
 
 from ._runtime import run
 from .calendar_api import CalendarApi
@@ -180,6 +180,7 @@ ROUTES: list[tuple[str, str]] = [
     ("GET", "/voice/openai"),
     ("PUT", "/voice/openai-key"),
     ("POST", "/voice/session"),
+    ("POST", "/voice/check"),
     ("POST", "/voice/live"),
     ("GET", "/github"),
     ("PUT", "/github/token"),
@@ -791,6 +792,21 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
             log("warn", "voice.presign_failed", error=type(e).__name__)
             return reply(503, {"error": "unavailable", "message": "AIC's voice could not start. Try again."})
         return reply(200, {"url": url, "expires_in": EXPIRES_S})
+    if is_("POST", r"/voice/check"):
+        # Why the browser's WebSocket to AIC's voice was refused: the API opens the same handshake and reports AWS's
+        # answer (browsers never show it). Read-only; it opens and closes one connection.
+        if d.voice is None:
+            return reply(200, {"ok": False, "reason": "AIC's real-time voice isn't set up here."})
+        try:
+            url = await asyncio.to_thread(presigned_voice_url, d.voice)
+            status, body = await check_voice_url(url)
+        except Exception as e:
+            log("warn", "voice.check_failed", error=type(e).__name__)
+            return reply(200, {"ok": False, "reason": f"the check itself failed ({type(e).__name__})"})
+        log("info", "voice.check", status=status)
+        if status == 101:
+            return reply(200, {"ok": True, "reason": "AWS accepts the connection; the voice stopped after it opened"})
+        return reply(200, {"ok": False, "status": status, "reason": f"AWS answered {status}: {body or 'no details'}"})
     if is_("GET", r"/departments/presets"):
         return reply(200, public_presets())
     if is_("GET", r"/departments"):

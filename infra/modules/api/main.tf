@@ -253,6 +253,8 @@ locals {
     "POST /voice/session",
     # AIC's real-time voice on OpenAI GPT-Live (decision 128): the browser's WebRTC offer in, the answer out.
     "POST /voice/live",
+    # Why the browser's voice WebSocket was refused: the API repeats the handshake and reports AWS's answer.
+    "POST /voice/check",
   ]
   queue_batch = { ace = 1, orchestrator = 5, manager = 5, worker = 10 }
   queue_conc  = { ace = 5, orchestrator = 10, manager = 20, worker = var.worker_queue_concurrency }

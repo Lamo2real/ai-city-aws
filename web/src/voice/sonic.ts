@@ -205,8 +205,20 @@ export async function startSonic(h: SonicHandlers): Promise<SonicCall> {
           return;
       }
     };
-    ws.onerror = () => fail(new Error("The connection to AIC's voice broke."));
-    ws.onclose = () => (ready ? cleanup() && h.onEnd() : fail(new Error("AIC's voice is not available.")));
+    // Browsers never say why a WebSocket was refused: ask the API, which repeats the handshake and reads AWS's answer.
+    let checking = false; // the API is finding out why; the close that follows the error waits for it
+    ws.onerror = () => {
+      checking = true;
+      void api<{ ok: boolean; reason: string }>("/voice/check", { method: "POST" }).then(
+        (c) =>
+          fail(
+            new Error(c.reason ? `the connection was refused: ${c.reason}` : "The connection to AIC's voice broke."),
+          ),
+        () => fail(new Error("The connection to AIC's voice broke.")),
+      );
+    };
+    ws.onclose = () =>
+      ready ? cleanup() && h.onEnd() : checking ? undefined : fail(new Error("AIC's voice is not available."));
   });
 
   return {

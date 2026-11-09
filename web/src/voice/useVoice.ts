@@ -489,7 +489,10 @@ export function useVoice(dictation?: DictationTarget) {
       } catch (e) {
         if (!convo.current) return;
         logVoiceError("GPT-Live could not start; trying Nova Sonic", e);
-        if (liveWanted())
+        // No OpenAI key is a choice, not a fault: GPT-Live is then simply skipped without a word.
+        const notSetUp =
+          (e as { status?: number } | null)?.status === 503 && /set up/i.test((e as Error)?.message ?? "");
+        if (liveWanted() && !notSetUp)
           liveWhy = ((e as Error | null)?.message ?? "").trim().replace(/\.$/, "").slice(0, 120) || "no reason given";
         call = await startSonic(handlers);
       }

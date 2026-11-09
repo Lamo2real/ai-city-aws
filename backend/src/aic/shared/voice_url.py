@@ -36,3 +36,45 @@ def presigned_voice_url(d: VoiceUrlDeps) -> str:
     req = AWSRequest(method="GET", url=url, headers={"host": urlparse(url).hostname or host})
     SigV4QueryAuth(creds.get_frozen_credentials(), "bedrock-agentcore", d.region, expires=EXPIRES_S).add_auth(req)
     return str(req.url).replace("https://", "wss://", 1)
+
+
+async def check_voice_url(url: str, timeout_s: float = 8.0) -> tuple[int, str]:
+    """Opens the WebSocket handshake to ``url`` the way the browser does and returns AWS's answer: ``(101, "")`` when
+    it connects, otherwise the HTTP status and the start of the error body. Browsers hide why a WebSocket was
+    refused; this shows the owner the real reason (the owner, 2026-11-09: "the connection to AIC's voice broke")."""
+    import asyncio
+    import base64
+    import os
+    import ssl
+
+    u = urlparse(url.replace("wss://", "https://", 1))
+    host = u.hostname or ""
+    target = u.path + (f"?{u.query}" if u.query else "")
+    key = base64.b64encode(os.urandom(16)).decode()
+    request = (
+        f"GET {target} HTTP/1.1\r\nHost: {host}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+        f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\nUser-Agent: aic-voice-check/1.0\r\n\r\n"
+    )
+
+    async def go() -> tuple[int, str]:
+        reader, writer = await asyncio.open_connection(
+            host, 443, ssl=ssl.create_default_context(), server_hostname=host
+        )
+        try:
+            writer.write(request.encode())
+            await writer.drain()
+            head = (await reader.readuntil(b"\r\n\r\n")).decode("latin-1")
+            status = int(head.split(" ", 2)[1])
+            if status == 101:
+                return 101, ""
+            length = 0
+            for line in head.split("\r\n")[1:]:
+                k, _, v = line.partition(":")
+                if k.strip().lower() == "content-length":
+                    length = int(v.strip() or 0)
+            body = (await reader.read(min(length or 2000, 2000))).decode("utf-8", "replace")
+            return status, " ".join(body.split())[:300]
+        finally:
+            writer.close()
+
+    return await asyncio.wait_for(go(), timeout_s)
