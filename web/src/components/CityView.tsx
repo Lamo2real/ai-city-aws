@@ -129,6 +129,14 @@ export function CityView({ go }: { go: (view: string) => void }) {
 
   return (
     <section className="city" ref={root} aria-label="City view">
+      {/* The refraction behind the City's glass boxes (decision 153): defined once, used by .cityui. */}
+      <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true" focusable="false">
+        <filter id="city-glass" x="0" y="0" width="100%" height="100%" colorInterpolationFilters="sRGB">
+          <feTurbulence type="fractalNoise" baseFrequency="0.012 0.018" numOctaves={2} seed={3} result="noise" />
+          <feGaussianBlur in="noise" stdDeviation={2} result="softNoise" />
+          <feDisplacementMap in="SourceGraphic" in2="softNoise" scale={28} xChannelSelector="R" yChannelSelector="G" />
+        </filter>
+      </svg>
       <canvas
         ref={canvas}
         aria-label="The city of the agents as a small map. Every building and agent is also listed under Departments and in the panel."
