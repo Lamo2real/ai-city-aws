@@ -151,6 +151,47 @@ describe("coming back after signing up and in", () => {
   });
 });
 
+describe("after the owner approves a connector", () => {
+  it("a failure while setting it up shows in the chat in full, not nothing (Canva, 2026-11-10)", async () => {
+    // Long ago, so no resume is kept: only the approval itself keeps the connector followed.
+    store.set({ chat: [{ who: "owner", text: "connect Canva", at: Date.now() - 10 * 3_600_000 }] as never });
+    store.event({
+      type: "approval.requested",
+      kind: "connector.add",
+      id: "ap-1",
+      action: "Connect Canva?",
+      reason: "r",
+      connector_id: "canva",
+    });
+    store.dropCard("ap:ap-1"); // what the card does when the owner taps Connect
+    const full =
+      "AgentCore Identity refused the sign-in setup. AccessDeniedException: User: arn:aws:sts::123456789012:assumed-role/aic-prod-fn-connectors/x is not authorized to perform: bedrock-agentcore:CreateTokenVault on resource: arn:aws:bedrock-agentcore:eu-north-1:123456789012:token-vault/default";
+    store.event({ type: "connector.updated", id: "canva", label: "Canva", status: "provisioning" });
+    store.event({ type: "connector.updated", id: "canva", label: "Canva", status: "error", error: full });
+    render(<ChatCards cards={store.get().cards} />);
+    expect(screen.getByRole("alert").textContent).toContain(`Canva didn't connect: ${full}`);
+  });
+
+  it("an error for a connector nobody asked about in this session stays in Settings", () => {
+    store.event({ type: "connector.updated", id: "other", label: "Other", status: "error", error: "x" });
+    expect(store.get().cards).toEqual([]);
+  });
+});
+
+describe("one card per mailbox", () => {
+  it("the same account's sign-in event twice is one card", () => {
+    for (let i = 0; i < 2; i++)
+      store.event({ type: "connect.signin", provider: "microsoft", label: "Outlook", account_id: "ma-9" });
+    expect(store.get().cards).toHaveLength(1);
+  });
+
+  it("the app-password form offers no Outlook.com: Microsoft turned app passwords off", async () => {
+    const { IMAP_PRESETS, APP_PASSWORD_HOWTO } = await import("../src/lib/connect.ts");
+    expect(Object.keys(IMAP_PRESETS)).not.toContain("Outlook.com");
+    expect(Object.keys(APP_PASSWORD_HOWTO)).not.toContain("Outlook.com");
+  });
+});
+
 describe("the live dot and full errors", () => {
   it("pulses gently and stands still when the owner prefers less motion", () => {
     expect(CSS).toMatch(/\.live-dot \{[^}]*animation: live-pulse/);

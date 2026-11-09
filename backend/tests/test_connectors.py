@@ -418,6 +418,52 @@ async def test_oauth_without_dynamic_registration_asks_the_owner_for_a_client() 
     assert dict(ctl.calls)["create_oauth2_credential_provider"]["credentialProviderVendor"] == "GithubOauth2"
 
 
+async def test_an_identity_refusal_is_shown_in_full_with_the_aws_message() -> None:
+    """Canva (2026-11-10): "AgentCore Identity refused the sign-in setup (AccessDeniedException)" said nothing about
+    what was denied. The record (and so Settings and the chat card) now carries AWS's whole message."""
+    from botocore.exceptions import ClientError
+
+    net = FakeNet()
+    net.status[URL] = (401, {"www-authenticate": "Bearer"})
+    net.get["https://mcp.higgsfield.ai/.well-known/oauth-protected-resource/mcp"] = {
+        "authorization_servers": ["https://github.com/login/oauth"]
+    }
+    net.get["https://github.com/.well-known/oauth-authorization-server/login/oauth"] = {
+        "issuer": "https://github.com/login/oauth",
+        "authorization_endpoint": "https://github.com/login/oauth/authorize",
+        "token_endpoint": "https://github.com/login/oauth/access_token",
+    }
+    deps, ctl, _ = _lam(net)
+    denied = (
+        "User: arn:aws:sts::123456789012:assumed-role/aic-prod-fn-connectors/aic-prod-connectors is not authorized "
+        "to perform: bedrock-agentcore:CreateTokenVault on resource: "
+        "arn:aws:bedrock-agentcore:eu-north-1:123456789012:token-vault/default"
+    )
+
+    def refuse(**_: Any) -> Any:
+        raise ClientError(
+            {"Error": {"Code": "AccessDeniedException", "Message": denied}}, "CreateOauth2CredentialProvider"
+        )
+
+    ctl.answers["create_oauth2_credential_provider"] = refuse
+    await _provisioning(deps.store)
+    await lam.handle({"action": "provision", "id": "higgsfield"}, deps)
+    rec = await deps.store.get("higgsfield")
+    assert rec and rec["status"] == "error"
+    assert rec["error"] == f"AgentCore Identity refused the sign-in setup. AccessDeniedException: {denied}"
+    sent = [e for e in deps.bus.events if e.get("type") == "connector.updated"][-1]  # type: ignore[attr-defined]
+    assert sent["error"] == rec["error"]  # the HUD gets it whole, not cut at 300 characters
+
+
+def test_aws_error_names_the_code_and_message_and_falls_back_to_the_type() -> None:
+    from botocore.exceptions import ClientError
+
+    e = ClientError({"Error": {"Code": "ThrottlingException", "Message": "Rate  exceeded\n"}}, "X")
+    assert lam.aws_error(e) == "ThrottlingException: Rate exceeded"
+    assert lam.aws_error(TimeoutError()) == "TimeoutError"
+    assert lam.aws_error(OSError("Connection refused")) == "OSError: Connection refused"
+
+
 async def test_a_401_without_oauth_metadata_means_an_api_key() -> None:
     net = FakeNet()
     net.status[URL] = (401, {})
@@ -756,6 +802,50 @@ async def test_mail_and_calendar_providers_go_to_connect_account_not_the_mcp_flo
 
     (acct,) = await AccountStore(d.ledger.table).all()
     assert acct["provider"] == provider and acct["label"] == "Work" and acct["status"] == "signing_in"
+
+
+async def test_asking_for_outlook_three_ways_gives_one_card() -> None:
+    """The owner's "connect Outlook" (2026-11-10) put three app-password cards in the chat: "Microsoft", "Outlook"
+    and "Outlook MCP". One request is one card; asking again shows the card that is already waiting."""
+    from aic.mail.accounts import AccountStore
+
+    d, _city = _deps()
+    tool = add_connector_tool(d, _ctx())
+    first = await tool.handler({"query": "Outlook", "label": "Outlook"})
+    again = [await tool.handler(a) for a in ({"query": "Outlook", "label": "Microsoft"}, {"query": "Outlook MCP"})]
+    assert "Sign in to Microsoft (Outlook)" in first
+    assert all("already in the chat" in a for a in again)
+    (acct,) = await AccountStore(d.ledger.table).all()
+    assert acct["provider"] == "microsoft" and acct["status"] == "signing_in"
+    cards = [e for e in d.bus.events if e.get("type") == "connect.signin"]  # type: ignore[attr-defined]
+    assert {c["account_id"] for c in cards} == {acct["id"]}  # the HUD keys cards by account: one card
+
+
+async def test_outlook_without_microsoft_sign_in_says_so_and_adds_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Microsoft turned off app passwords for Outlook mail, so without Microsoft sign-in there is no card that could
+    work: VAIC says what's missing instead of putting an app-password form in the chat."""
+    from aic.mail.accounts import AccountStore
+
+    monkeypatch.setenv("AIC_MAIL_PROVIDERS", "")
+    d, _city = _deps()
+    out = await add_connector_tool(d, _ctx()).handler({"query": "my Outlook", "label": "Outlook"})
+    assert "app passwords" in out and "isn't switched on" in out and "Nothing was added" in out
+    assert await AccountStore(d.ledger.table).all() == []
+    assert not [e for e in d.bus.events if e.get("type") == "connect.signin"]  # type: ignore[attr-defined]
+    # Gmail still connects by app password, and asking twice still gives one card.
+    for _ in range(2):
+        await add_connector_tool(d, _ctx()).handler({"query": "Gmail", "label": "Personal"})
+    (acct,) = await AccountStore(d.ledger.table).all()
+    assert acct["provider"] == "imap" and acct["preset"] == "Gmail (app password)"
+
+
+async def test_two_plain_imap_mailboxes_are_two_cards() -> None:
+    from aic.mail.accounts import AccountStore
+
+    d, _city = _deps()
+    await add_connector_tool(d, _ctx()).handler({"query": "iCloud", "label": "iCloud"})
+    await add_connector_tool(d, _ctx()).handler({"query": "Fastmail", "label": "Fastmail"})
+    assert len(await AccountStore(d.ledger.table).all()) == 2
 
 
 def test_links_and_other_names_are_not_mistaken_for_mail() -> None:

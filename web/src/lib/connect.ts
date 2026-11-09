@@ -164,14 +164,13 @@ export const listRules = () => api<{ rules: MailRule[] }>("/mail/rules");
 export const addRule = (r: Omit<MailRule, "id">) => api<{ rule: MailRule }>("/mail/rules", { method: "POST", body: r });
 export const removeRule = (id: string) => api(`/mail/rules/${id}`, { method: "DELETE" });
 
-/** Presets for the app-password form (the owner can change every field). */
 /** One line on getting the app password, per preset (shown above the form). */
 export const APP_PASSWORD_HOWTO: Record<string, string> = {
   "Gmail (app password)":
     "Create an app password at myaccount.google.com/apppasswords (2-step verification must be on), then paste it here with your Gmail address.",
-  "Outlook.com":
-    "Create an app password at account.microsoft.com/security (Advanced security options), then paste it here with your address.",
 };
+/** Presets for the app-password form (the owner can change every field). No Outlook.com: Microsoft turned off app
+ * passwords for Outlook mail, so Outlook signs in with Microsoft (decision 163). */
 export const IMAP_PRESETS: Record<string, Partial<ImapForm>> = {
   iCloud: {
     imap_host: "imap.mail.me.com",
@@ -202,13 +201,6 @@ export const IMAP_PRESETS: Record<string, Partial<ImapForm>> = {
     smtp_host: "smtp.gmail.com",
     smtp_port: 465,
     smtp_starttls: false,
-  },
-  "Outlook.com": {
-    imap_host: "outlook.office365.com",
-    imap_port: 993,
-    smtp_host: "smtp-mail.outlook.com",
-    smtp_port: 587,
-    smtp_starttls: true,
   },
 };
 

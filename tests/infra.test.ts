@@ -608,6 +608,18 @@ describe("app-bridge Lambda (docs/APPS.md v2)", () => {
   });
 });
 
+describe("connectors: creating an Identity provider at runtime (decision 163)", () => {
+  it("the connectors and api Lambdas may read and create the default token vault, and nothing else gets it", () => {
+    const conn = readFileSync(join(import.meta.dirname, "..", "infra", "modules", "connectors", "main.tf"), "utf8");
+    const vault =
+      /\{ Sid = "TokenVault",( Effect = "Allow",)? Action = \["bedrock-agentcore:GetTokenVault", "bedrock-agentcore:CreateTokenVault"\], Resource = \[local\.vault\] \}/g;
+    expect(conn.match(vault)).toHaveLength(2);
+    expect(conn).toMatch(/vault\s+= "\$\{local\.arn\}:token-vault\/default"/);
+    const runtime = conn.slice(conn.indexOf('resource "aws_iam_role_policy" "runtime_gateway"'));
+    expect(runtime.slice(0, runtime.indexOf("\n}\n"))).not.toMatch(/TokenVault/);
+  });
+});
+
 describe("VAIC's voice (Polly generative)", () => {
   it("the HUD may call Polly in its own region, which config.json names", async () => {
     const { readFileSync } = await import("node:fs");

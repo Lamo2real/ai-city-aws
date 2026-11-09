@@ -44,10 +44,10 @@ async def dispatch(event: Mapping[str, Any], d: ConnectorsDeps, store: Any = Non
         else:
             await sync(d, id, specs)
     except Exception as e:
-        from aic.lambdas.connectors import _fail
+        from aic.lambdas.connectors import _fail, aws_error
 
-        log("error", "connectors.failed", connector=id, action=str(action), error=type(e).__name__)
-        await _fail(d, id, "Something went wrong while setting it up. Try Refresh in Settings.")
+        log("error", "connectors.failed", connector=id, action=str(action), error=aws_error(e))
+        await _fail(d, id, f"Something went wrong while setting it up: {aws_error(e)} Try Refresh in Settings.")
         return {"ok": False}
     return {"ok": True}
 
@@ -92,7 +92,7 @@ async def provision(d: ConnectorsDeps, rec: Record, specs: Any) -> Record | None
 async def _oauth(d: ConnectorsDeps, rec: Record, info: dict[str, Any], auth: Mapping[str, Any]) -> Record | None:
     """A custom provider with the spec's endpoints and a placeholder client; the owner enters theirs in the
     secure field (most APIs have no dynamic registration), after registering our callback URL."""
-    from aic.lambdas.connectors import PENDING_CLIENT, _fail, _provider_input, _set
+    from aic.lambdas.connectors import PENDING_CLIENT, _fail, _provider_input, _set, aws_error
 
     id = rec["id"]
     name = f"aic-conn-{id}"
@@ -109,7 +109,7 @@ async def _oauth(d: ConnectorsDeps, rec: Record, info: dict[str, Any], auth: Map
             tags=d.tags,
         )
     except Exception as e:
-        return await _fail(d, id, f"AgentCore Identity refused the sign-in setup ({type(e).__name__}).")
+        return await _fail(d, id, f"AgentCore Identity refused the sign-in setup. {aws_error(e)}")
     oauth = {
         "flow": auth["flow"],
         "authorization_server": issuer,
@@ -135,7 +135,7 @@ async def _oauth(d: ConnectorsDeps, rec: Record, info: dict[str, Any], auth: Map
 
 
 async def sync(d: ConnectorsDeps, id: str, specs: Any) -> Record | None:
-    from aic.lambdas.connectors import _fail, _set, rewrite_policies
+    from aic.lambdas.connectors import _fail, _set, aws_error, rewrite_policies
 
     rec = await d.store.get(id)
     if not rec or rec.get("status") in ("removing", "pending_approval", "provisioning"):
@@ -147,7 +147,7 @@ async def sync(d: ConnectorsDeps, id: str, specs: Any) -> Record | None:
     try:
         spec = json.loads(await asyncio.to_thread(specs.get, key))
     except Exception as e:
-        return await _fail(d, id, f"The stored API description couldn't be read ({type(e).__name__}).")
+        return await _fail(d, id, f"The stored API description couldn't be read. {aws_error(e)}")
     try:
         await asyncio.to_thread(credential, rec, d.identity, d.workload)
     except NeedsLogin:
@@ -156,7 +156,7 @@ async def sync(d: ConnectorsDeps, id: str, specs: Any) -> Record | None:
         needs = "oauth_client" if rec.get("auth") == "oauth" else "api_key"
         return await _set(d, id, {"status": "needs_key", "needs": needs, "error": None})
     except Exception as e:
-        return await _fail(d, id, f"The credential couldn't be read ({type(e).__name__}).")
+        return await _fail(d, id, f"The credential couldn't be read. {aws_error(e)}")
     tools, schemas = openapi.tools_of(spec)
     if not tools:
         return await _fail(d, id, "The API has no operations the city can use.")
@@ -184,7 +184,7 @@ async def sync(d: ConnectorsDeps, id: str, specs: Any) -> Record | None:
             )
             target_id = r["targetId"]
     except Exception as e:
-        return await _fail(d, id, f"The Gateway refused the API's tools ({type(e).__name__}).")
+        return await _fail(d, id, f"The Gateway refused the API's tools. {aws_error(e)}")
     skipped = list(spec.get("skipped") or [])
     warning = f"Skipped {len(skipped)} operation(s) the city can't use: {'; '.join(skipped[:10])}." if skipped else None
     await d.store.update(

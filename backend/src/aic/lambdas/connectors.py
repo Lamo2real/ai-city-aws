@@ -93,8 +93,18 @@ async def _set(d: ConnectorsDeps, id: str, patch: Mapping[str, Any]) -> Record |
     return rec
 
 
+def aws_error(e: BaseException) -> str:
+    """An error in full (the owner's rule): the AWS error code and its message, e.g. ``AccessDeniedException: User:
+    arn:… is not authorized to perform: bedrock-agentcore:… on resource: …``. AWS messages name actions and
+    resources, never request bodies, so no secret is in them."""
+    err = (getattr(e, "response", None) or {}).get("Error") or {}
+    code = str(err.get("Code") or type(e).__name__)
+    msg = " ".join(str(err.get("Message") or e or "").split())
+    return f"{code}: {msg}"[:900] if msg and msg != code else code
+
+
 async def _fail(d: ConnectorsDeps, id: str, reason: str) -> Record | None:
-    log("warn", "connector.error", connector=id, reason=reason[:120])
+    log("warn", "connector.error", connector=id, reason=reason[:1000])
     return await _set(d, id, {"status": "error", "error": reason})
 
 
@@ -130,7 +140,7 @@ async def provision(d: ConnectorsDeps, id: str) -> Record | None:
     except McpError as e:
         status, headers = e.status, e.headers
     except Exception as e:
-        return await _fail(d, id, f"The server could not be reached ({type(e).__name__}).")
+        return await _fail(d, id, f"The server could not be reached. {aws_error(e)}")
     if status == 401:
         meta = await _discover(d, rec, headers.get("www-authenticate", ""))
         if meta:
@@ -214,7 +224,7 @@ async def _oauth(d: ConnectorsDeps, rec: Record, asm: dict[str, Any], scopes: li
             tags=d.tags,
         )
     except Exception as e:
-        return await _fail(d, id, f"AgentCore Identity refused the sign-in setup ({type(e).__name__}).")
+        return await _fail(d, id, f"AgentCore Identity refused the sign-in setup. {aws_error(e)}")
     callback = str(created.get("callbackUrl") or "")
     oauth: dict[str, Any] = {
         "authorization_server": str(asm.get("issuer") or ""),
@@ -247,7 +257,7 @@ async def _oauth(d: ConnectorsDeps, rec: Record, asm: dict[str, Any], scopes: li
                     {"auth": "oauth", "provider_name": name, "oauth": oauth, "status": "needs_login", "needs": None},
                 )
             except Exception as e:
-                log("warn", "connector.dcr_update_failed", connector=id, error=type(e).__name__)
+                log("warn", "connector.dcr_update_failed", connector=id, error=aws_error(e))
     # No dynamic registration: the owner registers a client at the provider with our callback URL.
     return await _set(
         d,
@@ -349,7 +359,7 @@ async def sync(d: ConnectorsDeps, id: str) -> Record | None:
             return await _set(d, id, {"status": "login_expired" if rec.get("auth") == "oauth" else "needs_key"})
         return await _fail(d, id, f"Listing the server's tools failed (HTTP {e.status}).")
     except Exception as e:
-        return await _fail(d, id, f"Listing the server's tools failed ({type(e).__name__}).")
+        return await _fail(d, id, f"Listing the server's tools failed. {aws_error(e)}")
     tools, schemas, skipped = [], [], []
     for t in raw:
         name = str(t.get("name", ""))
@@ -385,7 +395,7 @@ async def sync(d: ConnectorsDeps, id: str) -> Record | None:
             )
             target_id = r["targetId"]
     except Exception as e:
-        return await _fail(d, id, f"The Gateway refused the connector's tools ({type(e).__name__}).")
+        return await _fail(d, id, f"The Gateway refused the connector's tools. {aws_error(e)}")
     warning = (
         f"Skipped {len(skipped)} tool(s) the Gateway can't describe: {', '.join(skipped[:10])}." if skipped else None
     )
@@ -543,9 +553,9 @@ async def handle(event: Mapping[str, Any], d: ConnectorsDeps) -> dict[str, Any]:
         else:
             return {"ok": False, "error": "unknown action"}
     except Exception as e:
-        log("error", "connectors.failed", connector=id, action=str(action), error=type(e).__name__)
+        log("error", "connectors.failed", connector=id, action=str(action), error=aws_error(e))
         if id:
-            await _fail(d, id, "Something went wrong while setting it up. Try Refresh in Settings.")
+            await _fail(d, id, f"Something went wrong while setting it up: {aws_error(e)} Try Refresh in Settings.")
         return {"ok": False}
     return {"ok": True}
 

@@ -93,7 +93,7 @@ def event(rec: Mapping[str, Any], status: str | None = None) -> dict[str, Any]:
     if rec.get("needs"):
         e["needs"] = rec["needs"]
     if rec.get("error"):
-        e["error"] = str(rec["error"])[:300]
+        e["error"] = str(rec["error"])[:1000]
     return e
 
 

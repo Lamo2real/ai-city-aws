@@ -182,6 +182,8 @@ class Store {
   /** Adds a card, or updates it where it stands (so a card doesn't jump when its status changes). */
   /** Services already announced in the chat this session, so "… is connected, Sir." comes once. */
   private announced = new Set<string>();
+  /** Connectors approved on a card in this session, so a failure while setting one up is shown, never silent. */
+  private approved = new Set<string>();
   /** VAIC's short line when a service the owner was connecting turns live (written here, not by the model). */
   private announce(key: string, name: string) {
     if (this.announced.has(key)) return;
@@ -229,6 +231,9 @@ class Store {
     this.set({ cards: cards.some((x) => x.id === c.id) ? cards.map((x) => (x.id === c.id ? c : x)) : [...cards, c] });
   }
   dropCard(id: string) {
+    // A connector card the owner answered: what happens next (a sign-in, a key, or a failure) comes back to the chat.
+    const c = this.state.cards.find((x) => x.id === id);
+    if (c?.kind === "approve" && c.connectorId) this.approved.add(c.connectorId);
     this.set({ cards: this.state.cards.filter((x) => x.id !== id) });
   }
   /** Connect cards follow the city's events (CONNECTORS_SKILLS.md §3, MAIL_CALENDAR.md §6). */
@@ -331,7 +336,7 @@ class Store {
       if (status === "ready" && (card?.kind === "key" || card?.kind === "problem"))
         return this.putCard({ kind: "done", id, targetId: s("id"), title: label });
       // Every error in full, on the card that was following it (the owner's rule).
-      if (status === "error" && card)
+      if (status === "error" && (card || followed || this.approved.has(s("id"))))
         return this.putCard({
           kind: "problem",
           id,

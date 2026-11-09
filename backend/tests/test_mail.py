@@ -478,6 +478,21 @@ async def test_without_google_sign_in_gmail_connects_by_app_password(monkeypatch
     assert not [k for k, _ in identity.calls if k == "token"]  # no sign-in was even tried
 
 
+async def test_without_microsoft_sign_in_outlook_is_refused_plainly(monkeypatch: Any) -> None:
+    """Microsoft turned off app passwords for Outlook mail: no app-password fallback, a plain error with the fix."""
+    monkeypatch.setenv("AIC_MAIL_PROVIDERS", "google")
+    s, _, identity, secrets = make_service()
+    d = api(s, secrets)
+    out = await handle_http(ev("POST", "/mail/accounts", {"provider": "microsoft", "label": "Work"}), d)
+    body = js(out)
+    assert out["statusCode"] == 400 and "Microsoft" in body["error"] and "RUNBOOK" in body["fix"]
+    assert await s.store.all() == []
+    old = await s.store.create("microsoft", "Work")
+    out = await handle_http(ev("POST", f"/mail/accounts/{old['id']}/signin"), d)
+    assert out["statusCode"] == 400 and (await s.store.get(old["id"]))["provider"] == "microsoft"
+    assert not [k for k, _ in identity.calls if k == "token"]
+
+
 class FakeImapConn:
     def __init__(self, ok: bool = True) -> None:
         self.ok = ok

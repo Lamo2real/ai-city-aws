@@ -17,14 +17,13 @@ PK = "MAIL"
 PROVIDERS = ("google", "microsoft", "imap")
 
 # Sign-in with Google or Microsoft needs an OAuth app the owner sets up (AIC_MAIL_PROVIDERS names the ones that are
-# on). Until then such an account connects by app password instead, with the provider's servers filled in (the owner
-# hit "Something went wrong" on "Sign in to Google", 2026-11-09).
-APP_PASSWORD_PRESET = {"google": "Gmail (app password)", "microsoft": "Outlook.com"}
+# on). Until then a Gmail account connects by app password instead, with Google's servers filled in (the owner hit
+# "Something went wrong" on "Sign in to Google", 2026-11-09). Microsoft has no such fallback: it turned off app
+# passwords (basic authentication) for Outlook.com and Microsoft 365 mail, so Outlook only signs in (decision 163).
+APP_PASSWORD_PRESET = {"google": "Gmail (app password)"}
 APP_PASSWORD_HELP = {
     "google": "Create a Gmail app password at myaccount.google.com/apppasswords (2-step verification must be on), "
     "then paste it with your Gmail address in the form.",
-    "microsoft": "Create an app password at account.microsoft.com/security (Advanced security options), then paste "
-    "it with your address in the form.",
 }
 
 

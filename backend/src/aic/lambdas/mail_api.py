@@ -79,6 +79,13 @@ async def route(c: MailApi, method: str, seg: list[str], body: Callable[[], dict
         return _err(400, str(e))
 
 
+MICROSOFT_OFF = (
+    "Outlook and Microsoft 365 connect only by signing in with Microsoft (Microsoft has turned off app passwords for "
+    "Outlook mail), and Microsoft sign-in isn't switched on in this AI City yet."
+)
+MICROSOFT_FIX = "The owner registers a Microsoft app once (docs/RUNBOOK.md, “Mail and calendar: the owner's one-time setup”), then Outlook can sign in."
+
+
 async def _route(c: MailApi, method: str, seg: list[str], body: Callable[[], dict[str, Any]]) -> Answer | None:
     if seg[:2] == ["mail", "accounts"]:
         if len(seg) == 2 and method == "GET":
@@ -88,6 +95,8 @@ async def _route(c: MailApi, method: str, seg: list[str], body: Callable[[], dic
             if b.get("provider") not in PROVIDERS:
                 return _err(400, "Pick Google, Microsoft or another provider (IMAP).")
             provider, label = str(b["provider"]), _str(b.get("label") or b["provider"].capitalize(), "Label", 1, 40)
+            if provider == "microsoft" and not oauth_enabled(provider):
+                return _err(400, MICROSOFT_OFF, MICROSOFT_FIX)
             if provider in APP_PASSWORD_PRESET and not oauth_enabled(provider):
                 # Sign-in isn't switched on here: the same mailbox by app password, the servers filled in.
                 a = await c.store.create("imap", label)
@@ -173,6 +182,8 @@ async def _signin(c: MailApi, a: dict[str, Any]) -> Answer:
     if a.get("provider") not in ("google", "microsoft"):
         return _err(400, "This account uses an app password, not a sign-in.")
     provider = str(a["provider"])
+    if not oauth_enabled(provider) and provider not in APP_PASSWORD_PRESET:
+        return _err(400, MICROSOFT_OFF, MICROSOFT_FIX)
     if not oauth_enabled(provider):
         # No OAuth app for this provider here: switch the account to an app password (it used to crash with
         # "Something went wrong on our side", 2026-11-09).
