@@ -35,12 +35,13 @@ RESET_KINDS = frozenset(
         "IDEMP",
         "RATE",
         "STEWARD",
+        "EXECREC",
     }
 )
 """The key kinds (the part of ``pk`` before ``#``) that ``Ledger.reset_city`` removes. Anything else is kept."""
 
 Record = dict[str, Any]
-TurnKind = Literal["ace", "orchestrator", "manager", "worker", "utility", "compaction", "eval", "chief_of_staff"]
+TurnKind = Literal["ace", "orchestrator", "manager", "worker", "utility", "compaction", "eval", "chief_of_staff", "executive"]
 TURN_KINDS: tuple[TurnKind, ...] = (
     "ace",
     "orchestrator",
@@ -50,6 +51,7 @@ TURN_KINDS: tuple[TurnKind, ...] = (
     "compaction",
     "eval",
     "chief_of_staff",
+    "executive",
 )
 ALL_STATUSES = ("open", "in_progress", "in_review", "waiting_on_owner", "parked", "done", "failed", "cancelled")
 _KEY_ATTRS = {"pk", "sk", "gsi1pk", "gsi1sk", "gsi2pk", "gsi2sk", "ttl"}

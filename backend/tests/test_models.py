@@ -14,6 +14,7 @@ def test_maps_every_role_to_its_pinned_model_on_global_profiles() -> None:
         "worker": "opus-5-5",
         "utility": "haiku-5-5",
         "chief_of_staff": "fable-5-1",
+        "executive": "fable-5-1",  # decision 140
     }
     for role in ROLES:
         r = resolve_role(role)
@@ -27,6 +28,7 @@ def test_only_fable_roles_fall_back_to_opus_others_have_none() -> None:
     assert resolve_role("orchestrator").fallback.name == "opus-5-5"  # type: ignore[union-attr]
     assert resolve_role("manager").fallback.name == "opus-5-5"  # type: ignore[union-attr]
     assert resolve_role("chief_of_staff").fallback.name == "opus-5-5"  # type: ignore[union-attr]
+    assert resolve_role("executive").fallback.name == "opus-5-5"  # type: ignore[union-attr]
     for r in ("ace", "worker", "utility"):
         assert resolve_role(r).fallback is None  # type: ignore[arg-type]
 

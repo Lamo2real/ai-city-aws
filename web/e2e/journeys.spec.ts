@@ -1323,6 +1323,7 @@ test("Settings is a menu of pages, each with its own address and a way back; App
   const menu = page.getByRole("navigation", { name: "Settings pages" });
   await expect(menu.getByRole("link")).toHaveText([
     /^Company/,
+    /^Executives/,
     /^While I'm away/,
     /^General/,
     /^Departments & tools/,

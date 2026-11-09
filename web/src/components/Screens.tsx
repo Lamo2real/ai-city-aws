@@ -1,6 +1,7 @@
 // Tickets, Costs and Settings. Plain words in the main view; technical details behind "Details".
 import { AwaySettings } from "./Away.tsx";
 import { CompanySettings } from "./CompanySettings.tsx";
+import { Executives } from "./Executives.tsx";
 import { DecidedList } from "./ChiefOfStaff.tsx";
 import { ConnectorsSettings } from "./ConnectorsSettings.tsx";
 import { Inbox } from "./Inbox.tsx";
@@ -374,6 +375,7 @@ type S = Record<string, unknown> & {
 /** Settings is a menu of pages, each at its own address (`#/settings/<page>`), like a phone's Settings app. */
 export const SETTINGS_PAGES = [
   { id: "company", title: "Company", about: "What your business is, and what runs on its own while you're away" },
+  { id: "executives", title: "Executives", about: "CEO, COO, CFO and CTO: advice when you ask, never work" },
   {
     id: "away",
     title: "While I'm away",
@@ -584,6 +586,7 @@ function SettingsPageView({
       ) : null}
       {page === "away" ? <AwaySettings /> : null}
       {page === "company" ? <CompanySettings /> : null}
+      {page === "executives" ? <Executives /> : null}
       {page === "departments" ? (
         <>
           <YourDepartments />

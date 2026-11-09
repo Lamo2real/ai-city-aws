@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 from typing import Any, Literal, cast
 
 from aic.shared import company
+from aic.shared import executives as execs
 from aic.shared import sales_pipeline as deals
 from aic.shared import standing_orders as standing
 from aic.shared import support_desk as desk
@@ -116,6 +117,8 @@ ROUTES: list[tuple[str, str]] = [
     ("GET", "/company"),
     ("PUT", "/company"),
     ("DELETE", "/company"),
+    ("GET", "/executives"),
+    ("PUT", "/executives"),
     ("GET", "/standing-orders"),
     ("POST", "/standing-orders"),
     ("PUT", "/standing-orders/so-1"),
@@ -926,6 +929,15 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         # The support desk's board (decision 131): every customer ticket and where it stands.
         status = str(q.get("status") or "") or None
         return reply(200, {"tickets": await desk.list_tickets(d.ledger, status), "board": desk.BOARD})
+    if is_("GET", r"/executives"):
+        # The Executive Leadership layer (decision 140): the four, on or off; their advice; the optional reviews.
+        return reply(200, await execs.status(d.ledger))
+    if is_("PUT", r"/executives"):
+        try:
+            await execs.set_config(d.ledger, _body(event))
+        except execs.Invalid as e:
+            return problem(400, str(e))
+        return reply(200, await execs.status(d.ledger))
     if is_("GET", r"/company"):
         # The company brief and its operating mode (decision 136), for Settings → Company.
         return reply(200, {"brief": await company.get_brief(d.ledger),

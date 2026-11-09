@@ -244,6 +244,8 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
             max_review_rounds=caps["max_review_rounds"],
             # AIC's quick triage before delegating runs on the utility model through the runtime's own Bedrock client.
             utility_runner=bedrock_converse_runner(_bedrock()) if role == "ace" else None,
+            # The executives (decision 140): advice for AIC (when the owner asks) and the Orchestrator (big decisions).
+            advisor_runner=bedrock_converse_runner(_bedrock()) if role in ("ace", "orchestrator") else None,
             workspace=workspace_from_env(city.session, e) if role == "worker" else None,
             knowledge=_knowledge(city.session, city.bus, role, e),
         ),

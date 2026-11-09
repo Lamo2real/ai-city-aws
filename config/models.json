@@ -72,6 +72,12 @@
       "fallback": "opus-5-5",
       "cacheTtl": "5m"
     },
+    "executive": {
+      "model": "fable-5-1",
+      "fallback": "opus-5-5",
+      "cacheTtl": "5m",
+      "$comment": "The Executive Leadership layer (decision 140): CEO, COO, CFO and CTO, advisory only. Stateless calls from AIC's and the Orchestrator's runtimes and the executives Lambda, with their own application inference profile."
+    },
     "utility": {
       "model": "haiku-5-5",
       "fallback": null,

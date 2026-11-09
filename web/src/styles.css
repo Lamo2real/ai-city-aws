@@ -5504,3 +5504,38 @@ button.hub-status {
 .co-state {
   font-weight: 700;
 }
+
+/* Settings → Executives (decision 140) */
+.execs,
+.exec-advice {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1.25rem;
+  display: grid;
+  gap: 0.75rem;
+}
+.exec.off {
+  opacity: 0.6;
+}
+.exec h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.advice p {
+  margin: 0.25rem 0;
+}
+.advice-rec {
+  font-weight: 600;
+}
+.advice-why {
+  margin: 0.25rem 0;
+  padding-left: 1.1rem;
+}
+.advice-src {
+  font-size: 0.85rem;
+}
+.field.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}

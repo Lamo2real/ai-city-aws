@@ -51,8 +51,12 @@ locals {
   tags   = { Component = "agents" }
   models = jsondecode(file("${path.module}/../../../config/models.json"))
   roles  = ["ace", "orchestrator", "manager", "worker"]
-  # utility and chief_of_staff are Lambda-side calls (no runtime): a profile each, so the bill splits by role.
-  all_roles = concat(local.roles, ["utility", "chief_of_staff"])
+  # utility, chief_of_staff and executive are calls without a runtime of their own: a profile each, so the bill
+  # splits by role. The executives (decision 140) are called from AIC's and the Orchestrator's runtimes and the
+  # executives Lambda.
+  all_roles = concat(local.roles, ["utility", "chief_of_staff", "executive"])
+  # The runtimes that consult the executives may call the executives' models through their profile.
+  consults = ["ace", "orchestrator"]
   # Plain model names each role may call: its own and its fallback, plus, for the roles named in departmentModels,
   # the model the owner's chosen departments run on (decision 129: Fable for the workers of Media, Research, Legal).
   dept_models = try(compact([local.models.departmentModels.model, local.models.departmentModels.fallback]), [])
@@ -152,8 +156,8 @@ resource "aws_iam_role_policy" "common" {
     account_id   = var.account_id
     ecr_repo_arn = aws_ecr_repository.runtime.arn
     memory_arn   = aws_bedrockagentcore_memory.role[each.key].arn
-    model_arns   = jsonencode(local.invoke_arns[each.key])
-    profile_arns = jsonencode(local.profile_arns[each.key])
+    model_arns   = jsonencode(distinct(concat(local.invoke_arns[each.key], contains(local.consults, each.key) ? local.invoke_arns["executive"] : [])))
+    profile_arns = jsonencode(distinct(concat(local.profile_arns[each.key], contains(local.consults, each.key) ? local.profile_arns["executive"] : [])))
     kms_key_arn  = var.kms_key_arn
     bus_arn      = var.bus_arn
   })
@@ -312,6 +316,7 @@ resource "aws_bedrockagentcore_agent_runtime" "role" {
     each.key == "worker" ? { CLAUDE_CODE_SUBPROCESS_ENV_SCRUB = "1" } : {},
     each.key == "worker" && var.apps_url != "" ? { AIC_APPS_URL = var.apps_url } : {},
     var.use_application_inference_profiles ? { "AIC_APP_PROFILE_${upper(each.key)}" = aws_bedrock_inference_profile.role[each.key].arn } : {},
+    var.use_application_inference_profiles && contains(local.consults, each.key) ? { AIC_APP_PROFILE_EXECUTIVE = aws_bedrock_inference_profile.role["executive"].arn } : {},
     lookup(var.runtime_env, each.key, {}),
   )
   tags = merge(local.tags, { AgentRole = each.key })
@@ -326,3 +331,5 @@ output "utility_invoke_arns" { value = local.invoke_arns["utility"] }
 output "utility_profile_arn" { value = local.app_profile_arn["utility"] }
 output "chief_of_staff_invoke_arns" { value = local.invoke_arns["chief_of_staff"] }
 output "chief_of_staff_profile_arn" { value = local.app_profile_arn["chief_of_staff"] }
+output "executive_invoke_arns" { value = local.invoke_arns["executive"] }
+output "executive_profile_arn" { value = local.app_profile_arn["executive"] }

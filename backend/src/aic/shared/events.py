@@ -358,6 +358,13 @@ class WorkflowUpdated(_E):
     run: dict[str, Any]
 
 
+class ExecutiveRecommended(_E):
+    """An executive's recommendation was filed (decision 140): advice only, never work. Settings → Executives shows it."""
+
+    type: Literal["executive.recommended"]
+    recommendation: dict[str, Any]
+
+
 class SupportTicket(_E):
     """A customer ticket on the support desk changed (decision 131): the HUD's board redraws that row."""
 
@@ -397,6 +404,7 @@ CityEventModel = Annotated[
     | ApprovalDecided
     | ApprovalWithdrawn
     | StewardDecided
+    | ExecutiveRecommended
     | ConnectorUpdated
     | ConnectSignin
     | MailAccountEvent

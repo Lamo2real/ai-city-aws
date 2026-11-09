@@ -440,6 +440,8 @@ function headquarters(g, q) {
   for (let ry = 0; ry < 19; ry += 4) R(g, bx - 2, by + ry, bw + 4, 1, "#324c78");
   R(g, bx - 2, by, bw + 4, 2, "#5c7fb8");
   for (let wx = bx + 8; wx < bx + bw - 12; wx += 20) { if (Math.abs(wx + 7 - (X + W / 2)) < 26) continue; for (const wy of [by + 26, by + 46]) { R(g, wx - 1, wy - 1, 16, 15, INK); R(g, wx, wy, 14, 13, "#ffdf94"); R(g, wx, wy, 14, 3, "#ffefc0"); R(g, wx + 6, wy, 2, 13, INK); } }
+  // The boardroom (decision 140): the four executives at their table, behind HQ's top-left window. Advice only.
+  { const wx = bx + 8, wy = by + 26; R(g, wx + 1, wy + 8, 12, 2, "#7a4a2a"); for (const [i, c] of ["#c0504a", "#4f7fa0", "#e0c04a", "#6a7f4a"].entries()) R(g, wx + 1 + i * 3 + (i > 1 ? 1 : 0), wy + 5, 2, 3, c); }
   // The tower with its clock, and the grand door.
   const cx = X + W / 2;
   R(g, cx - 19, by - 8, 38, 78, INK); R(g, cx - 18, by - 7, 36, 77, "#e6dfc9"); R(g, cx - 18, by - 7, 36, 3, "#f4eedd");

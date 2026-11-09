@@ -232,6 +232,10 @@ module "api" {
   # The Chief of Staff (decision 124): Fable 5.1, Opus 5.5 behind it.
   chief_of_staff_invoke_arns = module.agents.chief_of_staff_invoke_arns
   chief_of_staff_profile_arn = module.agents.chief_of_staff_profile_arn
+
+  # The executives (decision 140): Fable 5.1, Opus 5.5 behind it, advisory only.
+  executive_invoke_arns = module.agents.executive_invoke_arns
+  executive_profile_arn = module.agents.executive_profile_arn
 }
 
 # The owner's knowledge base (docs/KNOWLEDGE.md): bucket, S3 Vectors + Bedrock Knowledge Base, graph table,

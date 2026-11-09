@@ -1720,7 +1720,9 @@ def tools_for(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         if c.role in ("manager", "worker")
         else []
     )
-    return [*own, _search_tool(d), *extra]
+    from .executive_tools import executive_tools  # late: built on this module's ToolSpec (decision 140)
+
+    return [*own, _search_tool(d), *extra, *executive_tools(d, c)]
 
 
 # ---------- standing orders (decision 125) ----------

@@ -12,8 +12,8 @@ from typing import Any, Literal, cast
 
 from .config import models_config
 
-Role = Literal["ace", "orchestrator", "manager", "worker", "utility", "chief_of_staff"]
-ROLES: tuple[Role, ...] = ("ace", "orchestrator", "manager", "worker", "utility", "chief_of_staff")
+Role = Literal["ace", "orchestrator", "manager", "worker", "utility", "chief_of_staff", "executive"]
+ROLES: tuple[Role, ...] = ("ace", "orchestrator", "manager", "worker", "utility", "chief_of_staff", "executive")
 ProfilePrefix = Literal["global", "us", "eu"]
 CacheTtl = Literal["5m", "1h"]
 

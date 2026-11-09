@@ -56,6 +56,8 @@ variable "utility_invoke_arns" { type = list(string) }
 variable "utility_profile_arn" { type = string }
 variable "chief_of_staff_invoke_arns" { type = list(string) }
 variable "chief_of_staff_profile_arn" { type = string }
+variable "executive_invoke_arns" { type = list(string) }
+variable "executive_profile_arn" { type = string }
 variable "profile_prefix" { type = string }
 variable "knowledge_table" { type = string }
 variable "knowledge_table_arn" { type = string }
@@ -113,6 +115,8 @@ locals {
     scheduler     = { bundle = "app", handler = "aic.lambdas.scheduler.handler", timeout = 120, memory = 256, env = merge({ AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_VERSION = var.runtime_version, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod", AIC_CONNECTIONS_TABLE = var.connections_table }, local.scheduler_mail_env) }
     notifier      = { bundle = "app", handler = "aic.lambdas.notifier.handler", timeout = 30, memory = 256, env = local.apns_env }
     approvals     = { bundle = "app", handler = "aic.lambdas.approvals.handler", timeout = 30, memory = 256, env = {} }
+    # The executives (decision 140): only the optional scheduled reviews the owner switched on (all off by default).
+    executives = { bundle = "app", handler = "aic.lambdas.executives.handler", timeout = 600, memory = 256, env = { AIC_APP_PROFILE_EXECUTIVE = var.executive_profile_arn } }
     # The Chief of Staff (decision 124): decides Needs you items; carries each out through the api (live alias).
     chief-of-staff = { bundle = "app", handler = "aic.lambdas.chief_of_staff.handler", timeout = 300, memory = 256, env = { AIC_APP_PROFILE_CHIEF_OF_STAFF = var.chief_of_staff_profile_arn, AIC_API_FUNCTION = "${local.api_name}:live" } }
     ws-authorizer  = { bundle = "app", handler = "aic.lambdas.ws.authorizer_handler", timeout = 10, memory = 256, env = { AIC_USER_POOL_ID = var.user_pool_id, AIC_USER_POOL_CLIENT_ID = var.client_id } }
@@ -203,6 +207,13 @@ locals {
       { Action = ["bedrock:InvokeModel"], Resource = var.chief_of_staff_invoke_arns },
       { Action = ["lambda:InvokeFunction"], Resource = ["arn:aws:lambda:${var.region}:${var.account_id}:function:${local.api_name}:live"] },
     ]
+    # Reads the city's records, writes its recommendations and AIC's chat line, calls its model. Starts no work: no
+    # queues, no runtimes, no other function.
+    executives = [
+      { Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] },
+      { Action = ["events:PutEvents"], Resource = [var.bus_arn] },
+      { Action = ["bedrock:InvokeModel"], Resource = var.executive_invoke_arns },
+    ]
     notifier = [{ Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] }] # push rights: modules/notifications
     approvals = [
       { Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] },
@@ -223,7 +234,7 @@ locals {
     "GET /departments", "POST /departments", "DELETE /departments/{id}", "GET /departments/presets", "GET /agents", "GET /workforce", "GET /costs", "GET /health", "GET /questions", "POST /questions/{id}/answer",
     "POST /questions/{id}/default", "POST /approvals/{id}", "GET /settings", "PUT /settings", "GET /chief-of-staff",
     # Autopilot (decision 125): while the owner is away.
-    "GET /away-summary", "GET /support-tickets", "GET /deals", "GET /company", "PUT /company", "DELETE /company", "GET /standing-orders", "POST /standing-orders", "PUT /standing-orders/{id}", "DELETE /standing-orders/{id}",
+    "GET /away-summary", "GET /support-tickets", "GET /deals", "GET /company", "PUT /company", "DELETE /company", "GET /executives", "PUT /executives", "GET /standing-orders", "POST /standing-orders", "PUT /standing-orders/{id}", "DELETE /standing-orders/{id}",
     # AI workflows (decision 126): the walkthrough's pages, its mode and Stop.
     "GET /workflows", "GET /workflows/runs/{id}", "POST /workflows/runs/{id}/step",
     "POST /workflows/runs/{id}/mode", "POST /workflows/runs/{id}/cancel",
@@ -282,6 +293,8 @@ locals {
     # Standing orders (decision 125): each due order starts one job for its department.
     standing-orders = { schedule = "rate(5 minutes)", fn = "scheduler", input = { job = "standing_orders" }, state = "ENABLED" }
     chief-digest    = { schedule = "cron(0 17 * * ? *)", fn = "chief-of-staff", input = { job = "digest" }, state = "ENABLED" }
+    # Decision 140: runs only the reviews the owner switched on, each when due; with all off it reads one record.
+    executive-reviews = { schedule = "rate(1 hour)", fn = "executives", input = { job = "reviews" }, state = "ENABLED" }
   }
 }
 

@@ -153,6 +153,15 @@ async def context(ledger: Ledger, kind: Kind, item: Record) -> dict[str, Any]:
             for r in await recent_decisions(ledger)
             if r.get("ticket_id") in job_ids or r.get("job_id") in job_ids
         ][:20]
+    # Decision 140: the executives' recent advice, which it may weigh (advice only; its own judgement decides).
+    from .executives import recent as executive_advice
+
+    advice = await executive_advice(ledger, days=7, limit=20)
+    mine = [r for r in advice if r.get("ticket_id") in job_ids] or advice[:3]
+    if mine:
+        ctx["executive_advice"] = [
+            {k: r.get(k) for k in ("title", "question", "recommendation", "confidence", "at")} for r in mine[:5]
+        ]
     return ctx
 
 

@@ -52,6 +52,9 @@ class CityDeps:
     """DNS for the connector URL check (an ``aic.shared.connectors.Resolver``); None = the system's."""
     utility_runner: Any = None
     """A ``ModelRunner`` for the utility model (AIC's quick triage before delegating); None = always delegate."""
+    advisor_runner: Any = None
+    """A ``ModelRunner`` for the executives (decision 140), on AIC's and the Orchestrator's runtimes; None = no
+    executive tools."""
 
 
 FINAL = ("done", "failed", "cancelled")
