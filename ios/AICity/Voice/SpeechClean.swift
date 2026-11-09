@@ -13,7 +13,9 @@ enum SpeechClean {
     }
 
     private static func scrub(_ s: String) -> String {
-        var t = replace(s, ",\\s*\(filler)\\s*,\\s*", " ")
+        // "Ace" heard, or spelled "A C E": always written AIC (the owner's rule, 2026-11-09).
+        var t = replace(s, "\\b(?:ace|a[-. ]c[-. ]e)\\b", "AIC")
+        t = replace(t, ",\\s*\(filler)\\s*,\\s*", " ")
         t = replace(t, "(^|[\\s,.;!?…-])\(filler)(?=$|[\\s,.;!?…-])", "$1")
         t = replace(t, "\\b(\\w{1,3})-\\s+(?=\\1)", "")
         t = replace(t, "\\b(\\w+)(?:[\\s,]+\\1\\b)+", "$1")

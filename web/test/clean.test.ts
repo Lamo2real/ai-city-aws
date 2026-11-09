@@ -27,4 +27,11 @@ describe("the owner's words without the stumbles", () => {
     expect(cleanSpeech("Ahmed and Erik have a meeting with Humana")).toBe("Ahmed and Erik have a meeting with Humana");
     expect(cleanSpeech("That that is fine")).toBe("That is fine");
   });
+  it("Ace, heard or spelled, is always written AIC; quoted words stay", () => {
+    expect(cleanSpeech("Hey Ace, what's the status?")).toBe("Hey AIC, what's the status?");
+    expect(cleanSpeech("ace can you check A C E's tasks")).toBe("AIC can you check AIC's tasks");
+    expect(cleanSpeech("A-C-E, ship it")).toBe("AIC, ship it");
+    expect(cleanSpeech('Name the button "Ace"')).toBe('Name the button "Ace"');
+    expect(cleanSpeech("Grace and Candace are here")).toBe("Grace and Candace are here");
+  });
 });

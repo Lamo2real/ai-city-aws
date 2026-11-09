@@ -18,4 +18,11 @@ final class SpeechCleanTests: XCTestCase {
         XCTAssertEqual(SpeechClean.clean("Ahmed and Erik have a meeting with Humana"), "Ahmed and Erik have a meeting with Humana")
         XCTAssertEqual(SpeechClean.clean("Yes."), "Yes.")
     }
+
+    func testAceIsAlwaysWrittenAIC() {
+        XCTAssertEqual(SpeechClean.clean("Hey Ace, what's the status?"), "Hey AIC, what's the status?")
+        XCTAssertEqual(SpeechClean.clean("A-C-E, ship it"), "AIC, ship it")
+        XCTAssertEqual(SpeechClean.clean("Name the button \"Ace\""), "Name the button \"Ace\"")
+        XCTAssertEqual(SpeechClean.clean("Grace and Candace are here"), "Grace and Candace are here")
+    }
 }

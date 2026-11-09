@@ -189,12 +189,110 @@ resource "aws_cognito_identity_pool_roles_attachment" "voice" {
 }
 
 # In the speech region (var.transcribe_region in prod), where the HUD runs Transcribe streaming.
+# A table vocabulary, so Transcribe itself writes what was heard the owner's way (the owner's rule, 2026-11-09):
+# "Ace" (and "A C E" spelled out) is always written AIC. DisplayAs needs the table format, and Transcribe reads a
+# table only from S3 in its own region, hence the small bucket below. The file name carries a hash of the table so
+# every change updates the vocabulary.
+locals {
+  vocabulary_table = join("\n", concat(["Phrase\tSoundsLike\tIPA\tDisplayAs"], [
+    "Ace\t\t\tAIC",
+    "A.C.E.\t\t\tAIC",
+    "A.I.C.\t\t\tAIC",
+    "AI-City\t\t\tAI City",
+    "Orchestrator\t\t\tOrchestrator",
+  ]))
+  vocabulary_key = "vocabulary/names-${substr(md5(local.vocabulary_table), 0, 12)}.txt"
+}
+
+resource "aws_s3_bucket" "speech" {
+  #checkov:skip=CKV_AWS_144:One small text file rebuilt from Terraform on every apply; replication is not worth it.
+  #checkov:skip=CKV_AWS_18:Access logging would need another bucket for one public-knowledge word list.
+  #checkov:skip=CKV2_AWS_62:No event notifications are needed.
+  #checkov:skip=CKV_AWS_145:The city's KMS key lives in var.region; this bucket is in the speech region, so SSE-S3.
+  provider = aws.speech
+  bucket   = "${var.name}-speech"
+  tags     = local.tags
+}
+
+resource "aws_s3_bucket_versioning" "speech" {
+  provider = aws.speech
+  bucket   = aws_s3_bucket.speech.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "speech" {
+  provider = aws.speech
+  bucket   = aws_s3_bucket.speech.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "speech" {
+  provider                = aws.speech
+  bucket                  = aws_s3_bucket.speech.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "speech" {
+  provider = aws.speech
+  bucket   = aws_s3_bucket.speech.id
+  rule {
+    id     = "old-versions"
+    status = "Enabled"
+    filter {}
+    expiration {
+      expired_object_delete_marker = true
+    }
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 2
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "speech" {
+  provider = aws.speech
+  bucket   = aws_s3_bucket.speech.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "TlsOnly"
+      Effect    = "Deny"
+      Principal = "*"
+      Action    = "s3:*"
+      Resource  = [aws_s3_bucket.speech.arn, "${aws_s3_bucket.speech.arn}/*"]
+      Condition = { Bool = { "aws:SecureTransport" = "false" } }
+    }]
+  })
+}
+
+resource "aws_s3_object" "vocabulary" {
+  #checkov:skip=CKV_AWS_186:SSE-S3 (see the bucket); the KMS key is in another region.
+  provider     = aws.speech
+  bucket       = aws_s3_bucket.speech.id
+  key          = local.vocabulary_key
+  content      = local.vocabulary_table
+  content_type = "text/plain"
+  tags         = local.tags
+  depends_on   = [aws_s3_bucket_server_side_encryption_configuration.speech, aws_s3_bucket_public_access_block.speech]
+}
+
 resource "aws_transcribe_vocabulary" "speech_names" {
-  provider        = aws.speech
-  vocabulary_name = "${var.name}-names"
-  language_code   = "en-US"
-  phrases         = ["A.I.C.", "AI-City", "Orchestrator"]
-  tags            = local.tags
+  provider            = aws.speech
+  vocabulary_name     = "${var.name}-names"
+  language_code       = "en-US"
+  vocabulary_file_uri = "s3://${aws_s3_bucket.speech.id}/${aws_s3_object.vocabulary.key}"
+  tags                = local.tags
 }
 
 output "user_pool_id" { value = aws_cognito_user_pool.this.id }
