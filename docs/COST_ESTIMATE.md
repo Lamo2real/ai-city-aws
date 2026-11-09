@@ -29,8 +29,8 @@ Computed with `estimateUsd()` from `packages/shared/src/cost.ts` (the same funct
 | Role | Turns | Tokens per turn (input / cache read / cache write / output) | With caching | Without caching |
 |---|---|---|---|---|
 | AIC (Sonnet 5.5) | 2 | 2k / 6k / 0.5k / 0.3k | $0.02 | $0.04 |
-| Orchestrator (Fable 5.1) | 3 | 3k / 10k / 1k / 1k | $0.31 | $0.57 |
-| Manager (Fable 5.1, 1-hour cache) | 6 | 4k / 15k / 2k / 1.5k | $0.95 | $1.71 |
+| Orchestrator (Fable 5.2) | 3 | 3k / 10k / 1k / 1k | $0.31 | $0.57 |
+| Manager (Fable 5.2, 1-hour cache) | 6 | 4k / 15k / 2k / 1.5k | $0.95 | $1.71 |
 | Workers (Opus 5.5) | 3 jobs | 40k / 260k / 40k / 15k per job | $2.14 | $4.98 |
 | Utility (Haiku 5.5) | 1–3 | small | <$0.01 | <$0.01 |
 | AgentCore compute (CPU idles during model waits) | | ~1 vCPU-min + 2 GB × 20 min per worker job | ~$0.05 | ~$0.05 |

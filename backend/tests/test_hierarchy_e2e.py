@@ -156,7 +156,7 @@ async def test_walks_one_prompt_from_the_owner_to_aces_report() -> None:
         assert turns, id
         assert all(t["usd"] > 0 and t["input"] == 400 and t["cache_read"] == 3000 for t in turns)
     o = (await city.ledger.turns_of("orchestrator"))[0]
-    assert (o["model"], o["role"]) == ("fable-5-1", "orchestrator")
+    assert (o["model"], o["role"]) == ("fable-5-2", "orchestrator")
     w0 = (await city.ledger.turns_of(workers[0]["id"]))[0]
     assert (w0["model"], w0["department"]) == ("opus-5-5", "Builders")
     today = await city.ledger.spend("day", "GLOBAL")
@@ -218,7 +218,7 @@ async def _manager_agent(city: City, name: str = "Builders") -> str:
             "kind": "manager",
             "role": f"{name} Manager",
             "department": name,
-            "model": "fable-5-1",
+            "model": "fable-5-2",
             "parent": "orchestrator",
             "state": "active",
             "total_cost_usd": 0,

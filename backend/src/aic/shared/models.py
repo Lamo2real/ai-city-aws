@@ -39,7 +39,17 @@ class RoleModels:
     """True when the configured model is not reachable with this prefix and the fallback became primary."""
 
 
+LEGACY_MODELS = {"fable-5-1": "fable-5-2"}
+"""Names that agents and departments may still carry on their ledger records from before an upgrade (the owner moved
+every Fable agent to Fable 5.2 on 2026-11-09, decision 154): they resolve to the model that replaced them."""
+
+
+def current_name(name: str) -> str:
+    return LEGACY_MODELS.get(name, name)
+
+
 def _resolve_name(name: str, prefix: str, cfg: Mapping[str, Any], app_arn: str | None = None) -> ResolvedModel | None:
+    name = current_name(name)
     m = cfg["models"].get(name)
     if not m:
         raise ValueError(f"unknown model name: {name}")
@@ -49,8 +59,8 @@ def _resolve_name(name: str, prefix: str, cfg: Mapping[str, Any], app_arn: str |
     return ResolvedModel(name=name, label=m["label"], profile_id=profile_id, invoke_id=app_arn or profile_id)
 
 
-WORKER_MODELS = ("opus-5-5", "fable-5-1")
-"""What the owner may pick for a department's workers (decision 134): Opus 5.5 unless they say Fable 5.1."""
+WORKER_MODELS = ("opus-5-5", "fable-5-2")
+"""What the owner may pick for a department's workers (decision 134): Opus 5.5 unless they say Fable 5.2."""
 
 
 def department_override(
@@ -66,7 +76,7 @@ def department_override(
     ``worker_model`` (decision 134), which wins over the config for its workers."""
     cfg = config or models_config()
     dm = cfg.get("departmentModels") or {}
-    own = str((dept or {}).get("worker_model") or "")
+    own = current_name(str((dept or {}).get("worker_model") or ""))
     if role == "worker" and own in WORKER_MODELS:
         default = cfg["roles"]["worker"]
         if own == default["model"]:
@@ -130,5 +140,5 @@ def resolve_role_from_env(
 
 
 def model_label(name: str) -> str:
-    m = models_config()["models"].get(name)
+    m = models_config()["models"].get(current_name(name))
     return str(m["label"]) if m else name

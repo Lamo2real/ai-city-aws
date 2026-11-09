@@ -540,7 +540,7 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             return f"{dept['name']} is already standing; nothing changed. Its workers run on {workers}."
         return (
             f"{'Rebuilt' if outcome == 'rebuilt' else 'Built'} {dept['name']}: the tower is going up in the City. "
-            f"Its manager runs on Claude Fable 5.1 and is hired with its first job; its workers run on {workers}."
+            f"Its manager runs on Claude Fable 5.2 and is hired with its first job; its workers run on {workers}."
         )
 
     async def demolish(a: dict[str, Any]) -> str:
@@ -573,14 +573,14 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             "build_department",
             "Build a new department now, when the owner asks for one ('make a Customer Success department'). "
             "name: its name; mission: one sentence on what it does (from the owner's words, or a sensible one). "
-            "Its manager runs on Fable 5.1 like every manager. worker_model: leave it out (workers run on Opus "
-            "5.5) unless the owner explicitly asked for Fable workers in it, then 'fable-5-1'. No confirmation "
+            "Its manager runs on Fable 5.2 like every manager. worker_model: leave it out (workers run on Opus "
+            "5.5) unless the owner explicitly asked for Fable workers in it, then 'fable-5-2'. No confirmation "
             "needed: building is what they asked for.",
             _obj(
                 {
                     "name": _s(2, 60),
                     "mission": _s(0, 400),
-                    "worker_model": {"type": "string", "enum": ["opus-5-5", "fable-5-1"]},
+                    "worker_model": {"type": "string", "enum": ["opus-5-5", "fable-5-2"]},
                 },
                 ("mission", "worker_model"),
             ),

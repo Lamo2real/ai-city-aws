@@ -11,7 +11,7 @@ from typing import Any
 from ..ids import department_key, manager_id
 from ..ledger import Record
 from ..log import log
-from ..models import WORKER_MODELS
+from ..models import WORKER_MODELS, current_name
 from ..presets import preset_for
 from .actions import OPEN_ASSIGNMENT, CityDeps, _walk_home, move, send
 
@@ -44,16 +44,16 @@ def clean_name(raw: Any) -> str:
 
 def worker_model_choice(v: Any) -> str | None:
     """``None``/"" = the department's usual workers (Opus 5.5, or the config's Fable for Media, Research and
-    Legal); "fable" / "fable-5-1" / ``True`` = Fable 5.1; "opus" / "opus-5-5" = Opus 5.5."""
+    Legal); "fable" / "fable-5-2" / ``True`` = Fable 5.2; "opus" / "opus-5-5" = Opus 5.5."""
     if v is None or v == "" or v is False:
         return None
     if v is True:
-        return "fable-5-1"
-    s = str(v).strip().lower().replace(" ", "-").replace(".", "-")
+        return "fable-5-2"
+    s = current_name(str(v).strip().lower().replace(" ", "-").replace(".", "-"))
     for m in WORKER_MODELS:
         if s == m or m.startswith(s):
             return m
-    raise DepartmentError("Workers run on Opus 5.5 or, when you say so, Fable 5.1.")
+    raise DepartmentError("Workers run on Opus 5.5 or, when you say so, Fable 5.2.")
 
 
 async def build_department(
@@ -61,8 +61,8 @@ async def build_department(
 ) -> tuple[Record, str]:
     """Builds a department the owner asked for. Returns the record and what happened: ``created``, ``rebuilt``
     (a demolished one stands again) or ``exists`` (already standing; nothing changed). Its manager is hired with
-    its first goal, as for the presets, and runs on the managers' model (Fable 5.1); its workers run on Opus 5.5
-    unless the owner chose Fable 5.1 for them."""
+    its first goal, as for the presets, and runs on the managers' model (Fable 5.2); its workers run on Opus 5.5
+    unless the owner chose Fable 5.2 for them."""
     name = clean_name(raw_name)
     model = worker_model_choice(worker_model)
     # Only a preset's own name or key is that preset: the owner asking for "Customer Success" wants a new

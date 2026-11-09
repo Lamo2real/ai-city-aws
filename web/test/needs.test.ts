@@ -78,7 +78,7 @@ describe("Needs you counts only what can still be answered", () => {
           kind: "manager",
           role: "Research Manager",
           department: "Research",
-          model: "fable-5-1",
+          model: "fable-5-2",
           parent: "orchestrator",
           state: "active",
         },

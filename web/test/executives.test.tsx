@@ -153,7 +153,7 @@ describe("the executives in the City (permanent, home until called in)", () => {
     kind: "executive",
     role: "CFO",
     department: null,
-    model: "fable-5-1",
+    model: "fable-5-2",
     parent: null,
     state,
     worker_state: null,

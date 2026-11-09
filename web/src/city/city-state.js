@@ -4,8 +4,8 @@
 // The City View's state: what the scene draws, as plain data. Pure functions, no DOM, no three.js,
 // so the event → state step is unit-tested in Node. The scene reads this; it never reads the server.
 
-export const MODEL_COLOR = { "haiku-5-5": "#ffd21e", "opus-5-5": "#3b82ff", "sonnet-5-5": "#2fd36b", "fable-5-1": "#a86bff" };
-export const MODEL_NAME = { "haiku-5-5": "Haiku 5.5", "opus-5-5": "Opus 5.5", "sonnet-5-5": "Sonnet 5.5", "fable-5-1": "Fable 5.1" };
+export const MODEL_COLOR = { "haiku-5-5": "#ffd21e", "opus-5-5": "#3b82ff", "sonnet-5-5": "#2fd36b", "fable-5-2": "#a86bff" };
+export const MODEL_NAME = { "haiku-5-5": "Haiku 5.5", "opus-5-5": "Opus 5.5", "sonnet-5-5": "Sonnet 5.5", "fable-5-2": "Fable 5.2" };
 export const DEPT_COLOR = { HQ: "#3b82ff", IT: "#4cc9f0", App: "#ff7a45", Cloud: "#8ecae6", Marketing: "#f72585", Video: "#b5179e", Travel: "#06d6a0", other: "#9aa0a6" };
 export const CORE = new Set(["ace", "orchestrator"]);
 export const TOOL_PROP = [["ios|swift|app", "laptop"], ["video|film|camera", "camera"], ["market|ads|growth", "chart"], ["cloud|infra|terraform|devops", "wrench"], ["travel|flight|hotel", "ticket"], ["qa|test", "clipboard"], [".", "laptop"]];

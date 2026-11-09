@@ -1,6 +1,6 @@
 """The Chief of Staff: decides every item in the owner's Needs you inbox the moment it appears (decision 124).
 
-An always-on Claude Fable 5.1 call (Opus 5.5 once on a refusal or an unavailable model, like the managers), no
+An always-on Claude Fable 5.2 call (Opus 5.5 once on a refusal or an unavailable model, like the managers), no
 AgentCore runtime: the ``chief-of-staff`` Lambda runs it on ``question.asked`` and ``approval.requested`` and
 in a sweep every 5 minutes. It reads the item, its job and history, the owner's notes and agreed briefs, and
 what it decided before on the same job, and answers with one JSON decision. The decision is carried out by the

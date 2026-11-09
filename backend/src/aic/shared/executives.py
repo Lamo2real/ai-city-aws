@@ -15,7 +15,7 @@ Orchestrator → Department Managers → Workers, and every earlier rule of the 
 - **Advice is advice.** The Orchestrator and managers decide what to do; under Autopilot the Chief of Staff
   reads the recent recommendations as context.
 
-Each executive is one stateless call on the ``executive`` role (Claude Fable 5.1, Opus 5.5 once on a refusal),
+Each executive is one stateless call on the ``executive`` role (Claude Fable 5.2, Opus 5.5 once on a refusal),
 with its own application inference profile so the bill shows what the executives cost.
 """
 

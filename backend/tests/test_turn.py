@@ -77,7 +77,7 @@ def test_prices_each_token_class_with_5_minute_and_1_hour_cache_writes() -> None
     u = Usage(1_000_000, 1_000_000, 1_000_000, 1_000_000, 1_000_000)
     # opus: 4 + 20 + 0.2 + 4*1.25 + 4*2 = 37.2
     assert estimate_usd("opus-5-5", u) == pytest.approx(37.2)
-    assert estimate_usd("fable-5-1", Usage(1_000_000, 1_000_000, 1_000_000)) == pytest.approx(60.25)
+    assert estimate_usd("fable-5-2", Usage(1_000_000, 1_000_000, 1_000_000)) == pytest.approx(48.2)  # 8 + 40 + 0.2
 
 
 def test_geo_profiles_cost_10pct_more_and_haiku_over_100k_costs_5x() -> None:
@@ -188,15 +188,15 @@ async def test_does_not_retry_other_errors() -> None:
 # ---------- Fable → Opus fallback ----------
 async def test_a_refusal_triggers_exactly_one_fallback_turn_on_opus_marked_in_the_ledger() -> None:
     runner = Runner(
-        lambda i: reply("I can't help with that.", "refusal") if i.model.name == "fable-5-1" else reply("Plan ready.")
+        lambda i: reply("I can't help with that.", "refusal") if i.model.name == "fable-5-2" else reply("Plan ready.")
     )
     ledger, _, deps = setup(runner)
     r = await run_gated_turn(turn("orchestrator"), deps)
-    assert [c.model.name for c in runner.calls] == ["fable-5-1", "opus-5-5"]
+    assert [c.model.name for c in runner.calls] == ["fable-5-2", "opus-5-5"]
     assert r.fallback
     turns = await ledger.turns_of("orchestrator-1")
     assert [(t["model"], t["fallback"], t["outcome"]) for t in turns] == [
-        ("fable-5-1", False, "refused"),
+        ("fable-5-2", False, "refused"),
         ("opus-5-5", True, "ok"),
     ]
 
@@ -213,7 +213,7 @@ async def test_a_review_with_no_verdict_falls_back_once() -> None:
     runner = Runner(
         lambda i: (
             reply("Looks interesting.")
-            if i.model.name == "fable-5-1"
+            if i.model.name == "fable-5-2"
             else reply('{"verdict":"FAIL","reasons":["no tests"]}')
         )
     )
@@ -225,7 +225,7 @@ async def test_a_review_with_no_verdict_falls_back_once() -> None:
 
 async def test_fable_unavailable_falls_back_to_opus() -> None:
     async def fn(i: TurnInput) -> TurnOutput:
-        if i.model.name == "fable-5-1":
+        if i.model.name == "fable-5-2":
             raise ModelUnavailable("model not available")
         return reply("ok")
 

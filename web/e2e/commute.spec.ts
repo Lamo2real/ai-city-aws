@@ -98,7 +98,7 @@ test("an executive lives at home, rides to HQ when called in, and goes home afte
     kind: "executive",
     role: "CFO",
     department: null,
-    model: "fable-5-1",
+    model: "fable-5-2",
     parent: null,
     state,
     worker_state: null,

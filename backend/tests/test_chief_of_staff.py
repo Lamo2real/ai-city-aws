@@ -20,7 +20,7 @@ class Model:
 
     async def __call__(self, i: TurnInput) -> TurnOutput:
         self.calls.append(i)
-        if self.refuse_primary and i.model.name == "fable-5-1":
+        if self.refuse_primary and i.model.name == "fable-5-2":
             return TurnOutput(text="", stop_reason="refusal")
         return TurnOutput(text=self.replies[min(len(self.calls) - 1, len(self.replies) - 1)])
 
@@ -35,7 +35,7 @@ def chief(d: Any, model: Model) -> ChiefDeps:
 async def _stuck_research(d: Any) -> tuple[dict[str, Any], dict[str, Any]]:
     """The Research manager stuck on a goal, asking the owner to clear phantom workers (t-c32ca08b9bdf)."""
     await d.ledger.put_agent({"id": "mgr-research", "kind": "manager", "role": "Research Manager", "department": "Research",
-                              "model": "fable-5-1", "parent": "orchestrator", "state": "active", "total_cost_usd": 0})  # fmt: skip
+                              "model": "fable-5-2", "parent": "orchestrator", "state": "active", "total_cost_usd": 0})  # fmt: skip
     task = await d.ledger.create_ticket({"goal": "Find 20 leads", "from": "ace", "to": "orchestrator", "department": None,
                                          "parent_id": None, "kind": "task", "owner_words": "find me leads", "status": "in_progress"})  # fmt: skip
     goal = await d.ledger.create_ticket({"goal": "Research leads", "from": "orchestrator", "to": "mgr-research", "department": "Research",
@@ -74,7 +74,7 @@ async def test_answers_the_stuck_research_question_as_if_the_owner_clicked() -> 
     # The model saw the item, the job and the owner's words, as data.
     prompt = model.calls[0].prompt
     assert "<item>" in prompt and "Phantom workers" in prompt and "find me leads" in prompt
-    assert model.calls[0].model.name == "fable-5-1"
+    assert model.calls[0].model.name == "fable-5-2"
     # Listed for the HUD.
     s = js(await handle_http(ev("GET", "/chief-of-staff"), d))
     assert s["enabled"] is True and s["needs_owner"] == []
@@ -165,7 +165,7 @@ async def test_falls_back_to_opus_once_when_fable_refuses() -> None:
     await _stuck_research(d)
     model = Model({"decision": "answer", "answer": "Wait", "reason": "r"}, refuse_primary=True)
     await review(chief(d, model))
-    assert [c.model.name for c in model.calls] == ["fable-5-1", "opus-5-5"]
+    assert [c.model.name for c in model.calls] == ["fable-5-2", "opus-5-5"]
 
 
 async def test_stops_a_job_stuck_in_a_loop() -> None:

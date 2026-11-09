@@ -20,9 +20,9 @@
         "eu"
       ]
     },
-    "fable-5-1": {
-      "label": "Claude Fable 5.1",
-      "modelId": "anthropic.claude-fable-5-1",
+    "fable-5-2": {
+      "label": "Claude Fable 5.2",
+      "modelId": "anthropic.claude-fable-5-2",
       "prefixes": [
         "global",
         "us"
@@ -59,12 +59,12 @@
       "cacheTtl": "5m"
     },
     "orchestrator": {
-      "model": "fable-5-1",
+      "model": "fable-5-2",
       "fallback": "opus-5-5",
       "cacheTtl": "1h"
     },
     "manager": {
-      "model": "fable-5-1",
+      "model": "fable-5-2",
       "fallback": "opus-5-5",
       "cacheTtl": "1h"
     },
@@ -74,12 +74,12 @@
       "cacheTtl": "5m"
     },
     "chief_of_staff": {
-      "model": "fable-5-1",
+      "model": "fable-5-2",
       "fallback": "opus-5-5",
       "cacheTtl": "5m"
     },
     "executive": {
-      "model": "fable-5-1",
+      "model": "fable-5-2",
       "fallback": "opus-5-5",
       "cacheTtl": "5m",
       "$comment": "The Executive Leadership layer (decision 140): CEO, COO, CFO and CTO, advisory only. Stateless calls from AIC's and the Orchestrator's runtimes and the executives Lambda, with their own application inference profile."
@@ -91,7 +91,7 @@
     }
   },
   "departmentModels": {
-    "$comment": "The owner's rules (2026-11-09, decision 129): Claude Fable 5.1 for the Orchestrator and every Department Manager (roles above), and for the workers of the Media, Research and Legal departments (here); the Chief of Staff is on Fable too; every other worker uses Opus 5.5. Department names as in config/departments.json. A department the owner builds on demand carries its own worker_model on its ledger record (opus-5-5 unless the owner explicitly asks for fable-5-1, decision 134), which wins for its workers.",
+    "$comment": "The owner's rules (2026-11-09, decision 129): Claude Fable 5.2 for the Orchestrator and every Department Manager (roles above), and for the workers of the Media, Research and Legal departments (here); the Chief of Staff is on Fable too; every other worker uses Opus 5.5. Department names as in config/departments.json. A department the owner builds on demand carries its own worker_model on its ledger record (opus-5-5 unless the owner explicitly asks for fable-5-2, decision 134), which wins for its workers.",
     "roles": [
       "worker"
     ],
@@ -100,7 +100,7 @@
       "Research",
       "Legal"
     ],
-    "model": "fable-5-1",
+    "model": "fable-5-2",
     "fallback": "opus-5-5"
   },
   "prices": {
@@ -119,10 +119,10 @@
       "output": 20,
       "cacheRead": 0.2
     },
-    "fable-5-1": {
-      "input": 10,
-      "output": 50,
-      "cacheRead": 0.25
+    "fable-5-2": {
+      "input": 8,
+      "output": 40,
+      "cacheRead": 0.2
     }
   },
   "cacheWriteMultiplier": {

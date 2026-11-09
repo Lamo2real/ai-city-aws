@@ -234,7 +234,7 @@ enum CityPalette {
                                         "Cloud": Color(hex: 0x8ecae6), "Marketing": Color(hex: 0xf72585), "Video": Color(hex: 0xb5179e),
                                         "Travel": Color(hex: 0x06d6a0)]
     static func color(_ name: String) -> Color { dept[name] ?? Color(hex: 0x9aa0a6) }
-    static let model: [String: Color] = ["haiku-5-5": Color(hex: 0xffd21e), "opus-5-5": Color(hex: 0x3b82ff), "sonnet-5-5": Color(hex: 0x2fd36b), "fable-5-1": Color(hex: 0xa86bff)]
+    static let model: [String: Color] = ["haiku-5-5": Color(hex: 0xffd21e), "opus-5-5": Color(hex: 0x3b82ff), "sonnet-5-5": Color(hex: 0x2fd36b), "fable-5-2": Color(hex: 0xa86bff)]
 }
 
 extension Color {

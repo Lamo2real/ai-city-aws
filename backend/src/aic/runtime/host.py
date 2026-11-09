@@ -92,7 +92,7 @@ class AgentHost:
     async def ensure_core(self) -> None:
         await ensure_executives(self.d.ledger)  # decision 140: permanent, at home until the Orchestrator calls them in
         at = now_iso(self.d.ledger.now())
-        for id, role, model in (("ace", "VAIC", "haiku-5-5"), ("orchestrator", "Orchestrator", "fable-5-1")):
+        for id, role, model in (("ace", "VAIC", "haiku-5-5"), ("orchestrator", "Orchestrator", "fable-5-2")):
             if not await self.d.ledger.get_agent(id):
                 await self.d.ledger.put_agent(
                     {
