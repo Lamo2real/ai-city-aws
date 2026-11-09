@@ -8,6 +8,7 @@ owner in Settings → Voice, and is never logged or echoed.
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import time
 from collections.abc import Awaitable, Callable
@@ -191,3 +192,72 @@ async def synthesize(d: SpeechDeps, text: Any, voice: Any = None) -> bytes:
             raise SpeechError(503, "rate_limited", "OpenAI is busy right now. Try again in a moment.")
         raise SpeechError(502, "openai_error", f"OpenAI answered with an error ({status}).")
     raise SpeechError(502, "openai_error", "No speech model answered.")
+
+
+# ---------- AIC's real-time voice on OpenAI GPT-Live (the owner's choice, 2026-11-09, decision 128) ----------
+LIVE_URL = "https://api.openai.com/v1/live/sessions"
+LIVE_MAX_SDP = 64 * 1024
+LIVE_TIMEOUT_S = 15.0
+
+
+def _live_config() -> dict[str, Any]:
+    from aic.shared.config import voice_config
+
+    return dict(voice_config().get("live") or {})
+
+
+def _live_prompt() -> str:
+    from aic.shared.utility import agents_dir
+
+    return (agents_dir() / "voice_live.md").read_text(encoding="utf-8").strip()
+
+
+async def create_live_session(d: SpeechDeps, sdp: Any) -> dict[str, str]:
+    """Opens a GPT-Live call for the browser's WebRTC offer and returns ``{"sdp": answer, "session_id": id}``.
+
+    The browser never sees the key: it sends its offer here, the call is created with the owner's key, and the
+    audio then flows straight between the browser and OpenAI. Client delegation: GPT-Live only listens and
+    speaks; the HUD hands every request to AIC through the normal chat and sends AIC's answer back to be said.
+    """
+    offer = str(sdp or "")
+    if not offer.strip():
+        raise ValueError("The browser's connection offer is missing.")
+    if len(offer) > LIVE_MAX_SDP:
+        raise ValueError("The browser's connection offer is too large.")
+    cfg = _live_config()
+    model = str(cfg.get("model") or "")
+    if not model:
+        raise SpeechError(503, "not_configured", "The real-time voice has no model configured.")
+    key = await d.key()
+    if not key:
+        raise NotConfigured()
+    session: dict[str, Any] = {"model": model, "instructions": _live_prompt(), "delegation": {"type": "client"}}
+    if cfg.get("voice"):
+        session["audio"] = {"output": {"voice": str(cfg["voice"])}}
+    body = {"session": session, "transport": {"type": "webrtc", "sdp": offer}}
+    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    try:
+        status, content, _ = await d.post(LIVE_URL, headers, body, LIVE_TIMEOUT_S)
+    except (httpx.TimeoutException, TimeoutError) as e:
+        log("warn", "live.failed", error="timeout", reason=type(e).__name__)
+        raise SpeechError(502, "timeout", "OpenAI took too long to open the call.") from e
+    except httpx.HTTPError as e:
+        log("warn", "live.failed", error="unreachable", reason=type(e).__name__)
+        raise SpeechError(502, "unreachable", "OpenAI could not be reached.") from e
+    if status in (200, 201):
+        try:
+            data = json.loads(content)
+            answer = str(data["transport"]["sdp"])
+            sid = str((data.get("session") or {}).get("id") or "")
+        except (ValueError, KeyError, TypeError) as e:
+            log("warn", "live.failed", error="bad_answer", status=status)
+            raise SpeechError(502, "openai_error", "OpenAI's answer to the call had no connection details.") from e
+        log("info", "live.ok", model=model)
+        return {"sdp": answer, "session_id": sid}
+    log("warn", "live.failed", error="openai", status=status)
+    if status in (401, 403):
+        d.forget_key()
+        raise SpeechError(503, "bad_key", "OpenAI rejected the key or it has no GPT-Live access.")
+    if status == 429:
+        raise SpeechError(503, "rate_limited", "OpenAI is busy right now.")
+    raise SpeechError(502, "openai_error", f"OpenAI answered with an error ({status}).")

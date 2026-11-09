@@ -27,7 +27,8 @@ import { getVoice, logVoiceError, micProblem, speakProblem } from "./voice.ts";
 import { watchForBargeIn } from "./bargeIn.ts";
 import { cleanSpeech } from "./clean.ts";
 import { CUE_AFTER_MS, CUE_AGAIN_MS, MAX_CUES, OWNER_TALKING_LEVEL, nextCue } from "./cues.ts";
-import { primeSonic, sonicWanted, startSonic, type SonicCall } from "./sonic.ts";
+import { primeSonic, sonicWanted, startSonic, type SonicCall, type SonicHandlers } from "./sonic.ts";
+import { liveWanted, startLive as startGptLive } from "./live.ts";
 
 /** Where dictated words go: each partial while talking, then each final piece. */
 export interface DictationTarget {
@@ -105,6 +106,34 @@ function stopTalking() {
   getVoice().stopSpeaking();
   browserStopSpeaking();
   if (store.get().presence === "speaking") store.set({ presence: "idle" });
+}
+
+/** GPT-Live's requests (live.ts): sent to AIC as a spoken chat message; resolves with AIC's answer when it is
+ *  done, or a short note when it fails or takes longer than two minutes (the answer still lands in the chat). */
+function askAic(text: string): Promise<string> {
+  const before = store.get().chat.length;
+  void sendMessage(text, { voice: true });
+  return new Promise((resolve) => {
+    let off: () => void = () => undefined;
+    const settle = (answer: string) => {
+      window.clearTimeout(timer);
+      off();
+      resolve(answer);
+    };
+    const timer = window.setTimeout(
+      () => settle("AIC is still working on it. The answer will be in the chat."),
+      120_000,
+    );
+    const check = () => {
+      const fresh = store.get().chat.slice(before);
+      const answer = fresh.find((l) => l.who === "ace" && l.state === "done");
+      if (answer) return settle(answer.text);
+      if (fresh.some((l) => l.who === "owner" && l.state === "failed"))
+        settle("The message didn't reach AIC. Check the connection.");
+    };
+    off = store.subscribe(check);
+    check();
+  });
 }
 
 export function useVoice(dictation?: DictationTarget) {
@@ -402,7 +431,7 @@ export function useVoice(dictation?: DictationTarget) {
     };
     const presence = (p: "listening" | "thinking" | "speaking") => sonic.current && store.set({ presence: p });
     try {
-      const call = await startSonic({
+      const handlers: SonicHandlers = {
         onUserText: (raw) => {
           const text = cleanSpeech(raw); // the chat shows what the owner meant, without "um" and stammers
           if (!text) return;
@@ -438,7 +467,34 @@ export function useVoice(dictation?: DictationTarget) {
             setProblem(`${(e as Error).message || "AIC's voice stopped."} Tap the voice button to talk again.`);
           }
         },
-      });
+      };
+      const quiet = () => {
+        endConversation(); // "stop listening" ends the call and is not sent
+        stopLive();
+        setListening(false);
+        store.set({ presence: "idle" });
+      };
+      // The most natural voice first (GPT-Live, decision 128); Nova Sonic when it can't open (no key, no access).
+      let call: SonicCall;
+      try {
+        if (!liveWanted()) throw new Error("not in this browser");
+        call = await startGptLive({
+          ask: (raw) => {
+            const text = cleanSpeech(raw) || raw.trim();
+            if (!isStopPhrase(text)) return askAic(text);
+            quiet();
+            return Promise.resolve("");
+          },
+          onUserWords: (w) => isStopPhrase(cleanSpeech(w)) && quiet(),
+          onThinking: handlers.onThinking,
+          onSpeaking: handlers.onSpeaking,
+          onEnd: handlers.onEnd,
+        });
+      } catch (e) {
+        if (!convo.current) return;
+        logVoiceError("GPT-Live could not start; trying Nova Sonic", e);
+        call = await startSonic(handlers);
+      }
       if (!convo.current) return call.stop(); // tapped off while it was connecting
       sonic.current = call;
       setEngine({ kind: "realtime" });

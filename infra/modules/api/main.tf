@@ -251,6 +251,8 @@ locals {
     "GET /github", "PUT /github/token", "DELETE /github/token",
     # AIC's real-time voice (decision 120): a five-minute signed address to AIC's own runtime.
     "POST /voice/session",
+    # AIC's real-time voice on OpenAI GPT-Live (decision 128): the browser's WebRTC offer in, the answer out.
+    "POST /voice/live",
   ]
   queue_batch = { ace = 1, orchestrator = 5, manager = 5, worker = 10 }
   queue_conc  = { ace = 5, orchestrator = 10, manager = 20, worker = var.worker_queue_concurrency }

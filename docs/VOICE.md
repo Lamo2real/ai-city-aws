@@ -80,3 +80,7 @@ three-sentence reply is well under a cent). Nothing is charged while the key is 
 
 `backend/src/aic/shared/speech.py`, the `_speech_routes` block in `backend/src/aic/lambdas/api.py`,
 `infra/modules/voice/main.tf`, tests in `backend/tests/test_speech.py`.
+
+## GPT-Live first (decision 128)
+The voice conversation tries OpenAI GPT-Live first (`web/src/voice/live.ts`): WebRTC, the offer opened by `POST /voice/live` with the owner's OpenAI key, client delegation so every request goes to AIC through the chat and AIC's answer comes back to be said. If it can't open, Nova Sonic, then the standard voice. Change the model or voice in `config/models.json` → `voice.live`.
+

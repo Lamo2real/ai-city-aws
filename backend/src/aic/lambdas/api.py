@@ -58,6 +58,7 @@ from aic.shared.speech import (
     NotConfigured,
     SpeechDeps,
     SpeechError,
+    create_live_session,
     openai_key_secret,
     store_secret,
     synthesize,
@@ -172,6 +173,7 @@ ROUTES: list[tuple[str, str]] = [
     ("GET", "/voice/openai"),
     ("PUT", "/voice/openai-key"),
     ("POST", "/voice/session"),
+    ("POST", "/voice/live"),
     ("GET", "/github"),
     ("PUT", "/github/token"),
     ("DELETE", "/github/token"),
@@ -405,7 +407,7 @@ OPENAI_FLAG = ("VOICE#openai", "META")
 
 async def _speech_routes(method: str, path: str, event: dict[str, Any], d: ApiDeps) -> dict[str, Any] | None:
     """AIC's voice through OpenAI: ``POST /speech`` (MP3 bytes), ``GET /voice/openai``, ``PUT /voice/openai-key``."""
-    if path not in ("/speech", "/voice/openai", "/voice/openai-key"):
+    if path not in ("/speech", "/voice/openai", "/voice/openai-key", "/voice/live"):
         return None
     s = d.speech
     if method == "GET" and path == "/voice/openai":
@@ -438,6 +440,16 @@ async def _speech_routes(method: str, path: str, event: dict[str, Any], d: ApiDe
         await d.ledger.table.put({"pk": OPENAI_FLAG[0], "sk": OPENAI_FLAG[1], "saved_at": at})
         log("info", "speech.key_saved")
         return reply(200, {"ok": True, "saved_at": at})
+    if method == "POST" and path == "/voice/live":
+        # AIC's real-time voice on GPT-Live (decision 128): the browser's WebRTC offer in, OpenAI's answer out.
+        try:
+            if s is None:
+                raise NotConfigured()
+            return reply(200, await create_live_session(s, _body(event).get("sdp")))
+        except ValueError as e:
+            return reply(400, {"error": "bad_request", "message": str(e)})
+        except SpeechError as e:
+            return reply(e.status, {"error": e.error, "message": e.message})
     if method == "POST" and path == "/speech":
         b = _body(event)
         try:

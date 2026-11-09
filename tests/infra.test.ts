@@ -829,6 +829,7 @@ describe("AIC's real-time voice (Nova Sonic, decision 120)", () => {
   });
   it("the API signs the browser's address to AIC's runtime only, and the HUD may open it", () => {
     expect(apiTf).toContain('"POST /voice/session"');
+    expect(apiTf).toContain('"POST /voice/live"');
     expect(apiTf).toMatch(
       /"bedrock-agentcore:InvokeAgentRuntimeWithWebSocketStream"\], Resource = \[var\.runtime_arns\["ace"\], "\$\{var\.runtime_arns\["ace"\]\}\/\*"\]/,
     );
