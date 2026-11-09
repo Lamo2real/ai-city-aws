@@ -78,7 +78,9 @@ function Card(p: { title: string; step?: number; children: ReactNode }) {
       <div className="signin-card">
         <div className="signin-brand">
           <Eyes presence="idle" small />
-          <span className="pixel">AI CITY</span>
+          <span className="wordmark">
+            <span className="wm-mark">AI</span> <span className="wm-word">City</span>
+          </span>
         </div>
         {p.step ? (
           <p className="mute small" aria-label={`Step ${p.step} of ${FIRST_LOGIN_STEPS}`}>

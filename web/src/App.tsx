@@ -162,7 +162,9 @@ export function App() {
       </a>
       <header className="top" ref={top}>
         <button type="button" className="brand" onClick={() => go("ace")} aria-label="AI City — talk to AIC">
-          <span className="pixel">AI CITY</span>
+          <span className="wordmark">
+            <span className="wm-mark">AI</span> <span className="wm-word">City</span>
+          </span>
         </button>
         <nav aria-label="Screens">
           {VIEWS.map((v) => (
