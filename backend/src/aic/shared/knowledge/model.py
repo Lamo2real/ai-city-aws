@@ -53,14 +53,35 @@ def estimate_tokens(text: str) -> int:
     return math.ceil(len(text) / CHARS_PER_TOKEN)
 
 
-def kb_metadata(item_id: str, scope: str, kind: str) -> dict[str, str]:
-    """The filterable attributes: in the ``.metadata.json`` file and inline with direct ingestion."""
-    return {"item_id": item_id, "scope": scope, "kind": kind}
+def kb_metadata(item_id: str, scope: str, kind: str, item: dict[str, Any] | None = None) -> dict[str, Any]:
+    """The filterable attributes: in the ``.metadata.json`` file and inline with direct ingestion.
+
+    With the item, its jurisdiction fields too (§15): ``jurisdictions`` and ``countries`` (string lists), ``year``
+    (number), ``topic``, ``doc_type``, ``language`` (strings). Empty values are left out: Bedrock has no null.
+    """
+    out: dict[str, Any] = {"item_id": item_id, "scope": scope, "kind": kind}
+    if item:
+        from .jurisdiction import countries_attr
+
+        js = [str(j) for j in item.get("jurisdictions") or []]
+        if js:
+            out["jurisdictions"] = js
+            out["countries"] = countries_attr(js)
+        if item.get("year") is not None:
+            out["year"] = int(item["year"])
+        for k in ("topic", "doc_type", "language"):
+            if item.get(k):
+                out[k] = str(item[k])
+    return out
 
 
-def metadata_doc(item_id: str, scope: str, kind: str) -> dict[str, Any]:
+def item_metadata(item: dict[str, Any], scope: str | None = None) -> dict[str, Any]:
+    return kb_metadata(item["id"], scope or item["scope"], item["kind"], item)
+
+
+def metadata_doc(item_id: str, scope: str, kind: str, item: dict[str, Any] | None = None) -> dict[str, Any]:
     """The ``<name>.metadata.json`` next to each normalized file; the title is not in vector metadata."""
-    return {"metadataAttributes": kb_metadata(item_id, scope, kind)}
+    return {"metadataAttributes": kb_metadata(item_id, scope, kind, item)}
 
 
 def safe_file_name(name: str) -> str:

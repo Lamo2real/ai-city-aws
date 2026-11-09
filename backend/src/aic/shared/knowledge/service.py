@@ -8,13 +8,16 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 from ..events import EventBus
 from ..log import log
 from .blobs import Blobs
 from .fetch import LinkRefused, check_url
+from .jurisdiction import MetadataError, clean_metadata, superseded_map
 from .kb import KnowledgeBase, ThrottlingException
 from .model import (
     ALWAYS_BUDGET_TOKENS,
@@ -25,7 +28,7 @@ from .model import (
     SCOPES,
     SINGLE_PUT_MAX_BYTES,
     item_json,
-    kb_metadata,
+    item_metadata,
     new_item_id,
     safe_file_name,
 )
@@ -62,6 +65,14 @@ def check_title(v: Any, fallback: str = "") -> str:
     return " ".join(v.split())
 
 
+def check_folder(v: Any) -> str:
+    """The folder a dropped file came from ("tax/Sweden"), a hint for detecting where it holds."""
+    if not isinstance(v, str):
+        return ""
+    parts = [re.sub(r"[\x00-\x1f\x7f]", "", p).strip() for p in re.split(r"[\\/]", v)]
+    return "/".join(p for p in parts if p and p not in (".", ".."))[:300]
+
+
 def updated_event(item: dict[str, Any]) -> dict[str, Any]:
     e = {
         "type": "knowledge.updated",
@@ -85,21 +96,30 @@ class KnowledgeService:
     """Only the API needs it (re-ingests after a scope change, deletes documents); AIC only adds."""
 
     async def _new(
-        self, kind: str, title: str, source: str, content_type: str, size: int, scope: str, raw_key_name: str
+        self,
+        kind: str,
+        title: str,
+        source: str,
+        content_type: str,
+        size: int,
+        scope: str,
+        raw_key_name: str,
+        folder: str = "",
     ) -> dict[str, Any]:
         item_id = new_item_id()
-        return await self.store.create_item(
-            {
-                "id": item_id,
-                "kind": kind,
-                "title": title,
-                "source": source,
-                "content_type": content_type,
-                "size_bytes": size,
-                "scope": scope,
-                "raw_key": f"raw/{item_id}/{raw_key_name}",
-            }
-        )
+        rec: dict[str, Any] = {
+            "id": item_id,
+            "kind": kind,
+            "title": title,
+            "source": source,
+            "content_type": content_type,
+            "size_bytes": size,
+            "scope": scope,
+            "raw_key": f"raw/{item_id}/{raw_key_name}",
+        }
+        if folder:
+            rec["folder"] = folder
+        return await self.store.create_item(rec)
 
     async def add_link(self, url: Any, title: Any = None, scope: Any = None) -> dict[str, Any]:
         if not isinstance(url, str):
@@ -162,6 +182,7 @@ class KnowledgeService:
             int(size),
             check_scope(b.get("scope")),
             safe,
+            check_folder(b.get("folder")),
         )
         key = item["raw_key"]
         upload: dict[str, Any]
@@ -216,8 +237,12 @@ class KnowledgeService:
 
     async def list(self, limit: int | None = None) -> dict[str, Any]:
         items = await self.store.list_items(limit)
+        # Newer years replace older ones for the same place and topic; the older stay listed, marked (§15).
+        newer = superseded_map(items, datetime.now(UTC).year)
         return {
-            "items": [item_json(i) for i in items],
+            "items": [
+                {**item_json(i), **({"superseded_by": newer[i["id"]]} if i["id"] in newer else {})} for i in items
+            ],
             "always_tokens": await self.store.always_tokens(),
             "always_budget": ALWAYS_BUDGET_TOKENS,
         }
@@ -229,18 +254,26 @@ class KnowledgeService:
             patch["title"] = check_title(b["title"])
         if b.get("scope") is not None:
             patch["scope"] = check_scope(b["scope"])
+        try:
+            meta = clean_metadata(b, partial=True)
+        except MetadataError as e:
+            raise KnowledgeError(str(e)) from e
+        if meta:
+            patch.update(meta)
+            patch["meta_source"] = "owner"
         if not patch:
             raise KnowledgeError("Nothing to change.")
-        if patch.get("scope") and patch["scope"] != item.get("scope"):
-            await self._reingest(item, str(patch["scope"]))
+        merged = {**item, **patch}
+        if item_metadata(merged) != item_metadata(item):
+            await self._reingest(merged)
         new = await self.store.update_item(item_id, patch) or item
-        if new.get("scope") != item.get("scope") or new.get("title") != item.get("title"):
+        if any(new.get(k) != item.get(k) for k in patch if k != "meta_source"):
             await self.bus.put(updated_event(new))
         return item_json(new)
 
-    async def _reingest(self, item: dict[str, Any], scope: str) -> None:
-        """New scope: the item's documents are re-ingested with it, then the metadata files rewritten."""
-        meta = kb_metadata(item["id"], scope, item["kind"])
+    async def _reingest(self, item: dict[str, Any]) -> None:
+        """New scope or place: the item's documents are re-ingested with it, then the metadata files rewritten."""
+        meta = item_metadata(item)
         uris = list(item.get("ingest_uris") or [])
         if uris and self.kb:
             try:

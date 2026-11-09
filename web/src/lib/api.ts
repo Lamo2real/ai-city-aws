@@ -52,6 +52,24 @@ export interface KnowledgeItem {
   summary?: string | null;
   created_at?: string;
   updated_at?: string;
+  /** Where and when it holds (docs/KNOWLEDGE.md §15): found on ingest, editable by the owner. */
+  jurisdictions?: string[];
+  year?: number | null;
+  in_force_from?: string | null;
+  in_force_to?: string | null;
+  topic?: string | null;
+  doc_type?: string | null;
+  language?: string | null;
+  meta_source?: "detected" | "owner";
+  folder?: string;
+  /** A newer item for the same place and topic (this one stays, marked). */
+  superseded_by?: string;
+}
+export interface KnowledgePlace {
+  jurisdictions?: string[];
+  year?: number | null;
+  topic?: string | null;
+  doc_type?: string | null;
 }
 export type UploadTicket =
   | { method: "PUT"; url: string; headers: Record<string, string> }
@@ -59,15 +77,21 @@ export type UploadTicket =
 
 export const knowledgeApi = {
   list: () => api<{ items: KnowledgeItem[]; always_tokens: number; always_budget: number }>("/knowledge"),
-  startUpload: (body: { file_name: string; content_type: string; size_bytes: number; title?: string; scope?: Scope }) =>
-    api<{ item: KnowledgeItem; upload: UploadTicket }>("/knowledge/uploads", { method: "POST", body }),
+  startUpload: (body: {
+    file_name: string;
+    content_type: string;
+    size_bytes: number;
+    title?: string;
+    scope?: Scope;
+    folder?: string;
+  }) => api<{ item: KnowledgeItem; upload: UploadTicket }>("/knowledge/uploads", { method: "POST", body }),
   completeUpload: (id: string, body: { upload_id: string; parts: Array<{ part_number: number; etag: string }> }) =>
     api<{ item: KnowledgeItem }>(`/knowledge/uploads/${id}/complete`, { method: "POST", body }),
   addLink: (url: string, scope?: Scope) =>
     api<{ item: KnowledgeItem }>("/knowledge/links", { method: "POST", body: { url, scope } }),
   addText: (text: string, title: string, scope?: Scope) =>
     api<{ item: KnowledgeItem }>("/knowledge/text", { method: "POST", body: { text, title, scope } }),
-  update: (id: string, patch: { scope?: Scope; title?: string }) =>
+  update: (id: string, patch: { scope?: Scope; title?: string } & KnowledgePlace) =>
     api<{ item: KnowledgeItem }>(`/knowledge/${id}`, { method: "PUT", body: patch }),
   remove: (id: string) => api<{ ok: true }>(`/knowledge/${id}`, { method: "DELETE" }),
 };

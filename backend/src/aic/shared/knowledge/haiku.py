@@ -8,6 +8,7 @@ stays far below Haiku's 100,000-token long-context tier.
 from __future__ import annotations
 
 import io
+import json
 import re
 from dataclasses import dataclass
 
@@ -15,6 +16,10 @@ from ..models import resolve_role_from_env
 from ..turn import GateDeps, GatedTurn, run_gated_turn
 from ..utility import UTILITY_MAX_CHARS, UtilityDeps, agents_dir
 from .extract import SUMMARY_MAX_WORDS, Extraction, limit_words, parse_extraction
+from .jurisdiction import clean_detected
+
+METADATA_TEXT_CHARS = 12_000
+"""The start of the item is enough to say where and when it holds."""
 
 MAX_IMAGE_BYTES = int(3.75 * 1024**2)
 MAX_IMAGE_EDGE = 1568
@@ -95,6 +100,27 @@ class KnowledgeModel:
             return parse_extraction(
                 await self._call(prompt + "\n\nReply with the JSON object only.", data, max_tokens=4096)
             )
+
+    async def detect_metadata(self, title: str, file_name: str, folder: str, text: str) -> dict[str, object]:
+        """Jurisdictions, year, in-force period, topic, document type and language (§15), each validated.
+
+        Raises ``ValueError`` when the reply is not a JSON object.
+        """
+        reply = await self._call(
+            knowledge_prompt("metadata"),
+            f"Title: {title}\nFile name: {file_name}\nFolder: {folder or '(none)'}\n\n{text[:METADATA_TEXT_CHARS]}",
+            max_tokens=512,
+        )
+        m = re.search(r"\{.*\}", reply, re.S)
+        if not m:
+            raise ValueError("no JSON in the metadata reply")
+        try:
+            data = json.loads(m.group(0))
+        except json.JSONDecodeError as e:
+            raise ValueError("the metadata reply is not JSON") from e
+        if not isinstance(data, dict):
+            raise ValueError("the metadata reply is not an object")
+        return clean_detected(data)
 
     async def describe_image(self, title: str, data: bytes) -> str:
         img, fmt = fit_image(data)

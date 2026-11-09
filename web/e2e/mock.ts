@@ -287,6 +287,47 @@ export async function mockBackend(
   const kEvent = (i: Record<string, unknown>) =>
     m.send({ type: "knowledge.updated", id: i.id, status: i.status, title: i.title, scope: i.scope, kind: i.kind });
   const alwaysTokens = () => m.knowledge.items.filter((x) => x.scope === "always").length * 1600;
+  /** Where and when it holds, "found" from the name the way the real pipeline's model would (KNOWLEDGE.md §15). */
+  const detect = (i: Record<string, unknown>) => {
+    const name = `${String(i.folder ?? "")} ${String(i.title)}`;
+    const places: Record<string, string> = {
+      sweden: "SE",
+      switzerland: "CH",
+      gdpr: "EU",
+      usa: "US",
+      california: "US-CA",
+    };
+    const js = Object.entries(places)
+      .filter(([w]) => name.toLowerCase().includes(w))
+      .map(([, c]) => c);
+    const year = /(20\d\d)/.exec(name)?.[1];
+    const topic = /tax|vat|skatt/i.test(name) ? "tax" : /gdpr|privacy|ccpa/i.test(name) ? "privacy" : undefined;
+    if (js.length || year || topic)
+      Object.assign(i, {
+        jurisdictions: js,
+        year: year ? Number(year) : null,
+        topic: topic ?? null,
+        doc_type: "law",
+        meta_source: "detected",
+      });
+  };
+  /** Newer years replace older ones for the same place and topic (the server works this out on GET). */
+  const withSuperseded = () =>
+    m.knowledge.items.map((a) => {
+      const newer = m.knowledge.items
+        .filter(
+          (b) =>
+            b !== a &&
+            b.topic &&
+            b.topic === a.topic &&
+            Number(b.year) > Number(a.year) &&
+            (b.jurisdictions as string[] | undefined)?.some((j) =>
+              (a.jurisdictions as string[] | undefined)?.includes(j),
+            ),
+        )
+        .sort((x, y) => Number(y.year) - Number(x.year))[0];
+      return newer ? { ...a, superseded_by: newer.id } : a;
+    });
   /** The pipeline, faked: processing at once, ready a moment later (unsupported for odd files). */
   const pipeline = (i: Record<string, unknown>) => {
     i.status = "processing";
@@ -294,6 +335,7 @@ export async function mockBackend(
     setTimeout(() => {
       if (!kItem(i.id as string)) return;
       i.status = i.kind === "other" ? "unsupported" : "ready";
+      if (i.status === "ready") detect(i);
       kEvent(i);
     }, 1200);
   };
@@ -700,7 +742,7 @@ export async function mockBackend(
         cost_explorer_url: "https://console.aws.amazon.com/costmanagement/home#/cost-explorer",
       });
     if (path === "/knowledge" && req.method() === "GET")
-      return ok({ items: m.knowledge.items, always_tokens: alwaysTokens(), always_budget: 8000 });
+      return ok({ items: withSuperseded(), always_tokens: alwaysTokens(), always_budget: 8000 });
     if (path === "/knowledge/uploads" && req.method() === "POST") {
       const name = String(body?.file_name);
       const size = Number(body?.size_bytes);
@@ -709,6 +751,7 @@ export async function mockBackend(
         source: name,
         content_type: body?.content_type,
         size_bytes: size,
+        ...(body?.folder ? { folder: body.folder } : {}),
       });
       const partSize = 16 * 1024 * 1024;
       const upload =
@@ -754,7 +797,9 @@ export async function mockBackend(
       if (!i) return ok({ error: "That item is gone." }, 404);
       if (req.method() === "GET") return ok({ ...i, entities: [] });
       if (req.method() === "PUT") {
-        Object.assign(i, body, { updated_at: at() });
+        const placeKeys = ["jurisdictions", "year", "topic", "doc_type"];
+        const owner = Object.keys(body ?? {}).some((k) => placeKeys.includes(k)) ? { meta_source: "owner" } : {};
+        Object.assign(i, body, owner, { updated_at: at() });
         kEvent(i);
         return ok({ item: i });
       }

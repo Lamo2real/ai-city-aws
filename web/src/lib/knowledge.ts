@@ -7,11 +7,13 @@ import {
   knowledgeApi,
   type KnowledgeItem,
   type KnowledgeKind,
+  type KnowledgePlace,
   type KnowledgeStatus,
   type Scope,
 } from "./api.ts";
 import { MAX_UPLOAD_BYTES, uploadFile, UploadError, type UploadOptions } from "./upload.ts";
 import { UNDO_MS } from "../components/ui.tsx";
+import { placeName, topicWord } from "./places.ts";
 
 export interface KnowledgeState {
   items: KnowledgeItem[];
@@ -141,8 +143,10 @@ class KnowledgeStore {
     if (e.type !== "knowledge.updated" || typeof e.id !== "string") return;
     const before = this.state.items.find((x) => x.id === e.id);
     this.dispatch(e as unknown as KnowledgeAction);
-    // The always-include budget is counted by the server: read it again when it may have changed.
-    if (this.state.loaded && (e.scope === "always" || before?.scope === "always")) refreshSoon();
+    // The always-include budget is counted by the server: read it again when it may have changed. A finished item
+    // has its place, year and topic now (§15), and may replace an older one: read the list again too.
+    const finished = e.status === "ready" && before?.status !== "ready";
+    if (this.state.loaded && (finished || e.scope === "always" || before?.scope === "always")) refreshSoon();
   }
 }
 export const knowledge = new KnowledgeStore();
@@ -260,4 +264,91 @@ export function scheduleDelete(id: string, onError: (message: string) => void, m
     clearTimeout(t);
     knowledge.dispatch({ type: "unhide", id });
   };
+}
+
+/** Saves where and when an item holds (docs/KNOWLEDGE.md §15); the server re-ingests it with the new filters. */
+export async function setPlace(id: string, patch: KnowledgePlace) {
+  const before = knowledge.get().items.find((x) => x.id === id);
+  if (!before) return;
+  try {
+    const { item } = await knowledgeApi.update(id, patch);
+    knowledge.dispatch({ type: "upsert", item });
+    refreshSoon(); // which items a newer year replaces is worked out by the server
+  } catch (e) {
+    throw new Error(`Not saved: ${words(e)}`, { cause: e });
+  }
+}
+
+// ---------- grouping by place, year and topic (§15) ----------
+export interface KnowledgeFilters {
+  place: string;
+  year: string;
+  topic: string;
+}
+export const NO_FILTERS: KnowledgeFilters = { place: "", year: "", topic: "" };
+export interface KnowledgeGroup {
+  key: string;
+  label: string;
+  items: KnowledgeItem[];
+}
+
+const placed = (i: KnowledgeItem) => Boolean(i.jurisdictions?.length || i.topic || i.year);
+export const placeLabel = (i: KnowledgeItem) => (i.jurisdictions ?? []).map(placeName).join(", ");
+
+/** "Sweden · 2026 · Tax"; parts that are unknown are left out. */
+export function groupLabel(i: KnowledgeItem): string {
+  const parts = [placeLabel(i), i.year ? String(i.year) : "", i.topic ? topicWord(i.topic) : ""].filter(Boolean);
+  return parts.join(" · ");
+}
+
+export function matchesFilters(i: KnowledgeItem, f: KnowledgeFilters): boolean {
+  if (f.place && !(i.jurisdictions ?? []).includes(f.place)) return false;
+  if (f.year && String(i.year ?? "") !== f.year) return false;
+  if (f.topic && (i.topic ?? "") !== f.topic) return false;
+  return true;
+}
+
+/** What the filter menus offer: only values some item has, places by name, years newest first. */
+export function filterChoices(items: KnowledgeItem[]) {
+  const places = [...new Set(items.flatMap((i) => i.jurisdictions ?? []))].sort((a, b) =>
+    placeName(a).localeCompare(placeName(b)),
+  );
+  const years = [...new Set(items.map((i) => i.year).filter((y): y is number => typeof y === "number"))].sort(
+    (a, b) => b - a,
+  );
+  const topics = [...new Set(items.map((i) => i.topic).filter((t): t is string => Boolean(t)))].sort();
+  return { places, years, topics };
+}
+
+/**
+ * Items by place, then topic, then year (newest first, so a newer year sits right above the one it replaces).
+ * Items still being read come first; items tied to no place come last.
+ */
+export function groupKnowledge(items: KnowledgeItem[]): KnowledgeGroup[] {
+  const reading: KnowledgeItem[] = [];
+  const loose: KnowledgeItem[] = [];
+  const groups = new Map<string, KnowledgeGroup & { sort: [string, string, number] }>();
+  for (const i of items) {
+    if (!placed(i)) {
+      (i.status === "uploading" || i.status === "processing" ? reading : loose).push(i);
+      continue;
+    }
+    const key = `${[...(i.jurisdictions ?? [])].sort().join(",")}|${i.year ?? ""}|${i.topic ?? ""}`;
+    const g = groups.get(key) ?? {
+      key,
+      label: groupLabel(i),
+      items: [],
+      sort: [placeLabel(i) || "~", i.topic ?? "~", -(i.year ?? 0)] as [string, string, number],
+    };
+    g.items.push(i);
+    groups.set(key, g);
+  }
+  const sorted = [...groups.values()].sort(
+    (a, b) => a.sort[0].localeCompare(b.sort[0]) || a.sort[1].localeCompare(b.sort[1]) || a.sort[2] - b.sort[2],
+  );
+  const out: KnowledgeGroup[] = [];
+  if (reading.length) out.push({ key: "reading", label: "Being read now", items: reading });
+  out.push(...sorted.map(({ key, label, items: xs }) => ({ key, label, items: xs })));
+  if (loose.length) out.push({ key: "loose", label: "Not tied to a country", items: loose });
+  return out;
 }

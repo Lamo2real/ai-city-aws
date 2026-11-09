@@ -27,10 +27,11 @@ from .documents import (
 from .extract import Extraction
 from .fetch import Fetched, decode_text, fetch_link, html_to_text
 from .haiku import KnowledgeModel
+from .jurisdiction import META_FIELDS, hints_from_name
 from .kb import FAILED as KB_FAILED
 from .kb import INDEXED as KB_INDEXED
 from .kb import KnowledgeBase
-from .model import kb_metadata, metadata_doc
+from .model import item_metadata, metadata_doc
 from .routing import TRANSCRIBE_FORMAT, extension, name_for_download, route_file, route_key
 from .service import updated_event
 from .store import KnowledgeStore
@@ -121,7 +122,7 @@ class Pipeline:
         item_id = item["id"]
         await self.blobs.delete_prefix(f"normalized/{item_id}/")
         keys: list[str] = []
-        meta = json.dumps(metadata_doc(item_id, item["scope"], item["kind"])).encode()
+        meta = json.dumps(metadata_doc(item_id, item["scope"], item["kind"], item)).encode()
         for name, body, ct in files:
             key = f"normalized/{item_id}/{name}"
             await self.blobs.put(key, body, ct)
@@ -200,7 +201,7 @@ class Pipeline:
         await self.blobs.copy(src, dst)
         await self.blobs.put(
             f"{dst}.metadata.json",
-            json.dumps(metadata_doc(item["id"], item["scope"], item["kind"])).encode(),
+            json.dumps(metadata_doc(item["id"], item["scope"], item["kind"], item)).encode(),
             "application/json",
         )
         await self._set(item["id"], {"normalized_keys": [dst]})
@@ -383,10 +384,42 @@ class Pipeline:
         uris = [f"s3://{self.blobs.bucket}/{k}" for k in item.get("normalized_keys") or []]
         if not uris:
             raise Unsupported("Nothing in this item could be prepared for search.")
-        await self._set(item["id"], {"ingest_uris": uris})
-        meta = kb_metadata(item["id"], item["scope"], item["kind"])
+        item = await self._set(item["id"], {"ingest_uris": uris})
+        if not item.get("meta_source"):
+            item = await self._detect_metadata(item)
+        meta = item_metadata(item)
         await self.kb.ingest([(u, meta) for u in uris])
         return {"documents": len(uris)}
+
+    async def _detect_metadata(self, item: dict[str, Any]) -> dict[str, Any]:
+        """Where and when the item holds (§15): the utility model reads the start of the text, with the file name
+        and folder as hints; the name alone fills what the model leaves empty. Never fails the item: an item
+        nobody could place is still searchable without a market filter, and the owner can set it in the HUD.
+        Runs in the ``ingest`` branch (before the KB gets the document), so the metadata goes in with it.
+        """
+        source = str(item.get("source") or "")
+        folder = str(item.get("folder") or "")
+        hints = hints_from_name(item.get("title") or "", source, folder)
+        found: dict[str, Any] = {}
+        if self.model:
+            try:
+                text = await self._item_text(item)
+                if text:
+                    found = dict(await self.model.detect_metadata(item["title"], source, folder, text))
+            except Exception as err:  # a paused city or a busy model must not fail the item: the name still helps
+                log("warn", "knowledge.metadata_failed", item=item["id"], error=type(err).__name__)
+        patch: dict[str, Any] = {k: found.get(k) for k in META_FIELDS}
+        if not patch.get("jurisdictions"):
+            patch["jurisdictions"] = hints["jurisdictions"]
+        if patch.get("year") is None:
+            patch["year"] = hints["year"]
+        patch["jurisdictions"] = patch.get("jurisdictions") or []
+        patch["meta_source"] = "detected"
+        item = await self._set(item["id"], patch)
+        doc = json.dumps(metadata_doc(item["id"], item["scope"], item["kind"], item)).encode()
+        for key in item.get("normalized_keys") or []:
+            await self.blobs.put(f"{key}.metadata.json", doc, "application/json")
+        return item
 
     async def _check_ingest(self, e: dict[str, Any]) -> dict[str, Any]:
         uris = list(e["item"].get("ingest_uris") or [])

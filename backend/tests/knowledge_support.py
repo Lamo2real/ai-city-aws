@@ -55,6 +55,8 @@ class FakeHaiku:
             if "describe one image" in t.prompt
             else "pages"
             if "scanned pages" in t.prompt
+            else "metadata"
+            if "say where and when it holds" in t.prompt
             else "other"
         )
         queue = self.replies.get(kind) or []
@@ -75,6 +77,7 @@ _DEFAULT = {
     ),
     "image": "## Description\nA whiteboard.\n\n## Text in the image\nQ3 plan",
     "pages": "## Page 1\nScanned words",
+    "metadata": "{}",
     "other": "",
 }
 

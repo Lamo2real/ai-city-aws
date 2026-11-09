@@ -15,7 +15,16 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from ..log import log
 from .graph import Expansion
+from .jurisdiction import (
+    item_holds_in,
+    label,
+    market_codes,
+    market_filter,
+    status_for,
+    superseded_map,
+)
 from .kb import Hit, KnowledgeBase
 from .model import DATA_HEADER, Scope
 from .store import KnowledgeStore
@@ -41,10 +50,24 @@ def _body(v: str) -> str:
     return html.escape(v.strip(), quote=False)
 
 
-def knowledge_block(item: dict[str, Any], text: str) -> str:
+def _place_attrs(item: dict[str, Any], status: str | None) -> str:
+    """Where and when the item holds (§15), so an agent can say which country a rule comes from."""
+    out = ""
+    if item.get("jurisdictions"):
+        out += f' jurisdictions="{_attr(",".join(item["jurisdictions"]))}"'
+    for k in ("year", "topic", "doc_type"):
+        if item.get(k) not in (None, ""):
+            out += f' {k}="{_attr(item[k])}"'
+    if status:
+        out += f' status="{_attr(status)}"'
+    return out
+
+
+def knowledge_block(item: dict[str, Any], text: str, status: str | None = None) -> str:
     return (
         f'<knowledge item="{_attr(item["id"])}" title="{_attr(item.get("title"))}" '
-        f'source="{_attr(item.get("source"))}" scope="{_attr(item.get("scope"))}">\n{_body(text)}\n</knowledge>'
+        f'source="{_attr(item.get("source"))}" scope="{_attr(item.get("scope"))}"{_place_attrs(item, status)}>'
+        f"\n{_body(text)}\n</knowledge>"
     )
 
 
@@ -61,9 +84,9 @@ class SearchCache:
         self.size = size
         self.ttl_s = ttl_s
         self._clock = clock
-        self._d: OrderedDict[tuple[str, bool, int], tuple[float, _Cached]] = OrderedDict()
+        self._d: OrderedDict[tuple[Any, ...], tuple[float, _Cached]] = OrderedDict()
 
-    def get(self, key: tuple[str, bool, int]) -> _Cached | None:
+    def get(self, key: tuple[Any, ...]) -> _Cached | None:
         hit = self._d.get(key)
         if not hit:
             return None
@@ -74,7 +97,7 @@ class SearchCache:
         self._d.move_to_end(key)
         return value
 
-    def put(self, key: tuple[str, bool, int], value: _Cached) -> None:
+    def put(self, key: tuple[Any, ...], value: _Cached) -> None:
         self._d[key] = (self._clock(), value)
         self._d.move_to_end(key)
         while len(self._d) > self.size:
@@ -89,27 +112,59 @@ class SearchResult:
     items: list[tuple[dict[str, Any], list[str]]] = field(default_factory=list)
     related_items: list[dict[str, Any]] = field(default_factory=list)
     related_lines: list[str] = field(default_factory=list)
+    statuses: dict[str, str] = field(default_factory=dict)
+    """item id → in force / superseded by … / not yet in force, for items that have a place and a year."""
+
+    def blocks(self) -> list[str]:
+        parts: list[str] = []
+        for item, snippets in self.items:
+            parts.append(knowledge_block(item, "\n…\n".join(snippets), self.statuses.get(item["id"])))
+        for item in self.related_items:
+            parts.append(
+                knowledge_block(item, f"(related, summary) {item.get('summary', '')}", self.statuses.get(item["id"]))
+            )
+        return parts + self.related_lines
 
     def text(self) -> str:
         if not self.items and not self.related_items:
             return f"{DATA_HEADER}\nNothing in the knowledge base matches."
-        parts = [DATA_HEADER]
-        for item, snippets in self.items:
-            parts.append(knowledge_block(item, "\n…\n".join(snippets)))
-        for item in self.related_items:
-            parts.append(knowledge_block(item, f"(related, summary) {item.get('summary', '')}"))
-        parts += self.related_lines
-        return "\n".join(parts)
+        return "\n".join([DATA_HEADER, *self.blocks()])
 
 
-def _usable(item: dict[str, Any] | None, scopes: list[Scope]) -> bool:
-    return item is not None and item.get("status") == "ready" and item.get("scope") in scopes
+def _usable(item: dict[str, Any] | None, scopes: list[Scope], market: str | None = None) -> bool:
+    if item is None or item.get("status") != "ready" or item.get("scope") not in scopes:
+        return False
+    # The item record is the truth for where an item holds (the owner may have just changed it).
+    return market is None or item_holds_in(item.get("jurisdictions"), market)
+
+
+async def _retrieve(kb: KnowledgeBase, query: str, n: int, scopes: list[Scope], market: str | None) -> list[Hit]:
+    """With a market: Retrieve filtered to it. When the filter finds nothing or Bedrock refuses it (an index
+    that can't filter on the attribute yet), a wider unfiltered Retrieve; ``search`` keeps only the items whose
+    record holds in the market, so the answer is never mixed, only possibly shorter."""
+    if market is None:
+        return await kb.retrieve(query, n, list(scopes))
+    try:
+        hits = await kb.retrieve(query, n, list(scopes), market_filter(market))
+    except Exception as e:
+        if type(e).__name__ not in ("ValidationException", "ClientError"):
+            raise
+        log("warn", "knowledge.market_filter_refused", market=market, error=type(e).__name__)
+        hits = []
+    if hits:
+        return hits
+    return await kb.retrieve(query, 30, list(scopes))
 
 
 async def _fetch(
-    kb: KnowledgeBase, store: KnowledgeStore, query: str, max_results: int, scopes: list[Scope]
+    kb: KnowledgeBase,
+    store: KnowledgeStore,
+    query: str,
+    max_results: int,
+    scopes: list[Scope],
+    market: str | None = None,
 ) -> _Cached:
-    hits = await kb.retrieve(query, min(30, max_results * 4), list(scopes))
+    hits = await _retrieve(kb, query, min(30, max_results * 4), scopes, market)
     grouped: dict[str, list[Hit]] = {}
     for h in sorted(hits, key=lambda h: h.score, reverse=True):
         grouped.setdefault(h.item_id, []).append(h)
@@ -125,12 +180,14 @@ async def search(
     max_results: int = 5,
     include_on_request: bool = False,
     cache: SearchCache | None = None,
+    market: str | None = None,
 ) -> SearchResult:
+    """``market``: only items that hold there (§15): the market, its parent regions and ``global``."""
     scopes = allowed_scopes(include_on_request)
-    key = (query.strip(), include_on_request, max_results)
+    key = (query.strip(), include_on_request, max_results, market)
     cached = cache.get(key) if cache is not None else None
     if cached is None:
-        cached = await _fetch(kb, store, query, max_results, scopes)
+        cached = await _fetch(kb, store, query, max_results, scopes, market)
         if cache is not None:
             cache.put(key, cached)
     ex = cached.expansion
@@ -140,7 +197,7 @@ async def search(
     out = SearchResult()
     for item_id, hs in cached.groups:
         item = records.get(item_id)
-        if _usable(item, scopes):
+        if _usable(item, scopes, market):
             assert item is not None
             out.items.append((item, [h.text[:SNIPPET_CHARS] for h in hs[:SNIPPETS_PER_ITEM]]))
             if len(out.items) >= max_results:
@@ -148,14 +205,14 @@ async def search(
     hit_ids = {item["id"] for item, _ in out.items}
     for i in candidates:
         item = records.get(i)
-        if i not in hit_ids and _usable(item, scopes) and item and item.get("summary"):
+        if i not in hit_ids and _usable(item, scopes, market) and item and item.get("summary"):
             out.related_items.append(item)
             if len(out.related_items) >= MAX_RELATED_ITEMS:
                 break
     if hit_ids:
         for r in ex.rels:
             # A relationship is shown only when the item it came from may be shown now.
-            if not _usable(records.get(r["item"]), scopes):
+            if not _usable(records.get(r["item"]), scopes, market):
                 continue
             line = f"related: {_attr(r['from'])} —{_attr(r['rel'])}→ {_attr(r['to'])} (item {_attr(r['item'])})"
             if line not in out.related_lines:
@@ -163,6 +220,55 @@ async def search(
             if len(out.related_lines) >= MAX_RELATED_LINES:
                 break
     return out
+
+
+def _placed(r: SearchResult) -> list[dict[str, Any]]:
+    return [i for i in [*(x for x, _ in r.items), *r.related_items] if i.get("year") is not None]
+
+
+async def label_status(store: KnowledgeStore, results: list[SearchResult], year: int) -> None:
+    """Marks each found item with a place and a year as in force, superseded by a newer one, not yet or no
+    longer in force in ``year``; items in force come first. One Query of the item list, only when needed."""
+    if not any(_placed(r) for r in results):
+        return
+    everything = await store.list_items()
+    newer = superseded_map(everything, year)
+    years = {str(i["id"]): int(i["year"]) for i in everything if i.get("year") is not None}
+    for r in results:
+        for item in _placed(r):
+            r.statuses[item["id"]] = status_for(item, year, newer, years)
+        r.items.sort(key=lambda x: r.statuses.get(x[0]["id"], "in force") != "in force")
+
+
+MARKETS_HEADER = (
+    "Searched once per market. Each <market> holds only what applies there: the country itself, the regions it "
+    "belongs to and global items. Never carry one market's rules into another market's answer, and say which "
+    "jurisdiction each rule comes from. Prefer items in force; an item superseded by a newer one is history "
+    "unless the task names its period."
+)
+
+
+async def search_markets(
+    kb: KnowledgeBase,
+    store: KnowledgeStore,
+    query: str,
+    markets: list[str],
+    year: int,
+    max_results: int = 5,
+    include_on_request: bool = False,
+    cache: SearchCache | None = None,
+) -> str:
+    """One filtered search per market, returned as separate ``<market>`` sections (§15)."""
+    results = [await search(kb, store, query, max_results, include_on_request, cache=cache, market=m) for m in markets]
+    await label_status(store, results, year)
+    parts = [DATA_HEADER, MARKETS_HEADER]
+    for m, r in zip(markets, results, strict=True):
+        covers = ", ".join(market_codes(m))
+        parts.append(f'<market code="{_attr(m)}" name="{_attr(label(m))}" covers="{_attr(covers)}" year="{year}">')
+        body = r.blocks()
+        parts += body if body else [f"Nothing stored for {_attr(label(m))} matches."]
+        parts.append("</market>")
+    return "\n".join(parts)
 
 
 async def always_block(store: KnowledgeStore) -> str:

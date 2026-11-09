@@ -2845,6 +2845,87 @@ a.pin:hover {
 .screen .kitem .mute {
   color: var(--gmute);
 }
+/* Where and when items hold (docs/KNOWLEDGE.md §15) */
+.folder-pick {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  margin: calc(-1 * var(--s2)) 0 var(--s2);
+  cursor: pointer;
+}
+.folder-pick:focus-within {
+  outline: 3px solid var(--gfocus);
+  outline-offset: 2px;
+}
+.kfilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s3);
+  align-items: end;
+  margin: var(--s3) 0;
+}
+.kfilters .field {
+  margin: 0;
+  min-width: 140px;
+  flex: 1 1 140px;
+}
+.kfilters .check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: var(--tap);
+  color: var(--gtext);
+}
+.kfilters .check input {
+  width: 22px;
+  height: 22px;
+}
+.kgroup + .kgroup {
+  margin-top: var(--s4);
+}
+.kgroup-title {
+  font-size: var(--fs-l);
+  margin: var(--s3) 0 var(--s2);
+  overflow-wrap: anywhere;
+}
+.kgroup-title .mute {
+  font-weight: 400;
+}
+.kplace {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s1) var(--s3);
+  margin: var(--s1) 0 0;
+}
+.kedit {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--s2) var(--s3);
+  align-items: end;
+  margin-top: var(--s2);
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--edge);
+  border-radius: var(--rg-s);
+  background: var(--glass-deep);
+}
+.kedit .field {
+  margin: 0;
+}
+.kedit-actions {
+  display: flex;
+  gap: var(--s2);
+  flex-wrap: wrap;
+}
+.kitem-old {
+  border-style: dashed;
+}
+.tag-old {
+  background: var(--glass-deep);
+  color: var(--gtext);
+  border: 1px solid var(--edge-2);
+}
 .ktitle {
   overflow-wrap: anywhere;
 }

@@ -11,6 +11,8 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from .jurisdiction import matches_filter, with_scopes
+
 MAX_DOCS_PER_CALL = 25
 INDEXED = ("INDEXED", "PARTIALLY_INDEXED")
 FAILED = ("FAILED", "METADATA_UPDATE_FAILED", "IGNORED", "NOT_FOUND")
@@ -23,6 +25,8 @@ class Hit:
     score: float
     scope: str = ""
     kind: str = ""
+    attributes: dict[str, Any] = field(default_factory=dict)
+    """The document's metadata as Bedrock returned it (the fake KB filters on it)."""
 
 
 class ThrottlingException(RuntimeError):
@@ -30,8 +34,13 @@ class ThrottlingException(RuntimeError):
 
 
 class KnowledgeBase(Protocol):
-    async def retrieve(self, query: str, max_results: int, scopes: list[str]) -> list[Hit]: ...
-    async def ingest(self, docs: list[tuple[str, dict[str, str]]]) -> None:
+    async def retrieve(
+        self, query: str, max_results: int, scopes: list[str], extra: dict[str, Any] | None = None
+    ) -> list[Hit]:
+        """``extra``: a further metadata filter ANDed with the scope filter (a market's jurisdictions, §15)."""
+        ...
+
+    async def ingest(self, docs: list[tuple[str, dict[str, Any]]]) -> None:
         """(S3 URI, metadata attributes) per document; the same call re-ingests with new metadata."""
         ...
 
@@ -39,32 +48,41 @@ class KnowledgeBase(Protocol):
     async def delete(self, uris: list[str]) -> None: ...
 
 
-def scope_filter(scopes: list[str]) -> dict[str, Any]:
-    return {"in": {"key": "scope", "value": list(scopes)}}
+def scope_filter(scopes: list[str], extra: dict[str, Any] | None = None) -> dict[str, Any]:
+    return with_scopes(scopes, extra)
 
 
-def retrieval_config(max_results: int, scopes: list[str]) -> dict[str, Any]:
+def retrieval_config(max_results: int, scopes: list[str], extra: dict[str, Any] | None = None) -> dict[str, Any]:
     return {
         "vectorSearchConfiguration": {
             "numberOfResults": max_results,
             "overrideSearchType": "HYBRID",
-            "filter": scope_filter(scopes),
+            "filter": scope_filter(scopes, extra),
         }
     }
+
+
+def attribute_value(v: Any) -> dict[str, Any]:
+    """A metadata value as Bedrock's typed inline attribute."""
+    if isinstance(v, bool):
+        return {"type": "BOOLEAN", "booleanValue": v}
+    if isinstance(v, int | float):
+        return {"type": "NUMBER", "numberValue": v}
+    if isinstance(v, list):
+        return {"type": "STRING_LIST", "stringListValue": [str(x) for x in v]}
+    return {"type": "STRING", "stringValue": str(v)}
 
 
 def s3_identifier(uri: str) -> dict[str, Any]:
     return {"dataSourceType": "S3", "s3": {"uri": uri}}
 
 
-def ingest_document(uri: str, metadata: dict[str, str]) -> dict[str, Any]:
+def ingest_document(uri: str, metadata: dict[str, Any]) -> dict[str, Any]:
     return {
         "content": {"dataSourceType": "S3", "s3": {"s3Location": {"uri": uri}}},
         "metadata": {
             "type": "IN_LINE_ATTRIBUTE",
-            "inlineAttributes": [
-                {"key": k, "value": {"type": "STRING", "stringValue": v}} for k, v in sorted(metadata.items())
-            ],
+            "inlineAttributes": [{"key": k, "value": attribute_value(v)} for k, v in sorted(metadata.items())],
         },
     }
 
@@ -90,12 +108,14 @@ class BedrockKnowledgeBase:
     def _ids(self) -> dict[str, str]:
         return {"knowledgeBaseId": self.kb_id, "dataSourceId": self.data_source_id}
 
-    async def retrieve(self, query: str, max_results: int, scopes: list[str]) -> list[Hit]:
+    async def retrieve(
+        self, query: str, max_results: int, scopes: list[str], extra: dict[str, Any] | None = None
+    ) -> list[Hit]:
         r = await asyncio.to_thread(
             self._runtime.retrieve,
             knowledgeBaseId=self.kb_id,
             retrievalQuery={"text": query},
-            retrievalConfiguration=retrieval_config(max_results, scopes),
+            retrievalConfiguration=retrieval_config(max_results, scopes, extra),
         )
         out: list[Hit] = []
         for res in r.get("retrievalResults", []):
@@ -110,11 +130,12 @@ class BedrockKnowledgeBase:
                     score=float(res.get("score") or 0),
                     scope=str(meta.get("scope", "")),
                     kind=str(meta.get("kind", "")),
+                    attributes=dict(meta),
                 )
             )
         return out
 
-    async def ingest(self, docs: list[tuple[str, dict[str, str]]]) -> None:
+    async def ingest(self, docs: list[tuple[str, dict[str, Any]]]) -> None:
         for chunk in _chunks(docs):
             try:
                 await asyncio.to_thread(
@@ -161,24 +182,27 @@ class FakeKnowledgeBase:
 
     hits: list[Hit] = field(default_factory=list)
     calls: list[dict[str, Any]] = field(default_factory=list)
-    docs: dict[str, dict[str, str]] = field(default_factory=dict)
+    docs: dict[str, dict[str, Any]] = field(default_factory=dict)
     """S3 URI → inline metadata of the documents in the index."""
     status: dict[str, str] = field(default_factory=dict)
     ingest_calls: list[list[str]] = field(default_factory=list)
     throttle: int = 0
     """Throttle the next N ingest calls."""
 
-    async def retrieve(self, query: str, max_results: int, scopes: list[str]) -> list[Hit]:
-        self.calls.append(
-            {
-                "query": query,
-                "max_results": max_results,
-                **retrieval_config(max_results, scopes)["vectorSearchConfiguration"],
-            }
-        )
-        return [h for h in self.hits if h.scope in scopes][:max_results]
+    fail_filters: bool = False
+    """Pretend the index can't filter on the jurisdiction attributes (Bedrock answers nothing)."""
 
-    async def ingest(self, docs: list[tuple[str, dict[str, str]]]) -> None:
+    async def retrieve(
+        self, query: str, max_results: int, scopes: list[str], extra: dict[str, Any] | None = None
+    ) -> list[Hit]:
+        cfg = retrieval_config(max_results, scopes, extra)["vectorSearchConfiguration"]
+        self.calls.append({"query": query, "max_results": max_results, **cfg})
+        if extra and self.fail_filters:
+            return []
+        f = cfg["filter"]
+        return [h for h in self.hits if matches_filter({**h.attributes, "scope": h.scope}, f)][:max_results]
+
+    async def ingest(self, docs: list[tuple[str, dict[str, Any]]]) -> None:
         for chunk in _chunks(docs):
             if self.throttle > 0:
                 self.throttle -= 1

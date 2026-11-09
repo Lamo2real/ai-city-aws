@@ -54,6 +54,12 @@ export interface UploadOptions {
   retryDelayMs?: number;
 }
 
+/** The folder a file was picked from ("tax/Sweden"), a hint for finding where it holds. */
+export const folderOf = (file: File) => {
+  const rel = (file as File & { webkitRelativePath?: string }).webkitRelativePath ?? "";
+  return rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "";
+};
+
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function uploadFile(file: File, o: UploadOptions = {}): Promise<KnowledgeItem> {
@@ -66,6 +72,7 @@ export async function uploadFile(file: File, o: UploadOptions = {}): Promise<Kno
     size_bytes: file.size,
     ...(o.title ? { title: o.title } : {}),
     ...(o.scope ? { scope: o.scope } : {}),
+    ...(folderOf(file) ? { folder: folderOf(file) } : {}),
   });
   o.onCreated?.(item);
 
