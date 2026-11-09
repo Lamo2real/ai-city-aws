@@ -20,6 +20,9 @@ runtime = [
   "claude-agent-sdk>=0.1",
   "starlette>=0.47",
   "uvicorn>=0.35",
+  # uvicorn needs a WebSocket library to accept /ws (AIC's real-time voice): without one it treats the upgrade as a
+  # plain request, Starlette answers 404 and AgentCore reports 424 (the owner's voice never connected, 2026-11-09).
+  "websockets>=15.0",
 ]
 
 [dependency-groups]

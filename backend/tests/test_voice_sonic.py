@@ -367,3 +367,47 @@ async def test_the_api_says_why_aws_refused_the_voice_connection(monkeypatch: An
     monkeypatch.setattr(api_mod, "check_voice_url", accepted)
     r = js(await handle_http(ev("POST", "/voice/check"), make(voice=deps)))
     assert r["ok"] is True
+
+
+async def test_the_real_uvicorn_server_accepts_the_voice_websocket() -> None:
+    """The same server the runtime image runs (uvicorn), not Starlette's test client: without a WebSocket library
+    uvicorn answered /ws with 404 and AgentCore reported 424 to the owner (2026-11-09)."""
+    import socket
+
+    import uvicorn
+    import websockets
+
+    class Session:
+        def __init__(self, send: Any, live: dict[str, str]) -> None:
+            self.send = send
+
+        async def start(self) -> None:
+            await self.send({"type": "ready", "model": "nova-2", "region": "eu-north-1"})
+
+        async def on_client(self, msg: dict[str, Any]) -> None:
+            pass
+
+        async def close(self) -> None:
+            pass
+
+    class Host:
+        async def run_turn(self, inv: dict[str, Any]) -> str:
+            return ""
+
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    server = uvicorn.Server(
+        uvicorn.Config(create_app(Host(), voice=Session), host="127.0.0.1", port=port, log_level="error")
+    )
+    task = asyncio.create_task(server.serve())
+    try:
+        for _ in range(100):
+            if server.started:
+                break
+            await asyncio.sleep(0.02)
+        async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
+            assert json.loads(await ws.recv()) == {"type": "ready", "model": "nova-2", "region": "eu-north-1"}
+    finally:
+        server.should_exit = True
+        await task
