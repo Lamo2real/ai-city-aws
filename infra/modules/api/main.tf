@@ -302,7 +302,9 @@ locals {
 }
 
 data "archive_file" "bundle" {
-  for_each    = toset(distinct([for f in local.functions : f.bundle]))
+  # Every function runs the one "app" bundle. A literal set keeps the zip independent of the functions' settings, so
+  # other modules can build from it and feed the api's env (Files' preview signing key, decision 156) without a cycle.
+  for_each    = toset(["app"])
   type        = "zip"
   source_dir  = "${var.lambda_dist}/${each.key}"
   output_path = "${path.root}/.build/${each.key}.zip"

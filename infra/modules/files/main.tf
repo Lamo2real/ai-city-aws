@@ -1,4 +1,4 @@
-# Files (docs/FILES.md, decision 147): the owner's one storage area for photos, videos, PDFs, documents and any
+# Files (docs/FILES.md, decisions 151 and 156): the owner's one storage area for photos, videos, PDFs, documents and any
 # other file, which the departments read and write. One private, KMS-encrypted, versioned bucket; one table of
 # file records; the files Lambda that describes each file (Claude captions, document text, video frames and
 # Transcribe), embeds the description with Titan Text Embeddings V2 and keeps the vector on the record. Driven by
@@ -50,10 +50,11 @@ variable "log_retention_days" {
 }
 
 locals {
-  tags          = { Component = "files" }
-  base          = "${var.name}-files"
-  function_name = local.base
-  embedding     = jsondecode(file("${path.module}/../../../config/models.json")).embeddings.files
+  signing_secret = "aic/prod/files-signing-key"
+  tags           = { Component = "files" }
+  base           = "${var.name}-files"
+  function_name  = local.base
+  embedding      = jsondecode(file("${path.module}/../../../config/models.json")).embeddings.files
   # Titan V2 in-Region (the owner's exception, decision 147): it only turns descriptions into vectors.
   embedding_model_arn = "arn:aws:bedrock:${var.region}::foundation-model/${local.embedding.modelId}"
   table_rw            = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query"]
@@ -162,14 +163,25 @@ resource "aws_s3_bucket_policy" "this" {
   bucket = aws_s3_bucket.this.id
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Sid       = "TlsOnly"
-      Effect    = "Deny"
-      Principal = "*"
-      Action    = "s3:*"
-      Resource  = [aws_s3_bucket.this.arn, "${aws_s3_bucket.this.arn}/*"]
-      Condition = { Bool = { "aws:SecureTransport" = "false" } }
-    }]
+    Statement = [
+      {
+        Sid       = "TlsOnly"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource  = [aws_s3_bucket.this.arn, "${aws_s3_bucket.this.arn}/*"]
+        Condition = { Bool = { "aws:SecureTransport" = "false" } }
+      },
+      # Previews and thumbnails through this module's CloudFront distribution only (decision 156).
+      {
+        Sid       = "CloudFrontReadsPreviews"
+        Effect    = "Allow"
+        Principal = { Service = "cloudfront.amazonaws.com" }
+        Action    = "s3:GetObject"
+        Resource  = ["${aws_s3_bucket.this.arn}/files/*", "${aws_s3_bucket.this.arn}/thumbs/*"]
+        Condition = { StringEquals = { "AWS:SourceArn" = aws_cloudfront_distribution.previews.arn } }
+      },
+    ]
   })
   depends_on = [aws_s3_bucket_public_access_block.this]
 }
@@ -434,6 +446,8 @@ resource "aws_iam_policy" "api" {
       { Sid = "FilesKey", Effect = "Allow", Action = ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"], Resource = [var.kms_key_arn] },
       { Sid = "EmbedSearches", Effect = "Allow", Action = ["bedrock:InvokeModel"], Resource = [local.embedding_model_arn] },
       { Sid = "DescribeAgain", Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = [aws_lambda_function.fn.arn] },
+      # Signs CloudFront preview URLs (decision 156); the api is the only reader of the private key.
+      { Sid = "SignPreviews", Effect = "Allow", Action = ["secretsmanager:GetSecretValue"], Resource = [aws_secretsmanager_secret.signing.arn] },
     ]
   })
 }
@@ -511,7 +525,151 @@ resource "aws_iam_role_policy" "workspace" {
   })
 }
 
+# ---------- previews through CloudFront, signed per view (decision 156) ----------
+# The signing key pair is made inside Secrets Manager by a one-time Lambda: Terraform creates the empty secret, invokes
+# the Lambda (which fills the secret only when it is empty) and gets back the public key alone. The private key is never
+# in Terraform state, code, the deploy log or a person's hands.
+resource "aws_secretsmanager_secret" "signing" {
+  #checkov:skip=CKV2_AWS_57:The key pair is replaced by emptying the secret and re-applying; there is no rotation Lambda.
+  name                    = local.signing_secret
+  description             = "CloudFront signing key for Files' previews (private key; written only by the signing-key Lambda)"
+  kms_key_id              = var.kms_key_arn
+  recovery_window_in_days = 7
+  tags                    = local.tags
+}
+
+resource "aws_cloudwatch_log_group" "signing" {
+  #checkov:skip=CKV_AWS_338:Retention is the log_retention_days variable; the function logs nothing about the key.
+  name              = "/aws/lambda/${local.base}-signing-key"
+  retention_in_days = var.log_retention_days
+  kms_key_id        = var.kms_key_arn
+  tags              = local.tags
+}
+
+resource "aws_iam_role" "signing" {
+  name                 = "${var.name}-fn-files-signing-key"
+  permissions_boundary = var.boundary_arn
+  assume_role_policy = jsonencode({
+    Version   = "2012-10-17"
+    Statement = [{ Effect = "Allow", Principal = { Service = "lambda.amazonaws.com" }, Action = "sts:AssumeRole" }]
+  })
+  tags = local.tags
+}
+
+resource "aws_iam_role_policy" "signing" {
+  name = "make-the-key-pair"
+  role = aws_iam_role.signing.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      { Sid = "Logs", Effect = "Allow", Action = ["logs:CreateLogStream", "logs:PutLogEvents"], Resource = "${aws_cloudwatch_log_group.signing.arn}:*" },
+      { Sid = "TheKeySecret", Effect = "Allow", Action = ["secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue"], Resource = [aws_secretsmanager_secret.signing.arn] },
+      { Sid = "Key", Effect = "Allow", Action = ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"], Resource = var.kms_key_arn },
+    ]
+  })
+}
+
+resource "aws_lambda_function" "signing" {
+  #checkov:skip=CKV_AWS_117:No VPC: it only talks to Secrets Manager.
+  #checkov:skip=CKV_AWS_272:Code signing is not set up for a single-owner project.
+  #checkov:skip=CKV_AWS_116:Invoked synchronously by Terraform only.
+  #checkov:skip=CKV_AWS_115:Runs once per apply at most; no concurrency limit needed.
+  #checkov:skip=CKV_AWS_50:X-Ray adds nothing to a one-call function.
+  function_name    = "${local.base}-signing-key"
+  role             = aws_iam_role.signing.arn
+  runtime          = "python3.13"
+  architectures    = ["arm64"]
+  handler          = "aic.lambdas.files.signing_key_handler"
+  filename         = var.lambda_zip_path
+  source_code_hash = var.lambda_zip_hash
+  timeout          = 30
+  memory_size      = 256
+  kms_key_arn      = var.kms_key_arn
+  logging_config {
+    log_format = "JSON"
+    log_group  = aws_cloudwatch_log_group.signing.name
+  }
+  environment {
+    variables = { FILES_SIGNING_SECRET = aws_secretsmanager_secret.signing.name }
+  }
+  tags       = local.tags
+  depends_on = [aws_iam_role_policy.signing]
+}
+
+# Only the public key comes back (and so only it is in state).
+resource "aws_lambda_invocation" "signing" {
+  function_name = aws_lambda_function.signing.function_name
+  input         = jsonencode({ action = "signing_key", secret = aws_secretsmanager_secret.signing.name })
+}
+
+resource "aws_cloudfront_public_key" "previews" {
+  name        = "${local.base}-previews"
+  comment     = "Files' preview signing key (the private key is in Secrets Manager only)"
+  encoded_key = jsondecode(aws_lambda_invocation.signing.result).public_key_pem
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_cloudfront_key_group" "previews" {
+  name    = "${local.base}-previews"
+  comment = "Signs Files' preview and thumbnail URLs"
+  items   = [aws_cloudfront_public_key.previews.id]
+}
+
+resource "aws_cloudfront_origin_access_control" "files" {
+  name                              = local.base
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+}
+
+resource "aws_cloudfront_distribution" "previews" {
+  #checkov:skip=CKV_AWS_86:Access logging needs a log bucket with ACLs; every view is a short-lived signed URL the api issued.
+  #checkov:skip=CKV_AWS_174:The default certificate enforces TLS 1.2 on *.cloudfront.net; no custom domain.
+  #checkov:skip=CKV_AWS_310:One private S3 origin; failover is not needed.
+  #checkov:skip=CKV_AWS_374:No geo restriction: the owner travels.
+  #checkov:skip=CKV2_AWS_42:Custom certificate only with a custom domain (not configured).
+  #checkov:skip=CKV_AWS_305:No root object: every request is one signed object.
+  #checkov:skip=CKV2_AWS_47:Every request must carry a valid signature from the trusted key group; nothing is public.
+  #checkov:skip=CKV_AWS_68:No WAF: unsigned requests are refused at the edge before any origin access.
+  enabled         = true
+  comment         = "AI City Files previews and thumbnails (signed URLs only)"
+  price_class     = "PriceClass_100"
+  http_version    = "http2and3"
+  is_ipv6_enabled = true
+  origin {
+    origin_id                = "files"
+    domain_name              = aws_s3_bucket.this.bucket_regional_domain_name
+    origin_access_control_id = aws_cloudfront_origin_access_control.files.id
+  }
+  default_cache_behavior {
+    target_origin_id       = "files"
+    viewer_protocol_policy = "https-only"
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+    trusted_key_groups     = [aws_cloudfront_key_group.previews.id]
+    # Managed-CachingOptimized: the query string (the signature) is not part of the cache key, so a thumbnail is
+    # fetched from S3 once and served from the edge to every later signed view.
+    cache_policy_id = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+  }
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+  viewer_certificate {
+    cloudfront_default_certificate = true
+    minimum_protocol_version       = "TLSv1.2_2021"
+  }
+  tags = local.tags
+}
+
 output "bucket" { value = aws_s3_bucket.this.bucket }
+output "cdn_url" { value = "https://${aws_cloudfront_distribution.previews.domain_name}" }
+output "cdn_key_id" { value = aws_cloudfront_public_key.previews.id }
+output "signing_secret" { value = aws_secretsmanager_secret.signing.name }
 output "bucket_arn" { value = aws_s3_bucket.this.arn }
 output "table" { value = aws_dynamodb_table.this.name }
 output "table_arn" { value = aws_dynamodb_table.this.arn }

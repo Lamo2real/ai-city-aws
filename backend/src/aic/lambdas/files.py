@@ -90,3 +90,14 @@ async def _handle(event: dict[str, Any]) -> dict[str, Any]:
 
 def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
     return run(_handle(event))
+
+
+def signing_key_handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
+    """Terraform's one-time step (decision 156): the CloudFront key pair, made inside Secrets Manager. Answers the
+    public key only; the private key never leaves the secret."""
+    import boto3
+
+    from aic.shared.files.cdn import ensure_signing_key
+
+    sm = client(boto3.session.Session(), "secretsmanager")
+    return {"public_key_pem": ensure_signing_key(sm, require_env("FILES_SIGNING_SECRET"))}

@@ -18,6 +18,11 @@ variable "apps_url" {
   type        = string
   description = "The apps origin (https://<id>.cloudfront.net). The HUD may frame it and load icons from it, nothing else."
 }
+variable "files_cdn_url" {
+  type        = string
+  default     = ""
+  description = "Files' signed previews (decision 156): shown in img, video and the PDF frame."
+}
 variable "rate_limit_per_5min" {
   type    = number
   default = 1000
@@ -25,7 +30,7 @@ variable "rate_limit_per_5min" {
 
 locals {
   tags          = { Component = "frontend" }
-  files_origins = "https://${var.name}-files.s3.${var.region}.amazonaws.com https://${var.name}-files.s3.amazonaws.com"
+  files_origins = trimspace("https://${var.name}-files.s3.${var.region}.amazonaws.com https://${var.name}-files.s3.amazonaws.com ${var.files_cdn_url}")
   # The browser talks only to: itself, the API and WebSocket, Cognito, and the voice services.
   # It frames (and loads icons from) the apps origin only; connect-src never names it.
   csp = join("; ", [

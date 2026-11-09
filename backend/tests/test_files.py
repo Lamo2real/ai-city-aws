@@ -561,3 +561,69 @@ def test_vaic_never_reads_the_signed_addresses() -> None:
     out = summarise({"statusCode": 200, "body": body}, strip_links=True)
     assert "sig" not in out and "a.png" in out
     assert "sig" in summarise({"statusCode": 200, "body": body})
+
+
+# ---------- CloudFront signed previews (decision 156) ----------
+class FakeSecrets:
+    def __init__(self) -> None:
+        self.value: str | None = None
+        self.puts = 0
+
+    def get_secret_value(self, SecretId: str) -> dict[str, Any]:
+        if self.value is None:
+            e = Exception("no value yet")
+            e.response = {"Error": {"Code": "ResourceNotFoundException"}}  # type: ignore[attr-defined]
+            raise e
+        return {"SecretString": self.value}
+
+    def put_secret_value(self, SecretId: str, SecretString: str) -> None:
+        self.value = SecretString
+        self.puts += 1
+
+
+def test_the_key_pair_is_made_once_inside_the_secret_and_only_the_public_key_leaves() -> None:
+    from aic.shared.files.cdn import ensure_signing_key
+
+    sm = FakeSecrets()
+    first = ensure_signing_key(sm, "aic/prod/files-signing-key")
+    again = ensure_signing_key(sm, "aic/prod/files-signing-key")
+    assert first == again and first.startswith("-----BEGIN PUBLIC KEY-----") and sm.puts == 1
+    assert "PRIVATE" not in first and "PRIVATE KEY" in (sm.value or "")
+
+
+def test_views_are_cloudfront_signed_for_one_object_and_downloads_stay_s3() -> None:
+    import base64
+    from datetime import UTC, datetime
+    from urllib.parse import parse_qs, urlsplit
+
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import padding
+
+    from aic.shared.files.cdn import CdnSigner, new_key_pair
+
+    private, public = new_key_pair()
+    signer = CdnSigner("https://d1.cloudfront.net", "K123", private, now=lambda: datetime(2026, 11, 9, tzinfo=UTC))
+    url = signer.sign_now("files/f-abc/sun rise.jpg", 900)
+    parts = urlsplit(url)
+    q = parse_qs(parts.query)
+    assert parts.path == "/files/f-abc/sun%20rise.jpg" and q["Key-Pair-Id"] == ["K123"]
+    assert int(q["Expires"][0]) == int(datetime(2026, 11, 9, tzinfo=UTC).timestamp()) + 900
+    policy = (
+        '{"Statement":[{"Resource":"https://d1.cloudfront.net/files/f-abc/sun%20rise.jpg",'
+        f'"Condition":{{"DateLessThan":{{"AWS:EpochTime":{q["Expires"][0]}}}}}}}]}}'
+    )
+    sig = base64.b64decode(q["Signature"][0].replace("-", "+").replace("_", "=").replace("~", "/"))
+    key = serialization.load_pem_public_key(public.encode())
+    key.verify(sig, policy.encode(), padding.PKCS1v15(), hashes.SHA1())  # type: ignore[union-attr, call-arg, arg-type]  # noqa: S303 - CloudFront's own scheme
+
+
+async def test_the_service_signs_views_with_cloudfront_when_it_is_set_up() -> None:
+    from aic.shared.files.cdn import CdnSigner, new_key_pair
+
+    w = world()
+    rec = await upload(w, "a.png", png(), "image/png")
+    w.service.cdn = CdnSigner("https://d1.cloudfront.net", "K1", new_key_pair()[0])
+    got = await w.service.get(rec["id"])
+    assert got["url"].startswith("https://d1.cloudfront.net/files/") and "Key-Pair-Id=K1" in got["url"]
+    assert got["thumb_url"].startswith("https://d1.cloudfront.net/thumbs/")
+    assert "signed=get&attachment" in got["download_url"]

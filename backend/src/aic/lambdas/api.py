@@ -1526,7 +1526,16 @@ def _files_service(session: Any, bus: EventBus) -> FilesService | None:
                 Payload=json.dumps({"action": "index", "file_id": file_id}).encode(),
             )
 
-    return FilesService(store=f.store, blobs=f.blobs, bus=bus, embedder=f.embedder, reindex=reindex)
+    from aic.shared.files.cdn import cdn_from_env
+
+    return FilesService(
+        store=f.store,
+        blobs=f.blobs,
+        bus=bus,
+        embedder=f.embedder,
+        reindex=reindex,
+        cdn=cdn_from_env(session, os.environ),
+    )
 
 
 def build_deps() -> ApiDeps:

@@ -97,6 +97,8 @@ class FilesService:
     embedder: Embedder | None = None
     reindex: Callable[[str], Awaitable[None]] | None = None
     """Starts the description again for one file (an async invoke of the files Lambda); None = not wired."""
+    cdn: Any = None
+    """A ``CdnSigner``: previews and thumbnails as CloudFront signed URLs (decision 156); None = S3 presigned."""
 
     # ---------- reading ----------
     async def require(self, file_id: str) -> dict[str, Any]:
@@ -110,11 +112,18 @@ class FilesService:
         out = file_json(rec)
         if rec.get("status") in ("ready", "processing", "failed") and rec.get("object_key"):
             ct = rec.get("content_type") or None
-            out["url"] = await self.blobs.presign_get(rec["object_key"], rec["name"], True, ct, seconds)
+            out["url"] = (
+                await self.cdn.sign(rec["object_key"], seconds)
+                if self.cdn
+                else await self.blobs.presign_get(rec["object_key"], rec["name"], True, ct, seconds)
+            )
+            # Downloads stay S3 presigned: S3 names the saved file with its current name (attachment).
             out["download_url"] = await self.blobs.presign_get(rec["object_key"], rec["name"], False, ct, seconds)
         if rec.get("thumb_key"):
-            out["thumb_url"] = await self.blobs.presign_get(
-                rec["thumb_key"], "thumbnail.jpg", True, "image/jpeg", seconds
+            out["thumb_url"] = (
+                await self.cdn.sign(rec["thumb_key"], seconds)
+                if self.cdn
+                else await self.blobs.presign_get(rec["thumb_key"], "thumbnail.jpg", True, "image/jpeg", seconds)
             )
         out["links_expire_in"] = seconds
         return out

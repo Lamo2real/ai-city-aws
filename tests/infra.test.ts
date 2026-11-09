@@ -378,7 +378,7 @@ describe("files (docs/FILES.md, decision 147)", () => {
   });
   it("one private, KMS-encrypted, versioned bucket with CORS for the HUD only, tagged files", () => {
     expect(tf).toContain("bucket        = local.base");
-    expect(tf).toContain('tags          = { Component = "files" }');
+    expect(tf).toMatch(/tags\s+= \{ Component = "files" \}/);
     expect(tf).toMatch(/allowed_origins = \[var\.app_origin\]/);
     expect(tf).toMatch(/status = "Enabled"/);
   });
@@ -403,9 +403,24 @@ describe("files (docs/FILES.md, decision 147)", () => {
     expect(prod).toMatch(/FILES_TABLE\s+= "\$\{local\.name\}-files"/);
     expect(prod).toMatch(/module "files" \{/);
     expect(moduleText("frontend")).toContain(
-      'files_origins = "https://${var.name}-files.s3.${var.region}.amazonaws.com',
+      'files_origins = trimspace("https://${var.name}-files.s3.${var.region}.amazonaws.com',
     );
     expect(moduleText("agents")).toContain('"aws:RequestTag/hire_id" = "mgr-*"');
+  });
+  it("previews go through a private CloudFront distribution with signed URLs; the private key never meets Terraform", () => {
+    expect(tf).toContain("trusted_key_groups     = [aws_cloudfront_key_group.previews.id]");
+    expect(tf).toContain('viewer_protocol_policy = "https-only"');
+    expect(tf).toMatch(
+      /Condition = \{ StringEquals = \{ "AWS:SourceArn" = aws_cloudfront_distribution\.previews\.arn \} \}/,
+    );
+    expect(tf).toContain("encoded_key = jsondecode(aws_lambda_invocation.signing.result).public_key_pem");
+    expect(tf).not.toMatch(/tls_private_key|secret_string|private_key_pem/);
+    expect(moduleText("security")).toContain('Sid       = "CloudFrontReadsFiles"');
+  });
+  it("the Lambda zip stays independent of the functions' settings (every function runs the app bundle)", () => {
+    const api = moduleText("api");
+    expect(api).toContain('for_each    = toset(["app"])');
+    expect([...api.matchAll(/bundle = "([a-z-]+)"/g)].every((m) => m[1] === "app")).toBe(true);
   });
   it("embeds with the Titan model pinned in config/models.json only", () => {
     expect(tf).toMatch(

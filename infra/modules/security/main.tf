@@ -38,6 +38,16 @@ resource "aws_kms_key" "data" {
         Resource  = "*"
         Condition = { StringEquals = { "aws:SourceAccount" = var.account_id } }
       },
+      # Files' previews (decision 156): CloudFront reads the private files bucket through Origin Access Control.
+      # The distribution is the account's own; naming it here would make security depend on the files module.
+      {
+        Sid       = "CloudFrontReadsFiles"
+        Effect    = "Allow"
+        Principal = { Service = "cloudfront.amazonaws.com" }
+        Action    = ["kms:Decrypt"]
+        Resource  = "*"
+        Condition = { StringLike = { "AWS:SourceArn" = "arn:aws:cloudfront::${var.account_id}:distribution/*" } }
+      },
     ]
   })
   tags = local.tags

@@ -29,6 +29,7 @@ embedding model. A document that should also be reference is added to Knowledge 
 | Captions and descriptions | Claude Haiku 5.5 (utility role) through the gate (spend caps, cost rows) |
 | Video and odd audio | AWS Elemental MediaConvert with the knowledge base's role (the permission boundary lets roles pass only that one); it also reads `files/*` and writes `work/*` here |
 | Speech | Amazon Transcribe batch (jobs named `aic-files-<id>-<ms>`) |
+| Previews | CloudFront distribution (Origin Access Control, HTTPS only, trusted key group; signed URLs, 15 min, one object; decision 156); the signing key pair lives only in Secrets Manager `aic/prod/files-signing-key`, made there by the `aic-prod-files-signing-key` Lambda, which Terraform invokes and which returns the public key alone |
 | Vectors | Amazon Titan Text Embeddings V2 (`embeddings.files` in `config/models.json`, 512 dimensions), kept on the record as float16 |
 
 ## 3. Keys
@@ -94,8 +95,9 @@ files right inside `folder`, with `q` the files in `folder` and below; `all`: ev
 Browsing returns the folder's subfolders with their file counts; a search also returns the folders whose path
 matches a query word. Folders exist as long as a file is in them (a file's `folder` is its path).
 
-`File` = the record without keys, vector and search text, plus `url` (inline), `download_url` (attachment, with the
-file's current name) and `thumb_url`, presigned for 15 minutes. Event `files.updated` `{id, status, name, kind,
+`File` = the record without keys, vector and search text, plus `url` (to view it) and `thumb_url`: CloudFront signed
+URLs once the distribution is deployed (S3 presigned inline before that), and `download_url`: always S3 presigned with
+`attachment` and the file's current name; all last 15 minutes and are made per request, never stored or logged. Event `files.updated` `{id, status, name, kind,
 folder, department, error?}` on every change. VVAIC's `city_api` may call every route except `POST /files/uploads*`
 (bytes come from the owner's device), and what it reads back has the signed addresses removed: a signed link only
 ever reaches the owner's own screen.
@@ -122,7 +124,8 @@ records. `scripts/check-iam.mjs` (`checkFiles`) enforces this.
 
 ## 9. Environment
 `FILES_TABLE`, `FILES_BUCKET` (api, the Lambda, VAIC/manager/worker runtimes), `FILES_FUNCTION` (api: Try again),
-`MEDIACONVERT_ROLE_ARN` (the Lambda). The HUD's CSP allows the bucket's two S3 hosts in `img-src`, `media-src`,
+`MEDIACONVERT_ROLE_ARN` (the Lambda), `FILES_CDN_URL`, `FILES_CDN_KEY_ID` and `FILES_SIGNING_SECRET` (api: signs
+previews). The HUD's CSP allows the bucket's two S3 hosts in `img-src`, `media-src`,
 `connect-src` and `frame-src` (the PDF preview).
 
 ## 10. Tests

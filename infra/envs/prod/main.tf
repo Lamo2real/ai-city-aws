@@ -104,6 +104,7 @@ module "frontend" {
   polly_region      = var.polly_region
   transcribe_region = var.transcribe_region
   apps_url          = module.apps.url
+  files_cdn_url     = module.files.cdn_url
 }
 
 # Apps the city builds, on their own origin (docs/APPS.md). It reuses the HUD's WAF web ACL; the HUD's
@@ -234,6 +235,10 @@ module "api" {
     FILES_TABLE    = "${local.name}-files"
     FILES_BUCKET   = "${local.name}-files"
     FILES_FUNCTION = "${local.name}-files"
+    # Previews and thumbnails as CloudFront signed URLs (decision 156); the api alone reads the signing key.
+    FILES_CDN_URL        = module.files.cdn_url
+    FILES_CDN_KEY_ID     = module.files.cdn_key_id
+    FILES_SIGNING_SECRET = "aic/prod/files-signing-key"
   }
   # Apps' granted connector reads run in the app-bridge Lambda, through the connectors Gateway (docs/APPS.md v2).
   app_bridge_env = { AIC_GATEWAY_URL = module.connectors.gateway_url }
