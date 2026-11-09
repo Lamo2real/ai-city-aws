@@ -845,11 +845,16 @@ describe("the Chief of Staff (decision 124)", () => {
   const prod = readFileSync("infra/envs/prod/main.tf", "utf8");
   const models = JSON.parse(readFileSync("config/models.json", "utf8"));
   const routes = api.slice(api.indexOf("routes = ["), api.indexOf("]", api.indexOf("routes = [")));
-  it("is Opus 5.5 (Fable only for the Orchestrator, Media, Research, Legal), with its own tagged profile", () => {
+  it("is Opus 5.5 (Fable for the Orchestrator, managers and Media/Research/Legal workers), with its own profile", () => {
     expect(models.roles.chief_of_staff).toMatchObject({ model: "opus-5-5", fallback: null });
-    // Decision 129: managers and workers may call the departments' model too; nobody else gets Fable.
-    expect(models.departmentModels).toMatchObject({ departments: ["Media", "Research", "Legal"], model: "fable-5-1" });
-    expect(agents).toMatch(/contains\(\["manager", "worker"\], r\) \? local\.dept_models : \[\]/);
+    // Decision 129: every manager on Fable; workers may call the departments' model too.
+    expect(models.roles.manager).toMatchObject({ model: "fable-5-1", fallback: "opus-5-5" });
+    expect(models.departmentModels).toMatchObject({
+      roles: ["worker"],
+      departments: ["Media", "Research", "Legal"],
+      model: "fable-5-1",
+    });
+    expect(agents).toMatch(/contains\(local\.dept_roles, r\) \? local\.dept_models : \[\]/);
     expect(agents).toMatch(/all_roles = concat\(local\.roles, \["utility", "chief_of_staff"\]\)/);
     expect(prod).toMatch(/chief_of_staff_profile_arn = module\.agents\.chief_of_staff_profile_arn/);
   });

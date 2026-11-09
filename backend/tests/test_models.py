@@ -10,7 +10,7 @@ def test_maps_every_role_to_its_pinned_model_on_global_profiles() -> None:
     want = {
         "ace": "haiku-5-5",
         "orchestrator": "fable-5-1",
-        "manager": "opus-5-5",
+        "manager": "fable-5-1",
         "worker": "opus-5-5",
         "utility": "haiku-5-5",
         "chief_of_staff": "opus-5-5",
@@ -25,22 +25,25 @@ def test_maps_every_role_to_its_pinned_model_on_global_profiles() -> None:
 
 def test_only_fable_roles_fall_back_to_opus_others_have_none() -> None:
     assert resolve_role("orchestrator").fallback.name == "opus-5-5"  # type: ignore[union-attr]
-    for r in ("ace", "manager", "worker", "utility", "chief_of_staff"):
+    assert resolve_role("manager").fallback.name == "opus-5-5"  # type: ignore[union-attr]
+    for r in ("ace", "worker", "utility", "chief_of_staff"):
         assert resolve_role(r).fallback is None  # type: ignore[arg-type]
 
 
-def test_fable_only_for_the_orchestrator_media_research_and_legal() -> None:
-    """The owner's rule (2026-11-09): everyone else is on Opus 5.5."""
+def test_fable_for_the_orchestrator_every_manager_and_media_research_legal_workers() -> None:
+    """The owner's rules (2026-11-09): every other worker, and the Chief of Staff, is on Opus 5.5."""
     for dept in ("Media", "Research", "Legal", "legal"):
-        for role in ("manager", "worker"):
-            r = resolve_role(role, department=dept, application_profiles={role: "arn:x"})  # type: ignore[arg-type]
-            assert r.primary.name == "fable-5-1" and r.fallback.name == "opus-5-5"  # type: ignore[union-attr]
-            assert r.primary.invoke_id == r.primary.profile_id  # the role's own profile copies Opus
-            assert model_name_for(role, dept) == "fable-5-1"
+        r = resolve_role("worker", department=dept, application_profiles={"worker": "arn:x"})
+        assert r.primary.name == "fable-5-1" and r.fallback.name == "opus-5-5"  # type: ignore[union-attr]
+        assert r.primary.invoke_id == r.primary.profile_id  # the worker profile copies Opus
+        assert model_name_for("worker", dept) == "fable-5-1"
     for dept in ("Sales", "Marketing", "Application", "Customer Support", None):
-        for role in ("manager", "worker"):
-            assert resolve_role(role, department=dept).primary.name == "opus-5-5"  # type: ignore[arg-type]
-            assert model_name_for(role, dept) == "opus-5-5"
+        assert resolve_role("worker", department=dept).primary.name == "opus-5-5"
+        assert model_name_for("worker", dept) == "opus-5-5"
+    for dept in ("Sales", "Media", None):
+        r = resolve_role("manager", department=dept, application_profiles={"manager": "arn:m"})
+        assert r.primary.name == "fable-5-1" and r.primary.invoke_id == "arn:m"  # its own tagged profile
+        assert model_name_for("manager", dept) == "fable-5-1"
     assert resolve_role("orchestrator", department="Sales").primary.name == "fable-5-1"
     assert resolve_role("chief_of_staff", department="Media").primary.name == "opus-5-5"
 
@@ -53,7 +56,7 @@ def test_uses_the_roles_application_inference_profile_when_configured() -> None:
 
 
 def test_on_eu_profiles_fable_roles_fall_back_to_opus_as_primary() -> None:
-    r = resolve_role("orchestrator", prefix="eu")
+    r = resolve_role("manager", prefix="eu")
     assert r.degraded
     assert r.primary.name == "opus-5-5"
     assert r.primary.profile_id == "eu.anthropic.claude-opus-5-5"

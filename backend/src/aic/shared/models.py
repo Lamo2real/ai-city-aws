@@ -52,11 +52,11 @@ def _resolve_name(name: str, prefix: str, cfg: Mapping[str, Any], app_arn: str |
 def department_override(
     role: str, department: str | None, config: Mapping[str, Any] | None = None
 ) -> dict[str, Any] | None:
-    """The model a department's managers and workers use instead of their role's (``departmentModels``, decision
-    129: Fable for Media, Research and Legal); None for every other department and role."""
-    if role not in ("manager", "worker") or not department:
-        return None
+    """The model an agent of ``role`` in ``department`` uses instead of its role's (``departmentModels``, decision
+    129: Fable for the workers of Media, Research and Legal); None for every other department and role."""
     dm = (config or models_config()).get("departmentModels") or {}
+    if role not in (dm.get("roles") or ("manager", "worker")) or not department:
+        return None
     names = {str(n).strip().lower() for n in dm.get("departments") or []}
     return dict(dm) if department.strip().lower() in names and dm.get("model") else None
 

@@ -4,8 +4,8 @@ AI City is the owner's personal organization of AI agents, running only in the o
 
 ## Models (pinned in `config/models.json`; nowhere else)
 - AIC: Claude Haiku 5.5 (fast replies; it routes, answers status from the ledger, and hands real work to the Orchestrator)
-- Orchestrator: Claude Fable 5.1, falling back to Claude Opus 5.5 once on refusal or no verdict
-- Department Managers, Workers and the Chief of Staff: Claude Opus 5.5. Exception (the owner's rule, 2026-11-09, decision 129): everyone in Media, Research and Legal (manager and workers) runs on Fable 5.1 with the Opus fallback (`departmentModels` in `config/models.json`). No one else uses Fable.
+- Orchestrator and every Department Manager: Claude Fable 5.1, falling back to Claude Opus 5.5 once on refusal or no verdict
+- Workers and the Chief of Staff: Claude Opus 5.5. Exception (the owner's rule, 2026-11-09, decision 129): the workers of Media, Research and Legal run on Fable 5.1 with the Opus fallback (`departmentModels` in `config/models.json`). No one else uses Fable.
 - Utility calls (wake-word check, titles, compaction): Claude Haiku 5.5, prompts kept under 100,000 tokens
 - Anthropic models only, via Amazon Bedrock with IAM roles. One exception (the owner's, 2026-11-07): the knowledge base embeds with Amazon Titan Text Embeddings V2 (`embeddings.knowledge` in `config/models.json`); it never reasons or writes text. A second exception (the owner's, 2026-11-08, decision 120): Amazon Nova 2.5 Sonic (falling back to Nova 2 Sonic) is AIC's real-time voice (`voice.speech` in `config/models.json`); it only listens and speaks, and hands every request to AIC. Never an Anthropic API key, never a subscription login.
 

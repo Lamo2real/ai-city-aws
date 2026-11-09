@@ -204,7 +204,7 @@ async def test_a_refusal_triggers_exactly_one_fallback_turn_on_opus_marked_in_th
 async def test_a_refusal_on_the_fallback_is_final_no_loop() -> None:
     runner = Runner(lambda _: reply("no", "refusal"))
     _, _, deps = setup(runner)
-    r = await run_gated_turn(turn("manager", department="Research"), deps)  # Research runs on Fable
+    r = await run_gated_turn(turn("manager"), deps)
     assert len(runner.calls) == 2
     assert r.output.stop_reason == "refusal"
 
@@ -218,7 +218,7 @@ async def test_a_review_with_no_verdict_falls_back_once() -> None:
         )
     )
     _, _, deps = setup(runner)
-    r = await run_gated_turn(turn("manager", "manager", needs_verdict=True, department="Legal"), deps)
+    r = await run_gated_turn(turn("manager", "manager", needs_verdict=True), deps)
     assert r.verdict == "FAIL"
     assert r.fallback
 
