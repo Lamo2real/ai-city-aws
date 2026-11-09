@@ -1,5 +1,7 @@
 # Architecture
 
+**Diagram (AWS icons, current as of 2026-11-09):** [`architecture/aws-architecture.drawio`](architecture/aws-architecture.drawio) · [PNG](architecture/aws-architecture.png). Regenerate with `python3 scripts/architecture_diagram.py`, then export from draw.io.
+
 AI City runs entirely in the owner's AWS account, in one region (`eu-north-1` by default), as one environment (`prod`). Agents run on Amazon Bedrock AgentCore with Claude models billed through Bedrock; everything else is serverless. Decisions are in `docs/adr/` and `docs/DECISIONS.md`. Editable diagram: `docs/architecture.drawio` (preview `docs/architecture.png`).
 
 ```mermaid
