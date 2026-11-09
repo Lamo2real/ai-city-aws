@@ -346,7 +346,20 @@ class Pipeline:
         return joined[:TEXT_FOR_SUMMARY_CHARS] or None
 
     async def _enrich(self, e: dict[str, Any]) -> dict[str, Any]:
-        """Summary and graph. Runs beside ``ingest`` (Parallel), so it touches only its own fields."""
+        """Summary and graph. Runs beside ``ingest`` (Parallel), so it touches only its own fields. Never fails the
+        item: the summary and the graph are extras, the item is searchable without them (2026-11-09)."""
+        try:
+            return await self._enrich_or_raise(e)
+        except Exception as err:
+            item_id = e["item"]["id"]
+            log("warn", "knowledge.enrich_failed", item=item_id, error=type(err).__name__, detail=str(err)[:300])
+            why = " ".join(f"{type(err).__name__}: {err}".split())[:200]
+            await self._set(
+                item_id, {"warning": f"The summary and links couldn't be made ({why}). The item is still searchable."}
+            )
+            return {}
+
+    async def _enrich_or_raise(self, e: dict[str, Any]) -> dict[str, Any]:
         item = e["item"]
         text = await self._item_text(item)
         if not text:
@@ -480,11 +493,9 @@ def plain_error(error: Any) -> str:
         return "Processing took too long."
     if name == "ThrottlingException":
         return "The knowledge base was busy for too long. Add the item again."
-    # Anything else: name the kind of error (never its message, which can hold internal details), so the cause can
-    # be found in the logs (a bare "something went wrong" hid it, 2026-11-09).
+    # Anything else: the whole reason (the owner, 2026-11-09: "I want to see any errors… no matter what it is").
     kind = re.sub(r"[^A-Za-z0-9_.]", "", name)[:60]
-    return (
-        f"Something went wrong while processing this item ({kind})."
-        if kind
-        else ("Something went wrong while processing this item.")
-    )
+    detail = " ".join(f"{kind}: {msg}".split()).strip(": ")[:300]
+    if not detail:
+        return "Something went wrong while processing this item."
+    return f"Something went wrong while processing this item ({detail})."

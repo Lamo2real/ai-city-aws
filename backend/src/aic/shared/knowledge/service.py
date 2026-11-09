@@ -294,6 +294,11 @@ class KnowledgeService:
                 await self.kb.delete(uris)
             except ThrottlingException as e:
                 raise KnowledgeError("The knowledge base is busy. Try again in a moment.") from e
+            except Exception as e:
+                # A failed item was never (fully) in the knowledge base: removing it must still work.
+                if item.get("status") != "failed":
+                    raise
+                log("warn", "knowledge.delete_kb_skipped", item=item_id, error=type(e).__name__)
         if item.get("upload_id"):
             try:
                 await self.blobs.abort_multipart(item["raw_key"], str(item["upload_id"]))

@@ -47,6 +47,10 @@ class Knowledge:
 
     status = "ready"
 
+    async def list(self) -> dict[str, Any]:
+        items = [{"id": f"kn-{i + 1}", "title": t} for i, (t, _) in enumerate(self.added)]
+        return {"items": [i for i in items if i["id"] not in self.deleted]}
+
     async def get(self, item_id: str) -> dict[str, Any]:
         return {"id": item_id, "status": self.status}
 

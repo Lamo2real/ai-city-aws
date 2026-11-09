@@ -24,8 +24,12 @@ def app_guide() -> str:
     return (agents_dir() / "help" / "app_guide.md").read_text(encoding="utf-8").strip()
 
 
+REVISION = "2"
+"""Bumped when the way the guide is stored changes, so every deploy that needs it starts with one fresh copy."""
+
+
 def guide_hash() -> str:
-    return hashlib.sha256(app_guide().encode()).hexdigest()[:16]
+    return hashlib.sha256((REVISION + app_guide()).encode()).hexdigest()[:16]
 
 
 async def ensure_guide_in_knowledge(table: Any, knowledge: Any) -> bool:
@@ -51,9 +55,15 @@ async def ensure_guide_in_knowledge(table: Any, knowledge: Any) -> bool:
         else:
             tries = 1
         item = await knowledge.add_text(app_guide(), TITLE, "relevant")
-        old = flag.get("item_id")
         await table.put({"pk": FLAG[0], "sk": FLAG[1], "hash": h, "item_id": item.get("id"), "tries": tries})
-        if old and old != item.get("id"):
+        # Only one guide: every other copy (an older version, a copy that failed) goes.
+        olds = {flag.get("item_id")} if flag.get("item_id") else set()
+        try:
+            listed = await knowledge.list()
+            olds |= {i["id"] for i in listed.get("items", []) if i.get("title") == TITLE}
+        except Exception as e:
+            log("info", "guide.list_failed", error=type(e).__name__)
+        for old in olds - {item.get("id")}:
             try:
                 await knowledge.delete(old)
             except Exception as e:  # the old copy may already be gone
