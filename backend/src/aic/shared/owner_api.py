@@ -15,6 +15,7 @@ Deleting things and starting over stay possible; VAIC passes ``confirm`` when th
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 from typing import Any
@@ -90,10 +91,25 @@ def to_event(method: str, path: str, body: Any = None) -> dict[str, Any]:
     }
 
 
-def summarise(response: dict[str, Any], cap: int = 6000) -> str:
-    """The API's answer as VAIC reads it: status and body, cut to fit."""
+LINK_KEYS = ("url", "download_url", "thumb_url")
+
+
+def without_links(v: Any) -> Any:
+    """Files' signed addresses never reach the model (decision 151): the chat card fetches its own."""
+    if isinstance(v, dict):
+        return {k: without_links(x) for k, x in v.items() if k not in LINK_KEYS}
+    if isinstance(v, list):
+        return [without_links(x) for x in v]
+    return v
+
+
+def summarise(response: dict[str, Any], cap: int = 6000, strip_links: bool = False) -> str:
+    """The API's answer as VAIC reads it: status and body (for Files, without signed addresses), cut to fit."""
     status = response.get("statusCode", 500)
     body = response.get("body") or ""
+    if strip_links and body:
+        with contextlib.suppress(ValueError):
+            body = json.dumps(without_links(json.loads(body)), ensure_ascii=False)
     if response.get("isBase64Encoded"):
         body = "(binary content)"
     text = f"{status} {body}"

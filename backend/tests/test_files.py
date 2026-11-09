@@ -508,3 +508,50 @@ async def test_a_worker_saves_and_gets_files_only_through_its_own_prefix(tmp_pat
     saved = await tool(d, m, "save_file").handler({"text": "# Brief\nShoot at sunrise.", "name": "brief.md"})
     assert "Saved" in saved and s3.calls[-1][2].startswith("hires/mgr-media/files/")
     assert "Only workers" in await tool(d, m, "save_file").handler({"path": "x.png"})
+
+
+# ---------- browsing by hand (folders, paging, sorting) ----------
+async def test_browse_folders_page_sort_and_search_inside_a_folder() -> None:
+    w = world()
+    for i, (name, folder) in enumerate(
+        [
+            ("a.png", ""),
+            ("logo.png", "Brand"),
+            ("hero.png", "Brand/2026"),
+            ("big.png", "Brand/2026"),
+            ("IMG_0042.jpg", "Thumbnails"),
+        ]
+    ):
+        w.clock.tick(60)
+        rec = await upload(w, name, png(10 + i * 40, 10), "image/png", folder=folder)
+        assert rec["folder"] == folder
+    top = await w.service.list({})
+    assert [f["name"] for f in top["files"]] == ["a.png"]
+    assert [(s["name"], s["files"]) for s in top["subfolders"]] == [("Brand", 3), ("Thumbnails", 1)]
+    assert top["folders"] == ["Brand", "Brand/2026", "Thumbnails"]
+    inside = await w.service.list({"folder": "Brand"})
+    assert [f["name"] for f in inside["files"]] == ["logo.png"] and inside["subfolders"][0]["path"] == "Brand/2026"
+    # Scroll everything, a page at a time, by name.
+    p1 = await w.service.list({"scope": "all", "sort": "name", "limit": "2"})
+    assert [f["name"] for f in p1["files"]] == ["a.png", "big.png"] and p1["next"] == 2 and p1["count"] == 5
+    p3 = await w.service.list({"scope": "all", "sort": "name", "limit": "2", "offset": "4"})
+    assert [f["name"] for f in p3["files"]] == ["logo.png"] and p3["next"] is None
+    by_size = await w.service.list({"scope": "all", "sort": "size"})
+    assert by_size["files"][0]["name"] == "IMG_0042.jpg"  # the largest first
+    # Search: everywhere, or only inside the open folder; matching folders come back too.
+    everywhere = await w.service.list({"q": "porsche"})
+    assert {f["folder"] for f in everywhere["files"]} >= {"Thumbnails"}
+    here = await w.service.list({"q": "porsche", "folder": "Brand", "scope": "here"})
+    assert all(f["folder"].startswith("Brand") for f in here["files"])
+    assert (await w.service.list({"q": "brand"}))["found_folders"][:2] == ["Brand", "Brand/2026"]
+    with pytest.raises(Exception, match="Sort by"):
+        await w.service.list({"sort": "colour"})
+
+
+def test_vaic_never_reads_the_signed_addresses() -> None:
+    from aic.shared.owner_api import summarise
+
+    body = json.dumps({"files": [{"id": "f-1", "name": "a.png", "url": "https://s3/x?sig", "thumb_url": "t"}]})
+    out = summarise({"statusCode": 200, "body": body}, strip_links=True)
+    assert "sig" not in out and "a.png" in out
+    assert "sig" in summarise({"statusCode": 200, "body": body})

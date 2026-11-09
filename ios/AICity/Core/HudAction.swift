@@ -36,6 +36,7 @@ enum HudAction: Equatable, Sendable {
         case "ace": return .aic
         case "city": return .city
         case "tickets": return .tickets
+        case "files": return .files
         case "costs": return .costs
         case "settings": return parts.dropFirst().first == "open-items" ? .inbox : .settings
         default: return nil

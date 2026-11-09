@@ -120,6 +120,7 @@ struct MainTabs: View {
         case .inbox: InboxScreen()
         case .away: AwaySettingsScreen()
         case .tickets: TicketsScreen()
+        case .files: FilesScreen()
         case .more: MoreList()
         case .costs: CostsScreen()
         case .settings: SettingsScreen()

@@ -4,6 +4,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as filesLib from "../src/lib/files.ts";
 import {
+  crumbs,
   fileStatusWords,
   initialFiles,
   reduceFiles,
@@ -56,6 +57,46 @@ describe("the files reducer", () => {
       "ThrottlingException",
     );
     expect(sizeWords(2_400_000)).toBe("2.3 MB");
+  });
+});
+
+describe("browsing by hand", () => {
+  it("a next page adds to the list without repeats, and says when there is no more", () => {
+    let s = reduceFiles(initialFiles(), {
+      type: "loaded",
+      files: [file()],
+      folders: [],
+      departments: [],
+      page: { count: 3, next: 1, subfolders: [{ name: "2026", path: "Brand/2026", files: 4, updated_at: "" }] },
+    });
+    expect([s.count, s.next, s.subfolders[0]!.path]).toEqual([3, 1, "Brand/2026"]);
+    s = reduceFiles(s, { type: "loading_more" });
+    expect(s.loadingMore).toBe(true);
+    s = reduceFiles(s, {
+      type: "more",
+      page: {
+        files: [file(), file({ id: "f-cccccccccccc" }), file({ id: "f-dddddddddddd" })],
+        count: 3,
+        next: null,
+        folder: "",
+        subfolders: [],
+        found_folders: [],
+        folders: [],
+        departments: [],
+        total: 3,
+      },
+    });
+    expect(s.files.map((f) => f.id)).toEqual(["f-aaaaaaaaaaaa", "f-cccccccccccc", "f-dddddddddddd"]);
+    expect([s.next, s.loadingMore]).toEqual([null, false]);
+  });
+
+  it("breadcrumbs go back up one level at a time", () => {
+    expect(crumbs("Brand/2026")).toEqual([
+      { name: "Files", path: "" },
+      { name: "Brand", path: "Brand" },
+      { name: "2026", path: "Brand/2026" },
+    ]);
+    expect(crumbs("")).toEqual([{ name: "Files", path: "" }]);
   });
 });
 

@@ -33,7 +33,7 @@ test("files: upload anything, find it by what's in it, preview, rename, download
   // Search by meaning: the photo is found by what the caption says, not its name.
   await page.getByRole("searchbox").fill("porsche at sunrise");
   await page.getByRole("button", { name: "Search", exact: true }).click();
-  await expect(page.getByText("Best matches for “porsche at sunrise”")).toBeVisible();
+  await expect(page.getByText("1 file matches “porsche at sunrise”")).toBeVisible();
   await expect(grid.getByRole("button")).toHaveCount(1);
 
   // Open it: a preview, what it is, Download, and rename.
@@ -132,4 +132,65 @@ test("VAIC shows a file it found in the chat, with a preview and Download; sever
   const many = chat.getByRole("list", { name: "Files VAIC found" }).last();
   await expect(many.getByRole("link", { name: "Download" })).toHaveCount(2);
   await expect(many).toContainText("Media");
+});
+
+test("storage by hand: open folders, go back up, scroll a long list, sort, list or grid, search names and folders", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  const file = (n: number, folder: string, name = `photo-${String(n).padStart(3, "0")}.jpg`) => ({
+    id: `f-seed${String(n).padStart(8, "0")}`,
+    name,
+    kind: "image",
+    content_type: "image/jpeg",
+    size_bytes: 1000 + n,
+    folder,
+    tags: [],
+    status: "ready",
+    added_by: "owner",
+    created_at: new Date(Date.UTC(2026, 0, 1) + n * 3_600_000).toISOString(),
+    description: "",
+  });
+  for (let n = 1; n <= 75; n++) m.files.items.push(file(n, "Shoots/2026"));
+  m.files.items.push(file(100, "Brand", "logo.svg"), file(101, "", "notes.txt"));
+  m.files.items.push({ ...file(102, "Brand/Guides", "React best practices.pdf"), kind: "document" });
+
+  await page.goto("/#/files");
+  const folders = page.getByRole("list", { name: "Folders" });
+  await expect(folders.getByRole("button", { name: /Brand/ })).toContainText("2 files");
+  await expect(folders.getByRole("button", { name: /Shoots/ })).toContainText("75 files");
+  await expect(page.getByRole("list", { name: "Your files" }).getByRole("button")).toHaveCount(1); // notes.txt
+
+  // Into Shoots, then 2026: 60 files, the rest load as the end scrolls into view.
+  await folders.getByRole("button", { name: /Shoots/ }).click();
+  await page.getByRole("list", { name: "Folders" }).getByRole("button", { name: /2026/ }).click();
+  const crumbs = page.getByRole("navigation", { name: "Where you are" });
+  await expect(crumbs.getByRole("listitem")).toHaveText(["Files", "Shoots", "2026"]);
+  const files = page.getByRole("list", { name: "Your files" });
+  await expect(files.getByRole("button")).toHaveCount(60);
+  await expect(page.getByText("75 files in “Shoots/2026”")).toBeVisible();
+  await page.mouse.wheel(0, 20_000);
+  await expect(files.getByRole("button")).toHaveCount(75);
+  await expect(page.getByRole("button", { name: /Show more/ })).toHaveCount(0);
+
+  // Sort by name, as a list.
+  await page.getByRole("group", { name: "Show as" }).getByRole("button", { name: "List" }).click();
+  await page.getByLabel("Sort").click();
+  await page.getByRole("option", { name: "Name Z–A" }).click();
+  await expect(files.getByRole("button").first()).toHaveAccessibleName("Open photo-075.jpg");
+  await noSeriousA11y(page, "files list");
+  await page.screenshot({ path: `${SHOTS}/files-browse.png` });
+
+  // Back up with the breadcrumbs, then search names and folders everywhere.
+  await crumbs.getByRole("button", { name: "Files" }).click();
+  await expect(crumbs).toContainText("Files");
+  await page.getByRole("searchbox").fill("guides");
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  const found = page.getByRole("list", { name: "Folders that match" });
+  await expect(found.getByRole("button", { name: /Brand\/Guides/ })).toBeVisible();
+  await page.getByRole("searchbox").fill("react");
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(files.getByRole("button", { name: "Open React best practices.pdf" })).toContainText("in Brand/Guides");
+  await files.getByRole("button", { name: "Open React best practices.pdf" }).click();
+  await expect(page.getByRole("dialog", { name: "React best practices.pdf" })).toBeVisible();
 });

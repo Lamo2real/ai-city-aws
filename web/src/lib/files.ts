@@ -53,9 +53,7 @@ const LINK_MS = 14 * 60_000;
 export const filesApi = {
   list: (q: Record<string, string> = {}) => {
     const qs = new URLSearchParams(Object.entries(q).filter(([, v]) => v)).toString();
-    return api<{ files: StoredFile[]; folders: string[]; departments: string[]; total: number }>(
-      `/files${qs ? `?${qs}` : ""}`,
-    );
+    return api<FilesPage>(`/files${qs ? `?${qs}` : ""}`);
   },
   get: (id: string) => api<StoredFile>(`/files/${id}`),
   startUpload: (body: {
@@ -73,11 +71,37 @@ export const filesApi = {
   retry: (id: string) => api<{ file: StoredFile }>(`/files/${id}/retry`, { method: "POST" }),
 };
 
+/** A folder right inside the one open, with how many files it holds (all levels below). */
+export interface SubFolder {
+  name: string;
+  path: string;
+  files: number;
+  updated_at: string;
+}
+/** One page of `GET /files` (docs/FILES.md §7). */
+export interface FilesPage {
+  files: StoredFile[];
+  count: number;
+  next: number | null;
+  folder: string;
+  subfolders: SubFolder[];
+  found_folders: string[];
+  folders: string[];
+  departments: string[];
+  total: number;
+}
+
 // ---------- the screen's state ----------
 export interface FilesState {
   files: StoredFile[];
   folders: string[];
   departments: string[];
+  subfolders: SubFolder[];
+  foundFolders: string[];
+  /** How many files match in all, and where the next page starts (null: that was the last). */
+  count: number;
+  next: number | null;
+  loadingMore: boolean;
   loaded: boolean;
   loadError: string | null;
   /** Upload percent per file id, while this browser is sending it. */
@@ -87,7 +111,9 @@ export interface FilesState {
 }
 
 export type FilesAction =
-  | { type: "loaded"; files: StoredFile[]; folders: string[]; departments: string[] }
+  | { type: "loaded"; files: StoredFile[]; folders: string[]; departments: string[]; page?: Partial<FilesPage> }
+  | { type: "more"; page: FilesPage }
+  | { type: "loading_more" }
   | { type: "load_failed"; error: string }
   | { type: "upsert"; file: StoredFile }
   | {
@@ -108,6 +134,11 @@ export const initialFiles = (): FilesState => ({
   files: [],
   folders: [],
   departments: [],
+  subfolders: [],
+  foundFolders: [],
+  count: 0,
+  next: null,
+  loadingMore: false,
   loaded: false,
   loadError: null,
   progress: {},
@@ -126,9 +157,33 @@ const addFolder = (folders: string[], f?: string) => (f && !folders.includes(f) 
 export function reduceFiles(s: FilesState, a: FilesAction): FilesState {
   switch (a.type) {
     case "loaded":
-      return { ...s, files: a.files, folders: a.folders, departments: a.departments, loaded: true, loadError: null };
+      return {
+        ...s,
+        files: a.files,
+        folders: a.folders,
+        departments: a.departments,
+        subfolders: a.page?.subfolders ?? [],
+        foundFolders: a.page?.found_folders ?? [],
+        count: a.page?.count ?? a.files.length,
+        next: a.page?.next ?? null,
+        loadingMore: false,
+        loaded: true,
+        loadError: null,
+      };
+    case "loading_more":
+      return { ...s, loadingMore: true };
+    case "more": {
+      const have = new Set(s.files.map((f) => f.id));
+      return {
+        ...s,
+        files: [...s.files, ...a.page.files.filter((f) => !have.has(f.id))],
+        next: a.page.next,
+        count: a.page.count,
+        loadingMore: false,
+      };
+    }
     case "load_failed":
-      return { ...s, loadError: a.error };
+      return { ...s, loadError: a.error, loadingMore: false };
     case "upsert": {
       const i = s.files.findIndex((x) => x.id === a.file.id);
       const files = i < 0 ? [a.file, ...s.files] : s.files.map((x, j) => (j === i ? { ...x, ...a.file } : x));
@@ -217,13 +272,43 @@ export const files = new FilesStore();
 export const useFiles = <T>(pick: (s: FilesState) => T): T =>
   useSyncExternalStore(files.subscribe, () => pick(files.get()));
 
+/** The query the screen shows now; a newer load wins over an older one still on its way. */
+let current: Record<string, string> = {};
+let generation = 0;
+
 export async function loadFiles(q: Record<string, string> = {}) {
+  current = q;
+  const mine = ++generation;
   try {
     const r = await filesApi.list(q);
-    files.dispatch({ type: "loaded", files: r.files, folders: r.folders, departments: r.departments });
+    if (mine !== generation) return;
+    files.dispatch({ type: "loaded", files: r.files, folders: r.folders, departments: r.departments, page: r });
   } catch (e) {
-    files.dispatch({ type: "load_failed", error: (e as Error).message });
+    if (mine === generation) files.dispatch({ type: "load_failed", error: errorWords(e) });
   }
+}
+
+/** The next page of what is shown (endless scroll); nothing when there is no more or one is on its way. */
+export async function loadMore() {
+  const s = files.get();
+  if (s.next === null || s.loadingMore) return;
+  const mine = generation;
+  files.dispatch({ type: "loading_more" });
+  try {
+    const r = await filesApi.list({ ...current, offset: String(s.next) });
+    if (mine === generation) files.dispatch({ type: "more", page: r });
+  } catch (e) {
+    if (mine === generation) files.dispatch({ type: "load_failed", error: errorWords(e) });
+  }
+}
+
+const errorWords = (e: unknown) =>
+  e instanceof ApiError ? `${e.message}${e.fix ? ` ${e.fix}` : ""}` : (e as Error).message;
+
+/** "Brand/2026" → [{name: "Files", path: ""}, {name: "Brand", path: "Brand"}, {name: "2026", path: "Brand/2026"}] */
+export function crumbs(folder: string): Array<{ name: string; path: string }> {
+  const parts = folder.split("/").filter(Boolean);
+  return [{ name: "Files", path: "" }, ...parts.map((name, i) => ({ name, path: parts.slice(0, i + 1).join("/") }))];
 }
 
 // ---------- uploads ----------

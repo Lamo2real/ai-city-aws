@@ -38,6 +38,9 @@ from .store import FilesStore
 
 LINK_SECONDS = 900
 LIST_LIMIT = 500
+PAGE = 60
+SEARCH_MAX = 1000
+SORTS = ("relevance", "date", "name", "size", "type")
 
 
 class FilesError(ValueError):
@@ -126,23 +129,64 @@ class FilesService:
         return await rank(recs, query, self.embedder, filters, limit)
 
     async def list(self, q: dict[str, Any]) -> dict[str, Any]:
-        """``GET /files``: newest first, or best first with ``q``; ``after``/``before``/``kind``/``folder``/
-        ``department`` narrow it. Folders and departments are listed for the HUD's filters."""
+        """``GET /files`` (docs/FILES.md §7): browse a folder or search, sorted, a page at a time.
+
+        Without ``q``: the files right inside ``folder`` (the top level when empty) and its subfolders, newest first;
+        ``scope=all`` lists every file instead. With ``q``: files by meaning, words and dates, best first, across all
+        folders (``scope=all``, the default) or inside ``folder`` and below (``scope=here``), and the folders whose
+        names match. ``sort`` (relevance, date, name, size, type) and ``order`` (asc, desc) reorder; ``offset`` and
+        ``limit`` (≤ 200, default 60) page; ``next`` is the next offset or null. ``kind``, ``department``,
+        ``after`` and ``before`` narrow everything."""
         after, before = check_after_before(q.get("after"), q.get("before"))
         kind = str(q.get("kind") or "") or None
-        f = Filters(after, before, kind, clean_folder(q.get("folder")) or None, str(q.get("department") or "") or None)
-        every = await self.store.all()
+        folder = clean_folder(q.get("folder"))
         query = str(q.get("q") or "").strip()[:500]
+        scope = str(q.get("scope") or ("all" if query else "here"))
+        if scope not in ("all", "here"):
+            raise FilesError("scope is all or here.")
+        sort = str(q.get("sort") or ("relevance" if query else "date"))
+        if sort not in SORTS:
+            raise FilesError("Sort by relevance, date, name, size or type.")
+        order = str(q.get("order") or ("asc" if sort in ("name", "type") else "desc"))
+        if order not in ("asc", "desc"):
+            raise FilesError("order is asc or desc.")
+        offset, limit = _int(q.get("offset"), 0, 0, 1_000_000), _int(q.get("limit"), PAGE, 1, 200)
+        dept = str(q.get("department") or "") or None
+        every = await self.store.all()
+        day_ago = _day_before(self.store.now_iso())
+        live = [r for r in every if r.get("status") != "uploading" or str(r.get("created_at", "")) >= day_ago]
+        subtree = folder if (query and scope == "here" and folder) else None
+        f = Filters(after, before, kind, subtree, dept)
+        subfolders: list[dict[str, Any]] = []
+        found_folders: list[str] = []
         if query:
-            hits = await rank([r for r in every if r.get("status") != "uploading"], query, self.embedder, f, 60)
+            hits = await rank([r for r in live if r.get("status") != "uploading"], query, self.embedder, f, SEARCH_MAX)
+            words = [w for w in query.lower().split() if len(w) > 1]
+            base = folder + "/" if subtree else ""
+            found_folders = [
+                p for p in all_folders(every) if p.startswith(base) and any(w in p.lower() for w in words)
+            ][:20]
         else:
-            day_ago = _day_before(self.store.now_iso())
-            live = [r for r in every if r.get("status") != "uploading" or str(r.get("created_at", "")) >= day_ago]
-            hits = await rank(live, "", None, f, LIST_LIMIT)
-        files = [{**await self.links(h.rec), **({"score": h.score} if query else {})} for h in hits]
-        folders = sorted({str(r.get("folder") or "") for r in every if r.get("folder")})
+            hits = await rank(live, "", None, f, len(live) or 1)
+            if scope == "here":
+                hits = [h for h in hits if str(h.rec.get("folder") or "") == folder]
+                subfolders = child_folders(every, folder)
+        if sort != "relevance":
+            hits = sort_hits(hits, sort, order)
+        page = hits[offset : offset + limit]
+        files = [{**await self.links(h.rec), **({"score": h.score} if query else {})} for h in page]
         departments = sorted({str(r["department"]) for r in every if r.get("department")})
-        return {"files": files, "folders": folders, "departments": departments, "total": len(every)}
+        return {
+            "files": files,
+            "count": len(hits),
+            "next": offset + limit if offset + limit < len(hits) else None,
+            "folder": folder,
+            "subfolders": subfolders,
+            "found_folders": found_folders,
+            "folders": all_folders(every),
+            "departments": departments,
+            "total": len(every),
+        }
 
     # ---------- uploads from the owner's device ----------
     async def create_upload(self, b: dict[str, Any]) -> dict[str, Any]:
@@ -270,6 +314,57 @@ class FilesService:
         await self.bus.put(updated_event(new))
         await self.reindex(file_id)
         return file_json(new)
+
+
+def _int(v: Any, default: int, low: int, high: int) -> int:
+    try:
+        n = int(str(v)) if v not in (None, "") else default
+    except ValueError as e:
+        raise FilesError("offset and limit are whole numbers.") from e
+    return max(low, min(high, n))
+
+
+def all_folders(recs: list[dict[str, Any]]) -> list[str]:
+    """Every folder that holds a file, with its parents ("Brand/2026" also gives "Brand"), sorted."""
+    out: set[str] = set()
+    for r in recs:
+        parts = str(r.get("folder") or "").split("/")
+        for i in range(1, len(parts) + 1):
+            p = "/".join(parts[:i])
+            if p:
+                out.add(p)
+    return sorted(out, key=str.lower)
+
+
+def child_folders(recs: list[dict[str, Any]], folder: str) -> list[dict[str, Any]]:
+    """The folders right inside ``folder``, with how many files each holds (all levels below) and the newest date."""
+    base = folder + "/" if folder else ""
+    kids: dict[str, dict[str, Any]] = {}
+    for r in recs:
+        f = str(r.get("folder") or "")
+        if not f.startswith(base) or f == folder:
+            continue
+        name = f[len(base) :].split("/", maxsplit=1)[0]
+        k = kids.setdefault(name, {"name": name, "path": base + name, "files": 0, "updated_at": ""})
+        k["files"] += 1
+        k["updated_at"] = max(k["updated_at"], str(r.get("created_at") or ""))
+    return sorted(kids.values(), key=lambda k: str(k["name"]).lower())
+
+
+def sort_hits(hits: list[Hit], sort: str, order: str) -> list[Hit]:
+    from pathlib import PurePosixPath
+
+    def key(h: Hit) -> tuple[str, str, int]:
+        r = h.rec
+        if sort == "size":
+            return ("", "", int(r.get("size_bytes") or 0))
+        if sort == "name":
+            return (str(r.get("name") or "").lower(), "", 0)
+        if sort == "type":
+            return (str(r.get("kind") or ""), PurePosixPath(str(r.get("name") or "")).suffix.lower(), 0)
+        return (str(r.get("taken_at") or r.get("created_at") or ""), "", 0)
+
+    return sorted(hits, key=key, reverse=order == "desc")
 
 
 def _day_before(iso: str) -> str:

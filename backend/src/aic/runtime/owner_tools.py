@@ -44,7 +44,7 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             )
         body = a.get("body")
         r = await d.owner_api({"method": method, "path": path, "body": body if isinstance(body, dict) else None})
-        return owner_api.summarise(r)
+        return owner_api.summarise(r, strip_links=owner_api.clean_path(path).startswith("/files"))
 
     async def hud(a: dict[str, Any]) -> str:
         if not c.from_owner:

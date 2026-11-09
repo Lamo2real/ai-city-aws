@@ -853,20 +853,68 @@ export async function mockBackend(
     }
     // ---------- Files (docs/FILES.md §7) ----------
     if (url.pathname === "/files" && req.method() === "GET") {
-      const q = (url.searchParams.get("q") ?? "").toLowerCase();
-      const kind = url.searchParams.get("kind") ?? "";
-      const folder = url.searchParams.get("folder") ?? "";
+      // The real route's shape (docs/FILES.md §7): browse a folder, or search everywhere or inside it; sort; pages.
+      const sp = url.searchParams;
+      const q = (sp.get("q") ?? "").toLowerCase();
+      const kind = sp.get("kind") ?? "";
+      const folder = sp.get("folder") ?? "";
+      const scope = sp.get("scope") ?? (q ? "all" : "here");
+      const sort = sp.get("sort") ?? (q ? "relevance" : "date");
+      const order = sp.get("order") ?? (sort === "name" || sort === "type" ? "asc" : "desc");
+      const offset = Number(sp.get("offset") ?? 0);
+      const limit = Number(sp.get("limit") ?? 60);
       const words = q.split(/\s+/).filter((w) => w.length > 2);
-      const list = m.files.items.filter(
+      const fol = (f: Record<string, unknown>) => String(f.folder ?? "");
+      const inside = (f: Record<string, unknown>) => fol(f) === folder || fol(f).startsWith(`${folder}/`);
+      let list = m.files.items.filter(
         (f) =>
           (!kind || f.kind === kind) &&
-          (!folder || f.folder === folder) &&
+          (q ? scope === "all" || !folder || inside(f) : scope === "all" || fol(f) === folder) &&
           (!words.length ||
             words.some((w) => `${String(f.name)} ${String(f.description ?? "")}`.toLowerCase().includes(w))),
       );
+      const keyOf = (f: Record<string, unknown>): string | number =>
+        sort === "name"
+          ? String(f.name).toLowerCase()
+          : sort === "size"
+            ? Number(f.size_bytes ?? 0)
+            : sort === "type"
+              ? String(f.kind)
+              : String(f.taken_at ?? f.created_at ?? "");
+      if (sort !== "relevance")
+        list = [...list].sort((x, y) => {
+          const a = keyOf(x),
+            b = keyOf(y);
+          return (a < b ? -1 : a > b ? 1 : 0) * (order === "desc" ? -1 : 1);
+        });
+      const all = [
+        ...new Set(
+          m.files.items.flatMap((f) =>
+            fol(f)
+              .split("/")
+              .map((_, i, p) => p.slice(0, i + 1).join("/")),
+          ),
+        ),
+      ]
+        .filter(Boolean)
+        .sort();
+      const base = folder ? `${folder}/` : "";
+      const kids = new Map<string, number>();
+      for (const f of m.files.items)
+        if (fol(f).startsWith(base) && fol(f) !== folder) {
+          const name = fol(f).slice(base.length).split("/")[0]!;
+          kids.set(name, (kids.get(name) ?? 0) + 1);
+        }
       return ok({
-        files: list.map(withLinks),
-        folders: [...new Set(m.files.items.map((f) => String(f.folder ?? "")).filter(Boolean))].sort(),
+        files: list.slice(offset, offset + limit).map(withLinks),
+        count: list.length,
+        next: offset + limit < list.length ? offset + limit : null,
+        folder,
+        subfolders: q
+          ? []
+          : [...kids].sort().map(([name, files]) => ({ name, path: base + name, files, updated_at: at() })),
+        found_folders: q ? all.filter((p) => words.some((w) => p.toLowerCase().includes(w))) : [],
+        folders: all,
         departments: [...new Set(m.files.items.map((f) => String(f.department ?? "")).filter(Boolean))].sort(),
         total: m.files.items.length,
       });

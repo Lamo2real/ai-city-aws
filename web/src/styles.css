@@ -6068,3 +6068,147 @@ a.btn-primary.chat-file-dl,
 .fpreview img {
   min-height: 120px;
 }
+/* Files: browsing by hand (folders, breadcrumbs, list view, endless scroll) */
+.files-scope {
+  margin-top: calc(-1 * var(--s2));
+}
+.crumbs ol {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s1);
+  margin: var(--s3) 0;
+  padding: 0;
+  font-weight: 700;
+}
+.crumbs li + li::before {
+  content: "›";
+  margin-right: var(--s1);
+  color: var(--gmute);
+}
+.crumbs button {
+  min-height: var(--tap);
+  font: inherit;
+}
+.files-folders {
+  list-style: none;
+  padding: 0;
+  margin: var(--s3) 0 0;
+  display: grid;
+  gap: var(--s2);
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+}
+.folder-tile {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 var(--s2);
+  align-items: center;
+  width: 100%;
+  min-height: var(--tap);
+  text-align: left;
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--edge);
+  border-radius: var(--rg-s);
+  background: var(--glass-2);
+  color: var(--gtext);
+  font: inherit;
+  transition: background var(--dur-s) var(--ease);
+}
+.folder-tile:hover {
+  background: var(--glass-3);
+}
+.folder-tile:focus-visible,
+.file-row:focus-visible {
+  outline: 3px solid var(--gfocus);
+  outline-offset: 2px;
+}
+.folder-icon {
+  grid-row: span 2;
+  font-size: 26px;
+}
+.screen .folder-tile .mute,
+.screen .file-row .mute {
+  color: var(--gmute);
+}
+.files-list {
+  list-style: none;
+  padding: 0;
+  margin: var(--s3) 0 0;
+  display: grid;
+  gap: var(--s1);
+}
+.file-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) repeat(3, minmax(72px, auto)) auto;
+  gap: var(--s3);
+  align-items: center;
+  width: 100%;
+  min-height: 56px;
+  text-align: left;
+  padding: var(--s1) var(--s2);
+  border: 1px solid var(--edge);
+  border-radius: var(--rg-s);
+  background: var(--glass);
+  color: var(--gtext);
+  font: inherit;
+  transition: background var(--dur-s) var(--ease);
+}
+.file-row:hover {
+  background: var(--glass-2);
+}
+.file-row-thumb {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: calc(var(--rg-s) - 4px);
+  background: var(--glass-deep);
+  overflow: hidden;
+  font-size: 24px;
+}
+.file-row-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.file-row-main {
+  display: grid;
+  min-width: 0;
+}
+.file-row-main .file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-row-col {
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .file-row {
+    grid-template-columns: 48px minmax(0, 1fr) auto;
+  }
+  .file-row-col {
+    display: none;
+  }
+}
+.files-end {
+  height: 1px;
+}
+.files-more {
+  display: flex;
+  justify-content: center;
+  margin: var(--s3) 0;
+}
+.files-list,
+.files-grid,
+.files-folders {
+  max-width: none;
+  width: 100%;
+}
+.screen .files-list > li,
+.screen .files-grid > li,
+.screen .files-folders > li {
+  max-width: none;
+}

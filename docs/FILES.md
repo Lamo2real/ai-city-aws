@@ -79,7 +79,7 @@ vectors move to a vector index (§11).
 ## 7. HTTP API (owner only, like every route)
 | Route | Body → answer |
 |---|---|
-| `GET /files` | query above → `{files: [File], folders, departments, total}` (newest first, or best first with `q`; up to 500) |
+| `GET /files` | browse or search (below) → `{files: [File], count, next, folder, subfolders: [{name, path, files, updated_at}], found_folders, folders, departments, total}` |
 | `GET /files/<id>` | → `File` |
 | `POST /files/uploads` | `{file_name, content_type, size_bytes, folder?, taken_at?, tags?, note?}` → `{file, upload}` |
 | `POST /files/uploads/<id>/complete` | `{upload_id, parts: [{part_number, etag}]}` → `{file}` |
@@ -87,10 +87,18 @@ vectors move to a vector index (§11).
 | `DELETE /files/<id>` | → `{ok: true}` (the object, its thumbnail, work files and record) |
 | `POST /files/<id>/retry` | → `{file}` (described again) |
 
+`GET /files` takes: `folder` (the open folder; empty = the top level), `q` (search), `scope` (`here`: without `q` the
+files right inside `folder`, with `q` the files in `folder` and below; `all`: every file; default `here` without `q`,
+`all` with it), `sort` (`relevance` with `q`, `date`, `name`, `size`, `type`), `order` (`asc`/`desc`), `offset` and
+`limit` (≤ 200, default 60; `next` is the next offset or null), and `kind`, `department`, `after`, `before`.
+Browsing returns the folder's subfolders with their file counts; a search also returns the folders whose path
+matches a query word. Folders exist as long as a file is in them (a file's `folder` is its path).
+
 `File` = the record without keys, vector and search text, plus `url` (inline), `download_url` (attachment, with the
 file's current name) and `thumb_url`, presigned for 15 minutes. Event `files.updated` `{id, status, name, kind,
-folder, department, error?}` on every change. VAIC's `city_api` may call every route except `POST /files/uploads*`
-(bytes come from the owner's device).
+folder, department, error?}` on every change. VVAIC's `city_api` may call every route except `POST /files/uploads*`
+(bytes come from the owner's device), and what it reads back has the signed addresses removed: a signed link only
+ever reaches the owner's own screen.
 
 ## 8. Agents (all through the policy gate)
 | Tool | Roles | Does |
@@ -116,8 +124,18 @@ pytest `backend/tests/test_files.py` (fakes: memory table and bucket, a bag-of-w
 fake MediaConvert/Transcribe/S3); vitest `web/test/files.test.tsx`, `tests/infra.test.ts`; Playwright
 `web/e2e/files.spec.ts`; XCTest `ios/AICityTests/FilesTests.swift`.
 
-## 11. Later (not built)
-The iPhone app has the chat's file cards (preview, Download → share sheet) but no Files screen or upload yet; a
-vector index (S3 Vectors or a `files` index on the knowledge collection) past ~20,000 files; frames across the whole
+## 11. Screens
+**HUD `#/files`:** breadcrumbs (Files › Brand › 2026) and folder tiles to go in and back up; the files of the open
+folder in a grid or a list (remembered on the device), 60 at a time, the next page loading as the end scrolls into
+view (and a "Show more" button), thumbnails loaded lazily; sort (best match, newest, oldest, name A–Z / Z–A, largest,
+smallest, type); kind and department filters; search names and contents everywhere or "Only in" the open folder,
+with matching folders listed first and each file saying where it lives; uploads go into the open folder.
+**iPhone, Files tab:** the same browsing (each folder a page, Back goes up, the path above), search with an
+Everywhere / In this folder scope, a Sort and view menu, endless scroll, + for Photos and videos (photos sent as
+JPEG with their date) or the Files app (sent from disk part by part, so a long video never sits in memory whole),
+and a sheet per file with the preview, Download (share sheet), rename, move and delete.
+
+## 12. Later (not built)
+A vector index (S3 Vectors or a `files` index on the knowledge collection) past ~20,000 files; frames across the whole
 length of a long video (today the first 2 minutes); HEIC thumbnails; a PDF thumbnail image (the HUD shows the first
 page in the browser's own viewer).

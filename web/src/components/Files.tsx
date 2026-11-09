@@ -1,15 +1,19 @@
-// Files (docs/FILES.md §11): the owner's storage for anything. Drop files anywhere on the screen or press
-// + Upload; search by what's in a file ("sunrise with a Porsche"); narrow by kind, folder or department; open a
-// file to preview, download, rename, move, tag or delete it. What the departments save shows here, marked.
+// Files (docs/FILES.md §11): the owner's storage for anything. Browse folders by hand (breadcrumbs back up, an
+// endless scroll that loads more as you go, thumbnails loaded lazily), or search files and folders by name and by
+// what's in them, everywhere or inside the open folder. Sort by date, name, size or type; a grid or a list. Drop
+// files anywhere or press + Upload (they go into the open folder); open a file to preview, download, rename, move,
+// tag or delete it. What the departments save shows here, marked with the department.
 import { useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
 import {
   addToFiles,
   byWords,
+  crumbs,
   dateWords,
   fileStatusWords,
   filesApi,
   KIND_WORD,
   loadFiles,
+  loadMore,
   sizeWords,
   useFiles,
   files as filesStore,
@@ -35,27 +39,87 @@ const ICON: Record<FileKind, string> = {
   text: "📝",
   other: "📦",
 };
+/** Sort choices: the API's sort and order, in plain words. */
+const SORTS: Array<{ value: string; label: string; search?: boolean }> = [
+  { value: "relevance:desc", label: "Best match", search: true },
+  { value: "date:desc", label: "Newest first" },
+  { value: "date:asc", label: "Oldest first" },
+  { value: "name:asc", label: "Name A–Z" },
+  { value: "name:desc", label: "Name Z–A" },
+  { value: "size:desc", label: "Largest first" },
+  { value: "size:asc", label: "Smallest first" },
+  { value: "type:asc", label: "Type" },
+];
+const VIEW_KEY = "aic.files.view";
+const readView = (): "grid" | "list" => {
+  try {
+    return localStorage.getItem(VIEW_KEY) === "list" ? "list" : "grid";
+  } catch {
+    return "grid";
+  }
+};
 
 const tone = (f: StoredFile, local?: string) =>
   local || f.status === "failed" ? "failed" : f.status === "ready" ? "done" : f.status;
 
 export function FilesScreen() {
   const s = useFiles((x) => x);
+  const [folder, setFolder] = useState("");
   const [query, setQuery] = useState("");
   const [searched, setSearched] = useState("");
+  const [here, setHere] = useState(false);
   const [kind, setKind] = useState<"" | FileKind>("");
-  const [folder, setFolder] = useState("");
   const [dept, setDept] = useState("");
+  const [sort, setSort] = useState("");
+  const [view, setView] = useState<"grid" | "list">(readView);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const picker = useRef<HTMLInputElement>(null);
+  const end = useRef<HTMLDivElement>(null);
 
-  const filters = { q: searched, kind, folder, department: dept };
+  const searching = Boolean(searched);
+  const sortValue = sort || (searching ? "relevance:desc" : "date:desc");
+  const [sortBy, order] = sortValue.split(":") as [string, string];
+  const params: Record<string, string> = {
+    q: searched,
+    folder,
+    scope: searching ? (here && folder ? "here" : "all") : "here",
+    kind,
+    department: dept,
+    sort: sortBy,
+    order,
+  };
+  const key = JSON.stringify(params);
   useEffect(() => {
-    void loadFiles({ q: searched, kind, folder, department: dept });
-  }, [searched, kind, folder, dept]);
+    void loadFiles(JSON.parse(key) as Record<string, string>);
+  }, [key]);
 
+  // Endless scroll: the next page loads as the end of the list comes into view.
+  useEffect(() => {
+    const el = end.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver((e) => e.some((x) => x.isIntersecting) && void loadMore(), {
+      rootMargin: "600px 0px",
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [s.next, s.loaded]);
+
+  const setView_ = (v: "grid" | "list") => {
+    setView(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      /* this device keeps the default */
+    }
+  };
+  const openFolder = (path: string) => {
+    setFolder(path);
+    setSearched("");
+    setQuery("");
+    setSort("");
+  };
   const add = async (list: File[]) => {
     if (!list.length) return;
     setError(null);
@@ -75,10 +139,11 @@ export function FilesScreen() {
   const search = (e: FormEvent) => {
     e.preventDefault();
     setSearched(query.trim());
+    setSort("");
   };
-  const filtered = Boolean(searched || kind || folder || dept);
-  const shown = s.files;
-  const opened = shown.find((f) => f.id === open) ?? null;
+  const filtered = Boolean(searched || kind || dept);
+  const opened = s.files.find((f) => f.id === open) ?? null;
+  const path = crumbs(folder);
 
   return (
     <section
@@ -121,7 +186,7 @@ export function FilesScreen() {
 
       <form className="files-search" role="search" onSubmit={search}>
         <label className="field grow">
-          <span className="sr-only">Search your files</span>
+          <span className="sr-only">Search files and folders</span>
           <input
             type="search"
             value={query}
@@ -129,11 +194,38 @@ export function FilesScreen() {
               setQuery(e.target.value);
               if (!e.target.value) setSearched("");
             }}
-            placeholder="Search by what's in it, e.g. sunrise with a Porsche"
+            placeholder="Search names and what's in them, e.g. sunrise with a Porsche"
           />
         </label>
         <Button type="submit">Search</Button>
       </form>
+      {folder ? (
+        <div className="segmented files-scope" role="group" aria-label="Where to search">
+          <button type="button" aria-pressed={!here} onClick={() => setHere(false)}>
+            Everywhere
+          </button>
+          <button type="button" aria-pressed={here} onClick={() => setHere(true)}>
+            {`Only in “${folder.split("/").at(-1)}”`}
+          </button>
+        </div>
+      ) : null}
+
+      <nav className="crumbs" aria-label="Where you are">
+        <ol>
+          {path.map((c, i) => (
+            <li key={c.path || "top"}>
+              {i === path.length - 1 && !searching ? (
+                <span aria-current="page">{c.name}</span>
+              ) : (
+                <button type="button" className="linkish" onClick={() => openFolder(c.path)}>
+                  {c.name}
+                </button>
+              )}
+            </li>
+          ))}
+          {searching ? <li aria-current="page">{`Results for “${searched}”`}</li> : null}
+        </ol>
+      </nav>
 
       <div className="files-filters">
         <div className="segmented" role="group" aria-label="Kind of file">
@@ -143,19 +235,6 @@ export function FilesScreen() {
             </button>
           ))}
         </div>
-        {s.folders.length ? (
-          <label className="field">
-            Folder
-            <Select value={folder} onChange={(e) => setFolder(e.target.value)}>
-              <option value="">All folders</option>
-              {s.folders.map((f) => (
-                <option key={f} value={f}>
-                  {f}
-                </option>
-              ))}
-            </Select>
-          </label>
-        ) : null}
         {s.departments.length ? (
           <label className="field">
             Made by
@@ -169,6 +248,24 @@ export function FilesScreen() {
             </Select>
           </label>
         ) : null}
+        <label className="field">
+          Sort
+          <Select value={sortValue} onChange={(e) => setSort(e.target.value)}>
+            {SORTS.filter((o) => !o.search || searching).map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <div className="segmented files-view" role="group" aria-label="Show as">
+          <button type="button" aria-pressed={view === "grid"} onClick={() => setView_("grid")}>
+            Grid
+          </button>
+          <button type="button" aria-pressed={view === "list"} onClick={() => setView_("list")}>
+            List
+          </button>
+        </div>
         {filtered ? (
           <Button
             variant="quiet"
@@ -176,8 +273,8 @@ export function FilesScreen() {
               setQuery("");
               setSearched("");
               setKind("");
-              setFolder("");
               setDept("");
+              setSort("");
             }}
           >
             Show everything
@@ -205,56 +302,126 @@ export function FilesScreen() {
 
       {error ? <Banner tone="bad">{error}</Banner> : null}
       {s.loadError ? (
-        <Banner tone="bad" action={{ label: "Try again", onClick: () => void loadFiles(filters) }}>
+        <Banner tone="bad" action={{ label: "Try again", onClick: () => void loadFiles(params) }}>
           {`Your files did not load: ${s.loadError}`}
         </Banner>
       ) : null}
       {!s.loaded && !s.loadError ? <Loading what="your files" /> : null}
-      {s.loaded && !shown.length && !filtered ? (
-        <p className="empty">Nothing here yet. Drop a photo, a video or a PDF above.</p>
-      ) : null}
-      {s.loaded && !shown.length && filtered ? (
-        <p className="empty">
-          {searched ? `Nothing matches “${searched}”.` : "Nothing matches what you picked."} Try other words, or choose
-          “Show everything”.
-        </p>
-      ) : null}
-      {searched && shown.length ? <p className="mute files-count">{`Best matches for “${searched}”`}</p> : null}
 
-      <ul className="files-grid" aria-label="Your files">
-        {shown.map((f) => {
-          const local = s.localError[f.id];
-          return (
-            <li key={f.id}>
-              <button type="button" className="file-tile" onClick={() => setOpen(f.id)} aria-label={`Open ${f.name}`}>
-                <span className="file-thumb" aria-hidden="true">
-                  {f.thumb_url ? (
-                    <img src={f.thumb_url} alt="" loading="lazy" />
-                  ) : (
-                    <span>{ICON[f.kind] ?? ICON.other}</span>
-                  )}
+      {(searching ? s.foundFolders.map((p) => ({ name: p, path: p, files: -1 })) : s.subfolders).length ? (
+        <ul className="files-folders" aria-label={searching ? "Folders that match" : "Folders"}>
+          {(searching ? s.foundFolders.map((p) => ({ name: p, path: p, files: -1 })) : s.subfolders).map((f) => (
+            <li key={f.path}>
+              <button type="button" className="folder-tile" onClick={() => openFolder(f.path)}>
+                <span className="folder-icon" aria-hidden="true">
+                  📁
                 </span>
                 <span className="file-name">{f.name}</span>
-                <span className="file-meta mute">
-                  {[
-                    KIND_WORD[f.kind] ?? "File",
-                    sizeWords(f.size_bytes),
-                    dateWords(f.taken_at || f.created_at),
-                    byWords(f),
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </span>
-                {f.status !== "ready" || local ? (
-                  <span className={`tag tag-${tone(f, local)}`} role="status">
-                    {fileStatusWords(f, s.progress[f.id], local)}
-                  </span>
+                {f.files >= 0 ? (
+                  <span className="mute file-meta">{f.files === 1 ? "1 file" : `${f.files} files`}</span>
                 ) : null}
               </button>
             </li>
-          );
-        })}
-      </ul>
+          ))}
+        </ul>
+      ) : null}
+
+      {s.loaded && !s.files.length && !s.subfolders.length && !filtered && !folder ? (
+        <p className="empty">Nothing here yet. Drop a photo, a video or a PDF above.</p>
+      ) : null}
+      {s.loaded && !s.files.length && (filtered || folder) && !s.foundFolders.length && !s.subfolders.length ? (
+        <p className="empty">
+          {searched ? `Nothing matches “${searched}”.` : "No files here."}{" "}
+          {searched ? "Try other words, or search everywhere." : "Drop some in, or go back up."}
+        </p>
+      ) : null}
+      {s.loaded && s.files.length ? (
+        <p className="mute files-count" aria-live="polite">
+          {searching
+            ? `${s.count === 1 ? "1 file matches" : `${s.count} files match`} “${searched}”`
+            : `${s.count === 1 ? "1 file" : `${s.count} files`}${folder ? ` in “${folder}”` : ""}`}
+        </p>
+      ) : null}
+
+      {view === "grid" ? (
+        <ul className="files-grid" aria-label="Your files">
+          {s.files.map((f) => {
+            const local = s.localError[f.id];
+            return (
+              <li key={f.id}>
+                <button type="button" className="file-tile" onClick={() => setOpen(f.id)} aria-label={`Open ${f.name}`}>
+                  <span className="file-thumb" aria-hidden="true">
+                    {f.thumb_url ? (
+                      <img src={f.thumb_url} alt="" loading="lazy" decoding="async" />
+                    ) : (
+                      <span>{ICON[f.kind] ?? ICON.other}</span>
+                    )}
+                  </span>
+                  <span className="file-name">{f.name}</span>
+                  <span className="file-meta mute">
+                    {[
+                      searching || f.folder !== folder ? `in ${f.folder || "Files"}` : "",
+                      KIND_WORD[f.kind] ?? "File",
+                      sizeWords(f.size_bytes),
+                      dateWords(f.taken_at || f.created_at),
+                      byWords(f),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                  {f.status !== "ready" || local ? (
+                    <span className={`tag tag-${tone(f, local)}`} role="status">
+                      {fileStatusWords(f, s.progress[f.id], local)}
+                    </span>
+                  ) : null}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <ul className="files-list" aria-label="Your files">
+          {s.files.map((f) => {
+            const local = s.localError[f.id];
+            return (
+              <li key={f.id}>
+                <button type="button" className="file-row" onClick={() => setOpen(f.id)} aria-label={`Open ${f.name}`}>
+                  <span className="file-row-thumb" aria-hidden="true">
+                    {f.thumb_url ? (
+                      <img src={f.thumb_url} alt="" loading="lazy" decoding="async" />
+                    ) : (
+                      <span>{ICON[f.kind] ?? ICON.other}</span>
+                    )}
+                  </span>
+                  <span className="file-row-main">
+                    <span className="file-name">{f.name}</span>
+                    <span className="file-meta mute">
+                      {searching || f.folder !== folder ? `in ${f.folder || "Files"} · ` : ""}
+                      {byWords(f)}
+                    </span>
+                  </span>
+                  <span className="file-row-col mute">{KIND_WORD[f.kind] ?? "File"}</span>
+                  <span className="file-row-col mute">{sizeWords(f.size_bytes)}</span>
+                  <span className="file-row-col mute">{dateWords(f.taken_at || f.created_at)}</span>
+                  {f.status !== "ready" || local ? (
+                    <span className={`tag tag-${tone(f, local)}`} role="status">
+                      {fileStatusWords(f, s.progress[f.id], local)}
+                    </span>
+                  ) : null}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <div ref={end} className="files-end" aria-hidden="true" />
+      {s.next !== null ? (
+        <div className="files-more">
+          <Button variant="quiet" onClick={() => loadMore()}>
+            {s.loadingMore ? "Loading more…" : `Show more (${s.count - s.files.length} left)`}
+          </Button>
+        </div>
+      ) : null}
 
       {opened ? (
         <FileViewer file={opened} folders={s.folders} onClose={() => setOpen(null)} onError={setError} />

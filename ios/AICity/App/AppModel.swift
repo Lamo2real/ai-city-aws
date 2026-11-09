@@ -16,11 +16,11 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
     // Tabs, in order: four areas and "More". Everything else lives in the More list, so new areas (apps,
     // knowledge, connectors, mail) are one case here, one row in `underMore` and one view in MainTabs.
     // Autopilot: there is no Needs you tab; what was open before it is "Open items" under More → While I'm away.
-    case aic, city, tickets, more
+    case aic, city, tickets, files, more
     // Under More:
     case away, costs, settings, inbox
 
-    static let tabs: [AppSection] = [.aic, .city, .tickets, .more]
+    static let tabs: [AppSection] = [.aic, .city, .tickets, .files, .more]
     static let underMore: [AppSection] = [.away, .costs, .settings]
 
     var id: String { rawValue }
@@ -31,6 +31,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
         case .inbox: return "Open items"
         case .away: return "While I'm away"
         case .tickets: return "Tickets"
+        case .files: return "Files"
         case .more: return "More"
         case .costs: return "Costs"
         case .settings: return "Settings"
@@ -43,6 +44,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
         case .inbox: return "tray.full"
         case .away: return "airplane"
         case .tickets: return "ticket"
+        case .files: return "folder"
         case .more: return "ellipsis.circle"
         case .costs: return "dollarsign.circle"
         case .settings: return "gearshape"
@@ -320,6 +322,9 @@ final class AppModel {
     }
 
     // MARK: The + menu: files to the knowledge base, and the skills and connectors it lists
+
+    /// Files' uploader (the Files tab), on this app's API and transport.
+    func filesUploader() -> FilesUploader? { api.map { FilesUploader(api: $0, http: http) } }
 
     /// Uploads the picked files; each becomes a chip under the message box. Problems become toasts.
     func attach(_ files: [PickedFile]) async {

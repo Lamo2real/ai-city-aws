@@ -65,4 +65,43 @@ final class FilesTests: XCTestCase {
         XCTAssertEqual(l.downloadURL?.absoluteString, "https://b/f?attachment")
         XCTAssertNil(l.thumbURL)
     }
+
+    // MARK: The Files tab
+
+    func testBrowseAndSearchQueries() {
+        XCTAssertEqual(FilesQuery().path(), "/files?scope=here&sort=date&order=desc")
+        XCTAssertEqual(FilesQuery(folder: "Brand/2026", sort: .nameAZ).path(offset: 60),
+                       "/files?folder=Brand/2026&scope=here&sort=name&order=asc&offset=60")
+        XCTAssertEqual(FilesQuery(folder: "Brand", search: "porsche sunrise").path(),
+                       "/files?q=porsche%20sunrise&folder=Brand&scope=all&sort=relevance&order=desc")
+        XCTAssertEqual(FilesQuery(folder: "Brand", search: "logo", onlyHere: true, kind: "image").path(),
+                       "/files?q=logo&folder=Brand&scope=here&kind=image&sort=relevance&order=desc")
+    }
+
+    func testAPageOfFilesFoldersAndWhatIsLeft() throws {
+        let page = FilesPage(json: [
+            "files": [["id": "f-a", "name": "a.jpg", "kind": "image", "folder": "Brand", "size_bytes": 2_400_000,
+                       "status": "failed", "error": "ThrottlingException: busy", "added_by": "wkr-media-1", "department": "Media",
+                       "thumb_url": "https://t/a"]],
+            "count": 75, "next": 60,
+            "subfolders": [["name": "2026", "path": "Brand/2026", "files": 4]],
+            "found_folders": ["Brand/Guides"], "folders": ["Brand", "Brand/2026", "Brand/Guides"],
+        ])
+        XCTAssertEqual(page.count, 75)
+        XCTAssertEqual(page.next, 60)
+        XCTAssertEqual(page.subfolders.first?.path, "Brand/2026")
+        XCTAssertEqual(page.subfolders.first?.files, 4)
+        XCTAssertEqual(page.foundFolders.map(\.path), ["Brand/Guides"])
+        let f = try XCTUnwrap(page.files.first)
+        XCTAssertEqual(f.by, "Media")
+        XCTAssertEqual(f.statusWords, "Failed: ThrottlingException: busy")
+        XCTAssertEqual(f.thumbURL?.absoluteString, "https://t/a")
+        XCTAssertNotNil(f.card)
+        XCTAssertNil(FilesPage(json: ["files": [], "count": 0, "next": nil]).next)
+    }
+
+    func testFilesHasItsOwnTabAndHudPage() {
+        XCTAssertTrue(AppSection.tabs.contains(.files))
+        XCTAssertEqual(HudAction.section(forPage: "#/files"), .files)
+    }
 }
