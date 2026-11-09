@@ -230,7 +230,7 @@ export function ImapCard(p: { targetId: string; title: string; status: "pending"
   );
 }
 
-function ApproveCard(p: { approvalId: string; action: string; reason: string; id: string }) {
+function ApproveCard(p: { approvalId: string; action: string; reason: string; id: string; connectorId?: string }) {
   const [problem, setProblem] = useState<string | null>(null);
   const decide = async (yes: boolean) => {
     setProblem(null);
@@ -242,8 +242,8 @@ function ApproveCard(p: { approvalId: string; action: string; reason: string; id
     }
   };
   return (
-    <div className="connect-card" role="group" aria-label="Add a connector?">
-      <p className="action">{p.action}</p>
+    <div className="connect-card" role="group" aria-label="Connect a service?">
+      <p>{p.action}</p>
       <p className="mute">{p.reason}</p>
       {problem ? (
         <p className="field-error" role="alert">
@@ -252,10 +252,10 @@ function ApproveCard(p: { approvalId: string; action: string; reason: string; id
       ) : null}
       <div className="row-end">
         <Button variant="quiet" onClick={() => decide(false)}>
-          Decline
+          Not now
         </Button>
         <Button variant="secondary" onClick={() => decide(true)}>
-          Approve
+          Connect
         </Button>
       </div>
     </div>

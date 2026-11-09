@@ -31,7 +31,7 @@ export interface AceTurn {
 }
 /** A connect card under AIC's chat: an add-connector approval, a sign-in button, a key field or an app-password form. */
 export type ConnectCardState =
-  | { kind: "approve"; id: string; approvalId: string; action: string; reason: string }
+  | { kind: "approve"; id: string; approvalId: string; action: string; reason: string; connectorId?: string }
   | {
       kind: "signin";
       id: string;
@@ -62,6 +62,8 @@ export interface HudState {
 
 type Listener = () => void;
 const CHAT_KEY = "aic.chat";
+const RESUME_KEY = "aic.resume";
+const RESUME_MS = 30 * 60_000;
 const readChat = (): ChatLine[] => {
   try {
     return (JSON.parse(localStorage.getItem(CHAT_KEY) ?? "[]") as ChatLine[]).slice(-60);
@@ -162,6 +164,23 @@ class Store {
     for (const l of this.sceneEvents) l(e);
   }
   /** Adds a card, or updates it where it stands (so a card doesn't jump when its status changes). */
+  /** What to do once a service the owner just connected is ready: AIC carries on with their request (decision 130). */
+  onResume: ((text: string) => void) | null = null;
+  /** The owner's request that led to each service being offered, by connector id, kept for this tab's session. */
+  private resumes(): Record<string, string> {
+    try {
+      return JSON.parse(sessionStorage.getItem(RESUME_KEY) ?? "{}") as Record<string, string>;
+    } catch {
+      return {};
+    }
+  }
+  private setResumes(r: Record<string, string>) {
+    try {
+      sessionStorage.setItem(RESUME_KEY, JSON.stringify(r));
+    } catch {
+      /* storage blocked: the owner just asks again */
+    }
+  }
   private putCard(c: ConnectCardState) {
     const cards = this.state.cards;
     this.set({ cards: cards.some((x) => x.id === c.id) ? cards.map((x) => (x.id === c.id ? c : x)) : [...cards, c] });
@@ -172,14 +191,20 @@ class Store {
   /** Connect cards follow the city's events (CONNECTORS_SKILLS.md §3, MAIL_CALENDAR.md §6). */
   private cardEvent(e: { type: string; [k: string]: unknown }) {
     const s = (k: string) => String(e[k] ?? "");
-    if (e.type === "approval.requested" && e.kind === "connector.add")
+    if (e.type === "approval.requested" && e.kind === "connector.add") {
+      // The owner's own words that led here (their latest message, if it is recent): sent again once it's connected.
+      const asked = this.state.chat.findLast((l) => l.who === "owner");
+      if (s("connector_id") && asked && Date.now() - asked.at < RESUME_MS)
+        this.setResumes({ ...this.resumes(), [s("connector_id")]: asked.text });
       return this.putCard({
         kind: "approve",
         id: `ap:${s("id")}`,
         approvalId: s("id"),
         action: s("action"),
         reason: s("reason"),
+        connectorId: s("connector_id") || undefined,
       });
+    }
     if (e.type === "approval.decided") return this.dropCard(`ap:${s("id")}`);
     if (e.type === "connect.signin") {
       const label = s("label");
@@ -214,6 +239,12 @@ class Store {
       const id = `conn:${s("id")}`;
       const label = s("label") || s("id");
       const status = s("status");
+      const waiting = this.resumes();
+      if ((status === "ready" || status === "removed") && s("id") in waiting) {
+        const { [s("id")]: text, ...rest } = waiting;
+        this.setResumes(rest);
+        if (status === "ready" && text) this.onResume?.(`${label} is connected now. Please carry on with: ${text}`);
+      }
       if (status === "removed") return this.dropCard(id);
       if (status === "needs_login" || status === "login_expired")
         return this.putCard({

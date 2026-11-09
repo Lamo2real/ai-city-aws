@@ -1,5 +1,6 @@
-// Settings → Connectors → Mail & calendar (MAIL_CALENDAR.md §7): accounts, which roles may read mail, and the
-// owner's standing rules. Sign-in and app passwords use the same cards as the chat.
+// Settings → Connectors → Mail & calendar (MAIL_CALENDAR.md §7): an account's details (a row in the Mine table),
+// adding one, which roles may read mail, and the owner's standing rules. Sign-in and app passwords use the same
+// cards as the chat.
 import { useEffect, useState } from "react";
 import { saveSettings } from "../lib/actions.ts";
 import { ApiError } from "../lib/api.ts";
@@ -7,7 +8,6 @@ import {
   addMailAccount,
   addRule,
   editMailAccount,
-  listMailAccounts,
   listRules,
   PROVIDER_LABEL,
   removeMailAccount,
@@ -16,7 +16,7 @@ import {
   type MailRule,
 } from "../lib/connect.ts";
 import { ImapCard, SignInCard } from "./ConnectCard.tsx";
-import { Banner, Button, Confirm, toast } from "./ui.tsx";
+import { Button, Confirm, toast } from "./ui.tsx";
 
 const STATUS: Record<MailAccount["status"], string> = {
   connected: "Connected",
@@ -26,130 +26,148 @@ const STATUS: Record<MailAccount["status"], string> = {
   removed: "Removed",
 };
 
-export function MailAccounts(p: { access: Record<string, string>; onAccess: (a: Record<string, string>) => void }) {
-  const [accounts, setAccounts] = useState<MailAccount[] | null>(null);
+/** One mailbox's details: sign-in or app password when needed, which calendars AIC sees, disconnect. */
+export function MailAccountCard(p: { a: MailAccount; onChange: (a: MailAccount | null) => void }) {
+  const { a } = p;
+  const [removing, setRemoving] = useState(false);
+  return (
+    <article className="card" aria-label={`${a.label} account`}>
+      <p>
+        <b>{a.label}</b> · {PROVIDER_LABEL[a.provider]} {a.address ? `· ${a.address}` : ""}
+      </p>
+      <p className={a.status === "connected" ? "good" : "mute"}>{STATUS[a.status]}</p>
+      {a.status !== "connected" && a.provider !== "imap" ? (
+        <SignInCard
+          kind="mail"
+          id={a.id}
+          title={`Sign in to ${PROVIDER_LABEL[a.provider]} (${a.label})`}
+          signinPath={`/mail/accounts/${a.id}/signin`}
+          completePath={`/mail/accounts/${a.id}/complete`}
+          status="pending"
+        />
+      ) : null}
+      {a.status !== "connected" && a.provider === "imap" ? (
+        <ImapCard targetId={a.id} title={`Add the app password for ${a.label}`} status="pending" />
+      ) : null}
+      {a.calendars?.length ? (
+        <fieldset className="roles">
+          <legend>Calendars AIC sees</legend>
+          {a.calendars.map((c) => (
+            <label key={c.id} className="switch">
+              <input
+                type="checkbox"
+                checked={!c.hidden}
+                onChange={async (e) => {
+                  const r = await editMailAccount(a.id, { calendars: [{ id: c.id, hidden: !e.target.checked }] });
+                  p.onChange(r.account);
+                }}
+              />{" "}
+              {c.name}
+            </label>
+          ))}
+        </fieldset>
+      ) : null}
+      <div className="row-end">
+        <Button variant="danger" onClick={() => setRemoving(true)}>
+          Disconnect…
+        </Button>
+      </div>
+      {removing ? (
+        <Confirm
+          title={`Disconnect ${a.label}?`}
+          what={`AI City stops reading and sending for ${a.address || a.label} and forgets its sign-in${a.provider === "imap" ? " and app password" : ""}. Nothing in the mailbox itself is deleted.`}
+          cost="Cost: nothing."
+          confirmLabel="Disconnect"
+          danger
+          onCancel={() => setRemoving(false)}
+          onConfirm={async () => {
+            const r = await removeMailAccount(a.id);
+            setRemoving(false);
+            p.onChange(null);
+            toast({ text: r.note ? `Disconnected. ${r.note}` : "Disconnected.", tone: "good" });
+          }}
+        />
+      ) : null}
+    </article>
+  );
+}
+
+/** Add a mailbox or calendar: pick the provider and a label, then the sign-in card appears on its row. */
+export function AddMailAccount(p: { onAdded: () => void; onCancel: () => void }) {
+  const [adding, setAdding] = useState<{ provider: MailAccount["provider"]; label: string }>({
+    provider: "google",
+    label: "",
+  });
+  return (
+    <div className="card" role="group" aria-label="Add a mailbox or calendar">
+      <h3>Add a mailbox or calendar</h3>
+      <label className="field">
+        Provider
+        <select
+          value={adding.provider}
+          onChange={(e) => setAdding({ ...adding, provider: e.target.value as MailAccount["provider"] })}
+        >
+          {Object.entries(PROVIDER_LABEL).map(([k, v]) => (
+            <option key={k} value={k}>
+              {v}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        Label
+        <input
+          value={adding.label}
+          onChange={(e) => setAdding({ ...adding, label: e.target.value })}
+          placeholder="Work"
+        />
+      </label>
+      <div className="row-end">
+        <Button variant="quiet" onClick={p.onCancel}>
+          Cancel
+        </Button>
+        <Button
+          variant="secondary"
+          disabled={!adding.label.trim()}
+          onClick={async () => {
+            try {
+              await addMailAccount(adding.provider, adding.label.trim());
+              toast({ text: "Added. Sign in on its row to finish.", tone: "info" });
+              p.onAdded();
+            } catch (e) {
+              toast({ text: e instanceof ApiError ? e.message : "Not added. Try again.", tone: "bad" });
+            }
+          }}
+        >
+          Add account
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Who may read mail (AIC always, workers never) and the owner's standing rules. */
+export function MailSettings(p: {
+  accounts: MailAccount[];
+  access: Record<string, string>;
+  onAccess: (a: Record<string, string>) => void;
+}) {
+  const { accounts } = p;
   const [rules, setRules] = useState<MailRule[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [adding, setAdding] = useState<{ provider: MailAccount["provider"]; label: string } | null>(null);
-  const [removing, setRemoving] = useState<MailAccount | null>(null);
   const [rule, setRule] = useState<{ kind: MailRule["kind"]; account_id: string; text: string } | null>(null);
-  const load = () =>
-    Promise.all([listMailAccounts(), listRules().catch(() => ({ rules: [] as MailRule[] }))]).then(
-      ([a, r]) => {
-        setAccounts(a.accounts);
-        setRules(r.rules);
-        setError(null);
-      },
-      (e: Error) => setError(e.message),
-    );
   useEffect(() => {
-    void load();
+    listRules().then(
+      (r) => setRules(r.rules),
+      () => undefined,
+    );
   }, []);
   const access = async (role: string, v: string) => {
     const next = { ...p.access, [role]: v };
     await saveSettings({ mail_access: next });
     p.onAccess(next);
   };
-  if (error) return <Banner tone="info">{`Mail and calendar: ${error}`}</Banner>;
   return (
     <div className="mail-accounts">
-      <h3>Mail &amp; calendar</h3>
-      {accounts && !accounts.length ? (
-        <p className="mute">No mailboxes or calendars yet. Ask AIC ("connect my work Outlook"), or add one here.</p>
-      ) : null}
-      {accounts?.map((a) => (
-        <article key={a.id} className="card" aria-label={`${a.label} account`}>
-          <p>
-            <b>{a.label}</b> · {PROVIDER_LABEL[a.provider]} {a.address ? `· ${a.address}` : ""}
-          </p>
-          <p className={a.status === "connected" ? "good" : "mute"}>{STATUS[a.status]}</p>
-          {a.status !== "connected" && a.provider !== "imap" ? (
-            <SignInCard
-              kind="mail"
-              id={a.id}
-              title={`Sign in to ${PROVIDER_LABEL[a.provider]} (${a.label})`}
-              signinPath={`/mail/accounts/${a.id}/signin`}
-              completePath={`/mail/accounts/${a.id}/complete`}
-              status="pending"
-            />
-          ) : null}
-          {a.status !== "connected" && a.provider === "imap" ? (
-            <ImapCard targetId={a.id} title={`Add the app password for ${a.label}`} status="pending" />
-          ) : null}
-          {a.calendars?.length ? (
-            <fieldset className="roles">
-              <legend>Calendars AIC sees</legend>
-              {a.calendars.map((c) => (
-                <label key={c.id} className="switch">
-                  <input
-                    type="checkbox"
-                    checked={!c.hidden}
-                    onChange={async (e) => {
-                      const r = await editMailAccount(a.id, { calendars: [{ id: c.id, hidden: !e.target.checked }] });
-                      setAccounts((xs) => xs?.map((x) => (x.id === a.id ? r.account : x)) ?? null);
-                    }}
-                  />{" "}
-                  {c.name}
-                </label>
-              ))}
-            </fieldset>
-          ) : null}
-          <div className="row-end">
-            <Button variant="danger" onClick={() => setRemoving(a)}>
-              Disconnect…
-            </Button>
-          </div>
-        </article>
-      ))}
-      {adding ? (
-        <div className="card">
-          <label className="field">
-            Provider
-            <select
-              value={adding.provider}
-              onChange={(e) => setAdding({ ...adding, provider: e.target.value as MailAccount["provider"] })}
-            >
-              {Object.entries(PROVIDER_LABEL).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            Label
-            <input
-              value={adding.label}
-              onChange={(e) => setAdding({ ...adding, label: e.target.value })}
-              placeholder="Work"
-            />
-          </label>
-          <div className="row-end">
-            <Button variant="quiet" onClick={() => setAdding(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="secondary"
-              disabled={!adding.label.trim()}
-              onClick={async () => {
-                try {
-                  await addMailAccount(adding.provider, adding.label.trim());
-                  setAdding(null);
-                  await load();
-                } catch (e) {
-                  toast({ text: e instanceof ApiError ? e.message : "Not added. Try again.", tone: "bad" });
-                }
-              }}
-            >
-              Add account
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <Button variant="secondary" onClick={() => setAdding({ provider: "google", label: "" })}>
-          Add a mailbox or calendar
-        </Button>
-      )}
       <h4>Who may read mail</h4>
       <p className="mute">AIC always can. Workers never can, by design.</p>
       {(["orchestrator", "manager"] as const).map((role) => (
@@ -252,22 +270,6 @@ export function MailAccounts(p: { access: Record<string, string>; onAccess: (a: 
         >
           Add a standing rule
         </Button>
-      ) : null}
-      {removing ? (
-        <Confirm
-          title={`Disconnect ${removing.label}?`}
-          what={`AI City stops reading and sending for ${removing.address || removing.label} and forgets its sign-in${removing.provider === "imap" ? " and app password" : ""}. Nothing in the mailbox itself is deleted.`}
-          cost="Cost: nothing."
-          confirmLabel="Disconnect"
-          danger
-          onCancel={() => setRemoving(null)}
-          onConfirm={async () => {
-            const r = await removeMailAccount(removing.id);
-            setRemoving(null);
-            setAccounts((xs) => xs?.filter((x) => x.id !== removing.id) ?? null);
-            toast({ text: r.note ? `Disconnected. ${r.note}` : "Disconnected.", tone: "good" });
-          }}
-        />
       ) : null}
     </div>
   );

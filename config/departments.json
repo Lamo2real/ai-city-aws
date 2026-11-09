@@ -1,5 +1,5 @@
 {
-  "$comment": "Pre-configured departments (decisions 113, 114). The Orchestrator uses these names when work fits; any other department is still created as data. Each department's manager prompt is agents/departments/<key>.md and its skills are agents/skills/<name>/SKILL.md. 'shared' tools and skills belong to every department. 'essential' marks the tools most businesses in that field use: Settings -> Departments and its setup guide put them first. Every url answered an MCP initialize on 2026-11-08 (401 with OAuth resource metadata, or 200). Read by backend/src/aic/shared/presets.py; served by GET /departments/presets.",
+  "$comment": "Pre-configured departments (decisions 113, 114). The Orchestrator uses these names when work fits; any other department is still created as data. Each department's manager prompt is agents/departments/<key>.md and its skills are agents/skills/<name>/SKILL.md. 'shared' tools and skills belong to every department. 'essential' marks the tools most businesses in that field use: Settings -> Departments and its setup guide put them first. Every url answered an MCP initialize on 2026-11-08 (401 with OAuth resource metadata, or 200). 'aka' lists other names the owner may use for a service. 'not_offered' names services that can't be connected directly or safely, why in plain words, and the catalog services that do the job instead (decision 130). Read by backend/src/aic/shared/presets.py; served by GET /departments/presets.",
   "shared": {
     "name": "Shared by every department",
     "mission": "Tools every team uses: one Stripe account for everything sold, one place for tickets, chat, docs, files and meetings.",
@@ -95,7 +95,8 @@
         "figma",
         "linear",
         "shopify-dev",
-        "microsoft-learn"
+        "microsoft-learn",
+        "drawio"
       ]
     },
     {
@@ -161,7 +162,8 @@
         "cloudflare-docs",
         "microsoft-learn",
         "context7",
-        "vanta"
+        "vanta",
+        "drawio"
       ]
     },
     {
@@ -307,7 +309,8 @@
         "webflow",
         "wix",
         "typeform",
-        "figma"
+        "figma",
+        "drawio"
       ]
     },
     {
@@ -377,7 +380,8 @@
         "hunter",
         "crunchbase",
         "tavily",
-        "firecrawl"
+        "firecrawl",
+        "indeed"
       ]
     },
     {
@@ -429,7 +433,8 @@
         "shopify-store",
         "typeform",
         "surveymonkey",
-        "hubspot"
+        "hubspot",
+        "freshdesk"
       ]
     },
     {
@@ -573,7 +578,8 @@
         "mixpanel",
         "typeform",
         "surveymonkey",
-        "fireflies"
+        "fireflies",
+        "drawio"
       ]
     },
     {
@@ -627,7 +633,8 @@
         "airtable",
         "clickup",
         "shopify-store",
-        "typeform"
+        "typeform",
+        "drawio"
       ]
     },
     {
@@ -688,7 +695,8 @@
         "jina",
         "firecrawl",
         "crunchbase",
-        "product-hunt"
+        "product-hunt",
+        "indeed"
       ]
     },
     {
@@ -774,7 +782,8 @@
         "frame-io",
         "vimeo",
         "mux",
-        "cloudinary"
+        "cloudinary",
+        "drawio"
       ]
     }
   ],
@@ -789,7 +798,8 @@
       "label": "Jira & Confluence",
       "url": "https://mcp.atlassian.com/v1/mcp",
       "what": "Tickets every team shares, and the company wiki",
-      "signup": "https://www.atlassian.com/try/cloud/signup?bundle=jira-software"
+      "signup": "https://www.atlassian.com/try/cloud/signup?bundle=jira-software",
+      "aka": ["jira", "confluence"]
     },
     "slack": {
       "label": "Slack",
@@ -848,7 +858,8 @@
     "aws-knowledge": {
       "label": "AWS Knowledge",
       "url": "https://knowledge-mcp.global.api.aws",
-      "what": "AWS documentation, the Well-Architected Framework, regional availability, What's New (no account needed)"
+      "what": "AWS documentation, the Well-Architected Framework, regional availability, What's New (no account needed)",
+      "aka": ["aws", "amazon web services", "aws docs"]
     },
     "context7": {
       "label": "Context7",
@@ -976,13 +987,15 @@
       "label": "Meta Ads",
       "url": "https://mcp.pipeboard.co/meta-ads-mcp",
       "what": "Facebook and Instagram ads: campaigns, audiences, creatives, budgets, insights (through Pipeboard, signed in with your Meta account)",
-      "signup": "https://www.facebook.com/business/tools/ads-manager"
+      "signup": "https://www.facebook.com/business/tools/ads-manager",
+      "aka": ["facebook ads", "instagram ads", "meta ads manager"]
     },
     "google-ads": {
       "label": "Google Ads",
       "url": "https://google-ads.mcp.pipeboard.co/",
       "what": "Search, YouTube and Performance Max campaigns, keywords, budgets, reports (through Pipeboard, signed in with your Google account)",
-      "signup": "https://ads.google.com/home/"
+      "signup": "https://ads.google.com/home/",
+      "aka": ["adwords"]
     },
     "higgsfield": {
       "label": "Higgsfield",
@@ -1358,6 +1371,55 @@
       "url": "https://asset-management.mcp.cloudinary.com/mcp",
       "what": "Media library: store, resize and transform images and video",
       "signup": "https://cloudinary.com/users/register_free"
+    },
+    "indeed": {
+      "label": "Indeed",
+      "url": "https://mcp.indeed.com/claude/mcp",
+      "what": "Search job postings by keyword and place, with salary, company and date",
+      "aka": ["indeed jobs", "job postings", "job search"]
+    },
+    "freshdesk": {
+      "label": "Freshdesk",
+      "url": "https://{desk}.freshdesk.com/mcp",
+      "what": "Support tickets: read, reply, assign and close, with your help-desk contacts",
+      "signup": "https://www.freshworks.com/freshdesk/signup/",
+      "ask": {
+        "name": "desk",
+        "label": "Your Freshdesk's name (the part before .freshdesk.com)",
+        "pattern": "^[a-z0-9][a-z0-9-]{1,60}$"
+      }
+    },
+    "drawio": {
+      "label": "draw.io",
+      "url": "https://mcp.draw.io/mcp",
+      "what": "Diagrams: flowcharts, org charts, architecture and process drawings (no account needed)",
+      "aka": ["drawio", "diagrams.net", "diagram"]
+    }
+  },
+  "not_offered": {
+    "youtube": {
+      "label": "YouTube",
+      "aka": ["youtube studio", "youtube channel"],
+      "why": "YouTube doesn't offer a way for assistants to connect to it directly. Posting and stats for it go through a social tool that connects your account for you.",
+      "instead": ["metricool", "ayrshare", "blotato"]
+    },
+    "tiktok": {
+      "label": "TikTok",
+      "aka": ["tik tok", "tiktok account"],
+      "why": "TikTok doesn't offer a way for assistants to connect to it directly. Posting and stats for it go through a social tool that connects your account for you.",
+      "instead": ["metricool", "ayrshare", "blotato"]
+    },
+    "instagram": {
+      "label": "Instagram",
+      "aka": ["insta", "ig"],
+      "why": "Instagram doesn't offer a way for assistants to connect to it directly. Posting and stats for it go through a social tool that connects your account for you.",
+      "instead": ["metricool", "ayrshare", "blotato"]
+    },
+    "linkedin": {
+      "label": "LinkedIn",
+      "aka": ["linked in", "linkedin sales navigator", "sales navigator"],
+      "why": "LinkedIn doesn't let assistants search people or read profiles. The tools that do it sign in as you in a hidden browser, and LinkedIn bans accounts for that.",
+      "instead": ["apollo", "hunter"]
     }
   }
 }

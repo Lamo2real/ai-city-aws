@@ -54,6 +54,9 @@ export async function sendMessage(text: string, opts: { voice?: boolean } = {}) 
   await deliver(line);
 }
 
+// A service the owner was offered is connected: AIC picks their request up again (decision 130).
+store.onResume = (text) => void sendMessage(text);
+
 /** Re-sends everything the outbox holds. The server ignores a line it already has (same client id). */
 export async function flushOutbox() {
   for (const l of store.get().chat.filter((x) => x.who === "owner" && (x.state === "queued" || x.state === "failed")))

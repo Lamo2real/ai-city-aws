@@ -155,7 +155,10 @@ async def test_add_connector_writes_a_pending_record_and_an_approval_bound_to_id
     [ap] = await d.ledger.pending_approvals()
     assert ap["kind"] == "connector.add" and ap["connector_id"] == "higgsfield" and ap["ticket_id"] is None
     assert ap["hash"] == approval_hash("higgsfield", URL, DEFAULT_ROLES)
-    assert URL in ap["action"] and "Approve?" in ap["action"]
+    assert ap["action"] == (
+        "Connect higgsfield? You sign in on higgsfield's own page; your password never comes to AI City. "
+        f"({URL}, the link you gave. Used by: AIC, Managers, Workers.)"
+    )
     req = city.bus.of_type("approval.requested")[0]
     assert req["kind"] == "connector.add" and parse_event(req)["connector_id"] == "higgsfield"
     assert city.bus.of_type("connector.updated")[0]["status"] == "pending_approval"
@@ -677,7 +680,13 @@ def test_the_prompts_carry_the_connector_and_skill_rules() -> None:
 
     ace = load_prompt("ace.md")
     assert {"add_connector", "use_skill"} <= set(ace.tools)
-    for s in ("only when the owner asks, in this message", "mail accounts", "Never ask for, accept or repeat a key"):
+    for s in (
+        "only for the owner's own message",
+        "Offer services",
+        'Never say "MCP"',
+        "mail accounts",
+        "Never ask for, accept or repeat a key",
+    ):
         assert s in ace.body
     for f in ("orchestrator.md", "manager.md", "worker.md"):
         body = load_prompt(f, {"department": "Eng"}).body
@@ -760,3 +769,41 @@ def test_runtime_created_resources_carry_the_default_tags_with_project_and_compo
     assert resource_tags(env) == {"Project": "ai-city", "Owner": "owner", "Component": "connectors"}
     assert resource_tags({}) == {"Project": "ai-city", "Component": "connectors"}
     assert resource_tags({"AIC_DEFAULT_TAGS": "not json"}) == {"Project": "ai-city", "Component": "connectors"}
+
+
+# ---------- plain requests: the catalog first, LinkedIn said plainly (decision 130) ----------
+async def test_a_service_named_in_plain_words_comes_from_the_catalog_with_why_on_a_card_without_jargon() -> None:
+    d, city = _deps()
+    out = await add_connector_tool(d, _ctx()).handler({"query": "Indeed", "why": "look for jobs in Stockholm."})
+    assert "card is waiting" in out and "carry on" in out
+    rec = await ConnectorStore(d.ledger.table).get("indeed")
+    assert rec and rec["url"] == "https://mcp.indeed.com/claude/mcp" and rec["source"] == "catalog"
+    [ap] = await d.ledger.pending_approvals()
+    assert ap["action"].startswith(
+        "Connect Indeed so I can look for jobs in Stockholm? You sign in on Indeed's own page"
+    )
+    assert "checked by AI City" in ap["action"] and "MCP" not in ap["action"] and "connector" not in ap["action"]
+    assert ap["hash"] == approval_hash("indeed", "https://mcp.indeed.com/claude/mcp", DEFAULT_ROLES)
+    assert city.bus.of_type("approval.requested")[0]["connector_id"] == "indeed"
+
+
+async def test_other_names_reach_the_same_service() -> None:
+    d, _ = _deps()
+    await add_connector_tool(d, _ctx()).handler({"query": "the Jira connector"})
+    [rec] = await ConnectorStore(d.ledger.table).list()
+    assert rec["id"] == "atlassian" and rec["url"] == "https://mcp.atlassian.com/v1/mcp"
+
+
+async def test_linkedin_is_explained_and_what_does_the_job_is_offered_with_nothing_written() -> None:
+    d, _ = _deps()
+    out = await add_connector_tool(d, _ctx()).handler({"query": "LinkedIn", "why": "find a person"})
+    assert out.startswith("LinkedIn can't be connected: LinkedIn doesn't let assistants search people")
+    assert "Apollo.io" in out and "Hunter" in out and "without technical terms" in out
+    assert await ConnectorStore(d.ledger.table).list() == [] and await d.ledger.pending_approvals() == []
+
+
+async def test_a_shopify_store_asks_for_its_name_first() -> None:
+    d, _ = _deps()
+    out = await add_connector_tool(d, _ctx()).handler({"query": "Shopify"})
+    assert "needs your store's name" in out and "https://{store}.myshopify.com/api/mcp" in out
+    assert await ConnectorStore(d.ledger.table).list() == []

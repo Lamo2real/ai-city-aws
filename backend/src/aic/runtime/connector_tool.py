@@ -34,6 +34,7 @@ from aic.shared.connectors import (
 from aic.shared.hierarchy.actions import CityDeps
 from aic.shared.log import log
 from aic.shared.mcp_http import urllib_transport
+from aic.shared.presets import find_service
 
 from .tools import ToolSpec, TurnCtx, _obj, _s
 
@@ -83,6 +84,8 @@ def add_connector_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
             return "Connectors are added only when the owner asks for one in their own message."
         query = str(a.get("query", "")).strip()
         label = str(a["label"]).strip()[:40] if a.get("label") else None
+        # What the owner wants it for, in their words ("find a person"), shown on the card (decision 130).
+        why = " ".join(str(a.get("why") or "").split())[:120].rstrip(".") or None
         if provider := mail_provider(query):
             return await connect_mail_account(d, c, provider, label)
         roles = valid_roles(a.get("roles")) if a.get("roles") is not None else dict(DEFAULT_ROLES)
@@ -107,6 +110,21 @@ def add_connector_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
             if (spec := await add_from_link(d, c, query, label, roles, _used_by(roles), net, resolve)) is not None:
                 return spec
             url, name, source, title = query, name_from_url(query), "owner_url", None
+        elif (svc := None if is_github_query(query) else find_service(query)) and svc["kind"] == "not_offered":
+            others = "; ".join(f"{e['label']} ({e['what']})" for e in svc["instead"])
+            return (
+                f"{svc['label']} can't be connected: {svc['why']} Tell the owner that in plain words, without "
+                f"technical terms. Then offer what does the job: {others}. On their yes, call add_connector with "
+                "that name and the same why."
+            )
+        elif svc and svc.get("ask"):
+            ask = svc["ask"]
+            return (
+                f"{svc['label']} needs {ask['label'].lower()} first. Ask the owner for it in plain words, then call "
+                f"add_connector with the link {svc['url']}, with {{{ask['name']}}} replaced by their answer."
+            )
+        elif svc:  # §1.3 from the checked catalog (config/departments.json): no registry search
+            url, title, source, name = svc["url"], svc["label"], "catalog", svc["id"]
         else:
             try:
                 found = [r for r in await registry_search(query, net) if not check_url(r["url"], resolve)]
@@ -164,8 +182,13 @@ def add_connector_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
         }
         if not await store.create(rec):
             return f"There is already a connector called {id}. Ask the owner for a different label."
-        where = "found in the MCP Registry" if source.startswith("registry") else "the link you gave"
-        action = f"Add the {rec['label']} MCP server at {url} ({where}). Used by: {_used_by(roles)}. Approve?"
+        # The card is for someone who doesn't know what a server is: the service, what it's for, then the details.
+        where = {"catalog": "checked by AI City", "owner_url": "the link you gave"}.get(source, "from the MCP Registry")
+        lead = f"Connect {rec['label']} so I can {why}?" if why else f"Connect {rec['label']}?"
+        action = (
+            f"{lead} You sign in on {rec['label']}'s own page; your password never comes to AI City. "
+            f"({url}, {where}. Used by: {_used_by(roles)}.)"
+        )
         h = approval_hash(id, url, roles)
         ap = await d.ledger.request_approval(
             {
@@ -176,7 +199,7 @@ def add_connector_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
                 "connector_id": id,
                 "action": action,
                 "hash": h,
-                "reason": "Adding a connector lets agents reach an outside service.",
+                "reason": "Your agents can then use it for you. You can remove it any time in Settings, Connectors.",
             }
         )
         await d.bus.put(
@@ -191,7 +214,11 @@ def add_connector_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
             }
         )
         await d.bus.put(event(rec))
-        return f"A card is waiting for the owner to approve adding {rec['label']} ({url}). Nothing is connected yet."
+        return (
+            f"A card is waiting for the owner to approve adding {rec['label']} ({url}). Nothing is connected yet. "
+            "Tell them in plain words: tap Connect on the card, then sign in; you carry on with their request as soon "
+            "as it is connected."
+        )
 
     roles_schema = {"type": "object", "additionalProperties": {"type": "string", "enum": ["read", "all"]}}
     return ToolSpec(
@@ -199,8 +226,15 @@ def add_connector_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
         "Add an outside service (a remote MCP server, a web API by its OpenAPI 3 link, or a package) as a connector, only "
         "because the owner asked for it in this message. query is its name (looked up in the MCP Registry), its "
         "https URL, the https link to its OpenAPI 3 document, or a package as npm:<name>@<version> or "
-        "pypi:<name>==<version>. label names a second account on the same server. The owner approves on a card before anything connects; keys are never "
-        "given in chat.",
-        {**_obj({"query": _s(2, 2000), "label": _s(1, 40), "roles": roles_schema}, ("label", "roles"))},
+        "pypi:<name>==<version>. label names a second account on the same server. why is what the owner wants it for, "
+        "in a few plain words ('find a person', 'look for jobs'): the card shows it. Also call it, with why, when the "
+        "owner's own request needs a service that isn't connected (offer it; the card is the question). The owner "
+        "approves on a card before anything connects; keys are never given in chat.",
+        {
+            **_obj(
+                {"query": _s(2, 2000), "label": _s(1, 40), "why": _s(2, 120), "roles": roles_schema},
+                ("label", "why", "roles"),
+            )
+        },
         run,
     )

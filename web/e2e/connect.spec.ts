@@ -4,6 +4,8 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { mockBackend } from "./mock.ts";
 
+const SHOTS = `${import.meta.dirname}/../../docs/screenshots`;
+
 async function noSeriousA11y(page: Page, label: string) {
   const r = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).exclude("canvas").analyze();
   const bad = r.violations.filter((v) => v.impact === "serious" || v.impact === "critical");
@@ -69,12 +71,12 @@ test("adding an MCP server by asking AIC: approve the card, sign in, come back c
     kind: "connector.add",
     connector_id: "higgsfield",
     action:
-      "Add the Higgsfield MCP server at https://mcp.higgsfield.test/mcp (found in the MCP Registry). Used by: AIC, Managers, Workers. Approve?",
-    reason: "Adding a connector needs the owner.",
+      "Connect Higgsfield? You sign in on Higgsfield's own page; your password never comes to AI City. (https://mcp.higgsfield.test/mcp, from the MCP Registry. Used by: AIC, Managers, Workers.)",
+    reason: "Your agents can then use it for you. You can remove it any time in Settings, Connectors.",
   });
-  const approve = page.getByRole("group", { name: "Add a connector?" });
-  await expect(approve).toContainText("Higgsfield MCP server");
-  await approve.getByRole("button", { name: "Approve" }).click();
+  const approve = page.getByRole("group", { name: "Connect a service?" });
+  await expect(approve).toContainText("Connect Higgsfield?");
+  await approve.getByRole("button", { name: "Connect" }).click();
   await expect.poll(() => m.calls.find((c) => c.path === "/approvals/ap-9")?.body).toEqual({ approved: true });
   m.send({ type: "approval.decided", id: "ap-9", approved: true });
   await expect(approve).toHaveCount(0);
@@ -98,6 +100,41 @@ test("adding an MCP server by asking AIC: approve the card, sign in, come back c
     .toEqual({ state: "st-1", session_uri: "urn:sess:1" });
   await expect(page.getByText("Signed in. It's connected.")).toBeVisible();
   expect(new URL(page.url()).search).toBe("");
+});
+
+test("a plain request offers the service it needs, and AIC carries on once it is connected", async ({ page }) => {
+  const m = await mockBackend(page);
+  await page.goto("/#/ace");
+  await page.getByLabel("Message to AIC").fill("find designer jobs in Stockholm on Indeed");
+  await page.keyboard.press("Enter");
+  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
+  // AIC offers Indeed: a card in plain words, no jargon.
+  m.send({
+    type: "approval.requested",
+    id: "ap-3",
+    agent: "ace",
+    kind: "connector.add",
+    connector_id: "indeed",
+    action:
+      "Connect Indeed so I can look for jobs? You sign in on Indeed's own page; your password never comes to AI City. (https://mcp.indeed.com/claude/mcp, checked by AI City. Used by: AIC, Managers, Workers.)",
+    reason: "Your agents can then use it for you. You can remove it any time in Settings, Connectors.",
+  });
+  const card = page.getByRole("group", { name: "Connect a service?" });
+  await expect(card).toContainText("Connect Indeed so I can look for jobs?");
+  await expect(card).not.toContainText(/connector|MCP/);
+  await card.getByRole("button", { name: "Connect" }).click();
+  m.send({ type: "approval.decided", id: "ap-3", approved: true });
+  m.send({ type: "connector.updated", id: "indeed", label: "Indeed", status: "needs_login", auth: "oauth" });
+  await expect(page.getByRole("button", { name: "Sign in to Indeed" })).toBeVisible();
+  // Signed in elsewhere; once it is ready AIC picks the request up again, by itself, once.
+  m.send({ type: "connector.updated", id: "indeed", label: "Indeed", status: "ready", auth: "oauth" });
+  m.send({ type: "connector.updated", id: "indeed", label: "Indeed", status: "ready", auth: "oauth" });
+  await expect
+    .poll(() => m.calls.filter((c) => c.path === "/messages").map((c) => (c.body as { text: string }).text))
+    .toEqual([
+      "find designer jobs in Stockholm on Indeed",
+      "Indeed is connected now. Please carry on with: find designer jobs in Stockholm on Indeed",
+    ]);
 });
 
 test("an API key goes into a secure field, never the chat", async ({ page }) => {
@@ -172,15 +209,161 @@ test("Settings lists connectors and mail accounts; roles can be changed", async 
     },
   ];
   await page.goto("/#/settings/connectors");
+  const table = page.getByRole("table", { name: "Connected tools" });
+  await expect(table.getByRole("row", { name: /GitHub.*MCP.*Application.*Connected/ }).first()).toBeVisible();
+  await table
+    .getByRole("button", { name: /^GitHub/ })
+    .first()
+    .click();
   const gh = page.getByRole("article", { name: "Connector GitHub" });
   await expect(gh).toContainText("On · 1 tools");
   await gh.getByLabel("Managers").selectOption("read");
   await expect
     .poll(() => m.calls.find((c) => c.path === "/connectors/github" && c.method === "PUT")?.body)
     .toEqual({ roles: { ace: "read", worker: "all", manager: "read" } });
+  await table.getByRole("button", { name: /^Personal/ }).click();
   await expect(page.getByRole("article", { name: "Personal account" })).toContainText("me@gmail.test");
+  await expect(page.getByRole("heading", { name: "Who may read mail" })).toBeVisible();
   expect(await primaries(page)).toBeLessThanOrEqual(1);
   await noSeriousA11y(page, "settings connectors");
+  await page.screenshot({ path: `${SHOTS}/connectors-connected.png`, fullPage: true });
+});
+
+test("Settings → Connectors: browse a department's tools, connect in one click, sign in, and it shows as connected", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  await page.goto("/#/settings/connectors");
+  await expect(page.getByText(/No tools connected yet/)).toBeVisible();
+  await page.getByRole("button", { name: "Browse tools" }).click();
+  await expect(page.getByRole("button", { name: "Browse", pressed: true })).toBeVisible();
+  // Every department has its own section, with its tools.
+  const support = page.getByRole("region", { name: "Customer Support tools" });
+  await expect(support.getByRole("heading", { name: "Customer Support" })).toBeVisible();
+  await expect(support.getByRole("listitem", { name: "Freshdesk" })).toBeVisible();
+  const src = await page
+    .getByRole("region", { name: "Every department tools" })
+    .getByRole("listitem", { name: "Stripe" })
+    .locator("img")
+    .getAttribute("src");
+  expect(src).toBe("/logos/stripe.svg"); // logos come from the HUD's own origin
+  expect((await page.request.get(src!)).ok()).toBe(true);
+  await noSeriousA11y(page, "connectors browse");
+  await page.screenshot({ path: `${SHOTS}/connectors-browse.png` });
+
+  // One department: its tools, its essentials, what it knows how to do.
+  await page.getByRole("group", { name: "Department" }).getByRole("button", { name: "Sales" }).click();
+  await expect(page.getByRole("region", { name: "Customer Support tools" })).toHaveCount(0);
+  const sales = page.getByRole("region", { name: "Sales tools" });
+  await expect(sales.getByRole("listitem", { name: "HubSpot" })).toContainText("Essential");
+  await sales.getByText(/What Sales knows how to do/).click();
+  await expect(sales.getByText("lead-research")).toBeVisible();
+
+  const hubspot = sales.getByRole("listitem", { name: "HubSpot" });
+  await hubspot.getByRole("button", { name: "Connect HubSpot" }).click();
+  await expect
+    .poll(() => m.calls.find((c) => c.path === "/connectors" && c.method === "POST")?.body)
+    .toMatchObject({ label: "HubSpot" });
+  await expect(hubspot.getByRole("button", { name: /Sign in to HubSpot/ })).toBeVisible();
+  await page.getByRole("button", { name: "Connected", exact: true }).click();
+  const row = page.getByRole("table", { name: "Connected tools" }).getByRole("row", { name: /HubSpot/ });
+  await expect(row).toContainText("Sales");
+  await row.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("article", { name: "Connector HubSpot" })).toBeVisible();
+  m.connectors[0]!.status = "ready";
+  await page.reload();
+  await expect(
+    page.getByRole("table", { name: "Connected tools" }).getByRole("row", { name: /HubSpot.*Connected/ }),
+  ).toBeVisible();
+  // Sales still needs its other essentials; each connects from here.
+  await page.getByRole("group", { name: "Department" }).getByRole("button", { name: "Sales" }).click();
+  await expect(page.getByRole("list", { name: "Sales essentials not connected" }).getByRole("listitem")).toHaveCount(3);
+});
+
+test("Settings → Connectors: search narrows connected tools, the catalog and skills", async ({ page }) => {
+  const m = await mockBackend(page);
+  m.connectors = [
+    { id: "stripe", label: "Stripe", url: "https://mcp.stripe.com", status: "ready", tools: [] },
+    { id: "acme", label: "Acme", url: "https://mcp.acme.test/mcp", status: "needs_key", auth: "api_key" },
+  ];
+  await page.goto("/#/settings/connectors");
+  const table = page.getByRole("table", { name: "Connected tools" });
+  await expect(table.getByRole("row", { name: /Acme.*Your own.*Add its key/ })).toBeVisible();
+  const search = page.getByRole("searchbox", { name: "Search tools and skills" });
+  await search.fill("strip");
+  await expect(table.getByRole("row", { name: /Stripe/ })).toBeVisible();
+  await expect(table.getByRole("row", { name: /Acme/ })).toHaveCount(0);
+  await search.fill("zzz-nothing");
+  await expect(page.getByText('Nothing connected matches "zzz-nothing".')).toBeVisible();
+  await page.getByRole("button", { name: "Search the catalog instead" }).click();
+  await search.fill("video");
+  await expect(
+    page.getByRole("region", { name: "Media tools" }).getByRole("listitem", { name: "Vimeo" }),
+  ).toBeVisible();
+  await expect(page.getByRole("region", { name: "Finance tools" })).toHaveCount(0);
+  await search.fill("jira"); // other names count too
+  await expect(page.getByRole("listitem", { name: "Jira & Confluence" }).first()).toBeVisible();
+});
+
+test("Settings → Connectors: + Add a tool by link, write a skill", async ({ page }) => {
+  const m = await mockBackend(page);
+  await page.goto("/#/settings/connectors");
+  const add = page.getByRole("button", { name: "Add", exact: true });
+  await add.click();
+  const menu = page.getByRole("menu", { name: "Add" });
+  await expect(menu.getByRole("menuitem")).toHaveCount(4);
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+
+  await add.click();
+  await menu.getByRole("menuitem", { name: /Tool by link/ }).click();
+  const form = page.getByRole("group", { name: "Add a tool by its link" });
+  await form.getByLabel(/https link/).fill("http://not-secure.test");
+  await expect(form.getByRole("button", { name: "Add tool" })).toBeDisabled();
+  await form.getByLabel(/https link/).fill("https://mcp.acme.test/mcp");
+  await form.getByRole("button", { name: "Add tool" }).click();
+  await expect
+    .poll(() => m.calls.find((c) => c.path === "/connectors" && c.method === "POST")?.body)
+    .toEqual({ url: "https://mcp.acme.test/mcp" });
+  await expect(
+    page.getByRole("table", { name: "Connected tools" }).getByRole("row", { name: /Your own/ }),
+  ).toBeVisible();
+
+  await add.click();
+  await menu.getByRole("menuitem", { name: /Write a skill/ }).click();
+  await page.getByLabel("Name (lowercase, dashes)").fill("weekly-report");
+  await page.getByLabel("When to use it (one sentence)").fill("Use when writing the Friday report");
+  await page.getByLabel("Instructions").fill("1. List what shipped.\n2. Keep it short.");
+  await noSeriousA11y(page, "write a skill");
+  await page.getByRole("button", { name: "Save skill" }).click();
+  await expect.poll(() => m.calls.some((c) => c.path === "/skills" && c.method === "POST")).toBe(true);
+  const post = m.calls.find((c) => c.path === "/skills" && c.method === "POST")!.body as {
+    roles: string[];
+    files: Array<{ path: string; content_base64: string }>;
+  };
+  expect(post.roles).toEqual(["ace", "orchestrator", "manager", "worker"]);
+  expect(Buffer.from(post.files[0]!.content_base64, "base64").toString()).toBe(
+    "---\nname: weekly-report\ndescription: Use when writing the Friday report\n---\n\n1. List what shipped.\n2. Keep it short.\n",
+  );
+  await expect(
+    page.getByRole("table", { name: "Your skills" }).getByRole("row", { name: /pdf-report.*Your own.*On/ }),
+  ).toBeVisible();
+});
+
+test("Settings → Connectors at phone width: switch, search, + Add and departments fit; rows stack", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  m.connectors = [{ id: "stripe", label: "Stripe", url: "https://mcp.stripe.com", status: "ready", tools: [] }];
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/settings/connectors");
+  await expect(page.getByRole("table", { name: "Connected tools" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+  await page.getByRole("button", { name: "Browse", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Sales tools" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+  await page.waitForTimeout(400); // the switch eases between its two states
+  await page.screenshot({ path: `${SHOTS}/connectors-phone.png` });
 });
 
 test("an email waiting for approval is shown in full before it's sent", async ({ page }) => {

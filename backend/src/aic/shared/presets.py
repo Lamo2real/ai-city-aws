@@ -38,6 +38,41 @@ def catalog() -> dict[str, dict[str, Any]]:
     return dict(presets_config().get("connectors") or {})
 
 
+_FILLER = re.compile(r"\b(the|my|our|an?|mcp|server|connector|integration|app|account|api|tool|access|to|for|on)\b")
+
+
+def _names(id: str, entry: dict[str, Any]) -> set[str]:
+    label = str(entry.get("label") or id)
+    names = {
+        id.replace("-", " "),
+        label,
+        label.split("(", maxsplit=1)[0],
+        label.split(".", maxsplit=1)[0],
+        *entry.get("aka", []),
+    }
+    return {k for n in names if (k := _key(n))}
+
+
+def find_service(query: str) -> dict[str, Any] | None:
+    """The catalog service, or the service that can't be connected, that the owner's words name (decision 130).
+
+    ``{"kind": "catalog", "id", **entry}`` for a checked server, ``{"kind": "not_offered", "id", "label", "why",
+    "instead": [catalog entries]}`` for one like LinkedIn, else None (the MCP Registry is searched next)."""
+    q = _key(query)
+    q = " ".join(_FILLER.sub(" ", q).split()) or q
+    if not q or "://" in query:
+        return None
+    for id, e in (presets_config().get("not_offered") or {}).items():
+        if q in _names(id, e):
+            cat = catalog()
+            instead = [{"id": i, **cat[i]} for i in e.get("instead", []) if i in cat]
+            return {"kind": "not_offered", "id": id, "label": e["label"], "why": e["why"], "instead": instead}
+    for id, e in catalog().items():
+        if q in _names(id, e):
+            return {"kind": "catalog", "id": id, **e}
+    return None
+
+
 def preset_for(name: str) -> Preset | None:
     """The preset a department name belongs to: its name, its key or one of its aliases (case, punctuation and
     "&"/"and" ignored), so "IT", "it-infrastructure" or "Engineering" all reach IT."""

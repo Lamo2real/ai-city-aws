@@ -48,6 +48,8 @@ export interface PresetConnector {
   essential: boolean;
   /** Where to create an account, when the service needs one. */
   signup?: string;
+  /** Other names the owner may use for it ("jira" for Jira & Confluence). */
+  aka?: string[];
   ask?: { name: string; label: string; pattern: string };
 }
 export interface DepartmentPreset {

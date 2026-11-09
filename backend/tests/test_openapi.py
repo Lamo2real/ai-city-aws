@@ -338,7 +338,7 @@ async def test_a_link_that_is_not_a_spec_is_still_an_mcp_server_and_a_name_gets_
     [rec] = await ConnectorStore(d.ledger.table).list()
     assert "card is waiting" in out and rec.get("transport") is None
     [ap] = await d.ledger.pending_approvals()
-    assert "MCP server at https://mcp.example.com/mcp" in ap["action"]
+    assert "(https://mcp.example.com/mcp, the link you gave." in ap["action"] and "MCP" not in ap["action"]
     assert "OpenAPI 3" in await tool.handler({"query": "nosuchthing"})
 
 

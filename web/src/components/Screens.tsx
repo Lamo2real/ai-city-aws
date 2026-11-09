@@ -517,7 +517,7 @@ function SettingsPageView({
       setProblem(e instanceof ApiError ? e.message : "Not saved. Nothing changed. Try again.");
     }
   };
-  const needsSave = page === "general" || page === "limits" || page === "connectors";
+  const needsSave = page === "general" || page === "limits";
   return (
     <section className="screen" aria-labelledby="set-title">
       <SettingsHead title={title} />

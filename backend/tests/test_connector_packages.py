@@ -90,10 +90,10 @@ TAVILY_ENTRY = {
 # ---------- add_connector: exact version, card, oci ----------
 async def test_a_registry_package_is_pinned_to_an_exact_version_before_the_card() -> None:
     net = FakeNet()
-    net.get[_registry_url("tavily")] = {"servers": [TAVILY_ENTRY]}
+    net.get[_registry_url("tavily-search")] = {"servers": [TAVILY_ENTRY]}
     _npm(net)
     d, city = _deps(net)
-    out = await add_connector_tool(d, _ctx()).handler({"query": "tavily"})
+    out = await add_connector_tool(d, _ctx()).handler({"query": "tavily-search"})
     assert "card is waiting" in out and "@acme/tavily-mcp@1.4.0" in out and "TAVILY_API_KEY" in out
     rec = await ConnectorStore(d.ledger.table).get("tavily")
     assert rec and rec["transport"] == "package" and rec["auth"] == "env" and rec["status"] == "pending_approval"
@@ -191,9 +191,9 @@ async def test_a_remote_server_wins_over_its_package() -> None:
             "remotes": [{"type": "streamable-http", "url": "https://mcp.tavily.com/mcp"}],
         }
     }
-    net.get[_registry_url("tavily")] = {"servers": [both]}
+    net.get[_registry_url("tavily-search")] = {"servers": [both]}
     d, _ = _deps(net)
-    await add_connector_tool(d, _ctx()).handler({"query": "tavily"})
+    await add_connector_tool(d, _ctx()).handler({"query": "tavily-search"})
     [rec] = await ConnectorStore(d.ledger.table).list()
     assert rec["url"] == "https://mcp.tavily.com/mcp" and "transport" not in rec
 

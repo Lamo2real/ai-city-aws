@@ -18,7 +18,7 @@ import {
 } from "../lib/connect.ts";
 import { Banner, Button, Confirm, Loading, toast } from "./ui.tsx";
 
-function RolePicker(p: { value: Role[]; onChange: (r: Role[]) => void; legend: string }) {
+export function RolePicker(p: { value: Role[]; onChange: (r: Role[]) => void; legend: string }) {
   return (
     <fieldset className="roles">
       <legend>{p.legend}</legend>
@@ -36,7 +36,7 @@ function RolePicker(p: { value: Role[]; onChange: (r: Role[]) => void; legend: s
   );
 }
 
-function AddSkill(p: { onAdded: () => void; onCancel: () => void; replacing?: string }) {
+export function AddSkill(p: { onAdded: () => void; onCancel: () => void; replacing?: string }) {
   const [files, setFiles] = useState<SkillFile[] | null>(null);
   const [roles, setRoles] = useState<Role[]>([...ROLES]);
   const [name, setName] = useState(p.replacing ?? "");
