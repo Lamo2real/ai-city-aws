@@ -20,7 +20,7 @@ from .hierarchy.actions import FINAL, CityDeps, new_ticket, send
 from .ids import new_id
 from .ledger import Ledger, Record
 from .log import log
-from .sales_pipeline import followup_instructions
+from .sales_pipeline import followup_instructions, nurture_instructions
 from .support_desk import intake_instructions
 from .table import UpdateOptions
 
@@ -67,11 +67,11 @@ async def get_order(ledger: Ledger, id: str) -> Record | None:
     return _clean(r) if r else None
 
 
-async def add_order(ledger: Ledger, b: dict[str, Any]) -> Record:
+async def add_order(ledger: Ledger, b: dict[str, Any], id: str | None = None) -> Record:
     if len(await list_orders(ledger)) >= MAX_ORDERS:
         raise Invalid(f"There are already {MAX_ORDERS} standing orders. Stop one first.")
     rec: Record = {
-        "id": new_id("so"),
+        "id": id or new_id("so"),
         "source": _text(b.get("source"), "what to watch (a connector, channel or inbox)", 120),
         "instructions": _text(b.get("instructions"), "what to do with what is new", 2000),
         "department": " ".join(str(b.get("department") or "Customer Support").split())[:60],
@@ -162,7 +162,12 @@ def goal_text(order: Record, done: list[str], today: datetime | None = None) -> 
         "can't be reached (not connected, signed out), report that in one line and finish: don't ask anyone."
         + (intake_instructions(order["id"]) if _is_support(order) else "")
         + (followup_instructions(order["id"], today or datetime.now(UTC)) if _is_sales(order) else "")
+        + (nurture_instructions(order["id"], today or datetime.now(UTC)) if _dept_is(order, "marketing") else "")
     )
+
+
+def _dept_is(order: Record, name: str) -> bool:
+    return " ".join(str(order.get("department") or "").lower().split()) == name
 
 
 def _is_sales(order: Record) -> bool:

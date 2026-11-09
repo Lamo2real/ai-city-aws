@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from aic.mail.service import MailService
+from aic.shared import company
 from aic.shared import workflows as wf
 from aic.shared.apps import drafts_of_ticket, get_app
 from aic.shared.connectors import ConnectorStore
@@ -364,6 +365,14 @@ class AgentHost:
         return [str(c) for c in spec.get("connectors") or []]
 
     async def _system(self, agent: dict[str, Any], inv: dict[str, Any]) -> tuple[str, list[str]]:
+        body, builtins = await self._system_base(agent, inv)
+        if inv["role"] == "ace":
+            return body, builtins
+        # The owner's company brief (decision 136): every team member knows the business and who it hands work to.
+        brief = await company.get_brief(self.d.ledger)
+        return body + company.context(brief, inv["role"], inv.get("department")), builtins
+
+    async def _system_base(self, agent: dict[str, Any], inv: dict[str, Any]) -> tuple[str, list[str]]:
         role = inv["role"]
         if role == "ace":
             return load_prompt("ace.md").body, []

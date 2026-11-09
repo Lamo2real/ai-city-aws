@@ -5399,3 +5399,27 @@ button.hub-status {
   display: grid;
   gap: var(--s2);
 }
+
+/* Tickets between teams, Company (decisions 135–137) */
+.segmented button[aria-pressed="true"] {
+  background: var(--glass-3);
+  box-shadow: var(--glow);
+}
+.sd-high,
+.sd-urgent {
+  background: var(--warn-t);
+  color: var(--warn-l);
+}
+.sd-urgent {
+  background: var(--bad-t);
+  color: var(--bad-l);
+}
+.co-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin: var(--s3) 0 var(--s4);
+}
+.co-state {
+  font-weight: 700;
+}

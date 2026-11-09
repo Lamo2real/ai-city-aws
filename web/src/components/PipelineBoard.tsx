@@ -1,11 +1,12 @@
-// Sales pipeline (decision 133): the deals Sales keeps when the owner has no CRM, in Work (`#/tickets/deals`).
+// Sales pipeline (decisions 133 and 137): the leads Marketing nurtures and the deals Sales keeps when the owner has no CRM, in Work (`#/tickets/deals`).
 // Deals come from `GET /deals` (oldest contact first) when the tab opens; there is no live event. A 404 means the
 // backend is not deployed yet: the empty state, quietly.
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "../lib/api.ts";
 import { Banner, Button, Loading } from "./ui.tsx";
 
-export type DealStage = "lead" | "contacted" | "meeting" | "proposal" | "negotiation" | "won" | "lost";
+export type DealStage =
+  "lead" | "nurturing" | "qualified" | "contacted" | "meeting" | "proposal" | "negotiation" | "won" | "lost";
 export interface Deal {
   id: string;
   name: string;
@@ -13,6 +14,8 @@ export interface Deal {
   contact: string;
   email: string;
   stage: DealStage;
+  /** Whose it is: Marketing (lead, nurturing) or Sales. Older deals may lack it. */
+  team?: "Marketing" | "Sales";
   words: string;
   value: number | null;
   currency: string;
@@ -23,7 +26,8 @@ export interface Deal {
   updated_at: string;
 }
 
-const OPEN: DealStage[] = ["lead", "contacted", "meeting", "proposal", "negotiation"];
+const OPEN: DealStage[] = ["lead", "nurturing", "qualified", "contacted", "meeting", "proposal", "negotiation"];
+const teamOf = (d: Deal) => d.team ?? (d.stage === "lead" || d.stage === "nurturing" ? "Marketing" : "Sales");
 const isOpen = (d: Deal) => OPEN.includes(d.stage);
 const DAY = 86_400_000;
 
@@ -64,7 +68,9 @@ function Row({ d, stale, open }: { d: Deal; stale: number; open: () => void }) {
   return (
     <li>
       <button type="button" className="job pl-row" onClick={open}>
-        <span className="job-name">{who(d)}</span>
+        <span className="job-name">
+          {who(d)} <span className="mute pl-team">· {teamOf(d)}</span>
+        </span>
         <span className={`tag tag-${tone(d.stage)}`}>{d.words}</span>
         <span className="job-parts">
           {v ? <strong>{v}</strong> : null}
@@ -91,7 +97,8 @@ function DealDetail({ d, back }: { d: Deal; back: () => void }) {
       <h2 id="pl-title">{who(d)}</h2>
       <p>
         <span className={`tag tag-${tone(d.stage)}`}>{d.words}</span>
-        {v ? <> {v}</> : null}
+        {v ? <> {v}</> : null}{" "}
+        <span className="mute">· {teamOf(d) === "Marketing" ? "Marketing's lead" : "Sales' deal"}</span>
       </p>
       {d.company || d.email ? <p className="mute">{[d.company, d.email].filter(Boolean).join(" · ")}</p> : null}
       {d.next_step ? <p>Next: {d.next_step}</p> : null}
@@ -113,6 +120,7 @@ export function PipelineBoard() {
   const [data, setData] = useState<{ stale_days: number; deals: Deal[] } | null>(null);
   const [error, setError] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
+  const [team, setTeam] = useState<"all" | "Marketing" | "Sales">("all");
   const load = useCallback(async () => {
     setError(false);
     try {
@@ -130,8 +138,9 @@ export function PipelineBoard() {
 
   const current = open ? data?.deals.find((d) => d.id === open) : null;
   if (current) return <DealDetail d={current} back={() => setOpen(null)} />;
-  const live = data ? openDeals(data.deals) : [];
-  const closed = data ? data.deals.filter((d) => !isOpen(d)) : [];
+  const shown = data ? data.deals.filter((d) => team === "all" || teamOf(d) === team) : [];
+  const live = openDeals(shown);
+  const closed = shown.filter((d) => !isOpen(d));
   const stale = data?.stale_days ?? 7;
   return (
     <>
@@ -147,6 +156,22 @@ export function PipelineBoard() {
           (“Add a deal: Acme, 5,000, talked to Bo”) and ask it to “follow up on my sales pipeline every day”.
         </p>
       ) : null}
+      {data?.deals.length ? (
+        <div className="segmented" role="group" aria-label="Whose deals">
+          {(
+            [
+              ["all", "All"],
+              ["Marketing", "Marketing leads"],
+              ["Sales", "Sales deals"],
+            ] as const
+          ).map(([k, label]) => (
+            <button key={k} type="button" aria-pressed={team === k} onClick={() => setTeam(k)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {data?.deals.length && !shown.length ? <p className="empty">None of these yet.</p> : null}
       {live.length ? (
         <ul className="jobs">
           {live.map((d) => (

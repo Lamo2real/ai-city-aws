@@ -223,7 +223,7 @@ locals {
     "GET /departments", "POST /departments", "DELETE /departments/{id}", "GET /departments/presets", "GET /agents", "GET /workforce", "GET /costs", "GET /health", "GET /questions", "POST /questions/{id}/answer",
     "POST /questions/{id}/default", "POST /approvals/{id}", "GET /settings", "PUT /settings", "GET /chief-of-staff",
     # Autopilot (decision 125): while the owner is away.
-    "GET /away-summary", "GET /support-tickets", "GET /deals", "GET /standing-orders", "POST /standing-orders", "PUT /standing-orders/{id}", "DELETE /standing-orders/{id}",
+    "GET /away-summary", "GET /support-tickets", "GET /deals", "GET /company", "PUT /company", "DELETE /company", "GET /standing-orders", "POST /standing-orders", "PUT /standing-orders/{id}", "DELETE /standing-orders/{id}",
     # AI workflows (decision 126): the walkthrough's pages, its mode and Stop.
     "GET /workflows", "GET /workflows/runs/{id}", "POST /workflows/runs/{id}/step",
     "POST /workflows/runs/{id}/mode", "POST /workflows/runs/{id}/cancel",

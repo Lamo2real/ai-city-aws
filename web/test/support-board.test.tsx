@@ -1,4 +1,4 @@
-// Customer tickets (decision 131): the support desk's board in Work. Rows, the five steps, the detail, the empty
+// Tickets (decisions 131 and 135): the support desk's board in Work, customers' and between teams. Rows, the five steps, the detail, the empty
 // state, a 404 before the backend is deployed, and live `support.ticket` events.
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -46,7 +46,7 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 const list = (tickets: SupportTicket[]) => () => new Response(JSON.stringify({ board: "AI City tickets", tickets }));
-const EMPTY = /No customer tickets yet\. When Customer Support watches Slack/;
+const EMPTY = /No tickets yet\. Customer messages from Slack or your support inbox, and work one department hands/;
 
 describe("customer tickets", () => {
   it("says where a ticket came from in plain words", () => {
@@ -120,7 +120,7 @@ describe("customer tickets", () => {
     expect(screen.getByText("On Slack #support, in the customer's thread.")).toBeTruthy();
     expect(screen.getByText("Also in Jira as SUP-7")).toBeTruthy();
     expect(screen.getByText(/IT Infrastructure: Fixed\./)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /All customer tickets/ }));
+    fireEvent.click(screen.getByRole("button", { name: /All tickets/ }));
     expect(screen.queryByText("What the customer said")).toBeNull();
     expect(screen.getByText("Customer can't log in (error 500)")).toBeTruthy();
   });
@@ -156,5 +156,91 @@ describe("customer tickets", () => {
     // Other event types are ignored.
     act(() => support.event({ type: "workflow.updated", ticket: ticket({ id: "x", title: "Nope" }) }));
     expect(screen.queryByText("Nope")).toBeNull();
+  });
+
+  const handoff = (extra: Partial<SupportTicket> = {}) =>
+    ticket({
+      id: "st-0009",
+      kind: "handoff",
+      title: "Call back the qualified lead",
+      details: "Lead asked for a price.",
+      customer: "",
+      channel: "handoff",
+      where: "",
+      thread: "",
+      department: "Sales",
+      from_department: "Marketing",
+      chain: ["Marketing", "Sales"],
+      priority: "high",
+      ref: "deal-12",
+      status: "new",
+      words: "Filed",
+      tracker: "Jira",
+      tracker_key: "",
+      jira: true,
+      created_at: "2026-11-09T12:00:00Z",
+      ...extra,
+    });
+
+  it("shows tickets between teams with their own steps, priority and filter", async () => {
+    answer = list([
+      ticket(),
+      handoff(),
+      handoff({
+        id: "st-0010",
+        title: "Loop",
+        chain: ["Marketing", "Sales", "Marketing"],
+        department: "Marketing",
+        from_department: "Sales",
+        priority: "low",
+      }),
+    ]);
+    const { container } = render(<SupportBoard />);
+    await screen.findByText("Call back the qualified lead");
+    const row = screen.getByText("Call back the qualified lead").closest("button")!;
+    expect(row.textContent).toContain("Marketing → Sales");
+    expect(row.textContent).toContain("High priority");
+    expect([...row.querySelectorAll("li")].map((l) => l.textContent)).toEqual([
+      "Filed",
+      "With Sales",
+      "Done",
+      "Back with Marketing",
+      "Closed",
+    ]);
+    const loop = screen.getByText("Loop").closest("button")!;
+    expect(loop.textContent).toContain("Marketing → Sales → Marketing");
+    expect(loop.textContent).not.toContain("priority");
+    // An old ticket without kind is a customer's.
+    expect(screen.getByText("Customer can't log in (error 500)").closest("button")!.textContent).toContain("Received");
+
+    fireEvent.click(screen.getByRole("button", { name: "Between teams" }));
+    expect([...container.querySelectorAll(".job-name")].map((n) => n.textContent)).toEqual([
+      "Call back the qualified lead",
+      "Loop",
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "From customers" }));
+    expect([...container.querySelectorAll(".job-name")].map((n) => n.textContent)).toEqual([
+      "Customer can't log in (error 500)",
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    expect(container.querySelectorAll(".job-name").length).toBe(3);
+  });
+
+  it("a handoff's detail shows who asked, the chain, the ref and the Jira issue", async () => {
+    answer = list([handoff()]);
+    render(<SupportBoard />);
+    fireEvent.click(await screen.findByText("Call back the qualified lead"));
+    expect(screen.getByText("What Marketing asked for")).toBeTruthy();
+    expect(screen.getByText("Passed through: Marketing → Sales")).toBeTruthy();
+    expect(screen.getByText("About: deal-12")).toBeTruthy();
+    expect(screen.getByText("Jira issue being created")).toBeTruthy();
+    expect(screen.queryByText("Where the reply goes")).toBeNull();
+    act(() =>
+      support.event({
+        type: "support.ticket",
+        ticket: handoff({ tracker_key: "SHOP-1", updated_at: "2026-11-09T13:00:00Z" }),
+      }),
+    );
+    expect(screen.getByText("Also in Jira as SHOP-1")).toBeTruthy();
   });
 });

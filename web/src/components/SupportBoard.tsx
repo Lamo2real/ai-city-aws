@@ -1,6 +1,7 @@
-// Customer tickets (decision 131): the support desk's board in Work (`#/tickets/customers`). Each customer issue
+// Tickets (decisions 131 and 135): the support desk's board in Work (`#/tickets/customers`). Each customer issue
 // Customer Support picks up from Slack, the support inbox or chat, who it went to, when it was fixed and when the
-// customer was told. Tickets come from `GET /support-tickets` and stay current through `support.ticket` events.
+// customer was told; and each piece of work one department hands to another (kind "handoff"), back to the team
+// that asked. Tickets come from `GET /support-tickets` and stay current through `support.ticket` events.
 // A 404 means the backend is not deployed yet: the empty state, quietly.
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { api, ApiError } from "../lib/api.ts";
@@ -15,7 +16,7 @@ export interface SupportTicket {
   title: string;
   details: string;
   customer: string;
-  channel: "slack" | "email" | "chat" | "phone" | "other";
+  channel: "slack" | "email" | "chat" | "phone" | "other" | "handoff";
   where: string;
   thread: string;
   department: string;
@@ -29,7 +30,16 @@ export interface SupportTicket {
   reply_job: string;
   created_at: string;
   updated_at: string;
+  /** Missing on old tickets: a customer ticket. */
+  kind?: "customer" | "handoff";
+  from_department?: string;
+  priority?: "low" | "normal" | "high" | "urgent";
+  ref?: string;
+  parent?: string;
+  chain?: string[];
+  jira?: boolean;
 }
+export const isHandoff = (t: Pick<SupportTicket, "kind">) => t.kind === "handoff";
 
 interface State {
   tickets: Record<string, SupportTicket>;
@@ -86,8 +96,12 @@ export function sortTickets(list: SupportTicket[]): SupportTicket[] {
   );
 }
 
-/** "Acme, on Slack #support" / "bo@example.com, by email". */
-export function fromWords(t: Pick<SupportTicket, "customer" | "channel" | "where">): string {
+/** "Acme, on Slack #support" / "bo@example.com, by email" / "Marketing → Sales". */
+export function fromWords(
+  t: Pick<SupportTicket, "customer" | "channel" | "where" | "kind" | "chain" | "from_department" | "department">,
+): string {
+  if (isHandoff(t))
+    return (t.chain && t.chain.length > 1 ? t.chain : [t.from_department || "A team", t.department]).join(" → ");
   const who = t.customer || "A customer";
   if (t.channel === "slack") return `${who}, on Slack${t.where ? ` ${t.where}` : ""}`;
   if (t.channel === "email") return `${who}, by email`;
@@ -114,7 +128,10 @@ const tone = (s: SupportStatus) =>
   s === "closed" || s === "fixed" ? "done" : s === "stuck" ? "failed" : s === "new" ? "new" : "in_progress";
 
 function Steps({ t }: { t: SupportTicket }) {
-  const names = ["Received", `With ${t.department || "the team"}`, "Fixed", "Telling the customer", "Customer told"];
+  const team = `With ${t.department || "the team"}`;
+  const names = isHandoff(t)
+    ? ["Filed", team, "Done", `Back with ${t.from_department || "the team that asked"}`, "Closed"]
+    : ["Received", team, "Fixed", "Telling the customer", "Customer told"];
   const n = reached(t);
   return (
     <span className="sd-steps">
@@ -130,23 +147,33 @@ function Steps({ t }: { t: SupportTicket }) {
   );
 }
 
+function Priority({ t }: { t: SupportTicket }) {
+  return t.priority === "high" || t.priority === "urgent" ? (
+    <span className={`tag sd-${t.priority}`}>{t.priority === "urgent" ? "Urgent" : "High priority"}</span>
+  ) : null;
+}
+
+function trackerWords(t: SupportTicket): string | null {
+  if (!t.tracker || t.tracker === "AI City tickets") return null;
+  if (!t.tracker_key) return `${t.tracker} issue being created`;
+  return `Also in ${t.tracker} as ${t.tracker_key}`;
+}
+
 const when = (iso: string) => new Date(iso).toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" });
 
 function SupportDetail({ t, back }: { t: SupportTicket; back: () => void }) {
   return (
     <section className="sd-detail" aria-labelledby="sd-title">
       <Button variant="quiet" onClick={back}>
-        ← All customer tickets
+        ← All tickets
       </Button>
       <h2 id="sd-title">{t.title}</h2>
       <p>
-        <span className={`tag tag-${tone(t.status)}`}>{t.words}</span>{" "}
-        <span className="mute">
-          {fromWords(t)} · {t.department}
-        </span>
+        <span className={`tag tag-${tone(t.status)}`}>{t.words}</span> <Priority t={t} />{" "}
+        <span className="mute">{isHandoff(t) ? fromWords(t) : `${fromWords(t)} · ${t.department}`}</span>
       </p>
       <Steps t={t} />
-      <h3>What the customer said</h3>
+      <h3>{isHandoff(t) ? `What ${t.from_department || "the team"} asked for` : "What the customer said"}</h3>
       <p className="sd-words">{t.details}</p>
       {t.resolution ? (
         <>
@@ -154,13 +181,15 @@ function SupportDetail({ t, back }: { t: SupportTicket; back: () => void }) {
           <p className="result">{t.resolution}</p>
         </>
       ) : null}
-      <h3>Where the reply goes</h3>
-      <p>{replyWords(t)}</p>
-      {t.tracker && t.tracker !== "AI City tickets" ? (
-        <p className="mute">
-          Also in {t.tracker} as {t.tracker_key}
-        </p>
-      ) : null}
+      {isHandoff(t) ? null : (
+        <>
+          <h3>Where the reply goes</h3>
+          <p>{replyWords(t)}</p>
+        </>
+      )}
+      {t.chain && t.chain.length > 1 ? <p className="mute">Passed through: {t.chain.join(" → ")}</p> : null}
+      {t.ref ? <p className="mute">About: {t.ref}</p> : null}
+      {trackerWords(t) ? <p className="mute">{trackerWords(t)}</p> : null}
       <h3>What happened</h3>
       <ol className="history">
         {t.history.map((h, i) => (
@@ -173,10 +202,18 @@ function SupportDetail({ t, back }: { t: SupportTicket; back: () => void }) {
   );
 }
 
-/** The "Customer tickets" tab in Work. */
+type Filter = "all" | "customer" | "handoff";
+const FILTERS: Array<[Filter, string]> = [
+  ["all", "All"],
+  ["customer", "From customers"],
+  ["handoff", "Between teams"],
+];
+
+/** The "Tickets" tab in Work. */
 export function SupportBoard() {
   const s = useSyncExternalStore(support.subscribe, support.get);
   const [open, setOpen] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Filter>("all");
   useEffect(() => {
     void support.load();
     const off = live.onEvent((e) => support.event(e));
@@ -184,24 +221,34 @@ export function SupportBoard() {
       off();
     };
   }, []);
-  const list = sortTickets(Object.values(s.tickets));
+  const all = sortTickets(Object.values(s.tickets));
+  const list = filter === "all" ? all : all.filter((t) => (filter === "handoff") === isHandoff(t));
   const current = open ? s.tickets[open] : null;
   if (current) return <SupportDetail t={current} back={() => setOpen(null)} />;
   return (
     <>
       {s.error ? (
         <Banner tone="bad" action={{ label: "Try again", onClick: () => void support.load() }}>
-          Customer tickets did not load. Check the connection.
+          Tickets did not load. Check the connection.
         </Banner>
       ) : null}
-      {!s.loaded && !list.length ? <Loading what="customer tickets" /> : null}
-      {s.loaded && !s.error && !list.length ? (
+      {all.length ? (
+        <div className="segmented sd-filter" role="group" aria-label="Which tickets">
+          {FILTERS.map(([f, label]) => (
+            <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {!s.loaded && !all.length ? <Loading what="tickets" /> : null}
+      {s.loaded && !s.error && !all.length ? (
         <p className="empty">
-          No customer tickets yet. When Customer Support watches Slack or your support inbox, every issue shows here:
-          who it went to, when it was fixed and when the customer was told. Ask AIC: “While I'm away, handle customer
-          support from Slack #support.”
+          No tickets yet. Customer messages from Slack or your support inbox, and work one department hands to another,
+          show here with every step. Ask AIC: “We're an online shop like Zalando; run it.”
         </p>
       ) : null}
+      {all.length && !list.length ? <p className="empty">None of these yet.</p> : null}
       <ul className="jobs">
         {list.map((t) => (
           <li key={t.id}>
@@ -209,7 +256,7 @@ export function SupportBoard() {
               <span className="job-name">{t.title}</span>
               <span className={`tag tag-${tone(t.status)}`}>{t.words}</span>
               <span className="job-parts mute">
-                {fromWords(t)} · {t.department}
+                {isHandoff(t) ? fromWords(t) : `${fromWords(t)} · ${t.department}`} <Priority t={t} />
               </span>
               <span className="job-time mute">{ago(Date.parse(t.updated_at))}</span>
               <Steps t={t} />

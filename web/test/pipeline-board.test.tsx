@@ -1,4 +1,4 @@
-// Sales pipeline (decision 133): open deals by stage, stale ones flagged for a follow-up, won and lost under
+// Sales pipeline (decisions 133 and 137): open deals by stage, stale ones flagged for a follow-up, won and lost under
 // "Closed", the detail, the empty state and a quiet 404 before the backend is deployed.
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -86,7 +86,12 @@ describe("sales pipeline", () => {
     const { container } = render(<PipelineBoard />);
     await screen.findByText("Fresh lead (Bo)");
     const names = [...container.querySelectorAll(".job-name")].map((n) => n.textContent);
-    expect(names).toEqual(["Fresh lead (Bo)", "Old proposal (Bo)", "Won one", "Lost one (Bo)"]);
+    expect(names).toEqual([
+      "Fresh lead (Bo) · Marketing",
+      "Old proposal (Bo) · Sales",
+      "Won one · Sales",
+      "Lost one (Bo) · Sales",
+    ]);
     expect(screen.getByRole("heading", { name: "Closed" })).toBeTruthy();
     // Value shown when there is one; next step on every row.
     expect(screen.getByText("Old proposal (Bo)").closest("button")!.textContent).toContain("$5,000");
@@ -123,5 +128,24 @@ describe("sales pipeline", () => {
     fireEvent.click(screen.getByRole("button", { name: /All deals/ }));
     expect(screen.queryByText("What happened")).toBeNull();
     expect(screen.getByText("Acme (Bo)")).toBeTruthy();
+  });
+
+  it("shows the team on each row and filters Marketing leads from Sales deals", async () => {
+    answer = list([
+      deal({ id: "m", name: "Nurtured", stage: "nurturing", words: "Being nurtured", team: "Marketing" }),
+      deal({ id: "q", name: "Qualified", stage: "qualified", words: "Qualified for Sales", team: "Sales" }),
+      deal({ id: "n", name: "Negotiating", stage: "negotiation", words: "Negotiating", team: "Sales" }),
+    ]);
+    const { container } = render(<PipelineBoard />);
+    await screen.findByText("Being nurtured");
+    const names = () => [...container.querySelectorAll(".job-name")].map((n) => n.textContent);
+    expect(names()).toEqual(["Nurtured (Bo) · Marketing", "Qualified (Bo) · Sales", "Negotiating (Bo) · Sales"]);
+    expect(screen.getByText("Qualified for Sales")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Marketing leads" }));
+    expect(names()).toEqual(["Nurtured (Bo) · Marketing"]);
+    fireEvent.click(screen.getByRole("button", { name: "Sales deals" }));
+    expect(names()).toEqual(["Qualified (Bo) · Sales", "Negotiating (Bo) · Sales"]);
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    expect(names().length).toBe(3);
   });
 });

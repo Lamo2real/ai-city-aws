@@ -1,5 +1,6 @@
 // Tickets, Costs and Settings. Plain words in the main view; technical details behind "Details".
 import { AwaySettings } from "./Away.tsx";
+import { CompanySettings } from "./CompanySettings.tsx";
 import { DecidedList } from "./ChiefOfStaff.tsx";
 import { ConnectorsSettings } from "./ConnectorsSettings.tsx";
 import { Inbox } from "./Inbox.tsx";
@@ -74,7 +75,7 @@ interface Job {
 }
 /**
  * Work: the owner's jobs, one row each (name, what is happening, parts done, when). Details are a tap away.
- * "Decided for you" (`#/tickets/decided`) lists what the Chief of Staff decided; "Customer tickets"
+ * "Decided for you" (`#/tickets/decided`) lists what the Chief of Staff decided; "Tickets"
  * (`#/tickets/customers`) is the support desk's board; "Sales pipeline" (`#/tickets/deals`) lists the deals.
  */
 export function Tickets({ page = null }: { page?: string | null }) {
@@ -104,7 +105,7 @@ export function Tickets({ page = null }: { page?: string | null }) {
           Decided for you
         </button>
         <button role="tab" aria-selected={which === "customers"} onClick={() => setWhich("customers")}>
-          Customer tickets
+          Tickets
         </button>
         <button role="tab" aria-selected={which === "deals"} onClick={() => setWhich("deals")}>
           Sales pipeline
@@ -372,6 +373,7 @@ type S = Record<string, unknown> & {
 };
 /** Settings is a menu of pages, each at its own address (`#/settings/<page>`), like a phone's Settings app. */
 export const SETTINGS_PAGES = [
+  { id: "company", title: "Company", about: "What your business is, and what runs on its own while you're away" },
   {
     id: "away",
     title: "While I'm away",
@@ -581,6 +583,7 @@ function SettingsPageView({
         </>
       ) : null}
       {page === "away" ? <AwaySettings /> : null}
+      {page === "company" ? <CompanySettings /> : null}
       {page === "departments" ? (
         <>
           <YourDepartments />

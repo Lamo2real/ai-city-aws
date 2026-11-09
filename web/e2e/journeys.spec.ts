@@ -1322,6 +1322,7 @@ test("Settings is a menu of pages, each with its own address and a way back; App
   await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
   const menu = page.getByRole("navigation", { name: "Settings pages" });
   await expect(menu.getByRole("link")).toHaveText([
+    /^Company/,
     /^While I'm away/,
     /^General/,
     /^Departments & tools/,

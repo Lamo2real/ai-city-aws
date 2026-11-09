@@ -190,7 +190,7 @@ async def test_standing_order_routes_add_list_change_and_remove() -> None:
 
 async def test_aic_sets_up_lists_and_stops_a_standing_order() -> None:
     d = city_deps()
-    ace = TurnCtx(agent_id="ace", role="ace", department=None, ticket_id="", task_id="")
+    ace = TurnCtx(agent_id="ace", role="ace", department=None, ticket_id="", task_id="", from_owner=True)
     out = await tool(d, ace, "add_standing_order")(
         {"source": "Slack #support", "instructions": "Reply to new support messages."}
     )

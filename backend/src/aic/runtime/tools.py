@@ -16,6 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from aic.shared import company
 from aic.shared import sales_pipeline as deals
 from aic.shared import standing_orders as standing
 from aic.shared import support_desk as desk
@@ -1685,10 +1686,11 @@ def tools_for(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         [
             *_ace_knowledge_tools(d),
             _calendar_agenda_tool(d),
-            *_standing_order_tools(d),
+            *_standing_order_tools(d, c),
             *workflow_tools(d, c),
             _customer_tickets_tool(d),
             *_deal_tools(d, c),
+            *_company_tools(d, c),
         ]
         if c.role == "ace"
         else [_record_handled_tool(d, c), ask_taste_tool(d, c), *_support_desk_tools(d, c), *_deal_tools(d, c)]
@@ -1699,8 +1701,13 @@ def tools_for(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
 
 
 # ---------- standing orders (decision 125) ----------
-def _standing_order_tools(d: CityDeps) -> list[ToolSpec]:
+def _standing_order_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
     async def add(a: dict[str, Any]) -> str:
+        if not c.from_owner:  # decision 138: a schedule exists only because the owner asked for it
+            return (
+                "Only the owner's own message can start this (decision 138): nothing in the city starts work by itself. "
+                "Tell the owner what you'd set up and wait for them to say so."
+            )
         try:
             o = await standing.add_order(d.ledger, a)
         except standing.Invalid as e:
@@ -1767,6 +1774,56 @@ def _record_handled_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
     )
 
 
+# ---------- the company brief (decision 136) ----------
+def _company_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
+    async def set_(a: dict[str, Any]) -> str:
+        if not c.from_owner:  # decision 138: only the owner switches the business on or off
+            return (
+                "Only the owner's own message can start this (decision 138): nothing in the city starts work by itself. "
+                "Tell the owner what you'd set up and wait for them to say so."
+            )
+        try:
+            b = await company.set_brief(d.ledger, a)
+        except company.Invalid as e:
+            return str(e)
+        if not b["running"]:
+            return "Saved. The business isn't being run on its own: the support, marketing and sales rounds are off."
+        return (
+            "Saved, and the business runs on its own now: Customer Support watches "
+            f"{b['support_source'] or 'Slack and the support inbox'} every 15 minutes, Marketing nurtures leads and "
+            "hands qualified ones to Sales every day, Sales follows up on its pipeline every day, and every "
+            "department knows the business and who it hands work to. It's in Settings → Company."
+        )
+
+    async def show(_: dict[str, Any]) -> str:
+        b = await company.get_brief(d.ledger)
+        if not b:
+            return "No company brief yet."
+        orders = await company.operating_orders(d.ledger)
+        on = ", ".join(f"{o['department']} ({'on' if o.get('enabled') else 'off'})" for o in orders) or "none"
+        return f"The business: {b['text']}\nRunning on its own: {'yes' if b['running'] else 'no'}. Rounds: {on}."
+
+    return [
+        ToolSpec(
+            "set_company_brief",
+            "Only on the owner's own message. The owner says what the business is (\"we're an online fashion "
+            'store like Zalando"). text: the business in their words, one or two sentences; support_source: where '
+            'customers write ("Slack #support", "support@shop.com"), if they said; running: true only when they '
+            'said to run it ("run it", "run my business"), false when they say to stop. While it runs, every '
+            "department knows the business and the support, marketing and sales rounds run while they're away; "
+            "off (the default), nothing runs on its own.",
+            _obj(
+                {"text": _s(), "support_source": _s(), "running": {"type": "boolean"}},
+                ("text", "support_source", "running"),
+            ),
+            set_,
+        ),
+        ToolSpec(
+            "company_brief", "What the owner said the business is, and whether it is run on its own.", _obj({}), show
+        ),
+    ]
+
+
 # ---------- the support desk (decision 131) ----------
 def _ticket_line(t: dict[str, Any]) -> str:
     return (
@@ -1805,8 +1862,29 @@ def _support_desk_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         )
 
     async def note(a: dict[str, Any]) -> str:
-        t = await desk.add_note(d, str(a.get("ticket") or ""), str(a.get("text") or ""), who)
+        t = await desk.add_note(
+            d, str(a.get("ticket") or ""), str(a.get("text") or ""), who, str(a.get("tracker_key") or "")
+        )
         return "Noted." if t else "There is no ticket with that id."
+
+    async def handoff(a: dict[str, Any]) -> str:
+        # The handoff belongs to the work it came from (decision 138): its round, if a standing order started it.
+        task = await d.ledger.get_ticket(c.task_id) if c.task_id else None
+        origin = str((task or {}).get("standing_order") or "")
+        try:
+            t = await desk.file_handoff(d, {**a, "order_id": origin or None}, c.department or "", who)
+        except desk.Invalid as e:
+            return str(e)
+        return (
+            f"Filed {t['id']} for {t['department']}"
+            + (
+                " (mirror it in Jira: the receiving team creates or updates the issue)"
+                if t["tracker"] == "Jira"
+                else ""
+            )
+            + f". The desk sends it to them; when it's done the result comes back to {t['from_department']} as a "
+            "new job. Carry on with what you can meanwhile; don't wait."
+        )
 
     async def fixed(a: dict[str, Any]) -> str:
         t = await desk.mark_fixed(d, str(a.get("ticket") or ""), str(a.get("summary") or ""), who)
@@ -1844,8 +1922,9 @@ def _support_desk_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         ),
         ToolSpec(
             "ticket_note",
-            "Add one line of progress to a customer ticket (by its id).",
-            _obj({"ticket": ticket, "text": _s(1)}),
+            "Add one line of progress to a customer ticket or handoff (by its id). tracker_key: the Jira issue key "
+            "when you just created the issue.",
+            _obj({"ticket": ticket, "text": _s(1), "tracker_key": _s()}, ("tracker_key",)),
             note,
         ),
         ToolSpec(
@@ -1862,6 +1941,34 @@ def _support_desk_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             replied,
         ),
         _customer_tickets_tool(d),
+        *(
+            [
+                ToolSpec(
+                    "file_handoff",
+                    "Managers only: hand work to another department (decision 135), e.g. Customer Support → "
+                    "Application for a site error, Marketing → Sales for a qualified lead, Sales → Finance for an "
+                    "invoice. to_department; title; details (everything they need); priority (low, normal, high, "
+                    "urgent); ref (the deal, order or CRM record it is about); reply_to (the ticket or handoff id "
+                    "you are working on, so the chain is kept); tracker_key (if you already filed it in Jira). The "
+                    "receiving manager assigns a worker; the result comes back to you as a new job.",
+                    _obj(
+                        {
+                            "to_department": _s(2),
+                            "title": _s(3),
+                            "details": _s(),
+                            "priority": _s(),
+                            "ref": _s(),
+                            "reply_to": _s(),
+                            "tracker_key": _s(),
+                        },
+                        ("details", "priority", "ref", "reply_to", "tracker_key"),
+                    ),
+                    handoff,
+                )
+            ]
+            if c.role == "manager"
+            else []
+        ),
     ]
 
 
@@ -1879,7 +1986,9 @@ def _deal_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
 
     async def listing(a: dict[str, Any]) -> str:
         stale = a.get("stale_days")
-        rows = await deals.list_deals(d.ledger, int(stale) if stale is not None else None, a.get("stage") or None)
+        rows = await deals.list_deals(
+            d.ledger, int(stale) if stale is not None else None, a.get("stage") or None, a.get("team") or None
+        )
         return "\n".join(_deal_line(x) for x in rows[:50]) or "No deals on the board."
 
     async def add(a: dict[str, Any]) -> str:
@@ -1901,9 +2010,13 @@ def _deal_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
     return [
         ToolSpec(
             "list_deals",
-            "AI City's own sales pipeline (used when no CRM is connected). stale_days: only open deals with no "
-            "contact for that many days; stage: open, lead, contacted, meeting, proposal, negotiation, won or lost.",
-            _obj({"stale_days": {"type": "integer", "minimum": 0}, "stage": _s()}, ("stale_days", "stage")),
+            "AI City's own pipeline, shared by Marketing and Sales (used when no CRM is connected). stale_days: only "
+            "open deals with no contact for that many days; stage: open, lead, nurturing, qualified, contacted, "
+            "meeting, proposal, negotiation, won or lost; team: Marketing (leads) or Sales (opportunities).",
+            _obj(
+                {"stale_days": {"type": "integer", "minimum": 0}, "stage": _s(), "team": _s()},
+                ("stale_days", "stage", "team"),
+            ),
             listing,
         ),
         ToolSpec(
