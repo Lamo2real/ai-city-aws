@@ -40,6 +40,8 @@ export type KnowledgeKind = "text" | "document" | "image" | "audio" | "video" | 
 export type KnowledgeStatus = "uploading" | "processing" | "ready" | "failed" | "unsupported";
 export interface KnowledgeItem {
   id: string;
+  /** The built-in AI City guide: always there, read-only (no scope, place, delete). */
+  builtin?: boolean;
   kind: KnowledgeKind;
   title: string;
   scope: Scope;

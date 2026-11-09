@@ -25,7 +25,6 @@ from aic.shared import support_desk as desk
 from aic.shared.app_activity import app_activity
 from aic.shared.app_bridge import Invoke, api_bridge, file_proposal, run_proposal
 from aic.shared.app_caps import Invalid, MailProposals, proposals_from_env
-from aic.shared.app_guide import ensure_guide_in_knowledge
 from aic.shared.apps import (
     AppsOrigin,
     get_app,
@@ -51,6 +50,7 @@ from aic.shared.hierarchy.factory import Factory
 from aic.shared.hierarchy.queue import Queue, WorkMessage
 from aic.shared.hierarchy.tasks import DONE_OR_GONE, cancel_task, job_rows
 from aic.shared.ids import department_key, new_id
+from aic.shared.knowledge.builtin import ensure_builtin_guide, remove_legacy_copies
 from aic.shared.knowledge.service import KnowledgeError, KnowledgeService, NotFound
 from aic.shared.knowledge.wiring import knowledge_from_env
 from aic.shared.ledger import Ledger, Record
@@ -341,7 +341,8 @@ async def city_snapshot(d: ApiDeps) -> dict[str, Any]:
             log("info", "departments.seeded", names=json.dumps(made))
     except Exception as e:  # the City still loads; the next snapshot tries again
         log("warn", "departments.seed_failed", error=type(e).__name__)
-    await ensure_guide_in_knowledge(d.ledger.table, d.knowledge)  # the AI City guide, in the Knowledge base
+    if d.knowledge is not None:  # the built-in AI City guide, indexed in the Knowledge base
+        await ensure_builtin_guide(d.knowledge.store, d.knowledge.blobs, d.knowledge.kb)
     results: list[Any] = await asyncio.gather(
         d.ledger.list_agents(),
         d.ledger.list_departments(),
@@ -1069,6 +1070,8 @@ async def _knowledge(event: dict[str, Any], method: str, path: str, d: ApiDeps) 
     item_id = path.rsplit("/", maxsplit=1)[-1] if re.fullmatch(rf"/knowledge/{_ITEM}", path) else ""
     try:
         if is_("GET", r"/knowledge"):
+            await ensure_builtin_guide(k.store, k.blobs, k.kb)  # the built-in guide, and how far its indexing is
+            await remove_legacy_copies(k)
             return reply(200, await k.list())
         if is_("GET", rf"/knowledge/{_ITEM}"):
             return reply(200, await k.get(item_id))

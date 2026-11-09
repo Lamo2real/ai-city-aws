@@ -129,7 +129,9 @@ async def test_list_get_scope_change_and_delete() -> None:
     await w.store.update_item(a["id"], {"normalized_keys": [key], "ingest_uris": [uri]})
     await w.kb.ingest([(uri, {"item_id": a["id"], "scope": "always", "kind": "text"})])
     listed = js(await handle_http(ev("GET", "/knowledge"), d))
-    assert [i["id"] for i in listed["items"]] == [b["id"], a["id"]]
+    # The built-in AI City guide is always there too (read-only, first added when Knowledge opens).
+    assert [i["id"] for i in listed["items"] if not i.get("builtin")] == [b["id"], a["id"]]
+    assert any(i.get("builtin") for i in listed["items"])
     assert listed["always_tokens"] == 100 and listed["always_budget"] == 8000
     one = js(await handle_http(ev("GET", f"/knowledge/{a['id']}"), d))
     assert one["entities"] == [{"name": "Ada", "type": "person"}]
@@ -157,7 +159,8 @@ async def test_list_get_scope_change_and_delete() -> None:
 
     r = await handle_http(ev("DELETE", f"/knowledge/{a['id']}"), d)
     assert js(r) == {"ok": True}
-    assert w.kb.docs == {} and a["id"] not in w.graph.items
+    assert list(w.kb.docs) == [f"s3://{w.blobs.bucket}/normalized/builtin/ai-city-guide.pdf"]  # only the guide
+    assert a["id"] not in w.graph.items
     assert not [k for k in w.blobs.objects if a["id"] in k]
     assert not [k for k in w.table.items if a["id"] in k[0] or a["id"] in k[1]]
 

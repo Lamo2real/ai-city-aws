@@ -249,6 +249,8 @@ class KnowledgeService:
 
     async def update(self, item_id: str, b: dict[str, Any]) -> dict[str, Any]:
         item = await self._get(item_id)
+        if item.get("builtin"):
+            raise KnowledgeError("The AI City guide is built in: it can't be changed or deleted.")
         patch: dict[str, Any] = {}
         if b.get("title") is not None:
             patch["title"] = check_title(b["title"])
@@ -288,6 +290,8 @@ class KnowledgeService:
     async def delete(self, item_id: str) -> None:
         """KB documents first (so a busy KB leaves everything as it was), then files, graph and record."""
         item = await self._get(item_id)
+        if item.get("builtin"):
+            raise KnowledgeError("The AI City guide is built in: it can't be changed or deleted.")
         uris = list(item.get("ingest_uris") or [])
         if uris and self.kb:
             try:

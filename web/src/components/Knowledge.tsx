@@ -283,12 +283,14 @@ export function KnowledgeScreen() {
                     {item.superseded_by ? (
                       <span className="tag tag-old">{`Older: ${yearOf(item.superseded_by) ?? "a newer year"} replaces it`}</span>
                     ) : null}
+                    {item.builtin ? <span className="tag tag-builtin">Built in</span> : null}
                     <span className={`tag tag-${statusTone(item, local)}`} role="status">
                       {statusWords(item, s.progress[item.id], local)}
                     </span>
                   </div>
                   {item.warning ? <p className="mute">{item.warning}</p> : null}
-                  {item.status === "ready" || item.meta_source ? (
+                  {item.builtin && item.summary ? <p className="mute">{item.summary}</p> : null}
+                  {!item.builtin && (item.status === "ready" || item.meta_source) ? (
                     <p className="kplace">
                       <span>
                         {facts.length ? facts.join(" · ") : "Not tied to a country"}
@@ -308,26 +310,28 @@ export function KnowledgeScreen() {
                   {editing === item.id ? (
                     <PlaceEditor item={item} onDone={() => setEditing(null)} onError={setError} />
                   ) : null}
-                  <div className="kitem-actions">
-                    <fieldset className="scope">
-                      <legend className="sr-only">{`How the agents use “${item.title}”`}</legend>
-                      {SCOPES.map((o) => (
-                        <label key={o.value} className={item.scope === o.value ? "on" : undefined}>
-                          <input
-                            type="radio"
-                            name={`scope-${item.id}`}
-                            value={o.value}
-                            checked={item.scope === o.value}
-                            onChange={() => void choose(item, o.value)}
-                          />
-                          {o.label}
-                        </label>
-                      ))}
-                    </fieldset>
-                    <Button variant="quiet" onClick={() => setConfirming(item)} label={`Delete “${item.title}”`}>
-                      Delete
-                    </Button>
-                  </div>
+                  {item.builtin ? null : (
+                    <div className="kitem-actions">
+                      <fieldset className="scope">
+                        <legend className="sr-only">{`How the agents use “${item.title}”`}</legend>
+                        {SCOPES.map((o) => (
+                          <label key={o.value} className={item.scope === o.value ? "on" : undefined}>
+                            <input
+                              type="radio"
+                              name={`scope-${item.id}`}
+                              value={o.value}
+                              checked={item.scope === o.value}
+                              onChange={() => void choose(item, o.value)}
+                            />
+                            {o.label}
+                          </label>
+                        ))}
+                      </fieldset>
+                      <Button variant="quiet" onClick={() => setConfirming(item)} label={`Delete “${item.title}”`}>
+                        Delete
+                      </Button>
+                    </div>
+                  )}
                 </li>
               );
             })}

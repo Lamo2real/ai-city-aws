@@ -327,6 +327,8 @@ export function filterChoices(items: KnowledgeItem[]) {
 export function groupKnowledge(items: KnowledgeItem[]): KnowledgeGroup[] {
   const reading: KnowledgeItem[] = [];
   const loose: KnowledgeItem[] = [];
+  const builtIn = items.filter((i) => i.builtin);
+  items = items.filter((i) => !i.builtin);
   const groups = new Map<string, KnowledgeGroup & { sort: [string, string, number] }>();
   for (const i of items) {
     if (!placed(i)) {
@@ -347,6 +349,7 @@ export function groupKnowledge(items: KnowledgeItem[]): KnowledgeGroup[] {
     (a, b) => a.sort[0].localeCompare(b.sort[0]) || a.sort[1].localeCompare(b.sort[1]) || a.sort[2] - b.sort[2],
   );
   const out: KnowledgeGroup[] = [];
+  if (builtIn.length) out.push({ key: "builtin", label: "Built in", items: builtIn }); // always first
   if (reading.length) out.push({ key: "reading", label: "Being read now", items: reading });
   out.push(...sorted.map(({ key, label, items: xs }) => ({ key, label, items: xs })));
   if (loose.length) out.push({ key: "loose", label: "Not tied to a country", items: loose });

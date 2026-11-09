@@ -2,11 +2,9 @@
 
 import re
 from pathlib import Path
-from typing import Any
 
 from aic.runtime.prompts import load_prompt
-from aic.shared.app_guide import FLAG, TITLE, app_guide, ensure_guide_in_knowledge, guide_hash
-from test_api import make
+from aic.shared.app_guide import app_guide
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -33,57 +31,8 @@ def test_aic_carries_the_guide_and_answers_from_it_at_once() -> None:
     assert "never invent a button or a page" in ace
 
 
-class Knowledge:
-    def __init__(self) -> None:
-        self.added: list[tuple[str, str]] = []
-        self.deleted: list[str] = []
-
-    async def add_text(self, text: str, title: str, scope: Any = None) -> dict[str, Any]:
-        self.added.append((title, text))
-        return {"id": f"kn-{len(self.added)}"}
-
-    async def delete(self, item_id: str) -> None:
-        self.deleted.append(item_id)
-
-    status = "ready"
-
-    async def list(self) -> dict[str, Any]:
-        items = [{"id": f"kn-{i + 1}", "title": t} for i, (t, _) in enumerate(self.added)]
-        return {"items": [i for i in items if i["id"] not in self.deleted]}
-
-    async def get(self, item_id: str) -> dict[str, Any]:
-        return {"id": item_id, "status": self.status}
-
-
-async def test_the_guide_is_added_to_knowledge_once_and_replaced_when_it_changes(monkeypatch: Any) -> None:
-    d = make()
-    k = Knowledge()
-    assert await ensure_guide_in_knowledge(d.ledger.table, k) is True
-    assert await ensure_guide_in_knowledge(d.ledger.table, k) is False  # same guide: nothing to do
-    assert k.added[0][0] == TITLE and "How do I" in k.added[0][1]
-    assert (await d.ledger.table.get(*FLAG))["hash"] == guide_hash()
-    import aic.shared.app_guide as g
-
-    monkeypatch.setattr(g, "guide_hash", lambda: "changed")
-    assert await ensure_guide_in_knowledge(d.ledger.table, k) is True
-    assert k.deleted == ["kn-1"]  # the old copy goes
-    assert await ensure_guide_in_knowledge(d.ledger.table, None) is False
-
-
 def test_every_prompt_a_lambda_reads_is_in_the_bundle() -> None:
     build = (ROOT / "backend/scripts/build_lambdas.py").read_text()
     assert 'shutil.copytree(ROOT / "agents", OUT / "aic" / "_agents")' in build
     for f in ("help/app_guide.md", "voice_live.md", "chief_of_staff.md", "executives/ceo.md"):
         assert (ROOT / "agents" / f).is_file(), f
-
-
-async def test_a_copy_that_failed_in_the_pipeline_is_added_again_at_most_three_times() -> None:
-    d = make()
-    k = Knowledge()
-    await ensure_guide_in_knowledge(d.ledger.table, k)
-    k.status = "failed"
-    assert await ensure_guide_in_knowledge(d.ledger.table, k) is True
-    assert await ensure_guide_in_knowledge(d.ledger.table, k) is True
-    assert await ensure_guide_in_knowledge(d.ledger.table, k) is False  # three tries for this version, then it waits
-    assert len(k.added) == 3 and k.deleted == ["kn-1", "kn-2"]
-
