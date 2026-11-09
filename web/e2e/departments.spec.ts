@@ -173,3 +173,35 @@ test("with reduced motion nothing rides or rises: towers stand, letters arrive a
   await expect.poll(() => towers(page)).not.toContain("Sales");
   expect(await anim(page, "Sales")).toBeNull();
 });
+
+test("the map runs on: zoomed out and panned to a corner, the roads go on and fade into the border", async ({
+  page,
+}) => {
+  const created_at = new Date(Date.now() - 86_400_000).toISOString();
+  const departments = ["Research", "Sales", "Legal", "Media"].map((name) => ({
+    key: name.toLowerCase(),
+    name,
+    mission: "x",
+    manager_id: `mgr-${name.toLowerCase()}`,
+    state: "active",
+    created_at,
+  }));
+  await openCity(page, { departments });
+  await expect.poll(() => hooks(page, (h) => h._anims?.size ?? 0), { timeout: 6000 }).toBe(0);
+  const canvas = page.locator("section.city > canvas").first();
+  await canvas.hover();
+  // Drag far to the bottom-left: the camera stops before the faded border, never on an empty edge.
+  await page.mouse.down();
+  await page.mouse.move(1100, -400, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: `${SHOTS}/city-edges.png` });
+  const view = await page.evaluate(() => {
+    const el = document.querySelector("section.city") as unknown as { dataset: DOMStringMap };
+    return Number(el.dataset.cabs ?? 0);
+  });
+  expect(view).toBeGreaterThan(8); // cabs on every street and the avenue, both ways
+  await page.getByRole("button", { name: "Fit" }).click(); // Fit brings the whole town back
+  await page.waitForTimeout(400);
+  await expect.poll(() => towers(page)).toEqual(["Research", "Sales", "Legal", "Media"]);
+});

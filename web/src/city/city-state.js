@@ -510,7 +510,9 @@ export const BUILDING_H = 5;
 // Every department is one tower of the same size, however many work inside (the owner's choice, decision 117):
 // workers walk in through the door and are counted on the roof instead of sitting on a terrace that grows.
 export const TOWER_H = 12;
-const PLOT_W = 9, SEATS_PER_ROW = 4, STREET = 3, HQ_W = 12, HQ_H = 11, HOUSES_PER_ROW = 4, HOUSE_W = 3, HOUSE_ROW_H = 4;
+const PLOT_W = 9, SEATS_PER_ROW = 4, STREET = 3, HQ_W = 12, HQ_H = 11, HOUSES_PER_ROW = 4, HOUSE_W = 3, HOUSE_ROW_H = 4, HOUSE_BLOCK_ROWS = 3;
+// How far the countryside and the roads run on past the town on every side, in tiles (the owner: a larger map).
+export const MAP_MARGIN = 48;
 
 // An archived department keeps its slot, so a building never lands on another; it isn't drawn unless work is still open there.
 // `seats` is { dept: the highest seat in use + 1 }; it only adds a department the registry no longer lists (the
@@ -522,10 +524,13 @@ export function layout(state, { portrait = false, seats = {}, houses = 0 } = {})
   const cols = portrait ? 2 : Math.max(2, n <= 4 ? 2 : Math.ceil(n / 3));
   const rows = Math.max(2, Math.ceil(n / cols));
   const originX = portrait ? 1 : 1 + HQ_W + STREET, width = originX + cols * PLOT_W + (cols - 1) * STREET + 1;
-  const hq = { dept: "HQ", x: portrait ? Math.round((width - HQ_W) / 2) : 1, y: 1, w: HQ_W, h: HQ_H, color: DEPT_COLOR.HQ };
+  // On the wide map HQ is as tall as a tower, so its street is the first row's street: one road, edge to edge.
+  const hqH = portrait ? HQ_H : TOWER_H;
+  const hq = { dept: "HQ", x: portrait ? Math.round((width - HQ_W) / 2) : 1, y: 1, w: HQ_W, h: hqH, color: DEPT_COLOR.HQ };
   const buildings = [], lots = [];
   const avenueX = portrait ? originX + PLOT_W : 1 + HQ_W;
-  const streets = [portrait ? { y: 1 + HQ_H, x0: 0, x1: width } : { y: 1 + HQ_H, x0: 0, x1: avenueX }];
+  // Every street runs the whole width and on off the map (the owner, 2026-11-09: no dead ends).
+  const streets = portrait ? [{ y: 1 + HQ_H, x0: 0, x1: width }] : [];
   let y = portrait ? 1 + HQ_H + STREET : 1;
   for (let r = 0; r < rows; r++) {
     const h = TOWER_H;
@@ -537,18 +542,32 @@ export function layout(state, { portrait = false, seats = {}, houses = 0 } = {})
       buildings.push({ dept: name, slot: r * cols + c, x, y, w: PLOT_W, h, color: deptColor(name), builtAt: reg?.builtAt ?? 0, archived: reg?.state === "archived" && !seats[name] });
     }
     y += h;
-    streets.push({ y, x0: portrait ? 0 : avenueX, x1: width });
+    streets.push({ y, x0: 0, x1: width });
     y += STREET;
   }
   const officesEnd = y - STREET;
-  // Houses: under HQ on the wide map, under the offices on a phone. More than fit makes the neighbourhood run on below.
-  const homesY = portrait ? y : 1 + HQ_H + STREET;
-  const homesW = portrait ? width - 2 : HQ_W;
-  const perRow = portrait ? Math.floor(homesW / HOUSE_W) : HOUSES_PER_ROW;
   const home = [];
-  for (let i = 0; i < houses; i++) home.push({ x: 1 + (i % perRow) * HOUSE_W, y: homesY + Math.floor(i / perRow) * HOUSE_ROW_H });
-  const homesH = Math.max(Math.ceil(houses / perRow) * HOUSE_ROW_H, portrait ? HOUSE_ROW_H : officesEnd - homesY);
-  return { hq, buildings, lots, streets, hqStreet: 1 + HQ_H, officesEnd, avenue: avenueX, width, height: Math.max(y, homesY + homesH + 1), homes: { x: 1, y: homesY, w: homesW, h: homesH, houses: home }, portrait };
+  let homesY, homesW, homesH;
+  if (portrait) {
+    // Under the offices, in rows; the avenue runs on down between them.
+    homesY = y; homesW = width - 2;
+    const xs = [];
+    for (let x = 1; x + HOUSE_W <= width - 1; x += HOUSE_W) if (x + HOUSE_W <= avenueX || x >= avenueX + STREET) xs.push(x);
+    for (let i = 0; i < houses; i++) home.push({ x: xs[i % xs.length], y: homesY + Math.floor(i / xs.length) * HOUSE_ROW_H });
+    homesH = Math.max(Math.ceil(houses / xs.length) * HOUSE_ROW_H, HOUSE_ROW_H);
+  } else {
+    // Under HQ, in blocks of three rows between the streets; more houses than fit add blocks (and streets) below.
+    const perBlock = HOUSES_PER_ROW * HOUSE_BLOCK_ROWS, block = TOWER_H + STREET;
+    homesY = 1 + hqH + STREET; homesW = HQ_W;
+    for (let i = 0; i < houses; i++) {
+      const b = Math.floor(i / perBlock), k = i % perBlock;
+      home.push({ x: 1 + (k % HOUSES_PER_ROW) * HOUSE_W, y: homesY + b * block + Math.floor(k / HOUSES_PER_ROW) * HOUSE_ROW_H });
+    }
+    const blocks = Math.max(1, Math.ceil(houses / perBlock));
+    for (let b = rows; b <= blocks; b++) { streets.push({ y: 1 + hqH + b * block, x0: 0, x1: width }); y += block; } // a street under every block
+    homesH = Math.max(blocks * block - STREET, officesEnd - homesY);
+  }
+  return { hq, buildings, lots, streets, hqStreet: portrait ? 1 + HQ_H : 1 + hqH, officesEnd, avenue: avenueX, width, height: Math.max(y, homesY + homesH + 1), homes: { x: 1, y: homesY, w: homesW, h: homesH, houses: home }, portrait };
 }
 
 // Where a worker at work is: inside the tower, just behind its door (drawn hidden; the roof counts them). The seat
@@ -883,21 +902,42 @@ export function bikeSpeed(route, from) {
   return Math.max(BIKE_PX_S, len / (BIKE_LEG_MS / 1000));
 }
 
-// Yellow cabs. Each street has two lanes: westbound above the centre line, eastbound below it.
+// Yellow cabs. Each street has two lanes, westbound above the centre line and eastbound below it; each avenue has
+// two, southbound on the left and northbound on the right. Every lane runs the whole road, out through the
+// countryside to the map's faded border, so a cab arrives from beyond the edge and drives off beyond it.
 export function streetLanes(world) {
-  return world.streets.map((s) => ({ y0: (s.y * TILE) + 17, y1: (s.y * TILE) + 33, x0: s.x0 * TILE, x1: s.x1 * TILE })).filter((l) => l.x1 - l.x0 > 4 * TILE);
+  const M = MAP_MARGIN * TILE, x0 = -M, x1 = world.width * TILE + M;
+  return world.streets.map((s) => ({ y0: s.y * TILE + 17, y1: s.y * TILE + 33, x0: s.x0 === 0 ? x0 : s.x0 * TILE, x1: s.x1 === world.width ? x1 : s.x1 * TILE }));
 }
-// The cabs cruising on their own: a few per street, by the clock alone, so a slow frame never bunches them up.
-export const CAB_PX_S = 34, CABS_PER_STREET = 2;
+export function avenueLanes(world) {
+  const M = MAP_MARGIN * TILE, top = world.portrait ? (world.hqStreet + STREET / 2) * TILE : -M, bottom = world.height * TILE + M;
+  return [{ x0: world.avenue * TILE + 18, x1: world.avenue * TILE + 30, y0: top, y1: bottom }];
+}
+// A cab's opacity: it fades in over the last stretch before a lane's end and out over the same stretch after it,
+// so it never appears or vanishes in the middle of a road.
+export const CAB_FADE_PX = 6 * TILE;
+export function edgeAlpha(pos, from, to) {
+  return Math.max(0, Math.min(1, Math.min(pos - from, to - pos) / CAB_FADE_PX));
+}
+// The cabs cruising on their own, placed by the clock alone (a slow frame never bunches them up). Cabs sharing a
+// lane share its speed, so they keep their distance; about one per 22 tiles of road each way.
+export const CAB_PX_S = 34, CAB_GAP_PX = 22 * TILE;
 export function trafficAt(world, now) {
   const out = [];
-  streetLanes(world).forEach((l, i) => {
-    const span = l.x1 - l.x0 + 40;
-    for (let k = 0; k < CABS_PER_STREET; k++) {
-      const east = (i + k) % 2 === 0, speed = CAB_PX_S * (0.8 + ((hashOf(`cab${i}:${k}`) % 40) / 100));
-      const d = ((now / 1000) * speed + (hashOf(`cab${i}:${k}`) % span) + k * (span / CABS_PER_STREET)) % span;
-      out.push({ x: east ? l.x0 - 20 + d : l.x1 + 20 - d, y: east ? l.y1 : l.y0, east, id: `cab${i}:${k}` });
+  const lane = (id, from, to, place) => {
+    const span = to - from, n = Math.max(1, Math.round(span / CAB_GAP_PX)), speed = CAB_PX_S * (0.85 + (hashOf(id) % 30) / 100);
+    for (let k = 0; k < n; k++) {
+      const d = ((now / 1000) * speed + (k * span) / n + (hashOf(`${id}:${k}`) % Math.max(1, Math.round(span / n / 2)))) % span;
+      out.push({ ...place(d), alpha: edgeAlpha(d, 0, span), id: `${id}:${k}` });
     }
+  };
+  streetLanes(world).forEach((l, i) => {
+    lane(`e${i}`, l.x0, l.x1, (d) => ({ x: l.x0 + d, y: l.y1, east: true, vertical: false }));
+    lane(`w${i}`, l.x0, l.x1, (d) => ({ x: l.x1 - d, y: l.y0, east: false, vertical: false }));
+  });
+  avenueLanes(world).forEach((l, i) => {
+    lane(`s${i}`, l.y0, l.y1, (d) => ({ x: l.x0, y: l.y0 + d, east: false, vertical: true }));
+    lane(`n${i}`, l.y0, l.y1, (d) => ({ x: l.x1, y: l.y1 - d, east: true, vertical: true }));
   });
   return out;
 }

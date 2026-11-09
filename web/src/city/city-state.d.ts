@@ -150,6 +150,12 @@ export interface CityWorld {
   lots: Array<CityPoint & { w: number; h: number; demolished?: string }>;
   streets: Array<{ y: number; x0: number; x1: number }>;
   avenue: number;
+  hq: CityBuilding;
+  width: number;
+  height: number;
+  portrait: boolean;
+  hqStreet: number;
+  officesEnd: number;
   homes: { x: number; y: number; w: number; h: number; houses: CityPoint[] };
   [k: string]: unknown;
 }
@@ -215,6 +221,13 @@ export const BIKE_LEG_MS: number;
 export function bikeSpeed(route: CityPoint[], from: CityPoint): number;
 export function streetLanes(world: CityWorld): Array<{ y0: number; y1: number; x0: number; x1: number }>;
 export const CAB_PX_S: number;
-export const CABS_PER_STREET: number;
-export function trafficAt(world: CityWorld, now: number): Array<{ x: number; y: number; east: boolean; id: string }>;
+export const CAB_GAP_PX: number;
+export const CAB_FADE_PX: number;
+export const MAP_MARGIN: number;
+export function edgeAlpha(pos: number, from: number, to: number): number;
+export function avenueLanes(world: CityWorld): Array<{ x0: number; x1: number; y0: number; y1: number }>;
+export function trafficAt(
+  world: CityWorld,
+  now: number,
+): Array<{ x: number; y: number; east: boolean; vertical: boolean; alpha: number; id: string }>;
 export function rideLegs(world: CityWorld, route: CityPoint[], from: CityPoint): boolean[];
