@@ -165,3 +165,19 @@ async def test_a_preset_gets_its_manager_with_its_first_goal_and_own_departments
     assert refused.startswith("Refused")
     ok = await tool(d, ORCH, "create_department")({"name": "Sales", "mission": "Sell the owner's products."})
     assert "already exists" in ok
+
+
+def test_the_catalog_says_how_each_service_connects_and_where_to_sign_up() -> None:
+    """Decision 134: sign-up links are https on the service's own site (checked live by
+    scripts/check-signup-links.mjs); 'own_app' marks sign-ins without self-registration; 'not_offered' points only
+    to services in the catalog; a '{name}' in a link comes with its question."""
+    from aic.shared.presets import presets_config
+
+    cat = catalog()
+    for id, c in cat.items():
+        assert c["url"].startswith("https://"), id
+        assert not c.get("signup") or c["signup"].startswith("https://"), id
+        assert c.get("setup") in (None, "own_app"), id
+        assert ("{" in c["url"]) == bool(c.get("ask")), id
+    for id, e in presets_config()["not_offered"].items():
+        assert e["why"] and e["instead"] and all(i in cat for i in e["instead"]), id

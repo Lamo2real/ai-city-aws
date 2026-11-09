@@ -16,7 +16,7 @@ import {
   type MailRule,
 } from "../lib/connect.ts";
 import { ImapCard, SignInCard } from "./ConnectCard.tsx";
-import { Button, Confirm, toast } from "./ui.tsx";
+import { Button, Confirm, LiveDot, toast } from "./ui.tsx";
 
 const STATUS: Record<MailAccount["status"], string> = {
   connected: "Connected",
@@ -33,9 +33,13 @@ export function MailAccountCard(p: { a: MailAccount; onChange: (a: MailAccount |
   return (
     <article className="card" aria-label={`${a.label} account`}>
       <p>
-        <b>{a.label}</b> · {a.preset ? a.preset.split(" (")[0] : PROVIDER_LABEL[a.provider]} {a.address ? `· ${a.address}` : ""}
+        <b>{a.label}</b> · {a.preset ? a.preset.split(" (")[0] : PROVIDER_LABEL[a.provider]}{" "}
+        {a.address ? `· ${a.address}` : ""}
       </p>
-      <p className={a.status === "connected" ? "good" : "mute"}>{STATUS[a.status]}</p>
+      <p className={a.status === "connected" ? "good" : a.status === "error" ? "status-bad" : "mute"}>
+        {a.status === "connected" ? <LiveDot label="Live" /> : null}{" "}
+        {a.status === "error" && a.error ? `${STATUS.error}: ${a.error}` : STATUS[a.status]}
+      </p>
       {a.status !== "connected" && a.provider !== "imap" ? (
         <SignInCard
           kind="mail"

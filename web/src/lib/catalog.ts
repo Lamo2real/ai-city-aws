@@ -2,7 +2,8 @@
 // from the same answers the page already loads. The catalog is config/departments.json, served by
 // GET /departments/presets: every server in it answered an MCP initialize when it was added. A department's kit is its
 // skills and tools together. Logos are files in web/public/logos/ (scripts/fetch-logos.mjs), so the CSP stays 'self'.
-import { matchesPreset, type Connector, type Presets, type PresetConnector } from "./connect.ts";
+import { useEffect, useState } from "react";
+import { listPresets, matchesPreset, type Connector, type Presets, type PresetConnector } from "./connect.ts";
 import logos from "./logos.json";
 
 /** One service in the catalog, with the departments that list it. */
@@ -106,8 +107,8 @@ export function rowStatus(c: Connector): { text: string; tone: "good" | "warn" |
       return { text: c.needs === "oauth_client" ? "Add its app's id" : "Add its key", tone: "warn", ok: false };
     case "pending_approval":
       return { text: "Waiting for you", tone: "warn", ok: false };
-    case "error":
-      return { text: "Problem", tone: "bad", ok: false };
+    case "error": // in full: the owner's rule
+      return { text: c.error ? `Problem: ${c.error}` : "Problem", tone: "bad", ok: false };
     case "removing":
       return { text: "Removing…", tone: "info", ok: false };
     default:
@@ -146,3 +147,30 @@ export function skillMarkdown(name: string, description: string, body: string): 
   const oneLine = description.replace(/\s+/g, " ").trim();
   return `---\nname: ${name.trim()}\ndescription: ${oneLine}\n---\n\n${body.trim()}\n`;
 }
+
+/** The catalog, fetched once per page load (the chat's cards use it for sign-up links). */
+let cached: Promise<CatalogItem[]> | null = null;
+export function loadCatalog(): Promise<CatalogItem[]> {
+  cached ??= listPresets().then(catalogOf, (e: unknown) => {
+    cached = null;
+    throw e;
+  });
+  return cached;
+}
+export function useCatalog(): CatalogItem[] {
+  const [cat, setCat] = useState<CatalogItem[]>([]);
+  useEffect(() => {
+    let live = true;
+    loadCatalog().then(
+      (c) => live && setCat(c),
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, []);
+  return cat;
+}
+/** The catalog service a connector id or label stands for (connectors added from the catalog keep its id). */
+export const serviceFor = (cat: CatalogItem[], id: string, label?: string) =>
+  cat.find((c) => c.id === id) ?? cat.find((c) => !!label && c.label.toLowerCase() === label.toLowerCase());

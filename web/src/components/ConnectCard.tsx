@@ -6,8 +6,23 @@ import { decideApproval } from "../lib/actions.ts";
 import { api, ApiError } from "../lib/api.ts";
 import { APP_PASSWORD_HOWTO, IMAP_PRESETS, sendConnectorKey, sendImapForm, type ImapForm } from "../lib/connect.ts";
 import { rememberConnect } from "../lib/connectReturn.ts";
+import { serviceFor, useCatalog } from "../lib/catalog.ts";
 import { store, type ConnectCardState } from "../lib/store.ts";
-import { Button } from "./ui.tsx";
+import { Button, errorText, LiveDot } from "./ui.tsx";
+
+/** "No account yet?": the service's own sign-up page, checked by scripts/check-signup-links.mjs, in a new tab. */
+export function SignupLink(p: { href?: string; service: string }) {
+  if (!p.href) return null;
+  return (
+    <p className="mute signup-link">
+      {`No ${p.service} account yet? `}
+      <a href={p.href} target="_blank" rel="noopener noreferrer">
+        {`Create one on ${p.service}'s site`}
+      </a>
+      {", then come back here: this updates by itself."}
+    </p>
+  );
+}
 
 export type SignInCardProps = {
   kind: "mail" | "connector";
@@ -18,6 +33,8 @@ export type SignInCardProps = {
   status: "pending" | "connected" | "failed";
   /** A connector whose sign-in is at github.com: the owner may paste a GitHub token instead (PUT …/key). */
   tokenInstead?: string;
+  /** The service's own sign-up page, for an owner without an account yet. */
+  signup?: string;
 };
 
 /** Starts a provider's sign-in in a new tab; returns the problem in plain words, or null. */
@@ -50,7 +67,7 @@ export async function openSignIn(
     return null;
   } catch (e) {
     tab?.close();
-    return e instanceof ApiError ? e.message : "The sign-in didn't start. Try again.";
+    return errorText(e, "The sign-in didn't start. Try again.");
   }
 }
 
@@ -75,12 +92,8 @@ export function SignInCard(p: SignInCardProps) {
         onDone={() => setWithToken(false)}
       />
     );
-  if (p.status === "connected")
-    return (
-      <div className="connect-card connect-done" role="status">
-        <p>{p.title.replace(/^Sign in to /, "")}: connected ✓</p>
-      </div>
-    );
+  const service = p.title.replace(/^Sign in to /, "");
+  if (p.status === "connected") return <DoneCard title={service} />;
   const go = async () => {
     setProblem(null);
     setProblem(await openSignIn({ ...p, onAppPassword: p.kind === "mail" ? setAppPreset : undefined }));
@@ -101,37 +114,74 @@ export function SignInCard(p: SignInCardProps) {
           I have a token instead
         </Button>
       ) : null}
+      <SignupLink href={p.signup} service={service.replace(/ \(.*\)$/, "")} />
+    </div>
+  );
+}
+
+/** A service that is live now: the green dot, and nothing left to do. */
+export function DoneCard(p: { title: string }) {
+  return (
+    <div className="connect-card connect-done" role="status" aria-label={`${p.title} is connected`}>
+      <p>
+        <LiveDot label="Connected" /> {`${p.title} is connected.`}
+      </p>
+    </div>
+  );
+}
+
+/** Why a service didn't connect, in full, with a way to try again in Settings. */
+function ProblemCard(p: { title: string; text: string }) {
+  return (
+    <div className="connect-card" role="alert" aria-label={`${p.title} didn't connect`}>
+      <p>{`${p.title} didn't connect: ${p.text}`}</p>
+      <a href="#/settings/connectors">Open Settings → Connectors</a>
     </div>
   );
 }
 
 /** A secure field: the value is sent once to AWS and then forgotten; it is never shown again. */
-export function KeyCard(p: { targetId: string; title: string; needs?: string; names?: string[]; onDone?: () => void }) {
+export function KeyCard(p: {
+  targetId: string;
+  title: string;
+  needs?: string;
+  names?: string[];
+  onDone?: () => void;
+  signup?: string;
+}) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [problem, setProblem] = useState<string | null>(null);
-  const fields = p.needs === "oauth_client" ? ["client_id", "client_secret"] : p.names?.length ? p.names : ["api_key"];
-  const label = (f: string) => ({ api_key: "Key", client_id: "Client id", client_secret: "Client secret" })[f] ?? f;
+  // A sign-in without self-registration: the owner's own app (id and secret), or an access token instead (decision 141).
+  const [token, setToken] = useState(false);
+  const client = p.needs === "oauth_client" && !token;
+  const fields = client ? ["client_id", "client_secret"] : p.names?.length ? p.names : ["api_key"];
+  const label = (f: string) =>
+    ({ api_key: token ? "Access token" : "Key", client_id: "Client id", client_secret: "Client secret" })[f] ?? f;
   const submit = async (e?: FormEvent) => {
     e?.preventDefault();
     setProblem(null);
-    const body =
-      p.needs === "oauth_client"
-        ? { client_id: values.client_id, client_secret: values.client_secret }
-        : p.names?.length
-          ? { env: values }
-          : { api_key: values.api_key };
+    const body = client
+      ? { client_id: values.client_id, client_secret: values.client_secret }
+      : p.names?.length
+        ? { env: values }
+        : { api_key: values.api_key };
     try {
       await sendConnectorKey(p.targetId, body);
       setValues({});
       p.onDone?.();
     } catch (err) {
-      setProblem(err instanceof ApiError ? err.message : "Not saved. Try again.");
+      setProblem(errorText(err, "Not saved. Try again."));
     }
   };
   const ready = fields.every((f) => (values[f] ?? "").length > 0);
   return (
     <form className="connect-card" onSubmit={submit} aria-label={p.title} autoComplete="off">
-      <p>{p.title}. It goes straight to AWS and is never shown again; don't paste it in the chat.</p>
+      <p>
+        {p.needs === "oauth_client" && !token
+          ? `${p.title.replace(/^Add the key for /, "")} doesn't let new apps sign in by themselves: create a free app in its developer settings, paste its client id and secret here, then sign in. Or paste an access token instead.`
+          : `${p.title}.`}{" "}
+        It goes straight to AWS and is never shown again; don't paste it in the chat.
+      </p>
       {fields.map((f) => (
         <label key={f} className="field">
           {label(f)}
@@ -152,6 +202,18 @@ export function KeyCard(p: { targetId: string; title: string; needs?: string; na
       <Button variant="secondary" type="submit" disabled={!ready}>
         Save securely
       </Button>
+      {p.needs === "oauth_client" ? (
+        <Button
+          variant="quiet"
+          onClick={() => {
+            setToken((x) => !x);
+            setValues({});
+          }}
+        >
+          {token ? "Use my app's id and secret instead" : "I have an access token instead"}
+        </Button>
+      ) : null}
+      <SignupLink href={p.signup} service={p.title.replace(/^Add the key for /, "")} />
     </form>
   );
 }
@@ -177,12 +239,7 @@ export function ImapCard(p: {
   const start = { ...EMPTY_IMAP, ...((p.preset && IMAP_PRESETS[p.preset]) || {}) };
   const [f, setF] = useState<ImapForm>(start);
   const [problem, setProblem] = useState<string | null>(null);
-  if (p.status === "connected")
-    return (
-      <div className="connect-card connect-done" role="status">
-        <p>{p.title.replace(/^Add the app password for /, "")}: connected ✓</p>
-      </div>
-    );
+  if (p.status === "connected") return <DoneCard title={p.title.replace(/^Add the app password for /, "")} />;
   const set = (k: keyof ImapForm, v: string | number | boolean) => setF({ ...f, [k]: v });
   const submit = async (e?: FormEvent) => {
     e?.preventDefault();
@@ -272,7 +329,7 @@ function ApproveCard(p: { approvalId: string; action: string; reason: string; id
       await decideApproval(p.approvalId, yes);
       store.dropCard(p.id);
     } catch (e) {
-      setProblem(e instanceof ApiError ? e.message : "That didn't go through. Try again.");
+      setProblem(errorText(e, "That didn't go through. Try again."));
     }
   };
   return (
@@ -298,13 +355,19 @@ function ApproveCard(p: { approvalId: string; action: string; reason: string; id
 
 /** Every connect card, in the order they arrived. Rendered under the chat by AceScreen. */
 export function ChatCards({ cards }: { cards: ConnectCardState[] }) {
+  const cat = useCatalog();
   if (!cards.length) return null;
   return (
     <div className="connect-cards">
       {cards.map((c) => {
         if (c.kind === "approve") return <ApproveCard key={c.id} {...c} />;
+        if (c.kind === "done") return <DoneCard key={c.id} title={c.title} />;
+        if (c.kind === "problem") return <ProblemCard key={c.id} title={c.title} text={c.text} />;
+        const signup = serviceFor(cat, c.targetId, c.title.replace(/^(Sign in to|Add the key for) /, ""))?.signup;
         if (c.kind === "key")
-          return <KeyCard key={c.id} targetId={c.targetId} title={c.title} needs={c.needs} names={c.names} />;
+          return (
+            <KeyCard key={c.id} targetId={c.targetId} title={c.title} needs={c.needs} names={c.names} signup={signup} />
+          );
         if (c.kind === "imap")
           return <ImapCard key={c.id} targetId={c.targetId} title={c.title} status={c.status} preset={c.preset} />;
         const base = c.target === "mail" ? `/mail/accounts/${c.targetId}` : `/connectors/${c.targetId}/login`;
@@ -318,6 +381,7 @@ export function ChatCards({ cards }: { cards: ConnectCardState[] }) {
             signinPath={c.target === "mail" ? `${base}/signin` : base}
             completePath={c.target === "mail" ? `${base}/complete` : `${base}/complete`}
             tokenInstead={c.target === "connector" && c.tokenOk ? c.targetId : undefined}
+            signup={c.target === "connector" ? signup : undefined}
           />
         );
       })}

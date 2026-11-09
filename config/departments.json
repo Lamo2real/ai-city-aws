@@ -1,5 +1,5 @@
 {
-  "$comment": "Pre-configured departments (decisions 113, 114). The Orchestrator uses these names when work fits; any other department is still created as data. Each department's manager prompt is agents/departments/<key>.md and its skills are agents/skills/<name>/SKILL.md. 'shared' tools and skills belong to every department. 'essential' marks the tools most businesses in that field use: Settings -> Departments and its setup guide put them first. Every url answered an MCP initialize on 2026-11-08 (401 with OAuth resource metadata, or 200). 'aka' lists other names the owner may use for a service. 'not_offered' names services that can't be connected directly or safely, why in plain words, and the catalog services that do the job instead (decision 130). Read by backend/src/aic/shared/presets.py; served by GET /departments/presets.",
+  "$comment": "Pre-configured departments (decisions 113, 114). The Orchestrator uses these names when work fits; any other department is still created as data. Each department's manager prompt is agents/departments/<key>.md and its skills are agents/skills/<name>/SKILL.md. 'shared' tools and skills belong to every department. 'essential' marks the tools most businesses in that field use: Settings -> Departments and its setup guide put them first. Every url answered an MCP initialize on 2026-11-08 (401 with OAuth resource metadata, or 200). 'aka' lists other names the owner may use for a service. 'setup': 'own_app' marks servers whose sign-in has no self-registration (checked 2026-11-09, decision 141): the owner pastes their own app's id and secret, or an access token. 'not_offered' names services that can't be connected directly or safely, why in plain words, and the catalog services that do the job instead (decision 130). Read by backend/src/aic/shared/presets.py; served by GET /departments/presets.",
   "shared": {
     "name": "Shared by every department",
     "mission": "Tools every team uses: one Stripe account for everything sold, one place for tickets, chat, docs, files and meetings.",
@@ -809,7 +809,8 @@
       "label": "Slack",
       "url": "https://mcp.slack.com/mcp",
       "what": "Read and post in your team's channels",
-      "signup": "https://slack.com/get-started"
+      "signup": "https://slack.com/get-started",
+      "setup": "own_app"
     },
     "notion": {
       "label": "Notion",
@@ -827,7 +828,8 @@
       "label": "Box",
       "url": "https://mcp.box.com/mcp",
       "what": "Company files and folders",
-      "signup": "https://account.box.com/signup"
+      "signup": "https://account.box.com/signup",
+      "setup": "own_app"
     },
     "dropbox": {
       "label": "Dropbox",
@@ -857,7 +859,8 @@
       "label": "GitHub",
       "url": "https://api.githubcopilot.com/mcp/",
       "what": "Repositories, issues, pull requests, Actions, secrets (uses the GitHub token from Settings when it is saved)",
-      "signup": "https://github.com/signup"
+      "signup": "https://github.com/signup",
+      "setup": "own_app"
     },
     "aws-knowledge": {
       "label": "AWS Knowledge",
@@ -904,7 +907,8 @@
       "label": "PagerDuty",
       "url": "https://mcp.pagerduty.com/mcp",
       "what": "On-call schedules and incidents",
-      "signup": "https://www.pagerduty.com/sign-up/"
+      "signup": "https://www.pagerduty.com/sign-up/",
+      "setup": "own_app"
     },
     "datadog": {
       "label": "Datadog",
@@ -1005,7 +1009,7 @@
       "label": "Higgsfield",
       "url": "https://mcp.higgsfield.ai/mcp",
       "what": "AI video and image generation",
-      "signup": "https://higgsfield.ai/"
+      "signup": "https://higgsfield.ai/auth/sign-up"
     },
     "heygen": {
       "label": "HeyGen",
@@ -1017,7 +1021,8 @@
       "label": "ElevenLabs",
       "url": "https://api.us.elevenlabs.io/v1/mcp",
       "what": "Voice-overs, voice design, sound effects",
-      "signup": "https://elevenlabs.io/app/sign-up"
+      "signup": "https://elevenlabs.io/app/sign-up",
+      "setup": "own_app"
     },
     "klaviyo": {
       "label": "Klaviyo",
@@ -1029,7 +1034,8 @@
       "label": "HubSpot",
       "url": "https://mcp.hubspot.com/",
       "what": "CRM: contacts, companies, deals, tickets, email marketing",
-      "signup": "https://app.hubspot.com/signup-hubspot/crm"
+      "signup": "https://app.hubspot.com/signup-hubspot/crm",
+      "setup": "own_app"
     },
     "semrush": {
       "label": "Semrush",
@@ -1119,13 +1125,14 @@
       "label": "Docusign",
       "url": "https://mcp.docusign.com/mcp",
       "what": "Send, sign and track agreements",
-      "signup": "https://www.docusign.com/products/electronic-signature/free-trial"
+      "signup": "https://trial.docusign.com/",
+      "setup": "own_app"
     },
     "fireflies": {
       "label": "Fireflies",
       "url": "https://mcp.fireflies.ai/mcp",
       "what": "Meeting recordings, transcripts and summaries",
-      "signup": "https://app.fireflies.ai/signup"
+      "signup": "https://app.fireflies.ai/"
     },
     "intercom": {
       "label": "Intercom",
@@ -1166,7 +1173,8 @@
       "label": "Xero",
       "url": "https://mcp.xero.com/mcp",
       "what": "Accounting: invoices, bills, bank reconciliation, reports, VAT",
-      "signup": "https://www.xero.com/signup/"
+      "signup": "https://www.xero.com/signup/",
+      "setup": "own_app"
     },
     "paypal": {
       "label": "PayPal",
@@ -1178,7 +1186,7 @@
       "label": "Ramp",
       "url": "https://mcp.ramp.com/mcp",
       "what": "Corporate cards, expenses, bills and spend reports",
-      "signup": "https://ramp.com/"
+      "signup": "https://ramp.com/signup"
     },
     "square": {
       "label": "Square",
@@ -1196,7 +1204,8 @@
       "label": "Asana",
       "url": "https://mcp.asana.com/v2/mcp",
       "what": "Projects, tasks, timelines and goals",
-      "signup": "https://asana.com/create-account"
+      "signup": "https://asana.com/create-account",
+      "setup": "own_app"
     },
     "monday": {
       "label": "monday.com",
@@ -1261,7 +1270,8 @@
       "label": "Crunchbase",
       "url": "https://mcp.crunchbase.com/mcp",
       "what": "Companies, funding rounds, investors and competitors",
-      "signup": "https://www.crunchbase.com/register"
+      "signup": "https://www.crunchbase.com/register",
+      "setup": "own_app"
     },
     "product-hunt": {
       "label": "Product Hunt",
@@ -1272,7 +1282,7 @@
       "label": "Metricool",
       "url": "https://ai.metricool.com/mcp",
       "what": "Publish and schedule to YouTube, TikTok, Instagram, Facebook, LinkedIn and more, with analytics for every account (you connect each social account inside Metricool)",
-      "signup": "https://app.metricool.com/signup"
+      "signup": "https://app.metricool.com/register"
     },
     "opus-clip": {
       "label": "Opus Clip",
@@ -1284,7 +1294,7 @@
       "label": "Captions",
       "url": "https://mcp.captions.ai/mcp",
       "what": "AI video editing: captions, cuts, eye contact, dubbing",
-      "signup": "https://www.captions.ai/"
+      "signup": "https://captions.ai/signup"
     },
     "runway": {
       "label": "Runway",
@@ -1302,7 +1312,7 @@
       "label": "Pika",
       "url": "https://mcp.pika.art/mcp",
       "what": "AI video generation and effects",
-      "signup": "https://pika.art/"
+      "signup": "https://create.pika.art/signup"
     },
     "ideogram": {
       "label": "Ideogram",
@@ -1320,13 +1330,13 @@
       "label": "Blotato",
       "url": "https://mcp.blotato.com/mcp",
       "what": "Create and publish faceless videos and posts to every social platform",
-      "signup": "https://www.blotato.com/"
+      "signup": "https://my.blotato.com/signup"
     },
     "vidiq": {
       "label": "vidIQ",
       "url": "https://mcp.vidiq.com/mcp",
       "what": "YouTube keyword research, video ideas, competitor channels, title scores",
-      "signup": "https://vidiq.com/"
+      "signup": "https://vidiq.com/signup/"
     },
     "tubebuddy": {
       "label": "TubeBuddy",
@@ -1338,7 +1348,8 @@
       "label": "Artlist",
       "url": "https://mcp.artlist.io/mcp",
       "what": "Licensed music, sound effects and stock footage for monetized videos",
-      "signup": "https://artlist.io/"
+      "signup": "https://artlist.io/",
+      "setup": "own_app"
     },
     "envato": {
       "label": "Envato",
@@ -1350,7 +1361,8 @@
       "label": "Unsplash",
       "url": "https://mcp.unsplash.com/mcp",
       "what": "Free high-quality photos",
-      "signup": "https://unsplash.com/join"
+      "signup": "https://unsplash.com/join",
+      "setup": "own_app"
     },
     "frame-io": {
       "label": "Frame.io",
@@ -1380,6 +1392,7 @@
       "label": "Indeed",
       "url": "https://mcp.indeed.com/claude/mcp",
       "what": "Search job postings by keyword and place, with salary, company and date",
+      "signup": "https://secure.indeed.com/auth",
       "aka": ["indeed jobs", "job postings", "job search"]
     },
     "freshdesk": {

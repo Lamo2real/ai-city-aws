@@ -5,7 +5,6 @@
 // department switches use, and sign-in or the key appear on the card. Keys go only into the secure fields of
 // ConnectCard.tsx, straight to AWS.
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ApiError } from "../lib/api.ts";
 import {
   builtInSkills,
   catalogFor,
@@ -51,7 +50,7 @@ import { KeyCard, SignInCard } from "./ConnectCard.tsx";
 import { loadGitHub, type GitHubStatus } from "./GitHubSettings.tsx";
 import { AddMailAccount, MailAccountCard, MailSettings } from "./MailAccounts.tsx";
 import { AddSkill, RolePicker } from "./SkillsScreen.tsx";
-import { Banner, Button, Confirm, PlusIcon, toast } from "./ui.tsx";
+import { Banner, Button, Confirm, errorText, LiveDot, PlusIcon, toast } from "./ui.tsx";
 
 const ALL = "All departments";
 type View = "connected" | "browse";
@@ -86,14 +85,6 @@ export function Logo(p: { id?: string; label: string; size?: number }) {
         </span>
       )}
     </span>
-  );
-}
-
-function Check() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" className="hub-check">
-      <path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
   );
 }
 
@@ -154,7 +145,7 @@ function Table(p: { rows: Row[]; label: string; open: string | null; onOpen: (k:
                 <td>
                   {r.status.ok ? (
                     <span className="hub-status status-good">
-                      <Check /> {r.status.text}
+                      <LiveDot label="Live" /> {r.status.text}
                     </span>
                   ) : (
                     <button type="button" className={`hub-status link status-${r.status.tone}`} onClick={toggle}>
@@ -223,6 +214,21 @@ export function ConnectorsHub(p: {
     listPresets().then(setPresets, fail("Departments"));
     loadGitHub().then(setGithub, () => undefined);
   }, []);
+  // Back from a service's own page (signing up or in): look again at once, so it shows connected (decision 141).
+  useEffect(() => {
+    const again = () => {
+      if (document.visibilityState !== "visible") return;
+      void loadConnectors();
+      void loadMail();
+      loadGitHub().then(setGithub, () => undefined);
+    };
+    window.addEventListener("focus", again);
+    document.addEventListener("visibilitychange", again);
+    return () => {
+      window.removeEventListener("focus", again);
+      document.removeEventListener("visibilitychange", again);
+    };
+  }, []);
   // A tool that is being set up or removed changes by itself in a few seconds: look again until it settles.
   useEffect(() => {
     if (!connectors?.some(settling)) return;
@@ -242,7 +248,7 @@ export function ConnectorsHub(p: {
       put((await editConnector(c.id, patch)).connector);
     } catch (e) {
       put(c);
-      toast({ text: e instanceof ApiError ? e.message : "Not saved.", tone: "bad" });
+      toast({ text: errorText(e, "Not saved."), tone: "bad" });
     }
   };
   const changeSkill = async (s: Skill, patch: { roles?: Role[]; enabled?: boolean }) => {
@@ -252,7 +258,7 @@ export function ConnectorsHub(p: {
       setSkills((xs) => xs?.map((x) => (x.name === s.name ? r.skill : x)) ?? null);
     } catch (e) {
       setSkills((xs) => xs?.map((x) => (x.name === s.name ? s : x)) ?? null);
-      toast({ text: e instanceof ApiError ? e.message : "Not saved. Try again.", tone: "bad" });
+      toast({ text: errorText(e, "Not saved. Try again."), tone: "bad" });
     }
   };
   /** One click from the catalog: the same add as Settings → Departments; sign-in or the key then show on the card. */
@@ -262,7 +268,7 @@ export function ConnectorsHub(p: {
       await loadConnectors();
       toast({ text: `${c.label} is being connected. Sign in when it asks.`, tone: "info" });
     } catch (e) {
-      toast({ text: e instanceof ApiError ? e.message : `${c.label} could not be added.`, tone: "bad" });
+      toast({ text: errorText(e, `${c.label} could not be added.`), tone: "bad" });
     }
   };
   const show = (v: View) => {
@@ -292,6 +298,7 @@ export function ConnectorsHub(p: {
             onChange={(patch) => change(c, patch)}
             onRemove={() => setRemoving(c)}
             reload={loadConnectors}
+            signup={cat?.signup}
           />
         ),
       };
@@ -305,7 +312,7 @@ export function ConnectorsHub(p: {
       teams: "AIC",
       groups: [],
       status: {
-        text: MAIL_STATUS[a.status],
+        text: a.status === "error" && a.error ? `Problem: ${a.error}` : MAIL_STATUS[a.status],
         tone: a.status === "error" ? "bad" : "warn",
         ok: a.status === "connected",
       },
@@ -744,7 +751,7 @@ function AddByLink(p: { onDone: () => void; reload: () => Promise<unknown> }) {
               toast({ text: "Added. Sign in or add its key on its row under Connected.", tone: "info" });
               p.onDone();
             } catch (e) {
-              toast({ text: e instanceof ApiError ? e.message : "Not added.", tone: "bad" });
+              toast({ text: errorText(e, "Not added."), tone: "bad" });
             }
           }}
         >
@@ -810,7 +817,7 @@ function WriteSkill(p: { onAdded: () => void; onCancel: () => void }) {
               toast({ text: `Skill ${r.skill.name} saved. Agents can use it from their next turn.`, tone: "good" });
               p.onAdded();
             } catch (e) {
-              setProblem(e instanceof ApiError ? e.message : "Not saved. Try again.");
+              setProblem(errorText(e, "Not saved. Try again."));
             }
           }}
         >
@@ -827,13 +834,16 @@ function ConnectorDetail(p: {
   onChange: (patch: Parameters<typeof editConnector>[1]) => Promise<void>;
   onRemove: () => void;
   reload: () => Promise<unknown>;
+  signup?: string;
 }) {
   const { c } = p;
   return (
     <article className="hub-detail-body" aria-label={`Connector ${c.label ?? c.id}`}>
       <p className="mute hub-url">{c.package ? `${c.package.name}@${c.package.version}` : c.url}</p>
       {c.status === "ready" ? <p className="status status-good">{`On · ${c.tools?.length ?? 0} tools`}</p> : null}
-      {c.status === "error" && c.error ? <Banner tone="bad">{c.error}</Banner> : null}
+      {c.status === "error" ? (
+        <Banner tone="bad">{`It didn't connect: ${c.error ?? "no reason was given."}`}</Banner>
+      ) : null}
       {c.status === "needs_login" || c.status === "login_expired" ? (
         <SignInCard
           kind="connector"
@@ -843,6 +853,7 @@ function ConnectorDetail(p: {
           completePath={`/connectors/${c.id}/login/complete`}
           status="pending"
           tokenInstead={githubSignIn(c) ? c.id : undefined}
+          signup={p.signup}
         />
       ) : null}
       {c.status === "needs_key" ? (
@@ -852,6 +863,7 @@ function ConnectorDetail(p: {
           needs={c.needs}
           names={c.package?.secrets?.map((s) => s.name)}
           onDone={() => void p.reload()}
+          signup={p.signup}
         />
       ) : null}
       <fieldset className="roles">
@@ -968,6 +980,11 @@ function CatalogCard(p: {
           <p className="mute hub-what">{c.what}</p>
         </div>
       </div>
+      {!on && c.setup === "own_app" ? (
+        <p className="mute hub-setup">
+          A few extra steps: it asks for an app you create on its site, or an access token. The card walks you through.
+        </p>
+      ) : null}
       {!on && c.ask ? (
         <label className="field">
           {c.ask.label}
@@ -984,7 +1001,7 @@ function CatalogCard(p: {
         {st ? (
           st.ok ? (
             <span className="hub-status status-good">
-              <Check /> Connected
+              <LiveDot label="Live" /> Connected
             </span>
           ) : (
             <span className={`hub-status status-${st.tone}`}>{st.text}</span>
@@ -992,8 +1009,8 @@ function CatalogCard(p: {
         ) : (
           <>
             {c.signup ? (
-              <a href={c.signup} target="_blank" rel="noopener noreferrer" aria-label={`Create a ${c.label} account`}>
-                No account?
+              <a href={c.signup} target="_blank" rel="noopener noreferrer">
+                {`Create a ${c.label.replace(/ \(.*\)$/, "")} account`}
               </a>
             ) : (
               <span />
@@ -1018,6 +1035,7 @@ function CatalogCard(p: {
           completePath={`/connectors/${on.id}/login/complete`}
           status="pending"
           tokenInstead={githubSignIn(on) ? on.id : undefined}
+          signup={c.signup}
         />
       ) : null}
       {on?.status === "needs_key" ? (
@@ -1027,6 +1045,7 @@ function CatalogCard(p: {
           needs={on.needs}
           names={on.package?.secrets?.map((s) => s.name)}
           onDone={() => void p.reload()}
+          signup={c.signup}
         />
       ) : null}
     </li>

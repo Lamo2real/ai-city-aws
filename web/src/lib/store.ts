@@ -43,7 +43,10 @@ export type ConnectCardState =
       tokenOk?: boolean;
     }
   | { kind: "key"; id: string; targetId: string; title: string; needs?: string; names?: string[] }
-  | { kind: "imap"; id: string; targetId: string; title: string; status: "pending" | "connected"; preset?: string };
+  | { kind: "imap"; id: string; targetId: string; title: string; status: "pending" | "connected"; preset?: string }
+  /** A service that turned live (its key card is done), or one that failed with the reason in full (decision 141). */
+  | { kind: "done"; id: string; targetId: string; title: string }
+  | { kind: "problem"; id: string; targetId: string; title: string; text: string };
 export type Presence = "idle" | "listening" | "thinking" | "speaking" | "waiting";
 
 export interface HudState {
@@ -164,6 +167,33 @@ class Store {
     for (const l of this.sceneEvents) l(e);
   }
   /** Adds a card, or updates it where it stands (so a card doesn't jump when its status changes). */
+  /** Services already announced in the chat this session, so "… is connected, Sir." comes once. */
+  private announced = new Set<string>();
+  /** AIC's short line when a service the owner was connecting turns live (written here, not by the model). */
+  private announce(key: string, name: string) {
+    if (this.announced.has(key)) return;
+    this.announced.add(key);
+    const line: ChatLine = {
+      id: `a-conn-${key}-${Date.now()}`,
+      who: "ace",
+      text: `${name} is connected, Sir.`,
+      state: "done",
+      at: Date.now(),
+    };
+    this.set({ chat: [...this.state.chat, line] });
+  }
+  /** The connectors and mail accounts that a card or a waiting request still follows (refreshed on return). */
+  following(): { connectors: string[]; mail: string[] } {
+    const connectors = new Set(Object.keys(this.resumes()));
+    const mail = new Set<string>();
+    for (const c of this.state.cards) {
+      if (c.kind === "signin" && c.status !== "connected") (c.target === "mail" ? mail : connectors).add(c.targetId);
+      if (c.kind === "imap" && c.status !== "connected") mail.add(c.targetId);
+      if (c.kind === "key" || c.kind === "problem") connectors.add(c.targetId);
+      if (c.kind === "approve" && c.connectorId) connectors.add(c.connectorId);
+    }
+    return { connectors: [...connectors], mail: [...mail] };
+  }
   /** What to do once a service the owner just connected is ready: AIC carries on with their request (decision 130). */
   onResume: ((text: string) => void) | null = null;
   /** The owner's request that led to each service being offered, by connector id, kept for this tab's session. */
@@ -237,8 +267,17 @@ class Store {
       const card = this.state.cards.find((c) => c.id === `mail:${a.id}`);
       if (!card) return;
       if (a.status === "removed") return this.dropCard(card.id);
-      if (a.status === "connected" && (card.kind === "signin" || card.kind === "imap"))
+      if (a.status === "connected" && (card.kind === "signin" || card.kind === "imap")) {
+        if (card.status !== "connected")
+          this.announce(
+            card.id,
+            String(
+              (e.account as { label?: string }).label ??
+                card.title.replace(/^(Sign in to|Add the app password for) /, ""),
+            ),
+          );
         return this.putCard({ ...card, status: "connected" });
+      }
       if (a.status === "error" && card.kind === "signin") return this.putCard({ ...card, status: "failed" });
       return;
     }
@@ -247,6 +286,8 @@ class Store {
       const label = s("label") || s("id");
       const status = s("status");
       const waiting = this.resumes();
+      const followed = this.following().connectors.includes(s("id"));
+      if (status === "ready" && followed) this.announce(id, label);
       if ((status === "ready" || status === "removed") && s("id") in waiting) {
         const { [s("id")]: text, ...rest } = waiting;
         this.setResumes(rest);
@@ -274,7 +315,18 @@ class Store {
         });
       const card = this.state.cards.find((c) => c.id === id);
       if (status === "ready" && card?.kind === "signin") return this.putCard({ ...card, status: "connected" });
-      if (status === "ready" || status === "syncing") return card?.kind === "key" ? this.dropCard(id) : undefined;
+      if (status === "ready" && (card?.kind === "key" || card?.kind === "problem"))
+        return this.putCard({ kind: "done", id, targetId: s("id"), title: label });
+      // Every error in full, on the card that was following it (the owner's rule).
+      if (status === "error" && card)
+        return this.putCard({
+          kind: "problem",
+          id,
+          targetId: s("id"),
+          title: label,
+          text: s("error") || "It didn't connect.",
+        });
+      if (status === "syncing" && card?.kind === "key") return this.dropCard(id);
     }
   }
   /** The published apps from `GET /apps` (the snapshot and the app events keep them current too). */

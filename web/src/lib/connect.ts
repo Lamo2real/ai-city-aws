@@ -50,6 +50,8 @@ export interface PresetConnector {
   signup?: string;
   /** Other names the owner may use for it ("jira" for Jira & Confluence). */
   aka?: string[];
+  /** "own_app": its sign-in has no self-registration, so it takes the owner's app or an access token. */
+  setup?: "own_app";
   ask?: { name: string; label: string; pattern: string };
 }
 export interface DepartmentPreset {

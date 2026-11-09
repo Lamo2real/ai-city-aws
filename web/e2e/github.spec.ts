@@ -65,5 +65,7 @@ test("a GitHub sign-in card offers a token instead, which goes to the connector'
     .poll(() => m.calls.find((c) => c.path === "/connectors/github/key" && c.method === "PUT")?.body)
     .toEqual({ api_key: TOKEN });
   m.send({ type: "connector.updated", id: "github", label: "GitHub", status: "ready", auth: "api_key" });
-  await expect(page.getByText("GitHub: connected ✓")).toBeVisible();
+  const live = page.getByRole("status", { name: "GitHub is connected" });
+  await expect(live).toBeVisible();
+  await expect(live.locator(".live-dot")).toBeVisible();
 });

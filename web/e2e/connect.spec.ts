@@ -137,6 +137,65 @@ test("a plain request offers the service it needs, and AIC carries on once it is
     ]);
 });
 
+test("Higgsfield end to end: no account yet, sign up on its own site, come back, and it's live", async ({
+  page,
+  context,
+}) => {
+  const m = await mockBackend(page);
+  await context.route("https://higgsfield.ai/**", (r) =>
+    r.fulfill({ contentType: "text/html", body: "<title>Create your Higgsfield account</title>" }),
+  );
+  await page.goto("/#/ace");
+  m.send({ type: "connector.updated", id: "higgsfield", label: "Higgsfield", status: "needs_login", auth: "oauth" });
+  const card = page.getByRole("group", { name: "Sign in to Higgsfield" });
+  // No account: the service's own, checked sign-up page, in a new tab.
+  const signup = card.getByRole("link", { name: "Create one on Higgsfield's site" });
+  await expect(signup).toHaveAttribute("href", "https://higgsfield.ai/auth/sign-up");
+  await expect(signup).toHaveAttribute("target", "_blank");
+  const tab = context.waitForEvent("page");
+  await signup.click();
+  const site = await tab;
+  await expect.poll(() => site.title()).toBe("Create your Higgsfield account");
+  // The owner signs up and signs in over there; meanwhile the city's event was missed (a sleeping tab).
+  m.connectors = [
+    {
+      id: "higgsfield",
+      label: "Higgsfield",
+      url: "https://mcp.higgsfield.ai/mcp",
+      status: "ready",
+      tools: [{ name: "generate_video" }],
+    },
+  ];
+  await site.close();
+  await page.bringToFront();
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  const live = page.getByRole("status", { name: "Higgsfield is connected" });
+  await expect(live).toBeVisible();
+  await expect(live.locator(".live-dot")).toHaveCSS("animation-name", "live-pulse");
+  await expect(page.getByText("Higgsfield is connected, Sir.")).toBeVisible();
+  await expect(page.getByText("Higgsfield is connected, Sir.")).toHaveCount(1);
+  // Settings shows the same, with the live dot; it stands still for an owner who prefers less motion.
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/#/settings/connectors");
+  const row = page.getByRole("table", { name: "Connected tools" }).getByRole("row", { name: /Higgsfield.*Connected/ });
+  await expect(row.locator(".live-dot")).toHaveCSS("animation-name", "none");
+  await noSeriousA11y(page, "connected live");
+});
+
+test("a failed connection shows its reason in full, in the chat and in Settings", async ({ page }) => {
+  const m = await mockBackend(page);
+  await page.goto("/#/ace");
+  m.send({ type: "connector.updated", id: "acme", label: "Acme", status: "needs_login", auth: "oauth" });
+  const why = "Acme's sign-in page answered 400: redirect_uri is not registered for this client.";
+  m.send({ type: "connector.updated", id: "acme", label: "Acme", status: "error", error: why });
+  await expect(page.getByRole("alert", { name: "Acme didn't connect" })).toContainText(`Acme didn't connect: ${why}`);
+  m.connectors = [{ id: "acme", label: "Acme", url: "https://mcp.acme.test/mcp", status: "error", error: why }];
+  await page.goto("/#/settings/connectors");
+  await expect(page.getByRole("table", { name: "Connected tools" }).getByRole("row", { name: /Acme/ })).toContainText(
+    `Problem: ${why}`,
+  );
+});
+
 test("an API key goes into a secure field, never the chat", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/#/ace");
@@ -178,7 +237,7 @@ test("connecting an IMAP mailbox: the app password is checked, then forgotten by
     smtp_host: "smtp.fastmail.com",
   });
   m.send({ type: "mail.account", account: { id: "ma-1", status: "connected" } });
-  await expect(page.getByText("Fastmail: connected ✓")).toBeVisible();
+  await expect(page.getByRole("status", { name: "Fastmail is connected" }).locator(".live-dot")).toBeVisible();
   const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }));
   expect(stored).not.toContain("good-app-password");
   expect(await page.content()).not.toContain("good-app-password");

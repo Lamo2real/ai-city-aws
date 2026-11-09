@@ -39,6 +39,21 @@ export function Button(p: {
   );
 }
 
+/** A live connection: a small green dot with a gentle pulse (still when the owner prefers less motion). */
+export function LiveDot(p: { label?: string }) {
+  return <span className="live-dot" role="img" aria-label={p.label ?? "Live"} />;
+}
+
+/** An error in full, with what to do about it when the API says (the owner's rule: never hide the reason). */
+export function errorText(e: unknown, fallback: string): string {
+  if (e && typeof e === "object" && "message" in e && (e as Error).message) {
+    const fix = (e as { fix?: string | null }).fix;
+    const msg = (e as Error).message;
+    return fix && !msg.includes(fix) ? `${msg} ${fix}` : msg;
+  }
+  return fallback;
+}
+
 export function Banner(p: {
   tone: "info" | "warn" | "bad" | "good";
   children: ReactNode;

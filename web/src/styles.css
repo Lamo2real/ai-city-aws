@@ -2453,6 +2453,38 @@ table.costs tr:last-child td {
   max-width: 34rem;
   box-shadow: var(--glow);
 }
+/* A live connection (decision 141): a small green dot with a gentle pulse; still when less motion is preferred. */
+.live-dot {
+  display: inline-block;
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #2fbf71;
+  box-shadow: 0 0 0 0 rgba(47, 191, 113, 0.55);
+  animation: live-pulse 2.2s ease-out infinite;
+  vertical-align: middle;
+}
+@keyframes live-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(47, 191, 113, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(47, 191, 113, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(47, 191, 113, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-dot {
+    animation: none;
+  }
+}
+.signup-link {
+  margin: var(--s2) 0 0;
+  font-size: var(--fs-s);
+}
 .connect-card.connect-done {
   border-color: rgba(159, 230, 187, 0.5);
   background: var(--good-t);

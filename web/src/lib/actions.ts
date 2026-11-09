@@ -1,7 +1,7 @@
 // What the owner can do, with instant feedback and an outbox: a message that can't be sent stays in
 // the chat marked "not sent yet" and goes out when the connection is back. Nothing is lost.
 import { api, ApiError } from "./api.ts";
-import { looksLikeKey } from "./connect.ts";
+import { listConnectors, listMailAccounts, looksLikeKey } from "./connect.ts";
 import { store, type ChatLine } from "./store.ts";
 import { toast } from "../components/ui.tsx";
 
@@ -56,6 +56,34 @@ export async function sendMessage(text: string, opts: { voice?: boolean } = {}) 
 
 // A service the owner was offered is connected: AIC picks their request up again (decision 130).
 store.onResume = (text) => void sendMessage(text);
+
+/** Coming back to AI City (after signing up or signing in on a service's own page): look again at whatever a card
+ * or a waiting request follows, so it turns connected without a reload (decision 141). Events do the same when the
+ * live connection is up; this covers a sleeping tab or a dropped socket. */
+export async function refreshFollowed() {
+  const { connectors, mail } = store.following();
+  const [c, m] = await Promise.all([
+    connectors.length ? listConnectors().catch(() => null) : null,
+    mail.length ? listMailAccounts().catch(() => null) : null,
+  ]);
+  for (const x of c?.connectors ?? [])
+    if (connectors.includes(x.id))
+      store.event({
+        type: "connector.updated",
+        id: x.id,
+        label: x.label ?? x.id,
+        status: x.status,
+        needs: x.needs,
+        error: x.error,
+      });
+  for (const a of m?.accounts ?? []) if (mail.includes(a.id)) store.event({ type: "mail.account", account: a });
+}
+if (typeof window !== "undefined") {
+  window.addEventListener("focus", () => void refreshFollowed());
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void refreshFollowed();
+  });
+}
 
 /** Re-sends everything the outbox holds. The server ignores a line it already has (same client id). */
 export async function flushOutbox() {
