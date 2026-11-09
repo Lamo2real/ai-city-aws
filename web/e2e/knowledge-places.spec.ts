@@ -49,10 +49,12 @@ test("knowledge: laws are grouped by country, year and topic, filterable, and th
   await expect(group(page, "Sweden · 2026 · Tax")).toContainText("found automatically");
 
   // Filter by country: only Sweden's.
-  await page.getByRole("combobox", { name: "Country or region" }).selectOption({ label: "Sweden" });
+  await page.getByRole("combobox", { name: "Country or region" }).click();
+  await page.getByRole("option", { name: "Sweden" }).click();
   await expect(page.locator(".kgroup-title")).toHaveCount(2);
   await expect(group(page, "Switzerland · 2025 · Tax")).toHaveCount(0);
-  await page.getByRole("combobox", { name: "Year", exact: true }).selectOption("2026");
+  await page.getByRole("combobox", { name: "Year", exact: true }).click();
+  await page.getByRole("option", { name: "2026" }).click();
   await expect(page.locator(".kgroup-title")).toHaveText([/Sweden · 2026 · Tax/]);
   await page.getByRole("button", { name: "Show everything" }).click();
   await expect(page.locator(".kgroup-title")).toHaveCount(5);
@@ -65,7 +67,8 @@ test("knowledge: laws are grouped by country, year and topic, filterable, and th
   const form = page.getByRole("form", { name: "Where and when “meeting notes.pdf” holds" });
   await form.getByLabel("Countries or regions").fill("Switzerland");
   await form.getByLabel("Year").fill("2026");
-  await form.getByLabel("Topic").selectOption("tax");
+  await form.getByRole("combobox", { name: "Topic" }).click();
+  await page.getByRole("option", { name: /^Tax/ }).click();
   await noSeriousA11y(page, "Knowledge place editor");
   await form.getByRole("button", { name: "Save" }).click();
   await expect

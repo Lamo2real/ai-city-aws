@@ -17,6 +17,7 @@ import {
 } from "../lib/connect.ts";
 import { ImapCard, SignInCard } from "./ConnectCard.tsx";
 import { Button, Confirm, LiveDot, toast } from "./ui.tsx";
+import { Select } from "./Select.tsx";
 
 const STATUS: Record<MailAccount["status"], string> = {
   connected: "Connected",
@@ -107,7 +108,7 @@ export function AddMailAccount(p: { onAdded: () => void; onCancel: () => void })
       <h3>Add a mailbox or calendar</h3>
       <label className="field">
         Provider
-        <select
+        <Select
           value={adding.provider}
           onChange={(e) => setAdding({ ...adding, provider: e.target.value as MailAccount["provider"] })}
         >
@@ -116,7 +117,7 @@ export function AddMailAccount(p: { onAdded: () => void; onCancel: () => void })
               {v}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="field">
         Label
@@ -177,10 +178,10 @@ export function MailSettings(p: {
       {(["orchestrator", "manager"] as const).map((role) => (
         <label key={role} className="field">
           {role === "orchestrator" ? "Orchestrator" : "Managers"}
-          <select value={p.access[role] ?? "none"} onChange={(e) => void access(role, e.target.value)}>
+          <Select value={p.access[role] ?? "none"} onChange={(e) => void access(role, e.target.value)}>
             <option value="none">No access</option>
             <option value="read">Can read</option>
-          </select>
+          </Select>
         </label>
       ))}
       <h4>Standing rules</h4>
@@ -209,14 +210,14 @@ export function MailSettings(p: {
         <div className="card">
           <label className="field">
             Kind
-            <select value={rule.kind} onChange={(e) => setRule({ ...rule, kind: e.target.value as MailRule["kind"] })}>
+            <Select value={rule.kind} onChange={(e) => setRule({ ...rule, kind: e.target.value as MailRule["kind"] })}>
               <option value="send_to">Send to</option>
               <option value="accept_from">Accept invitations from</option>
-            </select>
+            </Select>
           </label>
           <label className="field">
             From account
-            <select value={rule.account_id} onChange={(e) => setRule({ ...rule, account_id: e.target.value })}>
+            <Select value={rule.account_id} onChange={(e) => setRule({ ...rule, account_id: e.target.value })}>
               {accounts
                 ?.filter((a) => a.status === "connected")
                 .map((a) => (
@@ -224,7 +225,7 @@ export function MailSettings(p: {
                     {a.label}
                   </option>
                 ))}
-            </select>
+            </Select>
           </label>
           <label className="field">
             Addresses or domains, separated by commas

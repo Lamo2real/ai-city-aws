@@ -51,6 +51,7 @@ import { loadGitHub, type GitHubStatus } from "./GitHubSettings.tsx";
 import { AddMailAccount, MailAccountCard, MailSettings } from "./MailAccounts.tsx";
 import { AddSkill, RolePicker } from "./SkillsScreen.tsx";
 import { Banner, Button, Confirm, errorText, LiveDot, PlusIcon, toast } from "./ui.tsx";
+import { Select } from "./Select.tsx";
 
 const ALL = "All departments";
 type View = "connected" | "browse";
@@ -871,7 +872,7 @@ function ConnectorDetail(p: {
         {ROLES.map((r: Role) => (
           <label key={r} className="field inline">
             {ROLE_LABEL[r]}
-            <select
+            <Select
               value={c.roles?.[r] ?? "none"}
               onChange={(e) => {
                 const roles = { ...(c.roles ?? {}) };
@@ -883,13 +884,13 @@ function ConnectorDetail(p: {
               <option value="none">No</option>
               <option value="read">Read only</option>
               <option value="all">Everything</option>
-            </select>
+            </Select>
           </label>
         ))}
       </fieldset>
       <label className="field">
         Approvals
-        <select
+        <Select
           value={c.approval ?? "destructive"}
           onChange={(e) => void p.onChange({ approval: e.target.value as Connector["approval"] })}
         >
@@ -898,7 +899,7 @@ function ConnectorDetail(p: {
               {v}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <div className="row-end">
         {c.status === "ready" ? (

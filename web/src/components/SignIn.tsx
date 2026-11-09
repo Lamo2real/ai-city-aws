@@ -9,6 +9,7 @@ import { PASSWORD_RULES, auth, authProblem, passwordProblem, type SignInStep } f
 import { config } from "../lib/config.ts";
 import { Eyes } from "./Eyes.tsx";
 import { Banner, Button } from "./ui.tsx";
+import { Wordmark } from "./Wordmark.tsx";
 
 type Screen =
   | { s: "signin" }
@@ -78,9 +79,7 @@ function Card(p: { title: string; step?: number; children: ReactNode }) {
       <div className="signin-card">
         <div className="signin-brand">
           <Eyes presence="idle" small />
-          <span className="wordmark">
-            <span className="wm-mark">AI</span> <span className="wm-word">City</span>
-          </span>
+          <Wordmark />
         </div>
         {p.step ? (
           <p className="mute small" aria-label={`Step ${p.step} of ${FIRST_LOGIN_STEPS}`}>

@@ -124,7 +124,8 @@ describe("Settings → Executives", () => {
     fireEvent.click(await screen.findByRole("switch", { name: "CFO Cost review on or off" }));
     await waitFor(() => expect(calls.filter((c) => c.method === "PUT").length).toBe(1));
     expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ reviews: { "cfo-cost-review": { enabled: true } } });
-    fireEvent.change(screen.getAllByRole("combobox")[1]!, { target: { value: "14" } });
+    fireEvent.click(screen.getAllByRole("combobox")[1]!);
+    fireEvent.click(await screen.findByRole("option", { name: "every 2 weeks" }));
     await waitFor(() => expect(calls.filter((c) => c.method === "PUT").length).toBe(2));
     expect(calls.filter((c) => c.method === "PUT")[1]?.body).toEqual({
       reviews: { "coo-bottleneck-review": { every_days: 14 } },

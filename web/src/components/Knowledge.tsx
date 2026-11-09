@@ -22,6 +22,7 @@ import {
 } from "../lib/knowledge.ts";
 import { DOC_TYPES, placeCode, placeName, TOPICS, topicWord } from "../lib/places.ts";
 import { Banner, Button, Confirm, Loading, toast, UNDO_MS } from "./ui.tsx";
+import { Select } from "./Select.tsx";
 
 export const SCOPES: Array<{ value: Scope; label: string }> = [
   { value: "always", label: "Always include" },
@@ -207,36 +208,36 @@ export function KnowledgeScreen() {
         <div className="kfilters" role="group" aria-label="Show">
           <label className="field">
             Country or region
-            <select value={filters.place} onChange={(e) => setFilters({ ...filters, place: e.target.value })}>
+            <Select value={filters.place} onChange={(e) => setFilters({ ...filters, place: e.target.value })}>
               <option value="">All</option>
               {choices.places.map((p) => (
                 <option key={p} value={p}>
                   {placeName(p)}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="field">
             Year
-            <select value={filters.year} onChange={(e) => setFilters({ ...filters, year: e.target.value })}>
+            <Select value={filters.year} onChange={(e) => setFilters({ ...filters, year: e.target.value })}>
               <option value="">All</option>
               {choices.years.map((y) => (
                 <option key={y} value={String(y)}>
                   {y}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="field">
             Topic
-            <select value={filters.topic} onChange={(e) => setFilters({ ...filters, topic: e.target.value })}>
+            <Select value={filters.topic} onChange={(e) => setFilters({ ...filters, topic: e.target.value })}>
               <option value="">All</option>
               {choices.topics.map((t) => (
                 <option key={t} value={t}>
                   {topicWord(t)}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="check">
             <input type="checkbox" checked={grouped} onChange={(e) => setGrouped(e.target.checked)} />
@@ -407,25 +408,25 @@ function PlaceEditor(p: { item: KnowledgeItem; onDone: () => void; onError: (m: 
       </label>
       <label className="field">
         Topic
-        <select value={topic} onChange={(e) => setTopic(e.target.value)}>
+        <Select value={topic} onChange={(e) => setTopic(e.target.value)}>
           <option value="">Not set</option>
           {TOPICS.map((t) => (
             <option key={t} value={t}>
               {topicWord(t)}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="field">
         Type
-        <select value={docType} onChange={(e) => setDocType(e.target.value)}>
+        <Select value={docType} onChange={(e) => setDocType(e.target.value)}>
           <option value="">Not set</option>
           {DOC_TYPES.map((t) => (
             <option key={t} value={t}>
               {topicWord(t)}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <div className="kedit-actions">
         <Button type="submit">Save</Button>

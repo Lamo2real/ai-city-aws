@@ -23,6 +23,7 @@ import { config } from "../lib/config.ts";
 import { readTheme, saveTheme, type Theme } from "../lib/theme.ts";
 import { readVoiceId, saveVoiceId, VOICES } from "../voice/modes.ts";
 import { getVoice, logVoiceError, speakProblem } from "../voice/voice.ts";
+import { setTapFx, tapFxOn } from "../lib/tapFx.ts";
 import {
   loadOpenAi,
   openAiStatus,
@@ -32,6 +33,7 @@ import {
   saveOpenAiVoice,
   type OpenAiStatus,
 } from "../voice/openai.ts";
+import { Select } from "./Select.tsx";
 
 function useApi<T>(path: string | null) {
   const [data, setData] = useState<T | null>(null);
@@ -474,6 +476,28 @@ function AppearanceSetting() {
   );
 }
 
+/** Tap sound and rings (decision 148): on by default, saved on this device at once. */
+function TapFxSetting() {
+  const [on, setOn] = useState(tapFxOn);
+  return (
+    <label className="switch toggle">
+      <input
+        type="checkbox"
+        role="switch"
+        checked={on}
+        onChange={(e) => {
+          setOn(e.target.checked);
+          setTapFx(e.target.checked);
+        }}
+      />
+      <span className="toggle-track" aria-hidden="true">
+        <span className="toggle-knob" />
+      </span>
+      Tap sound and rings
+    </label>
+  );
+}
+
 function SettingsPageView({
   page,
   title,
@@ -543,6 +567,7 @@ function SettingsPageView({
       {page === "general" ? (
         <>
           <AppearanceSetting />
+          <TapFxSetting />
           <h2>Notifications</h2>
           <p className="mute">
             No emails. One message to your iPhone when a whole job is finished, nothing for its parts.
@@ -559,10 +584,10 @@ function SettingsPageView({
           <h2>Where Claude runs</h2>
           <label className="field">
             Model location
-            <select value={form.profile_prefix} onChange={(e) => setForm({ ...form, profile_prefix: e.target.value })}>
+            <Select value={form.profile_prefix} onChange={(e) => setForm({ ...form, profile_prefix: e.target.value })}>
               <option value="global">Worldwide (cheapest; prompts may leave the EU)</option>
               <option value="eu">Europe only (about 10% more; Fable roles use Opus instead)</option>
-            </select>
+            </Select>
           </label>
           <h2>Help</h2>
           <Button variant="quiet" onClick={reopenGuide}>
@@ -799,7 +824,7 @@ function VoiceSettings() {
       <label className="field">
         Voice
         {onOpenAi ? (
-          <select
+          <Select
             aria-label="AIC's voice"
             value={oaVoice}
             onChange={(e) => {
@@ -812,9 +837,9 @@ function VoiceSettings() {
                 {v[0]!.toUpperCase() + v.slice(1) + (v === openai.default ? " (closest to ChatGPT's Sol)" : "")}
               </option>
             ))}
-          </select>
+          </Select>
         ) : (
-          <select
+          <Select
             aria-label="AIC's voice"
             value={id}
             onChange={(e) => {
@@ -827,7 +852,7 @@ function VoiceSettings() {
                 {v.label}
               </option>
             ))}
-          </select>
+          </Select>
         )}
       </label>
       <Button variant="quiet" onClick={testVoice}>

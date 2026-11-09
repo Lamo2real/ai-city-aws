@@ -203,32 +203,34 @@ textarea {
   min-height: var(--tap);
   padding: 0 var(--s1);
 }
-/* the AI City wordmark: the Add skill button's amber and heavy rounded type, as a logo */
+/* the AI City logo (decision 147): an amber skyline tile and "AI City"; the tile reads the accent tokens */
 .wordmark {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 9px;
   font-family: var(--font);
   font-weight: 800;
   line-height: 1;
   white-space: nowrap;
 }
-.wm-mark {
+.wm-tile {
   display: inline-grid;
   place-items: center;
+  width: 28px;
   height: 28px;
-  padding: 0 9px;
-  border-radius: 999px;
+  border-radius: 8px;
   background: var(--accent-fill);
   color: var(--accent-ink);
   border: 1px solid var(--accent-edge);
   box-shadow: var(--accent-shadow);
-  font-size: 15px;
-  letter-spacing: 0.02em;
+}
+.wm-tile svg {
+  fill: currentColor;
+  display: block;
 }
 .wm-word {
   font-size: 21px;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
   color: var(--gtext);
 }
 .top nav {
@@ -531,6 +533,101 @@ main {
 .field select option {
   background: var(--night2);
   color: var(--gtext);
+}
+/* The one dropdown (decision 149): a glass field that opens our own list; amber marks the chosen row. */
+.aselect {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  min-height: var(--tap);
+  min-width: 0;
+  width: 100%;
+  padding: 0 var(--s3);
+  border: 1px solid var(--edge-2);
+  border-radius: var(--rg-s);
+  background: var(--glass-deep);
+  color: var(--gtext);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+  text-align: left;
+  transition:
+    border-color var(--dur-s) var(--ease),
+    background var(--dur-s) var(--ease);
+}
+.aselect:hover:not(:disabled),
+.aselect.is-open {
+  border-color: var(--go);
+}
+.aselect:disabled {
+  opacity: 0.55;
+}
+.aselect-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.aselect-chev {
+  flex: none;
+  color: var(--go);
+  transition: transform var(--dur-s) var(--ease);
+}
+.aselect.is-open .aselect-chev {
+  transform: rotate(180deg);
+}
+.aselect-list {
+  position: fixed;
+  z-index: 9000;
+  max-width: min(560px, calc(100vw - 16px));
+  max-height: 300px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--panel);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  color: var(--gtext);
+  border: 1px solid var(--edge-2);
+  border-radius: var(--rg-s);
+  box-shadow: var(--lift);
+  transform-origin: top center;
+  animation: aselect-in var(--dur-s) var(--ease-out) both;
+}
+.aselect-list.is-up {
+  transform-origin: bottom center;
+}
+@keyframes aselect-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+.aselect-opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  min-height: 40px;
+  padding: 0 var(--s3);
+  border-radius: 9px;
+  white-space: nowrap;
+}
+.aselect-opt.is-active {
+  background: var(--glass-2);
+}
+.aselect-opt.is-chosen {
+  background: var(--accent-fill);
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+.aselect-opt[aria-disabled="true"] {
+  opacity: 0.45;
+}
+@media (prefers-reduced-motion: reduce) {
+  .aselect-list {
+    animation: none;
+  }
 }
 .field-error {
   color: var(--bad-l);
@@ -5656,4 +5753,40 @@ button.hub-status {
 .citypanel .builddept .field {
   color: inherit;
   font-weight: 600;
+}
+
+/* Tap feedback (decision 148): two amber rings from the point tapped, like a signal. Never takes a pointer. */
+.tapfx {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  overflow: hidden;
+}
+.tapfx-ring {
+  position: absolute;
+  width: 72px;
+  height: 72px;
+  margin: -36px 0 0 -36px;
+  border-radius: 50%;
+  border: 2px solid var(--go);
+  box-shadow: 0 0 0 1px rgba(249, 201, 118, 0.35);
+  opacity: 0;
+  transform: scale(0.15);
+  animation: tapfx-ring 520ms var(--ease-out) both;
+}
+@keyframes tapfx-ring {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.15);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tapfx {
+    display: none;
+  }
 }

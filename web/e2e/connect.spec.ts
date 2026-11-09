@@ -222,7 +222,8 @@ test("connecting an IMAP mailbox: the app password is checked, then forgotten by
   await page.goto("/#/ace");
   m.send({ type: "connect.signin", account_id: "ma-1", provider: "imap", label: "Fastmail" });
   const form = page.getByRole("form", { name: "Add the app password for Fastmail" });
-  await form.getByLabel("Fill in the servers for").selectOption("Fastmail");
+  await form.getByRole("combobox", { name: "Fill in the servers for" }).click();
+  await page.getByRole("option", { name: "Fastmail" }).click();
   await form.getByLabel("Email address").fill("me@fastmail.com");
   await form.getByLabel("App password").fill("wrong-one");
   await form.getByRole("button", { name: "Connect securely" }).click();
@@ -276,7 +277,8 @@ test("Settings lists connectors and mail accounts; roles can be changed", async 
     .click();
   const gh = page.getByRole("article", { name: "Connector GitHub" });
   await expect(gh).toContainText("On · 1 tools");
-  await gh.getByLabel("Managers").selectOption("read");
+  await gh.getByRole("combobox", { name: "Managers" }).click();
+  await page.getByRole("option", { name: "Read only" }).click();
   await expect
     .poll(() => m.calls.find((c) => c.path === "/connectors/github" && c.method === "PUT")?.body)
     .toEqual({ roles: { ace: "read", worker: "all", manager: "read" } });

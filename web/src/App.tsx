@@ -26,6 +26,7 @@ import { Banner, Button, Toaster, toast } from "./components/ui.tsx";
 import { connectReturn } from "./lib/connectReturn.ts";
 import { Eyes } from "./components/Eyes.tsx";
 import { SignIn } from "./components/SignIn.tsx";
+import { Wordmark } from "./components/Wordmark.tsx";
 
 const VIEWS = ["ace", "city", "tickets", "apps", "knowledge", "skills", "costs", "settings"] as const;
 type View = (typeof VIEWS)[number];
@@ -162,9 +163,7 @@ export function App() {
       </a>
       <header className="top" ref={top}>
         <button type="button" className="brand" onClick={() => go("ace")} aria-label="AI City — talk to AIC">
-          <span className="wordmark">
-            <span className="wm-mark">AI</span> <span className="wm-word">City</span>
-          </span>
+          <Wordmark />
         </button>
         <nav aria-label="Screens">
           {VIEWS.map((v) => (

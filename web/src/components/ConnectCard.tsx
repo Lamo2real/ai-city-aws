@@ -9,6 +9,7 @@ import { rememberConnect } from "../lib/connectReturn.ts";
 import { serviceFor, useCatalog } from "../lib/catalog.ts";
 import { store, type ConnectCardState } from "../lib/store.ts";
 import { Button, errorText, LiveDot } from "./ui.tsx";
+import { Select } from "./Select.tsx";
 
 /** "No account yet?": the service's own sign-up page, checked by scripts/check-signup-links.mjs, in a new tab. */
 export function SignupLink(p: { href?: string; service: string }) {
@@ -260,7 +261,7 @@ export function ImapCard(p: {
       {p.preset && APP_PASSWORD_HOWTO[p.preset] ? <p className="mute">{APP_PASSWORD_HOWTO[p.preset]}</p> : null}
       <label className="field">
         Provider
-        <select
+        <Select
           onChange={(e) => setF({ ...f, ...(IMAP_PRESETS[e.target.value] ?? {}) })}
           defaultValue={p.preset && IMAP_PRESETS[p.preset] ? p.preset : ""}
           aria-label="Fill in the servers for"
@@ -271,7 +272,7 @@ export function ImapCard(p: {
               {k}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="field">
         Email address

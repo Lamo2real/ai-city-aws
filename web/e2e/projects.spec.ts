@@ -195,7 +195,8 @@ test("open a project, send a change, switch device sizes, see what's happening",
       .evaluate(() => window.innerWidth),
   ).toBe(1440);
   await expect.poll(width).toBeLessThan(900); // fitted into the pane
-  await page.getByLabel("Zoom").selectOption("0.5");
+  await page.getByRole("combobox", { name: "Zoom" }).click();
+  await page.getByRole("option", { name: "50%" }).click();
   await expect.poll(width).toBeCloseTo(720, 0);
   await page.getByRole("radio", { name: "Custom" }).click();
   await page.getByLabel("Width in pixels").fill("500");

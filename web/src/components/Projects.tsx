@@ -23,6 +23,7 @@ import {
 import { useHud } from "../lib/store.ts";
 import { AppFrame, AppIcon, GrantList, PinButton, problem } from "./Apps.tsx";
 import { Banner, Button, Confirm, SendIcon, toast } from "./ui.tsx";
+import { Select } from "./Select.tsx";
 
 const IDEAS = [
   "A memory game with animal cards for my kids",
@@ -696,7 +697,7 @@ function Preview({ project }: { project: Project }) {
         {size ? (
           <label className="pv-zoom">
             <span className="sr">Zoom</span>
-            <select
+            <Select
               value={String(zoom)}
               onChange={(e) => setZoom(e.target.value === "fit" ? "fit" : Number(e.target.value))}
             >
@@ -704,7 +705,7 @@ function Preview({ project }: { project: Project }) {
               {ZOOMS.map((z) => (
                 <option key={z} value={z}>{`${Math.round(z * 100)}%`}</option>
               ))}
-            </select>
+            </Select>
           </label>
         ) : null}
       </div>

@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../lib/api.ts";
 import { Banner, Loading, toast } from "./ui.tsx";
+import { Select } from "./Select.tsx";
 
 export interface Executive {
   id: string;
@@ -221,7 +222,7 @@ export function Executives() {
                 />
                 <label className="field inline">
                   How often
-                  <select
+                  <Select
                     value={r.every_days}
                     onChange={(e) =>
                       void save({ reviews: { [r.id]: { every_days: Number(e.target.value) } } }, "Saved.")
@@ -232,7 +233,7 @@ export function Executives() {
                         {everyDays(n)}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
               </div>
             </li>

@@ -474,7 +474,7 @@ test("a three-sentence streamed reply plays three clips, in order, once each; Se
 test("Settings: an OpenAI key switches AIC to OpenAI's voice; the key is never shown back", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/#/settings/voice");
-  await expect(page.getByRole("combobox", { name: "AIC's voice" })).toHaveValue("Ruth"); // Polly until a key is in
+  await expect(page.getByRole("combobox", { name: "AIC's voice" })).toHaveAttribute("data-value", "Ruth"); // Polly until a key is in
   await page.getByRole("button", { name: "Add an OpenAI key" }).click();
   const field = page.getByLabel("OpenAI key", { exact: true });
   await expect(field).toHaveAttribute("type", "password");
@@ -488,15 +488,16 @@ test("Settings: an OpenAI key switches AIC to OpenAI's voice; the key is never s
   expect(await page.content()).not.toContain("sk-test-123");
   expect(m.calls.filter((c) => c.path === "/voice/openai-key").at(-1)?.body).toEqual({ key: "sk-test-123" });
   const voice = page.getByRole("combobox", { name: "AIC's voice" });
-  await expect(voice).toHaveValue("alloy"); // OpenAI's default
-  await voice.selectOption("nova");
+  await expect(voice).toHaveAttribute("data-value", "alloy"); // OpenAI's default
+  await voice.click();
+  await page.getByRole("option", { name: /^Nova/ }).click();
   await page.getByRole("button", { name: "Test voice" }).click();
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []))
     .toEqual(["openai:nova:Hi, I'm AIC. This is how I'll sound when I answer you."]);
   await expect(page.getByText(/^Played\./)).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("combobox", { name: "AIC's voice" })).toHaveValue("nova");
+  await expect(page.getByRole("combobox", { name: "AIC's voice" })).toHaveAttribute("data-value", "nova");
   await expect(page.getByRole("button", { name: "Replace the OpenAI key" })).toBeVisible();
 });
 
@@ -541,15 +542,16 @@ test("Settings: pick AIC's voice; it is remembered on this device and can be hea
   await mockBackend(page);
   await page.goto("/#/settings/voice");
   const voice = page.getByRole("combobox", { name: "AIC's voice" });
-  await expect(voice).toHaveValue("Ruth"); // the deploy's default
-  await voice.selectOption("Danielle");
+  await expect(voice).toHaveAttribute("data-value", "Ruth"); // the deploy's default
+  await voice.click();
+  await page.getByRole("option", { name: /^Danielle/ }).click();
   await page.getByRole("button", { name: "Test voice" }).click();
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []))
     .toEqual(["Hi, I'm AIC. This is how I'll sound when I answer you."]);
   await expect(page.getByText(/^Played\./)).toBeVisible(); // the button says it worked
   await page.reload();
-  await expect(page.getByRole("combobox", { name: "AIC's voice" })).toHaveValue("Danielle");
+  await expect(page.getByRole("combobox", { name: "AIC's voice" })).toHaveAttribute("data-value", "Danielle");
   expect(await page.evaluate(() => localStorage.getItem("aic.voice"))).toBe("Danielle");
 });
 
