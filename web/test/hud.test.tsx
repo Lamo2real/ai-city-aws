@@ -71,7 +71,7 @@ describe("the ported City state", () => {
     s = reduce(s, { type: "worker.state", id: "wkr-1", state: "working", at });
     expect(topBar(s).agentsActive).toBe(1);
     s = reduce(s, { type: "worker.state", id: "wkr-1", state: "waiting", at });
-    expect(topBar(s).agentsActive).toBe(1); // asked a question: still on the job
+    expect(topBar(s).agentsActive).toBe(0); // waiting for an answer: not running now
     s = reduce(s, { type: "worker.state", id: "wkr-1", state: "dormant", at });
     expect(topBar(s).agentsActive).toBe(0); // idle at the desk is not working
     s = reduce(s, { type: "agent.retired", id: "wkr-1", at });

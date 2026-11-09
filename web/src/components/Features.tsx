@@ -28,10 +28,21 @@ import { Banner, Button, Loading, toast } from "./ui.tsx";
 
 const ADD_DRAFT = "I'd like a feature that ";
 
-/** "City | Features": the two pages under the City tab. */
+/** Which side the "City | Features" highlight was on, so the next page's switch starts there and slides over. */
+let shownTab: "city" | "features" | null = null;
+
+/** "City | Features": the two pages under the City tab. One look on both pages; the highlight slides from the
+ *  page you left to the one you opened (the owner's wish, 2026-11-09: smooth, not a jump to a new style). */
 export function CityTabs({ on }: { on: "city" | "features" }) {
+  const [at, setAt] = useState<"city" | "features">(shownTab ?? on);
+  useEffect(() => {
+    shownTab = on;
+    const raf = requestAnimationFrame(() => setAt(on));
+    return () => cancelAnimationFrame(raf);
+  }, [on]);
   return (
-    <nav className="citytabs" aria-label="City pages">
+    <nav className="citytabs" aria-label="City pages" data-at={at}>
+      <span className="citytabs-thumb" aria-hidden="true" />
       <a href="#/city" aria-current={on === "city" ? "page" : undefined}>
         City
       </a>

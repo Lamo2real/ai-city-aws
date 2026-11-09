@@ -506,7 +506,7 @@ enum City {
     static func topBar(_ s: CityState) -> TopBar {
         let agents = s.agents.values.filter { !core.contains($0.id) && $0.kind != "specialist" }
         // "Agents working now": workers on a job right now, never managers, the Orchestrator or AIC (the owner, 2026-11-08).
-        let busy: Set<String> = ["working", "waiting", "review", "blocked"]
+        let busy: Set<String> = ["working", "reporting"] // running now: not waiting on an answer or in review (2026-11-09)
         let working = agents.filter { $0.kind == "worker" && $0.state != "retired" && busy.contains($0.workerState ?? "") }.count
         return TopBar(agentsTotal: agents.count, agentsActive: working,
                       ticketsRunning: s.tickets.values.filter { $0.status == "in_progress" || $0.status == "in_review" }.count,

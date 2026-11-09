@@ -4099,43 +4099,61 @@ summary,
 }
 
 /* ---------- City → Features and the Calendar (docs/MAIL_CALENDAR.md §12) ---------- */
-/* "City | Features": a small pill. On the City it sits in the parchment stats card; on Features, on the glass. */
+/* "City | Features": one parchment pill on both pages, two equal halves, and a highlight that slides from the
+   page you left to the one you opened (the owner's wish, 2026-11-09). On the City it sits at the right of the
+   stats card; on Features at the right of the page's top, in the same parchment look. */
 .citytabs {
-  display: inline-flex;
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   flex: none;
-  gap: 2px;
+  width: fit-content;
   padding: 3px;
   border-radius: 999px;
-  border: 1px solid var(--edge-2);
-  background: var(--glass);
-  box-shadow: var(--glow);
-  margin-bottom: var(--s3);
+  border: 1px solid var(--wood);
+  background: var(--paper2);
+  margin: 0 0 var(--s3) auto;
 }
 .citytabs a {
-  min-height: 36px;
+  position: relative;
+  z-index: 1;
+  min-height: 34px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   padding: 0 var(--s4);
   border-radius: 999px;
-  color: var(--gtext);
+  color: var(--text);
   font-weight: 700;
   text-decoration: none;
+  transition: color 0.25s ease;
 }
 .citytabs a[aria-current="page"] {
-  background: linear-gradient(180deg, rgba(249, 201, 118, 0.96), rgba(232, 163, 61, 0.96));
   color: #2a1a08;
+}
+.citytabs-thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(249, 201, 118, 0.96), rgba(232, 163, 61, 0.96));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.citytabs[data-at="features"] .citytabs-thumb {
+  transform: translateX(100%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .citytabs-thumb,
+  .citytabs a {
+    transition: none;
+  }
 }
 .citytop .citytabs {
   order: 9; /* after the stats, before the (i) */
   margin: 0 0 0 auto;
-  border-color: var(--wood);
-  background: var(--paper2);
-  box-shadow: none;
-}
-.citytop .citytabs a {
-  min-height: 32px;
-  color: var(--text);
 }
 .citytop .citytabs + * {
   margin-left: 0;
@@ -4151,9 +4169,8 @@ summary,
     margin: 0 0 2px;
     justify-content: center;
   }
-  .citytop .citytabs a {
-    flex: 1;
-    justify-content: center;
+  .citytabs {
+    width: 100%;
   }
   .citytop .info {
     margin-left: auto;

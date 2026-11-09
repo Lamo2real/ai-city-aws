@@ -821,8 +821,8 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     ctx.fillStyle = bg; ctx.fillRect(x, y, w, 9); ctx.fillRect(x + 1, y - 1, w - 2, 11);
     pixelText(ctx, t, x + 3, y + 2, fg);
   }
-  // Lit windows fill a tower in a fixed scattered order (never the same pattern twice across towers), about six
-  // per person inside, so a busy department glows and an empty one is dark.
+  // Lit windows fill a tower in a fixed scattered order (never the same pattern twice across towers), one window
+  // per person inside (the owner, 2026-11-09): one agent in, one window lit; an empty tower is dark.
   const windowOrder = new Map();
   function litOrder(b) {
     let o = windowOrder.get(b.dept);
@@ -830,7 +830,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     return o;
   }
   function drawTowerLive(b, now, ox, oy) {
-    const t = towerShape(b), n = counts.get(b.dept)?.n ?? 0, lit = litOrder(b).slice(0, Math.min(litOrder(b).length, n ? n * 6 + 2 : 0));
+    const t = towerShape(b), n = counts.get(b.dept)?.n ?? 0, lit = litOrder(b).slice(0, Math.min(litOrder(b).length, n));
     for (const w of lit) { R(ctx, w.x - ox, w.y - oy, w.w, w.h, "#ffdf94"); R(ctx, w.x - ox, w.y - oy, w.w, 1, "#fff3cf"); }
     // The automatic doors: two glass panels that slide apart; the lobby glows warm behind them.
     const o = doors.get(b.dept) ?? 0, dw = 22, dx = Math.round(t.cx - dw / 2) - ox, dy = t.foot - 22 - oy, half = dw / 2, gap = Math.round(half * o);
