@@ -38,7 +38,7 @@ export interface AceTurn {
   files?: FileCardData[];
 }
 /** A connect card under VAIC's chat: an add-connector approval, a sign-in button, a key field or an app-password form. */
-export type ConnectCardState =
+export type ConnectCardState = (
   | { kind: "approve"; id: string; approvalId: string; action: string; reason: string; connectorId?: string }
   | {
       kind: "signin";
@@ -54,7 +54,12 @@ export type ConnectCardState =
   | { kind: "imap"; id: string; targetId: string; title: string; status: "pending" | "connected"; preset?: string }
   /** A service that turned live (its key card is done), or one that failed with the reason in full (decision 141). */
   | { kind: "done"; id: string; targetId: string; title: string }
-  | { kind: "problem"; id: string; targetId: string; title: string; text: string };
+  | { kind: "problem"; id: string; targetId: string; title: string; text: string }
+) & {
+  /** The chat line it appeared after ("" before any): the card stays at that point in the conversation, and later
+   * messages and replies go below it (decision 164). */
+  after?: string;
+};
 export type Presence = "idle" | "listening" | "thinking" | "speaking" | "waiting";
 
 export interface HudState {
@@ -226,14 +231,24 @@ class Store {
       /* storage blocked: the owner just asks again */
     }
   }
+  /** Where each service's cards sit in the conversation: a key or sign-in card that follows an approval card takes
+   * its place, so the conversation doesn't jump. */
+  private anchors = new Map<string, string>();
   private putCard(c: ConnectCardState) {
     const cards = this.state.cards;
-    this.set({ cards: cards.some((x) => x.id === c.id) ? cards.map((x) => (x.id === c.id ? c : x)) : [...cards, c] });
+    const have = cards.find((x) => x.id === c.id);
+    const key = "targetId" in c ? c.targetId : c.connectorId;
+    const after = have?.after ?? (key && this.anchors.get(key)) ?? this.state.chat.at(-1)?.id ?? "";
+    if (key && !this.anchors.has(key)) this.anchors.set(key, after);
+    if (key && (c.kind === "done" || ("status" in c && c.status === "connected"))) this.anchors.delete(key); // finished
+    const placed = { ...c, after };
+    this.set({ cards: have ? cards.map((x) => (x.id === c.id ? placed : x)) : [...cards, placed] });
   }
   dropCard(id: string) {
     // A connector card the owner answered: what happens next (a sign-in, a key, or a failure) comes back to the chat.
     const c = this.state.cards.find((x) => x.id === id);
     if (c?.kind === "approve" && c.connectorId) this.approved.add(c.connectorId);
+    else if (c && "targetId" in c) this.anchors.delete(c.targetId); // asked again later, it comes in at that point
     this.set({ cards: this.state.cards.filter((x) => x.id !== id) });
   }
   /** Connect cards follow the city's events (CONNECTORS_SKILLS.md §3, MAIL_CALENDAR.md §6). */
@@ -453,3 +468,21 @@ export const useHud = <T>(pick: (s: HudState) => T): T =>
 
 /** Things waiting for the owner that can still be answered (lib/needs.ts): the badge, the City's box, Needs you. */
 export const waitingCount = (s: HudState) => needsCount(s.city);
+
+/** Where connect cards go in the conversation: each one just before the first message the owner sent after the
+ * point it appeared (so VAIC's reply in that turn stays above it and everything later goes below), or at the end.
+ * `before[i]` are the cards shown just before chat line i. */
+export function placeCards(
+  chat: { id: string; who: string }[],
+  cards: ConnectCardState[],
+): { before: Map<number, ConnectCardState[]>; end: ConnectCardState[] } {
+  const before = new Map<number, ConnectCardState[]>();
+  const end: ConnectCardState[] = [];
+  for (const c of cards) {
+    const from = c.after === "" ? -1 : c.after === undefined ? chat.length : chat.findIndex((l) => l.id === c.after);
+    const at = from < 0 && c.after !== "" ? -1 : chat.findIndex((l, i) => i > from && l.who === "owner");
+    if (at < 0) end.push(c);
+    else before.set(at, [...(before.get(at) ?? []), c]);
+  }
+  return { before, end };
+}

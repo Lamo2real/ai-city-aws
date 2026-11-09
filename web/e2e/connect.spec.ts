@@ -137,6 +137,50 @@ test("a plain request offers the service it needs, and VAIC carries on once it i
     ]);
 });
 
+test("a connect card waiting in the chat doesn't stop the conversation: later turns go below it, and it still works", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  await page.goto("/#/ace");
+  const box = page.getByLabel("Message to VAIC");
+  const say = async (text: string) => {
+    await box.fill(text);
+    await page.keyboard.press("Enter");
+    await expect
+      .poll(() => m.calls.filter((c) => c.path === "/messages").map((c) => (c.body as { text: string }).text))
+      .toContain(text);
+  };
+  await say("add the Tavily MCP");
+  m.send({ type: "connector.updated", id: "tavily", label: "Tavily", status: "needs_key", auth: "api_key" });
+  m.send({
+    type: "ace.reply",
+    conversation: "main",
+    text: "Tavily needs its key, Sir: the safe field is in the chat.",
+    done: true,
+  });
+  const card = page.getByRole("form", { name: "Add the key for Tavily" });
+  await expect(card).toBeVisible();
+  // The owner carries on talking while the card waits: the box still sends, and VAIC still answers.
+  await expect(box).toBeEnabled();
+  await say("what's on today?");
+  m.send({ type: "ace.reply", conversation: "main", text: "Two meetings today, Sir.", done: true });
+  const later = page.getByText("Two meetings today, Sir.");
+  await expect(later).toBeVisible();
+  // In order: the first reply, then the card, then the new message and its reply, below the card.
+  const y = async (l: ReturnType<Page["getByText"]>) => (await l.boundingBox())!.y;
+  const first = page.getByText("Tavily needs its key, Sir");
+  const asked = page.locator(".msg-owner").getByText("what's on today?");
+  expect(await y(first)).toBeLessThan(await y(card));
+  expect(await y(card)).toBeLessThan(await y(asked));
+  expect(await y(asked)).toBeLessThan(await y(later));
+  // And the card still works afterwards.
+  await card.getByLabel(/key/i).first().fill("tvly-LATER-KEY-123456");
+  await card.getByRole("button", { name: "Save securely" }).click();
+  await expect
+    .poll(() => m.calls.find((c) => c.path === "/connectors/tavily/key")?.body)
+    .toEqual({ api_key: "tvly-LATER-KEY-123456" });
+});
+
 test("Higgsfield end to end: no account yet, sign up on its own site, come back, and it's live", async ({
   page,
   context,

@@ -19,7 +19,7 @@ vi.mock("../src/lib/api.ts", () => ({
 }));
 import { api, ApiError } from "../src/lib/api.ts";
 import { refreshFollowed } from "../src/lib/actions.ts";
-import { store } from "../src/lib/store.ts";
+import { placeCards, store } from "../src/lib/store.ts";
 import { ChatCards, KeyCard, SignupLink } from "../src/components/ConnectCard.tsx";
 import { errorText } from "../src/components/ui.tsx";
 
@@ -175,6 +175,36 @@ describe("after the owner approves a connector", () => {
   it("an error for a connector nobody asked about in this session stays in Settings", () => {
     store.event({ type: "connector.updated", id: "other", label: "Other", status: "error", error: "x" });
     expect(store.get().cards).toEqual([]);
+  });
+});
+
+describe("where a connect card sits in the conversation (decision 164)", () => {
+  const line = (id: string, who: string) => ({ id, who });
+  const card = (id: string, after?: string) => ({ kind: "done" as const, id, targetId: id, title: id, after });
+  it("after VAIC's reply in the turn it came in, before the owner's next message", () => {
+    const chat = [line("o1", "owner"), line("a1", "ace"), line("o2", "owner"), line("a2", "ace")];
+    const { before, end } = placeCards(chat, [card("x", "o1"), card("y", "a2"), card("z", ""), card("w")]);
+    expect(before.get(2)?.map((c) => c.id)).toEqual(["x"]);
+    expect(before.get(0)?.map((c) => c.id)).toEqual(["z"]);
+    expect(end.map((c) => c.id)).toEqual(["y", "w"]);
+  });
+  it("a card keeps its place when it changes, and a follow-up card takes the approval card's place", () => {
+    store.set({ chat: [{ id: "o1", who: "owner", text: "add Tavily", at: Date.now(), state: "sent" }] as never });
+    store.event({
+      type: "approval.requested",
+      kind: "connector.add",
+      id: "ap-7",
+      action: "a",
+      reason: "r",
+      connector_id: "tavily",
+    });
+    store.set({
+      chat: [...store.get().chat, { id: "o2", who: "owner", text: "and now?", at: Date.now(), state: "sent" }] as never,
+    });
+    store.dropCard("ap:ap-7");
+    store.event({ type: "connector.updated", id: "tavily", label: "Tavily", status: "needs_key" });
+    store.event({ type: "connector.updated", id: "tavily", label: "Tavily", status: "ready" });
+    expect(store.get().cards).toMatchObject([{ kind: "done", after: "o1" }]);
   });
 });
 

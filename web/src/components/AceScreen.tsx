@@ -1,7 +1,7 @@
 // The landing screen: VAIC's eye with the voice strip on the left, the conversation on the right (stacked on a
 // phone). Everything else can be done by asking VAIC ("send the workers home", "what's the status?").
 import { ChatCards } from "./ConnectCard.tsx";
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { sendMessage } from "../lib/actions.ts";
 import { knowledgeApi } from "../lib/api.ts";
 import {
@@ -15,7 +15,7 @@ import {
   type Lists,
 } from "../lib/attach.ts";
 import { addFiles, useKnowledge } from "../lib/knowledge.ts";
-import { store, useHud } from "../lib/store.ts";
+import { placeCards, store, useHud } from "../lib/store.ts";
 import { awayStart, cameBack } from "../lib/away.ts";
 import { AwayPanel } from "./Away.tsx";
 import { appendDictation } from "../voice/modes.ts";
@@ -45,6 +45,7 @@ const readDraft = () => {
 export function AceScreen({ go }: { go: (view: string) => void }) {
   const chat = useHud((s) => s.chat);
   const cards = useHud((s) => s.cards);
+  const placed = placeCards(chat, cards);
   const presence = useHud((s) => s.presence);
   // "While you were away": opens by itself after more than 12 hours away, and from the clock any time.
   const [away, setAway] = useState<number | null>(() => (cameBack() ? awayStart() : null));
@@ -284,32 +285,34 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
         </div>
         <div className="chat" ref={log} aria-live="polite" aria-label="Conversation with VAIC" tabIndex={0}>
           {chat.length === 0 ? <p className="hello">Say hi. Type, or tap the voice button and just talk.</p> : null}
-          {chat.map((l) => (
-            <article
-              key={l.id}
-              className={`msg msg-${l.who} ${l.state === "streaming" ? "is-streaming" : ""}`}
-              aria-busy={l.state === "streaming" || undefined}
-            >
-              <span className="sr">{l.who === "ace" ? "VAIC:" : "You:"}</span>
-              <div className="msg-body">
-                {l.who === "ace" ? (
-                  l.text || l.state === "streaming" ? (
-                    <StreamedText text={l.text} streaming={l.state === "streaming"} onGrow={follow} />
-                  ) : null
-                ) : (
-                  <p>{l.text}</p>
-                )}
-                {l.files?.length ? <FileCards files={l.files} label={l.filesLabel} /> : null}
-                {l.who === "ace" && l.state === "done" && l.steps ? (
-                  <AicSteps steps={l.steps} tookMs={l.tookMs} running={stepsRunning(l)} started={l.started} />
-                ) : null}
-                {l.state === "failed" || l.state === "queued" ? (
-                  <span className="note">Not sent yet. It will send when the connection is back.</span>
-                ) : null}
-              </div>
-            </article>
+          {chat.map((l, i) => (
+            <Fragment key={l.id}>
+              {placed.before.has(i) ? <ChatCards cards={placed.before.get(i) ?? []} /> : null}
+              <article
+                className={`msg msg-${l.who} ${l.state === "streaming" ? "is-streaming" : ""}`}
+                aria-busy={l.state === "streaming" || undefined}
+              >
+                <span className="sr">{l.who === "ace" ? "VAIC:" : "You:"}</span>
+                <div className="msg-body">
+                  {l.who === "ace" ? (
+                    l.text || l.state === "streaming" ? (
+                      <StreamedText text={l.text} streaming={l.state === "streaming"} onGrow={follow} />
+                    ) : null
+                  ) : (
+                    <p>{l.text}</p>
+                  )}
+                  {l.files?.length ? <FileCards files={l.files} label={l.filesLabel} /> : null}
+                  {l.who === "ace" && l.state === "done" && l.steps ? (
+                    <AicSteps steps={l.steps} tookMs={l.tookMs} running={stepsRunning(l)} started={l.started} />
+                  ) : null}
+                  {l.state === "failed" || l.state === "queued" ? (
+                    <span className="note">Not sent yet. It will send when the connection is back.</span>
+                  ) : null}
+                </div>
+              </article>
+            </Fragment>
           ))}
-          <ChatCards cards={cards} />
+          <ChatCards cards={placed.end} />
           <WorkflowCard />
           {waitingForAic && turn ? (
             <article className="msg msg-ace msg-pending">
