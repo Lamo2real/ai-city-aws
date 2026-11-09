@@ -57,7 +57,7 @@ test("first sign-in on our own screens: temporary password, own password, authen
   await page.getByLabel("6-digit code").fill("123456");
   await page.getByRole("button", { name: "Confirm and sign in" }).click();
 
-  await expect(page.getByRole("button", { name: "AI City — talk to VAIC" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "VAIC — talk to VAIC" })).toBeVisible();
 });
 
 test("later sign-ins: a wrong password says so plainly; then password and code", async ({ page }) => {
@@ -73,7 +73,7 @@ test("later sign-ins: a wrong password says so plainly; then password and code",
   await page.getByLabel("6-digit code", { exact: true }).fill("12a3456"); // only digits are kept
   await expect(page.getByLabel("6-digit code", { exact: true })).toHaveValue("123456");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "AI City — talk to VAIC" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "VAIC — talk to VAIC" })).toBeVisible();
 });
 
 test("sign in once: closing the tab and coming back later opens AI City already signed in", async ({
@@ -87,7 +87,7 @@ test("sign in once: closing the tab and coming back later opens AI City already 
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.getByLabel("6-digit code", { exact: true }).fill("123456");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "AI City — talk to VAIC" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "VAIC — talk to VAIC" })).toBeVisible();
   await page.close(); // the tab is gone (sessionStorage with it)
 
   const later = await context.newPage();
@@ -280,7 +280,10 @@ test("a microphone failure names the real cause and logs it to the console", asy
   await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Microphone access is blocked for this site");
   // The conversation ends with the failure: the button is off again and the voice bar is gone.
-  await expect(page.getByRole("button", { name: "Talk to VAIC", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("button", { name: "Talk to VAIC", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
   await expect(page.locator(".voice")).toHaveCount(0);
   expect(
     logged.some((t) => t.includes("[VAIC voice] the microphone could not start:") && t.includes("NotAllowedError")),
@@ -647,7 +650,9 @@ test("a plain chat: nothing is suggested under VAIC's replies, even after a ques
   await page.getByRole("textbox", { name: "Message to VAIC" }).fill("check the GT3 sentences");
   await page.keyboard.press("Enter");
   m.send({ type: "ace.reply", conversation: "main", text: "On it. Want me to tell you when it's done?", done: true });
-  await expect(page.getByLabel("Conversation with VAIC").getByText("Want me to tell you when it's done?")).toBeVisible();
+  await expect(
+    page.getByLabel("Conversation with VAIC").getByText("Want me to tell you when it's done?"),
+  ).toBeVisible();
   await expect(page.getByRole("group", { name: "Quick replies" })).toHaveCount(0);
   for (const label of ["Yes", "No", "How's it going?", "Stop it"])
     await expect(page.getByRole("button", { name: label, exact: true })).toHaveCount(0);
@@ -755,7 +760,10 @@ test("speech to speech: VAIC answers aloud while it keeps listening; its own ech
   await expect(strip).toHaveCount(0);
   await page.waitForTimeout(300);
   expect(m.calls.filter((c) => c.path === "/messages")).toHaveLength(3);
-  await expect(page.getByRole("button", { name: "Talk to VAIC", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("button", { name: "Talk to VAIC", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
 
   // Outside the conversation a typed message is answered in text, and the mic stays closed.
   await page.getByRole("textbox", { name: "Message to VAIC" }).fill("hello");

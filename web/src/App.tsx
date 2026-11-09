@@ -166,7 +166,7 @@ export function App() {
         Skip to content
       </a>
       <header className="top" ref={top}>
-        <button type="button" className="brand" onClick={() => go("ace")} aria-label="AI City — talk to VAIC">
+        <button type="button" className="brand" onClick={() => go("ace")} aria-label="VAIC — talk to VAIC">
           <Wordmark />
         </button>
         <nav aria-label="Screens">

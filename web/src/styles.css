@@ -44,6 +44,7 @@
     rgba(232, 163, 61, 0.96)
   ); /* primary buttons, on-states, the logo */
   --accent-ink: #2a1a08; /* text and icons on the accent */
+  --wm-ai: linear-gradient(180deg, #f9c976, #e8a33d); /* the AI in the VAIC logo */
   --accent-edge: rgba(255, 255, 255, 0.3);
   --accent-shadow: none; /* the owner's call, 2026-11-09: flat, no glow around accent buttons */
   --btn-radius: 999px;
@@ -231,9 +232,31 @@ textarea {
   display: block;
 }
 .wm-word {
-  font-size: 21px;
-  letter-spacing: -0.03em;
+  font-size: 22px;
+  letter-spacing: -0.02em;
   color: var(--gtext);
+}
+/* The "AI" in VAIC (decision 158): amber, leaning a little, with a small four-point spark above its I. */
+.wm-ai {
+  position: relative;
+  display: inline-block;
+  margin: 0 1px 0 0;
+  font-style: italic;
+  letter-spacing: 0.01em;
+  background: var(--wm-ai);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.wm-ai::after {
+  content: "";
+  position: absolute;
+  right: -3px;
+  top: -5px;
+  width: 7px;
+  height: 7px;
+  background: var(--go);
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
 }
 .top nav {
   display: flex;
@@ -3497,6 +3520,7 @@ summary,
 /* Light appearance (Settings → General → Appearance): the same glass over a daytime sky, ink text. The City scene
    keeps its own parchment palette in both. */
 :root[data-theme="light"] {
+  --wm-ai: linear-gradient(180deg, #e8a33d, #a8661a); /* deeper on the light ground, so it reads */
   --link: #7a4a00;
   --panel: rgba(255, 255, 255, 0.92);
   --savebar: rgba(240, 242, 250, 0.92);

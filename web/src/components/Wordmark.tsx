@@ -1,5 +1,6 @@
-// The AI City logo (decision 147): an amber tile with a small skyline, then "AI City". The tile reads the accent
-// tokens, so it follows the design system (decision 142).
+// The logo (decisions 147, 158): an amber tile with a small skyline, then "VAIC" with the "AI" in it set apart:
+// amber, a slight lean and a small spark, so Vice Artificial Intelligence City reads at a glance. The tile and the
+// AI read the accent tokens, so they follow the design system (decision 142).
 export function Wordmark() {
   return (
     <span className="wordmark">
@@ -12,7 +13,9 @@ export function Wordmark() {
           <path d="M2 21h20v1.2H2Z" />
         </svg>
       </span>
-      <span className="wm-word">AI City</span>
+      <span className="wm-word" aria-label="VAIC">
+        V<span className="wm-ai">AI</span>C
+      </span>
     </span>
   );
 }
