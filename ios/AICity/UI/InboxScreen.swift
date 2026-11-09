@@ -212,13 +212,13 @@ struct HoldToApprove: View {
             Spacer(minLength: 0)
             // The primary action: amber on ink, like every primary button; the hold fills it with light.
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Glass.primaryGradient)
+                RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Glass.accentFill)
                 GeometryReader { g in
                     RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white.opacity(0.45)).frame(width: g.size.width * progress)
                 }
-                RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.white.opacity(0.35), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Glass.accentEdge, lineWidth: 1)
                 Text(holding ? "Keep holding…" : "Hold to approve").font(.headline).frame(maxWidth: .infinity)
-                    .foregroundStyle(Glass.ink)
+                    .foregroundStyle(Glass.accentInk)
             }
             .frame(height: 56)
             .contentShape(Rectangle())
@@ -228,7 +228,7 @@ struct HoldToApprove: View {
             } onPressingChanged: { pressing in
                 holding = pressing
                 if pressing { Haptics.tap() }
-                withAnimation(pressing ? .linear(duration: 1.2) : .easeOut(duration: 0.2)) { progress = pressing ? 1 : 0 }
+                withAnimation(pressing ? .linear(duration: 1.2) : Glass.ease(Glass.durS)) { progress = pressing ? 1 : 0 }
             }
             .accessibilityElement()
             .accessibilityLabel("Approve")

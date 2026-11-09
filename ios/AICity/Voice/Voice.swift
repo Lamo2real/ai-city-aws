@@ -16,31 +16,14 @@ final class VoiceController {
     /// Loudness right now, 0…1, for the voice line.
     var inputLevel: Double = 0
     var speaking = false
-    /// When AIC reads its reply aloud (web/src/voice/modes.ts): only when the owner's message came by voice
-    /// (the default), always, or never.
-    enum SpeakMode: String, CaseIterable, Identifiable {
-        case auto, always, never
-        var id: String { rawValue }
-        var label: String {
-            switch self {
-            case .auto: return "When I talk"
-            case .always: return "Always"
-            case .never: return "Never"
-            }
-        }
-    }
-    var speakMode: SpeakMode {
-        didSet { UserDefaults.standard.set(speakMode.rawValue, forKey: "aic.voice.speakMode") }
-    }
+    /// When AIC's voice last started a word, and how strongly (longer words lift the aurora more).
+    @ObservationIgnored private var pulse: (at: Date, strength: Double) = (.distantPast, 0)
 
-    /// Reads the mode back; an owner who had turned the old on/off switch off stays muted, everyone else gets the new default.
-    static func readSpeakMode(_ defaults: UserDefaults = .standard) -> SpeakMode {
-        if let raw = defaults.string(forKey: "aic.voice.speakMode"), let m = SpeakMode(rawValue: raw) { return m }
-        return defaults.object(forKey: "aic.voice.speak") as? Bool == false ? .never : .auto
+    /// AIC's voice right now, 0…1, for the aurora: the system voice reports word boundaries, not loudness, so
+    /// each word lifts the level and it settles until the next.
+    func outputLevel(at now: Date = Date()) -> Double {
+        speaking ? Aurora.spokenLevel(strength: pulse.strength, since: now.timeIntervalSince(pulse.at)) : 0
     }
-
-    /// Whether AIC should read this reply aloud, given how the owner's message came in.
-    func shouldSpeak(askedByVoice: Bool) -> Bool { speakMode == .always || (speakMode == .auto && askedByVoice) }
 
     @ObservationIgnored private let engine = AVAudioEngine()
     @ObservationIgnored private var request: SFSpeechAudioBufferRecognitionRequest?
@@ -50,10 +33,12 @@ final class VoiceController {
     @ObservationIgnored private var delegate: SpeechDelegate?
     @ObservationIgnored var onText: (String) -> Void = { _ in }
     @ObservationIgnored var onSpeakingDone: () -> Void = {}
+    /// The spoken replies' volume (the demo shows the aurora silently).
+    @ObservationIgnored var volume: Float = 1
 
     init() {
-        speakMode = Self.readSpeakMode()
-        let d = SpeechDelegate { [weak self] in self?.speaking = false; self?.onSpeakingDone() }
+        let d = SpeechDelegate(word: { [weak self] letters in self?.pulse = (Date(), Aurora.wordStrength(letters: letters)) },
+                               done: { [weak self] in self?.speaking = false; self?.onSpeakingDone() })
         delegate = d
         synth.delegate = d
     }
@@ -130,11 +115,12 @@ final class VoiceController {
     }
 
     func speak(_ text: String) {
-        guard speakMode != .never, !text.isEmpty else { return }
+        guard !text.isEmpty else { return }
         let plain = text.replacingOccurrences(of: "[*`#|_]", with: "", options: .regularExpression)
             .replacingOccurrences(of: #"\bAIC\b"#, with: "Ace", options: .regularExpression) // written AIC, said "Ace" (the owner's rule, 2026-11-08)
         let u = AVSpeechUtterance(string: String(plain.prefix(2900)))
         u.voice = AVSpeechSynthesisVoice(language: "en-US")
+        u.volume = volume
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
         speaking = true
         synth.speak(u)
@@ -155,8 +141,16 @@ final class VoiceController {
 }
 
 private final class SpeechDelegate: NSObject, AVSpeechSynthesizerDelegate {
+    let word: @MainActor (Int) -> Void
     let done: @MainActor () -> Void
-    init(done: @escaping @MainActor () -> Void) { self.done = done }
+    init(word: @escaping @MainActor (Int) -> Void, done: @escaping @MainActor () -> Void) {
+        self.word = word
+        self.done = done
+    }
+    func speechSynthesizer(_ s: AVSpeechSynthesizer, willSpeakRangeOfSpeechString range: NSRange, utterance: AVSpeechUtterance) {
+        let letters = range.length
+        Task { @MainActor in word(letters) }
+    }
     func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) { Task { @MainActor in done() } }
     func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) { Task { @MainActor in done() } }
 }

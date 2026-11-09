@@ -27,7 +27,7 @@ Requires Xcode 26 or later; runs on iOS 17 or later.
 3. The app opens on the sign-in screen. Its AI City web address is built in (`AIC_SITE_HOST` in `Config/AICity.xcconfig`, the HUD's CloudFront host from Terraform's `hud_url` output); it reads `config.json` from there, like the web HUD. Nobody types an address (decision 111). A build with that setting empty cannot start and says so in one sentence.
 4. Sign in with your email, password and 6-digit code, exactly as on the web. The first time, use the temporary password from the "Welcome to AI City" email.
 
-**Demo mode (Debug builds only):** in Xcode, *Product → Scheme → Edit Scheme → Run → Arguments*, add `-demo` to see the app with a made-up city and no AWS at all (`-demo -signedout` shows the sign-in screens; the demo password `first` walks the first-login steps and the code is `123456`). `-demo -demo-cognito` uses the real sign-in code against a fake Cognito (any password, code `123456`, ID tokens that last 2 minutes) so you can quit and relaunch and see that you stay signed in; add `-reset` to start over. Release builds don't contain the demo.
+**Demo mode (Debug builds only):** in Xcode, *Product → Scheme → Edit Scheme → Run → Arguments*, add `-demo` to see the app with a made-up city and no AWS at all (`-demo -demo-voice you` or `-demo -demo-voice aic` shows the voice's light without a microphone; `-demo -signedout` shows the sign-in screens; the demo password `first` walks the first-login steps and the code is `123456`). `-demo -demo-cognito` uses the real sign-in code against a fake Cognito (any password, code `123456`, ID tokens that last 2 minutes) so you can quit and relaunch and see that you stay signed in; add `-reset` to start over. Release builds don't contain the demo.
 
 Tests: *Product → Test* (⌘U), or
 
@@ -79,7 +79,7 @@ Real pushes need the **Push Notifications capability**, which only Apple Develop
 
 ## Voice
 
-Tap the mic, talk, tap again to send. The words are recognised by Apple's Speech framework, on the iPhone when the model is available (no audio leaves the phone then); otherwise Apple's speech service. Replies are read aloud with the system voice; the **Speak replies** pill above the message box chooses *When I talk* (only after a spoken message, the default), *Always* or *Never*. There is no hands-free wake mode on the iPhone. The web HUD uses Amazon Transcribe and Polly instead; see `docs/DECISIONS.md` (decision 69). The microphone is used only while listening.
+Tap the mic, talk, tap again to send. The words are recognised by Apple's Speech framework, on the iPhone when the model is available (no audio leaves the phone then); otherwise Apple's speech service. A message you spoke is answered aloud with the system voice; a typed one is answered in text. While you talk a soft blue light rises from the message box behind the chat, amber while AIC talks, and nothing shows when nobody does. There is no hands-free wake mode on the iPhone. The web HUD uses Amazon Transcribe and Polly instead; see `docs/DECISIONS.md` (decision 69). The microphone is used only while listening.
 
 ## The + menu
 

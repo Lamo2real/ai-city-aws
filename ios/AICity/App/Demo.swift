@@ -24,10 +24,32 @@ enum Demo {
         }
         let model = AppModel(configStore: store, hud: HudStore(archive: NoChatArchive()), http: http, makeAuth: makeAuth, connectLive: false)
         http.model = model
+        if let i = args.firstIndex(of: "-demo-voice"), i + 1 < args.count { showVoice(args[i + 1], on: model) }
         UserDefaults.standard.set(true, forKey: "aic.guide.done")
         // `-away`: as if the owner was last here two days ago, so AIC opens with "While you were away".
         if args.contains("-away") { UserDefaults.standard.set(nowMs() - 48 * 3_600_000, forKey: Away.seenKey) }
         return model
+    }
+
+    /// `-demo-voice you` holds the screen as if the owner were talking (a level that rises and falls);
+    /// `-demo-voice aic` sends one spoken-style message, so the made-up reply is thought about and then read out
+    /// by the system voice with its volume at zero. Both show the aurora without a microphone.
+    @MainActor private static func showVoice(_ who: String, on model: AppModel) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2.5))
+            if who == "aic" {
+                model.voice.volume = 0
+                await model.send("What's the status of the city?", byVoice: true)
+            } else {
+                model.voice.listening = true
+                model.voice.partial = "What's the status of the city"
+                while model.voice.listening {
+                    let t = Date().timeIntervalSinceReferenceDate
+                    model.voice.inputLevel = 0.45 + 0.4 * sin(t * 1.7) * sin(t * 0.9)
+                    try? await Task.sleep(for: .milliseconds(50))
+                }
+            }
+        }
     }
 
     static let config: JSONValue = [

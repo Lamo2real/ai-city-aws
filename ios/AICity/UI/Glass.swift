@@ -38,7 +38,22 @@ enum Glass {
     static let radius: CGFloat = 18 // panels
     static let radiusSmall: CGFloat = 12 // rows, inputs, chips
 
-    static let primaryGradient = LinearGradient(colors: [amber, amber2], startPoint: .top, endPoint: .bottom)
+    // The design system's shared tokens (web/src/styles.css `:root`, decision 142): one place for the accent
+    // and the motion, so every amber button, on-state and transition changes together.
+    /// `--accent-fill`: primary buttons and on-states.
+    static let accentFill = LinearGradient(colors: [Color(hex: 0xf9c976).opacity(0.96), Color(hex: 0xe8a33d).opacity(0.96)], startPoint: .top, endPoint: .bottom)
+    /// `--accent-ink`: text and icons on the accent.
+    static let accentInk = Color(hex: 0x2a1a08)
+    /// `--accent-edge`.
+    static let accentEdge = Color.white.opacity(0.3)
+    // `--accent-shadow` is none: accent pieces are flat, with no glow or shadow around them.
+    /// `--ease`: standard motion. `--ease-out`: things sliding into place.
+    static func ease(_ duration: Double) -> Animation { .timingCurve(0.4, 0, 0.2, 1, duration: duration) }
+    static func easeOut(_ duration: Double) -> Animation { .timingCurve(0.2, 0.8, 0.2, 1, duration: duration) }
+    /// `--dur-xs`, `--dur-s`, `--dur-m`.
+    static let durXS = 0.12
+    static let durS = 0.25
+    static let durM = 0.32
 }
 
 /// On when a view sits on the night sky, so shared pieces draw as glass. The City tab leaves it off.
@@ -179,25 +194,25 @@ struct GlassPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.body.weight(.semibold))
-            .foregroundStyle(Glass.ink)
+            .foregroundStyle(Glass.accentInk)
             .padding(.horizontal, circle ? 0 : 16)
             .frame(minWidth: 44, minHeight: circle ? 44 : 50)
             .background {
                 if circle {
-                    Circle().fill(Glass.primaryGradient)
+                    Circle().fill(Glass.accentFill)
                 } else {
-                    RoundedRectangle(cornerRadius: Glass.radiusSmall, style: .continuous).fill(Glass.primaryGradient)
+                    RoundedRectangle(cornerRadius: Glass.radiusSmall, style: .continuous).fill(Glass.accentFill)
                 }
             }
             .overlay {
                 if circle {
-                    Circle().strokeBorder(Color.white.opacity(0.35), lineWidth: 1)
+                    Circle().strokeBorder(Glass.accentEdge, lineWidth: 1)
                 } else {
-                    RoundedRectangle(cornerRadius: Glass.radiusSmall, style: .continuous).strokeBorder(Color.white.opacity(0.35), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: Glass.radiusSmall, style: .continuous).strokeBorder(Glass.accentEdge, lineWidth: 1)
                 }
             }
             .opacity(!enabled ? 0.45 : configuration.isPressed ? 0.62 : 1)
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : Glass.ease(Glass.durXS), value: configuration.isPressed)
     }
 }
 
@@ -214,7 +229,7 @@ struct GlassButtonStyle: ButtonStyle {
             .frame(minWidth: 44, minHeight: 44)
             .glassTint(Glass.fill2, edge: Glass.edge2)
             .opacity(!enabled ? 0.45 : configuration.isPressed ? 0.62 : 1)
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : Glass.ease(Glass.durXS), value: configuration.isPressed)
     }
 }
 
@@ -224,45 +239,6 @@ extension ButtonStyle where Self == GlassPrimaryButtonStyle {
 }
 extension ButtonStyle where Self == GlassButtonStyle {
     static var glass: GlassButtonStyle { GlassButtonStyle() }
-}
-
-/// One glass pill with equal cells and no dividers; the amber highlight glides to the chosen option (the HUD's
-/// `.speak-mode .seg`). Under Reduce Motion it jumps.
-struct GlassSegmented<Option: Hashable & Identifiable>: View {
-    var options: [Option]
-    var label: (Option) -> String
-    @Binding var selection: Option
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        let index = options.firstIndex(of: selection) ?? 0
-        GeometryReader { g in
-            let cell = g.size.width / CGFloat(max(1, options.count))
-            ZStack(alignment: .leading) {
-                Capsule().fill(Glass.primaryGradient)
-                    .overlay(Capsule().strokeBorder(Color.white.opacity(0.35), lineWidth: 1))
-                    .frame(width: cell)
-                    .offset(x: cell * CGFloat(index))
-                    .animation(reduceMotion ? nil : .timingCurve(0.4, 0, 0.2, 1, duration: 0.32), value: index)
-                HStack(spacing: 0) {
-                    ForEach(options) { o in
-                        Button { selection = o } label: {
-                            Text(label(o))
-                                .font(.footnote.weight(.bold))
-                                .foregroundStyle(o == selection ? Color(hex: 0x2a1a08) : Glass.text)
-                                .lineLimit(1).minimumScaleFactor(0.8)
-                                .frame(width: cell, height: g.size.height)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityAddTraits(o == selection ? [.isSelected] : [])
-                    }
-                }
-            }
-        }
-        .frame(height: 36)
-        .glassTint(Glass.fill, radius: 18, edge: Glass.edge2)
-        .clipShape(Capsule())
-    }
 }
 
 /// A bar at an edge of the screen (the composer, Settings' Save): material with a 1pt light edge on top.

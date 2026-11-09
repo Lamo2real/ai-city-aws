@@ -234,14 +234,4 @@ final class AttachTests: XCTestCase {
         a.remove("k-6", api: nil)
         XCTAssertTrue(a.sendable)
     }
-
-    @MainActor
-    func testSpeakModeReadsTheOldSwitch() {
-        let d = UserDefaults(suiteName: "aic.tests.speak.\(UUID().uuidString)")!
-        XCTAssertEqual(VoiceController.readSpeakMode(d), .auto)
-        d.set(false, forKey: "aic.voice.speak")
-        XCTAssertEqual(VoiceController.readSpeakMode(d), .never, "a muted owner stays muted")
-        d.set("always", forKey: "aic.voice.speakMode")
-        XCTAssertEqual(VoiceController.readSpeakMode(d), .always)
-    }
 }

@@ -17,7 +17,7 @@ struct PlusButton: View {
                 .font(.system(size: 20, weight: .medium))
                 .foregroundStyle(open ? Glass.amber : Glass.text)
                 .rotationEffect(.degrees(open ? 45 : 0))
-                .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: open)
+                .animation(reduceMotion ? nil : Glass.ease(Glass.durS), value: open)
                 .frame(width: 44, height: 44)
                 .glassTint(Glass.fill2, radius: 22, edge: Glass.edge2)
         }

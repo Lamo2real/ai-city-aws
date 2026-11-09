@@ -1,8 +1,9 @@
-// The landing screen (web AceScreen, decisions 106–108): the conversation runs up under the glass top bar,
-// the clear button floats in its corner, and the voice strip (a small eye at the start of the voice line, the
-// Speak replies pill) sits above the composer with its + menu and push-to-talk. The owner's lines sit on the
-// right in a filled bubble; AIC's on the left as plain full-width text with its Markdown. While AIC works,
-// its status row shows the current step and seconds.
+// The landing screen (web AceScreen, decisions 106–108 and 112): the conversation runs up under the glass top
+// bar and down to the composer, the clear button floats in its corner, and the composer holds the + menu, the
+// box, one voice button and Send. The voice has no row of its own: its light (UI/Aurora.swift) rises from the
+// message box behind the chat text, blue for the owner and amber for AIC, and is not there when nobody talks.
+// The owner's lines sit on the right in a filled bubble; AIC's on the left as plain full-width text with its
+// Markdown. While AIC works, its status row shows the current step and seconds.
 import PhotosUI
 import SwiftUI
 
@@ -12,9 +13,12 @@ struct ChatScreen: View {
     @FocusState private var focused: Bool
     @State private var confirmClear = false
     @State private var menuOpen = false
+    @State private var composerHeight: CGFloat = 0
 
     var body: some View {
         let hud = model.hud
+        let speaker = Aurora.speaker(listening: model.voice.listening, speaking: model.voice.speaking,
+                                     presence: hud.presence, askedByVoice: model.lastAskedByVoice)
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView {
@@ -37,7 +41,13 @@ struct ChatScreen: View {
             // Under the bar: the notes that need the owner, and the quiet clear button in the corner.
             .safeAreaInset(edge: .top, spacing: 0) { notes }
 
-            Composer(draft: $draft, focused: $focused, menuOpen: $menuOpen)
+            Composer(draft: $draft, focused: $focused, menuOpen: $menuOpen, speaker: speaker)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { composerHeight = $0 }
+        }
+        // The voice's light, behind the chat text and the composer's glass: it rises from the box's top edge.
+        .background(alignment: .bottom) {
+            AuroraView(speaker: speaker, voice: model.voice, base: composerHeight)
+                .frame(height: composerHeight + Aurora.reach)
         }
         .nightScreen()
         .navigationBarTitleDisplayMode(.inline)
@@ -156,7 +166,7 @@ struct MessageRow: View {
     }
 }
 
-/// AIC at work, before its first words: a small eye with a slow blink, the step with a soft shimmer, seconds.
+/// AIC at work, before its first words: a small amber light that breathes, the step with a soft shimmer, seconds.
 struct AicStatusRow: View {
     var turn: AceTurn
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -164,9 +174,9 @@ struct AicStatusRow: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.25)) { ctx in
             let secs = max(0, Int((ctx.date.timeIntervalSince1970 * 1000 - turn.started) / 1000))
-            let blink = !reduceMotion && Int(ctx.date.timeIntervalSince1970 * 4) % 16 == 0
+            let breath = reduceMotion ? 1 : 0.55 + 0.45 * abs(sin(ctx.date.timeIntervalSince1970 * 2))
             HStack(spacing: 10) {
-                EyeView(size: 28).scaleEffect(y: blink ? 0.15 : 1)
+                Circle().fill(Glass.accentFill).frame(width: 10, height: 10).opacity(breath)
                 Text("\(turn.steps.last ?? "Working on it")…")
                     .foregroundStyle(.secondary)
                     .opacity(reduceMotion ? 1 : 0.65 + 0.35 * abs(sin(ctx.date.timeIntervalSince1970 * 2)))
@@ -178,12 +188,15 @@ struct AicStatusRow: View {
     }
 }
 
-/// The bottom of the screen: the voice strip, what rides along with the message, and the box with its buttons.
+/// The bottom of the screen: what rides along with the message, and the box with its buttons (+, voice, Send).
 struct Composer: View {
     @Environment(AppModel.self) private var model
     @Binding var draft: String
     var focused: FocusState<Bool>.Binding
     @Binding var menuOpen: Bool
+    /// Who is talking right now: VoiceOver hears it as the voice button's value (the light itself is decoration).
+    var speaker: AuroraSpeaker = .idle
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let voice = model.voice
@@ -191,27 +204,10 @@ struct Composer: View {
         let commands = Slash.allCommands(model.skills)
         let suggestions = Slash.matchCommands(draft, commands)
         VStack(spacing: 8) {
-            // A small eye at the start of the voice line (decision 107); the line keeps its bars, wave and dots.
-            HStack(spacing: 12) {
-                EyeView(size: 44)
-                VoiceLine(presence: model.hud.presence, listening: voice.listening, level: voice.inputLevel, speaking: voice.speaking)
-                    .frame(maxWidth: .infinity)
-            }
             if voice.listening, !voice.partial.isEmpty {
                 Text(voice.partial).font(.callout).foregroundStyle(.secondary).lineLimit(2)
             }
             if let p = voice.problem { Banner(tone: .bad, text: p) }
-            if !focused.wrappedValue {
-                // Speak replies: one glass pill, the amber highlight sliding to the choice (decision 106's look).
-                HStack(spacing: 12) {
-                    Text("Speak replies").font(.footnote.weight(.bold))
-                    GlassSegmented(options: VoiceController.SpeakMode.allCases, label: \.label,
-                                   selection: Binding(get: { voice.speakMode }, set: { voice.speakMode = $0 }))
-                        .frame(maxWidth: 270)
-                        .accessibilityLabel("Speak replies")
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
             if !attachments.entries.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
@@ -263,16 +259,23 @@ struct Composer: View {
                     .onSubmit(send)
                     .accessibilityLabel("Message to AIC")
 
+                // The one voice button: quiet glass when off, the accent while it listens (the web's .voice-btn).
+                // What is said is answered aloud; what is typed is answered in text.
                 Button {
                     voice.toggle()
                 } label: {
-                    Image(systemName: voice.listening ? "stop.circle.fill" : "mic.circle")
-                        .font(.system(size: 30))
+                    Image(systemName: voice.listening ? "stop.fill" : "mic.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(voice.listening ? Glass.accentInk : Glass.text)
                         .frame(width: 44, height: 44)
-                        .foregroundStyle(voice.listening ? Glass.badLight : Glass.amber)
+                        .background { if voice.listening { Circle().fill(Glass.accentFill) } else { Circle().fill(Glass.fill2) } }
+                        .overlay(Circle().strokeBorder(voice.listening ? Glass.accentEdge : Glass.edge2, lineWidth: 1))
+                        .animation(reduceMotion ? nil : Glass.ease(Glass.durS), value: voice.listening)
                 }
+                .buttonStyle(.plain)
                 .accessibilityLabel(voice.listening ? "Stop listening and send" : "Talk to AIC")
-                .accessibilityHint("Tap to talk, tap again to send what you said.")
+                .accessibilityValue(Aurora.words(speaker))
+                .accessibilityHint("Tap to talk, tap again to send what you said. AIC answers aloud.")
 
                 Button(action: send) {
                     Image(systemName: "arrow.up").font(.headline).frame(width: 44, height: 44)

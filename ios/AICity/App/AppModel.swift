@@ -70,7 +70,7 @@ final class AppModel {
     var skills: [Skill] = []
     var connectors: [Connector] = []
     @ObservationIgnored private var listsLoadedAt: Double = 0
-    /// Whether the owner's last message came by voice (AIC answers aloud in "When I talk" only then).
+    /// Whether the owner's last message came by voice: AIC answers that one aloud, and the aurora shows it thinking.
     private(set) var lastAskedByVoice = false
     /// Notifications when a large feature is done.
     let push: PushController
@@ -120,7 +120,8 @@ final class AppModel {
         voice.onSpeakingDone = { [weak self] in if self?.hud.presence == .speaking { self?.hud.presence = .idle } }
         self.hud.onReplyDone = { [weak self] text in
             guard let self else { return }
-            if self.voice.shouldSpeak(askedByVoice: self.lastAskedByVoice) { self.voice.speak(text) } else { self.hud.presence = .idle }
+            // One voice button (decision 112): a spoken message gets a spoken answer, a typed one stays text.
+            if self.lastAskedByVoice { self.voice.speak(text) } else { self.hud.presence = .idle }
         }
         self.hud.onKnowledgeUpdated = { [weak self] e in self?.attachments.apply(event: e) }
     }
