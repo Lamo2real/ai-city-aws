@@ -38,6 +38,10 @@ Links like `#/settings/connectors` open that page in the app.
 - **The clock icon** (top left of the chat): "While you were away", a summary of what happened.
 - **The trash icon** (top right of the chat): clears the conversation on this device.
 - **"What I did"** under a reply shows the steps AIC took.
+- **Ask AIC to do it for you.** Anything you can set or change on any screen, AIC can do when you ask: "switch to
+  dark mode", "turn the CFO off", "set a $20 daily limit", "delete that document", "add a standing order…", "open my
+  connectors". It just does it and tells you what changed. The only exception is a password, key or token: AIC opens
+  the page and you paste it there yourself, because secrets never go through the chat.
 
 ## The City
 - The map shows HQ (AIC and the Orchestrator), one tower per department, and the houses where workers live. Workers

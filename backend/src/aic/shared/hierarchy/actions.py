@@ -55,6 +55,9 @@ class CityDeps:
     advisor_runner: Any = None
     """A ``ModelRunner`` for the executives (decision 140), on AIC's and the Orchestrator's runtimes; None = no
     executive tools."""
+    owner_api: Any = None
+    """AIC's door to the HUD's own API (decision 143): an async ``(call: {method, path, body}) -> response`` that
+    runs one route as the owner; None = not wired (only AIC's runtime has it)."""
 
 
 FINAL = ("done", "failed", "cancelled")

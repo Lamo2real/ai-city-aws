@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Literal, cast
 
-from aic.shared import company
+from aic.shared import company, owner_api
 from aic.shared import executives as execs
 from aic.shared import sales_pipeline as deals
 from aic.shared import standing_orders as standing
@@ -1213,6 +1213,26 @@ async def steward_apply(op: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
     return {"ok": True, "choice": choice}
 
 
+async def aic_call(call: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
+    """One HUD route run for the owner by AIC (decision 143): the same router and checks as the owner's own request.
+
+    Reached only by a direct invoke from AIC's runtime role (IAM); an HTTP event never has the ``aic_call`` key, so
+    nothing on the internet can take this path. The secret-taking and AIC's own routes are refused here too."""
+    method, path = str(call.get("method") or "GET").upper(), str(call.get("path") or "")
+    why = owner_api.refusal(method, path)
+    if why:
+        return problem(403, why)
+    event = owner_api.to_event(method, path, call.get("body"))
+    log("info", "api.aic_call", method=method, path=owner_api.clean_path(path))
+    try:
+        return await _route(event, d)
+    except BadRequest as e:
+        return problem(400, str(e))
+    except Exception as e:
+        log("error", "api.failed", path=path, error=type(e).__name__, via="aic")
+        return problem(500, f"Something went wrong on our side ({type(e).__name__}: {str(e)[:300]}).")
+
+
 def _connectors(d: ApiDeps) -> ConnectorsApi:
     from aic.shared.connectors import ConnectorStore
 
@@ -1524,6 +1544,8 @@ def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
         _deps = build_deps()
     if isinstance(event.get("chief_of_staff"), dict):  # a direct invoke from the chief-of-staff Lambda
         return run(steward_apply(event["chief_of_staff"], _deps))
+    if isinstance(event.get("aic_call"), dict):  # a direct invoke from AIC's runtime (decision 143)
+        return run(aic_call(event["aic_call"], _deps))
     return run(handle_http(event, _deps))
 
 

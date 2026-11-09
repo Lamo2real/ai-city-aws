@@ -351,6 +351,17 @@ class AceQuestion(_E):
     options: list[str]
 
 
+class HudAction(_E):
+    """AIC changes something that lives on the owner's device (decision 143): ``theme`` (light, dark, system) or
+    ``open`` (bring a HUD page up). Every open HUD applies it."""
+
+    type: Literal["hud.action"]
+    action: Literal["theme", "open"]
+    conversation: str = "main"
+    value: str | None = None
+    page: str | None = None
+
+
 class WorkflowUpdated(_E):
     """A workflow run changed (decision 126): the HUD's walkthrough card redraws from ``run`` (its public form)."""
 
@@ -422,6 +433,7 @@ CityEventModel = Annotated[
     | SpendCapReachedEvent
     | AceReply
     | AceQuestion
+    | HudAction
     | AppSubmitted
     | AppDraft
     | AppPublished

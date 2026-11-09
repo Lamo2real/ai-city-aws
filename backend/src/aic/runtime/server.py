@@ -210,6 +210,27 @@ def _skills(city: Any, e: Mapping[str, str]) -> Any:
     return SkillStore(city.ledger.table, city.session.client("s3"), bucket) if bucket else None
 
 
+def _owner_api(city: Any, e: Mapping[str, str]) -> Callable[[dict[str, Any]], Awaitable[dict[str, Any]]] | None:
+    """AIC runs a HUD route as the owner by invoking the API Lambda directly (decision 143); IAM lets only AIC's
+    role do that, and the API refuses secret-taking routes on this path too."""
+    fn = e.get("AIC_API_FUNCTION")
+    if not fn:
+        return None
+    lam = client(city.session, "lambda")
+
+    def call(c: dict[str, Any]) -> dict[str, Any]:
+        r = lam.invoke(FunctionName=fn, Payload=json.dumps({"aic_call": c}).encode())
+        out = json.loads(r["Payload"].read() or b"{}")
+        if r.get("FunctionError"):
+            return {"statusCode": 500, "body": json.dumps({"error": str(out.get("errorMessage") or out)[:400]})}
+        return out if isinstance(out, dict) else {"statusCode": 500, "body": "unreadable answer"}
+
+    async def run(c: dict[str, Any]) -> dict[str, Any]:
+        return await asyncio.to_thread(call, c)
+
+    return run
+
+
 def factory_for(role: str, city: Any, e: Mapping[str, str]) -> FactoryClient:
     """Managers hire through the Agent Factory Lambda (it holds the hiring logic and rights). AIC never hires;
     it only sends workers home (`send_workers_home`, `cancel_task`), which is a ledger write and one event, so
@@ -248,6 +269,7 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
             advisor_runner=bedrock_converse_runner(_bedrock()) if role in ("ace", "orchestrator") else None,
             workspace=workspace_from_env(city.session, e) if role == "worker" else None,
             knowledge=_knowledge(city.session, city.bus, role, e),
+            owner_api=_owner_api(city, e) if role == "ace" else None,
         ),
         HostOptions(
             engine=sdk_engine,

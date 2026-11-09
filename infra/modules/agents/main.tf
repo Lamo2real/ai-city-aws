@@ -25,6 +25,15 @@ variable "queue_arns" { type = map(string) }
 variable "queue_urls" { type = map(string) }
 variable "factory_function_arn" { type = string }
 variable "factory_function_name" { type = string }
+# AIC acts for the owner through the HUD's own API (decision 143): it invokes the API Lambda's live alias directly.
+variable "api_function_name" {
+  type    = string
+  default = ""
+}
+variable "api_function_arn" {
+  type    = string
+  default = ""
+}
 variable "workspaces_bucket" { type = string }
 variable "workspaces_arn" { type = string }
 variable "runtime_env" {
@@ -210,6 +219,22 @@ resource "aws_iam_role_policy" "voice" {
   })
 }
 
+# Only AIC may run HUD routes as the owner (decision 143); the API refuses secret-taking routes on this path.
+resource "aws_iam_role_policy" "owner_api" {
+  count = var.api_function_arn == "" ? 0 : 1
+  name  = "owner-api"
+  role  = aws_iam_role.agent["ace"].id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid      = "RunHudRoutesForTheOwner"
+      Effect   = "Allow"
+      Action   = ["lambda:InvokeFunction"]
+      Resource = [var.api_function_arn]
+    }]
+  })
+}
+
 resource "aws_iam_role_policy" "factory" {
   name   = "agent-factory"
   role   = aws_iam_role.agent["manager"].id
@@ -311,6 +336,7 @@ resource "aws_bedrockagentcore_agent_runtime" "role" {
       CLAUDE_CODE_DISABLE_1M_CONTEXT = "1"
     },
     each.key == "ace" ? { KNOWLEDGE_BUCKET = var.knowledge_bucket } : {},
+    each.key == "ace" && var.api_function_name != "" ? { AIC_API_FUNCTION = var.api_function_name } : {},
     # Only workers run shell commands, so only they scrub their environment (needs bubblewrap, in the image).
     # On the other roles Claude Code refuses to start with it set and nothing to sandbox.
     each.key == "worker" ? { CLAUDE_CODE_SUBPROCESS_ENV_SCRUB = "1" } : {},

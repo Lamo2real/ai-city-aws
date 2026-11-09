@@ -1,5 +1,6 @@
 // One store for the whole HUD: the city (via the ported reducer), AIC's chat, connection status and
 // the owner's outbox. Every screen reads from here; the WebSocket and API write to it.
+import { hudAction } from "./hudAction.ts";
 import { needsCount } from "./needs.ts";
 import { useSyncExternalStore } from "react";
 import { applySnapshot, initialState, reduce, type CityApp, type CityState } from "../city/city-state.js";
@@ -157,6 +158,7 @@ class Store {
     // A project's chat (`app-…`, lib/projects.ts) is not AIC's main chat.
     if ((e.type === "ace.reply" || e.type === "ace.question") && String(e.conversation ?? "").startsWith("app-"))
       return;
+    if (e.type === "hud.action") return hudAction(e);
     if (e.type === "ace.reply")
       return this.aceReply(e as unknown as { conversation: string; text: string; done: boolean });
     if (e.type === "activity" && e.id === "ace") this.aceStep(String(e.activity ?? ""), e.detail as string | null);

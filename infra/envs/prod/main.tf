@@ -144,8 +144,11 @@ module "agents" {
   # The Factory's name is fixed, so the agents module need not wait for the api module (no cycle).
   factory_function_name = "${local.name}-factory"
   factory_function_arn  = "arn:aws:lambda:${var.region}:${data.aws_caller_identity.me.account_id}:function:${local.name}-factory"
-  workspaces_bucket     = module.storage.workspaces_bucket
-  workspaces_arn        = module.storage.workspaces_arn
+  # AIC runs HUD routes as the owner (decision 143); the API's name is fixed too, so still no cycle.
+  api_function_name = "${local.name}-api:live"
+  api_function_arn  = "arn:aws:lambda:${var.region}:${data.aws_caller_identity.me.account_id}:function:${local.name}-api:live"
+  workspaces_bucket = module.storage.workspaces_bucket
+  workspaces_arn    = module.storage.workspaces_arn
   # Connectors, skills and mail are read at turn start, so new ones work without a redeploy.
   runtime_env = {
     for r in local.roles : r => merge(
