@@ -24,7 +24,7 @@ def app_guide() -> str:
     return (agents_dir() / "help" / "app_guide.md").read_text(encoding="utf-8").strip()
 
 
-REVISION = "2"
+REVISION = "3"
 """Bumped when the way the guide is stored changes, so every deploy that needs it starts with one fresh copy."""
 
 

@@ -1726,6 +1726,13 @@ main {
   border: 1px solid var(--edge-2);
   white-space: nowrap;
 }
+/* A long reason (a failed knowledge item) wraps inside its card instead of running off the screen. */
+.tag-bad {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  border-radius: 10px;
+  max-width: 100%;
+}
 .tag-done {
   background: var(--good-t);
   color: var(--good-l);

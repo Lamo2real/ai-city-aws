@@ -75,6 +75,7 @@ resource "aws_iam_policy" "boundary" {
           "cloudfront:CreateInvalidation",
           # The knowledge base (docs/KNOWLEDGE.md section 9).
           "bedrock:Retrieve", "bedrock:IngestKnowledgeBaseDocuments", "bedrock:GetKnowledgeBaseDocuments", "bedrock:DeleteKnowledgeBaseDocuments",
+          "bedrock:StartIngestionJob", "bedrock:ListKnowledgeBaseDocuments", # direct ingestion is also authorised as these
           "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts", "aoss:APIAccessAll",
           "neptune-graph:ReadDataViaQuery", "neptune-graph:WriteDataViaQuery", "neptune-graph:DeleteDataViaQuery",
           "transcribe:StartTranscriptionJob", "transcribe:GetTranscriptionJob", "mediaconvert:CreateJob", "mediaconvert:GetJob",

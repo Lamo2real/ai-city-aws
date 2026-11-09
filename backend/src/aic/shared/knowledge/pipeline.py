@@ -495,7 +495,9 @@ def plain_error(error: Any) -> str:
         return "The knowledge base was busy for too long. Add the item again."
     # Anything else: the whole reason (the owner, 2026-11-09: "I want to see any errors… no matter what it is").
     kind = re.sub(r"[^A-Za-z0-9_.]", "", name)[:60]
-    detail = " ".join(f"{kind}: {msg}".split()).strip(": ")[:300]
+    # botocore's "An error occurred (X) when calling the Y operation: " says nothing the kind doesn't: keep the reason.
+    msg = re.sub(r"^An error occurred \([^)]*\) when calling the (\w+) operation: ", r"\1: ", msg)
+    detail = " ".join(f"{kind}: {msg}".split()).strip(": ")[:400]
     if not detail:
         return "Something went wrong while processing this item."
     return f"Something went wrong while processing this item ({detail})."

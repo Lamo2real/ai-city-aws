@@ -488,7 +488,9 @@ resource "aws_iam_role_policy" "fn" {
       # Converse is authorized as bedrock:InvokeModel; Haiku 5.5 (utility) only.
       { Sid = "Utility", Effect = "Allow", Action = ["bedrock:InvokeModel"], Resource = var.utility_invoke_arns },
       # Direct ingestion per item (no data-source syncs: AWS says not to mix them).
-      { Sid = "Ingest", Effect = "Allow", Action = ["bedrock:IngestKnowledgeBaseDocuments", "bedrock:GetKnowledgeBaseDocuments", "bedrock:DeleteKnowledgeBaseDocuments"], Resource = [aws_bedrockagent_knowledge_base.this.arn] },
+      # AWS's direct-ingestion policy (kb-direct-ingestion-prereq): IngestKnowledgeBaseDocuments is also authorised as
+      # StartIngestionJob; without it Bedrock answered AccessDenied and every item failed (2026-11-09).
+      { Sid = "Ingest", Effect = "Allow", Action = ["bedrock:StartIngestionJob", "bedrock:IngestKnowledgeBaseDocuments", "bedrock:GetKnowledgeBaseDocuments", "bedrock:ListKnowledgeBaseDocuments", "bedrock:DeleteKnowledgeBaseDocuments"], Resource = [aws_bedrockagent_knowledge_base.this.arn] },
       { Sid = "Graph", Effect = "Allow", Action = ["neptune-graph:ReadDataViaQuery", "neptune-graph:WriteDataViaQuery", "neptune-graph:DeleteDataViaQuery"], Resource = [aws_neptunegraph_graph.this.arn] },
       { Sid = "Events", Effect = "Allow", Action = ["events:PutEvents"], Resource = [var.bus_arn] },
       { Sid = "Ledger", Effect = "Allow", Action = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query"], Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] },
