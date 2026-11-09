@@ -1,10 +1,80 @@
-// Shared pieces: the wordmark, banners, toasts, loading and empty states.
+// Shared pieces: the logo, banners, toasts, loading and empty states.
 import SwiftUI
 
-/// The brand: the AI CITY wordmark alone (decision 108). The eye drawing is no longer on any screen; it stays in the app icon.
+/// The logo (decisions 147 and 158; the web's Wordmark.tsx): an amber tile with a small skyline, then "VAIC" with
+/// the "AI" set apart: amber, a slight lean and a small spark, so Vice Artificial Intelligence City reads at a
+/// glance. The tile and the AI read the accent tokens (decision 142). VoiceOver reads it as "VAIC".
 struct Wordmark: View {
+    @Environment(\.colorScheme) private var scheme
+
+    /// The AI's amber: the accent's two tones, or the deeper pair on a light ground so it reads.
+    private var ai: LinearGradient {
+        scheme == .light
+            ? LinearGradient(colors: [Color(hex: 0xe8a33d), Color(hex: 0xa8661a)], startPoint: .top, endPoint: .bottom)
+            : LinearGradient(colors: [Color(hex: 0xf9c976), Color(hex: 0xe8a33d)], startPoint: .top, endPoint: .bottom)
+    }
+
     var body: some View {
-        Text("AI CITY").font(.headline.monospaced()).accessibilityLabel("AI City")
+        HStack(spacing: 9) {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Glass.accentFill)
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Glass.accentEdge, lineWidth: 1))
+                .overlay(Skyline().fill(Glass.accentInk).frame(width: 18, height: 18))
+                .frame(width: 28, height: 28)
+            HStack(alignment: .firstTextBaseline, spacing: 0) {
+                Text("V")
+                Text("AI")
+                    .italic()
+                    .foregroundStyle(ai)
+                    .kerning(0.2)
+                    .padding(.trailing, 1)
+                    .overlay(alignment: .topTrailing) {
+                        Spark().fill(Glass.amber).frame(width: 7, height: 7).offset(x: 3, y: -5)
+                    }
+                Text("C")
+            }
+            .font(.system(size: 22, weight: .heavy, design: .rounded))
+            .kerning(-0.44)
+            .foregroundStyle(scheme == .light ? Glass.ink : Glass.text)
+            .lineLimit(1)
+            .fixedSize()
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("VAIC")
+    }
+}
+
+/// The tile's skyline (the web's five SVG paths in a 24 × 24 box): three buildings with rounded tops, an aerial on
+/// the middle one, and the ground.
+struct Skyline: Shape {
+    func path(in rect: CGRect) -> Path {
+        let k = min(rect.width, rect.height) / 24
+        func box(_ x: CGFloat, _ top: CGFloat, _ w: CGFloat) -> CGRect {
+            // Each building runs a little under the ground, so only its top corners show as rounded.
+            CGRect(x: rect.minX + x * k, y: rect.minY + top * k, width: w * k, height: (22 - top) * k)
+        }
+        var p = Path()
+        p.addRoundedRect(in: box(3, 11.5, 5.2), cornerSize: CGSize(width: k, height: k))
+        p.addRoundedRect(in: box(9.4, 5.2, 5.2), cornerSize: CGSize(width: k, height: k))
+        p.addRoundedRect(in: box(15.8, 8.6, 5.2), cornerSize: CGSize(width: k, height: k))
+        p.addRect(CGRect(x: rect.minX + 11.6 * k, y: rect.minY + 2.4 * k, width: 0.8 * k, height: 2.8 * k)) // the aerial
+        p.addRect(CGRect(x: rect.minX + 2 * k, y: rect.minY + 21 * k, width: 20 * k, height: 1.2 * k)) // the ground
+        return p
+    }
+}
+
+/// A small four-point spark (the web's clip-path polygon).
+struct Spark: Shape {
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width, h = rect.height
+        let pts: [(CGFloat, CGFloat)] = [(0.5, 0), (0.62, 0.38), (1, 0.5), (0.62, 0.62), (0.5, 1), (0.38, 0.62), (0, 0.5), (0.38, 0.38)]
+        var p = Path()
+        for (i, (x, y)) in pts.enumerated() {
+            let pt = CGPoint(x: rect.minX + x * w, y: rect.minY + y * h)
+            if i == 0 { p.move(to: pt) } else { p.addLine(to: pt) }
+        }
+        p.closeSubpath()
+        return p
     }
 }
 
