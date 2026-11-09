@@ -58,14 +58,15 @@ def setup(runner: Any, settings: dict[str, Any] | None = None) -> tuple[Ledger, 
 
 
 def turn(role: str, kind: str | None = None, **extra: Any) -> GatedTurn:
+    dept = extra.pop("department", "Engineering" if role in ("worker", "manager") else None)
     return GatedTurn(
         kind=kind or role,
         role=role,
         agent_id=f"{role}-1",
         session_id="s" * 33,
-        department="Engineering" if role in ("worker", "manager") else None,
+        department=dept,
         ticket_id="t-1",
-        models=resolve_role(role),  # type: ignore[arg-type]
+        models=resolve_role(role, department=dept),  # type: ignore[arg-type]
         prompt="do it",
         **extra,
     )
@@ -203,7 +204,7 @@ async def test_a_refusal_triggers_exactly_one_fallback_turn_on_opus_marked_in_th
 async def test_a_refusal_on_the_fallback_is_final_no_loop() -> None:
     runner = Runner(lambda _: reply("no", "refusal"))
     _, _, deps = setup(runner)
-    r = await run_gated_turn(turn("manager"), deps)
+    r = await run_gated_turn(turn("manager", department="Research"), deps)  # Research runs on Fable
     assert len(runner.calls) == 2
     assert r.output.stop_reason == "refusal"
 
@@ -217,7 +218,7 @@ async def test_a_review_with_no_verdict_falls_back_once() -> None:
         )
     )
     _, _, deps = setup(runner)
-    r = await run_gated_turn(turn("manager", "manager", needs_verdict=True), deps)
+    r = await run_gated_turn(turn("manager", "manager", needs_verdict=True, department="Legal"), deps)
     assert r.verdict == "FAIL"
     assert r.fallback
 

@@ -17,6 +17,7 @@ from ..connectors import ConnectorStore
 from ..events import EventBus, now_iso
 from ..ids import department_key, new_id
 from ..ledger import Ledger, Record
+from ..models import model_name_for
 
 WORKER_TOOLS: tuple[str, ...] = (
     "Bash",
@@ -110,7 +111,7 @@ class Factory:
             "role": spec.specialty,
             "specialty": spec.specialty,
             "department": dept["name"],
-            "model": "opus-5-5",
+            "model": model_name_for("worker", dept["name"]),
             "parent": manager_id,
             "state": "active",
             "worker_state": "hired",

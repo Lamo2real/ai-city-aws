@@ -176,7 +176,12 @@ class AgentHost:
                     inv = {**inv, "body": inv["body"] + "\n\n[Saved to the owner's knowledge base as a CSV: "
                            + "; ".join(f"“{t}”" for t in saved) + "]"}  # fmt: skip
             prompt = await self._prompt(agent, inv)
-            models = resolve_role_from_env(inv["role"], self.o.env if self.o.env is not None else os.environ)
+            models = resolve_role_from_env(
+                inv["role"], self.o.env if self.o.env is not None else os.environ, agent.get("department")
+            )
+            if agent.get("model") and agent["model"] != models.primary.name and inv["role"] in ("manager", "worker"):
+                # The City shows what the agent really runs on (the model rules changed, decision 129).
+                await ledger.update_agent(agent["id"], {"model": models.primary.name})
             settings = await self.d.settings()
             is_ace = inv["role"] == "ace"
 

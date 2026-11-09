@@ -53,8 +53,15 @@ locals {
   roles  = ["ace", "orchestrator", "manager", "worker"]
   # utility and chief_of_staff are Lambda-side calls (no runtime): a profile each, so the bill splits by role.
   all_roles = concat(local.roles, ["utility", "chief_of_staff"])
-  # Plain model names each role may call: its own, and its fallback.
-  role_models = { for r in local.all_roles : r => compact([local.models.roles[r].model, local.models.roles[r].fallback]) }
+  # Plain model names each role may call: its own and its fallback, plus, for managers and workers, the model the
+  # owner's chosen departments run on (departmentModels, decision 129: Fable for Media, Research and Legal).
+  dept_models = try(compact([local.models.departmentModels.model, local.models.departmentModels.fallback]), [])
+  role_models = {
+    for r in local.all_roles : r => distinct(compact(concat(
+      [local.models.roles[r].model, local.models.roles[r].fallback],
+      contains(["manager", "worker"], r) ? local.dept_models : [],
+    )))
+  }
   system_profile_arn = {
     for m, v in local.models.models : m => "arn:aws:bedrock:${var.region}:${var.account_id}:inference-profile/${var.profile_prefix}.${v.modelId}"
   }

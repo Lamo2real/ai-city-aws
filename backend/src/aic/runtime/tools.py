@@ -65,6 +65,7 @@ from aic.shared.knowledge.model import SCOPES
 from aic.shared.knowledge.search import search
 from aic.shared.knowledge.service import KnowledgeError
 from aic.shared.log import log
+from aic.shared.models import model_name_for
 from aic.shared.policy import decide, gate
 from aic.shared.presets import preset_for
 from aic.shared.utility import UtilityDeps, about_ai_city, triage
@@ -664,7 +665,7 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             "kind": "manager",
             "role": f"{dept['name']} Manager",
             "department": dept["name"],
-            "model": "fable-5-1",
+            "model": model_name_for("manager", dept["name"]),
             "parent": "orchestrator",
             "state": "dormant",
             "worker_state": None,
