@@ -54,15 +54,30 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
   const [text, setText] = useState(readDraft);
   const input = useRef<HTMLTextAreaElement>(null);
   const log = useRef<HTMLDivElement>(null);
-  // Dictation writes into the box: `base` is the text before the words being spoken right now.
+  // Dictation writes into the box: `base` is the text before the words being spoken right now, `pending` those
+  // words while the recognizer may still change them. Stop keeps everything shown, pending words included, to edit,
+  // send with Enter or add to by dictating again; the recognizer's last word may land just after stop and then
+  // replaces the pending words it finishes (`closing`), until the owner types.
   const base = useRef(text);
+  const pending = useRef("");
+  const closing = useRef(false);
   const voice = useVoice({
-    onPartial: (words) => setText(appendDictation(base.current, words)),
+    onPartial: (words) => {
+      if (closing.current) return;
+      pending.current = words;
+      setText(appendDictation(base.current, words));
+    },
     onFinal: (words) => {
+      if (closing.current && !pending.current) return;
       base.current = appendDictation(base.current, words);
+      pending.current = "";
       setText(base.current);
     },
-    onStop: () => setText(base.current),
+    onStop: () => {
+      closing.current = true;
+      setText(appendDictation(base.current, pending.current));
+      requestAnimationFrame(() => input.current?.focus());
+    },
   });
   // The + menu: skills and connectors to list, and the files attached to the message being written (they are
   // knowledge items, so their live status comes from the knowledge store).
@@ -120,16 +135,22 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
   const beforeDictation = useRef("");
   const startDictation = () => {
     beforeDictation.current = text;
+    base.current = text; // new words go after what the box shows, typed or dictated before
+    pending.current = "";
+    closing.current = false;
     voice.toggleDictate();
   };
   const cancelDictation = () => {
     voice.toggleDictate();
+    closing.current = true;
+    pending.current = "";
     base.current = beforeDictation.current;
-    setText(beforeDictation.current);
-    requestAnimationFrame(() => setText(beforeDictation.current)); // after the recognizer's last word lands
+    setText(beforeDictation.current); // a word landing after this is ignored (`closing`)
     input.current?.focus();
   };
   const setTyped = (next: string) => {
+    if (!voice.dictating) closing.current = true; // typed after stop: a late word must not undo the typing
+    pending.current = "";
     base.current = next;
     setText(next);
   };

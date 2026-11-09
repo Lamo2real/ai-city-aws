@@ -44,7 +44,8 @@
     rgba(232, 163, 61, 0.96)
   ); /* primary buttons, on-states, the logo */
   --accent-ink: #2a1a08; /* text and icons on the accent */
-  --wm-ai: linear-gradient(180deg, #f9c976, #e8a33d); /* the AI in the VAIC logo */
+  --wm-ai-top: #ffd98a; /* the "AI" in the VAIC logo */
+  --wm-ai-bottom: #e8a33d;
   --accent-edge: rgba(255, 255, 255, 0.3);
   --accent-shadow: none; /* the owner's call, 2026-11-09: flat, no glow around accent buttons */
   --btn-radius: 999px;
@@ -206,57 +207,26 @@ textarea {
   min-height: var(--tap);
   padding: 0 var(--s1);
 }
-/* the AI City logo (decision 147): an amber skyline tile and "AI City"; the tile reads the accent tokens */
+/* the VAIC logo (decision 159): a striped sunset with a skyline, then VAIC drawn as lines with an amber "ΛI" */
 .wordmark {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
-  font-family: var(--font);
-  font-weight: 800;
+  gap: 10px;
   line-height: 1;
   white-space: nowrap;
-}
-.wm-tile {
-  display: inline-grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: var(--accent-fill);
-  color: var(--accent-ink);
-  border: 1px solid var(--accent-edge);
-  box-shadow: var(--accent-shadow);
-}
-.wm-tile svg {
-  fill: currentColor;
-  display: block;
-}
-.wm-word {
-  font-size: 22px;
-  letter-spacing: -0.02em;
   color: var(--gtext);
 }
-/* The "AI" in VAIC (decision 158): amber, leaning a little, with a small four-point spark above its I. */
-.wm-ai {
-  position: relative;
-  display: inline-block;
-  margin: 0 1px 0 0;
-  font-style: italic;
-  letter-spacing: 0.01em;
-  background: var(--wm-ai);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+.wm-mark,
+.wm-word {
+  display: block;
+  flex: none;
+  overflow: visible;
 }
-.wm-ai::after {
-  content: "";
-  position: absolute;
-  right: -3px;
-  top: -5px;
-  width: 7px;
-  height: 7px;
-  background: var(--go);
-  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+.wm-ai-top {
+  stop-color: var(--wm-ai-top);
+}
+.wm-ai-bottom {
+  stop-color: var(--wm-ai-bottom);
 }
 .top nav {
   display: flex;
@@ -3520,7 +3490,8 @@ summary,
 /* Light appearance (Settings → General → Appearance): the same glass over a daytime sky, ink text. The City scene
    keeps its own parchment palette in both. */
 :root[data-theme="light"] {
-  --wm-ai: linear-gradient(180deg, #e8a33d, #a8661a); /* deeper on the light ground, so it reads */
+  --wm-ai-top: #e8a33d; /* deeper on the light ground, so it reads */
+  --wm-ai-bottom: #a8661a;
   --link: #7a4a00;
   --panel: rgba(255, 255, 255, 0.92);
   --savebar: rgba(240, 242, 250, 0.92);

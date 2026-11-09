@@ -1409,3 +1409,37 @@ test("dictation: × puts the box back as it was, and send goes out at once witho
   await expect(page.getByRole("group", { name: "Dictation" })).toHaveCount(0); // listening stopped
   await expect(box).toHaveValue("");
 });
+
+test("dictation: stop keeps the words still being heard, to edit, send with Enter or dictate more", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  await page.addInitScript(() => {
+    const w = window as unknown as { __partials: string[]; __micHold: boolean };
+    w.__partials = ["make this into a solution"];
+    w.__micHold = true; // the recognizer never finalises: only the live words are on screen
+  });
+  await page.goto("/");
+  const box = page.getByRole("textbox", { name: "Message to VAIC" });
+  await page.getByRole("button", { name: "Dictate into the box" }).click();
+  await expect(box).toHaveValue("make this into a solution");
+  await page.getByRole("button", { name: "Stop dictating" }).click();
+  await expect(page.getByRole("group", { name: "Dictation" })).toHaveCount(0);
+  await expect(box).toHaveValue("make this into a solution"); // kept, not wiped
+  await expect(box).toBeFocused();
+  await box.press("End");
+  await box.pressSequentially(", please");
+  await expect(box).toHaveValue("make this into a solution, please");
+
+  // Dictate again: the new words go after what is there.
+  await page.evaluate(() => {
+    (window as unknown as { __partials: string[] }).__partials = ["and test it"];
+  });
+  await page.getByRole("button", { name: "Dictate into the box" }).click();
+  await expect(box).toHaveValue("make this into a solution, please and test it");
+  await page.getByRole("button", { name: "Stop dictating" }).click();
+  await box.press("Enter");
+  await expect
+    .poll(() => m.calls.filter((c) => c.path === "/messages").at(-1)?.body)
+    .toMatchObject({ text: "make this into a solution, please and test it" });
+});
