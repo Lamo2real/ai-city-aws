@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -479,4 +480,11 @@ def plain_error(error: Any) -> str:
         return "Processing took too long."
     if name == "ThrottlingException":
         return "The knowledge base was busy for too long. Add the item again."
-    return "Something went wrong while processing this item."
+    # Anything else: name the kind of error (never its message, which can hold internal details), so the cause can
+    # be found in the logs (a bare "something went wrong" hid it, 2026-11-09).
+    kind = re.sub(r"[^A-Za-z0-9_.]", "", name)[:60]
+    return (
+        f"Something went wrong while processing this item ({kind})."
+        if kind
+        else ("Something went wrong while processing this item.")
+    )

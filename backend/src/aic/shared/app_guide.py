@@ -16,6 +16,7 @@ from aic.shared.utility import agents_dir
 
 TITLE = "AI City guide (built in)"
 FLAG = ("HELP#guide", "META")
+MAX_TRIES = 3
 
 
 @cache
@@ -35,11 +36,23 @@ async def ensure_guide_in_knowledge(table: Any, knowledge: Any) -> bool:
     try:
         flag = await table.get(*FLAG) or {}
         h = guide_hash()
+        tries = int(flag.get("tries") or 1)
         if flag.get("hash") == h:
-            return False
+            # Same guide: only a copy that failed in the pipeline is added again, at most three times per version.
+            if tries >= MAX_TRIES or not flag.get("item_id"):
+                return False
+            try:
+                current = await knowledge.get(flag["item_id"])
+            except Exception:
+                current = {"status": "failed"}  # gone: add it again
+            if current.get("status") != "failed":
+                return False
+            tries += 1
+        else:
+            tries = 1
         item = await knowledge.add_text(app_guide(), TITLE, "relevant")
         old = flag.get("item_id")
-        await table.put({"pk": FLAG[0], "sk": FLAG[1], "hash": h, "item_id": item.get("id")})
+        await table.put({"pk": FLAG[0], "sk": FLAG[1], "hash": h, "item_id": item.get("id"), "tries": tries})
         if old and old != item.get("id"):
             try:
                 await knowledge.delete(old)

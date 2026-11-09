@@ -45,6 +45,11 @@ class Knowledge:
     async def delete(self, item_id: str) -> None:
         self.deleted.append(item_id)
 
+    status = "ready"
+
+    async def get(self, item_id: str) -> dict[str, Any]:
+        return {"id": item_id, "status": self.status}
+
 
 async def test_the_guide_is_added_to_knowledge_once_and_replaced_when_it_changes(monkeypatch: Any) -> None:
     d = make()
@@ -66,3 +71,15 @@ def test_every_prompt_a_lambda_reads_is_in_the_bundle() -> None:
     assert 'shutil.copytree(ROOT / "agents", OUT / "aic" / "_agents")' in build
     for f in ("help/app_guide.md", "voice_live.md", "chief_of_staff.md", "executives/ceo.md"):
         assert (ROOT / "agents" / f).is_file(), f
+
+
+async def test_a_copy_that_failed_in_the_pipeline_is_added_again_at_most_three_times() -> None:
+    d = make()
+    k = Knowledge()
+    await ensure_guide_in_knowledge(d.ledger.table, k)
+    k.status = "failed"
+    assert await ensure_guide_in_knowledge(d.ledger.table, k) is True
+    assert await ensure_guide_in_knowledge(d.ledger.table, k) is True
+    assert await ensure_guide_in_knowledge(d.ledger.table, k) is False  # three tries for this version, then it waits
+    assert len(k.added) == 3 and k.deleted == ["kn-1", "kn-2"]
+

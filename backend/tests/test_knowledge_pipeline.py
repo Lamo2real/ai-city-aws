@@ -274,7 +274,7 @@ async def test_a_refused_link_fails_with_plain_words() -> None:
 def test_unknown_errors_never_leak_details() -> None:
     assert plain_error(
         {"Error": "KeyError", "Cause": json.dumps({"errorType": "KeyError", "errorMessage": "secret path"})}
-    ) == ("Something went wrong while processing this item.")
+    ) == ("Something went wrong while processing this item (KeyError).")  # the kind, never the message
     assert plain_error({"Error": "States.Timeout"}) == "Processing took too long."
     assert plain_error(None) == "Something went wrong while processing this item."
 
