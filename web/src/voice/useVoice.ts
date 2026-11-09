@@ -25,6 +25,7 @@ import { loadOpenAi, onVoiceNote, withOpenAi } from "./openai.ts";
 import { toast } from "../components/ui.tsx";
 import { getVoice, logVoiceError, micProblem, speakProblem } from "./voice.ts";
 import { watchForBargeIn } from "./bargeIn.ts";
+import { cleanSpeech } from "./clean.ts";
 import { CUE_AFTER_MS, CUE_AGAIN_MS, MAX_CUES, OWNER_TALKING_LEVEL, nextCue } from "./cues.ts";
 import { primeSonic, sonicWanted, startSonic, type SonicCall } from "./sonic.ts";
 
@@ -55,6 +56,9 @@ const loop = { current: false };
 // The voice conversation (the AIC screen's voice button): on until the owner taps it off.
 const convo = { current: false };
 const startRef: { current: ((reopened?: boolean) => void) | null } = { current: null };
+// The pieces of what the owner is saying, joined into one message after a short pause (voice conversation).
+const THOUGHT_PAUSE_MS = 1100;
+const thought: { parts: string[]; timer: number | undefined } = { parts: [], timer: undefined };
 // The real-time call while it runs (one for the whole page).
 const sonic: { current: SonicCall | null } = { current: null };
 /** Loudness of the real-time call, for the visualizer; null when no call runs. */
@@ -288,6 +292,8 @@ export function useVoice(dictation?: DictationTarget) {
 
   const endConversation = useCallback(() => {
     stopCues();
+    window.clearTimeout(thought.timer); // a half-said thought is dropped with the conversation
+    thought.parts = [];
     convo.current = false;
     setEngine(null);
     setConversation(false);
@@ -306,32 +312,63 @@ export function useVoice(dictation?: DictationTarget) {
         end();
       };
       try {
+        // What the owner says, as one thought: in the voice conversation the pieces heard between short pauses
+        // are joined until the owner has been quiet for a moment, so "They" + "I take that." go as one message.
+        const said = (raw: string) => {
+          const text = cleanSpeech(raw); // no "um", "uh", stammers; quoted words stay as said
+          if (!text) return;
+          if (isStopPhrase(text)) {
+            loop.current = false; // "stop listening" ends the conversation and is not sent
+            endConversation();
+            end();
+            return;
+          }
+          if (convo.current) {
+            // Always listening: words heard while AIC talks are the owner's, unless they are AIC's own
+            // words coming back from the speakers.
+            const t = talk.current;
+            if (t && !t.cancelled && t.started) {
+              const reply = store.get().chat.find((l) => l.id === t.id)?.text ?? "";
+              if (isEcho(text, reply)) return;
+            }
+            if (cue.last && Date.now() - cue.at < 6000 && isEcho(text, cue.last)) return; // a cue's echo
+            stopTalking();
+            return void sendMessage(text, { voice: true });
+          }
+          end();
+          loop.current = loopNext(loop.current, "voice_sent").on; // the loop arms on a spoken send
+          void sendMessage(text, { voice: true });
+        };
+        const flush = () => {
+          window.clearTimeout(thought.timer);
+          const whole = thought.parts.join(" ");
+          thought.parts = [];
+          if (whole) said(whole);
+        };
         stop.current = await getVoice().listen(
           async (text) => {
-            if (dictate) return target.current?.onFinal(text);
-            if (isStopPhrase(text)) {
-              loop.current = false; // "stop listening" ends the conversation and is not sent
-              endConversation();
-              end();
-              return;
+            if (dictate) {
+              const clean = cleanSpeech(text);
+              return clean ? target.current?.onFinal(clean) : undefined;
             }
-            if (convo.current && !dictate) {
-              // Always listening: words heard while AIC talks are the owner's, unless they are AIC's own
-              // words coming back from the speakers.
-              const t = talk.current;
-              if (t && !t.cancelled && t.started) {
-                const said = store.get().chat.find((l) => l.id === t.id)?.text ?? "";
-                if (isEcho(text, said)) return;
-              }
-              if (cue.last && Date.now() - cue.at < 6000 && isEcho(text, cue.last)) return; // a cue's echo
-              stopTalking();
-              return void sendMessage(text, { voice: true });
+            if (!convo.current) return said(text);
+            if (isStopPhrase(cleanSpeech(text))) {
+              thought.parts = []; // "stop listening" acts at once, never joined to what follows
+              return said(text);
             }
-            end();
-            loop.current = loopNext(loop.current, "voice_sent").on; // the loop arms on a spoken send
-            return void sendMessage(text, { voice: true });
+            thought.parts.push(text);
+            window.clearTimeout(thought.timer);
+            thought.timer = window.setTimeout(flush, THOUGHT_PAUSE_MS);
           },
-          dictate ? (text) => target.current?.onPartial(text) : undefined,
+          dictate
+            ? (text) => target.current?.onPartial(cleanSpeech(text))
+            : (text) => {
+                // Still talking: wait for the end of the thought before sending.
+                if (text.trim() && thought.parts.length) {
+                  window.clearTimeout(thought.timer);
+                  thought.timer = window.setTimeout(flush, THOUGHT_PAUSE_MS);
+                }
+              },
           (e) => failed("listening stopped", e),
         );
         dictating.current = dictate;
@@ -366,7 +403,9 @@ export function useVoice(dictation?: DictationTarget) {
     const presence = (p: "listening" | "thinking" | "speaking") => sonic.current && store.set({ presence: p });
     try {
       const call = await startSonic({
-        onUserText: (text) => {
+        onUserText: (raw) => {
+          const text = cleanSpeech(raw); // the chat shows what the owner meant, without "um" and stammers
+          if (!text) return;
           if (!isStopPhrase(text)) return add("owner", text);
           endConversation(); // "stop listening" ends the call and is not sent
           stopLive();

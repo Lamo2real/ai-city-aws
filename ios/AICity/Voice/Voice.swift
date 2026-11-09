@@ -103,7 +103,7 @@ final class VoiceController {
             recognition = recognizer.recognitionTask(with: req) { [weak self] result, error in
                 Task { @MainActor in
                     guard let self else { return }
-                    if let result { self.partial = result.bestTranscription.formattedString }
+                    if let result { self.partial = SpeechClean.clean(result.bestTranscription.formattedString) }
                     if error != nil, self.listening { self.stop(send: !self.partial.isEmpty) }
                 }
             }
@@ -124,7 +124,7 @@ final class VoiceController {
         listening = false
         inputLevel = 0
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        let text = partial.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = SpeechClean.clean(partial) // no "um", "uh" or stammers; quoted words stay as said
         partial = ""
         if send, !text.isEmpty { onText(text) }
     }

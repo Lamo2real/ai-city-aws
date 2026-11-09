@@ -172,3 +172,20 @@ test("the standard voice says a short thinking cue only when AIC takes a moment,
   await page.waitForTimeout(1600);
   expect((await spoken()).slice(before)).toEqual(["Two dollars."]);
 });
+
+test("voice mode drops ums and stammers, sends nothing for filler-only sounds, and joins one thought into one message", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  await page.addInitScript(() => ((window as unknown as { __heard: string }).__heard = "Um, um, um, well, um, maybe, um."));
+  await page.goto("/");
+  const said = (t: string) => page.evaluate((x) => ((window as unknown as { __heard: string }).__heard = x), t);
+  const sent = () => m.calls.filter((c) => c.path === "/messages").map((c) => (c.body as { text: string }).text);
+  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await page.waitForTimeout(1800);
+  expect(sent()).toEqual([]); // only fillers: nothing goes out
+  await said("They");
+  await page.waitForTimeout(300);
+  await said("I I take, um, that one.");
+  await expect.poll(sent).toEqual(["They I take that one."]); // one thought, one message, no stammer
+});
