@@ -74,6 +74,8 @@ final class HudStore {
     @ObservationIgnored private(set) var lastSnapshot: JSONValue?
     /// Called once with AIC's whole reply when it is done (to read it aloud).
     @ObservationIgnored var onReplyDone: (String) -> Void = { _ in }
+    /// `hud.action` events: AIC changing the theme or the open page on the owner's devices (decision 143).
+    @ObservationIgnored var onHudAction: (JSONValue) -> Void = { _ in }
     /// `knowledge.updated` events, for the files attached to the message being written.
     @ObservationIgnored var onKnowledgeUpdated: (JSONValue) -> Void = { _ in }
 
@@ -159,6 +161,7 @@ final class HudStore {
         let type = e["type"].string ?? ""
         if type == "ace.reply" { return aceReply(text: e["text"].string ?? "", done: e["done"].bool ?? false) }
         if type == "knowledge.updated" { return onKnowledgeUpdated(e) }
+        if type == "hud.action" { return onHudAction(e) }
         if type == "steward.decided" { return stewardDecided(e) }
         // The backend answers first, then says `steward.decided`: remember what a closing item was about.
         if ["question.answered", "approval.decided", "question.withdrawn", "approval.withdrawn"].contains(type),

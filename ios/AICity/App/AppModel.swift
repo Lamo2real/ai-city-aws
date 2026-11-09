@@ -57,6 +57,10 @@ final class AppModel {
 
     var boot: Boot = .starting
     var section: AppSection = .aic
+    /// The appearance for the parts that follow one (the City tab), kept on this iPhone. AIC can set it (decision 143).
+    var appearance: Appearance {
+        didSet { defaults.set(appearance.rawValue, forKey: "aic.appearance") }
+    }
     /// What is open under the More tab.
     var morePath: [AppSection] = []
     var showGuide = false
@@ -106,11 +110,14 @@ final class AppModel {
     @ObservationIgnored private let http: HTTPTransport
     @ObservationIgnored private let connectLive: Bool
     @ObservationIgnored private var toastTask: Task<Void, Never>?
+    @ObservationIgnored private let defaults: UserDefaults
 
     init(configStore: ConfigStore = ConfigStore(), hud: HudStore? = nil, http: HTTPTransport = URLSessionTransport(),
          makeAuth: @escaping (AppConfig) -> AuthClient = { CognitoAuth(config: $0) }, connectLive: Bool = true,
-         push: PushController? = nil) {
+         push: PushController? = nil, defaults: UserDefaults = .standard) {
         self.configStore = configStore
+        self.defaults = defaults
+        appearance = defaults.string(forKey: "aic.appearance").flatMap(Appearance.init(rawValue:)) ?? .system
         self.push = push ?? PushController()
         self.hud = hud ?? HudStore()
         self.http = http
@@ -124,6 +131,7 @@ final class AppModel {
             if self.lastAskedByVoice { self.voice.speak(text) } else { self.hud.presence = .idle }
         }
         self.hud.onKnowledgeUpdated = { [weak self] e in self?.attachments.apply(event: e) }
+        self.hud.onHudAction = { [weak self] e in if let a = HudAction(event: e) { self?.perform(a) } }
     }
 
     // MARK: Boot
@@ -209,6 +217,14 @@ final class AppModel {
         live?.stop()
         live = nil
         boot = .signedOut
+    }
+
+    /// What AIC asked this device to do (decision 143): the theme, or bringing a screen up.
+    func perform(_ action: HudAction) {
+        switch action {
+        case .theme(let a): appearance = a
+        case .open(let s): open(s)
+        }
     }
 
     /// Opens any area: a tab, or a page under More.
