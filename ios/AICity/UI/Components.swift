@@ -1,127 +1,80 @@
 // Shared pieces: the logo, banners, toasts, loading and empty states.
 import SwiftUI
 
-/// The logo (decisions 147 and 158; the web's Wordmark.tsx): an amber tile with a small skyline, then "VAIC" with
+/// The logo (decisions 147, 158 and 162; the web's Wordmark.tsx): an amber tile with a small skyline, then "VAIC" with
 /// the "AI" set apart: amber, a slight lean and a small spark, so Vice Artificial Intelligence City reads at a
 /// glance. The tile and the AI read the accent tokens (decision 142). VoiceOver reads it as "VAIC".
 struct Wordmark: View {
     @Environment(\.colorScheme) private var scheme
 
-    /// The "ΛI"'s amber (the web's --wm-ai-top / --wm-ai-bottom): the deeper pair on a light ground so it reads.
+    /// The AI's amber: the accent's two tones, or the deeper pair on a light ground so it reads.
     private var ai: LinearGradient {
         scheme == .light
             ? LinearGradient(colors: [Color(hex: 0xe8a33d), Color(hex: 0xa8661a)], startPoint: .top, endPoint: .bottom)
-            : LinearGradient(colors: [Color(hex: 0xffd98a), Color(hex: 0xe8a33d)], startPoint: .top, endPoint: .bottom)
+            : LinearGradient(colors: [Color(hex: 0xf9c976), Color(hex: 0xe8a33d)], startPoint: .top, endPoint: .bottom)
     }
 
     var body: some View {
-        HStack(spacing: 10) {
-            SunsetMark().frame(width: 30, height: 30)
-            // The word: 67 × 20 units shown at 74 × 22, every letter drawn in one frame so the amber gradient runs
-            // over the whole word's height, as the web's userSpaceOnUse gradient does.
-            ZStack {
-                WordLetters(part: .vc).fill(scheme == .light ? Glass.ink : Glass.text)
-                WordLetters(part: .ai).fill(ai)
+        HStack(spacing: 9) {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Glass.accentFill)
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Glass.accentEdge, lineWidth: 1))
+                .overlay(Skyline().fill(Glass.accentInk).frame(width: 18, height: 18))
+                .frame(width: 28, height: 28)
+            HStack(alignment: .firstTextBaseline, spacing: 0) {
+                Text("V")
+                Text("AI")
+                    .italic()
+                    .foregroundStyle(ai)
+                    .kerning(0.2)
+                    .padding(.trailing, 1)
+                    .overlay(alignment: .topTrailing) {
+                        Spark().fill(Glass.amber).frame(width: 7, height: 7).offset(x: 3, y: -5)
+                    }
+                Text("C")
             }
-            .frame(width: 74, height: 22)
+            .font(.system(size: 22, weight: .heavy, design: .rounded))
+            .kerning(-0.44)
+            .foregroundStyle(scheme == .light ? Glass.ink : Glass.text)
+            .lineLimit(1)
+            .fixedSize()
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("VAIC")
     }
 }
 
-/// The mark (decision 159): a round sunset, light to deep amber, cut by three dark stripes with a skyline in front.
-/// Drawn in the web's 32-unit box: the gradient fills the box, the circle (r 15 at 16, 16) clips it.
-struct SunsetMark: View {
-    static let sunset = LinearGradient(
-        stops: [
-            .init(color: Color(hex: 0xffd98a), location: 0),
-            .init(color: Color(hex: 0xf2b33d), location: 0.55),
-            .init(color: Color(hex: 0xe07a3a), location: 1),
-        ],
-        startPoint: .top, endPoint: .bottom)
-
-    var body: some View {
-        Rectangle()
-            .fill(Self.sunset)
-            .overlay(SunsetSkyline().fill(Glass.accentInk))
-            .clipShape(MarkCircle())
-            .aspectRatio(1, contentMode: .fit)
-    }
-}
-
-/// The circle the mark is clipped to: radius 15 at (16, 16) in a 32-unit box, so one unit of the box is left all round.
-struct MarkCircle: Shape {
+/// The tile's skyline (the web's five SVG paths in a 24 × 24 box): three buildings with rounded tops, an aerial on
+/// the middle one, and the ground.
+struct Skyline: Shape {
     func path(in rect: CGRect) -> Path {
-        let k = min(rect.width, rect.height) / 32
-        return Path(ellipseIn: rect.insetBy(dx: k, dy: k))
-    }
-}
-
-/// The stripes and the skyline of the mark, in its 32-unit box. The skyline is the web's single path (the favicon's
-/// too): seven buildings of different heights, the tallest with an aerial, on a ground that runs to the bottom.
-struct SunsetSkyline: Shape {
-    /// The web's stripes: y, then height.
-    static let stripes: [(CGFloat, CGFloat)] = [(14.6, 1.1), (17.6, 1.5), (20.8, 1.9)]
-    /// The web's skyline path `M0 32V24h3.5v-3h2.5v3h2V15.5…V32z` as its corners, in order.
-    static let skyline: [(CGFloat, CGFloat)] = [
-        (0, 32), (0, 24), (3.5, 24), (3.5, 21), (6, 21), (6, 24), (8, 24), (8, 15.5), (11.5, 15.5), (11.5, 24),
-        (13, 24), (13, 9.5), (14.2, 9.5), (14.2, 7), (15.8, 7), (15.8, 9.5), (17, 9.5), (17, 24), (18.5, 24),
-        (18.5, 18), (21.5, 18), (21.5, 24), (23, 24), (23, 15), (26.5, 15), (26.5, 24), (28.5, 24), (28.5, 21.5),
-        (32, 21.5), (32, 32),
-    ]
-
-    func path(in rect: CGRect) -> Path {
-        let k = min(rect.width, rect.height) / 32
-        func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: rect.minX + x * k, y: rect.minY + y * k) }
+        let k = min(rect.width, rect.height) / 24
+        func box(_ x: CGFloat, _ top: CGFloat, _ w: CGFloat) -> CGRect {
+            // Each building runs a little under the ground, so only its top corners show as rounded.
+            CGRect(x: rect.minX + x * k, y: rect.minY + top * k, width: w * k, height: (22 - top) * k)
+        }
         var p = Path()
-        for (y, h) in Self.stripes {
-            p.addRect(CGRect(x: rect.minX, y: rect.minY + y * k, width: 32 * k, height: h * k))
-        }
-        for (i, (x, y)) in Self.skyline.enumerated() {
-            if i == 0 { p.move(to: pt(x, y)) } else { p.addLine(to: pt(x, y)) }
-        }
-        p.closeSubpath()
+        p.addRoundedRect(in: box(3, 11.5, 5.2), cornerSize: CGSize(width: k, height: k))
+        p.addRoundedRect(in: box(9.4, 5.2, 5.2), cornerSize: CGSize(width: k, height: k))
+        p.addRoundedRect(in: box(15.8, 8.6, 5.2), cornerSize: CGSize(width: k, height: k))
+        p.addRect(CGRect(x: rect.minX + 11.6 * k, y: rect.minY + 2.4 * k, width: 0.8 * k, height: 2.8 * k)) // the aerial
+        p.addRect(CGRect(x: rect.minX + 2 * k, y: rect.minY + 21 * k, width: 20 * k, height: 1.2 * k)) // the ground
         return p
     }
 }
 
-/// "VAIC" drawn as lines, not set in a font, so it is the same on every device (decision 159). The web's 67 × 20
-/// viewBox: round-capped strokes of 3.6 units; `.vc` is the V and the C (the text colour), `.ai` the crossbar-less
-/// Λ that mirrors the V, the I, and a four-point spark over the I (the amber).
-struct WordLetters: Shape {
-    enum Part { case vc, ai }
-    var part: Part
-
-    static let strokeWidth: CGFloat = 3.6
-    /// The spark's corners (the web's `M39.5-1.2l1.1 2.5 2.5 1.1…z`): it rises above the viewBox, as on the web.
-    static let spark: [(CGFloat, CGFloat)] = [(39.5, -1.2), (40.6, 1.3), (43.1, 2.4), (40.6, 3.5), (39.5, 6), (38.4, 3.5), (35.9, 2.4), (38.4, 1.3)]
-
+/// A small four-point spark (the web's clip-path polygon).
+struct Spark: Shape {
     func path(in rect: CGRect) -> Path {
-        let k = min(rect.width / 67, rect.height / 20)
-        func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: rect.minX + x * k, y: rect.minY + y * k) }
-        let style = StrokeStyle(lineWidth: Self.strokeWidth * k, lineCap: .round, lineJoin: .round)
-        var lines = Path()
-        switch part {
-        case .vc:
-            lines.move(to: pt(2, 2)); lines.addLine(to: pt(9, 18)); lines.addLine(to: pt(16, 2)) // V
-            // C: the web's arc from (63, 4.6) to (63, 15.4), radius 8, the long way round through the left.
-            let half: CGFloat = 5.4, r: CGFloat = 8
-            let centre = pt(63 - (r * r - half * half).squareRoot(), 10)
-            let a = Angle(radians: Double(atan2(-half, (r * r - half * half).squareRoot())))
-            lines.move(to: pt(63, 4.6))
-            lines.addArc(center: centre, radius: r * k, startAngle: a, endAngle: -a, clockwise: true)
-            return lines.strokedPath(style)
-        case .ai:
-            lines.move(to: pt(20, 18)); lines.addLine(to: pt(27, 2)); lines.addLine(to: pt(34, 18)) // Λ
-            lines.move(to: pt(39.5, 7)); lines.addLine(to: pt(39.5, 18)) // I
-            var p = lines.strokedPath(style)
-            for (i, (x, y)) in Self.spark.enumerated() {
-                if i == 0 { p.move(to: pt(x, y)) } else { p.addLine(to: pt(x, y)) }
-            }
-            p.closeSubpath()
-            return p
+        let w = rect.width, h = rect.height
+        let pts: [(CGFloat, CGFloat)] = [(0.5, 0), (0.62, 0.38), (1, 0.5), (0.62, 0.62), (0.5, 1), (0.38, 0.62), (0, 0.5), (0.38, 0.38)]
+        var p = Path()
+        for (i, (x, y)) in pts.enumerated() {
+            let pt = CGPoint(x: rect.minX + x * w, y: rect.minY + y * h)
+            if i == 0 { p.move(to: pt) } else { p.addLine(to: pt) }
         }
+        p.closeSubpath()
+        return p
     }
 }
 

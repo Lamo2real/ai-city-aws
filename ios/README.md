@@ -16,7 +16,7 @@ A native SwiftUI app that does what the web HUD (`web/`) does: sign in, talk to 
 | `AICity/Voice` | Push-to-talk with Apple's Speech framework (on the iPhone when it can) and spoken replies |
 | `AICity/UI` | The screens |
 | `AICityTests` | XCTest unit tests with fakes only (no AWS) |
-| `scripts/` | `srp_vectors.py` (SRP test vectors from Python), `make_icon.swift` (the app icon: the decision-159 sunset mark), `make_tap_sound.py` (the tap click, `AICity/Sounds/tap.wav`) |
+| `scripts/` | `srp_vectors.py` (SRP test vectors from Python), `make_icon.swift` (the app icon: the amber skyline tile, the web's favicon), `make_tap_sound.py` (the tap click, `AICity/Sounds/tap.wav`) |
 
 Requires Xcode 26 or later; runs on iOS 17 or later.
 
