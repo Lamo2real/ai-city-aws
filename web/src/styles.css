@@ -438,6 +438,10 @@ main {
 .dialog {
   width: min(480px, 100%);
   padding: var(--s5);
+  /* never taller than the window: a dialog that grows (a textarea dragged bigger) scrolls inside */
+  max-height: calc(100dvh - 2 * var(--s4));
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .dialog h2 {
   margin-top: 0;

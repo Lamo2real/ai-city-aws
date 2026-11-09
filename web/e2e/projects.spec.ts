@@ -133,6 +133,20 @@ test("a new project: one sentence, AIC asks with choice chips, the answer goes t
   await expect(page.getByRole("list", { name: "Your projects" }).getByRole("link")).toHaveCount(1);
 });
 
+test("the new-project dialog scrolls when the description box is dragged taller than the window", async ({ page }) => {
+  await mockBackend(page);
+  await page.setViewportSize({ width: 1280, height: 600 });
+  await page.goto("/#/apps");
+  await page.getByRole("button", { name: /New project/ }).click();
+  const dialog = page.getByRole("dialog", { name: "What should your app do?" });
+  await dialog.locator("textarea").evaluate((t) => ((t as HTMLTextAreaElement).style.height = "1200px"));
+  const box = await dialog.boundingBox();
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(600);
+  await dialog.evaluate((d) => (d.scrollTop = d.scrollHeight));
+  await expect(dialog.getByRole("button", { name: "Start building" })).toBeInViewport();
+});
+
 test("open a project, send a change, switch device sizes, see what's happening", async ({ page }) => {
   const m = await mockBackend(page, { apps: [appRecord("app-0000000000aa", "star-sweeper", "Star Sweeper")] });
   await page.goto("/#/apps");
