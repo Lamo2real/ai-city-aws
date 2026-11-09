@@ -5,11 +5,14 @@
 
 /** Loudness (0..1) above which a frame counts as speech, given the room's noise measured at the start. */
 export function speechThreshold(noise: number): number {
-  return Math.min(0.5, Math.max(0.06, noise * 3));
+  // Calibrated while AIC is already talking, so `noise` includes what is left of AIC's own voice after echo
+  // cancellation; on a phone that is loud, hence a high bar (it stopped itself on its own echo, 2026-11-09). Words
+  // the owner says over AIC also stop it through the transcript (useVoice), so this only needs to catch clear speech.
+  return Math.min(0.5, Math.max(0.1, noise * 4));
 }
 
 /** Feeds one frame's loudness; true once speech has lasted `holdMs` (short noises like a cough don't count). */
-export function speechDetector(holdMs = 220, calibrateMs = 250) {
+export function speechDetector(holdMs = 400, calibrateMs = 300) {
   let started: number | null = null;
   let noise = 0;
   let frames = 0;

@@ -7,6 +7,7 @@ import { config } from "../lib/config.ts";
 import { idToken } from "../lib/auth.ts";
 import { readVoiceId } from "./modes.ts";
 import { speakable } from "./speech.ts";
+import { confidence, MIN_CONFIDENCE, standsOut } from "./heard.ts";
 import { toast } from "../components/ui.tsx";
 import {
   browserListen,
@@ -16,11 +17,16 @@ import {
   usingBrowserSpeech,
 } from "./browserSpeech.ts";
 
+/** About one finished phrase: when it began (ms since epoch, from Transcribe's timings). */
+export interface Heard {
+  startedAt?: number;
+}
+
 export interface Voice {
   /** Starts listening; calls onText with each final transcript and onError if the stream breaks later.
    *  Returns a function that stops. */
   listen(
-    onText: (text: string) => void,
+    onText: (text: string, heard?: Heard) => void,
     onPartial?: (text: string) => void,
     onError?: (error: unknown) => void,
   ): Promise<() => void>;
@@ -259,7 +265,11 @@ class AwsVoice implements Voice {
 
   /** Transcribe first; if it refuses the stream before anything was heard, the browser's own speech recognition
    *  for the rest of this page session (browserSpeech.ts), with a one-time note. */
-  async listen(onText: (text: string) => void, onPartial?: (text: string) => void, onError?: (e: unknown) => void) {
+  async listen(
+    onText: (text: string, heard?: Heard) => void,
+    onPartial?: (text: string) => void,
+    onError?: (e: unknown) => void,
+  ) {
     if (usingBrowserSpeech() && browserSpeechAvailable()) return browserListen(onText, onPartial, onError);
     let heard = false;
     let switched = false;
@@ -294,7 +304,7 @@ class AwsVoice implements Voice {
   }
 
   private async transcribeListen(
-    onText: (text: string) => void,
+    onText: (text: string, heard?: Heard) => void,
     onPartial?: (text: string) => void,
     onError?: (e: unknown) => void,
   ) {
@@ -333,7 +343,7 @@ class AwsVoice implements Voice {
     ctx: AudioContext,
     stream: MediaStream,
     release: () => void,
-    onText: (text: string) => void,
+    onText: (text: string, heard?: Heard) => void,
     onPartial?: (text: string) => void,
     onError?: (e: unknown) => void,
   ) {
@@ -354,8 +364,18 @@ class AwsVoice implements Voice {
     const chunks: Uint8Array[] = [];
     let wake: (() => void) | null = null;
     let open = true;
+    // The room, for the noise gate (heard.ts): the loudness of every chunk over the last seconds.
+    const levels: Array<{ t: number; v: number }> = [];
+    let audioT0 = 0; // when the first audio went out: Transcribe's StartTime counts from here
     node.onaudioprocess = (ev) => {
-      chunks.push(toPcm16(ev.inputBuffer.getChannelData(0), ctx.sampleRate));
+      const data = ev.inputBuffer.getChannelData(0);
+      let sum = 0;
+      for (const x of data) sum += x * x;
+      const now = Date.now();
+      if (!audioT0) audioT0 = now - (data.length / ctx.sampleRate) * 1000;
+      levels.push({ t: now, v: Math.sqrt(sum / data.length) });
+      while (levels.length && now - levels[0]!.t > 12_000) levels.shift();
+      chunks.push(toPcm16(data, ctx.sampleRate));
       wake?.();
     };
     source.connect(node);
@@ -386,8 +406,17 @@ class AwsVoice implements Voice {
         for (const r of ev.TranscriptEvent?.Transcript?.Results ?? []) {
           const text = r.Alternatives?.[0]?.Transcript ?? "";
           if (!text) continue;
-          if (r.IsPartial) onPartial?.(text);
-          else onText(text);
+          if (r.IsPartial) {
+            onPartial?.(text);
+            continue;
+          }
+          // Only the owner's words: what Transcribe is unsure of, or what isn't louder than the room's steady
+          // background (music, a TV, people further away), is dropped (the owner, 2026-11-09).
+          const sure = confidence(r.Alternatives?.[0]?.Items);
+          if (sure !== null && sure < MIN_CONFIDENCE) continue;
+          if (!standsOut(levels, Date.now())) continue;
+          const startedAt = audioT0 && typeof r.StartTime === "number" ? audioT0 + r.StartTime * 1000 : undefined;
+          onText(text, { startedAt });
         }
       }
       if (open) throw named("StreamEnded", "the speech service closed the stream");

@@ -14,6 +14,7 @@ import { store, useHud } from "../lib/store.ts";
 import { readSpeakMode, saveSpeakMode, shouldSpeak, type SpeakMode } from "./modes.ts";
 import { browserSpeak, browserStopSpeaking, browserVoiceAvailable, usingBrowserVoice } from "./browserSpeech.ts";
 import { isEcho, isStopPhrase, loopNext } from "./convo.ts";
+import { isOwnerSpeech, type Span } from "./heard.ts";
 import { SpeechQueue } from "./speech.ts";
 import { loadOpenAi, onVoiceNote, withOpenAi } from "./openai.ts";
 import { toast } from "../components/ui.tsx";
@@ -90,7 +91,24 @@ function stopBargeIn() {
 }
 
 /** Cuts AIC off: drops the reply's queue, stops the clip playing now and any browser voice. */
+// When AIC's voice was audible, so its echo from the speakers is never taken for the owner (heard.ts).
+const spans: Span[] = [];
+function aicSpeaks() {
+  if (spans.at(-1)?.end === Infinity) return;
+  spans.push({ start: Date.now(), end: Infinity });
+  while (spans.length > 8) spans.shift();
+}
+function aicQuiet() {
+  const s = spans.at(-1);
+  if (s && s.end === Infinity) s.end = Date.now();
+}
+/** What AIC last said (its reply, or a thinking cue), for telling its echo from the owner's words. */
+function aicWords(): string {
+  return `${store.get().chat.findLast((l) => l.who === "ace")?.text ?? ""} ${cue.last ?? ""}`;
+}
+
 function stopTalking() {
+  aicQuiet();
   stopBargeIn();
   const t = talk.current;
   if (t) {
@@ -187,6 +205,7 @@ export function useVoice(dictation?: DictationTarget) {
     // Done talking: with the hands-free loop on after a spoken reply, the mic reopens for the owner's next
     // sentence; otherwise back to idle. In the voice conversation the mic stays open throughout.
     const finish = (t: Talk, spokenAloud: boolean, askedVoice: boolean) => {
+      aicQuiet();
       if (t.cancelled || talk.current !== t) return; // cut off: whoever cut it off decides what's next
       stopBargeIn();
       const next = loopNext(loop.current, spokenAloud && askedVoice ? "reply_spoken" : "reply_silent");
@@ -234,6 +253,7 @@ export function useVoice(dictation?: DictationTarget) {
           () => {
             if (t.cancelled) return;
             t.started = true;
+            aicSpeaks();
             store.set({ presence: "speaking" });
           },
           (e) => {
@@ -280,6 +300,7 @@ export function useVoice(dictation?: DictationTarget) {
               () => {
                 if (t.cancelled) return;
                 t.started = true;
+                aicSpeaks();
                 store.set({ presence: "speaking" });
               },
             );
@@ -370,12 +391,14 @@ export function useVoice(dictation?: DictationTarget) {
           if (whole) said(whole);
         };
         stop.current = await getVoice().listen(
-          async (text) => {
+          async (text, heard) => {
             if (dictate) {
               const clean = cleanSpeech(text);
               return clean ? target.current?.onFinal(clean) : undefined;
             }
             if (!convo.current) return said(text);
+            // AIC's own voice coming back from the speakers is not the owner (the owner, 2026-11-09).
+            if (!isOwnerSpeech(text, aicWords(), heard?.startedAt ?? null, spans)) return;
             if (isStopPhrase(cleanSpeech(text))) {
               thought.parts = []; // "stop listening" acts at once, never joined to what follows
               return said(text);
@@ -387,6 +410,12 @@ export function useVoice(dictation?: DictationTarget) {
           dictate
             ? (text) => target.current?.onPartial(cleanSpeech(text))
             : (text) => {
+                // The owner talks over AIC with words of their own: AIC stops at once.
+                const t = talk.current;
+                if (convo.current && t && t.started && !t.cancelled && isOwnerSpeech(text, aicWords(), null, spans)) {
+                  stopTalking();
+                  store.set({ presence: "listening" });
+                }
                 // Still talking: wait for the end of the thought before sending.
                 if (text.trim() && thought.parts.length) {
                   window.clearTimeout(thought.timer);
