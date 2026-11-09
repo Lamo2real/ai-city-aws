@@ -1,7 +1,7 @@
 // Uploads one file to the knowledge bucket with presigned URLs (docs/KNOWLEDGE.md §5): one PUT up to
 // 100 MB, otherwise multipart (parts PUT in parallel, each retried, then "complete" with the ETags).
 // Progress is reported in whole percent of the file's bytes.
-import { knowledgeApi, type KnowledgeItem, type Scope } from "./api.ts";
+import { knowledgeApi, type KnowledgeItem, type Scope, type UploadTicket } from "./api.ts";
 
 /** PUTs a body to a presigned URL and resolves with the response's ETag. */
 export type PutFn = (
@@ -62,20 +62,24 @@ export const folderOf = (file: File) => {
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export async function uploadFile(file: File, o: UploadOptions = {}): Promise<KnowledgeItem> {
+export interface SendOptions {
+  onProgress?: (percent: number) => void;
+  put?: PutFn;
+  concurrency?: number;
+  retries?: number;
+  retryDelayMs?: number;
+}
+
+/** Sends a file's bytes for an upload ticket (one PUT, or the parts in parallel, each retried). For a multipart
+ * ticket it returns what "complete" needs; for a single PUT, null. Shared by Knowledge and Files. */
+export async function sendBytes(
+  file: Blob,
+  upload: UploadTicket,
+  o: SendOptions = {},
+): Promise<{ upload_id: string; parts: Array<{ part_number: number; etag: string }> } | null> {
   const put = o.put ?? xhrPut;
   const retries = o.retries ?? 3;
   const delay = o.retryDelayMs ?? 1000;
-  const { item, upload } = await (o.start ?? knowledgeApi.startUpload)({
-    file_name: file.name,
-    content_type: file.type || "application/octet-stream",
-    size_bytes: file.size,
-    ...(o.title ? { title: o.title } : {}),
-    ...(o.scope ? { scope: o.scope } : {}),
-    ...(folderOf(file) ? { folder: folderOf(file) } : {}),
-  });
-  o.onCreated?.(item);
-
   const total = Math.max(1, file.size);
   let lastPct = -1;
   const report = (loaded: number) => {
@@ -93,33 +97,48 @@ export async function uploadFile(file: File, o: UploadOptions = {}): Promise<Kno
       }
     }
   };
+  if ("method" in upload) {
+    await withRetry(upload.url, file, upload.headers, report);
+    report(total);
+    return null;
+  }
+  const loaded = upload.part_urls.map(() => 0);
+  const etags: string[] = [];
+  let next = 0;
+  const worker = async () => {
+    while (next < upload.part_urls.length) {
+      const i = next++;
+      const body = file.slice(i * upload.part_size, Math.min(file.size, (i + 1) * upload.part_size));
+      etags[i] = await withRetry(upload.part_urls[i]!, body, {}, (n) => {
+        loaded[i] = n;
+        report(loaded.reduce((a, b) => a + b, 0));
+      });
+      loaded[i] = body.size;
+      report(loaded.reduce((a, b) => a + b, 0));
+    }
+  };
+  const n = Math.max(1, Math.min(o.concurrency ?? 4, upload.part_urls.length));
+  await Promise.all(Array.from({ length: n }, worker));
+  return { upload_id: upload.upload_id, parts: etags.map((etag, i) => ({ part_number: i + 1, etag })) };
+}
+
+export async function uploadFile(file: File, o: UploadOptions = {}): Promise<KnowledgeItem> {
+  const { item, upload } = await (o.start ?? knowledgeApi.startUpload)({
+    file_name: file.name,
+    content_type: file.type || "application/octet-stream",
+    size_bytes: file.size,
+    ...(o.title ? { title: o.title } : {}),
+    ...(o.scope ? { scope: o.scope } : {}),
+    ...(folderOf(file) ? { folder: folderOf(file) } : {}),
+  });
+  o.onCreated?.(item);
 
   try {
-    if ("method" in upload) {
-      await withRetry(upload.url, file, upload.headers, report);
-      report(total);
-      return item;
-    }
-    const loaded = upload.part_urls.map(() => 0);
-    const etags: string[] = [];
-    let next = 0;
-    const worker = async () => {
-      while (next < upload.part_urls.length) {
-        const i = next++;
-        const body = file.slice(i * upload.part_size, Math.min(file.size, (i + 1) * upload.part_size));
-        etags[i] = await withRetry(upload.part_urls[i]!, body, {}, (n) => {
-          loaded[i] = n;
-          report(loaded.reduce((a, b) => a + b, 0));
-        });
-        loaded[i] = body.size;
-        report(loaded.reduce((a, b) => a + b, 0));
-      }
-    };
-    const n = Math.max(1, Math.min(o.concurrency ?? 4, upload.part_urls.length));
-    await Promise.all(Array.from({ length: n }, worker));
+    const parts = await sendBytes(file, upload, o);
+    if (!parts) return item;
     const done = await (o.complete ?? knowledgeApi.completeUpload)(item.id, {
-      upload_id: upload.upload_id,
-      parts: etags.map((etag, i) => ({ part_number: i + 1, etag })),
+      upload_id: parts.upload_id,
+      parts: parts.parts,
     });
     return done.item;
   } catch {

@@ -1721,9 +1721,10 @@ def tools_for(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         else []
     )
     from .executive_tools import executive_tools  # late: built on this module's ToolSpec (decision 140)
+    from .file_tools import file_tools  # late: built on this module's ToolSpec (decision 147)
     from .owner_tools import owner_tools  # late: built on this module's ToolSpec (decision 143)
 
-    return [*own, _search_tool(d), *extra, *executive_tools(d, c), *owner_tools(d, c)]
+    return [*own, _search_tool(d), *extra, *file_tools(d, c), *executive_tools(d, c), *owner_tools(d, c)]
 
 
 # ---------- standing orders (decision 125) ----------

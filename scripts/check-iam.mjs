@@ -406,13 +406,74 @@ export function checkKnowledge({ statements = knowledgeStatements(), boundary, t
   return problems;
 }
 
+/** The Files module's statements (docs/FILES.md §10), one per `{ Sid = "…", … }` line, by resource block. */
+export function filesStatements(text = readFileSync(join(ROOT, "infra", "modules", "files", "main.tf"), "utf8")) {
+  const out = [];
+  for (const r of text.matchAll(/resource "aws_iam_(?:role_policy|policy)" "(\w+)" \{([\s\S]*?)\n\}/g))
+    for (const line of r[2].split("\n")) {
+      if (!/^\s*\{.*Action\s*=/.test(line)) continue;
+      const sid = /Sid\s*=\s*"(\w+)"/.exec(line)?.[1] ?? "";
+      const act = /Action\s*=\s*(\[[^\]]*\]|[\w.]+)/.exec(line)[1];
+      const actions = act.startsWith("[") ? [...act.matchAll(/"([^"]+)"/g)].map((m) => m[1]) : [act];
+      const resource = /Resource\s*=\s*(\[[^\]]*\]|[^,}]+)/.exec(line)?.[1].trim() ?? "";
+      out.push({ policy: r[1], sid, actions, resource, line });
+    }
+  return out;
+}
+
+const OWN_DROP = "/hires/$${aws:PrincipalTag/hire_id}/files/*";
+
+/** Files: hires write only their own drop, agents only read records, Bedrock only Titan (and Haiku for the
+ * Lambda), the only role passed is the knowledge MediaConvert role, and the bucket is private and KMS-encrypted. */
+export function checkFiles({ statements = filesStatements(), text } = {}) {
+  const problems = [];
+  const tf = text ?? readFileSync(join(ROOT, "infra", "modules", "files", "main.tf"), "utf8");
+  if (!statements.length) problems.push("files: no IAM statements found");
+  for (const s of statements) {
+    const where = `files ${s.policy}${s.sid ? `/${s.sid}` : ""}`;
+    for (const a of s.actions) {
+      if (a === "*" || a.endsWith(":*")) problems.push(`${where} has wildcard action ${a}`);
+      if (/^iam:/.test(a)) {
+        const ok =
+          a === "iam:PassRole" &&
+          s.policy === "fn" &&
+          s.resource === "[var.mediaconvert_role_arn]" &&
+          /"iam:PassedToService"\s*=\s*"mediaconvert\.amazonaws\.com"/.test(s.line);
+        if (!ok) problems.push(`${where} has IAM action ${a} beyond passing the MediaConvert role to MediaConvert`);
+      }
+      if (/^bedrock:Invoke/.test(a)) {
+        const ok =
+          s.resource === "[local.embedding_model_arn]" ||
+          (s.policy === "fn" && s.resource === "var.utility_invoke_arns");
+        if (!ok) problems.push(`${where} may invoke ${s.resource}, not only Titan (or Haiku for the files Lambda)`);
+      }
+      if (s.policy === "agents" && !/^(dynamodb:(GetItem|Query|BatchGetItem)|bedrock:InvokeModel)$/.test(a))
+        problems.push(`${where}: the agents may only read file records and embed searches (${a})`);
+      if (s.policy === "workspace" && /^s3:(Put|AbortMultipartUpload)/.test(a) && !s.resource.includes(OWN_DROP))
+        problems.push(`${where}: a hire may write only its own hires/<hire>/files/ drop`);
+      if (s.policy === "workspace" && /^s3:Delete/.test(a)) problems.push(`${where}: hires may not delete files`);
+      if (s.policy === "workspace" && a === "s3:GetObject" && !s.resource.endsWith('/files/*"]'))
+        problems.push(`${where}: hires read only files/`);
+      if (s.policy === "aic" && a !== "s3:GetObject") problems.push(`${where}: VAIC only reads files to show them`);
+      if (s.policy === "mediaconvert" && /^s3:/.test(a) && !/\/(files|work)\/\*/.test(s.resource))
+        problems.push(`${where}: MediaConvert may only read files/ and write work/`);
+    }
+    if (s.resource === '"*"' && s.actions.some((a) => !/^(xray|logs):/.test(a)))
+      problems.push(`${where} allows * on ${s.actions.join(",")}`);
+  }
+  for (const k of ["block_public_acls", "block_public_policy", "ignore_public_acls", "restrict_public_buckets"])
+    if (!new RegExp(`${k}\\s*=\\s*true`).test(tf)) problems.push(`files: the bucket's ${k} is not true`);
+  if (!/sse_algorithm\s*=\s*"aws:kms"/.test(tf)) problems.push("files: the bucket is not KMS-encrypted");
+  return problems;
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const problems = [...checkWorker(), ...checkBoundaries(), ...checkInline(), ...checkKnowledge()];
+  const problems = [...checkWorker(), ...checkBoundaries(), ...checkInline(), ...checkKnowledge(), ...checkFiles()];
   if (problems.length) {
     console.error(`IAM check failed (${problems.length}):\n${problems.join("\n")}`);
     process.exit(1);
   }
   console.log(
-    "IAM check passed: workers have no IAM, no wildcard secrets, no resource-creating actions, Bedrock only on the worker profile; every role has a permission boundary; knowledge roles pass only the MediaConvert role, invoke only Titan/Haiku, and only AIC adds knowledge.; the MCP host only logs, only the bridge reads connector secrets and only the gateway invokes it, and the worker gets no mail, Identity credentials or connector secrets.",
+    "IAM check passed: workers have no IAM, no wildcard secrets, no resource-creating actions, Bedrock only on the worker profile; every role has a permission boundary; knowledge roles pass only the MediaConvert role, invoke only Titan/Haiku, and only VAIC adds knowledge.; the MCP host only logs, only the bridge reads connector secrets and only the gateway invokes it, and the worker gets no mail, Identity credentials or connector secrets; Files: hires write only their own drop, agents only read records, Bedrock only Titan/Haiku, the bucket is private and KMS-encrypted.",
   );
 }

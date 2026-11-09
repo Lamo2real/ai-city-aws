@@ -24,7 +24,8 @@ variable "rate_limit_per_5min" {
 }
 
 locals {
-  tags = { Component = "frontend" }
+  tags          = { Component = "frontend" }
+  files_origins = "https://${var.name}-files.s3.${var.region}.amazonaws.com https://${var.name}-files.s3.amazonaws.com"
   # The browser talks only to: itself, the API and WebSocket, Cognito, and the voice services.
   # It frames (and loads icons from) the apps origin only; connect-src never names it.
   csp = join("; ", [
@@ -32,10 +33,11 @@ locals {
     "script-src 'self'",
     "style-src 'self'",
     "font-src 'self'",
-    "img-src 'self' data: blob: ${var.apps_url}",
-    "media-src 'self' blob:",
-    "connect-src 'self' https://*.execute-api.${var.region}.amazonaws.com wss://*.execute-api.${var.region}.amazonaws.com https://*.auth.${var.region}.amazoncognito.com https://cognito-idp.${var.region}.amazonaws.com https://cognito-identity.${var.region}.amazonaws.com https://transcribestreaming.${var.transcribe_region}.amazonaws.com wss://transcribestreaming.${var.transcribe_region}.amazonaws.com:8443 wss://bedrock-agentcore.${var.region}.amazonaws.com https://polly.${var.polly_region}.amazonaws.com https://${var.name}-knowledge.s3.${var.region}.amazonaws.com https://${var.name}-knowledge.s3.amazonaws.com",
-    "frame-src ${var.apps_url}",
+    # Files (docs/FILES.md): previews, players and PDFs come from short-lived presigned addresses on the files bucket.
+    "img-src 'self' data: blob: ${var.apps_url} ${local.files_origins}",
+    "media-src 'self' blob: ${local.files_origins}",
+    "connect-src 'self' https://*.execute-api.${var.region}.amazonaws.com wss://*.execute-api.${var.region}.amazonaws.com https://*.auth.${var.region}.amazoncognito.com https://cognito-idp.${var.region}.amazonaws.com https://cognito-identity.${var.region}.amazonaws.com https://transcribestreaming.${var.transcribe_region}.amazonaws.com wss://transcribestreaming.${var.transcribe_region}.amazonaws.com:8443 wss://bedrock-agentcore.${var.region}.amazonaws.com https://polly.${var.polly_region}.amazonaws.com https://${var.name}-knowledge.s3.${var.region}.amazonaws.com https://${var.name}-knowledge.s3.amazonaws.com ${local.files_origins}",
+    "frame-src ${var.apps_url} ${local.files_origins}",
     "frame-ancestors 'none'",
     "base-uri 'none'",
     "form-action 'self' https://*.auth.${var.region}.amazoncognito.com",

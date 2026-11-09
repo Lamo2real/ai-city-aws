@@ -17,6 +17,8 @@ import { CityView } from "./components/CityView.tsx";
 import { FeaturesScreen } from "./components/Features.tsx";
 import { FirstRun } from "./components/FirstRun.tsx";
 import { KnowledgeScreen } from "./components/Knowledge.tsx";
+import { FilesScreen } from "./components/Files.tsx";
+import { files } from "./lib/files.ts";
 import { knowledge } from "./lib/knowledge.ts";
 import { projects } from "./lib/projects.ts";
 import { workflows } from "./lib/workflows.ts";
@@ -28,13 +30,14 @@ import { Eyes } from "./components/Eyes.tsx";
 import { SignIn } from "./components/SignIn.tsx";
 import { Wordmark } from "./components/Wordmark.tsx";
 
-const VIEWS = ["ace", "city", "tickets", "apps", "knowledge", "skills", "costs", "settings"] as const;
+const VIEWS = ["ace", "city", "tickets", "apps", "files", "knowledge", "skills", "costs", "settings"] as const;
 type View = (typeof VIEWS)[number];
 const LABEL: Record<View, string> = {
   ace: "VAIC",
   city: "City",
   tickets: "Work",
   apps: "Projects",
+  files: "Files",
   knowledge: "Knowledge",
   costs: "Costs",
   skills: "Skills",
@@ -92,6 +95,7 @@ export function App() {
         chief.event(e); // before the store, so a decision can still read the item it is about
         store.event(e);
         knowledge.event(e);
+        files.event(e);
         projects.event(e);
         workflows.event(e);
         forwardEvent(e); // only calendar.changed, only to apps granted the calendar
@@ -182,6 +186,7 @@ export function App() {
         {view === "tickets" ? <Tickets page={slug} /> : null}
         {view === "apps" && !slug ? <ProjectsScreen /> : null}
         {view === "apps" && slug ? <ProjectPage key={slug} slug={slug} go={go} /> : null}
+        {view === "files" ? <FilesScreen /> : null}
         {view === "knowledge" ? <KnowledgeScreen /> : null}
         {view === "costs" ? <CostsScreen /> : null}
         {view === "skills" ? <SkillsScreen /> : null}

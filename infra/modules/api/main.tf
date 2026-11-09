@@ -245,6 +245,9 @@ locals {
     "POST /apps/{id}/bridge", "POST /apps/{id}/proposals", "POST /apps/{id}/rollback", "GET /apps/{id}/activity",
     "GET /knowledge", "GET /knowledge/{id}", "POST /knowledge/uploads", "POST /knowledge/uploads/{id}/complete", "POST /knowledge/links",
     "POST /knowledge/text", "PUT /knowledge/{id}", "DELETE /knowledge/{id}",
+    # Files (docs/FILES.md §7): the owner's storage; uploads and downloads go straight to S3, presigned.
+    "GET /files", "GET /files/{id}", "POST /files/uploads", "POST /files/uploads/{id}/complete", "PUT /files/{id}",
+    "DELETE /files/{id}", "POST /files/{id}/retry",
     # Connectors (docs/CONNECTORS_SKILLS.md §1.7), skills (§2.4) and mail accounts (docs/MAIL_CALENDAR.md §4).
     "GET /connectors", "POST /connectors", "PUT /connectors/{id}", "DELETE /connectors/{id}", "POST /connectors/{id}/login",
     "POST /connectors/{id}/login/complete", "PUT /connectors/{id}/key", "POST /connectors/{id}/refresh",

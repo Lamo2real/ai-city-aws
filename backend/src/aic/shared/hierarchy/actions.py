@@ -13,6 +13,7 @@ from typing import Any, cast
 from ..apps import Workspace
 from ..cost import format_usd
 from ..events import EventBus, now_iso
+from ..files.service import FilesAccess
 from ..ids import new_id
 from ..knowledge.service import KnowledgeAccess
 from ..ledger import Ledger, Record
@@ -44,6 +45,9 @@ class CityDeps:
     """Workers' S3 workspace (for ``submit_app``); None outside the worker runtime."""
     knowledge: KnowledgeAccess | None = None
     """The owner's knowledge base; None until it is deployed."""
+    files: FilesAccess | None = None
+    """Files (docs/FILES.md): search for every role, show in the chat for VAIC, get and save for managers and
+    workers; None until it is deployed."""
     fetch: Callable[[str], bytes] = field(default_factory=lambda: _https_get)
     """GETs one public URL (``load_app`` reads an app's files from the apps origin); fakes in tests."""
     net: Any = None

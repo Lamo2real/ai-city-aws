@@ -198,8 +198,11 @@ struct MessageRow: View {
             .accessibilityLabel("You: \(line.text)\(line.state == .failed || line.state == .queued ? ". Not sent yet." : "")")
         } else {
             VStack(alignment: .leading, spacing: 6) {
-                StreamedText(text: line.text, streaming: line.state == .streaming)
-                    .accessibilityLabel("VAIC: \(line.text)")
+                if !line.text.isEmpty || line.state == .streaming {
+                    StreamedText(text: line.text, streaming: line.state == .streaming)
+                        .accessibilityLabel("VAIC: \(line.text)")
+                }
+                if let files = line.files, !files.isEmpty { FileCards(files: files) }
                 if line.state == .done, let steps = line.steps, steps.count >= 2 {
                     DisclosureGroup(isExpanded: $showSteps) {
                         VStack(alignment: .leading, spacing: 2) {

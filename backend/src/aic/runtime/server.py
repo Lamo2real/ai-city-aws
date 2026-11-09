@@ -24,6 +24,8 @@ from aic.shared.apps import workspace_from_env
 from aic.shared.aws import LambdaFactoryClient, aws_city, require_env
 from aic.shared.clients import client
 from aic.shared.config import caps_config
+from aic.shared.files.service import FilesAccess, FilesService
+from aic.shared.files.wiring import files_from_env
 from aic.shared.guard import startup_guard
 from aic.shared.hierarchy.actions import CityDeps
 from aic.shared.hierarchy.factory import Factory, FactoryClient
@@ -267,8 +269,10 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
             utility_runner=bedrock_converse_runner(_bedrock()) if role == "ace" else None,
             # The executives (decision 140): advice for VAIC (when the owner asks) and the Orchestrator (big decisions).
             advisor_runner=bedrock_converse_runner(_bedrock()) if role in ("ace", "orchestrator") else None,
-            workspace=workspace_from_env(city.session, e) if role == "worker" else None,
+            # Workers' own S3 prefix; managers use the same session-tagged role to save into Files (decision 147).
+            workspace=workspace_from_env(city.session, e) if role in ("worker", "manager") else None,
             knowledge=_knowledge(city.session, city.bus, role, e),
+            files=_files(city.session, city.bus, role, e),
             owner_api=_owner_api(city, e) if role == "ace" else None,
         ),
         HostOptions(
@@ -385,6 +389,17 @@ def _knowledge(session: Any, bus: Any, role: str, env: Mapping[str, str]) -> Kno
         return None
     service = KnowledgeService(store=k.store, blobs=k.blobs, bus=bus) if role == "ace" and k.blobs else None
     return KnowledgeAccess(store=k.store, kb=k.kb, service=service)
+
+
+def _files(session: Any, bus: Any, role: str, env: Mapping[str, str]) -> FilesAccess | None:
+    """Search for VAIC, managers and workers (records + Titan for the query); VAIC presigns the chat's previews."""
+    if role not in ("ace", "manager", "worker"):
+        return None
+    f = files_from_env(session, env)
+    if not f:
+        return None
+    service = FilesService(store=f.store, blobs=f.blobs, bus=bus, embedder=f.embedder)
+    return FilesAccess(service=service, bucket=f.blobs.bucket)
 
 
 def _mail(city: Any, e: Mapping[str, str], role: str | None) -> Any:

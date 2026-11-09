@@ -25,6 +25,7 @@ import { stepsRunning } from "../lib/steps.ts";
 import { statusWords } from "./Knowledge.tsx";
 import { PlusMenu, type Insert } from "./PlusMenu.tsx";
 import { StreamedText } from "./StreamedText.tsx";
+import { FileCards } from "./FileCards.tsx";
 import { Banner, ClearIcon, ClockIcon, DictateIcon, SendIcon, toast, WaveIcon } from "./ui.tsx";
 import { MicWave, VoiceVisualizer } from "./VoiceVisualizer.tsx";
 import { WorkflowCard } from "./WorkflowCard.tsx";
@@ -224,7 +225,9 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
           <button
             type="button"
             className="icon-btn talk-away"
-            onClick={() => setAway((a) => (a === null ? Math.min(awayStart() ?? Infinity, Date.now() - 24 * 3600_000) : null))}
+            onClick={() =>
+              setAway((a) => (a === null ? Math.min(awayStart() ?? Infinity, Date.now() - 24 * 3600_000) : null))
+            }
             aria-expanded={away !== null}
             aria-label="While you were away"
             title="While you were away"
@@ -235,7 +238,11 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
         <div className="talk-notes">
           {voice.problem ? <Banner tone="bad">{voice.problem}</Banner> : null}
           {away !== null ? (
-            <AwayPanel since={away} onClose={() => setAway(null)} onMissing={() => (setNoSummary(true), setAway(null))} />
+            <AwayPanel
+              since={away}
+              onClose={() => setAway(null)}
+              onMissing={() => (setNoSummary(true), setAway(null))}
+            />
           ) : null}
           {live === "reconnecting" ? (
             <Banner tone="bad">Connection lost. Your messages are saved. Reconnecting…</Banner>
@@ -258,10 +265,13 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
               <span className="sr">{l.who === "ace" ? "VAIC:" : "You:"}</span>
               <div className="msg-body">
                 {l.who === "ace" ? (
-                  <StreamedText text={l.text} streaming={l.state === "streaming"} onGrow={follow} />
+                  l.text || l.state === "streaming" ? (
+                    <StreamedText text={l.text} streaming={l.state === "streaming"} onGrow={follow} />
+                  ) : null
                 ) : (
                   <p>{l.text}</p>
                 )}
+                {l.files?.length ? <FileCards files={l.files} /> : null}
                 {l.who === "ace" && l.state === "done" && l.steps ? (
                   <AicSteps steps={l.steps} tookMs={l.tookMs} running={stepsRunning(l)} started={l.started} />
                 ) : null}

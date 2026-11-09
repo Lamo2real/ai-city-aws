@@ -21,6 +21,8 @@ Links like `#/settings/connectors` open that page in the app.
   and Sales pipeline.
 - **Projects** `#/apps`: the apps and games the city builds. Open one to preview it on a phone, a laptop or any size.
 - **Knowledge** `#/knowledge`: your documents. Everything the agents may read and quote.
+- **Files** `#/files`: your storage for anything (photos, videos, PDFs, documents, any type). The departments read
+  and save here too; what they save is marked with the department.
 - **Skills**: what your agents know how to do (built-in skills and your own).
 - **Costs**: what the city spent today and this month (estimates; the AWS bill is the truth).
 - **Settings** `#/settings`: a menu of pages (listed below).
@@ -84,6 +86,13 @@ Links like `#/settings/connectors` open that page in the app.
 - **…add knowledge (documents, laws, manuals)?** Open Knowledge `#/knowledge` and drop the files (many at once),
   paste text, or add a link. Each item is sorted by country, year and topic automatically; you can correct them.
   Agents then use the right country's rules (EU rules like GDPR for EU markets, US rules for the US).
+- **…store photos, videos and other files?** Open Files `#/files` and drop them in (or press **+ Upload**; on the
+  iPhone, pick photos or files). Large videos upload straight from your device. Each file gets a description by
+  itself (what a photo shows, what a document or recording says), so you can later ask VAIC "find the sunrise photo
+  with the Porsche from last spring" and it shows the file in the chat with a **Download** button. Rename, move to a
+  folder, tag, delete or download from the Files screen, or ask VAIC to.
+- **…tell Files and Knowledge apart?** Knowledge is what the agents read as reference (laws, manuals, notes).
+  Files is your storage: things you keep, find and download, and what the departments make.
 - **…let the business run without me?** Settings → Company: describe the business and turn on "run my business".
   Settings → While I'm away: turn on Autopilot. Turn either off any time.
 - **…get advice from the executives?** Ask VAIC: "what does the CFO think about this?" or "ask the CTO to review

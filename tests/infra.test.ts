@@ -11,8 +11,10 @@ import * as iam from "../scripts/check-iam.mjs";
 
 const {
   checkBoundaries,
+  checkFiles,
   checkInline,
   checkKnowledge,
+  filesStatements,
   checkWorker,
   knowledgeStatements,
   rolePolicies,
@@ -361,6 +363,58 @@ describe("knowledge base (docs/KNOWLEDGE.md)", () => {
   });
 });
 
+describe("files (docs/FILES.md, decision 147)", () => {
+  const tf = moduleText("files");
+  const prod = readFileSync("infra/envs/prod/main.tf", "utf8");
+  const api = moduleText("api");
+  it("IAM: hires write only their own drop, agents only read records, Bedrock only Titan/Haiku", () => {
+    expect(checkFiles()).toEqual([]);
+    const bad = filesStatements(
+      'resource "aws_iam_role_policy" "workspace" {\n  policy = jsonencode({\n      { Sid = "W", Effect = "Allow", Action = ["s3:PutObject"], Resource = ["${aws_s3_bucket.this.arn}/files/*"] },\n  })\n}',
+    );
+    expect(checkFiles({ statements: bad, text: tf })).toEqual([
+      "files workspace/W: a hire may write only its own hires/<hire>/files/ drop",
+    ]);
+  });
+  it("one private, KMS-encrypted, versioned bucket with CORS for the HUD only, tagged files", () => {
+    expect(tf).toContain("bucket        = local.base");
+    expect(tf).toContain('tags          = { Component = "files" }');
+    expect(tf).toMatch(/allowed_origins = \[var\.app_origin\]/);
+    expect(tf).toMatch(/status = "Enabled"/);
+  });
+  it("events: object created under files/ and hires/, our MediaConvert and Transcribe jobs, with a DLQ", () => {
+    expect(tf).toContain('object = { key = [{ prefix = "files/" }, { prefix = "hires/" }] }');
+    expect(tf).toContain('userMetadata = { component = ["files"] }');
+    expect(tf).toContain('TranscriptionJobName = [{ prefix = "aic-files-" }]');
+    expect(tf).toMatch(/handler\s+= "aic\.lambdas\.files\.handler"/);
+    expect(prod).toContain("files-events = module.files.dlq_name");
+  });
+  it("the api, the runtimes and the HUD's CSP know the bucket; every route is behind the owner's JWT", () => {
+    for (const r of [
+      "GET /files",
+      "GET /files/{id}",
+      "POST /files/uploads",
+      "POST /files/uploads/{id}/complete",
+      "PUT /files/{id}",
+      "DELETE /files/{id}",
+      "POST /files/{id}/retry",
+    ])
+      expect(api).toContain(`"${r}"`);
+    expect(prod).toMatch(/FILES_TABLE\s+= "\$\{local\.name\}-files"/);
+    expect(prod).toMatch(/module "files" \{/);
+    expect(moduleText("frontend")).toContain(
+      'files_origins = "https://${var.name}-files.s3.${var.region}.amazonaws.com',
+    );
+    expect(moduleText("agents")).toContain('"aws:RequestTag/hire_id" = "mgr-*"');
+  });
+  it("embeds with the Titan model pinned in config/models.json only", () => {
+    expect(tf).toMatch(
+      /jsondecode\(file\("\$\{path\.module\}\/\.\.\/\.\.\/\.\.\/config\/models\.json"\)\)\.embeddings\.files/,
+    );
+    expect(tf).not.toMatch(/amazon\.titan|titan-embed/);
+  });
+});
+
 describe("voice credentials", () => {
   it("the identity pool trusts only the HUD's app client and skips the server-side check that refused valid tokens", async () => {
     const { readFileSync } = await import("node:fs");
@@ -408,10 +462,10 @@ describe("apps origin (docs/APPS.md)", () => {
     expect(prod).toMatch(/appsUrl\s+= module\.apps\.url/);
   });
 
-  it("the HUD CSP frames only the apps origin and adds it to img-src, never to connect-src", async () => {
+  it("the HUD CSP frames only the apps origin (and Files' PDF previews) and adds it to img-src, never to connect-src", async () => {
     const d = directives(cspOf(await read("infra/modules/frontend/main.tf")));
-    expect(d["frame-src"]).toBe("${var.apps_url}");
-    expect(d["img-src"]).toBe("'self' data: blob: ${var.apps_url}");
+    expect(d["frame-src"]).toBe("${var.apps_url} ${local.files_origins}");
+    expect(d["img-src"]).toBe("'self' data: blob: ${var.apps_url} ${local.files_origins}");
     expect(d["connect-src"]).not.toContain("apps_url");
     expect(d["frame-ancestors"]).toBe("'none'");
   });
@@ -496,7 +550,9 @@ describe("app-bridge Lambda (docs/APPS.md v2)", () => {
     const apiPerms = block(tf, "    api = [");
     expect(apiPerms).toContain('function:${local.app_bridge_name}"');
     // Its one AgentCore right is signing the voice address to VAIC's runtime (decision 120).
-    expect(apiPerms.replace(/bedrock-agentcore:InvokeAgentRuntimeWithWebSocketStream/, "")).not.toMatch(/bedrock-agentcore/);
+    expect(apiPerms.replace(/bedrock-agentcore:InvokeAgentRuntimeWithWebSocketStream/, "")).not.toMatch(
+      /bedrock-agentcore/,
+    );
     const invokes = [...tf.matchAll(/app_bridge_name\}"\]/g)].length;
     expect(invokes).toBe(1);
     expect(tf).not.toMatch(/aws_lambda_permission"[^{]*\{[^}]*app-bridge/);
@@ -524,7 +580,9 @@ describe("app-bridge Lambda (docs/APPS.md v2)", () => {
     expect(mail).toMatch(/Statement = local\.read_path \}\)\n\}/);
     expect(mail).toMatch(/workload_arn\s+= "\$\{local\.directory\}\/workload-identity\/\$\{local\.workload\}"/);
     expect(mail).toMatch(/app_passwords\s+= "\$\{local\.sm\}:aic\/prod\/mail\/\*"/);
-    expect(block(tf, "    api = [").replace(/bedrock-agentcore:InvokeAgentRuntimeWithWebSocketStream/, "")).not.toMatch(/bedrock-agentcore/);
+    expect(block(tf, "    api = [").replace(/bedrock-agentcore:InvokeAgentRuntimeWithWebSocketStream/, "")).not.toMatch(
+      /bedrock-agentcore/,
+    );
     // The bridge's Gateway access is attached by the connectors module, on the gateway ARN only, never the api role.
     const conn = readFileSync(join(import.meta.dirname, "..", "infra", "modules", "connectors", "main.tf"), "utf8");
     expect(conn).toMatch(
@@ -655,11 +713,15 @@ describe("the owner's calendar (City → Features, docs/MAIL_CALENDAR.md §12)",
     );
     expect(api).toMatch(/scheduler_mail_env = \{ for k in \["AIC_MAIL_WORKLOAD", "AIC_MAIL_PROVIDERS"\]/);
     const block = mail.slice(mail.indexOf('resource "aws_iam_role_policy" "scheduler"'));
-    expect(block.slice(0, block.indexOf("\n}\n"))).toMatch(/role\s+= var\.scheduler_role_name\n\s+policy = jsonencode\(\{ Version = "2012-10-17", Statement = local\.read_path \}\)/);
+    expect(block.slice(0, block.indexOf("\n}\n"))).toMatch(
+      /role\s+= var\.scheduler_role_name\n\s+policy = jsonencode\(\{ Version = "2012-10-17", Statement = local\.read_path \}\)/,
+    );
     expect(prod).toMatch(/scheduler_role_name\s+= module\.api\.role_names\["scheduler"\]/);
   });
   it("Refresh now: the api may start the scheduler, and knows its name", () => {
-    expect(mail).toMatch(/Sid = "StartCalendarImport", Effect = "Allow", Action = \["lambda:InvokeFunction"\], Resource = \["arn:aws:lambda:\$\{var\.region\}:\$\{var\.account_id\}:function:\$\{var\.name\}-scheduler"\]/);
+    expect(mail).toMatch(
+      /Sid = "StartCalendarImport", Effect = "Allow", Action = \["lambda:InvokeFunction"\], Resource = \["arn:aws:lambda:\$\{var\.region\}:\$\{var\.account_id\}:function:\$\{var\.name\}-scheduler"\]/,
+    );
     expect(api).toMatch(/AIC_SCHEDULER_FUNCTION = local\.scheduler_name/);
   });
 });
@@ -837,7 +899,9 @@ describe("VAIC's real-time voice (Nova Sonic, decision 120)", () => {
     expect(apiTf).toMatch(
       /"bedrock-agentcore:InvokeAgentRuntimeWithWebSocketStream"\], Resource = \[var\.runtime_arns\["ace"\], "\$\{var\.runtime_arns\["ace"\]\}\/\*"\]/,
     );
-    expect(apiTf).toMatch(/AIC_RUNTIME_ARN_ACE = var\.runtime_arns\["ace"\], AIC_RUNTIME_VERSION = var\.runtime_version \}/);
+    expect(apiTf).toMatch(
+      /AIC_RUNTIME_ARN_ACE = var\.runtime_arns\["ace"\], AIC_RUNTIME_VERSION = var\.runtime_version \}/,
+    );
     const connect = fe.split("\n").find((l) => l.includes('"connect-src')) ?? "";
     expect(connect).toContain("wss://bedrock-agentcore.${var.region}.amazonaws.com");
   });
@@ -867,13 +931,22 @@ describe("the Chief of Staff (decision 124)", () => {
   });
   it("runs on each new question and approval, and sweeps every 5 minutes", () => {
     expect(api).toMatch(/"detail-type" = \["question\.asked", "approval\.requested"\]/);
-    expect(api).toMatch(/chief-sweep\s+= \{ schedule = "rate\(5 minutes\)", fn = "chief-of-staff", input = \{ job = "sweep" \}, state = "ENABLED" \}/);
-    expect(api).toMatch(/chief-digest\s+= \{ schedule = "cron\(0 17 \* \* \? \*\)", fn = "chief-of-staff", input = \{ job = "digest" \}, state = "ENABLED" \}/);
+    expect(api).toMatch(
+      /chief-sweep\s+= \{ schedule = "rate\(5 minutes\)", fn = "chief-of-staff", input = \{ job = "sweep" \}, state = "ENABLED" \}/,
+    );
+    expect(api).toMatch(
+      /chief-digest\s+= \{ schedule = "cron\(0 17 \* \* \? \*\)", fn = "chief-of-staff", input = \{ job = "digest" \}, state = "ENABLED" \}/,
+    );
   });
   it("least privilege: its model, the ledger, the bus and the api's live alias, nothing else", () => {
-    const block = api.slice(api.indexOf("    chief-of-staff = ["), api.indexOf("    ]", api.indexOf("    chief-of-staff = [")));
+    const block = api.slice(
+      api.indexOf("    chief-of-staff = ["),
+      api.indexOf("    ]", api.indexOf("    chief-of-staff = [")),
+    );
     expect(block).toMatch(/bedrock:InvokeModel"\], Resource = var\.chief_of_staff_invoke_arns/);
-    expect(block).toMatch(/lambda:InvokeFunction"\], Resource = \["arn:aws:lambda:\$\{var\.region\}:\$\{var\.account_id\}:function:\$\{local\.api_name\}:live"\]/);
+    expect(block).toMatch(
+      /lambda:InvokeFunction"\], Resource = \["arn:aws:lambda:\$\{var\.region\}:\$\{var\.account_id\}:function:\$\{local\.api_name\}:live"\]/,
+    );
     expect(block).not.toMatch(/s3:|secretsmanager|sqs:|states:|cloudfront/);
   });
 });
@@ -900,8 +973,12 @@ describe("the executives (decision 140)", () => {
     expect(routes).toContain('"PUT /executives"');
   });
   it("the hourly review run is the only schedule, and the Lambda can start no work", () => {
-    expect(api).toMatch(/executive-reviews\s+= \{ schedule = "rate\(1 hour\)", fn = "executives", input = \{ job = "reviews" \}, state = "ENABLED" \}/);
-    expect(api).toMatch(/executives\s+= \{ bundle = "app", handler = "aic\.lambdas\.executives\.handler".*AIC_APP_PROFILE_EXECUTIVE = var\.executive_profile_arn/);
+    expect(api).toMatch(
+      /executive-reviews\s+= \{ schedule = "rate\(1 hour\)", fn = "executives", input = \{ job = "reviews" \}, state = "ENABLED" \}/,
+    );
+    expect(api).toMatch(
+      /executives\s+= \{ bundle = "app", handler = "aic\.lambdas\.executives\.handler".*AIC_APP_PROFILE_EXECUTIVE = var\.executive_profile_arn/,
+    );
     const block = api.slice(api.indexOf("    executives = ["), api.indexOf("    ]", api.indexOf("    executives = [")));
     expect(block).toMatch(/bedrock:InvokeModel"\], Resource = var\.executive_invoke_arns/);
     expect(block).not.toMatch(/sqs:|lambda:|bedrock-agentcore|states:|s3:|secretsmanager/);
@@ -912,14 +989,24 @@ describe("Autopilot (decision 125)", () => {
   const api = readFileSync("infra/modules/api/main.tf", "utf8");
   const routes = api.slice(api.indexOf("routes = ["), api.indexOf("]", api.indexOf("routes = [")));
   it("the away summary and standing-order routes sit behind the JWT authorizer", () => {
-    for (const r of ['"GET /away-summary"', '"GET /standing-orders"', '"POST /standing-orders"', '"PUT /standing-orders/{id}"', '"DELETE /standing-orders/{id}"'])
+    for (const r of [
+      '"GET /away-summary"',
+      '"GET /standing-orders"',
+      '"POST /standing-orders"',
+      '"PUT /standing-orders/{id}"',
+      '"DELETE /standing-orders/{id}"',
+    ])
       expect(routes).toContain(r);
   });
   it("the scheduler starts due standing orders every 5 minutes, enabled", () => {
-    expect(api).toMatch(/standing-orders = \{ schedule = "rate\(5 minutes\)", fn = "scheduler", input = \{ job = "standing_orders" \}, state = "ENABLED" \}/);
+    expect(api).toMatch(
+      /standing-orders = \{ schedule = "rate\(5 minutes\)", fn = "scheduler", input = \{ job = "standing_orders" \}, state = "ENABLED" \}/,
+    );
   });
   it("the approvals function may finish only its own workflow's task (an approval decided before its token)", () => {
-    expect(api).toMatch(/Action = \["states:SendTaskSuccess", "states:SendTaskFailure"\], Resource = \["arn:aws:states:\$\{var\.region\}:\$\{var\.account_id\}:stateMachine:\$\{var\.name\}-approval"\]/);
+    expect(api).toMatch(
+      /Action = \["states:SendTaskSuccess", "states:SendTaskFailure"\], Resource = \["arn:aws:states:\$\{var\.region\}:\$\{var\.account_id\}:stateMachine:\$\{var\.name\}-approval"\]/,
+    );
   });
 });
 
@@ -927,7 +1014,13 @@ describe("AI workflows (decision 126)", () => {
   const api = readFileSync("infra/modules/api/main.tf", "utf8");
   const routes = api.slice(api.indexOf("routes = ["), api.indexOf("]", api.indexOf("routes = [")));
   it("the walkthrough routes sit behind the JWT authorizer, and no route spends money", () => {
-    for (const r of ['"GET /workflows"', '"GET /workflows/runs/{id}"', '"POST /workflows/runs/{id}/step"', '"POST /workflows/runs/{id}/mode"', '"POST /workflows/runs/{id}/cancel"'])
+    for (const r of [
+      '"GET /workflows"',
+      '"GET /workflows/runs/{id}"',
+      '"POST /workflows/runs/{id}/step"',
+      '"POST /workflows/runs/{id}/mode"',
+      '"POST /workflows/runs/{id}/cancel"',
+    ])
       expect(routes).toContain(r);
     expect(routes).not.toMatch(/workflows[^"]*\/(run|confirm|go)"/);
     for (const r of ['"GET /workflows/taste"', '"POST /workflows/taste/{id}"']) expect(routes).toContain(r);

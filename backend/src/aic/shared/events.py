@@ -404,6 +404,43 @@ class KnowledgeUpdated(_E):
     error: str | None = None
 
 
+class FileCard(BaseModel):
+    """What VAIC's chat keeps of one file (docs/FILES.md §8); the addresses are fetched fresh when shown."""
+
+    id: str
+    name: str
+    kind: Literal["image", "video", "audio", "document", "text", "other"]
+    content_type: str = ""
+    size_bytes: int = 0
+    description: str = ""
+    department: str = ""
+    taken_at: str = ""
+    created_at: str = ""
+
+
+class FilesUpdated(_E):
+    """A file in Files arrived, changed, was described or was deleted (``docs/FILES.md`` §7)."""
+
+    type: Literal["files.updated"]
+    id: str
+    status: Literal["uploading", "processing", "ready", "failed", "deleted"]
+    name: str = ""
+    kind: str = ""
+    folder: str = ""
+    department: str = ""
+    error: str | None = None
+
+
+class AceFiles(_E):
+    """VAIC put files in the chat (``show_files``): a preview and a Download button each; ``ask`` = VAIC asks which."""
+
+    type: Literal["ace.files"]
+    conversation: str = "main"
+    message_id: str = ""
+    files: list[FileCard]
+    ask: bool = False
+
+
 CityEventModel = Annotated[
     AgentHired
     | AgentRetired
@@ -440,6 +477,8 @@ CityEventModel = Annotated[
     | AppUpdated
     | AppRemoved
     | KnowledgeUpdated
+    | FilesUpdated
+    | AceFiles
     | WorkflowUpdated
     | SupportTicket,
     Field(discriminator="type"),

@@ -253,18 +253,27 @@ resource "aws_iam_role_policy" "worker" {
 }
 
 # Workers reach S3 only through this role, assumed with a session tag naming the hire: each hire
-# can touch hires/<its id>/ and nothing else.
+# can touch hires/<its id>/ and nothing else. Managers assume it too (tag mgr-…), only to save into Files
+# (decision 147; the files module grants the files bucket's hires/<tag>/files/ prefix).
 resource "aws_iam_role" "workspace" {
   name                 = "${var.name}-worker-workspace"
   permissions_boundary = var.boundary_arn
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { AWS = aws_iam_role.agent["worker"].arn }
-      Action    = ["sts:AssumeRole", "sts:TagSession"]
-      Condition = { StringLike = { "aws:RequestTag/hire_id" = "wkr-*" } }
-    }]
+    Statement = [
+      {
+        Effect    = "Allow"
+        Principal = { AWS = aws_iam_role.agent["worker"].arn }
+        Action    = ["sts:AssumeRole", "sts:TagSession"]
+        Condition = { StringLike = { "aws:RequestTag/hire_id" = "wkr-*" } }
+      },
+      {
+        Effect    = "Allow"
+        Principal = { AWS = aws_iam_role.agent["manager"].arn }
+        Action    = ["sts:AssumeRole", "sts:TagSession"]
+        Condition = { StringLike = { "aws:RequestTag/hire_id" = "mgr-*" } }
+      },
+    ]
   })
   tags = merge(local.tags, { AgentRole = "worker" })
 }
@@ -350,6 +359,8 @@ resource "aws_bedrockagentcore_agent_runtime" "role" {
 
 output "role_arns" { value = { for r, x in aws_iam_role.agent : r => x.arn } }
 output "role_names" { value = { for r, x in aws_iam_role.agent : r => x.name } }
+output "workspace_role_name" { value = aws_iam_role.workspace.name }
+output "workspace_role_arn" { value = aws_iam_role.workspace.arn }
 output "runtime_arns" { value = { for r, x in aws_bedrockagentcore_agent_runtime.role : r => x.agent_runtime_arn } }
 output "runtime_ids" { value = { for r, x in aws_bedrockagentcore_agent_runtime.role : r => x.agent_runtime_id } }
 output "ecr_repository_url" { value = aws_ecr_repository.runtime.repository_url }

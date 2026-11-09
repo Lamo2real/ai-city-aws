@@ -698,6 +698,9 @@ def test_the_prompts_carry_the_connector_and_skill_rules() -> None:
         "submit_app",
         "search_knowledge",
         "load_app",
+        "find_files",
+        "get_file",
+        "save_file",
     ]
 
 

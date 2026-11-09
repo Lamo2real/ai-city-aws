@@ -44,6 +44,12 @@
       "modelId": "amazon.titan-embed-text-v2:0",
       "dimensions": 1024,
       "$comment": "Owner's exception to Anthropic-only (2026-11-07): Anthropic has no embedding model. Called in-Region (eu-north-1) by the Bedrock knowledge base only."
+    },
+    "files": {
+      "label": "Amazon Titan Text Embeddings V2",
+      "modelId": "amazon.titan-embed-text-v2:0",
+      "dimensions": 512,
+      "$comment": "Files (decision 147): the same Titan V2, in-Region, called directly (InvokeModel) by the files Lambda, the api and the runtimes to embed each file's description and each search. 512 dimensions keep one vector at 1 KB on the file record. It never reasons or writes text."
     }
   },
   "roles": {

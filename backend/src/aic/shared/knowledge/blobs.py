@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol
+from urllib.parse import quote
 
 PRESIGN_SECONDS = 3600
 
@@ -13,6 +14,16 @@ PRESIGN_SECONDS = 3600
 class Head:
     size: int
     content_type: str | None
+    metadata: dict[str, str] = field(default_factory=dict)
+    """The object's user metadata (``x-amz-meta-*``), lower-case keys."""
+
+
+def disposition(file_name: str, inline: bool) -> str:
+    """``Content-Disposition`` for a presigned download: the name as given (RFC 5987), never a header break."""
+    safe = "".join(c for c in file_name if c.isprintable() and c not in '"\\\r\n') or "file"
+    ascii_name = safe.encode("ascii", "replace").decode().replace("?", "_")
+    kind = "inline" if inline else "attachment"
+    return f"{kind}; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(safe)}"
 
 
 class Blobs(Protocol):
@@ -20,11 +31,21 @@ class Blobs(Protocol):
 
     async def get(self, key: str) -> bytes: ...
     async def head(self, key: str) -> Head | None: ...
-    async def put(self, key: str, body: bytes, content_type: str = "application/octet-stream") -> None: ...
+    async def put(
+        self,
+        key: str,
+        body: bytes,
+        content_type: str = "application/octet-stream",
+        metadata: dict[str, str] | None = None,
+    ) -> None: ...
     async def copy(self, src: str, dst: str) -> None: ...
     async def keys(self, prefix: str) -> list[str]: ...
     async def delete_prefix(self, prefix: str) -> int: ...
     async def presign_put(self, key: str, content_type: str) -> str: ...
+    async def presign_get(
+        self, key: str, file_name: str, inline: bool, content_type: str | None = None, seconds: int = 900
+    ) -> str: ...
+    async def delete(self, key: str) -> None: ...
     async def start_multipart(self, key: str, content_type: str) -> str: ...
     async def presign_part(self, key: str, upload_id: str, part_number: int) -> str: ...
     async def complete_multipart(self, key: str, upload_id: str, parts: list[dict[str, Any]]) -> None: ...
@@ -35,6 +56,7 @@ class MemoryBlobs:
     def __init__(self, bucket: str = "aic-test-knowledge") -> None:
         self.bucket = bucket
         self.objects: dict[str, tuple[bytes, str]] = {}
+        self.meta: dict[str, dict[str, str]] = {}
         self.uploads: dict[str, dict[str, Any]] = {}
 
     async def get(self, key: str) -> bytes:
@@ -44,13 +66,31 @@ class MemoryBlobs:
 
     async def head(self, key: str) -> Head | None:
         o = self.objects.get(key)
-        return Head(len(o[0]), o[1]) if o else None
+        return Head(len(o[0]), o[1], dict(self.meta.get(key, {}))) if o else None
 
-    async def put(self, key: str, body: bytes, content_type: str = "application/octet-stream") -> None:
+    async def put(
+        self,
+        key: str,
+        body: bytes,
+        content_type: str = "application/octet-stream",
+        metadata: dict[str, str] | None = None,
+    ) -> None:
         self.objects[key] = (body, content_type)
+        self.meta[key] = dict(metadata or {})
 
     async def copy(self, src: str, dst: str) -> None:
         self.objects[dst] = self.objects[src]
+        self.meta[dst] = dict(self.meta.get(src, {}))
+
+    async def delete(self, key: str) -> None:
+        self.objects.pop(key, None)
+        self.meta.pop(key, None)
+
+    async def presign_get(
+        self, key: str, file_name: str, inline: bool, content_type: str | None = None, seconds: int = 900
+    ) -> str:
+        how = "inline" if inline else "attachment"
+        return f"https://{self.bucket}.s3.test/{key}?signed=get&{how}&expires={seconds}"
 
     async def keys(self, prefix: str) -> list[str]:
         return sorted(k for k in self.objects if k.startswith(prefix))
@@ -59,6 +99,7 @@ class MemoryBlobs:
         keys = await self.keys(prefix)
         for k in keys:
             del self.objects[k]
+            self.meta.pop(k, None)
         return len(keys)
 
     async def presign_put(self, key: str, content_type: str) -> str:
@@ -105,10 +146,38 @@ class S3Blobs:
             if code in ("404", "NoSuchKey", "NotFound"):
                 return None
             raise
-        return Head(int(r.get("ContentLength", 0)), r.get("ContentType"))
+        meta = {str(k).lower(): str(v) for k, v in (r.get("Metadata") or {}).items()}
+        return Head(int(r.get("ContentLength", 0)), r.get("ContentType"), meta)
 
-    async def put(self, key: str, body: bytes, content_type: str = "application/octet-stream") -> None:
-        await asyncio.to_thread(self._s3.put_object, Bucket=self.bucket, Key=key, Body=body, ContentType=content_type)
+    async def put(
+        self,
+        key: str,
+        body: bytes,
+        content_type: str = "application/octet-stream",
+        metadata: dict[str, str] | None = None,
+    ) -> None:
+        kw: dict[str, Any] = {"Metadata": metadata} if metadata else {}
+        await asyncio.to_thread(
+            self._s3.put_object, Bucket=self.bucket, Key=key, Body=body, ContentType=content_type, **kw
+        )
+
+    async def delete(self, key: str) -> None:
+        await asyncio.to_thread(self._s3.delete_object, Bucket=self.bucket, Key=key)
+
+    async def presign_get(
+        self, key: str, file_name: str, inline: bool, content_type: str | None = None, seconds: int = 900
+    ) -> str:
+        params: dict[str, Any] = {
+            "Bucket": self.bucket,
+            "Key": key,
+            "ResponseContentDisposition": disposition(file_name, inline),
+        }
+        if content_type:
+            params["ResponseContentType"] = content_type
+        url: str = await asyncio.to_thread(
+            self._s3.generate_presigned_url, "get_object", Params=params, ExpiresIn=seconds
+        )
+        return url
 
     async def copy(self, src: str, dst: str) -> None:
         # The managed copy switches to a multipart copy for large objects on its own.

@@ -154,6 +154,8 @@ module "agents" {
     for r in local.roles : r => merge(
       { AIC_GATEWAY_URL = module.connectors.gateway_url, AIC_SKILLS_BUCKET = module.skills.bucket },
       r == "worker" ? {} : { AIC_MAIL_WORKLOAD = module.mail.workload_name, AIC_MAIL_PROVIDERS = module.mail.providers, AIC_HUD_ORIGIN = module.frontend.url },
+      # Files (docs/FILES.md): literal names (the files module needs the agents' role names, so no cycle).
+      contains(["ace", "manager", "worker"], r) ? { FILES_TABLE = "${local.name}-files", FILES_BUCKET = "${local.name}-files" } : {},
     )
   }
   # The knowledge base: every runtime searches it; AIC (ace) may add to it.
@@ -228,6 +230,10 @@ module "api" {
     AIC_MAIL_PROVIDERS      = join(",", [for k, p in var.mail_providers : k if p.enabled])
     AIC_OPENAI_SECRET       = "aic/prod/openai" # module.voice creates it; a literal here avoids an api ↔ voice cycle
     AIC_GITHUB_SECRET       = "aic/prod/github" # module.github creates it; a literal here avoids an api ↔ github cycle
+    # Files (docs/FILES.md): module.files names them so; literals avoid an api ↔ files cycle.
+    FILES_TABLE    = "${local.name}-files"
+    FILES_BUCKET   = "${local.name}-files"
+    FILES_FUNCTION = "${local.name}-files"
   }
   # Apps' granted connector reads run in the app-bridge Lambda, through the connectors Gateway (docs/APPS.md v2).
   app_bridge_env = { AIC_GATEWAY_URL = module.connectors.gateway_url }
@@ -264,6 +270,35 @@ module "knowledge" {
   deletion_protection = var.deletion_protection
   log_retention_days  = var.log_retention_days
   deployer_arn        = data.aws_iam_session_context.me.issuer_arn
+}
+
+# Files (docs/FILES.md, decision 147): the owner's storage for photos, videos, PDFs and any file; the departments
+# read and write it; each file is described and embedded so VAIC finds it from a vague description.
+module "files" {
+  source                 = "../../modules/files"
+  name                   = local.name
+  region                 = var.region
+  account_id             = data.aws_caller_identity.me.account_id
+  kms_key_arn            = module.security.kms_key_arn
+  boundary_arn           = module.security.boundary_arn
+  app_origin             = module.frontend.url
+  lambda_zip_path        = module.api.lambda_zip_path
+  lambda_zip_hash        = module.api.lambda_zip_hash
+  ledger_table           = module.ledger.ledger_table
+  ledger_arn             = module.ledger.ledger_arn
+  bus_name               = module.bus.bus_name
+  bus_arn                = module.bus.bus_arn
+  utility_invoke_arns    = module.agents.utility_invoke_arns
+  utility_profile_arn    = module.agents.utility_profile_arn
+  profile_prefix         = var.profile_prefix
+  mediaconvert_role_name = "${local.name}-knowledge-mediaconvert"
+  mediaconvert_role_arn  = module.knowledge.mediaconvert_role_arn
+  api_role_name          = module.api.role_names["api"]
+  agent_role_names       = module.agents.role_names
+  workspace_role_name    = module.agents.workspace_role_name
+  workspace_role_arn     = module.agents.workspace_role_arn
+  deletion_protection    = var.deletion_protection
+  log_retention_days     = var.log_retention_days
 }
 
 # Connectors: any MCP server, added at runtime by asking AIC (docs/CONNECTORS_SKILLS.md). Terraform names none.
@@ -359,7 +394,7 @@ module "observability" {
   source           = "../../modules/observability"
   name             = local.name
   region           = var.region
-  dlq_names        = merge(module.bus.dlq_names, { apps = module.api.apps_dlq_name, knowledge-start = module.knowledge.start_dlq_name })
+  dlq_names        = merge(module.bus.dlq_names, { apps = module.api.apps_dlq_name, knowledge-start = module.knowledge.start_dlq_name, files-events = module.files.dlq_name })
   queue_names      = [for k in ["ace", "orchestrator", "manager", "worker"] : "${local.name}-${k}"]
   function_names   = module.api.function_names
   notify_topic_arn = module.bus.notify_topic_arn

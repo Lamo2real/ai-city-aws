@@ -112,6 +112,9 @@ def test_managers_hire_few_and_the_orchestrator_never_staffs_a_one_off() -> None
         "submit_app",
         "search_knowledge",
         "load_app",
+        "find_files",
+        "get_file",
+        "save_file",
     ]
 
 

@@ -6,6 +6,7 @@ import { useSyncExternalStore } from "react";
 import { applySnapshot, initialState, reduce, type CityApp, type CityState } from "../city/city-state.js";
 import { FIRST_STEP, stepWords } from "./steps.ts";
 import type { LiveStatus } from "./ws.ts";
+import type { FileCardData } from "./files.ts";
 
 export interface ChatLine {
   id: string;
@@ -22,6 +23,8 @@ export interface ChatLine {
   /** VAIC lines: when the owner sent, and the work VAIC handed on (tickets) and whether each has settled. */
   started?: number;
   tasks?: { id: string; done: boolean }[];
+  /** VAIC lines: files VAIC put in the chat (show_files), each drawn with a preview and a Download button. */
+  files?: FileCardData[];
 }
 /** VAIC's turn in progress: when the owner sent, and the steps so far. */
 export interface AceTurn {
@@ -29,6 +32,8 @@ export interface AceTurn {
   steps: string[];
   /** Tickets VAIC opened in this turn before its reply line existed. */
   tasks?: string[];
+  /** Files VAIC showed in this turn before its reply line existed. */
+  files?: FileCardData[];
 }
 /** A connect card under VAIC's chat: an add-connector approval, a sign-in button, a key field or an app-password form. */
 export type ConnectCardState =
@@ -159,6 +164,10 @@ class Store {
     if ((e.type === "ace.reply" || e.type === "ace.question") && String(e.conversation ?? "").startsWith("app-"))
       return;
     if (e.type === "hud.action") return hudAction(e);
+    if (e.type === "ace.files") {
+      if (String(e.conversation ?? "main") !== "main") return;
+      return this.aceFiles((e.files as FileCardData[] | undefined) ?? []);
+    }
     if (e.type === "ace.reply")
       return this.aceReply(e as unknown as { conversation: string; text: string; done: boolean });
     if (e.type === "activity" && e.id === "ace") this.aceStep(String(e.activity ?? ""), e.detail as string | null);
@@ -347,6 +356,28 @@ class Store {
     if (!words || !turn || turn.steps.at(-1) === words) return;
     this.set({ turn: { ...turn, steps: [...turn.steps, words] } });
   }
+  /** Files VAIC shows (show_files): on its reply to this turn, or held for that reply until its first words. */
+  private aceFiles(cards: FileCardData[]) {
+    if (!cards.length) return;
+    const merge = (have: FileCardData[] = []) => [...have, ...cards.filter((c) => !have.some((h) => h.id === c.id))];
+    const turn = this.state.turn;
+    const chat = this.state.chat;
+    const i = chat.findLastIndex((l) => l.who === "ace");
+    const line = chat[i];
+    if (turn && (!line || line.at < turn.started)) return this.set({ turn: { ...turn, files: merge(turn.files) } });
+    if (line && turn) {
+      const next = [...chat];
+      next[i] = { ...line, files: merge(line.files) };
+      return this.set({ chat: next });
+    }
+    // No turn in this tab (another device asked): the files arrive as VAIC's own line.
+    this.set({
+      chat: [
+        ...chat,
+        { id: `a-files-${Date.now()}`, who: "ace", text: "", state: "done", at: Date.now(), files: cards },
+      ],
+    });
+  }
   private aceReply(e: { text: string; done: boolean }) {
     const chat = [...this.state.chat];
     const last = chat.at(-1);
@@ -374,6 +405,7 @@ class Store {
               ...(this.state.turn.tasks?.length
                 ? { tasks: this.state.turn.tasks.map((id) => ({ id, done: false })) }
                 : {}),
+              ...(this.state.turn.files?.length ? { files: this.state.turn.files } : {}),
             }
           : {}),
       });

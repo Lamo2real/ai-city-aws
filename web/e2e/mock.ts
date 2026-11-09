@@ -116,6 +116,8 @@ export interface Mock {
   apps: Array<Record<string, unknown>>;
   /** The knowledge base: stored items (newest first) and the S3 PUTs the HUD made. */
   knowledge: { items: Array<Record<string, unknown>>; puts: string[] };
+  /** Files (docs/FILES.md): stored files (newest first) and the S3 PUTs the HUD made. */
+  files: { items: Array<Record<string, unknown>>; puts: string[] };
   /** v3 per-app state, `<app_id>/<key>` → value. */
   state: Record<string, unknown>;
   /** OpenAI's voice (docs/VOICE.md): the stored key, when it was saved, and an error /speech should answer. */
@@ -161,6 +163,14 @@ export const appRecord = (id: string, slug: string, title: string, extra: Record
 });
 
 export const S3_URL = "https://s3.aic.test";
+export const FILES_URL = "https://files.aic.test";
+/** A drawn sunrise with a black car: what the mock files bucket serves for any picture or thumbnail. */
+const SUNRISE_JPG = readFileSync(`${import.meta.dirname}/fixtures/sunrise.jpg`);
+/** A tiny amber PNG: what the mock files bucket serves for images and thumbnails. */
+export const PNG_1PX = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==",
+  "base64",
+);
 const KIND_BY_EXT: Record<string, string> = {
   pdf: "document",
   docx: "document",
@@ -281,6 +291,39 @@ export async function mockBackend(
       first_run_done: opts.firstRunDone ?? true,
     },
     knowledge: { items: [], puts: [] },
+    files: { items: [], puts: [] },
+  };
+  let fn = 0;
+  const fItem = (id: string) => m.files.items.find((x) => x.id === id);
+  const fKind = (name: string, ct: string) =>
+    /^image\//.test(ct) || /\.(png|jpe?g|gif|webp|heic)$/i.test(name)
+      ? "image"
+      : /^video\//.test(ct) || /\.(mov|mp4|m4v|webm)$/i.test(name)
+        ? "video"
+        : /^audio\//.test(ct)
+          ? "audio"
+          : /\.(pdf|docx?|xlsx?|csv|html?)$/i.test(name)
+            ? "document"
+            : /\.(txt|md)$/i.test(name)
+              ? "text"
+              : "other";
+  const withLinks = (f: Record<string, unknown>) => ({
+    ...f,
+    url: `${FILES_URL}/files/${String(f.id)}/${encodeURIComponent(String(f.name))}?inline`,
+    download_url: `${FILES_URL}/files/${String(f.id)}/${encodeURIComponent(String(f.name))}?attachment`,
+    ...(f.kind === "image" || f.kind === "video" ? { thumb_url: `${FILES_URL}/thumbs/${String(f.id)}.jpg` } : {}),
+  });
+  /** What the files Lambda would write: a caption for the sunrise photo, plain words for the rest. */
+  const describeFile = (f: Record<string, unknown>) => {
+    f.status = "processing";
+    m.send({ type: "files.updated", id: f.id, status: "processing", name: f.name, kind: f.kind, folder: f.folder });
+    setTimeout(() => {
+      f.status = "ready";
+      f.description = /sunrise/i.test(String(f.name))
+        ? "A sunrise over the sea with a black Porsche 911 in front. Keywords: sunrise, Porsche, thumbnail"
+        : `A ${String(f.kind)} called ${String(f.name)}.`;
+      m.send({ type: "files.updated", id: f.id, status: "ready", name: f.name, kind: f.kind, folder: f.folder });
+    }, 300);
   };
   let kn = 0;
   const kItem = (id: string) => m.knowledge.items.find((x) => x.id === id);
@@ -808,6 +851,90 @@ export async function mockBackend(
         return ok({ ok: true });
       }
     }
+    // ---------- Files (docs/FILES.md §7) ----------
+    if (url.pathname === "/files" && req.method() === "GET") {
+      const q = (url.searchParams.get("q") ?? "").toLowerCase();
+      const kind = url.searchParams.get("kind") ?? "";
+      const folder = url.searchParams.get("folder") ?? "";
+      const words = q.split(/\s+/).filter((w) => w.length > 2);
+      const list = m.files.items.filter(
+        (f) =>
+          (!kind || f.kind === kind) &&
+          (!folder || f.folder === folder) &&
+          (!words.length ||
+            words.some((w) => `${String(f.name)} ${String(f.description ?? "")}`.toLowerCase().includes(w))),
+      );
+      return ok({
+        files: list.map(withLinks),
+        folders: [...new Set(m.files.items.map((f) => String(f.folder ?? "")).filter(Boolean))].sort(),
+        departments: [...new Set(m.files.items.map((f) => String(f.department ?? "")).filter(Boolean))].sort(),
+        total: m.files.items.length,
+      });
+    }
+    if (url.pathname === "/files/uploads" && req.method() === "POST") {
+      const name = String(body?.file_name);
+      const size = Number(body?.size_bytes);
+      const id = `f-file${String(++fn).padStart(8, "0")}`;
+      const f: Record<string, unknown> = {
+        id,
+        name,
+        kind: fKind(name, String(body?.content_type ?? "")),
+        content_type: body?.content_type,
+        size_bytes: size,
+        folder: body?.folder ?? "",
+        tags: [],
+        status: "uploading",
+        added_by: "owner",
+        description: "",
+        created_at: at(),
+        object_key: `files/${id}/${name}`,
+      };
+      m.files.items.unshift(f);
+      const partSize = 16 * 1024 * 1024;
+      const upload =
+        size <= 100 * 1024 * 1024
+          ? {
+              method: "PUT",
+              url: `${FILES_URL}/files/${id}/${encodeURIComponent(name)}?put`,
+              headers: { "content-type": body?.content_type },
+            }
+          : {
+              multipart: true,
+              upload_id: `up-${id}`,
+              part_size: partSize,
+              part_urls: Array.from(
+                { length: Math.ceil(size / partSize) },
+                (_, n) => `${FILES_URL}/files/${id}/${encodeURIComponent(name)}?partNumber=${n + 1}&uploadId=up-${id}`,
+              ),
+            };
+      return ok({ file: f, upload }, 201);
+    }
+    const fComplete = /^\/files\/uploads\/(f-[\w-]+)\/complete$/.exec(url.pathname);
+    if (fComplete && req.method() === "POST") {
+      const f = fItem(fComplete[1]!);
+      if (!f) return ok({ error: "That file doesn't exist (any more)." }, 404);
+      describeFile(f);
+      return ok({ file: f });
+    }
+    const fOne = /^\/files\/(f-[\w-]+)(\/retry)?$/.exec(url.pathname);
+    if (fOne) {
+      const f = fItem(fOne[1]!);
+      if (!f) return ok({ error: "That file doesn't exist (any more)." }, 404);
+      if (fOne[2] && req.method() === "POST") {
+        describeFile(f);
+        return ok({ file: f });
+      }
+      if (req.method() === "GET") return ok(withLinks(f));
+      if (req.method() === "PUT") {
+        Object.assign(f, body, { updated_at: at() });
+        m.send({ type: "files.updated", id: f.id, status: f.status, name: f.name, kind: f.kind, folder: f.folder });
+        return ok({ file: withLinks(f) });
+      }
+      if (req.method() === "DELETE") {
+        m.files.items = m.files.items.filter((x) => x !== f);
+        return ok({ ok: true });
+      }
+    }
     if (path === "/workflows" && req.method() === "GET") return ok({ workflows: [], runs: [] });
     if (path === "/workforce") return ok({ workers: [], specialists: [] });
     if (path === "/health") return ok({ workers_busy: 0, worker_ceiling: 2450, stale_turns: 0 });
@@ -953,6 +1080,34 @@ export async function mockBackend(
     if (!part) {
       const i = kItem(url.pathname.split("/")[2]!);
       if (i) pipeline(i);
+    }
+    return route.fulfill({ status: 200, headers: { ...headers, etag: `"etag-${part ?? "single"}"` }, body: "" });
+  });
+  // The files bucket: presigned PUTs (an ETag back) and presigned GETs (a small image for any picture).
+  await page.route(`${FILES_URL}/**`, async (route) => {
+    const req = route.request();
+    const headers = {
+      "access-control-allow-origin": "*",
+      "access-control-allow-methods": "PUT, GET",
+      "access-control-allow-headers": "*",
+      "access-control-expose-headers": "ETag",
+    };
+    if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers });
+    const url = new URL(req.url());
+    if (req.method() === "GET") {
+      const pdf = /\.pdf$/i.test(decodeURIComponent(url.pathname));
+      return route.fulfill({
+        status: 200,
+        headers,
+        contentType: pdf ? "application/pdf" : "image/jpeg",
+        body: pdf ? Buffer.from("%PDF-1.4\n%%EOF") : SUNRISE_JPG,
+      });
+    }
+    m.files.puts.push(url.pathname + url.search);
+    const part = url.searchParams.get("partNumber");
+    if (!part) {
+      const f = fItem(url.pathname.split("/")[2]!);
+      if (f) describeFile(f);
     }
     return route.fulfill({ status: 200, headers: { ...headers, etag: `"etag-${part ?? "single"}"` }, body: "" });
   });

@@ -5793,3 +5793,278 @@ button.hub-status {
     display: none;
   }
 }
+
+/* ---------- Files (docs/FILES.md §11, decision 147) ---------- */
+.files-head {
+  display: flex;
+  gap: var(--s3);
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.files-head .btn {
+  margin-top: var(--s3);
+}
+.files-search {
+  display: flex;
+  gap: var(--s2);
+  align-items: end;
+  margin: var(--s3) 0;
+}
+.files-search .field {
+  margin: 0;
+}
+.files-search input {
+  min-height: var(--tap);
+  width: 100%;
+}
+.files-filters {
+  display: flex;
+  gap: var(--s2) var(--s3);
+  align-items: end;
+  flex-wrap: wrap;
+}
+.files-filters .segmented {
+  flex-wrap: wrap;
+  margin-bottom: 0;
+}
+.files-filters .field {
+  margin: 0;
+}
+.segmented button[aria-pressed="true"] {
+  background: var(--glass-3);
+  box-shadow: var(--glow);
+}
+.files-drop {
+  min-height: 84px;
+  transition:
+    background var(--dur-s) var(--ease),
+    border-color var(--dur-s) var(--ease);
+}
+.files-dragging .files-drop {
+  min-height: 160px;
+}
+.files-count {
+  margin: var(--s2) 0;
+}
+.files-grid {
+  list-style: none;
+  padding: 0;
+  margin: var(--s3) 0 0;
+  display: grid;
+  gap: var(--s3);
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+}
+.file-tile {
+  display: grid;
+  gap: var(--s1);
+  width: 100%;
+  text-align: left;
+  padding: var(--s2);
+  border: 1px solid var(--edge);
+  border-radius: var(--rg-s);
+  background: var(--glass);
+  color: var(--gtext);
+  font: inherit;
+  transition:
+    background var(--dur-s) var(--ease),
+    border-color var(--dur-s) var(--ease);
+}
+.file-tile:hover {
+  background: var(--glass-2);
+  border-color: var(--edge-2);
+}
+.file-tile:focus-visible {
+  outline: 3px solid var(--gfocus);
+  outline-offset: 2px;
+}
+.file-thumb {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 4 / 3;
+  border-radius: calc(var(--rg-s) - 4px);
+  background: var(--glass-deep);
+  overflow: hidden;
+  font-size: 40px;
+}
+.file-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.file-name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.file-meta {
+  font-size: var(--fs-xs);
+}
+.screen .file-tile .mute {
+  color: var(--gmute);
+}
+.file-tile .tag {
+  justify-self: start;
+}
+.file-viewer {
+  width: min(760px, 100%);
+}
+.fv-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+.fv-head h2 {
+  overflow-wrap: anywhere;
+}
+.fv-desc {
+  white-space: pre-line;
+}
+.fv-actions {
+  margin-top: var(--s2);
+}
+.fv-edit {
+  display: grid;
+  gap: var(--s2);
+  margin-top: var(--s4);
+  padding-top: var(--s3);
+  border-top: 1px solid var(--edge);
+}
+.fv-edit .field {
+  margin: 0;
+}
+.fv-edit input,
+.fv-edit textarea {
+  min-height: var(--tap);
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--edge-2);
+  border-radius: var(--rg-s);
+  background: var(--glass-deep);
+  color: var(--gtext);
+  font: inherit;
+}
+.fpreview {
+  display: grid;
+  place-items: center;
+  border-radius: var(--rg-s);
+  background: var(--glass-deep);
+  overflow: hidden;
+  max-height: 60vh;
+}
+.fpreview img,
+.fpreview video {
+  display: block;
+  max-width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+}
+.fpreview-audio {
+  padding: var(--s3);
+}
+.fpreview-audio audio {
+  width: 100%;
+}
+.fpreview-pdf iframe {
+  width: 100%;
+  height: min(60vh, 520px);
+  border: 0;
+  background: #fff;
+}
+.fpreview-none {
+  gap: var(--s1);
+  padding: var(--s5);
+  font-size: 40px;
+}
+.fpreview-none .mute {
+  font-size: var(--fs-s);
+}
+.fpreview-wait {
+  min-height: 160px;
+  animation: fwait 1.2s var(--ease) infinite alternate;
+}
+@keyframes fwait {
+  to {
+    opacity: 0.55;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fpreview-wait {
+    animation: none;
+  }
+}
+/* In the chat: one file large, several side by side to pick from */
+.chat-files {
+  list-style: none;
+  padding: 0;
+  margin: var(--s2) 0 0;
+  display: grid;
+  gap: var(--s2);
+}
+.chat-files-many {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+.chat-file {
+  position: relative;
+  margin: 0;
+  display: grid;
+  gap: var(--s2);
+  padding: var(--s2);
+  border: 1px solid var(--edge);
+  border-radius: var(--rg-s);
+  background: var(--glass);
+  color: var(--gtext);
+}
+.chat-file figcaption {
+  display: grid;
+  gap: 2px;
+}
+.chat-file .mute {
+  color: var(--gmute);
+  font-size: var(--fs-xs);
+}
+.chat-file-name {
+  overflow-wrap: anywhere;
+}
+.chat-file-no {
+  position: absolute;
+  top: var(--s3);
+  left: var(--s3);
+  z-index: 1;
+  min-width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--accent-fill);
+  color: var(--accent-ink);
+  font-weight: var(--btn-weight);
+  box-shadow: var(--accent-shadow);
+}
+.chat-file-problem {
+  color: var(--bad-l, var(--gtext));
+}
+.chat-file-dl {
+  justify-self: start;
+}
+.chat-files-many .fpreview img,
+.chat-files-many .fpreview video {
+  max-height: 200px;
+}
+.chat-files-many .fpreview-pdf iframe {
+  height: 220px;
+}
+/* A download link drawn as a button: the button's ink, no link underline, its text centred */
+a.chat-file-dl,
+.fv-actions a.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+a.btn-primary.chat-file-dl,
+.fv-actions a.btn-primary {
+  color: var(--accent-ink);
+}
+.fpreview img {
+  min-height: 120px;
+}

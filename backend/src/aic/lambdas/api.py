@@ -43,6 +43,9 @@ from aic.shared.chief_of_staff import status as chief_status
 from aic.shared.clients import client
 from aic.shared.config import caps_config
 from aic.shared.events import EventBus, now_iso
+from aic.shared.files.service import FilesError, FilesService
+from aic.shared.files.service import NotFound as FileNotFound
+from aic.shared.files.wiring import files_from_env
 from aic.shared.github import GitHubDeps, GitHubError, github_token_secret, whoami
 from aic.shared.hierarchy.actions import CityDeps, answer_question, send_home, send_workers_home, sweep_stale_asks
 from aic.shared.hierarchy.departments import DepartmentError, build_department, demolish_department, find_standing
@@ -179,6 +182,13 @@ ROUTES: list[tuple[str, str]] = [
     ("POST", "/knowledge/text"),
     ("PUT", "/knowledge/k-aaaaaaaaaaaa"),
     ("DELETE", "/knowledge/k-aaaaaaaaaaaa"),
+    ("GET", "/files"),
+    ("GET", "/files/f-aaaaaaaaaaaa"),
+    ("POST", "/files/uploads"),
+    ("POST", "/files/uploads/f-aaaaaaaaaaaa/complete"),
+    ("PUT", "/files/f-aaaaaaaaaaaa"),
+    ("DELETE", "/files/f-aaaaaaaaaaaa"),
+    ("POST", "/files/f-aaaaaaaaaaaa/retry"),
     ("GET", "/devices"),
     ("POST", "/devices"),
     ("DELETE", "/devices/d-aaaaaaaaaaaaaaaaaaaaaaaa"),
@@ -220,6 +230,8 @@ class ApiDeps:
     """Asks the connectors Lambda to rewrite the Cedar policies after a publish, removal or grant change."""
     knowledge: KnowledgeService | None = None
     """None until the knowledge base is deployed (``KNOWLEDGE_*`` variables)."""
+    files: FilesService | None = None
+    """Files (docs/FILES.md); None until deployed (``FILES_*`` variables)."""
     connectors: ConnectorsApi | None = None
     """The ``/connectors*`` routes and the add-connector approval hook; None = built from ledger and bus."""
     skills: SkillsApi | None = None
@@ -1052,10 +1064,46 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
             return reply(*found)
     if path == "/knowledge" or path.startswith("/knowledge/"):
         return await _knowledge(event, method, path, d)
+    if path == "/files" or path.startswith("/files/"):
+        return await _files(event, method, path, d)
     return problem(404, "There is nothing here.")
 
 
 _ITEM = r"k-[\w-]{12}"
+_FILE = r"f-[\w-]{12}"
+
+
+async def _files(event: dict[str, Any], method: str, path: str, d: ApiDeps) -> dict[str, Any]:
+    """The Files routes (``docs/FILES.md`` §7). The owner check already ran in ``handle_http``."""
+    f = d.files
+    if f is None:
+        return problem(503, "Files isn't set up yet.", "Deploy it first, then try again.")
+
+    def is_(m: str, pattern: str) -> bool:
+        return method == m and re.fullmatch(pattern, path) is not None
+
+    file_id = path.split("/")[2] if re.fullmatch(rf"/files/{_FILE}(/retry)?", path) else ""
+    try:
+        if is_("GET", r"/files"):
+            return reply(200, await f.list(event.get("queryStringParameters") or {}))
+        if is_("GET", rf"/files/{_FILE}"):
+            return reply(200, await f.get(file_id))
+        if is_("POST", r"/files/uploads"):
+            return reply(201, await f.create_upload(_body(event)))
+        if is_("POST", rf"/files/uploads/{_FILE}/complete"):
+            return reply(200, {"file": await f.complete_upload(path.split("/")[3], _body(event))})
+        if is_("PUT", rf"/files/{_FILE}"):
+            return reply(200, {"file": await f.update(file_id, _body(event))})
+        if is_("DELETE", rf"/files/{_FILE}"):
+            await f.delete(file_id)
+            return reply(200, {"ok": True})
+        if is_("POST", rf"/files/{_FILE}/retry"):
+            return reply(200, {"file": await f.retry(file_id)})
+    except FileNotFound as e:
+        return problem(404, str(e))
+    except FilesError as e:
+        return problem(400, str(e))
+    return problem(404, "There is nothing here.")
 
 
 async def _knowledge(event: dict[str, Any], method: str, path: str, d: ApiDeps) -> dict[str, Any]:
@@ -1461,6 +1509,26 @@ def _knowledge_service(session: Any, bus: EventBus) -> KnowledgeService | None:
     return KnowledgeService(store=k.store, blobs=k.blobs, bus=bus, kb=k.kb)
 
 
+def _files_service(session: Any, bus: EventBus) -> FilesService | None:
+    f = files_from_env(session)
+    if not f:
+        return None
+    fn = os.environ.get("FILES_FUNCTION")
+    reindex = None
+    if fn:
+        lam = client(session, "lambda")
+
+        async def reindex(file_id: str) -> None:
+            await asyncio.to_thread(
+                lam.invoke,
+                FunctionName=fn,
+                InvocationType="Event",
+                Payload=json.dumps({"action": "index", "file_id": file_id}).encode(),
+            )
+
+    return FilesService(store=f.store, blobs=f.blobs, bus=bus, embedder=f.embedder, reindex=reindex)
+
+
 def build_deps() -> ApiDeps:
     city = aws_city()
     github = GitHubDeps(
@@ -1480,6 +1548,7 @@ def build_deps() -> ApiDeps:
         user_pool_id=os.environ.get("AIC_USER_POOL_ID"),
         owner_email=os.environ.get("AIC_OWNER_EMAIL"),
         knowledge=_knowledge_service(city.session, city.bus),
+        files=_files_service(city.session, city.bus),
         apps=_apps_origin(city.session),
         bridge_invoke=_bridge_invoke(city.session, os.environ.get("AIC_APP_BRIDGE_FUNCTION")),
         proposals=proposals_from_env(city.ledger),

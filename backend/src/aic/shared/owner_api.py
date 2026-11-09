@@ -36,6 +36,7 @@ SELF_ROUTES: tuple[tuple[str, str], ...] = (
     ("POST", r"/voice/.*"),
     ("POST", r"/speech"),
     ("POST", r"/knowledge/uploads(/.*)?"),  # file bytes come from the owner's device, not a chat
+    ("POST", r"/files/uploads(/.*)?"),
 )
 SECRET_PAGE = {
     "/github/token": "#/settings/github",

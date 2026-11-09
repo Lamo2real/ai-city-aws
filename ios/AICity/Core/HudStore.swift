@@ -14,11 +14,15 @@ struct ChatLine: Codable, Equatable, Identifiable, Sendable {
     var at: Double
     var steps: [String]?
     var tookMs: Double?
+    /// VAIC lines: files VAIC put in the chat (show_files), each drawn with a preview and Download.
+    var files: [ChatFile]?
 }
 
 struct AceTurn: Equatable, Sendable {
     var started: Double
     var steps: [String]
+    /// Files VAIC showed in this turn before its reply line existed.
+    var files: [ChatFile] = []
 }
 
 enum Presence: String, Sendable { case idle, listening, thinking, speaking, waiting }
@@ -162,6 +166,10 @@ final class HudStore {
         if type == "ace.reply" { return aceReply(text: e["text"].string ?? "", done: e["done"].bool ?? false) }
         if type == "knowledge.updated" { return onKnowledgeUpdated(e) }
         if type == "hud.action" { return onHudAction(e) }
+        if type == "ace.files" {
+            guard (e["conversation"].string ?? "main") == "main" else { return }
+            return aceFiles(e["files"].array.compactMap(ChatFile.init(json:)))
+        }
         if type == "steward.decided" { return stewardDecided(e) }
         // The backend answers first, then says `steward.decided`: remember what a closing item was about.
         if ["question.answered", "approval.decided", "question.withdrawn", "approval.withdrawn"].contains(type),
@@ -184,6 +192,24 @@ final class HudStore {
         turn = t
     }
 
+    /// Files VAIC shows (show_files, docs/FILES.md §8): on its reply to this turn, or held for that reply until its
+    /// first words; with no turn on this phone (asked on another device), as VAIC's own line.
+    private func aceFiles(_ cards: [ChatFile]) {
+        guard !cards.isEmpty else { return }
+        func merge(_ have: [ChatFile]) -> [ChatFile] { have + cards.filter { c in !have.contains { $0.id == c.id } } }
+        let i = chat.lastIndex { $0.who == .ace }
+        if var t = turn {
+            if let i, chat[i].at >= t.started {
+                chat[i].files = merge(chat[i].files ?? [])
+            } else {
+                t.files = merge(t.files)
+                turn = t
+            }
+            return
+        }
+        chat.append(ChatLine(id: "a-files-\(Int(clock()))-\(chat.count)", who: .ace, text: "", state: .done, at: clock(), files: cards))
+    }
+
     private func aceReply(text: String, done: Bool) {
         var c = chat
         let last = c.last
@@ -197,7 +223,8 @@ final class HudStore {
             c[c.count - 1] = l
         } else {
             c.append(ChatLine(id: "a-\(Int(clock()))-\(c.count)", who: .ace, text: text, state: done ? .done : .streaming, at: clock(),
-                              steps: turn?.steps, tookMs: turn.map { clock() - $0.started }))
+                              steps: turn?.steps, tookMs: turn.map { clock() - $0.started },
+                              files: (turn?.files.isEmpty ?? true) ? nil : turn?.files))
         }
         chat = c
         presence = done ? .speaking : .thinking
