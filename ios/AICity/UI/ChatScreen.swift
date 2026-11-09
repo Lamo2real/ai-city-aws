@@ -1,6 +1,7 @@
-// The landing screen (web AceScreen, decisions 106–108 and 112): the conversation runs up under the glass top
-// bar and down to the composer, the clear button floats in its corner, and the composer holds the + menu, the
-// box, one voice button and Send. The voice has no row of its own: its light (UI/Aurora.swift) rises from the
+// The landing screen (web AceScreen, decisions 106–108 and 112): there is no top bar and no title, so the
+// conversation runs from the status bar (fading softly under the clock) down to the composer; the history and
+// clear buttons float as small glass circles in the top corners, and the composer holds the + menu, the box,
+// one voice button and Send. The voice has no row of its own: its light (UI/Aurora.swift) rises from the
 // message box behind the chat text, blue for the owner and amber for AIC, and is not there when nobody talks.
 // The owner's lines sit on the right in a filled bubble; AIC's on the left as plain full-width text with its
 // Markdown. While AIC works, its status row shows the current step and seconds.
@@ -14,6 +15,7 @@ struct ChatScreen: View {
     @State private var confirmClear = false
     @State private var menuOpen = false
     @State private var composerHeight: CGFloat = 0
+    @State private var statusBarHeight: CGFloat = 0
 
     var body: some View {
         let hud = model.hud
@@ -38,7 +40,7 @@ struct ChatScreen: View {
                 .onAppear { proxy.scrollTo(hud.chat.last?.id, anchor: .bottom) }
             }
             .accessibilityLabel("Conversation with AIC")
-            // Under the bar: the notes that need the owner, and the quiet clear button in the corner.
+            // Under the status bar: the two floating buttons, and the notes that need the owner.
             .safeAreaInset(edge: .top, spacing: 0) { notes }
 
             Composer(draft: $draft, focused: $focused, menuOpen: $menuOpen, speaker: speaker)
@@ -49,10 +51,10 @@ struct ChatScreen: View {
             AuroraView(speaker: speaker, voice: model.voice, base: composerHeight)
                 .frame(height: composerHeight + Aurora.reach)
         }
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { statusBarHeight = $0 }
         .nightScreen()
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .toolbar { ToolbarItem(placement: .principal) { Wordmark() } }
+        // No top bar on this tab (decision 145): the room goes to the conversation.
+        .toolbar(.hidden, for: .navigationBar)
         .confirmationDialog("Clear the conversation on this iPhone?", isPresented: $confirmClear, titleVisibility: .visible) {
             Button("Clear", role: .destructive) { model.hud.chat = [] }
         } message: {
@@ -91,33 +93,83 @@ struct ChatScreen: View {
                 ? Banner(tone: .info, text: (hud.unsent.count == 1 ? "One message is waiting to send." : "\(hud.unsent.count) messages are waiting to send.") + " They go out automatically.")
                 : nil,
         ].compactMap { $0 }
-        if !banners.isEmpty || !hud.chat.isEmpty || !model.awayMissing {
-            HStack(alignment: .top, spacing: 4) {
-                // "While you were away": by itself after more than 12 hours away, and from this clock any time.
-                if !model.awayMissing {
-                    Button { model.toggleAway() } label: {
-                        Image(systemName: "clock").font(.callout).foregroundStyle(Glass.mute).frame(width: 44, height: 44)
-                    }
-                    .accessibilityLabel("While you were away")
-                    .padding(.leading, 4)
-                }
-                VStack(spacing: 8) {
-                    if let since = model.awaySince { AwayPanel(since: since).padding(.top, 6) }
-                    ForEach(Array(banners.enumerated()), id: \.offset) { $0.element }
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal)
-                .padding(.vertical, banners.isEmpty ? 0 : 8)
-                if !hud.chat.isEmpty {
-                    Button { confirmClear = true } label: {
-                        Image(systemName: "trash").font(.callout).foregroundStyle(Glass.mute).frame(width: 44, height: 44)
-                    }
-                    .accessibilityLabel("Clear conversation on this iPhone")
-                    .padding(.trailing, 4)
-                }
+        HStack(alignment: .top, spacing: 4) {
+            // "While you were away": by itself after more than 12 hours away, and from this clock any time.
+            if !model.awayMissing {
+                FloatingGlassButton(symbol: "clock", label: "While you were away") { model.toggleAway() }
+                    .padding(.leading, 6)
             }
-            .background { if !banners.isEmpty { Rectangle().fill(.ultraThinMaterial) } }
+            VStack(spacing: 8) {
+                if let since = model.awaySince { AwayPanel(since: since).padding(.top, 6) }
+                ForEach(Array(banners.enumerated()), id: \.offset) { $0.element }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 8)
+            .padding(.vertical, banners.isEmpty ? 0 : 8)
+            if !hud.chat.isEmpty {
+                FloatingGlassButton(symbol: "trash", label: "Clear conversation on this iPhone") { confirmClear = true }
+                    .padding(.trailing, 6)
+            }
         }
+        // The soft fade under the status bar, so the conversation never clashes with the clock. It reaches a
+        // little below the status bar and lies behind the buttons; with nothing in the row it is all there is.
+        .background(alignment: .top) { StatusBarFade(statusBarHeight: statusBarHeight) }
+        // A note that needs the owner sits on glass up to the top edge, so the chat never shows through it.
+        .background { if !banners.isEmpty { Rectangle().fill(.ultraThinMaterial).ignoresSafeArea(edges: .top) } }
+    }
+}
+
+/// A small floating glass circle (36 pt drawn, 44 pt to tap) for the chat's top corners.
+struct FloatingGlassButton: View {
+    var symbol: String
+    var label: String
+    var action: () -> Void
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Glass.text)
+                .frame(width: 36, height: 36)
+                .background {
+                    if reduceTransparency { Circle().fill(Glass.solid) } else { Circle().fill(.ultraThinMaterial) }
+                    Circle().fill(Glass.fill)
+                }
+                .overlay(Circle().strokeBorder(Glass.edge2, lineWidth: 1))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+}
+
+/// The night, blurred, fading out just below the status bar: text scrolls up into it instead of under the clock.
+/// Under Reduce Transparency it is the solid night with the same fade. Drawn from the top of the screen down
+/// to `reach` points below the status bar, whatever view it is the background of.
+struct StatusBarFade: View {
+    var statusBarHeight: CGFloat
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    /// How far below the status bar the fade reaches.
+    static let reach: CGFloat = 26
+
+    var body: some View {
+        let height = statusBarHeight + Self.reach
+        Rectangle()
+            .fill(reduceTransparency ? AnyShapeStyle(Glass.solid) : AnyShapeStyle(.ultraThinMaterial))
+            .overlay(Glass.night2.opacity(reduceTransparency ? 0 : 0.35))
+            .mask {
+                // Full under the clock, gone at the bottom edge.
+                LinearGradient(stops: [.init(color: .black, location: 0),
+                                       .init(color: .black.opacity(0.85), location: statusBarHeight / max(1, height) * 0.8),
+                                       .init(color: .clear, location: 1)],
+                               startPoint: .top, endPoint: .bottom)
+            }
+            .frame(height: height)
+            .offset(y: -statusBarHeight)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
 
