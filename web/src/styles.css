@@ -2097,13 +2097,94 @@ table.costs tr:last-child td {
 .tile[aria-pressed="false"] {
   opacity: 0.85;
 }
-.mic-big {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
+/* The City dock (the owner's wish, 2026-11-09): one slim bar, icons without their own boxes, and a flat voice
+   line that slides open beside the mic while anyone is talking. */
+.dockbar {
+  gap: 2px !important;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--wood) 70%, transparent),
+    0 3px 10px rgb(0 0 0 / 0.25);
+  backdrop-filter: blur(6px);
 }
-.mic-big.on {
-  background: #8ef0a0;
+.dockbtn {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #5a3219;
+  display: inline-grid;
+  place-items: center;
+  opacity: 0.8;
+}
+.dockbtn:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--wood) 14%, transparent);
+}
+.dockbtn:active {
+  transform: scale(0.94);
+}
+.dockbtn[aria-pressed="false"] {
+  opacity: 0.55;
+}
+.dockvoice {
+  display: flex;
+  align-items: center;
+  border-radius: 999px;
+  transition: background-color 0.25s ease;
+}
+.dockmic,
+.dockmic[aria-pressed="false"] {
+  opacity: 1;
+  color: #fff;
+  background: #7a4a2a;
+}
+.dockmic.on {
+  background: #2a56a8;
+}
+.docklive {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition:
+    width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.2s ease;
+}
+.dockbar.live .docklive {
+  width: 150px;
+  padding-right: 10px;
+  opacity: 1;
+}
+.dockbar.live .dockvoice {
+  background: color-mix(in srgb, var(--wood) 12%, transparent);
+}
+.dockbar[data-speaker="aic"] .dockmic.on {
+  background: #7a4a2a;
+}
+.flatwave {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+}
+.dockwho {
+  font-size: 12px;
+  font-weight: 700;
+  color: #5a3219;
+  min-width: 52px;
+}
+.dockbar[data-speaker="you"] .dockwho {
+  color: #2a56a8;
+}
+@media (prefers-reduced-motion: reduce) {
+  .docklive {
+    transition: none;
+  }
 }
 .citypanel {
   top: 74px;
@@ -2226,14 +2307,16 @@ table.costs tr:last-child td {
     gap: 10px;
   }
   .citybottom .actions {
-    justify-content: space-between;
+    justify-content: center;
   }
   .citybottom .zoom {
     justify-content: flex-start;
   }
-  .mic-big {
-    width: 56px;
-    height: 56px;
+  .citybottom .dockbar {
+    align-self: center;
+  }
+  .dockbar.live .docklive {
+    width: 110px;
   }
   .citypanel {
     top: auto;

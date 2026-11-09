@@ -226,3 +226,56 @@ export function MicWave() {
   }, []);
   return <canvas ref={canvas} className="mic-wave" aria-hidden="true" />;
 }
+
+/** The City dock's voice line (the owner's wish, 2026-11-09: subtle, integrated, a flat voice animation that
+ *  shows who is speaking). One thin line: blue and rippling with your voice when you talk, brown and flowing with
+ *  AIC's when AIC talks, a dot travelling along it while AIC thinks, flat when nobody does. */
+export function FlatWave({ speaker }: { speaker: Speaker }) {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const c = canvas.current;
+    const g = c?.getContext("2d");
+    if (!c || !g) return;
+    const still = reducedMotion();
+    let smooth = 0;
+    let raf = 0;
+    const draw = (t: number) => {
+      const dpr = window.devicePixelRatio || 1;
+      const w = c.clientWidth;
+      const h = c.clientHeight;
+      if (c.width !== Math.round(w * dpr)) c.width = Math.round(w * dpr);
+      if (c.height !== Math.round(h * dpr)) c.height = Math.round(h * dpr);
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      g.clearRect(0, 0, w, h);
+      const mid = h / 2;
+      const lv = still ? { input: 0.4, output: 0.4 } : (sonicLevels() ?? getVoice().levels?.() ?? { input: 0, output: 0 });
+      const level = speaker === "you" ? lv.input : speaker === "aic" ? lv.output : 0;
+      smooth += (level - smooth) * 0.3;
+      const amp = speaker === "you" || speaker === "aic" ? Math.min(1, 0.08 + smooth * 1.4) * (mid - 2) : 0;
+      const freq = speaker === "you" ? 3.2 : 1.8;
+      const speed = speaker === "you" ? 90 : 160;
+      g.strokeStyle = speaker === "you" ? COLOR.you : speaker === "aic" ? COLOR.aic : COLOR.idle;
+      g.lineWidth = 2;
+      g.lineCap = "round";
+      g.beginPath();
+      for (let x = 0; x <= w; x += 2) {
+        const edge = Math.sin((Math.PI * x) / w); // flat at both ends
+        const y = mid + Math.sin((x / w) * Math.PI * 2 * freq - (still ? 0 : t / speed)) * amp * edge;
+        if (x === 0) g.moveTo(x, y);
+        else g.lineTo(x, y);
+      }
+      g.stroke();
+      if (speaker === "thinking") {
+        g.fillStyle = COLOR.thinking;
+        const x = still ? w / 2 : ((t / 8) % (w + 20)) - 10;
+        g.beginPath();
+        g.arc(x, mid, 3.5, 0, Math.PI * 2);
+        g.fill();
+      }
+      if (!still) raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, [speaker]);
+  return <canvas ref={canvas} className="flatwave" aria-hidden="true" />;
+}

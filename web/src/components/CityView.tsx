@@ -22,6 +22,7 @@ import { api, ApiError } from "../lib/api.ts";
 import { store, useHud } from "../lib/store.ts";
 import { useVoice } from "../voice/useVoice.ts";
 import { MicIcon } from "./ui.tsx";
+import { FlatWave, speakerOf } from "./VoiceVisualizer.tsx";
 import { Banner, Button, Loading } from "./ui.tsx";
 
 const REGION_CITY: Record<string, string> = {
@@ -61,6 +62,7 @@ export function CityView({ go }: { go: (view: string) => void }) {
   const [earlier, setEarlier] = useState(false);
   const [health, setHealth] = useState<string | null>(null);
   const voice = useVoice();
+  const speaker = speakerOf(useHud((s) => s.presence));
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000);
@@ -255,25 +257,33 @@ export function CityView({ go }: { go: (view: string) => void }) {
             Fit
           </button>
         </div>
-        <div className="actions">
-          <button type="button" className="tile" onClick={() => go("ace")} aria-label="Chat with AIC">
+        <div className={`actions dockbar${voice.listening || speaker !== "idle" ? " live" : ""}`} data-speaker={speaker}>
+          <button type="button" className="dockbtn" onClick={() => go("ace")} aria-label="Chat with AIC">
             <Glyph d="M4 5h16v10H9l-5 4z" />
           </button>
-          <button type="button" className="tile" onClick={() => go("tickets")} aria-label="Tickets">
+          <button type="button" className="dockbtn" onClick={() => go("tickets")} aria-label="Tickets">
             <Glyph d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5" />
           </button>
+          <div className="dockvoice">
+            <button
+              type="button"
+              className={`dockbtn dockmic ${voice.listening ? "on" : ""}`}
+              onClick={voice.pushToTalk}
+              aria-pressed={voice.listening}
+              aria-label={voice.listening ? "Stop listening" : "Talk to AIC"}
+            >
+              <MicIcon size={20} />
+            </button>
+            <span className="docklive">
+              <FlatWave speaker={speaker} />
+              <span className="dockwho" aria-hidden="true">
+                {speaker === "you" ? "You" : speaker === "aic" ? "AIC" : speaker === "thinking" ? "Thinking" : "Listening"}
+              </span>
+            </span>
+          </div>
           <button
             type="button"
-            className={`tile mic-big ${voice.listening ? "on" : ""}`}
-            onClick={voice.pushToTalk}
-            aria-pressed={voice.listening}
-            aria-label={voice.listening ? "Stop listening" : "Talk to AIC"}
-          >
-            <MicIcon />
-          </button>
-          <button
-            type="button"
-            className="tile"
+            className="dockbtn"
             onClick={voice.toggleSound}
             aria-pressed={voice.sound}
             aria-label={voice.sound ? "Sound on (tap to mute)" : "Sound off (tap to turn on)"}
@@ -282,7 +292,7 @@ export function CityView({ go }: { go: (view: string) => void }) {
               d={voice.sound ? "M4 9v6h4l5 4V5L8 9zM16 9a4 4 0 0 1 0 6" : "M4 9v6h4l5 4V5L8 9zM17 9l4 6M21 9l-4 6"}
             />
           </button>
-          <button type="button" className="tile" onClick={() => go("costs")} aria-label="Charts and costs">
+          <button type="button" className="dockbtn" onClick={() => go("costs")} aria-label="Charts and costs">
             <Glyph d="M5 19V9M10 19V5M15 19v-7M20 19v-4" />
           </button>
         </div>
