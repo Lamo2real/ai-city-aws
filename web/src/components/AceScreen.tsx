@@ -26,7 +26,7 @@ import { statusWords } from "./Knowledge.tsx";
 import { PlusMenu, type Insert } from "./PlusMenu.tsx";
 import { StreamedText } from "./StreamedText.tsx";
 import { FileCards } from "./FileCards.tsx";
-import { Banner, ClearIcon, ClockIcon, DictateIcon, SendIcon, toast, WaveIcon } from "./ui.tsx";
+import { Banner, ClearIcon, ClockIcon, MicIcon, SendIcon, toast, WaveIcon } from "./ui.tsx";
 import { MicWave, VoiceVisualizer } from "./VoiceVisualizer.tsx";
 import { WorkflowCard } from "./WorkflowCard.tsx";
 import { workflows } from "../lib/workflows.ts";
@@ -81,6 +81,7 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
   const commands = allCommands(lists?.skills ?? []);
   const suggestions = matchCommands(text, commands);
 
+  const [tall, setTall] = useState(false);
   useEffect(() => input.current?.focus(), []);
   // The message box is one line tall until the text needs more, then grows with it (typed or dictated) up to
   // about eight lines and scrolls inside; it shrinks back as text is deleted or sent.
@@ -88,10 +89,16 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
     const el = input.current;
     if (!el) return;
     el.style.height = "auto";
-    const max = parseFloat(getComputedStyle(el).maxHeight) || Infinity;
+    const cs = getComputedStyle(el);
+    const max = parseFloat(cs.maxHeight) || Infinity;
     const border = el.offsetHeight - el.clientHeight;
     el.style.height = `${Math.min(el.scrollHeight + border, max)}px`;
     el.style.overflowY = el.scrollHeight + border > max ? "auto" : "hidden";
+    // Like ChatGPT's box: the words use the whole width first; once they need a second line, the text takes the
+    // full top row and the buttons move under it, and it stays that way until the box is empty again.
+    const oneLine = (parseFloat(cs.lineHeight) || 23) + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    const wraps = el.scrollHeight > oneLine * 1.4;
+    setTall((was) => (text === "" ? false : was || wraps));
   }, [text]);
   useEffect(() => {
     try {
@@ -338,91 +345,93 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
               ))}
             </ul>
           ) : null}
-          {voice.dictating ? null : (
-            <PlusMenu lists={lists} onFiles={(f, folder) => void onFiles(f, folder)} onInsert={insert} go={go} />
-          )}
-          <label className="sr" htmlFor="say">
-            Message to VAIC
-          </label>
-          <textarea
-            id="say"
-            ref={input}
-            rows={1}
-            value={text}
-            placeholder={voice.dictating ? "Listening… your words appear here" : "Type your message…"}
-            onChange={(e) => setTyped(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void submit();
-              }
-            }}
-          />
-          {voice.dictating ? (
-            // Dictating, like Claude's composer: the words stream into the box above; here a cancel, the live
-            // sound of your voice, stop (keep the words to edit) and send at once.
-            <div className="dictation-bar" role="group" aria-label="Dictation">
-              <button
-                type="button"
-                className="dict-cancel"
-                onClick={cancelDictation}
-                aria-label="Cancel dictation"
-                title="Cancel dictation"
-              >
-                ×
-              </button>
-              <MicWave />
-              <button
-                type="button"
-                className="dict-stop"
-                onClick={voice.toggleDictate}
-                aria-label="Stop dictating"
-                title="Stop dictating (keep the words)"
-              >
-                <span aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                className="send dict-send"
-                onClick={() => void submit()}
-                aria-label="Send to VAIC"
-                disabled={!text.trim() && !items.length}
-              >
-                <SendIcon />
-              </button>
-            </div>
-          ) : (
-            <>
-              <button
-                type="button"
-                className={`dictate ${voice.dictating ? "on" : ""}`}
-                onClick={startDictation}
-                aria-pressed={voice.dictating}
-                aria-label={voice.dictating ? "Stop dictating" : "Dictate into the box"}
-                title={voice.dictating ? "Stop dictating" : "Dictate into the box"}
-              >
-                <DictateIcon />
-              </button>
-              <button
-                type="button"
-                className={`voice-btn ${voice.conversation ? "on" : ""}`}
-                onClick={voice.toggleConversation}
-                aria-pressed={voice.conversation}
-                aria-label={voice.conversation ? "End the voice conversation" : "Talk to VAIC"}
-                title={voice.conversation ? "End the voice conversation" : "Talk to VAIC: speak, VAIC answers aloud"}
-              >
-                <WaveIcon />
-              </button>
-              <button
-                type="submit"
-                className="send"
-                aria-label="Send to VAIC"
-                disabled={(!text.trim() && !items.length) || !sendable(items)}
-              >
-                <SendIcon />
-              </button>
-            </>
-          )}
+          <div className={`cbox${tall ? " is-tall" : ""}`}>
+            {voice.dictating ? null : (
+              <PlusMenu lists={lists} onFiles={(f, folder) => void onFiles(f, folder)} onInsert={insert} go={go} />
+            )}
+            <label className="sr" htmlFor="say">
+              Message to VAIC
+            </label>
+            <textarea
+              id="say"
+              ref={input}
+              rows={1}
+              value={text}
+              placeholder={voice.dictating ? "Listening… your words appear here" : "Type your message…"}
+              onChange={(e) => setTyped(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void submit();
+                }
+              }}
+            />
+            {voice.dictating ? (
+              // Dictating, like Claude's composer: the words stream into the box above; here a cancel, the live
+              // sound of your voice, stop (keep the words to edit) and send at once.
+              <div className="dictation-bar" role="group" aria-label="Dictation">
+                <button
+                  type="button"
+                  className="dict-cancel"
+                  onClick={cancelDictation}
+                  aria-label="Cancel dictation"
+                  title="Cancel dictation"
+                >
+                  ×
+                </button>
+                <MicWave />
+                <button
+                  type="button"
+                  className="dict-stop"
+                  onClick={voice.toggleDictate}
+                  aria-label="Stop dictating"
+                  title="Stop dictating (keep the words)"
+                >
+                  <span aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className="send dict-send"
+                  onClick={() => void submit()}
+                  aria-label="Send to VAIC"
+                  disabled={!text.trim() && !items.length}
+                >
+                  <SendIcon />
+                </button>
+              </div>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className={`dictate ${voice.dictating ? "on" : ""}`}
+                  onClick={startDictation}
+                  aria-pressed={voice.dictating}
+                  aria-label={voice.dictating ? "Stop dictating" : "Dictate into the box"}
+                  title={voice.dictating ? "Stop dictating" : "Dictate into the box"}
+                >
+                  <MicIcon />
+                </button>
+                <button
+                  type="button"
+                  className={`voice-btn ${voice.conversation ? "on" : ""}`}
+                  onClick={voice.toggleConversation}
+                  aria-pressed={voice.conversation}
+                  aria-label={voice.conversation ? "End the voice conversation" : "Talk to VAIC"}
+                  title={voice.conversation ? "End the voice conversation" : "Talk to VAIC: speak, VAIC answers aloud"}
+                >
+                  <WaveIcon />
+                </button>
+                <button
+                  type="submit"
+                  className="send"
+                  aria-label="Send to VAIC"
+                  disabled={(!text.trim() && !items.length) || !sendable(items)}
+                >
+                  <SendIcon size={20} />
+                </button>
+              </>
+            )}
+          </div>
         </form>
       </div>
     </section>
