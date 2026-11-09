@@ -286,6 +286,7 @@ struct SettingsForm: Equatable {
 
 struct SettingsScreen: View {
     @Environment(AppModel.self) private var model
+    @AppStorage(TapSignal.key) private var tapFeedback = true
     @State private var loader = Loader()
     @State private var form = SettingsForm()
     @State private var saved = SettingsForm()
@@ -382,6 +383,11 @@ struct SettingsScreen: View {
             } header: { Text("Integrations") } footer: {
                 Text("Built but off. Each needs its sign-in set up in AWS first (see the deploy checklist).")
             }
+        }
+        Section {
+            Toggle("Tap sound and rings", isOn: $tapFeedback).frame(minHeight: 44)
+        } header: { Text("General") } footer: {
+            Text("A soft click, a light tap you can feel and two rings wherever you tap. The silent switch mutes the click; Reduce Motion hides the rings.")
         }
         Section("Help and this iPhone") {
             Button("Show the first-run guide again") { model.showGuide = true }.frame(minHeight: 44)

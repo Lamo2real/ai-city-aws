@@ -48,6 +48,8 @@ struct RootView: View {
 
     var body: some View {
         content.preferredColorScheme(scheme)
+            // Every tap anywhere answers with two rings, a soft click and a light haptic (UI/TapFeedback.swift).
+            .background { TapFeedbackInstaller().frame(width: 0, height: 0) }
     }
 
     @ViewBuilder private var content: some View {
