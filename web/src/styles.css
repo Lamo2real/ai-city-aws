@@ -1192,28 +1192,42 @@ main {
     inset 0 1px 0 rgba(255, 255, 255, 0.45),
     0 10px 24px -12px rgba(232, 163, 61, 0.9);
 }
-/* The voice bar above the message box while the conversation is on: the moving line and who is talking. */
-.voice-bare {
-  padding: var(--s2) var(--s5) 0;
-  border-top: 1px solid var(--edge);
-  background: var(--glass);
-}
-.voice-bare .voice-strip {
-  height: 56px;
-}
+/* The voice bar above the message box while the conversation is on: who is talking, over the aurora. */
 .voice-bare .voice-row {
   justify-content: center;
   padding: 0;
   min-height: 0;
 }
-/* While the voice conversation is on: the page stays as it is (the owner, 2026-11-09: no dark backdrop, the regular
-   background), the voice bar gets a warm top edge, a "Voice on" badge beats, and the voice button breathes. */
-.ace.voice-live .voice-bare {
-  border-top-color: rgba(232, 163, 61, 0.55);
-  box-shadow: 0 -10px 30px -22px rgba(232, 163, 61, 0.6);
+/* While the voice conversation is on: the page stays as it is (the owner, 2026-11-09: no dark backdrop), and the
+   aurora (VoiceVisualizer.tsx) rises from the message box: blue for you, amber for AIC, its crest following how
+   loud the voice is. The bars are not shown; the badge and who is talking sit on the light. */
+.voice-bare {
+  position: relative;
+  padding: 0 var(--s5) var(--s2);
+  border-top: 0;
+  background: transparent;
 }
-.ace.voice-live .voice-bare .voice-strip {
-  height: 72px;
+.voice-bare .voice-strip {
+  display: none;
+}
+.voice-bare .voice-row,
+.voice-bare .voice-engine-why {
+  position: relative;
+  z-index: 2;
+}
+.voice-bare + .composer {
+  position: relative;
+  z-index: 1;
+}
+.aurora {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -120px;
+  width: 100%;
+  height: 300px;
+  z-index: 0;
+  pointer-events: none;
 }
 .voice-on-pill {
   display: inline-flex;

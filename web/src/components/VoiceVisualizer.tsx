@@ -139,6 +139,7 @@ export function VoiceVisualizer(p: {
       <div className="voice-strip">
         <canvas ref={canvas} aria-hidden="true" />
       </div>
+      {p.bare ? <Aurora speaker={speaker} /> : null}
       <div className="voice-row">
         {p.bare ? null : (
           <button
@@ -248,7 +249,9 @@ export function FlatWave({ speaker }: { speaker: Speaker }) {
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
       g.clearRect(0, 0, w, h);
       const mid = h / 2;
-      const lv = still ? { input: 0.4, output: 0.4 } : (sonicLevels() ?? getVoice().levels?.() ?? { input: 0, output: 0 });
+      const lv = still
+        ? { input: 0.4, output: 0.4 }
+        : (sonicLevels() ?? getVoice().levels?.() ?? { input: 0, output: 0 });
       const level = speaker === "you" ? lv.input : speaker === "aic" ? lv.output : 0;
       smooth += (level - smooth) * 0.3;
       const amp = speaker === "you" || speaker === "aic" ? Math.min(1, 0.08 + smooth * 1.4) * (mid - 2) : 0;
@@ -278,4 +281,103 @@ export function FlatWave({ speaker }: { speaker: Speaker }) {
     return () => cancelAnimationFrame(raf);
   }, [speaker]);
   return <canvas ref={canvas} className="flatwave" aria-hidden="true" />;
+}
+
+/** The voice conversation's light (the owner, 2026-11-09: an effect around the message box that follows how loud
+ *  you speak, with AI City's own touch). An aurora rising from the message box: a soft horizon of light whose crest
+ *  ripples and climbs with the voice level, a second, slower veil behind it, and sparks that drift up when the voice
+ *  is loud. Blue while you talk, amber while AIC talks, a slow breathing glow while AIC thinks, a faint ember when
+ *  nobody does. With reduced motion: one still glow per state. */
+const AURORA = {
+  you: ["79,143,214", "138,180,255"],
+  aic: ["232,163,61", "249,201,118"],
+  thinking: ["150,120,200", "200,170,240"],
+  idle: ["200,170,120", "230,210,170"],
+} as const;
+
+export function Aurora({ speaker }: { speaker: Speaker }) {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const c = canvas.current;
+    const g = c?.getContext("2d");
+    if (!c || !g) return;
+    const still = reducedMotion();
+    const [deep, light] = AURORA[speaker];
+    const sparks: Array<{ x: number; y: number; v: number; r: number; life: number }> = [];
+    let smooth = 0;
+    let raf = 0;
+    const draw = (t: number) => {
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const w = c.clientWidth;
+      const h = c.clientHeight;
+      if (c.width !== Math.round(w * dpr)) c.width = Math.round(w * dpr);
+      if (c.height !== Math.round(h * dpr)) c.height = Math.round(h * dpr);
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      g.clearRect(0, 0, w, h);
+      const lv = still
+        ? { input: 0.35, output: 0.35 }
+        : (sonicLevels() ?? getVoice().levels?.() ?? { input: 0, output: 0 });
+      const raw =
+        speaker === "you"
+          ? lv.input
+          : speaker === "aic"
+            ? lv.output
+            : speaker === "thinking"
+              ? 0.18 + 0.1 * Math.sin(t / 600)
+              : 0.06;
+      smooth += (Math.min(1, raw * 1.6) - smooth) * 0.18;
+      const base = h * 0.62; // where the message box's top edge sits in this canvas
+      const veil = (amp: number, speed: number, freq: number, alpha: number, color: string) => {
+        const crest = base - (24 + amp * h * 0.42);
+        const grad = g.createLinearGradient(0, crest - 30, 0, base + 20);
+        grad.addColorStop(0, `rgba(${color},0)`);
+        grad.addColorStop(0.45, `rgba(${color},${alpha * 0.55})`);
+        grad.addColorStop(1, `rgba(${color},${alpha})`);
+        g.fillStyle = grad;
+        g.beginPath();
+        g.moveTo(0, h);
+        for (let x = 0; x <= w; x += 8) {
+          const u = x / w;
+          const bell = Math.sin(Math.PI * u) ** 1.4; // tallest in the middle, flat at the sides
+          const ripple = still
+            ? 0
+            : Math.sin(u * Math.PI * freq + t / speed) * 0.35 + Math.sin(u * 13 - t / (speed * 1.7)) * 0.15;
+          g.lineTo(x, base - (base - crest) * bell * (0.75 + ripple * (0.4 + amp)));
+        }
+        g.lineTo(w, h);
+        g.closePath();
+        g.fill();
+      };
+      g.filter = "blur(18px)";
+      veil(smooth * 0.8, 900, 3, 0.35, light);
+      veil(smooth, 520, 5, 0.55, deep);
+      g.filter = "none";
+      // Sparks: born at the crest when the voice is loud, drifting up and fading.
+      if (!still && smooth > 0.25 && Math.random() < smooth * 0.6)
+        sparks.push({
+          x: w * (0.2 + Math.random() * 0.6),
+          y: base - 20,
+          v: 0.4 + Math.random() * 1.2,
+          r: 1 + Math.random() * 2,
+          life: 1,
+        });
+      for (let i = sparks.length - 1; i >= 0; i--) {
+        const s = sparks[i]!;
+        s.y -= s.v;
+        s.life -= 0.012;
+        if (s.life <= 0) {
+          sparks.splice(i, 1);
+          continue;
+        }
+        g.fillStyle = `rgba(${light},${s.life * 0.9})`;
+        g.beginPath();
+        g.arc(s.x + Math.sin((t + i * 97) / 300) * 4, s.y, s.r, 0, Math.PI * 2);
+        g.fill();
+      }
+      if (!still) raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, [speaker]);
+  return <canvas ref={canvas} className="aurora" aria-hidden="true" data-speaker={speaker} />;
 }
