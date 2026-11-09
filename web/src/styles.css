@@ -44,8 +44,10 @@
     rgba(232, 163, 61, 0.96)
   ); /* primary buttons, on-states, the logo */
   --accent-ink: #2a1a08; /* text and icons on the accent */
-  --wm-ai-top: #ffd98a; /* the "AI" in the VAIC logo */
-  --wm-ai-bottom: #e8a33d;
+  --wm-pink: #ff3ea5; /* the VAIC logo's neon */
+  --wm-cyan: #2fe6ff;
+  --wm-core: rgba(255, 255, 255, 0.85);
+  --wm-halo: 0.9;
   --accent-edge: rgba(255, 255, 255, 0.3);
   --accent-shadow: none; /* the owner's call, 2026-11-09: flat, no glow around accent buttons */
   --btn-radius: 999px;
@@ -207,14 +209,13 @@ textarea {
   min-height: var(--tap);
   padding: 0 var(--s1);
 }
-/* the VAIC logo (decision 159): a striped sunset with a skyline, then VAIC drawn as lines with an amber "ΛI" */
+/* the VAIC logo (decision 161): a sunset with a palm, then VAIC as a leaning neon sign: pink V and C, cyan "ΛI" */
 .wordmark {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   line-height: 1;
   white-space: nowrap;
-  color: var(--gtext);
 }
 .wm-mark,
 .wm-word {
@@ -222,11 +223,17 @@ textarea {
   flex: none;
   overflow: visible;
 }
-.wm-ai-top {
-  stop-color: var(--wm-ai-top);
+.wm-pink {
+  stroke: var(--wm-pink);
 }
-.wm-ai-bottom {
-  stop-color: var(--wm-ai-bottom);
+.wm-cyan {
+  stroke: var(--wm-cyan);
+}
+.wm-halo {
+  opacity: var(--wm-halo);
+}
+.wm-core {
+  stroke: var(--wm-core);
 }
 .top nav {
   display: flex;
@@ -3490,8 +3497,10 @@ summary,
 /* Light appearance (Settings → General → Appearance): the same glass over a daytime sky, ink text. The City scene
    keeps its own parchment palette in both. */
 :root[data-theme="light"] {
-  --wm-ai-top: #e8a33d; /* deeper on the light ground, so it reads */
-  --wm-ai-bottom: #a8661a;
+  --wm-pink: #e0168a; /* the logo's neon, deeper on the light ground so it reads */
+  --wm-cyan: #0a9fc2;
+  --wm-core: transparent;
+  --wm-halo: 0.45;
   --link: #7a4a00;
   --panel: rgba(255, 255, 255, 0.92);
   --savebar: rgba(240, 242, 250, 0.92);
