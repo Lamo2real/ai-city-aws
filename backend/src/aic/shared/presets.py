@@ -125,10 +125,13 @@ def public_presets() -> dict[str, Any]:
     }
 
 
-def orchestrator_note() -> str:
-    """One line per preset for the Orchestrator's context."""
+def orchestrator_note(demolished: set[str] | None = None) -> str:
+    """One line per preset for the Orchestrator's context (minus the ones the owner demolished, by key)."""
+    gone = demolished or set()
     lines = [
-        f"- {p['name']}: {p['mission']} Teams: {', '.join(t['name'] for t in p.get('teams') or [])}." for p in presets()
+        f"- {p['name']}: {p['mission']} Teams: {', '.join(t['name'] for t in p.get('teams') or [])}."
+        for p in presets()
+        if department_key(p["name"]) not in gone
     ]
     return (
         "Pre-configured departments (create them with exactly these names when the work fits; they come with "
@@ -141,7 +144,8 @@ async def ensure_presets(ledger: Any) -> list[str]:
     created, in the presets' order, so their towers stand in the City before any work arrives (and again after a
     Start over). Their managers are hired with the first goal (`ensure_manager` in the city tools), so an idle city
     shows empty towers, not a crowd of idle managers. Returns the names it created."""
-    have = {department_key(str(x.get("name", ""))) for x in await ledger.list_departments()}
+    # A preset the owner demolished stays demolished (decision 134): its record is still there.
+    have = {department_key(str(x.get("name", ""))) for x in await ledger.list_departments(include_demolished=True)}
     made = []
     for p in presets():
         if department_key(p["name"]) in have:

@@ -159,6 +159,8 @@ function storyOf(event, s) {
       return { key: "cap", one: "The spending limit was reached; new work waits" };
     case "department.created":
       return { key: `dept:${event.name}`, one: `New department: ${event.name}` };
+    case "department.demolished":
+      return { key: `demolished:${event.name}`, one: `${event.name} was demolished` };
     case "tickets.parked":
       return { key: "parked", one: `${event.ids?.length ?? 0} old jobs were put aside for you` };
     case "turn.failed":
@@ -306,8 +308,17 @@ function reduceEvent(state, event, now) {
     case "colleague.answer":
       return { ...state, now, feed: feed(state, event.answered_by === "ledger" ? `${event.from} got ${event.to}'s record, not an answer` : `${event.to} answers ${event.from}: ${event.answer.slice(0, 60)}`, "worker", now) };
     case "department.created": {
-      if (state.departments[event.name]) return state;
-      return { ...state, now, departments: { ...state.departments, [event.name]: { name: event.name, mission: event.mission, manager_id: event.manager_id, state: "active", builtAt: now } }, feed: feed(state, `Department ${event.name} created`, "department", now) };
+      const was = state.departments[event.name];
+      if (was && was.state !== "demolished") return state;
+      // A rebuilt department goes back up on its old lot; a new one takes the next free lot.
+      return { ...state, now, departments: { ...state.departments, [event.name]: { name: event.name, mission: event.mission, manager_id: event.manager_id, state: "active", worker_model: event.worker_model ?? null, builtAt: was?.builtAt ?? now, rebuiltAt: now } }, feed: feed(state, `Department ${event.name} created`, "department", now) };
+    }
+    case "department.demolished": {
+      // The record stays until the next snapshot so the lot keeps its place and the towers beside it don't move
+      // (decision 134); the scene plays the demolition over it.
+      const was = state.departments[event.name];
+      if (!was || was.state === "demolished") return state;
+      return { ...state, now, departments: { ...state.departments, [event.name]: { ...was, state: "demolished", demolishedAt: now } }, feed: feed(state, `Department ${event.name} demolished`, "department", now) };
     }
     case "department.updated": {
       const d = event.department;
@@ -352,6 +363,8 @@ export function agentStatus(state, id, now = state.now) {
 }
 
 export const departmentNames = (state) => Object.values(state.departments).sort((a, b) => a.builtAt - b.builtAt).map((d) => d.name);
+// The towers standing (a demolished one keeps its lot until the next snapshot, but it is not a department any more).
+export const standingDepartments = (state) => departmentNames(state).filter((n) => state.departments[n]?.state !== "demolished");
 
 // ---------- Where each agent is. The whole game follows from these few rules. ----------
 const hasOpenWork = (state, id) => Object.values(state.tickets).some((t) => t.to === id || t.from === id);
@@ -508,6 +521,7 @@ export function layout(state, { portrait = false, seats = {}, houses = 0 } = {})
       const name = names[r * cols + c], x = originX + c * (PLOT_W + STREET);
       if (!name) { lots.push({ x, y, w: PLOT_W, h }); continue; }
       const reg = state.departments[name];
+      if (reg?.state === "demolished" && !seats[name]) { lots.push({ x, y, w: PLOT_W, h, demolished: name }); continue; }
       buildings.push({ dept: name, slot: r * cols + c, x, y, w: PLOT_W, h, color: deptColor(name), builtAt: reg?.builtAt ?? 0, archived: reg?.state === "archived" && !seats[name] });
     }
     y += h;
@@ -589,7 +603,7 @@ export const staggerMs = (i) => i * 350;
 // What the map should say when it has nothing to show. Null when people and offices speak for themselves.
 export function cityMessage(state) {
   const others = Object.keys(state.agents).filter((id) => !CORE.has(id));
-  if (!departmentNames(state).length) return "No departments yet. An office goes up the moment a prompt needs one.";
+  if (!standingDepartments(state).length) return "No departments yet. An office goes up the moment a prompt needs one.";
   if (!others.some((id) => placement(state, id).place === "station")) return "Nobody is at a desk right now. Everyone is home or at HQ.";
   return null;
 }
@@ -808,4 +822,80 @@ function traceText(e) {
     case "turn.failed": return `${e.agent || "A turn"} failed${e.retrying ? ", retrying" : ""}: ${e.error}`;
     default: return e.type;
   }
+}
+
+// ---------- Departments on demand, taxis and the mailman (decision 134) ----------
+
+// How long each building animation runs, in ms.
+export const ANIM_MS = { rise: 900, build: 3200, demolish: 2600 };
+export const RISE_STAGGER_MS = 110;
+// Where a building animation is: 0 … 1 (clamped), from its start and its kind.
+export const animProgress = (anim, now) => Math.max(0, Math.min(1, (now - anim.start) / (anim.dur ?? ANIM_MS[anim.kind] ?? 1000)));
+// The page-load entrance: every tower rises in turn, left to right and front to back (its slot order).
+export function entranceAnims(buildings, start) {
+  return [...buildings].filter((b) => !b.archived).sort((a, b) => a.slot - b.slot).map((b, i) => ({ dept: b.dept, kind: "rise", start: start + i * RISE_STAGGER_MS, dur: ANIM_MS.rise }));
+}
+// How far a tower stands out of the ground (0 … 1) at progress k: rising overshoots a little and settles; building
+// stacks floors from the street up; demolition shakes, then sinks into its dust.
+export function standFraction(kind, k) {
+  if (kind === "rise") { const e = 1 - (1 - k) ** 3; return Math.min(1.04, e * 1.04) - (k > 0.85 ? (k - 0.85) * 0.27 : 0); }
+  if (kind === "build") return k < 0.08 ? 0 : Math.min(1, (k - 0.08) / 0.84);
+  if (kind === "demolish") return k < 0.3 ? 1 : Math.max(0, 1 - ((k - 0.3) / 0.62) ** 1.6);
+  return 1;
+}
+
+// The mailman (the owner's picture, 2026-11-09): an instruction from the Orchestrator to a manager is a letter he
+// cycles over to that department's tower; a manager's reply rides back to the Orchestrator the same way.
+// Null for every other event.
+export function mailFor(event, state) {
+  if (event.type !== "ticket.status") return null;
+  const t = event.ticket, dept = t.department;
+  if (!dept || !state?.departments?.[dept]) return null;
+  if (event.previous === null && t.from === "orchestrator" && t.to && t.to !== "orchestrator") return { dept, dir: "out", ticket: t.id };
+  if (t.from === "orchestrator" && (t.status === "done" || t.status === "failed") && event.previous !== t.status) return { dept, dir: "back", ticket: t.id };
+  return null;
+}
+// The letters waiting for the one mailman: a new one joins the queue; a burst to the same tower in the same
+// direction rides as one bundle (its count goes up) so a busy morning never becomes a parade.
+export const MAIL_QUEUE_MAX = 8;
+export function enqueueMail(queue, mail) {
+  const same = queue.find((m) => m.dept === mail.dept && m.dir === mail.dir);
+  if (same) return queue.map((m) => (m === same ? { ...m, letters: (m.letters ?? 1) + 1 } : m));
+  return [...queue, { ...mail, letters: 1 }].slice(-MAIL_QUEUE_MAX);
+}
+// The bicycle rides the same streets the people walk, quicker, never longer than about four seconds a leg.
+export const BIKE_PX_S = 70, BIKE_LEG_MS = 4000;
+export function bikeSpeed(route, from) {
+  let len = 0, at = from;
+  for (const p of route) { len += Math.hypot(p.x - at.x, p.y - at.y); at = p; }
+  return Math.max(BIKE_PX_S, len / (BIKE_LEG_MS / 1000));
+}
+
+// Yellow cabs. Each street has two lanes: westbound above the centre line, eastbound below it.
+export function streetLanes(world) {
+  return world.streets.map((s) => ({ y0: (s.y * TILE) + 17, y1: (s.y * TILE) + 33, x0: s.x0 * TILE, x1: s.x1 * TILE })).filter((l) => l.x1 - l.x0 > 4 * TILE);
+}
+// The cabs cruising on their own: a few per street, by the clock alone, so a slow frame never bunches them up.
+export const CAB_PX_S = 34, CABS_PER_STREET = 2;
+export function trafficAt(world, now) {
+  const out = [];
+  streetLanes(world).forEach((l, i) => {
+    const span = l.x1 - l.x0 + 40;
+    for (let k = 0; k < CABS_PER_STREET; k++) {
+      const east = (i + k) % 2 === 0, speed = CAB_PX_S * (0.8 + ((hashOf(`cab${i}:${k}`) % 40) / 100));
+      const d = ((now / 1000) * speed + (hashOf(`cab${i}:${k}`) % span) + k * (span / CABS_PER_STREET)) % span;
+      out.push({ x: east ? l.x0 - 20 + d : l.x1 + 20 - d, y: east ? l.y1 : l.y0, east, id: `cab${i}:${k}` });
+    }
+  });
+  return out;
+}
+// A commute by cab: which legs of a route are ridden. A leg is ridden when it runs along a street or the avenue,
+// from the first kerb a cab can reach to the kerb in front of the tower; the path between the houses (grass, no
+// cabs) and the steps through the doors stay a walk.
+export function rideLegs(world, route, from) {
+  const lanes = new Set(world.streets.map((s) => (s.y + STREET / 2) * TILE));
+  const ax = (world.avenue + STREET / 2) * TILE;
+  const onRoad = (p) => lanes.has(p.y) || p.x === ax;
+  let prev = from;
+  return route.map((p) => { const ride = onRoad(prev) && onRoad(p) && (p.x !== prev.x || p.y !== prev.y); prev = p; return ride; });
 }

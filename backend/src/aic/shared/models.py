@@ -49,21 +49,38 @@ def _resolve_name(name: str, prefix: str, cfg: Mapping[str, Any], app_arn: str |
     return ResolvedModel(name=name, label=m["label"], profile_id=profile_id, invoke_id=app_arn or profile_id)
 
 
+WORKER_MODELS = ("opus-5-5", "fable-5-1")
+"""What the owner may pick for a department's workers (decision 134): Opus 5.5 unless they say Fable 5.1."""
+
+
 def department_override(
-    role: str, department: str | None, config: Mapping[str, Any] | None = None
+    role: str,
+    department: str | None,
+    config: Mapping[str, Any] | None = None,
+    dept: Mapping[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """The model an agent of ``role`` in ``department`` uses instead of its role's (``departmentModels``, decision
-    129: Fable for the workers of Media, Research and Legal); None for every other department and role."""
-    dm = (config or models_config()).get("departmentModels") or {}
+    129: Fable for the workers of Media, Research and Legal); None for every other department and role.
+
+    ``dept`` is the department's ledger record: a department the owner built on demand carries its own
+    ``worker_model`` (decision 134), which wins over the config for its workers."""
+    cfg = config or models_config()
+    dm = cfg.get("departmentModels") or {}
+    own = str((dept or {}).get("worker_model") or "")
+    if role == "worker" and own in WORKER_MODELS:
+        default = cfg["roles"]["worker"]
+        if own == default["model"]:
+            return None
+        return {"model": own, "fallback": dm.get("fallback") if own == dm.get("model") else default["model"]}
     if role not in (dm.get("roles") or ("manager", "worker")) or not department:
         return None
     names = {str(n).strip().lower() for n in dm.get("departments") or []}
     return dict(dm) if department.strip().lower() in names and dm.get("model") else None
 
 
-def model_name_for(role: str, department: str | None = None) -> str:
+def model_name_for(role: str, department: str | None = None, dept: Mapping[str, Any] | None = None) -> str:
     """The plain model name an agent of ``role`` in ``department`` runs on (what the ledger and the City show)."""
-    o = department_override(role, department)
+    o = department_override(role, department, dept=dept)
     return str(o["model"]) if o else str(models_config()["roles"][role]["model"])
 
 
@@ -73,6 +90,7 @@ def resolve_role(
     application_profiles: Mapping[str, str] | None = None,
     config: Mapping[str, Any] | None = None,
     department: str | None = None,
+    dept: Mapping[str, Any] | None = None,
 ) -> RoleModels:
     cfg = config or models_config()
     pfx = prefix or cfg["profilePrefix"]
@@ -80,7 +98,7 @@ def resolve_role(
     if not r:
         raise ValueError(f"unknown role: {role}")
     app_arn = (application_profiles or {}).get(role)
-    o = department_override(role, department, cfg)
+    o = department_override(role, department, cfg, dept)
     if o:
         # The role's application profile copies the role's own model, so a department's model goes through its
         # system profile (its cost is still split by the runtime's AgentRole tag).
@@ -97,13 +115,18 @@ def resolve_role(
 
 
 def resolve_role_from_env(
-    role: Role, env: Mapping[str, str] | None = None, department: str | None = None
+    role: Role,
+    env: Mapping[str, str] | None = None,
+    department: str | None = None,
+    dept: Mapping[str, Any] | None = None,
 ) -> RoleModels:
     """Environment-driven resolution used inside Lambdas and the runtime container."""
     e = os.environ if env is None else env
     prefix = cast(ProfilePrefix | None, e.get("AIC_PROFILE_PREFIX") or None)
     arn = e.get(f"AIC_APP_PROFILE_{role.upper()}")
-    return resolve_role(role, prefix=prefix, application_profiles={role: arn} if arn else {}, department=department)
+    return resolve_role(
+        role, prefix=prefix, application_profiles={role: arn} if arn else {}, department=department, dept=dept
+    )
 
 
 def model_label(name: str) -> str:

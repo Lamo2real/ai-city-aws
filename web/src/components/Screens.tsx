@@ -9,6 +9,7 @@ import { GitHubSettings } from "./GitHubSettings.tsx";
 import { useEffect, useState } from "react";
 import { COST_NOTE, plainText, ticketWords } from "../city/city-state.js";
 import { saveSettings } from "../lib/actions.ts";
+import { YourDepartments } from "./Departments.tsx";
 import { api, ApiError } from "../lib/api.ts";
 import { ago, money, spendLevel } from "../lib/format.ts";
 import { store } from "../lib/store.ts";
@@ -380,7 +381,7 @@ export const SETTINGS_PAGES = [
   {
     id: "departments",
     title: "Departments & tools",
-    about: "The setup guide and each department's tools: switch on, sign in",
+    about: "Build or demolish a department, the setup guide, and each department's tools",
   },
   {
     id: "connectors",
@@ -580,7 +581,12 @@ function SettingsPageView({
         </>
       ) : null}
       {page === "away" ? <AwaySettings /> : null}
-      {page === "departments" ? <ConnectorsSettings part="departments" /> : null}
+      {page === "departments" ? (
+        <>
+          <YourDepartments />
+          <ConnectorsSettings part="departments" />
+        </>
+      ) : null}
       {page === "connectors" ? (
         <ConnectorsSettings
           part="connectors"

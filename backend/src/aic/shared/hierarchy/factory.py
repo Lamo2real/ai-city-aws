@@ -111,7 +111,7 @@ class Factory:
             "role": spec.specialty,
             "specialty": spec.specialty,
             "department": dept["name"],
-            "model": model_name_for("worker", dept["name"]),
+            "model": model_name_for("worker", dept["name"], dept),
             "parent": manager_id,
             "state": "active",
             "worker_state": "hired",

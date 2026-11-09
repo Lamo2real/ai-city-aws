@@ -43,6 +43,7 @@ from aic.shared.config import caps_config
 from aic.shared.events import EventBus, now_iso
 from aic.shared.github import GitHubDeps, GitHubError, github_token_secret, whoami
 from aic.shared.hierarchy.actions import CityDeps, answer_question, send_home, send_workers_home, sweep_stale_asks
+from aic.shared.hierarchy.departments import DepartmentError, build_department, demolish_department, find_standing
 from aic.shared.hierarchy.factory import Factory
 from aic.shared.hierarchy.queue import Queue, WorkMessage
 from aic.shared.hierarchy.tasks import DONE_OR_GONE, cancel_task, job_rows
@@ -94,6 +95,8 @@ ROUTES: list[tuple[str, str]] = [
     ("GET", "/tickets/t-1"),
     ("GET", "/jobs"),
     ("GET", "/departments"),
+    ("POST", "/departments"),
+    ("DELETE", "/departments/customer-success"),
     ("GET", "/departments/presets"),
     ("GET", "/agents"),
     ("GET", "/workforce"),
@@ -792,6 +795,27 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         return reply(200, public_presets())
     if is_("GET", r"/departments"):
         return reply(200, {"departments": await d.ledger.list_departments()})
+    if is_("POST", r"/departments"):
+        # The owner builds a department (City "+ Build", Settings): the same path as asking AIC (decision 134).
+        b = _body(event)
+        try:
+            dept, outcome = await build_department(
+                _action_deps(d), b.get("name"), b.get("mission"), b.get("worker_model")
+            )
+        except DepartmentError as e:
+            return problem(400, str(e))
+        if outcome == "exists":
+            return problem(409, f"{dept['name']} is already standing.", "Pick another name.")
+        return reply(201, {"department": dept, "outcome": outcome})
+    if is_("DELETE", r"/departments/[\w-]+"):
+        # The owner demolishes a department (City or Settings, after an inline "Demolish …?" with Yes / Keep).
+        if _body(event).get("confirm") is not True:
+            return problem(400, "Nothing was demolished.", "Confirm the demolition first.")
+        try:
+            dept = await find_standing(_action_deps(d), seg[1])
+        except DepartmentError as e:
+            return problem(404, str(e))
+        return reply(200, await demolish_department(_action_deps(d), dept))
     if is_("GET", r"/agents"):
         return reply(200, {"agents": await d.ledger.list_agents()})
     if is_("GET", r"/workforce"):

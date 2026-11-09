@@ -51,6 +51,14 @@ from aic.shared.hierarchy.actions import (
     status_summary,
     workers_at_work,
 )
+from aic.shared.hierarchy.departments import (
+    DepartmentError,
+    build_department,
+    demolish_department,
+    demolition_plan,
+    find_standing,
+    preset_named,
+)
 from aic.shared.hierarchy.factory import WORKER_TOOLS, worker_spec
 from aic.shared.hierarchy.tasks import (
     cancel_preview,
@@ -65,7 +73,7 @@ from aic.shared.knowledge.model import SCOPES
 from aic.shared.knowledge.search import search
 from aic.shared.knowledge.service import KnowledgeError
 from aic.shared.log import log
-from aic.shared.models import model_name_for
+from aic.shared.models import model_label, model_name_for
 from aic.shared.policy import decide, gate
 from aic.shared.presets import preset_for
 from aic.shared.utility import UtilityDeps, about_ai_city, triage
@@ -519,7 +527,70 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             + (f" {r['failed']} could not be released." if r["failed"] else "")
         )
 
+    async def build(a: dict[str, Any]) -> str:
+        try:
+            dept, outcome = await build_department(d, a.get("name"), a.get("mission"), a.get("worker_model"))
+        except DepartmentError as e:
+            return f"Not built: {e}"
+        workers = model_label(model_name_for("worker", dept["name"], dept))
+        if outcome == "exists":
+            return f"{dept['name']} is already standing; nothing changed. Its workers run on {workers}."
+        return (
+            f"{'Rebuilt' if outcome == 'rebuilt' else 'Built'} {dept['name']}: the tower is going up in the City. "
+            f"Its manager runs on Claude Fable 5.1 and is hired with its first job; its workers run on {workers}."
+        )
+
+    async def demolish(a: dict[str, Any]) -> str:
+        try:
+            dept = await find_standing(d, a.get("name"))
+        except DepartmentError as e:
+            return str(e)
+        if not a.get("confirm"):
+            plan = await demolition_plan(d, dept)
+            nw, np_ = len(plan["workers"]), len(plan["parts"])
+            return (
+                f"Demolish {dept['name']}? "
+                + (
+                    f"{nw} worker{'s' if nw != 1 else ''} go home and {np_} unfinished part{'s' if np_ != 1 else ''} "
+                    "go back to the Orchestrator. "
+                    if nw or np_
+                    else "Nobody is working there. "
+                )
+                + "Its history stays; it can be built again later. (Ask the owner; call again with confirm=true on "
+                "a clear yes.)"
+            )
+        r = await demolish_department(d, dept)
+        return (
+            f"Demolished {r['name']}: {r['workers']} worker{'s' if r['workers'] != 1 else ''} went home, "
+            f"{r['parts']} unfinished part{'s' if r['parts'] != 1 else ''} went back to the Orchestrator."
+        )
+
     return [
+        ToolSpec(
+            "build_department",
+            "Build a new department now, when the owner asks for one ('make a Customer Success department'). "
+            "name: its name; mission: one sentence on what it does (from the owner's words, or a sensible one). "
+            "Its manager runs on Fable 5.1 like every manager. worker_model: leave it out (workers run on Opus "
+            "5.5) unless the owner explicitly asked for Fable workers in it, then 'fable-5-1'. No confirmation "
+            "needed: building is what they asked for.",
+            _obj(
+                {
+                    "name": _s(2, 60),
+                    "mission": _s(0, 400),
+                    "worker_model": {"type": "string", "enum": ["opus-5-5", "fable-5-1"]},
+                },
+                ("mission", "worker_model"),
+            ),
+            build,
+        ),
+        ToolSpec(
+            "demolish_department",
+            "Demolish a department the owner names: its workers go home, its unfinished parts go back to the "
+            "Orchestrator, its manager retires, its history stays. First call with confirm=false to get the "
+            "one-line question to ask the owner; on their clear yes, call again with confirm=true.",
+            _obj({"name": _s(2, 60), "confirm": {"type": "boolean"}}, ("confirm",)),
+            demolish,
+        ),
         ToolSpec(
             "send_home",
             "Send some workers home now, the ones the owner names: who = a worker id (wkr-…), a department name "
@@ -685,7 +756,7 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         # The ceiling counts only departments beyond the presets (those exist from the start).
         dept_cap = int((await d.settings()).get("max_departments") or 6)
         existing = await d.ledger.list_departments()
-        extra = [x for x in existing if not preset_for(str(x.get("name", "")))]
+        extra = [x for x in existing if not preset_named(str(x.get("name", "")))]
         known = any(department_key(str(x.get("name", ""))) == department_key(name) for x in existing)
         if not preset and not known and len(extra) >= dept_cap:
             log("info", "department.refused", name=name, departments=len(extra), cap=dept_cap)
@@ -694,6 +765,12 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 f"(the ceiling is {dept_cap}). Use one of them: "
                 + ", ".join(str(x.get("name", "")) for x in existing)
                 + "."
+            )
+        gone = await d.ledger.get_department(name)
+        if gone and gone.get("state") == "demolished":  # decision 134: only the owner builds it again
+            return (
+                f"Refused: the owner demolished {gone['name']}. Use one of the standing departments, or tell AIC "
+                "that the owner would have to build it again."
             )
         dept, created = await d.ledger.create_department(name, str(a["mission"]), manager_id(name))
         if created:  # the building first, then its manager
@@ -717,6 +794,8 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             a = {**a, "department": preset["name"]}
         if not dept:
             return f"There is no department called {a['department']}. Create it first."
+        if dept.get("state") == "demolished":
+            return f"The owner demolished {dept['name']}. Use another standing department, or report what is left."
         await ensure_manager(dept)
         if dept.get("stood_down_at"):
             await d.ledger.stand_down_department(dept["name"], down=False)  # a new job from the owner lifts it

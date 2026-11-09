@@ -114,6 +114,18 @@ class DepartmentCreated(_E):
     name: str
     mission: str
     manager_id: str
+    worker_model: str | None = None
+    """Set when the owner chose the workers' model for a department they built (decision 134)."""
+
+
+class DepartmentDemolished(_E):
+    """The owner demolished a department (decision 134): its workers went home, its open parts were cancelled
+    and handed back to the Orchestrator; the City plays the demolition and the lot stands empty."""
+
+    type: Literal["department.demolished"]
+    name: str
+    workers: int = 0
+    parts: int = 0
 
 
 class QuestionAsked(_E):
@@ -372,6 +384,7 @@ CityEventModel = Annotated[
     | Activity
     | TicketStatusEvent
     | DepartmentCreated
+    | DepartmentDemolished
     | QuestionAsked
     | QuestionAnswered
     | QuestionWithdrawn

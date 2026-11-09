@@ -176,8 +176,14 @@ class AgentHost:
                     inv = {**inv, "body": inv["body"] + "\n\n[Saved to the owner's knowledge base as a CSV: "
                            + "; ".join(f"“{t}”" for t in saved) + "]"}  # fmt: skip
             prompt = await self._prompt(agent, inv)
+            # A department built on demand may carry its own worker model (decision 134).
+            own_dept = (
+                await ledger.get_department(str(agent["department"]))
+                if inv["role"] == "worker" and agent.get("department")
+                else None
+            )
             models = resolve_role_from_env(
-                inv["role"], self.o.env if self.o.env is not None else os.environ, agent.get("department")
+                inv["role"], self.o.env if self.o.env is not None else os.environ, agent.get("department"), own_dept
             )
             if agent.get("model") and agent["model"] != models.primary.name and inv["role"] in ("manager", "worker"):
                 # The City shows what the agent really runs on (the model rules changed, decision 129).
@@ -434,9 +440,16 @@ class AgentHost:
             lines.append(f"Task {inv['taskId']}: {task.get('goal', '')} [{task.get('status', '?')}]")
             if task.get("brief"):
                 lines.append(brief_note(str(task["brief"])) + "\nPass it on whole in every assignment.")
-            names = ", ".join(d["name"] for d in await ledger.list_departments()) or "none yet"
+            every = await ledger.list_departments(include_demolished=True)
+            names = ", ".join(d["name"] for d in every if d.get("state") != "demolished") or "none yet"
             lines.append(f"Departments: {names}")
-            lines.append(orchestrator_note())
+            gone = [d for d in every if d.get("state") == "demolished"]
+            if gone:  # decision 134: the owner's demolition stands until the owner builds it again
+                lines.append(
+                    "Demolished by the owner (never use or create these; only the owner can build them again): "
+                    + ", ".join(d["name"] for d in gone)
+                )
+            lines.append(orchestrator_note({str(d.get("key")) for d in gone}))
             for k in await ledger.child_tickets(inv["taskId"]):
                 if k.get("kind") == "assignment":
                     lines.append(f"- {k.get('department')}: {k['id']} [{k['status']}]")

@@ -79,7 +79,7 @@
     }
   },
   "departmentModels": {
-    "$comment": "The owner's rules (2026-11-09, decision 129): Claude Fable 5.1 for the Orchestrator and every Department Manager (roles above), and for the workers of the Media, Research and Legal departments (here); the Chief of Staff is on Fable too; every other worker uses Opus 5.5. Department names as in config/departments.json.",
+    "$comment": "The owner's rules (2026-11-09, decision 129): Claude Fable 5.1 for the Orchestrator and every Department Manager (roles above), and for the workers of the Media, Research and Legal departments (here); the Chief of Staff is on Fable too; every other worker uses Opus 5.5. Department names as in config/departments.json. A department the owner builds on demand carries its own worker_model on its ledger record (opus-5-5 unless the owner explicitly asks for fable-5-1, decision 134), which wins for its workers.",
     "roles": [
       "worker"
     ],

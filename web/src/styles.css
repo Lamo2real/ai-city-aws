@@ -5378,3 +5378,24 @@ button.hub-status {
 .pl-closed {
   margin-top: var(--s4);
 }
+
+/* ---------- Departments on demand (decision 134) ---------- */
+.checkrow {
+  display: flex;
+  gap: var(--s2);
+  align-items: center;
+  min-height: var(--tap);
+  cursor: pointer;
+}
+.checkrow input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent, #ffd84a);
+}
+.builddept .field {
+  margin: 0;
+}
+.yourdepts .recent li {
+  display: grid;
+  gap: var(--s2);
+}

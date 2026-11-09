@@ -237,6 +237,7 @@ export async function mockBackend(
 ): Promise<Mock> {
   // Events sent before the page's WebSocket connects are held and delivered on connect.
   const pending: Array<Record<string, unknown>> = [];
+  const built: string[] = []; // departments built through POST /departments, so DELETE can find them
   const m: Mock = {
     calls: [],
     ws: () => {
@@ -560,8 +561,7 @@ export async function mockBackend(
     }
     if (path === "/devices" && req.method() === "GET") return ok({ devices: [] });
     if (path === "/settings" && req.method() === "GET") return ok({ settings: m.settings });
-    if (path.startsWith("/away-summary"))
-      return m.away ? ok(m.away) : ok({ error: "There is nothing here." }, 404);
+    if (path.startsWith("/away-summary")) return m.away ? ok(m.away) : ok({ error: "There is nothing here." }, 404);
     if (path === "/standing-orders" && req.method() === "GET")
       return m.orders ? ok({ standing_orders: m.orders }) : ok({ error: "There is nothing here." }, 404);
     if (/^\/standing-orders\/[\w-]+$/.test(path) && m.orders) {
@@ -575,8 +575,7 @@ export async function mockBackend(
       Object.assign(o, body);
       return ok({ standing_order: o });
     }
-    if (path === "/chief-of-staff")
-      return m.chief ? ok(m.chief) : ok({ error: "There is nothing here." }, 404);
+    if (path === "/chief-of-staff") return m.chief ? ok(m.chief) : ok({ error: "There is nothing here." }, 404);
     if (path === "/settings" && req.method() === "PUT") {
       Object.assign(m.settings, body);
       if (m.chief && typeof body?.chief_of_staff_enabled === "boolean") m.chief.enabled = body.chief_of_staff_enabled;
@@ -771,6 +770,40 @@ export async function mockBackend(
     const method = req.method();
     if (path === "/connectors" && method === "GET") return ok({ connectors: m.connectors });
     if (path === "/departments/presets") return ok(PRESETS);
+    // Departments on demand (decision 134): the server answers and tells the city, as the real one does.
+    if (path === "/departments" && method === "POST") {
+      const b = (body ?? {}) as { name?: string; mission?: string; worker_model?: string };
+      const name = String(b.name ?? "").trim();
+      if (name.length < 2) return ok({ error: "A department needs a name." }, 400);
+      const key = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      const department = {
+        key,
+        name,
+        mission: b.mission || `Everything the business needs from ${name}.`,
+        manager_id: `mgr-${key}`,
+        state: "active",
+        ...(b.worker_model ? { worker_model: b.worker_model } : {}),
+      };
+      built.push(name);
+      m.send({
+        type: "department.created",
+        name,
+        mission: department.mission,
+        manager_id: department.manager_id,
+        ...(b.worker_model ? { worker_model: b.worker_model } : {}),
+      });
+      return ok({ department, outcome: "created" }, 201);
+    }
+    if (/^\/departments\/[\w-]+$/.test(path) && method === "DELETE") {
+      const key = path.split("/")[2];
+      const city = m.snapshot as { departments?: Array<{ name: string }> };
+      const name =
+        (city.departments ?? []).find((d) => d.name.toLowerCase().replace(/[^a-z0-9]+/g, "-") === key)?.name ??
+        built.find((n) => n.toLowerCase().replace(/[^a-z0-9]+/g, "-") === key);
+      if (!name) return ok({ error: "There is no standing department called that." }, 404);
+      m.send({ type: "department.demolished", name, workers: 0, parts: 0 });
+      return ok({ name, workers: 0, parts: 0, jobs: 0 });
+    }
     if (path === "/connectors" && method === "POST") {
       // Added by link or by a department's switch: a service that needs the owner's account asks to sign in.
       const b = body as { url: string; label?: string };

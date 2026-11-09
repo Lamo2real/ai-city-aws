@@ -93,7 +93,17 @@ export interface CityState {
   parked: Record<string, CityTicket>;
   questions: Record<string, CityQuestion>;
   approvals: Record<string, CityApproval>;
-  departments: Record<string, { name: string; mission?: string; manager_id?: string; state?: string; builtAt: number }>;
+  departments: Record<
+    string,
+    {
+      name: string;
+      mission?: string;
+      manager_id?: string;
+      state?: string;
+      worker_model?: string | null;
+      builtAt: number;
+    }
+  >;
   usage: { usd: number; turns: number; tokens: number } | null;
   spend: Record<string, number>;
   caps: {
@@ -117,6 +127,8 @@ export function initialState(now?: number): CityState;
 export function applySnapshot(state: CityState, snap: unknown, now?: number): CityState;
 export function reduce(state: CityState, event: unknown, now?: number): CityState;
 export function departmentNames(state: CityState): string[];
+/** The towers standing: a demolished one keeps its lot until the next snapshot but is not a department any more. */
+export function standingDepartments(state: CityState): string[];
 export function deptOf(agent: CityAgent): string;
 export function deptColor(name: string): string;
 export function visualState(state: CityState, id: string, now?: number): string;
@@ -135,6 +147,7 @@ export interface CityBuilding {
 }
 export interface CityWorld {
   buildings: CityBuilding[];
+  lots: Array<CityPoint & { w: number; h: number; demolished?: string }>;
   streets: Array<{ y: number; x0: number; x1: number }>;
   avenue: number;
   homes: { x: number; y: number; w: number; h: number; houses: CityPoint[] };
@@ -184,3 +197,23 @@ export function plainText(text: string, max?: number): { short: string; whole: b
 export function cityMessage(state: CityState): string | null;
 
 export function workersWorking(state: unknown): number;
+
+// ---------- Departments on demand, taxis and the mailman (decision 134) ----------
+export type CityAnim = { dept: string; kind: "rise" | "build" | "demolish"; start: number; dur?: number };
+export const ANIM_MS: { rise: number; build: number; demolish: number };
+export const RISE_STAGGER_MS: number;
+export function animProgress(anim: { kind: string; start: number; dur?: number }, now: number): number;
+export function entranceAnims(buildings: CityBuilding[], start: number): CityAnim[];
+export function standFraction(kind: string, k: number): number;
+export type CityMail = { dept: string; dir: "out" | "back"; ticket: string; letters?: number };
+export function mailFor(event: unknown, state: CityState): CityMail | null;
+export const MAIL_QUEUE_MAX: number;
+export function enqueueMail(queue: CityMail[], mail: CityMail): CityMail[];
+export const BIKE_PX_S: number;
+export const BIKE_LEG_MS: number;
+export function bikeSpeed(route: CityPoint[], from: CityPoint): number;
+export function streetLanes(world: CityWorld): Array<{ y0: number; y1: number; x0: number; x1: number }>;
+export const CAB_PX_S: number;
+export const CABS_PER_STREET: number;
+export function trafficAt(world: CityWorld, now: number): Array<{ x: number; y: number; east: boolean; id: string }>;
+export function rideLegs(world: CityWorld, route: CityPoint[], from: CityPoint): boolean[];

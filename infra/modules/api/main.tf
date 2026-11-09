@@ -220,7 +220,7 @@ locals {
   }
   routes = [
     "GET /city", "GET /city/agent", "POST /city/instruct", "POST /messages", "POST /wake-check", "GET /tickets", "GET /tickets/{id}", "GET /jobs",
-    "GET /departments", "GET /departments/presets", "GET /agents", "GET /workforce", "GET /costs", "GET /health", "GET /questions", "POST /questions/{id}/answer",
+    "GET /departments", "POST /departments", "DELETE /departments/{id}", "GET /departments/presets", "GET /agents", "GET /workforce", "GET /costs", "GET /health", "GET /questions", "POST /questions/{id}/answer",
     "POST /questions/{id}/default", "POST /approvals/{id}", "GET /settings", "PUT /settings", "GET /chief-of-staff",
     # Autopilot (decision 125): while the owner is away.
     "GET /away-summary", "GET /support-tickets", "GET /deals", "GET /standing-orders", "POST /standing-orders", "PUT /standing-orders/{id}", "DELETE /standing-orders/{id}",

@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   MODEL_NAME,
   VISUALS,
-  departmentNames,
+  standingDepartments,
   plainText,
   stockholmTime,
   stories,
@@ -24,6 +24,7 @@ import { useVoice } from "../voice/useVoice.ts";
 import { MicIcon } from "./ui.tsx";
 import { FlatWave, speakerOf } from "./VoiceVisualizer.tsx";
 import { Banner, Button, Loading } from "./ui.tsx";
+import { BuildDepartment, DemolishDepartment } from "./Departments.tsx";
 
 const REGION_CITY: Record<string, string> = {
   "eu-north-1": "Stockholm",
@@ -47,7 +48,12 @@ const SWATCH = [
   "#5f7a8a",
 ];
 
-type Open = { agent: string } | { dept: string } | { record: "workforce" | "health" | "parked" | "legend" } | null;
+type Open =
+  | { agent: string }
+  | { dept: string }
+  | { build: true }
+  | { record: "workforce" | "health" | "parked" | "legend" }
+  | null;
 
 export function CityView({ go }: { go: (view: string) => void }) {
   const root = useRef<HTMLDivElement>(null);
@@ -97,7 +103,7 @@ export function CityView({ go }: { go: (view: string) => void }) {
   }, [loadedAt]);
 
   const t = topBar(city);
-  const names = departmentNames(city);
+  const names = standingDepartments(city);
   const jobsRunning = Object.values(city.tickets).filter((x) => x.kind === "task" && !x.parent_id).length;
   const lines = stories(city.feed, earlier ? 40 : 9);
   const toggleHealth = () => {
@@ -203,6 +209,9 @@ export function CityView({ go }: { go: (view: string) => void }) {
               </button>
             );
           })}
+          <button type="button" className="dept rec build" onClick={() => setOpen({ build: true })}>
+            + Build a department
+          </button>
           <h3 className="pixel">Records</h3>
           <button type="button" className="dept rec" onClick={() => setOpen({ record: "workforce" })}>
             Workforce
@@ -257,7 +266,10 @@ export function CityView({ go }: { go: (view: string) => void }) {
             Fit
           </button>
         </div>
-        <div className={`actions dockbar${voice.listening || speaker !== "idle" ? " live" : ""}`} data-speaker={speaker}>
+        <div
+          className={`actions dockbar${voice.listening || speaker !== "idle" ? " live" : ""}`}
+          data-speaker={speaker}
+        >
           <button type="button" className="dockbtn" onClick={() => go("ace")} aria-label="Chat with AIC">
             <Glyph d="M4 5h16v10H9l-5 4z" />
           </button>
@@ -277,7 +289,13 @@ export function CityView({ go }: { go: (view: string) => void }) {
             <span className="docklive">
               <FlatWave speaker={speaker} />
               <span className="dockwho" aria-hidden="true">
-                {speaker === "you" ? "You" : speaker === "aic" ? "AIC" : speaker === "thinking" ? "Thinking" : "Listening"}
+                {speaker === "you"
+                  ? "You"
+                  : speaker === "aic"
+                    ? "AIC"
+                    : speaker === "thinking"
+                      ? "Thinking"
+                      : "Listening"}
               </span>
             </span>
           </div>
@@ -306,6 +324,10 @@ export function CityView({ go }: { go: (view: string) => void }) {
             scene.current?.select(null);
           }}
           onZoom={(d) => scene.current?.focusBuilding(d)}
+          onBuilt={(d) => {
+            setOpen({ dept: d });
+            setTimeout(() => scene.current?.focusBuilding(d), 400);
+          }}
         />
       ) : null}
     </section>
@@ -354,11 +376,13 @@ export function CityPanel({
   city,
   onClose,
   onZoom,
+  onBuilt,
 }: {
   open: NonNullable<Open>;
   city: CityState;
   onClose: () => void;
   onZoom: (dept: string) => void;
+  onBuilt?: (dept: string) => void;
 }) {
   const ref = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -370,11 +394,13 @@ export function CityPanel({
   const title =
     "agent" in open
       ? (city.agents[open.agent]?.role ?? open.agent)
-      : "dept" in open
-        ? open.dept === "HQ"
-          ? "Headquarters"
-          : `${open.dept} department`
-        : { workforce: "Workforce", health: "Health", parked: "On hold", legend: "What the marks mean" }[open.record];
+      : "build" in open
+        ? "Build a department"
+        : "dept" in open
+          ? open.dept === "HQ"
+            ? "Headquarters"
+            : `${open.dept} department`
+          : { workforce: "Workforce", health: "Health", parked: "On hold", legend: "What the marks mean" }[open.record];
   return (
     <aside className="cityui citypanel" role="dialog" aria-label={title} ref={ref}>
       <header>
@@ -384,7 +410,8 @@ export function CityPanel({
         </button>
       </header>
       {"agent" in open ? <AgentPanel id={open.agent} city={city} /> : null}
-      {"dept" in open ? <DeptPanel name={open.dept} city={city} onZoom={onZoom} /> : null}
+      {"build" in open ? <BuildDepartment compact onDone={onBuilt} /> : null}
+      {"dept" in open ? <DeptPanel name={open.dept} city={city} onZoom={onZoom} onGone={onClose} /> : null}
       {"dept" in open ? <DeptApps name={open.dept} city={city} /> : null}
       {"record" in open && open.record === "legend" ? <Legend /> : null}
       {"record" in open && open.record === "parked" ? <Parked city={city} /> : null}
@@ -502,8 +529,19 @@ function AgentPanel({ id, city }: { id: string; city: CityState }) {
   );
 }
 
-function DeptPanel({ name, city, onZoom }: { name: string; city: CityState; onZoom: (d: string) => void }) {
+function DeptPanel({
+  name,
+  city,
+  onZoom,
+  onGone,
+}: {
+  name: string;
+  city: CityState;
+  onZoom: (d: string) => void;
+  onGone: () => void;
+}) {
   const d = city.departments[name];
+  if (d?.state === "demolished") return <p className="doing">{`${name} was demolished. Its lot stands empty.`}</p>;
   const members = Object.values(city.agents).filter(
     (a) => (name === "HQ" ? a.kind === "core" : a.department === name) && a.state !== "retired",
   );
@@ -516,7 +554,10 @@ function DeptPanel({ name, city, onZoom }: { name: string; city: CityState; onZo
           ? "AIC and the team lead work here."
           : `${workers.length ? `${workers.length} workers at their desks.` : "Nobody hired right now."} ${d?.mission ?? ""}`}
       </p>
-      {name !== "HQ" ? <Row k="Manager" v={d?.manager_id ?? "—"} /> : null}
+      {name !== "HQ" ? <Row k="Manager" v={d?.manager_id ? `${d.manager_id} · Fable 5.1` : "—"} /> : null}
+      {name !== "HQ" ? (
+        <Row k="Workers run on" v={d?.worker_model === "fable-5-1" ? "Fable 5.1" : workerModel(name)} />
+      ) : null}
       <h4>{`Work in progress (${open.length})`}</h4>
       <ul className="recent">
         {open.length ? (
@@ -528,9 +569,13 @@ function DeptPanel({ name, city, onZoom }: { name: string; city: CityState; onZo
       <Button variant="secondary" onClick={() => onZoom(name)}>
         Zoom in
       </Button>
+      {name !== "HQ" && d ? <DemolishDepartment name={name} city={city} onDone={onGone} /> : null}
     </div>
   );
 }
+// The presets whose workers run on Fable 5.1 (decision 129, `departmentModels` in config/models.json).
+const FABLE_WORKERS = new Set(["media", "research", "legal"]);
+const workerModel = (name: string) => (FABLE_WORKERS.has(name.trim().toLowerCase()) ? "Fable 5.1" : "Opus 5.5");
 
 // The Apps building's own part of its panel: what waits for the owner, and every app it built (the
 // same as the cabinets on the map, for keyboards and screen readers).
@@ -589,6 +634,17 @@ function Legend() {
       </li>
       <li>
         <span className="mark">“Waiting for you” sign</span> a new app is ready to try in Open items
+      </li>
+      <li>
+        <span className="mark">Yellow cab</span> someone riding to work or home (the others just cruise the streets)
+      </li>
+      <li>
+        <span className="mark">Mailman on a bike</span> a letter between the Orchestrator and a department's manager: a
+        new goal going out, or the answer coming back
+      </li>
+      <li>
+        <span className="mark">Crane and scaffolding</span> a department being built; a wrecking ball means one is being
+        demolished
       </li>
       {Object.entries(VISUALS).map(([k, v]) => (
         <li key={k}>

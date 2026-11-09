@@ -4,7 +4,7 @@
 // Reviewer; each department's manager stands at its door; panels are React (see CityView.tsx).
 // The City View: a small game world of the agents, drawn pixel by pixel on a canvas from city-state.js.
 // All of the art is drawn here in code. Every person on screen is a real agent; only the scenery moves on its own.
-import { COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, commuteRoute, doorOf, staggerMs, walkSpeed } from "./city-state.js";
+import { COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, standFraction, mailFor, enqueueMail, bikeSpeed, trafficAt, rideLegs } from "./city-state.js";
 
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const INK = "#1d1c36";
@@ -200,6 +200,54 @@ function desk(item = "none") {
   return desks.get(item);
 }
 
+// ---------- Vehicles: yellow cabs and the mailman's bicycle (decision 134) ----------
+function line(g, x0, y0, x1, y1, c) {
+  const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
+  for (let i = 0; i <= n; i++) R(g, x0 + ((x1 - x0) * i) / n, y0 + ((y1 - y0) * i) / n, 1, 1, c);
+}
+const CAB_Y = "#f4c63c", CAB_SHADE = "#c99a1f", CAB_GLASS = "#2c3550";
+const cabs = new Map();
+// A New York cab, side on (driving along a street, facing right) or nose on (driving up or down the avenue).
+function cab(view) {
+  if (!cabs.has(view)) cabs.set(view, view === "side" ? outlined(24, 14, (g) => {
+    g.translate(1, 1);
+    R(g, 1, 5, 20, 4, CAB_Y); R(g, 5, 2, 11, 4, CAB_Y); R(g, 1, 8, 20, 1, CAB_SHADE);
+    R(g, 6, 3, 4, 2, CAB_GLASS); R(g, 11, 3, 4, 2, CAB_GLASS); R(g, 6, 3, 4, 1, "#8fb8d8"); R(g, 11, 3, 4, 1, "#8fb8d8");
+    for (let x = 2; x < 20; x += 2) { R(g, x, 6, 1, 1, INK); R(g, x + 1, 7, 1, 1, "#fff6e0"); } // the checker band
+    R(g, 20, 5, 1, 2, "#fff3b0"); R(g, 1, 5, 1, 2, "#d8392b"); // headlight, tail light
+    R(g, 8, 0, 5, 2, "#fff3b0"); R(g, 9, 0, 3, 1, "#e6a53c"); // the roof light
+    for (const wx of [3, 14]) { R(g, wx, 9, 4, 3, INK); R(g, wx + 1, 10, 2, 1, "#8b8fa8"); }
+  }) : outlined(18, 17, (g) => {
+    g.translate(1, 1);
+    R(g, 1, 5, 14, 7, CAB_Y); R(g, 3, 2, 10, 4, CAB_Y); R(g, 4, 3, 8, 3, CAB_GLASS); R(g, 4, 3, 8, 1, "#8fb8d8");
+    R(g, 6, 0, 4, 2, "#fff3b0"); R(g, 1, 8, 14, 1, INK); for (let x = 1; x < 15; x += 2) R(g, x, 8, 1, 1, "#fff6e0");
+    R(g, 2, 9, 3, 2, "#fff3b0"); R(g, 11, 9, 3, 2, "#fff3b0"); R(g, 6, 10, 4, 1, INK); R(g, 1, 11, 14, 1, CAB_SHADE);
+    R(g, 1, 12, 3, 3, INK); R(g, 12, 12, 3, 3, INK);
+  }));
+  return cabs.get(view);
+}
+const bikes = new Map();
+// The mailman on his bicycle, facing right: postal blue, a cap, a satchel, letters in the front basket.
+function bike(frame, carrying) {
+  const key = `${frame}${carrying ? "l" : ""}`;
+  if (!bikes.has(key)) bikes.set(key, outlined(28, 30, (g) => {
+    g.translate(2, 2);
+    for (const [cx, cy] of [[5, 21], [19, 21]]) { oval(g, cx, cy, 4, 4, INK); oval(g, cx, cy, 3, 3, "#55525e"); R(g, cx - 2, cy - 2, 5, 5, "#55525e"); if (frame % 2) R(g, cx, cy - 3, 1, 7, "#8b8fa8"); else R(g, cx - 3, cy, 7, 1, "#8b8fa8"); R(g, cx, cy, 1, 1, "#cfd6e2"); }
+    line(g, 5, 21, 9, 15, "#d8392b"); line(g, 9, 15, 17, 14, "#d8392b"); line(g, 17, 14, 19, 21, "#d8392b"); line(g, 9, 15, 12, 21, "#d8392b"); line(g, 12, 21, 5, 21, "#d8392b");
+    R(g, 7, 13, 4, 1, INK); R(g, 16, 11, 3, 1, INK); line(g, 17, 11, 17, 14, INK); // saddle, handlebar
+    R(g, 17, 12, 6, 3, "#b5823a"); R(g, 17, 12, 6, 1, "#d09c4c"); // the basket
+    if (carrying) { R(g, 18, 9, 5, 4, "#fff6e0"); R(g, 18, 9, 5, 1, "#d8392b"); line(g, 18, 10, 20, 12, "#cfc4b0"); line(g, 22, 10, 20, 12, "#cfc4b0"); }
+    const knee = frame % 2 ? [12, 15] : [13, 13], foot = frame % 2 ? [11, 21] : [14, 19];
+    line(g, 9, 12, knee[0], knee[1], "#32344f"); line(g, knee[0], knee[1], foot[0], foot[1], "#32344f"); R(g, foot[0], foot[1], 2, 1, INK);
+    R(g, 8, 5, 5, 8, "#2f5fa8"); R(g, 8, 5, 5, 1, "#4f8fd6"); // the uniform, leaning into the ride
+    line(g, 12, 7, 16, 11, "#2f5fa8"); R(g, 16, 11, 1, 1, "#eebb8e");
+    R(g, 6, 9, 3, 4, "#8a5a33"); R(g, 6, 9, 3, 1, "#a8743f"); // the satchel
+    R(g, 9, 0, 5, 5, "#eebb8e"); R(g, 13, 2, 1, 1, INK); R(g, 8, -1, 6, 2, "#1f3f78"); R(g, 13, 0, 3, 1, "#1f3f78"); // head and cap
+  }));
+  return bikes.get(key);
+}
+const ENVELOPE = (g, x, y) => { R(g, x - 4, y - 3, 8, 6, INK); R(g, x - 3, y - 2, 6, 4, "#fff6e0"); R(g, x - 3, y - 2, 6, 1, "#d8392b"); R(g, x - 1, y, 2, 1, "#cfc4b0"); };
+
 // ---------- The ground ----------
 const PLAZA = ["#6f5c6c", "#776370", "#6a5768"], WALK = ["#7a7690", "#817d97", "#74708a"];
 function paving(g, x, y, w, h, tones, grout, seed, size = 8) {
@@ -315,9 +363,31 @@ function towerWindows(b) {
   });
   return out;
 }
-function tower(g, b) {
-  const t = towerShape(b), f = FACADES[hashOf(b.dept) % FACADES.length], [accent, light, dark] = ROOFS[b.slot % ROOFS.length];
+// The pavement and lamps of a tower's plot (they stay while the tower goes up or comes down).
+function towerPlot(g, b) {
+  const t = towerShape(b);
   paving(g, t.X, t.foot - 2, t.W, t.H - (t.foot - t.Y) + 2, WALK, "#5e5a74", b.dept);
+  lamp(g, t.X + 6, t.foot + 10); lamp(g, t.X + t.W - 6, t.foot + 10);
+}
+function tower(g, b) { towerPlot(g, b); towerBody(g, b); }
+// A building site: the plot's pavement, a dirt pit behind a striped hoarding (under a tower going up, or after one came down).
+function site(g, b) {
+  const t = towerShape(b), q = t.tiers[0];
+  towerPlot(g, b);
+  R(g, q.x - 3, t.foot - 10, q.w + 6, 10, INK); R(g, q.x - 2, t.foot - 9, q.w + 4, 8, "#6b5236");
+  for (let x = q.x; x < q.x + q.w; x += 7) R(g, x, t.foot - 8, 3, 2, "#58432c");
+  for (let x = q.x - 2; x < q.x + q.w + 2; x += 6) { R(g, x, t.foot - 3, 3, 3, "#f4c63c"); R(g, x + 3, t.foot - 3, 3, 3, INK); } // the hoarding
+}
+// The tower alone, drawn once into its own canvas, so it can rise, be built floor by floor, or be pulled down.
+const towerSprites = new Map();
+function towerSprite(b) {
+  const key = `${b.dept}|${b.slot}|${b.x},${b.y}`;
+  let c = towerSprites.get(key);
+  if (!c) { const t = towerShape(b); const [cv, g] = newCanvas(t.W, t.H); g.translate(-t.X, -t.Y); towerBody(g, b); c = cv; towerSprites.set(key, c); }
+  return c;
+}
+function towerBody(g, b) {
+  const t = towerShape(b), f = FACADES[hashOf(b.dept) % FACADES.length], [accent, light, dark] = ROOFS[b.slot % ROOFS.length];
   R(g, t.tiers[0].x - 4, t.foot - 1, t.tiers[0].w + 8, 4, "rgba(20,18,40,.35)"); // its shadow on the pavement
   // The body, tier by tier: an ink outline, the wall, a lit edge on the left and a shaded edge on the right.
   for (const [k, q] of t.tiers.entries()) {
@@ -344,7 +414,6 @@ function tower(g, b) {
   R(g, dx - 1, dy - 1, dw + 2, 23, INK); R(g, dx, dy, dw, 22, "#1a2236"); // the doorway (the panels are live)
   for (const gx of [base.x + 8, base.x + base.w - 24]) { R(g, gx - 1, dy - 1, 18, 19, INK); R(g, gx, dy, 16, 17, "#3b4a66"); R(g, gx, dy, 16, 3, "#5b6f92"); R(g, gx + 7, dy, 2, 17, INK); } // lobby glass
   sign(g, b.dept, t.cx, base.y + 9, base.w - 10);
-  lamp(g, t.X + 6, t.foot + 10); lamp(g, t.X + t.W - 6, t.foot + 10);
 }
 function freeLot(g, l, text) {
   const X = l.x * TILE, Y = l.y * TILE, W = l.w * TILE, H = l.h * TILE, r = rng(`${l.x},${l.y}`);
@@ -405,7 +474,7 @@ function house(g, h, i) {
 
 // Everything that does not move, baked once per layout, with a margin of countryside so the map runs off the screen's edges.
 const MARGIN = 30; // tiles
-function bake(world) {
+function bake(world, skip = new Map()) {
   const W = world.width * TILE, H = world.height * TILE, M = MARGIN * TILE, r = rng("world");
   const [c, g] = newCanvas(W + M * 2, H + M * 2);
   g.translate(M, M);
@@ -425,8 +494,8 @@ function bake(world) {
   const kept = [];
   for (const [x, y] of spots) if (kept.every(([kx, ky]) => Math.abs(kx - x) > 18 || Math.abs(ky - y) > 14)) kept.push([x, y]);
   for (const [x, y] of kept) tree(g, x, y, r);
-  for (const b of world.buildings) if (b.archived) freeLot(g, b, "ARCHIVED"); else tower(g, b);
-  for (const l of world.lots) freeLot(g, l, "FREE LOT");
+  for (const b of world.buildings) if (b.archived) freeLot(g, b, "ARCHIVED"); else if (skip.get(b.dept) === "rise") towerPlot(g, b); else if (skip.has(b.dept)) site(g, b); else tower(g, b);
+  for (const l of world.lots) if (l.demolished && skip.has(l.demolished)) site(g, { ...l, dept: l.demolished }); else freeLot(g, l, "FREE LOT");
   headquarters(g, world.hq);
   // The neighbourhood: houses, with trees where no house stands yet.
   const hx = world.homes.x * TILE, hy = world.homes.y * TILE, hw = world.homes.w * TILE;
@@ -437,7 +506,7 @@ function bake(world) {
   return c;
 }
 
-const DASH_MS = 320, WALK_SPEED = 46, SCENERY_MS = 125, ZOOMS = [1, 1.5, 2, 3, 4, 5, 6];
+const DASH_MS = 320, WALK_SPEED = 46, SCENERY_MS = 125, TRAFFIC_MS = 50, ZOOMS = [1, 1.5, 2, 3, 4, 5, 6];
 
 // `insets()` says how much of the root the HUD's own bars cover, so the map is fitted into the free part.
 export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0, r: 0, b: 0 }), onSelectAgent = () => {}, onSelectBuilding = () => {}, onOpenApp = () => {}, onState = () => {} } = {}) {
@@ -456,6 +525,12 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   const doorHold = new Map(); // dept → keep the doors open until (performance.now() ms)
   const counts = new Map(); // dept → { n: people inside, delta: last change, at: when } (the roof counter)
   const cam = { x: 0, y: 0, wantX: 0, wantY: 0, zoom: 2, userMoved: false };
+  const anims = new Map(); // dept → { kind: "rise" | "build" | "demolish", start, dur, b?, done? } (decision 134)
+  const mail = { queue: [], rider: null, out: 0, back: 0 }; // the one mailman and the letters waiting for him
+  let entered = false; // the towers' entrance has played (or there was nothing to show)
+  let leaving = []; // cabs driving off after dropping someone at a door or a house
+  root._anims = anims; // read-only test hooks (e2e/departments.spec.ts)
+  root._mail = mail;
   const walked = new Set(); // ids that already walked home for good
   root._people = people; // a read-only test hook: e2e/commute.spec.ts watches who stands where
   root._counts = counts; // and the roof counters (e2e/towers.spec.ts)
@@ -502,7 +577,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     const next = layout(state, { portrait, seats: seatCount, houses });
     const sig = JSON.stringify(next);
     const rebaked = sig !== worldSig;
-    if (rebaked) { world = next; worldSig = sig; ground = bake(world); fitView(); }
+    if (rebaked) { world = next; worldSig = sig; ground = bake(world, animSkip()); fitView(); }
     const wanted = new Set([...list.filter((a) => a.kind === "core" || CORE.has(a.id)).map((a) => a.id), ...shown.ids]);
     for (const id of people.keys()) if (!wanted.has(id)) { people.delete(id); if (selected === id) selected = null; if (hover === id) hover = null; }
     const still = instant || reduced() || !visible();
@@ -523,6 +598,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
         const b = buildingOfKey(fromKey);
         p.move = null;
         p.route = commuteRoute(world, p, to, { leaving: fromKey.startsWith("desk:") ? b : null });
+        p.ride = rideLegs(world, p.route, p); // home by cab: from the kerb outside the tower to the kerb by the house
         p.speed = walkSpeed(p.route, p);
         p.waitUntil = b ? queueAt(`door:${b.dept}`, 150) : performance.now();
         p.homecoming = true; // lights the house on arrival (step() clears it)
@@ -534,6 +610,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
         const from = { x: p.x, y: p.y };
         p.move = null;
         p.route = commuteRoute(world, from, to, { entering: b });
+        p.ride = rideLegs(world, p.route, from); // to work by cab, hailed at the kerb by the house
         p.speed = walkSpeed(p.route, from);
         p.waitUntil = queueAt(`door:${b.dept}`, 700);
         lightHouse(id, p.waitUntil - performance.now() + 500);
@@ -604,19 +681,27 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   function markApps() { const m = appMarkers().filter((x) => x.app); root.dataset.apps = String(m.length); root.dataset.appsWaiting = String(waitingBuildings().size); }
 
   // ---------- Live events ----------
-  const PLACEMENT_EVENTS = new Set(["agent.hired", "agent.retired", "department.created", "department.updated", "ticket.status", "worker.state", "worker.merge_waiting", "worker.merged", "tickets.parked"]);
+  const PLACEMENT_EVENTS = new Set(["agent.hired", "agent.retired", "department.created", "department.demolished", "department.updated", "ticket.status", "worker.state", "worker.merge_waiting", "worker.merged", "tickets.parked"]);
   function onEvent(e) {
     const feedBefore = state.feed;
+    const before = e.type === "department.created" ? state.departments[e.name] : null;
+    if (e.type === "department.demolished") demolish(e.name);
     state = reduce(state, e);
+    if (e.type === "department.created" && (!before || before.state === "demolished")) {
+      root.dataset.built = String(Number(root.dataset.built ?? 0) + 1);
+      if (!reduced() && visible()) anims.set(e.name, { kind: "build", start: performance.now(), dur: ANIM_MS.build });
+    }
     if (PLACEMENT_EVENTS.has(e.type)) { sync(); markApps(); } else refreshVisuals();
-    const hop = courierFor(e); if (hop) courier(hop);
+    if (e.type.startsWith("department.")) { entered = true; ground = bake(world, animSkip()); wake(); }
+    const letter = mailFor(e, state);
+    if (letter) post(letter);
+    const hop = courierFor(e); if (hop && !letter) courier(hop); // orchestrator ↔ manager goes by the mailman
     if (e.type === "ace.visit") aceVisit(e);
     if (e.type === "review.result" && e.verdict === "FAIL") { const t = state.tickets[e.ticket_id], p = t && people.get(t.to); if (p) dust(p.x, p.y - 20, 14, ["#55525e", "#77747f", "#99969f"], 18, 1.2); }
     if (e.type === "ticket.status" && e.ticket.status === "done") { const p = people.get(e.ticket.to); if (p) dust(p.x, p.y - 22, 28, CONFETTI, 70, 1); }
     if (e.type === "agent.hired" && e.agent) { const b = buildingOf(deptOf(e.agent)); if (b) dust((b.x + b.w / 2) * TILE, (b.y + 3) * TILE, 24, POOF, 60, 0.7); } // someone new walks in
     if (e.type === "app.published") { const b = buildingOf(appsDept(e)); if (b) { dust((b.x + b.w / 2) * TILE, (b.y + 1) * TILE, 90, CONFETTI, 90, 1.4); wake(); } }
     if (e.type.startsWith("app.") || e.type.startsWith("approval.")) { markApps(); wake(); }
-    if (e.type === "department.created") { const b = world.buildings.find((x) => x.dept === e.name); if (b) dust((b.x + b.w / 2) * TILE, (b.y + 3) * TILE, 40, POOF, 70, 0.8); }
     void feedBefore;
     onState(state);
   }
@@ -628,6 +713,131 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     root.dataset.couriers = String(Number(root.dataset.couriers ?? 0) + 1);
     if (visible()) parcels.push({ from: { x: a.x, y: a.y - 14 }, target: b, t: 0, kind });
   }
+  // ---------- Building and demolishing (decision 134) ----------
+  const animSkip = () => new Map([...anims].filter(([, a]) => a.kind !== "demolish" || !a.done).map(([d, a]) => [d, a.kind]));
+  function demolish(name) {
+    const b = world?.buildings.find((x) => x.dept === name);
+    root.dataset.demolished = String(Number(root.dataset.demolished ?? 0) + 1);
+    counts.delete(name); doors.delete(name);
+    if (b && !reduced() && visible()) anims.set(name, { kind: "demolish", start: performance.now(), dur: ANIM_MS.demolish, b: { ...b } });
+    else anims.delete(name);
+  }
+  function finishAnim(dept, a) {
+    const b = a.b ?? world.buildings.find((x) => x.dept === dept);
+    if (!b) return;
+    const t = towerShape(b);
+    if (a.kind === "build") { dust(t.cx, t.top, 60, CONFETTI, 80, 1.2); dust(t.cx, t.foot, 24, POOF, 50, 0.7); }
+    if (a.kind === "demolish") dust(t.cx, t.foot - 10, 50, RUBBLE, 60, 1.1);
+  }
+  const RUBBLE = ["#8b8fa8", "#77747f", "#b9ab90", "#55525e", "#cfc4b0"];
+  function drawAnim(dept, a, now, ox, oy) {
+    const b = a.b ?? world.buildings.find((x) => x.dept === dept);
+    if (!b || now < a.start) return; // a tower that hasn't had its turn to rise yet stays a plot
+    const k = animProgress(a, now), frac = standFraction(a.kind, k), t = towerShape(b), sp = towerSprite(b);
+    const full = t.foot + 3 - t.Y, X = t.X - ox, Y = t.Y - oy, base = t.tiers[0];
+    if (a.kind === "build") {
+      const top = Math.round((t.foot - t.Y) * (1 - frac)); // floors go up from the street
+      if (full - top > 0) ctx.drawImage(sp, 0, top, t.W, full - top, X, Y + top, t.W, full - top);
+      if (k < 1) {
+        const ty = t.Y + top;
+        // Scaffolding around the floor going up, and a tower crane lifting the next beam.
+        for (let x = base.x - 3; x <= base.x + base.w + 3; x += 8) R(ctx, x - ox, Math.max(ty - 12, t.Y) - oy, 1, Math.min(26, t.foot - ty + 12), "#8a6a44");
+        for (const dy of [-12, 0, 12]) if (ty + dy < t.foot && ty + dy > t.Y) R(ctx, base.x - 4 - ox, ty + dy - oy, base.w + 8, 2, "#b5823a");
+        const mx = t.X + t.W - 10, jy = t.Y + 4;
+        R(ctx, mx - 1 - ox, jy - oy, 5, t.foot - jy, INK); R(ctx, mx - ox, jy - oy, 3, t.foot - jy, "#f4c63c");
+        for (let y = jy + 3; y < t.foot; y += 6) R(ctx, mx - ox, y - oy, 3, 1, "#c99a1f");
+        R(ctx, t.X + 8 - ox, jy - 1 - oy, mx - t.X - 2, 4, INK); R(ctx, t.X + 9 - ox, jy - oy, mx - t.X - 4, 2, "#f4c63c");
+        R(ctx, mx - 3 - ox, jy - 6 - oy, 8, 6, INK); R(ctx, mx - 2 - ox, jy - 5 - oy, 6, 4, "#e6a53c"); // the crane's cab
+        const hx = Math.round(t.cx + Math.sin(now / 420) * 18), hy = Math.max(jy + 8, ty - 16);
+        R(ctx, hx - ox, jy + 2 - oy, 1, hy - jy - 2, INK); R(ctx, hx - 7 - ox, hy - oy, 14, 3, INK); R(ctx, hx - 6 - ox, hy + 1 - oy, 12, 1, "#8a6a44");
+        if (Math.random() < 0.25) dust(t.cx + (Math.random() - 0.5) * base.w * 0.7, ty, 2, ["#ffe9a0", "#f4c63c", "#fff6e0"], 40, 0.3); // welding sparks
+        if (Math.random() < 0.2) dust(t.cx + (Math.random() - 0.5) * base.w, t.foot, 1, POOF, 25, 0.5);
+      }
+      return;
+    }
+    const sink = Math.round((t.foot - t.Y) * (1 - frac)), rows = Math.min(full, full - sink);
+    const shake = a.kind === "demolish" && k > 0.28 && k < 0.95 ? Math.round(Math.sin(now / 22) * 1.5) : 0;
+    if (rows > 0) ctx.drawImage(sp, 0, 0, t.W, rows, X + shake, Y + sink, t.W, rows);
+    if (a.kind === "rise" && k < 0.75 && Math.random() < 0.3) dust(t.cx + (Math.random() - 0.5) * base.w, t.foot, 2, POOF, 30, 0.45);
+    if (a.kind === "demolish") {
+      if (k < 0.32) {
+        // The wrecking ball swings in from a crane beside the tower.
+        const px = t.X + t.W + 6, py = t.Y + 30, L = 70, phi = -0.5 + Math.min(1, k / 0.3) * 1.07;
+        const bx = px - L * Math.sin(phi), by = py + L * Math.cos(phi);
+        R(ctx, px - 1 - ox, py - oy, 4, t.foot - py, INK); R(ctx, px - ox, py - oy, 2, t.foot - py, "#f4c63c");
+        R(ctx, px - 8 - ox, py - 2 - oy, 14, 3, INK); R(ctx, px - 7 - ox, py - 1 - oy, 12, 1, "#f4c63c");
+        line(ctx, px - ox, py - oy, Math.round(bx) - ox, Math.round(by) - oy, INK);
+        oval(ctx, Math.round(bx) - ox, Math.round(by) - oy, 6, 6, INK); oval(ctx, Math.round(bx) - ox, Math.round(by) - oy, 5, 5, "#55525e"); R(ctx, Math.round(bx) - 2 - ox, Math.round(by) - 3 - oy, 2, 2, "#8b8fa8");
+      }
+      if (k > 0.3 && k < 1 && Math.random() < 0.7) dust(t.cx + (Math.random() - 0.5) * base.w, t.foot - Math.random() * 20, 3, RUBBLE, 45, 0.8);
+    }
+  }
+
+  // ---------- The mailman (the owner's picture, 2026-11-09) ----------
+  // The Orchestrator hands him a letter for a manager; he cycles over, hands it on, and rides back. A manager's
+  // reply goes the other way. One mailman, one letter (or bundle) at a time; the rest wait in his queue.
+  const parkSpot = () => ({ x: world.hq.x * TILE + 134, y: world.hq.y * TILE + 106 });
+  const callOn = (b) => { const d = doorOf(b); return { x: d.x + 36, y: d.y + 10 }; };
+  const pos = (v) => (typeof v === "function" ? v() : v);
+  function post(m) {
+    if (reduced() || !visible() || !world) { deliver(m.dir); return; } // nothing rides; the count still says it arrived
+    mail.queue = enqueueMail(mail.queue, m);
+    if (!mail.rider?.job) nextMail();
+    wake();
+  }
+  function deliver(dir) {
+    mail[dir] += 1;
+    root.dataset[dir === "out" ? "mailOut" : "mailBack"] = String(mail[dir]);
+  }
+  function nextMail() {
+    const r = mail.rider ?? (mail.rider = { ...parkSpot(), flip: false, carrying: false });
+    const m = mail.queue.shift();
+    if (!m) { r.job = null; r.legs = null; r.route = null; root.dataset.mailBusy = "0"; return; }
+    const b = buildingOf(m.dept);
+    if (!b || b.archived) { deliver(m.dir); nextMail(); return; } // the tower is gone: the letter is returned
+    const park = parkSpot(), at = callOn(b);
+    const orch = () => people.get("orchestrator"), mgr = () => people.get(state.departments[m.dept]?.manager_id) ?? at;
+    r.job = m;
+    r.legs = m.dir === "out"
+      ? [{ pause: 650, letter: [orch, r], pick: true }, { ride: walkRoute(world, r, at) }, { pause: 550, letter: [r, mgr], drop: true, done: "out" }, { ride: walkRoute(world, at, park) }]
+      : [{ ride: walkRoute(world, r, at) }, { pause: 550, letter: [mgr, r], pick: true }, { ride: walkRoute(world, at, park) }, { pause: 500, letter: [r, orch], drop: true, done: "back" }];
+    root.dataset.mailBusy = "1";
+    startLeg(r);
+  }
+  function startLeg(r) {
+    const leg = r.legs?.[0];
+    if (!leg) { nextMail(); return; }
+    if (leg.ride) { r.route = leg.ride.slice(); r.speed = bikeSpeed(r.route, r); r.until = null; return; }
+    r.route = null; r.until = performance.now() + leg.pause;
+    if (leg.drop) r.carrying = false;
+    const from = pos(leg.letter[0]), to = pos(leg.letter[1]);
+    if (from && to && visible()) parcels.push({ from: { x: from.x, y: from.y - 14 }, target: to, t: 0, kind: "letter" });
+  }
+  function finishLeg(r) {
+    const leg = r.legs.shift();
+    if (leg.pick) r.carrying = true;
+    if (leg.done) deliver(leg.done);
+    startLeg(r);
+  }
+  function stepMail(dt, now) {
+    const r = mail.rider;
+    if (!r?.job) return false;
+    if (r.route) {
+      const to = r.route[0], dx = to.x - r.x, dy = to.y - r.y, d = Math.hypot(dx, dy), s = r.speed * dt;
+      if (Math.abs(dx) > 0.5) r.flip = dx < 0;
+      if (d <= s) { r.x = to.x; r.y = to.y; r.route.shift(); if (!r.route.length) finishLeg(r); } else { r.x += (dx / d) * s; r.y += (dy / d) * s; }
+    } else if (r.until && now >= r.until) finishLeg(r);
+    return true;
+  }
+  function drawMail(now) {
+    const r = mail.rider ?? { ...parkSpot(), flip: false, carrying: false };
+    const moving = !!r.route, img = bike(moving && !reduced() ? Math.floor(now / 110) % 2 : 0, r.carrying);
+    const x = Math.round(r.x - cam.x), y = Math.round(r.y - cam.y);
+    ctx.fillStyle = "rgba(20,18,40,.35)"; ctx.fillRect(x - 11, y + 1, 22, 2);
+    if (r.flip) { ctx.save(); ctx.scale(-1, 1); ctx.drawImage(img, -x - 14, y - 27); ctx.restore(); } else ctx.drawImage(img, x - 14, y - 27);
+    if (r.job && (r.job.letters ?? 1) > 1 && r.carrying) label(`x${r.job.letters}`, r.x + 12, r.y - 36, INK, "#fff6e0");
+  }
+
   // AIC dashes over, says what it is doing, and comes back. Its status call can repeat fast: those are not new visits.
   function aceVisit({ to, kind }) {
     const now = Date.now(), allowed = visitAllowed(lastVisit, now, to);
@@ -788,6 +998,14 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   function drawPerson(p, now, f) {
     const a = state.agents[p.id];
     if (!a || p.inside) return;
+    if (p.route && !p.waitUntil && p.ride?.[0]) {
+      // Riding a cab: side on along a street, nose on along the avenue; the passenger is inside.
+      const to = p.route[0], along = Math.abs(to.x - p.x) >= Math.abs(to.y - p.y), x = Math.round(p.x - cam.x), y = Math.round(p.y - cam.y);
+      ctx.fillStyle = "rgba(20,18,40,.3)"; ctx.fillRect(x - 9, y + 1, 18, 2);
+      if (!along) ctx.drawImage(cab("front"), x - 9, y - 15);
+      else if (p.flip) { ctx.save(); ctx.scale(-1, 1); ctx.drawImage(cab("side"), -x - 12, y - 12); ctx.restore(); } else ctx.drawImage(cab("side"), x - 12, y - 12);
+      return;
+    }
     const moving = !!(p.move || p.route), key = p.visual ?? "idle", vis = VISUALS[key] ?? VISUALS.working;
     const pose = moving ? "still" : key === "idle" && p.seated ? "still" : vis.pose;
     const frame = (f + p.phase) % 4;
@@ -877,7 +1095,19 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     }
     if (hiddenHomes) label(`+${hiddenHomes} MORE IN WORKFORCE`, world.homes.x * TILE + 60, (world.homes.y + world.homes.h) * TILE - 12);
     // The towers' live parts: lit windows for the people inside, the sliding doors, the beacon and the roof counter.
-    for (const b of world.buildings) if (!b.archived) drawTowerLive(b, now, ox, oy);
+    for (const b of world.buildings) if (!b.archived && !anims.has(b.dept)) drawTowerLive(b, now, ox, oy);
+    for (const [d, a] of anims) drawAnim(d, a, now, ox, oy);
+    // Yellow cabs cruising the streets (parked where they are with reduced motion), and the ones driving off.
+    const side = cab("side");
+    const traffic = trafficAt(world, reduced() ? 0 : now);
+    if (root.dataset.cabs !== String(traffic.length)) root.dataset.cabs = String(traffic.length); // for tests
+    for (const c of traffic) {
+      const x = Math.round(c.x - 12 - ox), y = Math.round(c.y - 12 - oy);
+      if (x < -30 || x > w + 30 || y < -20 || y > h + 20) continue;
+      R(ctx, x + 3, y + 12, 18, 2, "rgba(20,18,40,.3)");
+      if (c.east) ctx.drawImage(side, x, y); else { ctx.save(); ctx.scale(-1, 1); ctx.drawImage(side, -x - 24, y); ctx.restore(); }
+    }
+    for (const c of leaving) { const x = Math.round(c.x - 12 - ox), y = Math.round(c.y - 12 - oy); ctx.globalAlpha = Math.max(0, 1 - c.t / 1.4); if (c.east) ctx.drawImage(side, x, y); else { ctx.save(); ctx.scale(-1, 1); ctx.drawImage(side, -x - 24, y); ctx.restore(); } ctx.globalAlpha = 1; }
     // The apps' cabinets stand in front of the Apps building; the people walk in front of them.
     const marks = appMarkers();
     for (const m of marks) { if (m.app) { ctx.drawImage(cabinet(m.tint), Math.round(m.x - cam.x), Math.round(m.y - cam.y)); } else label(`+${m.more}`, m.x + 10, m.y, INK, "#ffd84a"); }
@@ -886,13 +1116,15 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     // Everyone, back to front.
     const order = [...people.values()].sort((a, b) => a.y - b.y);
     for (const p of order) drawPerson(p, now, f);
+    drawMail(now);
     for (const p of parcels) {
       const tx = p.target.x, ty = p.target.y - 14, k = p.t, ax = p.from.x + (tx - p.from.x) * k, ay = p.from.y + (ty - p.from.y) * k;
       const x = Math.round(ax - cam.x), y = Math.round(ay - cam.y - Math.sin(k * Math.PI) * 26);
       R(ctx, Math.round(ax - cam.x) - 3, Math.round(ay - cam.y) + 12, 6, 2, "rgba(20,18,40,.35)");
-      R(ctx, x - 4, y - 4, 8, 7, INK); R(ctx, x - 3, y - 3, 6, 5, p.kind === "ticket" ? "#f4c63c" : "#49ad7c"); R(ctx, x - 1, y - 3, 2, 5, "#fff6e0");
+      if (p.kind === "letter") ENVELOPE(ctx, x, y);
+      else { R(ctx, x - 4, y - 4, 8, 7, INK); R(ctx, x - 3, y - 3, 6, 5, p.kind === "ticket" ? "#f4c63c" : "#49ad7c"); R(ctx, x - 1, y - 3, 2, 5, "#fff6e0"); }
     }
-    for (const b of world.buildings) if (!b.archived) drawCounter(b, now);
+    for (const b of world.buildings) if (!b.archived && !anims.has(b.dept)) drawCounter(b, now);
     for (const p of order) drawBubble(p, f);
     for (const e of effects) R(ctx, e.x - cam.x, e.y - cam.y, e.s, e.s, e.c);
     // The one being looked at gets an arrow and its name; so does whoever the mouse is on, and the core keep name plates.
@@ -932,14 +1164,27 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
         const to = p.route[0], dx = to.x - p.x, dy = to.y - p.y, d = Math.hypot(dx, dy), s = (p.speed ?? WALK_SPEED) * dt;
         if (Math.abs(dx) > 0.5) p.flip = dx < 0;
         if (d <= s) {
-          p.x = to.x; p.y = to.y; p.route.shift();
+          p.x = to.x; p.y = to.y; p.route.shift(); p.ride?.shift();
           if (!p.route.length) {
-            p.route = null; p.speed = null;
+            p.route = null; p.speed = null; p.ride = null;
             if (p.key.startsWith("desk:")) setInside(p, true); // in through the doors: out of sight, counted on the roof
             if (p.homecoming) { p.homecoming = false; lightHouse(p.id, 1500); dust(p.x, p.y - 8, 10, POOF, 28, 0.5); } // home: the light goes on, then out
           }
         } else { p.x += (dx / d) * s; p.y += (dy / d) * s; }
       }
+      // Hailing a cab at the kerb, and its driving off after the drop.
+      const riding = !!(p.route && !p.waitUntil && p.ride?.[0]);
+      if (riding && !p.wasRiding) { root.dataset.taxiRides = String(Number(root.dataset.taxiRides ?? 0) + 1); dust(p.x, p.y, 6, ["#f4c63c", "#fff6e0"], 24, 0.35); }
+      if (!riding && p.wasRiding && !p.inside) leaving.push({ x: p.x, y: p.y, east: !p.flip, t: 0 });
+      p.wasRiding = riding;
+    }
+    if (stepMail(dt, now)) busy = true;
+    if (leaving.length) { busy = true; leaving = leaving.filter((c) => { c.t += dt; c.x += (c.east ? 1 : -1) * 70 * dt; return c.t < 1.4; }); }
+    if (anims.size) {
+      busy = true;
+      for (const [d, a] of anims) if (!a.done && animProgress(a, now) >= 1) { a.done = true; finishAnim(d, a); }
+      // Bake the finished towers into the ground once everything has settled (not once per tower).
+      if ([...anims.values()].every((a) => a.done)) { anims.clear(); ground = bake(world, animSkip()); }
     }
     // The roof counters follow who is really inside; the doors open for anyone at them, and shut behind.
     const inside = new Map();
@@ -972,7 +1217,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     if (root.offsetParent === null) { paused = true; return; }
     const dt = Math.max(0, Math.min(0.25, (now - last) / 1000)); last = now;
     const busy = world ? step(dt, now) : false;
-    if (world && (busy || needDraw || now - lastDraw >= SCENERY_MS)) { draw(now); lastDraw = now; needDraw = false; fpsN++; }
+    if (world && (busy || needDraw || now - lastDraw >= (reduced() ? SCENERY_MS : TRAFFIC_MS))) { draw(now); lastDraw = now; needDraw = false; fpsN++; }
     if (now - fpsT > 2000) { root.dataset.fps = String(Math.round((fpsN * 1000) / (now - fpsT))); fpsN = 0; fpsT = now; }
     requestAnimationFrame(frame);
   }
@@ -986,7 +1231,16 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     // The people stay: a later snapshot (a reconnect, or one racing live events) converges by walking anyone
     // whose place changed in the meantime, instead of clearing the town and teleporting everyone. Only the
     // very first load, before there is a world, places people instantly.
-    if (ctx) { sync(!world); fitView(); markApps(); needDraw = true; resume(); }
+    if (ctx) {
+      sync(!world);
+      // The page opens with every tower rising out of the ground in turn: once, on the first snapshot that has
+      // towers (not with reduced motion or a hidden tab).
+      if (!entered && world.buildings.length) {
+        entered = true;
+        if (!reduced() && visible()) { for (const a of entranceAnims(world.buildings, performance.now() + 200)) anims.set(a.dept, a); ground = bake(world, animSkip()); }
+      }
+      fitView(); markApps(); needDraw = true; resume();
+    }
     onState(state);
   }
   if (typeof ResizeObserver === "undefined") window.addEventListener("resize", () => { if (world) { fitView(); wake(); } });

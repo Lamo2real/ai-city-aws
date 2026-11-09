@@ -182,7 +182,10 @@ class Ledger:
         return [t for t in await self.list_tickets(ALL_STATUSES) if t.get("parent_id") == parent_id]
 
     # ---------- departments ----------
-    async def create_department(self, name: str, mission: str, manager_id: str) -> tuple[Record, bool]:
+    async def create_department(
+        self, name: str, mission: str, manager_id: str, extra: Record | None = None
+    ) -> tuple[Record, bool]:
+        """Creates the department, or returns the one already there (``False``), demolished ones included."""
         key = department_key(name)
         dept: Record = {
             "key": key,
@@ -191,6 +194,7 @@ class Ledger:
             "manager_id": manager_id,
             "state": "active",
             "created_at": self._iso(),
+            **(extra or {}),
         }
         created = await self.table.put(
             {"pk": f"DEPT#{key}", "sk": "META", "gsi1pk": "DEPT", "gsi1sk": dept["created_at"], **dept},
@@ -214,8 +218,40 @@ class Ledger:
             UpdateOptions(set={"stood_down_at": self._iso() if down else ""}),
         )
 
-    async def list_departments(self) -> list[Record]:
-        return [_strip(i) for i in await self.table.query_index("gsi1", "DEPT")]
+    async def list_departments(self, include_demolished: bool = False) -> list[Record]:
+        """The standing departments; ``include_demolished`` adds the ones the owner demolished (kept as history)."""
+        rows = [_strip(i) for i in await self.table.query_index("gsi1", "DEPT")]
+        return rows if include_demolished else [r for r in rows if r.get("state") != "demolished"]
+
+    async def demolish_department(self, name: str) -> None:
+        """The record stays (history, and so a demolished preset is not put back by ``ensure_presets``)."""
+        await self.table.update(
+            f"DEPT#{department_key(name)}",
+            "META",
+            UpdateOptions(set={"state": "demolished", "demolished_at": self._iso()}),
+        )
+
+    async def rebuild_department(self, name: str, mission: str, extra: Record | None = None) -> Record:
+        """A demolished department built again by the owner: standing, with its new mission and choices."""
+        it = await self.table.update(
+            f"DEPT#{department_key(name)}",
+            "META",
+            UpdateOptions(
+                set={
+                    "state": "active",
+                    "mission": mission,
+                    "demolished_at": "",
+                    "stood_down_at": "",
+                    "rebuilt_at": self._iso(),
+                    "worker_model": (extra or {}).get("worker_model") or "",
+                    **{k: v for k, v in (extra or {}).items() if k != "worker_model"},
+                },
+                must_exist=True,
+            ),
+        )
+        if it is None:
+            raise KeyError(f"no department {name}")
+        return _strip(it)
 
     # ---------- agents (hires) ----------
     async def put_agent(self, a: Record) -> None:
