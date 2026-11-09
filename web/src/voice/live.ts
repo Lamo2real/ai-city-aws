@@ -6,7 +6,7 @@
 // request (from the input transcript) go to AIC through the normal chat, and AIC's answer goes back as
 // `session.commentary.append`, which GPT-Live says in its own words. When this can't open, Nova Sonic takes over.
 import { api } from "../lib/api.ts";
-import type { SonicCall } from "./sonic.ts";
+import { primedContext, type SonicCall } from "./sonic.ts";
 
 export interface LiveHandlers {
   /** The owner's request, for AIC; resolves with AIC's answer (text to say). */
@@ -64,7 +64,10 @@ export async function startLive(h: LiveHandlers): Promise<SonicCall> {
     audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
   });
   const pc = new RTCPeerConnection();
-  const ctx = new AudioContext();
+  // The context unlocked in the tap (Safari keeps a later one suspended, and the meters would read 0); shared with
+  // Nova Sonic, so it is never closed here.
+  const shared = primedContext();
+  const ctx = shared ?? new AudioContext();
   void ctx.resume().catch(() => undefined);
   const audio = new Audio();
   audio.autoplay = true;
@@ -82,7 +85,7 @@ export async function startLive(h: LiveHandlers): Promise<SonicCall> {
       /* already closed */
     }
     audio.srcObject = null;
-    void ctx.close().catch(() => undefined);
+    if (ctx !== shared) void ctx.close().catch(() => undefined);
     return true;
   };
 

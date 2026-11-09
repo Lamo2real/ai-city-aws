@@ -39,6 +39,11 @@ export function primeSonic() {
   }
 }
 
+/** The AudioContext unlocked in the tap, for GPT-Live's level meters; Sonic still takes it if GPT-Live fails. */
+export function primedContext(): AudioContext | null {
+  return primed && primed.state !== "closed" ? primed : null;
+}
+
 /** Whether to try the real-time voice: always, except under a test's fake voice that did not ask for it. */
 export function sonicWanted(): boolean {
   const w = window as unknown as { __aicVoice?: unknown; __aicSonic?: boolean };

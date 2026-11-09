@@ -430,6 +430,7 @@ export function useVoice(dictation?: DictationTarget) {
       else spoken.current = line.id;
     };
     const presence = (p: "listening" | "thinking" | "speaking") => sonic.current && store.set({ presence: p });
+    let liveWhy = ""; // why GPT-Live didn't open, shown with Nova Sonic's reason when both fail
     try {
       const handlers: SonicHandlers = {
         onUserText: (raw) => {
@@ -493,6 +494,8 @@ export function useVoice(dictation?: DictationTarget) {
       } catch (e) {
         if (!convo.current) return;
         logVoiceError("GPT-Live could not start; trying Nova Sonic", e);
+        if (liveWanted())
+          liveWhy = ((e as Error | null)?.message ?? "").trim().replace(/\.$/, "").slice(0, 120) || "no reason given";
         call = await startSonic(handlers);
       }
       if (!convo.current) return call.stop(); // tapped off while it was connecting
@@ -509,7 +512,8 @@ export function useVoice(dictation?: DictationTarget) {
         return endConversation();
       }
       // Say why, in one line, so it can be fixed; the standard voice carries on meanwhile.
-      const why = ((e as Error | null)?.message ?? "").trim().replace(/\.$/, "").slice(0, 160);
+      const sonicWhy = ((e as Error | null)?.message ?? "").trim().replace(/\.$/, "").slice(0, 160);
+      const why = liveWhy ? `GPT-Live: ${liveWhy}. Nova Sonic: ${sonicWhy || "no reason given"}` : sonicWhy;
       setEngine({ kind: "standard", why: why || "no reason given" });
       toast({
         text: `Real-time voice didn't connect${why ? ` (${why})` : ""}, so AIC is using its standard voice.`,
@@ -557,8 +561,11 @@ export function useVoice(dictation?: DictationTarget) {
       }
       convo.current = true;
       setConversation(true);
+      // Synchronously, inside the tap (Safari): the real-time voices' audio, and the standard voice's too, which takes
+      // over when they can't connect; primed later, outside the tap, Safari keeps it silent.
+      getVoice().prime?.();
       if (sonicWanted()) {
-        primeSonic(); // synchronously, inside the tap (Safari)
+        primeSonic();
         return void startLive();
       }
       setEngine({ kind: "standard" });
