@@ -110,6 +110,15 @@ class SonicSession:
     _user_at: float = -1e9  # when the owner last spoke (a cue never starts over the owner's words)
     _last_error: str = ""
     _errors_in_a_row: int = 0
+    _failures: list[str] = field(default_factory=list)
+
+    def _failed(self, model_id: str, region: str, e: BaseException) -> None:
+        """Remembers why each model and region failed, so the owner sees every reason, not only the last one."""
+        short = model_id.replace("amazon.", "")
+        line = f"{short} in {region}: {type(e).__name__}{': ' + str(e)[:90] if str(e).strip() else ''}"
+        if line not in self._failures:
+            self._failures.append(line)
+        self._last_error = "; ".join(self._failures)
 
     # ---------- opening and rotating streams ----------
     async def start(self) -> None:
@@ -123,7 +132,7 @@ class SonicSession:
                 await self.send_client({"type": "ready", "model": model_id, "region": region})
                 return
             except Exception as e:
-                self._last_error = f"{model_id} in {region}: {type(e).__name__}: {str(e)[:160]}"
+                self._failed(model_id, region, e)
                 log(
                     "warn",
                     "voice.open_failed",
@@ -235,7 +244,7 @@ class SonicSession:
                 return
             log("warn", "voice.stream_error", error=type(e).__name__, detail=str(e)[:300])
             assert self.model is not None
-            self._last_error = f"{self.model[0]} in {self.model[1]}: {type(e).__name__}: {str(e)[:160]}"
+            self._failed(self.model[0], self.model[1], e)
             if not self._got_output and self._tried < len(self.candidates):
                 model_id, region = self.candidates[self._tried]  # this model isn't usable here: the next one
                 self._tried += 1
@@ -244,6 +253,7 @@ class SonicSession:
                     await self.send_client({"type": "ready", "model": model_id, "region": region})
                     return
                 except Exception as e2:
+                    self._failed(model_id, region, e2)
                     log("warn", "voice.open_failed", model=model_id, region=region, error=type(e2).__name__)
             # A stream that keeps failing before Sonic says anything is not coming back: say why and stop,
             # instead of reopening it forever while the owner hears nothing.

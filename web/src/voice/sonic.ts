@@ -47,7 +47,16 @@ export function primedContext(): AudioContext | null {
 /** Whether to try the real-time voice: always, except under a test's fake voice that did not ask for it. */
 export function sonicWanted(): boolean {
   const w = window as unknown as { __aicVoice?: unknown; __aicSonic?: boolean };
-  return typeof WebSocket !== "undefined" && (!w.__aicVoice || w.__aicSonic === true);
+  if (typeof WebSocket === "undefined") return false;
+  if (w.__aicSonic === true) return true;
+  // Off by default (the owner, 2026-11-09: "use the old way that worked"): the conversation runs on the standard
+  // voice (Transcribe + Polly) until Nova Sonic is switched on, once the AWS account allows it (Bedrock answered
+  // AccessDenied). Switch on: localStorage "aic.voice.engine" = "nova-sonic".
+  try {
+    return !w.__aicVoice && localStorage.getItem("aic.voice.engine") === "nova-sonic";
+  } catch {
+    return false;
+  }
 }
 
 function loudness(a: AnalyserNode | null, buf: Float32Array<ArrayBuffer> | null): number {
