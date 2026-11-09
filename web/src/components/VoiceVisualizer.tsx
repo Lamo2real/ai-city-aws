@@ -325,10 +325,10 @@ export function Aurora({ speaker }: { speaker: Speaker }) {
             : speaker === "thinking"
               ? 0.18 + 0.1 * Math.sin(t / 600)
               : 0.06;
-      smooth += (Math.min(1, raw * 1.6) - smooth) * 0.18;
+      smooth += (Math.min(1, raw * 1.3) - smooth) * 0.1; // slow to rise and fall: calm, never jumpy
       const base = h * 0.62; // where the message box's top edge sits in this canvas
       const veil = (amp: number, speed: number, freq: number, alpha: number, color: string) => {
-        const crest = base - (24 + amp * h * 0.42);
+        const crest = base - (18 + amp * h * 0.32);
         const grad = g.createLinearGradient(0, crest - 30, 0, base + 20);
         grad.addColorStop(0, `rgba(${color},0)`);
         grad.addColorStop(0.45, `rgba(${color},${alpha * 0.55})`);
@@ -341,35 +341,35 @@ export function Aurora({ speaker }: { speaker: Speaker }) {
           const bell = Math.sin(Math.PI * u) ** 1.4; // tallest in the middle, flat at the sides
           const ripple = still
             ? 0
-            : Math.sin(u * Math.PI * freq + t / speed) * 0.35 + Math.sin(u * 13 - t / (speed * 1.7)) * 0.15;
-          g.lineTo(x, base - (base - crest) * bell * (0.75 + ripple * (0.4 + amp)));
+            : Math.sin(u * Math.PI * freq + t / speed) * 0.18 + Math.sin(u * 7 - t / (speed * 1.7)) * 0.06;
+          g.lineTo(x, base - (base - crest) * bell * (0.85 + ripple * (0.3 + amp * 0.5)));
         }
         g.lineTo(w, h);
         g.closePath();
         g.fill();
       };
-      g.filter = "blur(18px)";
-      veil(smooth * 0.8, 900, 3, 0.35, light);
-      veil(smooth, 520, 5, 0.55, deep);
+      g.filter = "blur(22px)";
+      veil(smooth * 0.7, 1400, 2, 0.24, light);
+      veil(smooth, 900, 3, 0.4, deep);
       g.filter = "none";
       // Sparks: born at the crest when the voice is loud, drifting up and fading.
-      if (!still && smooth > 0.25 && Math.random() < smooth * 0.6)
+      if (!still && smooth > 0.45 && sparks.length < 6 && Math.random() < smooth * 0.05)
         sparks.push({
-          x: w * (0.2 + Math.random() * 0.6),
-          y: base - 20,
-          v: 0.4 + Math.random() * 1.2,
-          r: 1 + Math.random() * 2,
+          x: w * (0.3 + Math.random() * 0.4),
+          y: base - 16,
+          v: 0.25 + Math.random() * 0.35,
+          r: 0.8 + Math.random() * 0.8,
           life: 1,
         });
       for (let i = sparks.length - 1; i >= 0; i--) {
         const s = sparks[i]!;
         s.y -= s.v;
-        s.life -= 0.012;
+        s.life -= 0.008;
         if (s.life <= 0) {
           sparks.splice(i, 1);
           continue;
         }
-        g.fillStyle = `rgba(${light},${s.life * 0.9})`;
+        g.fillStyle = `rgba(${light},${s.life * 0.45})`;
         g.beginPath();
         g.arc(s.x + Math.sin((t + i * 97) / 300) * 4, s.y, s.r, 0, Math.PI * 2);
         g.fill();
