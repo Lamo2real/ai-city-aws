@@ -310,7 +310,8 @@
         "wix",
         "typeform",
         "figma",
-        "drawio"
+        "drawio",
+        "everygen"
       ]
     },
     {
@@ -783,7 +784,8 @@
         "vimeo",
         "mux",
         "cloudinary",
-        "drawio"
+        "drawio",
+        "everygen"
       ]
     }
   ],
@@ -1394,6 +1396,13 @@
       "url": "https://mcp.draw.io/mcp",
       "what": "Diagrams: flowcharts, org charts, architecture and process drawings (no account needed)",
       "aka": ["drawio", "diagrams.net", "diagram"]
+    },
+    "everygen": {
+      "label": "EveryGen AI",
+      "url": "https://everygen-ai.com/mcp",
+      "what": "Images, videos, music and voice-overs from a brief, with the cost shown before anything is made",
+      "signup": "https://everygen-ai.com/",
+      "aka": ["evergen", "ever gen", "every gen"]
     }
   },
   "not_offered": {

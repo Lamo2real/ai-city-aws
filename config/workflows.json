@@ -608,6 +608,129 @@
         "the words on buttons and the main call to action",
         "colours and layout of the main screen"
       ]
+    },
+    {
+      "id": "organic-content",
+      "name": "Organic content",
+      "summary": "Posts and short videos made by Media with your creative tools and published to YouTube, TikTok and Instagram, with no money spent.",
+      "department": "Media",
+      "connector": null,
+      "skill": "social-publishing",
+      "modes": ["do"],
+      "away_by_default": true,
+      "match": {
+        "direct_only": true,
+        "subjects": ["content", "post", "posts", "reel", "reels", "shorts", "tiktok", "tiktoks", "youtube video", "youtube short", "instagram post", "social post", "social posts", "social media post", "video for social", "organic content", "content for social", "carousel"],
+        "actions": ["create", "make", "post", "publish", "film", "produce", "put out", "lets", "let us", "i want", "i need", "we need"],
+        "not_when": ["ads", "ad", "campaign", "boost", "sponsored", "paid", "budget", "report", "analytics", "stats", "how", "what", "why", "delete", "remove", "app", "website"]
+      },
+      "inputs": [
+        {
+          "key": "brief",
+          "label": "The brief",
+          "type": "text",
+          "from_words": true,
+          "question": "What is the content about, in a sentence or two?"
+        },
+        {
+          "key": "platforms",
+          "label": "Where",
+          "type": "choice",
+          "default": "YouTube, TikTok and Instagram",
+          "question": "Where should it go: YouTube, TikTok and Instagram, only short-video platforms, or only Instagram?",
+          "options": [
+            {
+              "label": "YouTube, TikTok and Instagram",
+              "words": ["everywhere", "all", "all three", "youtube tiktok and instagram", "every platform"]
+            },
+            {
+              "label": "TikTok and Instagram Reels",
+              "words": ["tiktok and instagram", "reels and tiktok", "short video", "shorts only", "tiktok and reels"]
+            },
+            {
+              "label": "YouTube only",
+              "words": ["youtube only", "only youtube", "just youtube"]
+            },
+            {
+              "label": "Instagram only",
+              "words": ["instagram only", "only instagram", "just instagram"]
+            }
+          ]
+        },
+        {
+          "key": "format",
+          "label": "Format",
+          "type": "choice",
+          "default": "A short video",
+          "question": "What should it be: a short video, an image post or carousel, or a longer YouTube video?",
+          "options": [
+            {
+              "label": "A short video",
+              "words": ["short", "shorts", "reel", "reels", "tiktok", "short video", "clip"]
+            },
+            {
+              "label": "An image post or carousel",
+              "words": ["image", "picture", "photo", "carousel", "graphic", "post"]
+            },
+            {
+              "label": "A longer YouTube video",
+              "words": ["long", "longer", "long form", "long-form", "full video", "explainer"]
+            }
+          ]
+        },
+        {
+          "key": "voice",
+          "label": "Tone",
+          "type": "choice",
+          "default": "Friendly and clear",
+          "question": "What tone: friendly and clear, bold and energetic, or calm and expert?",
+          "options": [
+            {
+              "label": "Friendly and clear",
+              "words": ["friendly", "clear", "warm", "simple"]
+            },
+            {
+              "label": "Bold and energetic",
+              "words": ["bold", "energetic", "hype", "punchy", "exciting"]
+            },
+            {
+              "label": "Calm and expert",
+              "words": ["calm", "expert", "professional", "serious", "educational"]
+            }
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "id": "plan",
+          "title": "Plan",
+          "inputs": ["brief", "platforms", "format"],
+          "guide": "Media plans {format} about {brief} for {platforms}: the hook, the script and the caption per platform.",
+          "do": "Plan {format} about {brief} for {platforms}: search the knowledge base for the brand first, then write the hook, script or storyboard and a caption per platform (each platform's format and length). Choose sensible defaults and ask taste questions as you go; never wait."
+        },
+        {
+          "id": "make",
+          "title": "Make",
+          "inputs": ["voice"],
+          "guide": "The team makes it with your creative tools: Canva for designs, Higgsfield or EveryGen for video, ElevenLabs for the voice, draw.io for diagrams. Tone: {voice}.",
+          "do": "Make it with the creative connectors that are on (Canva for designs and thumbnails, Higgsfield, HeyGen or EveryGen for video, ElevenLabs for voice-over and sound, draw.io for diagrams), tone {voice}. Use only licensed music and the owner's own or generated material; label realistic AI content as the platforms require. If a tool is off, use the next one; never sign up for anything."
+        },
+        {
+          "id": "check",
+          "title": "Check",
+          "inputs": [],
+          "guide": "The manager checks it against the brand and each platform's rules.",
+          "do": "Review the result against the brief, the brand in the knowledge base and each platform's format; fix what fails."
+        },
+        {
+          "id": "publish",
+          "title": "Publish",
+          "inputs": [],
+          "guide": "It is published to {platforms} through the accounts you connected.",
+          "do": "Publish it to {platforms} now, as organic posts (the owner's request is the go-ahead; no money is spent): through the platform's own connector when the owner added it (YouTube, TikTok or Instagram official API), otherwise the publishing tool that is on (Metricool, Buffer, Ayrshare or Blotato). Never boost, promote or spend: paid ads are a separate workflow with the owner's budget. If no publishing account is connected, save the finished files and captions to the knowledge base and say in one line which account to connect. Report the links."
+        }
+      ],
+      "taste_topics": ["the hook and the first seconds", "the thumbnail or cover image", "the caption and call to action", "the music or voice"]
     }
   ]
 }

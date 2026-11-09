@@ -4,7 +4,9 @@ description: "Publish and schedule to YouTube, TikTok, Instagram and Facebook th
 ---
 # Social publishing
 
-The owner connects each social account once inside the publishing tool (**Metricool** first; **Buffer**, **Ayrshare** or **Blotato** also work). The city never asks for social passwords.
+Two ways to publish, both signed in by the owner once with the platform's own sign-in (the city never asks for social passwords):
+- **The platform's own API**, when the owner added it as a connector: YouTube Data API, TikTok Content Posting API, Instagram Graph API (content publishing). Use it first when it is there.
+- **A publishing tool**: **Metricool** first; **Buffer**, **Ayrshare** or **Blotato** also work.
 
 | Platform | Format | Caption |
 |---|---|---|
@@ -14,6 +16,7 @@ The owner connects each social account once inside the publishing tool (**Metric
 | Facebook | Reels 9:16, feed video 4:5 or 1:1 | short caption with a question |
 
 - Post when the audience is online (the tool's best-time data).
-- Schedule as drafts or queued posts; nothing goes live without the owner's yes in the goal or in Needs you.
+- Organic posts from the "Organic content" workflow go live as soon as they pass review: the owner's request is the go-ahead (decision 132). Anything else is scheduled as a draft or queued post unless the goal says to publish.
+- Never boost, promote or spend: paid reach is the ads workflows' job, with the owner's own budget (decision 126).
 - Disclose AI-generated realistic content and paid partnerships using each platform's label.
 - Report what was scheduled, when and where, and the links once live.

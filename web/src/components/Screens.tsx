@@ -3,6 +3,8 @@ import { AwaySettings } from "./Away.tsx";
 import { DecidedList } from "./ChiefOfStaff.tsx";
 import { ConnectorsSettings } from "./ConnectorsSettings.tsx";
 import { Inbox } from "./Inbox.tsx";
+import { SupportBoard } from "./SupportBoard.tsx";
+import { PipelineBoard } from "./PipelineBoard.tsx";
 import { GitHubSettings } from "./GitHubSettings.tsx";
 import { useEffect, useState } from "react";
 import { COST_NOTE, plainText, ticketWords } from "../city/city-state.js";
@@ -71,17 +73,20 @@ interface Job {
 }
 /**
  * Work: the owner's jobs, one row each (name, what is happening, parts done, when). Details are a tap away.
- * "Decided for you" (`#/tickets/decided`) lists what the Chief of Staff decided.
+ * "Decided for you" (`#/tickets/decided`) lists what the Chief of Staff decided; "Customer tickets"
+ * (`#/tickets/customers`) is the support desk's board; "Sales pipeline" (`#/tickets/deals`) lists the deals.
  */
 export function Tickets({ page = null }: { page?: string | null }) {
-  const [which, setWhich] = useState<"live" | "done" | "decided">(page === "decided" ? "decided" : "live");
+  const pageTab = page === "decided" || page === "customers" || page === "deals" ? page : null;
+  const [which, setWhich] = useState<"live" | "done" | "decided" | "customers" | "deals">(pageTab ?? "live");
   useEffect(() => {
-    if (page === "decided") setWhich("decided");
-  }, [page]);
+    if (pageTab) setWhich(pageTab);
+  }, [pageTab]);
   const [open, setOpen] = useState<string | null>(null);
-  const api_ = useApi<{ jobs: Job[] }>(which === "decided" ? null : `/jobs${which === "done" ? "?status=done" : ""}`);
-  const data = which === "decided" ? null : api_.data;
-  const error = which === "decided" ? null : api_.error;
+  const other = which === "decided" || which === "customers" || which === "deals";
+  const api_ = useApi<{ jobs: Job[] }>(other ? null : `/jobs${which === "done" ? "?status=done" : ""}`);
+  const data = other ? null : api_.data;
+  const error = other ? null : api_.error;
   const retry = api_.retry;
   if (open) return <TicketDetail id={open} back={() => setOpen(null)} />;
   return (
@@ -97,14 +102,22 @@ export function Tickets({ page = null }: { page?: string | null }) {
         <button role="tab" aria-selected={which === "decided"} onClick={() => setWhich("decided")}>
           Decided for you
         </button>
+        <button role="tab" aria-selected={which === "customers"} onClick={() => setWhich("customers")}>
+          Customer tickets
+        </button>
+        <button role="tab" aria-selected={which === "deals"} onClick={() => setWhich("deals")}>
+          Sales pipeline
+        </button>
       </div>
       {which === "decided" ? <DecidedList inWork /> : null}
+      {which === "customers" ? <SupportBoard /> : null}
+      {which === "deals" ? <PipelineBoard /> : null}
       {error ? (
         <Banner tone="bad" action={{ label: "Try again", onClick: retry }}>
           Your work list did not load. Check the connection.
         </Banner>
       ) : null}
-      {!data && !error && which !== "decided" ? <Loading what="your work" /> : null}
+      {!data && !error && !other ? <Loading what="your work" /> : null}
       {data && !data.jobs.length ? (
         <p className="empty">
           {which === "live" ? "Nothing is being worked on. Ask AIC for something." : "Nothing is finished yet."}

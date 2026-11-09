@@ -12,7 +12,7 @@ Ledger: ``STANDING`` / ``<id>`` for the orders, ``HANDLED#<order id>`` / ``<item
 from __future__ import annotations
 
 import re
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .events import now_iso
@@ -20,6 +20,8 @@ from .hierarchy.actions import FINAL, CityDeps, new_ticket, send
 from .ids import new_id
 from .ledger import Ledger, Record
 from .log import log
+from .sales_pipeline import followup_instructions
+from .support_desk import intake_instructions
 from .table import UpdateOptions
 
 DEFAULT_MINUTES = 15
@@ -148,7 +150,7 @@ async def handled_since(ledger: Ledger, since: str) -> list[Record]:
 
 
 # ---------- running them ----------
-def goal_text(order: Record, done: list[str]) -> str:
+def goal_text(order: Record, done: list[str], today: datetime | None = None) -> str:
     skip = ", ".join(done[:SKIP_SHOWN]) if done else "none yet"
     return (
         f"Standing order {order['id']} (the owner set this up to run while they are away): check "
@@ -158,7 +160,19 @@ def goal_text(order: Record, done: list[str]) -> str:
         "(ticket key, message id or email id) and one line of what you did; if it answers that the item was "
         "already handled, skip it. If nothing is new, finish at once and report 'Nothing new'. If the source "
         "can't be reached (not connected, signed out), report that in one line and finish: don't ask anyone."
+        + (intake_instructions(order["id"]) if _is_support(order) else "")
+        + (followup_instructions(order["id"], today or datetime.now(UTC)) if _is_sales(order) else "")
     )
+
+
+def _is_sales(order: Record) -> bool:
+    """Sales' orders follow up on stale deals (decision 133)."""
+    return " ".join(str(order.get("department") or "").lower().split()) == "sales"
+
+
+def _is_support(order: Record) -> bool:
+    """Customer Support's orders run the support desk (decision 131): intake becomes a ticket."""
+    return " ".join(str(order.get("department") or "").lower().split()) in ("customer support", "support")
 
 
 def _due(order: Record, now_dt: Any) -> bool:
@@ -185,7 +199,7 @@ async def run_due(d: CityDeps) -> dict[str, int]:
         t = await new_ticket(
             d,
             {
-                "goal": goal_text(o, done),
+                "goal": goal_text(o, done, now_dt),
                 "from": "ace",
                 "to": "orchestrator",
                 "department": None,

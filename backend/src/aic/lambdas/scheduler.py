@@ -14,7 +14,8 @@ again (within the cap) when work resumes.
   invitation emails of plain IMAP accounts), merged and stored (docs/MAIL_CALENDAR.md §12). Skipped when the
   Calendar feature is off. "Refresh now" in the HUD starts the same job.
 - standing_orders: every 5 minutes, each due standing order starts one ordinary job for its department
-  (decision 125); one live job per order at a time.
+  (decision 125); one live job per order at a time. On the same beat the support desk moves each open customer
+  ticket one step (decision 131).
 - warm_ace: keeps AIC's runtime container running (a "warm" ping every few minutes on the owner's conversation
   session), so a message never pays the container's cold start. Created ENABLED: an idle container costs nothing.
 """
@@ -36,6 +37,7 @@ from aic.shared.hierarchy.queue import Queue
 from aic.shared.ledger import Ledger, Record
 from aic.shared.log import log
 from aic.shared.standing_orders import run_due
+from aic.shared.support_desk import advance as advance_tickets
 from aic.shared.table import UpdateOptions
 
 from ._runtime import run
@@ -205,7 +207,8 @@ async def run_job(
             settings=city_settings,
             max_review_rounds=3,
         )
-        return dict(await run_due(d))
+        # The support desk moves each open customer ticket one step on the same beat (decision 131).
+        return {**(await run_due(d)), **(await advance_tickets(d))}
     if job in ("sweep", "retire_idle"):
         settings: Record = await ledger.settings(default_settings())
         minutes = int(settings.get("worker_idle_release_minutes") or 15)

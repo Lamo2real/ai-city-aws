@@ -346,6 +346,13 @@ class WorkflowUpdated(_E):
     run: dict[str, Any]
 
 
+class SupportTicket(_E):
+    """A customer ticket on the support desk changed (decision 131): the HUD's board redraws that row."""
+
+    type: Literal["support.ticket"]
+    ticket: dict[str, Any]
+
+
 class KnowledgeUpdated(_E):
     """A knowledge item's status or scope changed (``docs/KNOWLEDGE.md`` §6)."""
 
@@ -390,7 +397,8 @@ CityEventModel = Annotated[
     | AppUpdated
     | AppRemoved
     | KnowledgeUpdated
-    | WorkflowUpdated,
+    | WorkflowUpdated
+    | SupportTicket,
     Field(discriminator="type"),
 ]
 _ADAPTER: TypeAdapter[Any] = TypeAdapter(CityEventModel)

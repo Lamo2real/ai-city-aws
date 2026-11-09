@@ -17,7 +17,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Literal, cast
 
+from aic.shared import sales_pipeline as deals
 from aic.shared import standing_orders as standing
+from aic.shared import support_desk as desk
 from aic.shared.app_activity import app_activity
 from aic.shared.app_bridge import Invoke, api_bridge, file_proposal, run_proposal
 from aic.shared.app_caps import Invalid, MailProposals, proposals_from_env
@@ -105,6 +107,8 @@ ROUTES: list[tuple[str, str]] = [
     ("PUT", "/settings"),
     ("GET", "/chief-of-staff"),
     ("GET", "/away-summary?since=2026-11-01T00:00:00Z"),
+    ("GET", "/support-tickets"),
+    ("GET", "/deals"),
     ("GET", "/standing-orders"),
     ("POST", "/standing-orders"),
     ("PUT", "/standing-orders/so-1"),
@@ -874,6 +878,14 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}(T[\d:.]+Z?)?", since):
             since = now_iso(d.ledger.now() - timedelta(days=7))
         return reply(200, await away_summary(d.ledger, since))
+    if is_("GET", r"/support-tickets"):
+        # The support desk's board (decision 131): every customer ticket and where it stands.
+        status = str(q.get("status") or "") or None
+        return reply(200, {"tickets": await desk.list_tickets(d.ledger, status), "board": desk.BOARD})
+    if is_("GET", r"/deals"):
+        # AI City's own sales pipeline (decision 133); the stale ones are what Sales follows up next.
+        stage = str(q.get("stage") or "") or None
+        return reply(200, {"deals": await deals.list_deals(d.ledger, None, stage), "stale_days": deals.STALE_DAYS})
     if is_("GET", r"/standing-orders"):
         return reply(200, {"standing_orders": await standing.list_orders(d.ledger)})
     if is_("POST", r"/standing-orders"):

@@ -5329,3 +5329,61 @@ button.hub-status {
     grid-template-columns: 1fr;
   }
 }
+
+/* Support desk (decision 131) */
+.segmented {
+  flex-wrap: wrap;
+}
+.sd-row {
+  grid-template-areas:
+    "name tag"
+    "parts time"
+    "steps steps";
+}
+.sd-steps {
+  grid-area: steps;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  margin: var(--s2) 0;
+}
+.sd-steps ol {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s1);
+  padding: 0;
+  margin: 0;
+  font-size: var(--fs-xs);
+}
+.sd-steps li {
+  opacity: 0.55;
+}
+.sd-steps li + li::before {
+  content: "→ ";
+}
+.sd-steps li.sd-on {
+  opacity: 1;
+  font-weight: 700;
+}
+.sd-stuck {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bad-t);
+  color: var(--bad-l);
+}
+.sd-words {
+  white-space: pre-wrap;
+}
+
+/* Sales pipeline (decision 133) */
+.job-time.pl-late {
+  color: var(--bad-l);
+  font-weight: 700;
+}
+.pl-closed {
+  margin-top: var(--s4);
+}

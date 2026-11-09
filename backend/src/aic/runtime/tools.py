@@ -16,7 +16,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from aic.shared import sales_pipeline as deals
 from aic.shared import standing_orders as standing
+from aic.shared import support_desk as desk
 from aic.shared.apps import (
     MAX_FILE_BYTES,
     MAX_FILES,
@@ -1600,9 +1602,16 @@ def tools_for(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
     from .workflow_tools import ask_taste_tool, workflow_tools  # late: they build on this module's ToolSpec
 
     extra = (
-        [*_ace_knowledge_tools(d), _calendar_agenda_tool(d), *_standing_order_tools(d), *workflow_tools(d, c)]
+        [
+            *_ace_knowledge_tools(d),
+            _calendar_agenda_tool(d),
+            *_standing_order_tools(d),
+            *workflow_tools(d, c),
+            _customer_tickets_tool(d),
+            *_deal_tools(d, c),
+        ]
         if c.role == "ace"
-        else [_record_handled_tool(d, c), ask_taste_tool(d, c)]
+        else [_record_handled_tool(d, c), ask_taste_tool(d, c), *_support_desk_tools(d, c), *_deal_tools(d, c)]
         if c.role in ("manager", "worker")
         else []
     )
@@ -1641,7 +1650,10 @@ def _standing_order_tools(d: CityDeps) -> list[ToolSpec]:
             "On the owner's request (\"while I'm away, handle new Jira tickets\"): watch a source and handle what is "
             'new, again and again, without asking. source: the connector, channel or inbox ("Jira project SUP", '
             '"Slack #support"); instructions: what to do with each new item; department: who does it (default '
-            "Customer Support); every_minutes: how often (default 15).",
+            "Customer Support); every_minutes: how often (default 15). Customer Support's orders run the support desk: "
+            "each issue becomes a ticket, goes to the responsible department, and the reporter is told when it's "
+            "fixed. Sales' orders follow up on deals nobody has touched for a week (\"follow up on my pipeline every "
+            'day": department Sales, every_minutes 1440).',
             _obj(
                 {"source": _s(2), "instructions": _s(3), "department": _s(), "every_minutes": {"type": "integer"}},
                 ("department", "every_minutes"),
@@ -1673,6 +1685,162 @@ def _record_handled_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
         _obj({"order_id": _s(3), "item": _s(1), "summary": _s(1)}),
         record,
     )
+
+
+# ---------- the support desk (decision 131) ----------
+def _ticket_line(t: dict[str, Any]) -> str:
+    return (
+        f"{t['id']} ({t['tracker_key']}{'' if t['tracker'] == desk.BOARD else ' in ' + t['tracker']}): {t['title']} "
+        f"[{t['words']}; {t['department']}; from {t.get('customer') or t['channel']}]"
+    )
+
+
+def _customer_tickets_tool(d: CityDeps) -> ToolSpec:
+    async def listing(a: dict[str, Any]) -> str:
+        rows = await desk.list_tickets(d.ledger, str(a.get("status") or "") or None)
+        return "\n".join(_ticket_line(t) for t in rows[:30]) or "No customer tickets."
+
+    return ToolSpec(
+        "list_customer_tickets",
+        "Customer tickets on the support desk (newest first). status: open (default: all), new, with_team, fixed, "
+        "replying, closed or stuck.",
+        _obj({"status": _s()}, ("status",)),
+        listing,
+    )
+
+
+def _support_desk_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
+    who = c.department or c.agent_id
+
+    async def open_(a: dict[str, Any]) -> str:
+        try:
+            t, new = await desk.open_ticket(d, a, who)
+        except desk.Invalid as e:
+            return str(e)
+        if not new:
+            return f"This conversation already has ticket {_ticket_line(t)}. Don't open another."
+        return (
+            f"Opened ticket {t['id']} (number {t['tracker_key']}). The desk sends it to {t['department']} and comes "
+            "back to Customer Support to tell the reporter when it's fixed."
+        )
+
+    async def note(a: dict[str, Any]) -> str:
+        t = await desk.add_note(d, str(a.get("ticket") or ""), str(a.get("text") or ""), who)
+        return "Noted." if t else "There is no ticket with that id."
+
+    async def fixed(a: dict[str, Any]) -> str:
+        t = await desk.mark_fixed(d, str(a.get("ticket") or ""), str(a.get("summary") or ""), who)
+        return "Marked fixed: Customer Support tells the reporter next." if t else "There is no ticket with that id."
+
+    async def replied(a: dict[str, Any]) -> str:
+        t = await desk.mark_replied(d, str(a.get("ticket") or ""), str(a.get("summary") or ""), who)
+        return "Closed: the reporter has been told." if t else "There is no ticket with that id."
+
+    ticket = _s(2)
+    return [
+        ToolSpec(
+            "open_ticket",
+            "Customer Support: file a customer's issue on the support desk so the responsible department fixes it "
+            "and the reporter is told when it's done. title; details (what they wrote); customer; channel (slack, "
+            "email, chat, phone, other); where (Slack channel or sender's address); thread (the message's thread "
+            "timestamp or email message id, so the reply lands in the same thread); department (who is "
+            "responsible); tracker and tracker_key when you also filed it in Jira, Linear or similar; order_id.",
+            _obj(
+                {
+                    "title": _s(3),
+                    "details": _s(),
+                    "customer": _s(),
+                    "channel": _s(),
+                    "where": _s(),
+                    "thread": _s(),
+                    "department": _s(),
+                    "tracker": _s(),
+                    "tracker_key": _s(),
+                    "order_id": _s(),
+                },
+                ("details", "customer", "where", "thread", "department", "tracker", "tracker_key", "order_id"),
+            ),
+            open_,
+        ),
+        ToolSpec(
+            "ticket_note",
+            "Add one line of progress to a customer ticket (by its id).",
+            _obj({"ticket": ticket, "text": _s(1)}),
+            note,
+        ),
+        ToolSpec(
+            "ticket_fixed",
+            "The responsible department: the customer ticket is fixed. summary: one plain line of what was done, "
+            "written for the customer (Customer Support sends it to them).",
+            _obj({"ticket": ticket, "summary": _s(1)}),
+            fixed,
+        ),
+        ToolSpec(
+            "ticket_replied",
+            "Customer Support: the reporter has been told it's fixed. summary: one line of what you sent.",
+            _obj({"ticket": ticket, "summary": _s(1)}),
+            replied,
+        ),
+        _customer_tickets_tool(d),
+    ]
+
+
+# ---------- the sales pipeline (decision 133) ----------
+def _deal_line(x: dict[str, Any]) -> str:
+    value = f", {x['value']:g} {x.get('currency') or ''}".rstrip() if x.get("value") is not None else ""
+    return (
+        f"{x['id']}: {x['name']}{' (' + x['contact'] + ')' if x.get('contact') else ''} [{x['words']}{value}; last "
+        f"contact {str(x.get('last_contact_at'))[:10]}; next: {x.get('next_step') or 'not set'}]"
+    )
+
+
+def _deal_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
+    who = "AIC" if c.role == "ace" else (c.department or c.agent_id)
+
+    async def listing(a: dict[str, Any]) -> str:
+        stale = a.get("stale_days")
+        rows = await deals.list_deals(d.ledger, int(stale) if stale is not None else None, a.get("stage") or None)
+        return "\n".join(_deal_line(x) for x in rows[:50]) or "No deals on the board."
+
+    async def add(a: dict[str, Any]) -> str:
+        try:
+            x = await deals.add_deal(d.ledger, a, who)
+        except deals.Invalid as e:
+            return str(e)
+        return f"Added {_deal_line(x)}"
+
+    async def update(a: dict[str, Any]) -> str:
+        try:
+            x = await deals.update_deal(d.ledger, str(a.get("id") or ""), a, who)
+        except deals.Invalid as e:
+            return str(e)
+        return f"Updated {_deal_line(x)}" if x else "There is no deal with that id."
+
+    deal = {"name": _s(), "company": _s(), "contact": _s(), "email": _s(), "stage": _s(), "value": _s(),
+            "currency": _s(), "next_step": _s(), "note": _s()}  # fmt: skip
+    return [
+        ToolSpec(
+            "list_deals",
+            "AI City's own sales pipeline (used when no CRM is connected). stale_days: only open deals with no "
+            "contact for that many days; stage: open, lead, contacted, meeting, proposal, negotiation, won or lost.",
+            _obj({"stale_days": {"type": "integer", "minimum": 0}, "stage": _s()}, ("stale_days", "stage")),
+            listing,
+        ),
+        ToolSpec(
+            "add_deal",
+            "Put a deal on AI City's own sales pipeline: name (or company), contact, email, stage (default lead), "
+            "value, currency, next_step, note.",
+            _obj(deal, tuple(k for k in deal if k != "name")),
+            add,
+        ),
+        ToolSpec(
+            "update_deal",
+            "Change a deal on AI City's own pipeline: stage, value, next_step, a note, and contacted true when you "
+            "just followed up (it resets how long it has been).",
+            _obj({"id": _s(3), **deal, "contacted": {"type": "boolean"}}, (*deal, "contacted")),
+            update,
+        ),
+    ]
 
 
 async def file_approval(

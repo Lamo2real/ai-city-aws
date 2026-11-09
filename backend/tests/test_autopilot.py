@@ -206,7 +206,7 @@ async def test_the_scheduler_runs_a_due_order_once_at_a_time_and_nothing_is_hand
     d = make(clock)
     o = await so.add_order(d.ledger, {"source": "Jira SUP", "instructions": "Answer new tickets."})
     out = await run_job("standing_orders", d.ledger, d.queue, d.bus)
-    assert out == {"started": 1, "still_running": 0}
+    assert out == {"started": 1, "still_running": 0, "tickets_moved": 0}
     job = (await so.get_order(d.ledger, o["id"]))["last_job_id"]  # type: ignore[index]
     t = await d.ledger.get_ticket(job)
     assert t is not None and t["standing_order"] == o["id"] and t["to"] == "orchestrator"

@@ -607,3 +607,38 @@ def test_the_team_and_aic_are_told_about_taste_questions() -> None:
     assert "ask_taste" in load_prompt("manager.md", {"department": "Apps"}).body
     p = load_prompt("ace.md")
     assert "answer_taste" in p.tools and "The owner is usually away" in p.body and "never waited on" in p.body
+
+
+# ---------- decision 132: organic content, made by Media and published with no money spent ----------
+ORGANIC = "organic-content"
+
+
+@pytest.mark.parametrize(
+    ("words", "found"),
+    [
+        ("make a tiktok about our new summer menu", ORGANIC),
+        ("create a reel showing our product in action", ORGANIC),
+        ("post a youtube short about the launch", ORGANIC),
+        ("boost our latest reel with a paid campaign", None),  # money: the ads workflows, never this one
+        ("how did my last reel do", None),
+        ("make me a snake game", APP),
+    ],
+)
+def test_organic_content_is_recognised_only_when_asked_for_and_never_for_ads(words: str, found: str | None) -> None:
+    assert [m["id"] for m in wf.recognise(words)] == ([found] if found else [])
+
+
+async def test_organic_content_is_made_and_published_by_media_while_the_owner_is_away() -> None:
+    d = deps()
+    words = "Make a TikTok about our new summer menu, bold and energetic"
+    out = await tool(d, ace(), "start_workflow")({"workflow_id": ORGANIC, "owner_words": words})
+    assert "Handed to the Media department as task" in out
+    assert not d.bus.of_type("ace.question")
+    (t,) = [t for t in await d.ledger.list_tickets(("open",)) if t.get("kind") == "task"]
+    brief = t["brief"]
+    assert "Format: A short video\n" in brief and "Tone: Bold and energetic\n" in brief
+    assert "Where: YouTube, TikTok and Instagram (assumed)" in brief
+    for tool_name in ("Canva", "Higgsfield", "EveryGen", "ElevenLabs", "draw.io", "Metricool"):
+        assert tool_name in brief
+    assert "Never boost, promote or spend" in brief and "official API" in brief
+    assert not wf.spend(next(w for w in wf.definitions() if w["id"] == ORGANIC), {})  # nothing is ever spent
