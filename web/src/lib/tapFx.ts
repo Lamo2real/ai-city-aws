@@ -23,7 +23,14 @@ export function setTapFx(on: boolean) {
 }
 
 let ctx: AudioContext | null = null;
-/** A short, soft "tick": a sine dropping from 1.6 kHz to 700 Hz in 45 ms, very quiet. Made, not loaded. */
+/** The tap sound (the owner, 2026-11-09: "a different kind of sound"): a soft glass "tink", like a fingertip on a
+ *  glass pane. Two bell-like partials (2.6 kHz and its inharmonic 2.76× overtone) that ring for about 120 ms, the
+ *  overtone fading first, very quiet. Made, not loaded; ios/scripts/make_tap_sound.py writes the same sound for the
+ *  iPhone. */
+export const TINK = [
+  { hz: 2600, peak: 0.03, decay: 0.12 },
+  { hz: 2600 * 2.76, peak: 0.012, decay: 0.05 },
+] as const;
 export function click() {
   try {
     const AC =
@@ -32,17 +39,18 @@ export function click() {
     ctx ??= new AC();
     if (ctx.state === "suspended") void ctx.resume();
     const t = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(1600, t);
-    osc.frequency.exponentialRampToValueAtTime(700, t + 0.045);
-    gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.exponentialRampToValueAtTime(0.05, t + 0.004);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
-    osc.connect(gain).connect(ctx.destination);
-    osc.start(t);
-    osc.stop(t + 0.07);
+    for (const p of TINK) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(p.hz, t);
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(p.peak, t + 0.002);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + p.decay);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + p.decay + 0.01);
+    }
   } catch {
     /* no sound is fine */
   }
