@@ -567,7 +567,7 @@ describe("VAIC's ears (Transcribe streaming in Frankfurt)", () => {
     const auth = readFileSync("infra/modules/auth/main.tf", "utf8");
     expect(auth).toMatch(/resource "aws_transcribe_vocabulary" "speech_names" \{\s+provider\s+= aws\.speech/);
     // The owner's rule (2026-11-09): Transcribe writes "Ace" as VAIC, through a table vocabulary in the speech region.
-    expect(auth).toMatch(/"Ace\\t\\t\\tAIC"/);
+    expect(auth).toMatch(/"Ace\\t\\t\\tVAIC"/);
     expect(auth).toMatch(/vocabulary_file_uri = "s3:\/\/\$\{aws_s3_bucket\.speech\.id\}/);
     expect(auth).toMatch(/resource "aws_s3_bucket" "speech" \{[\s\S]*?provider = aws\.speech/);
     expect(auth).toMatch(/tags\s+= local\.tags/);
