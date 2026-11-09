@@ -14,9 +14,9 @@ import {
 import { FilePreview } from "./Files.tsx";
 import { errorText } from "./ui.tsx";
 
-export function FileCards(p: { files: FileCardData[]; ask?: boolean }) {
+export function FileCards(p: { files: FileCardData[]; ask?: boolean; label?: string }) {
   if (!p.files.length) return null;
-  return (
+  const list = (
     <ul className={`chat-files${p.files.length > 1 ? " chat-files-many" : ""}`} aria-label="Files VAIC found">
       {p.files.map((f, i) => (
         <li key={f.id}>
@@ -24,6 +24,14 @@ export function FileCards(p: { files: FileCardData[]; ask?: boolean }) {
         </li>
       ))}
     </ul>
+  );
+  return p.label ? (
+    <div className="chat-files-labelled">
+      <p className="chat-files-label">{p.label}</p>
+      {list}
+    </div>
+  ) : (
+    list
   );
 }
 

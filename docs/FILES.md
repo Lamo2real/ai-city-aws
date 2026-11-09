@@ -108,6 +108,12 @@ ever reaches the owner's own screen.
 | `get_file` | managers, workers | a worker gets a copy in its workspace (`files/<name>`); a manager gets the description and, for a text file, its text (≤ 40,000 characters) |
 | `save_file` | managers, workers | a worker saves a workspace file, a manager saves text; it goes to `hires/<hire>/files/<new id>/<name>` with folder, description and tags as object metadata; the Lambda adopts it with the department **read from the ledger's agent record** (never from what the agent wrote) and folder `Departments/<department>` by default |
 
+**References for a build (decision 155):** `delegate_to_orchestrator` takes `references` (≤ 5: `file_id`, `use` =
+`follow` | `inspiration`, `note`). They are stored on the task, listed for the Orchestrator, managers and workers
+(`runtime/references.py`), and a worker's assignment turn carries the images as image blocks (≤ 3) and the documents'
+text in `<file-content>` blocks, marked as data. `ace.files` with `label: "References for this build"` shows them in
+the chat (the project's own chat in the Apps studio).
+
 **Scoping, as with workspaces:** managers and workers reach the bucket only through the workspace role, assumed with
 the session tag `hire_id` (`wkr-…`, now also `mgr-…`): every hire may read `files/*` and write only
 `hires/${aws:PrincipalTag/hire_id}/files/*`; no hire may delete. The runtimes read the records and call Titan; VAIC

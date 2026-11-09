@@ -202,7 +202,12 @@ struct MessageRow: View {
                     StreamedText(text: line.text, streaming: line.state == .streaming)
                         .accessibilityLabel("VAIC: \(line.text)")
                 }
-                if let files = line.files, !files.isEmpty { FileCards(files: files) }
+                if let files = line.files, !files.isEmpty {
+                    if let label = line.filesLabel {
+                        Text(label.uppercased()).font(.caption2.weight(.bold)).foregroundStyle(Glass.mute)
+                    }
+                    FileCards(files: files)
+                }
                 if line.state == .done, let steps = line.steps, steps.count >= 2 {
                     DisclosureGroup(isExpanded: $showSteps) {
                         VStack(alignment: .leading, spacing: 2) {

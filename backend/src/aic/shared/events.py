@@ -439,6 +439,8 @@ class AceFiles(_E):
     message_id: str = ""
     files: list[FileCard]
     ask: bool = False
+    label: str = ""
+    """A heading over the cards ("References for this build"); empty for files VAIC simply shows."""
 
 
 CityEventModel = Annotated[

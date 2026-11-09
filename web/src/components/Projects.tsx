@@ -2,6 +2,7 @@
 // through, "New project" first. A project opens as a studio: a chat with VAIC about this app only, what is
 // happening, its versions, and a live preview at phone, tablet, laptop or any size. No code and no jargon:
 // one sentence starts a project, and VAIC asks before it guesses.
+import { FileCards } from "./FileCards.tsx";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import type { CityApp } from "../city/city-state.js";
 import { capped, loadApps, removeApp, rollbackApp } from "../lib/apps.ts";
@@ -438,7 +439,8 @@ function ProjectChat({ project }: { project: Project }) {
         {chat.map((l) => (
           <article key={l.id} className={`pj-msg pj-${l.who}`} aria-busy={l.state === "streaming" || undefined}>
             <span className="sr">{l.who === "ace" ? "VAIC:" : "You:"}</span>
-            {l.who === "ace" ? <Markdown text={l.text} /> : <p>{l.text}</p>}
+            {l.who === "ace" ? l.text ? <Markdown text={l.text} /> : null : <p>{l.text}</p>}
+            {l.files?.length ? <FileCards files={l.files} label={l.filesLabel} /> : null}
             {l.state === "failed" ? (
               <span className="pj-note">
                 Not sent.{" "}

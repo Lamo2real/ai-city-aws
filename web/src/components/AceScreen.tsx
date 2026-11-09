@@ -271,7 +271,7 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
                 ) : (
                   <p>{l.text}</p>
                 )}
-                {l.files?.length ? <FileCards files={l.files} /> : null}
+                {l.files?.length ? <FileCards files={l.files} label={l.filesLabel} /> : null}
                 {l.who === "ace" && l.state === "done" && l.steps ? (
                   <AicSteps steps={l.steps} tookMs={l.tookMs} running={stepsRunning(l)} started={l.started} />
                 ) : null}

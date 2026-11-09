@@ -244,6 +244,22 @@ async def _cold(req: EngineRequest) -> TurnOutput:
 
     # can_use_tool needs streaming input: the prompt is sent as one user message on a stream.
     async def prompt() -> AsyncIterator[dict[str, Any]]:
-        yield {"type": "user", "message": {"role": "user", "content": req.turn.prompt}}
+        yield {"type": "user", "message": {"role": "user", "content": user_content(req.turn)}}
 
     return await _consume(query(prompt=prompt(), options=_options(req, b)), req, b, [False])
+
+
+def user_content(turn: TurnInput) -> str | list[dict[str, Any]]:
+    """The turn's message for the Agent SDK: plain text, or text plus images (the owner's reference images,
+    decision 155). Attachments arrive as Converse blocks; the SDK takes Anthropic Messages blocks."""
+    import base64
+
+    images = [a["image"] for a in turn.attachments if isinstance(a.get("image"), dict)]
+    if not images:
+        return turn.prompt
+    blocks: list[dict[str, Any]] = [{"type": "text", "text": turn.prompt}]
+    for im in images:
+        fmt = str(im.get("format") or "png")
+        data = base64.b64encode(im["source"]["bytes"]).decode()
+        blocks.append({"type": "image", "source": {"type": "base64", "media_type": f"image/{fmt}", "data": data}})
+    return blocks

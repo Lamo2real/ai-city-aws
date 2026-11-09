@@ -435,6 +435,12 @@ class FakeS3:
         self.blobs.objects[key] = (Path(src).read_bytes(), ExtraArgs["ContentType"])
         self.blobs.meta[key] = ExtraArgs["Metadata"]
 
+    def get_object(self, Bucket: str, Key: str) -> dict[str, Any]:
+        import io as _io
+
+        self.calls.append(("get", Bucket, Key))
+        return {"Body": _io.BytesIO(self.blobs.objects[Key][0])}
+
     def download_file(self, bucket: str, key: str, dest: str) -> None:
         self.calls.append(("download", bucket, key))
         Path(dest).write_bytes(self.blobs.objects[key][0])

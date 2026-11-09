@@ -37,6 +37,7 @@ from .github_auth import GitAuth
 from .live import LiveReply, Send
 from .mail_tools import mail_level, mail_tools
 from .prompts import department_template, load_prompt
+from .references import refs_note, task_refs, worker_material
 from .skills import SkillStore, empty_home, use_skill_tool
 from .tools import (
     ToolSpec,
@@ -180,6 +181,13 @@ class AgentHost:
                     inv = {**inv, "body": inv["body"] + "\n\n[Saved to the owner's knowledge base as a CSV: "
                            + "; ".join(f"“{t}”" for t in saved) + "]"}  # fmt: skip
             prompt = await self._prompt(agent, inv)
+            attachments: tuple[dict[str, Any], ...] = ()
+            if ctx.role == "worker" and inv.get("kind") == "task" and self.d.files is not None:
+                # The owner's reference files ride with the assignment itself: images as images, documents as text.
+                refs = await task_refs(self.d, inv["ticketId"])
+                if refs:
+                    text, attachments = await worker_material(self.d, agent["id"], refs)
+                    prompt = f"{prompt}\n\n{text}"
             # A department built on demand may carry its own worker model (decision 134).
             own_dept = (
                 await ledger.get_department(str(agent["department"]))
@@ -254,6 +262,7 @@ class AgentHost:
                     prefix=settings.get("profile_prefix"),
                     turn_id=inv["id"],
                     timeout_ms=self.o.timeout_ms,
+                    attachments=attachments,
                 ),
                 GateDeps(ledger=ledger, bus=bus, settings=settings, backoff=self.o.backoff, runner=runner),
             )
@@ -453,6 +462,8 @@ class AgentHost:
             lines.append(f"Task {inv['taskId']}: {task.get('goal', '')} [{task.get('status', '?')}]")
             if task.get("brief"):
                 lines.append(brief_note(str(task["brief"])) + "\nPass it on whole in every assignment.")
+            if task.get("references"):
+                lines.append(refs_note(list(task["references"])))
             every = await ledger.list_departments(include_demolished=True)
             names = ", ".join(d["name"] for d in every if d.get("state") != "demolished") or "none yet"
             lines.append(f"Departments: {names}")
@@ -471,6 +482,8 @@ class AgentHost:
             lines.append(f"Your goal {inv['ticketId']}: {mine.get('goal', '')} [{mine.get('status', '?')}]")
             if brief := await task_brief(self.d, inv["ticketId"]):
                 lines.append(brief_note(brief))
+            if refs := await task_refs(self.d, inv["ticketId"]):
+                lines.append(refs_note(refs))
             for w in await ledger.department_agents(inv.get("department") or ""):
                 if w.get("kind") == "worker" and w.get("parent") == agent["id"] and w.get("state") != "retired":
                     lines.append(f"- worker {w['id']} ({w['role']}) state {w.get('worker_state') or '?'}")
@@ -500,6 +513,8 @@ class AgentHost:
             )
             if brief := await task_brief(self.d, inv["ticketId"]):
                 lines.append(brief_note(brief))
+            if refs := await task_refs(self.d, inv["ticketId"]):
+                lines.append(refs_note(refs))
             lines += [_draft_line(dr, "") for dr in await drafts_of_ticket(ledger, inv["ticketId"])]
         return "\n".join(lines)
 

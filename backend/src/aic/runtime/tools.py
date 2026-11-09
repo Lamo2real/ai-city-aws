@@ -35,6 +35,7 @@ from aic.shared.apps import (
 )
 from aic.shared.chief_of_staff import autopilot
 from aic.shared.events import now_iso
+from aic.shared.files.service import chat_card
 from aic.shared.github import redact
 from aic.shared.hierarchy.actions import (
     STAND_DOWN_NOTE,
@@ -349,6 +350,11 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 f"Not started: {open_jobs} job{'s' if open_jobs != 1 else ''} already running (the limit is "
                 f"{open_cap}). Tell the owner; they can stop one, or raise the limit in Settings."
             )
+        from .references import check_refs, refs_note  # late: it builds on CityDeps and Files
+
+        refs, bad_refs = await check_refs(d, a.get("references"))
+        if bad_refs:
+            return f"Not started: {bad_refs}"
         if not a.get("confirm"):
             # A job starts only on the owner's explicit yes: nothing is created until VAIC has asked.
             who = (
@@ -379,6 +385,7 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 **({"app_id": target["app_id"]} if target else {}),
                 **({"brief": brief} if brief else {}),
                 **({"workers": workers} if workers else {}),
+                **({"references": refs} if refs else {}),
                 "owner_words": str(a.get("owner_words", ""))[:500],  # so "the Porsche thing" finds it later
             },
         )
@@ -392,6 +399,19 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             body += f"\nConstraints: {cons}"
         if brief:
             body += f"\n{brief_note(brief)}"
+        if refs:
+            body += f"\n{refs_note(refs)}"
+            if c.conversation and d.files is not None:  # the chat shows which files the build uses
+                recs = {r["file_id"]: await d.files.service.store.get(r["file_id"]) for r in refs}
+                await d.bus.put(
+                    {
+                        "type": "ace.files",
+                        "conversation": c.conversation,
+                        "message_id": c.message_id or "",
+                        "files": [chat_card(v) for v in recs.values() if v],
+                        "label": "References for this build",
+                    }
+                )
         if workers:
             body += (
                 f"\nThe owner asked for exactly {workers} worker{'s' if workers != 1 else ''} on this task, all working "
@@ -613,7 +633,10 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             "plain words (who uses it, the screens, what happens on the key actions, the look, anything paid or "
             "private); the team builds exactly that. If the owner said how many agents or workers to use "
             '("use 5 agents", "put 3 people on it"), pass workers: exactly that many work on it at the same '
-            "time; otherwise leave it out and the team decides.",
+            "time; otherwise leave it out and the team decides. When the owner points at stored files for the work "
+            '("follow the best practices in my React guide", "make the UI like that sunset image"), find them with '
+            "find_files and pass references: each file_id with use follow (guidance to follow) or inspiration (the "
+            "look), and a short note on what to take from it.",
             _obj(
                 {
                     "goal": _s(3),
@@ -622,9 +645,22 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                     "app_id": _s(1, 40),
                     "brief": _s(1, BRIEF_MAX),
                     "workers": _WORKERS,
+                    "references": {
+                        "type": "array",
+                        "maxItems": 5,
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "file_id": _s(14, 14),
+                                "use": {"type": "string", "enum": ["follow", "inspiration"]},
+                                "note": _s(0, 300),
+                            },
+                            "required": ["file_id", "use"],
+                        },
+                    },
                     "confirm": {"type": "boolean"},
                 },
-                ("constraints", "app_id", "brief", "workers", "confirm"),
+                ("constraints", "app_id", "brief", "workers", "references", "confirm"),
             ),
             delegate,
         ),

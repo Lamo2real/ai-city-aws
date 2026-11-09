@@ -16,6 +16,8 @@ struct ChatLine: Codable, Equatable, Identifiable, Sendable {
     var tookMs: Double?
     /// VAIC lines: files VAIC put in the chat (show_files), each drawn with a preview and Download.
     var files: [ChatFile]?
+    /// A heading over the files ("References for this build", decision 154).
+    var filesLabel: String?
 }
 
 struct AceTurn: Equatable, Sendable {
@@ -168,7 +170,13 @@ final class HudStore {
         if type == "hud.action" { return onHudAction(e) }
         if type == "ace.files" {
             guard (e["conversation"].string ?? "main") == "main" else { return }
-            return aceFiles(e["files"].array.compactMap(ChatFile.init(json:)))
+            let cards = e["files"].array.compactMap(ChatFile.init(json:))
+            if let label = e["label"].string, !label.isEmpty, !cards.isEmpty {  // the references a build uses: own line
+                chat.append(ChatLine(id: "a-files-\(Int(clock()))-\(chat.count)", who: .ace, text: "", state: .done, at: clock(),
+                                     files: cards, filesLabel: label))
+                return
+            }
+            return aceFiles(cards)
         }
         if type == "steward.decided" { return stewardDecided(e) }
         // The backend answers first, then says `steward.decided`: remember what a closing item was about.

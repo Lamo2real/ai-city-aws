@@ -220,3 +220,38 @@ describe("files in the chat", () => {
     expect(store.get().chat.at(-1)!.files).toHaveLength(1);
   });
 });
+
+describe("references for a build (decision 154)", () => {
+  it("the project chat shows the files a build uses, under their heading", async () => {
+    const { projects } = await import("../src/lib/projects.ts");
+    projects.event({
+      type: "ace.files",
+      conversation: "app-habits",
+      label: "References for this build",
+      files: [{ id: "f-aaaaaaaaaaaa", name: "sunset.png", kind: "image" }],
+    });
+    const line = projects.get().chats["app-habits"]!.at(-1)!;
+    expect(line.filesLabel).toBe("References for this build");
+    expect(line.files?.map((f) => f.id)).toEqual(["f-aaaaaaaaaaaa"]);
+  });
+
+  it("in the main chat a labelled set is its own line", () => {
+    store.set({ chat: [], turn: null });
+    store.event({
+      type: "ace.files",
+      conversation: "main",
+      label: "References for this build",
+      files: [{ id: "f-aaaaaaaaaaaa", name: "a.png", kind: "image" }],
+    });
+    expect(store.get().chat.at(-1)?.filesLabel).toBe("References for this build");
+  });
+
+  it("the cards carry the heading", async () => {
+    vi.spyOn(filesLib, "withLinks").mockResolvedValue(file({ url: "u", download_url: "d" }));
+    render(
+      <FileCards files={[{ id: "f-aaaaaaaaaaaa", name: "a.png", kind: "image" }]} label="References for this build" />,
+    );
+    expect(screen.getByText("References for this build")).toBeTruthy();
+    await screen.findByRole("link", { name: "Download" });
+  });
+});

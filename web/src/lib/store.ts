@@ -25,6 +25,8 @@ export interface ChatLine {
   tasks?: { id: string; done: boolean }[];
   /** VAIC lines: files VAIC put in the chat (show_files), each drawn with a preview and a Download button. */
   files?: FileCardData[];
+  /** A heading over the files ("References for this build"). */
+  filesLabel?: string;
 }
 /** VAIC's turn in progress: when the owner sent, and the steps so far. */
 export interface AceTurn {
@@ -166,7 +168,7 @@ class Store {
     if (e.type === "hud.action") return hudAction(e);
     if (e.type === "ace.files") {
       if (String(e.conversation ?? "main") !== "main") return;
-      return this.aceFiles((e.files as FileCardData[] | undefined) ?? []);
+      return this.aceFiles((e.files as FileCardData[] | undefined) ?? [], String(e.label ?? ""));
     }
     if (e.type === "ace.reply")
       return this.aceReply(e as unknown as { conversation: string; text: string; done: boolean });
@@ -357,8 +359,25 @@ class Store {
     this.set({ turn: { ...turn, steps: [...turn.steps, words] } });
   }
   /** Files VAIC shows (show_files): on its reply to this turn, or held for that reply until its first words. */
-  private aceFiles(cards: FileCardData[]) {
+  private aceFiles(cards: FileCardData[], label = "") {
     if (!cards.length) return;
+    if (label) {
+      // A labelled set (the references a build uses) is its own line, never merged into a reply's cards.
+      return this.set({
+        chat: [
+          ...this.state.chat,
+          {
+            id: `a-files-${Date.now()}`,
+            who: "ace",
+            text: "",
+            state: "done",
+            at: Date.now(),
+            files: cards,
+            filesLabel: label,
+          },
+        ],
+      });
+    }
     const merge = (have: FileCardData[] = []) => [...have, ...cards.filter((c) => !have.some((h) => h.id === c.id))];
     const turn = this.state.turn;
     const chat = this.state.chat;

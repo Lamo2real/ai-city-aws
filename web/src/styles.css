@@ -6212,3 +6212,11 @@ a.btn-primary.chat-file-dl,
 .screen .files-folders > li {
   max-width: none;
 }
+.chat-files-label {
+  margin: var(--s2) 0 0;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--gmute);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

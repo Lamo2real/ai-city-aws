@@ -104,4 +104,13 @@ final class FilesTests: XCTestCase {
         XCTAssertTrue(AppSection.tabs.contains(.files))
         XCTAssertEqual(HudAction.section(forPage: "#/files"), .files)
     }
+
+    func testReferencesForABuildArriveAsTheirOwnLabelledLine() {
+        let h = store()
+        h.beginTurn()
+        h.event(["type": "ace.reply", "conversation": "main", "text": "On it.", "done": false])
+        h.event(["type": "ace.files", "conversation": "main", "label": "References for this build", "files": [sunrise]])
+        XCTAssertEqual(h.chat.last?.filesLabel, "References for this build")
+        XCTAssertEqual(h.chat.count, 2)
+    }
 }

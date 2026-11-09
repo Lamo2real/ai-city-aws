@@ -3,6 +3,7 @@
 // "New project" is `app-new-<short id>` until its app is published. Replies come as `ace.reply` events with
 // that conversation, multiple-choice questions also as `ace.question` events. The timeline comes from
 // `GET /apps/<id>/activity` when the server has it, and otherwise from the city events this page sees.
+import type { FileCardData } from "./files.ts";
 import { useSyncExternalStore } from "react";
 import type { CityApp } from "../city/city-state.js";
 import { api, ApiError } from "./api.ts";
@@ -15,6 +16,9 @@ export interface ProjectLine {
   text: string;
   state: "sending" | "sent" | "failed" | "streaming" | "done";
   at: number;
+  /** Files VAIC put in this chat (decision 155: the references a build uses), with a heading. */
+  files?: FileCardData[];
+  filesLabel?: string;
 }
 export interface ProjectAsk {
   question: string;
@@ -210,6 +214,21 @@ class Projects {
   event(e: { type: string; [k: string]: unknown }) {
     const conv = typeof e.conversation === "string" ? e.conversation : "";
     if (e.type === "ace.reply" && conv.startsWith("app-")) return this.reply(conv, String(e.text ?? ""), !!e.done);
+    if (e.type === "ace.files" && conv.startsWith("app-")) {
+      const files = (Array.isArray(e.files) ? e.files : []) as FileCardData[];
+      if (!files.length) return;
+      const lines = [...this.lines(conv)];
+      lines.push({
+        id: `f${Date.now().toString(36)}${newId()}`,
+        who: "ace",
+        text: "",
+        state: "done",
+        at: Date.now(),
+        files,
+        filesLabel: typeof e.label === "string" ? e.label : "",
+      });
+      return this.putLines(conv, lines);
+    }
     if (e.type === "ace.question" && conv.startsWith("app-")) {
       const options = (Array.isArray(e.options) ? e.options : [])
         .map((o) => capped(o, 80))
@@ -255,7 +274,11 @@ export function eventWords(e: {
   if (e.type === "app.updated" && app?.app_id && app.version)
     return { conv: `app-${app.app_id}`, who: "VAIC", text: `Version ${app.version} is live` };
   if (e.type === "approval.requested" && e.kind === "app.publish" && s(e.replaces))
-    return { conv: `app-${s(e.replaces)}`, who: "Builder", text: "A new version is ready for you to try in Open items (Settings → While I'm away)" };
+    return {
+      conv: `app-${s(e.replaces)}`,
+      who: "Builder",
+      text: "A new version is ready for you to try in Open items (Settings → While I'm away)",
+    };
   if (e.type === "app.draft" && s(e.replaces)) {
     const st = s(e.status);
     const text =
