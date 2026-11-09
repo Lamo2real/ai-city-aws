@@ -1,7 +1,7 @@
 """Builds the one Lambda package all functions share: dist/lambda/app/.
 
 It holds the ``aic`` package, its locked dependencies for Linux ARM64 (Python 3.13), the config files
-(``aic/_config``) and the utility prompts (``aic/_agents/utility``) and the departments' bundled skills (``aic/_agents/skills``). boto3 is left out: the Lambda runtime has
+(``aic/_config``) and every prompt (``aic/_agents``). boto3 is left out: the Lambda runtime has
 it. Terraform zips the folder; each function points at its own handler, e.g. ``aic.lambdas.api.handler``.
 
 Run from anywhere:  python3 backend/scripts/build_lambdas.py   (needs uv)
@@ -63,9 +63,9 @@ def main() -> int:
     )
     shutil.copytree(BACKEND / "src" / "aic", OUT / "aic", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     shutil.copytree(ROOT / "config", OUT / "aic" / "_config")
-    shutil.copytree(ROOT / "agents" / "utility", OUT / "aic" / "_agents" / "utility")
-    shutil.copytree(ROOT / "agents" / "skills", OUT / "aic" / "_agents" / "skills")  # Settings -> Departments
-    shutil.copy(ROOT / "agents" / "chief_of_staff.md", OUT / "aic" / "_agents" / "chief_of_staff.md")
+    # Every prompt (small): Lambdas read utility prompts, bundled skills, the Chief of Staff, the executives, the AI City
+    # guide and the GPT-Live voice prompt; a subset once left the executives' and the guide's files out.
+    shutil.copytree(ROOT / "agents", OUT / "aic" / "_agents")
     for junk in OUT.rglob("__pycache__"):
         shutil.rmtree(junk, ignore_errors=True)
     size = sum(p.stat().st_size for p in OUT.rglob("*") if p.is_file())

@@ -25,6 +25,7 @@ from aic.shared import support_desk as desk
 from aic.shared.app_activity import app_activity
 from aic.shared.app_bridge import Invoke, api_bridge, file_proposal, run_proposal
 from aic.shared.app_caps import Invalid, MailProposals, proposals_from_env
+from aic.shared.app_guide import ensure_guide_in_knowledge
 from aic.shared.apps import (
     AppsOrigin,
     get_app,
@@ -340,6 +341,7 @@ async def city_snapshot(d: ApiDeps) -> dict[str, Any]:
             log("info", "departments.seeded", names=json.dumps(made))
     except Exception as e:  # the City still loads; the next snapshot tries again
         log("warn", "departments.seed_failed", error=type(e).__name__)
+    await ensure_guide_in_knowledge(d.ledger.table, d.knowledge)  # the AI City guide, in the Knowledge base
     results: list[Any] = await asyncio.gather(
         d.ledger.list_agents(),
         d.ledger.list_departments(),

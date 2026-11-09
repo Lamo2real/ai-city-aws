@@ -15,6 +15,7 @@ from typing import Any
 from aic.mail.service import MailService
 from aic.shared import company
 from aic.shared import workflows as wf
+from aic.shared.app_guide import app_guide
 from aic.shared.apps import drafts_of_ticket, get_app
 from aic.shared.connectors import ConnectorStore
 from aic.shared.events import now_iso
@@ -377,7 +378,8 @@ class AgentHost:
     async def _system_base(self, agent: dict[str, Any], inv: dict[str, Any]) -> tuple[str, list[str]]:
         role = inv["role"]
         if role == "ace":
-            return load_prompt("ace.md").body, []
+            # The app guide rides with AIC's instructions so "how do I…" is answered at once (the owner, 2026-11-09).
+            return load_prompt("ace.md").body + "\n\n" + app_guide(), []
         if role == "orchestrator":
             return load_prompt("orchestrator.md").body, []
         if role == "manager":

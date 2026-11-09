@@ -811,7 +811,10 @@ describe("pre-configured departments (decision 113)", () => {
     }
   });
   it("the Lambda package carries the bundled skills", () => {
-    expect(readFileSync("backend/scripts/build_lambdas.py", "utf8")).toContain('"agents" / "skills"');
+    // Every prompt is bundled, the departments' skills included.
+    expect(readFileSync("backend/scripts/build_lambdas.py", "utf8")).toContain(
+      'shutil.copytree(ROOT / "agents", OUT / "aic" / "_agents")',
+    );
   });
 });
 
