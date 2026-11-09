@@ -402,6 +402,11 @@ class Pipeline:
         if not item.get("meta_source"):
             item = await self._detect_metadata(item)
         meta = item_metadata(item)
+        # Bedrock reads the metadata from the .metadata.json next to each document (S3 data source): written now,
+        # so it holds exactly what is ingested.
+        doc = json.dumps({"metadataAttributes": meta}).encode()
+        for key in item.get("normalized_keys") or []:
+            await self.blobs.put(f"{key}.metadata.json", doc, "application/json")
         await self.kb.ingest([(u, meta) for u in uris])
         return {"documents": len(uris)}
 

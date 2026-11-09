@@ -23,7 +23,7 @@ TITLE = "AI City guide"
 KEY = "normalized/builtin/ai-city-guide.pdf"
 LEGACY_TITLE = "AI City guide (built in)"
 """Copies the earlier attempt added as ordinary items; they are removed."""
-REVISION = "1"
+REVISION = "2"
 
 _ASCII = {
     "→": "->", "←": "<-", "…": "...", "’": "'", "‘": "'", "“": '"', "”": '"', "–": "-", "—": "-", "·": "-",

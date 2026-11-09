@@ -56,7 +56,7 @@ class Throttled(Exception):
     response: ClassVar[dict[str, Any]] = {"Error": {"Code": "ThrottlingException"}}
 
 
-async def test_direct_ingestion_sends_s3_documents_with_inline_metadata_25_per_call() -> None:
+async def test_direct_ingestion_sends_s3_documents_with_their_metadata_files_25_per_call() -> None:
     agent = Recorder(ingest_knowledge_base_documents={})
     kb = BedrockKnowledgeBase("KB1", "DS1", agent=agent)
     meta = {"item_id": "k-aaaaaaaaaaaa", "scope": "relevant", "kind": "text"}
@@ -66,14 +66,8 @@ async def test_direct_ingestion_sends_s3_documents_with_inline_metadata_25_per_c
     assert kw["knowledgeBaseId"] == "KB1" and kw["dataSourceId"] == "DS1"
     assert kw["documents"][0] == {
         "content": {"dataSourceType": "S3", "s3": {"s3Location": {"uri": "s3://b/normalized/k/0.md"}}},
-        "metadata": {
-            "type": "IN_LINE_ATTRIBUTE",
-            "inlineAttributes": [
-                {"key": "item_id", "value": {"type": "STRING", "stringValue": "k-aaaaaaaaaaaa"}},
-                {"key": "kind", "value": {"type": "STRING", "stringValue": "text"}},
-                {"key": "scope", "value": {"type": "STRING", "stringValue": "relevant"}},
-            ],
-        },
+        # S3 data source: the metadata comes from the .metadata.json next to the document (Bedrock's rule).
+        "metadata": {"type": "S3_LOCATION", "s3Location": {"uri": "s3://b/normalized/k/0.md.metadata.json"}},
     }
     with pytest.raises(ThrottlingException):
         await BedrockKnowledgeBase("KB1", "DS1", agent=Recorder(ingest_knowledge_base_documents=Throttled())).ingest(

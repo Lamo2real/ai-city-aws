@@ -4207,6 +4207,8 @@ summary,
   align-items: center;
   justify-content: center;
   padding: 0 var(--s4);
+  font-size: 15px; /* the same size on the City (13px base) and on Features */
+  line-height: 1;
   border-radius: 999px;
   color: var(--text);
   font-weight: 700;
@@ -4243,6 +4245,18 @@ summary,
 .citytop .citytabs + * {
   margin-left: 0;
 }
+/* On Features and the Calendar the switch sits exactly where it sits on the City (16px under the top bar, 311px
+   from the right: the stats card's right end, before its (i)), so switching pages moves only the highlight. */
+.screen > .citytabs {
+  position: absolute;
+  top: 16px;
+  right: 311px;
+  margin: 0;
+  z-index: 3;
+}
+.screen:has(> .citytabs) {
+  padding-top: calc(16px + 42px + var(--s4));
+}
 .citytop .info {
   order: 10;
   margin-left: 0;
@@ -4256,6 +4270,14 @@ summary,
   }
   .citytabs {
     width: 100%;
+  }
+  .screen > .citytabs {
+    position: static;
+    width: calc(100% - 10px); /* lines up with the City card's row (its 9px + 12px inset) */
+    margin: 0 5px var(--s3);
+  }
+  .screen:has(> .citytabs) {
+    padding-top: var(--s4);
   }
   .citytop .info {
     margin-left: auto;

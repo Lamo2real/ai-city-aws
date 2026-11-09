@@ -78,12 +78,13 @@ def s3_identifier(uri: str) -> dict[str, Any]:
 
 
 def ingest_document(uri: str, metadata: dict[str, Any]) -> dict[str, Any]:
+    """With an S3 data source, Bedrock takes a document's metadata only from S3 ("You can only upload content and
+    metadata from S3 if your knowledge base is connected to an S3 data source", 2026-11-09): the ``.metadata.json``
+    next to the document, which every caller writes first with these same attributes."""
+    del metadata  # it is in the .metadata.json file the caller wrote
     return {
         "content": {"dataSourceType": "S3", "s3": {"s3Location": {"uri": uri}}},
-        "metadata": {
-            "type": "IN_LINE_ATTRIBUTE",
-            "inlineAttributes": [{"key": k, "value": attribute_value(v)} for k, v in sorted(metadata.items())],
-        },
+        "metadata": {"type": "S3_LOCATION", "s3Location": {"uri": f"{uri}.metadata.json"}},
     }
 
 

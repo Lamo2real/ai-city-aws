@@ -21,7 +21,7 @@ from aic.shared.knowledge.jurisdiction import (
     superseded_map,
 )
 from aic.shared.knowledge.kb import Hit, ingest_document, retrieval_config
-from aic.shared.knowledge.model import item_metadata
+from aic.shared.knowledge.model import item_metadata, metadata_doc
 from aic.shared.knowledge.search import search_markets
 from aic.shared.knowledge.service import KnowledgeError
 from knowledge_support import World, ready_item, world
@@ -151,10 +151,15 @@ def test_metadata_attributes_are_typed_for_bedrock() -> None:
          "year": 2026, "topic": "privacy", "doc_type": "law", "language": "en"}
     )  # fmt: skip
     assert meta["countries"] == ["US"]
-    attrs = {a["key"]: a["value"] for a in ingest_document("s3://b/k", meta)["metadata"]["inlineAttributes"]}
-    assert attrs["jurisdictions"] == {"type": "STRING_LIST", "stringListValue": ["US-CA"]}
-    assert attrs["year"] == {"type": "NUMBER", "numberValue": 2026}
-    assert attrs["topic"] == {"type": "STRING", "stringValue": "privacy"}
+    # In the .metadata.json Bedrock reads: lists, numbers and strings as JSON values.
+    doc = metadata_doc(
+        "k-aaaaaaaaaaaa", "relevant", "document", {"jurisdictions": ["US-CA"], "year": 2026, "topic": "privacy"}
+    )
+    assert doc["metadataAttributes"]["jurisdictions"] == ["US-CA"] and doc["metadataAttributes"]["year"] == 2026
+    assert ingest_document("s3://b/k", meta)["metadata"] == {
+        "type": "S3_LOCATION",
+        "s3Location": {"uri": "s3://b/k.metadata.json"},
+    }
     # Nothing known: only the old three attributes (Bedrock has no null).
     assert set(item_metadata({"id": "k-aaaaaaaaaaaa", "scope": "relevant", "kind": "text"})) == {
         "item_id", "scope", "kind"

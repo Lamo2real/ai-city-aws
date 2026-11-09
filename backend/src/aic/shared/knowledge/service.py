@@ -267,25 +267,31 @@ class KnowledgeService:
             raise KnowledgeError("Nothing to change.")
         merged = {**item, **patch}
         if item_metadata(merged) != item_metadata(item):
-            await self._reingest(merged)
+            await self._reingest(merged, item)
         new = await self.store.update_item(item_id, patch) or item
         if any(new.get(k) != item.get(k) for k in patch if k != "meta_source"):
             await self.bus.put(updated_event(new))
         return item_json(new)
 
-    async def _reingest(self, item: dict[str, Any]) -> None:
-        """New scope or place: the item's documents are re-ingested with it, then the metadata files rewritten."""
+    async def _reingest(self, item: dict[str, Any], before: dict[str, Any]) -> None:
+        """New scope or place: the metadata files are rewritten (Bedrock reads the metadata from them), then the
+        item's documents are re-ingested. A busy knowledge base puts the old files back, so nothing changes."""
         meta = item_metadata(item)
+
+        async def write(m: dict[str, Any]) -> None:
+            for key in item.get("normalized_keys") or []:
+                await self.blobs.put(
+                    f"{key}.metadata.json", json.dumps({"metadataAttributes": m}).encode(), "application/json"
+                )
+
+        await write(meta)
         uris = list(item.get("ingest_uris") or [])
         if uris and self.kb:
             try:
                 await self.kb.ingest([(u, meta) for u in uris])
             except ThrottlingException as e:
+                await write(item_metadata(before))
                 raise KnowledgeError("The knowledge base is busy. Try again in a moment.") from e
-        for key in item.get("normalized_keys") or []:
-            await self.blobs.put(
-                f"{key}.metadata.json", json.dumps({"metadataAttributes": meta}).encode(), "application/json"
-            )
 
     async def delete(self, item_id: str) -> None:
         """KB documents first (so a busy KB leaves everything as it was), then files, graph and record."""
