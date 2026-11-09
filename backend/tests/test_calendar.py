@@ -1,5 +1,5 @@
 """The owner's one calendar (City → Features → Calendar, docs/MAIL_CALENDAR.md §12): join links, the merge across
-accounts, invitation emails (.ics) with repeats, the scheduled import, the routes and AIC's read tool. Fake
+accounts, invitation emails (.ics) with repeats, the scheduled import, the routes and VAIC's read tool. Fake
 providers and a fake IMAP server only: nothing here reaches a real account, AWS or the network."""
 
 from __future__ import annotations
@@ -488,7 +488,7 @@ async def test_refresh_now_starts_one_import_per_double_tap() -> None:
     assert (await handle_http(ev("POST", "/calendar/refresh"), make()))["statusCode"] == 503  # not deployed
 
 
-# ---------- AIC's read tool ----------
+# ---------- VAIC's read tool ----------
 async def test_aic_answers_whats_on_tomorrow_from_the_merged_calendar_through_the_gate() -> None:
     city = make_city(lambda req: None)  # type: ignore[arg-type,return-value]
     ledger = city.deps.ledger

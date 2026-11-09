@@ -1,4 +1,4 @@
-// One store for the whole HUD: the city (via the ported reducer), AIC's chat, connection status and
+// One store for the whole HUD: the city (via the ported reducer), VAIC's chat, connection status and
 // the owner's outbox. Every screen reads from here; the WebSocket and API write to it.
 import { hudAction } from "./hudAction.ts";
 import { needsCount } from "./needs.ts";
@@ -11,26 +11,26 @@ export interface ChatLine {
   id: string;
   who: "owner" | "ace";
   text: string;
-  /** Owner lines: queued (not sent yet), sent, or failed. AIC lines: streaming until done. */
+  /** Owner lines: queued (not sent yet), sent, or failed. VAIC lines: streaming until done. */
   state: "queued" | "sent" | "failed" | "streaming" | "done";
   at: number;
   /** Owner lines: said by voice (the mic or the wake word, or dictated and not edited by keyboard). */
   voice?: boolean;
-  /** AIC lines: the steps AIC took before answering, and how long until its first words (ms). */
+  /** VAIC lines: the steps VAIC took before answering, and how long until its first words (ms). */
   steps?: string[];
   tookMs?: number;
-  /** AIC lines: when the owner sent, and the work AIC handed on (tickets) and whether each has settled. */
+  /** VAIC lines: when the owner sent, and the work VAIC handed on (tickets) and whether each has settled. */
   started?: number;
   tasks?: { id: string; done: boolean }[];
 }
-/** AIC's turn in progress: when the owner sent, and the steps so far. */
+/** VAIC's turn in progress: when the owner sent, and the steps so far. */
 export interface AceTurn {
   started: number;
   steps: string[];
-  /** Tickets AIC opened in this turn before its reply line existed. */
+  /** Tickets VAIC opened in this turn before its reply line existed. */
   tasks?: string[];
 }
-/** A connect card under AIC's chat: an add-connector approval, a sign-in button, a key field or an app-password form. */
+/** A connect card under VAIC's chat: an add-connector approval, a sign-in button, a key field or an app-password form. */
 export type ConnectCardState =
   | { kind: "approve"; id: string; approvalId: string; action: string; reason: string; connectorId?: string }
   | {
@@ -124,7 +124,7 @@ class Store {
     this.settleTasks((id) => !open.has(id));
   }
 
-  /** Links the ticket AIC opens to its reply, and settles it when it finishes or its result comes back. */
+  /** Links the ticket VAIC opens to its reply, and settles it when it finishes or its result comes back. */
   private taskEvent(e: { type: string; [k: string]: unknown }) {
     if (e.type === "result" && typeof e.ticket_id === "string") return this.settleTasks((id) => id === e.ticket_id);
     if (e.type !== "ticket.status") return;
@@ -155,7 +155,7 @@ class Store {
     });
   }
   event(e: { type: string; [k: string]: unknown }) {
-    // A project's chat (`app-…`, lib/projects.ts) is not AIC's main chat.
+    // A project's chat (`app-…`, lib/projects.ts) is not VAIC's main chat.
     if ((e.type === "ace.reply" || e.type === "ace.question") && String(e.conversation ?? "").startsWith("app-"))
       return;
     if (e.type === "hud.action") return hudAction(e);
@@ -171,7 +171,7 @@ class Store {
   /** Adds a card, or updates it where it stands (so a card doesn't jump when its status changes). */
   /** Services already announced in the chat this session, so "… is connected, Sir." comes once. */
   private announced = new Set<string>();
-  /** AIC's short line when a service the owner was connecting turns live (written here, not by the model). */
+  /** VAIC's short line when a service the owner was connecting turns live (written here, not by the model). */
   private announce(key: string, name: string) {
     if (this.announced.has(key)) return;
     this.announced.add(key);
@@ -196,7 +196,7 @@ class Store {
     }
     return { connectors: [...connectors], mail: [...mail] };
   }
-  /** What to do once a service the owner just connected is ready: AIC carries on with their request (decision 130). */
+  /** What to do once a service the owner just connected is ready: VAIC carries on with their request (decision 130). */
   onResume: ((text: string) => void) | null = null;
   /** The owner's request that led to each service being offered, by connector id, kept for this tab's session. */
   private resumes(): Record<string, string> {
@@ -337,7 +337,7 @@ class Store {
     for (const a of list) if (a?.app_id) apps[a.app_id] = a;
     this.set({ city: { ...this.state.city, apps } });
   }
-  /** Starts AIC's turn: the status row shows from now until its first words. */
+  /** Starts VAIC's turn: the status row shows from now until its first words. */
   beginTurn() {
     this.set({ turn: { started: Date.now(), steps: [FIRST_STEP] } });
   }
@@ -350,7 +350,7 @@ class Store {
   private aceReply(e: { text: string; done: boolean }) {
     const chat = [...this.state.chat];
     const last = chat.at(-1);
-    // The final reply arrives twice (straight from AIC, and through the event bus as a safety net).
+    // The final reply arrives twice (straight from VAIC, and through the event bus as a safety net).
     if (e.done && last?.who === "ace" && last.state === "done" && last.text === e.text) return;
     if (last?.who === "ace" && last.state === "streaming")
       chat[chat.length - 1] = {
@@ -378,7 +378,7 @@ class Store {
           : {}),
       });
     // "speaking" comes only from audio really playing (the voice sets it when a clip starts). A finished reply
-    // ends "thinking"; while AIC already speaks its first sentences, more pieces must not flip it back.
+    // ends "thinking"; while VAIC already speaks its first sentences, more pieces must not flip it back.
     const presence =
       this.state.presence === "speaking"
         ? "speaking"

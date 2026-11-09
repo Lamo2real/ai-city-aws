@@ -118,13 +118,13 @@ def test_managers_hire_few_and_the_orchestrator_never_staffs_a_one_off() -> None
 def test_aces_prompt_states_its_name_greetings_spoken_style_and_limits() -> None:
     body = load_prompt("ace.md").body
     for s in (
-        "AIC",
-        "AIC",
-        "yo AIC",
-        "hi AIC",
-        "what's up AIC",
-        "how's it going AIC",
-        "what's the status of the product, AIC?",
+        "VAIC",
+        "VAIC",
+        "yo VAIC",
+        "hi VAIC",
+        "what's up VAIC",
+        "how's it going VAIC",
+        "what's the status of the product, VAIC?",
         "Short",
         "can't",
     ):

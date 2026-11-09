@@ -307,7 +307,7 @@ async def stage_submission(
         "replaces": None,
         "created_at": now_iso(ledger.now()),
     }
-    # A task about an existing app (AIC passed its app_id) makes a new version of that app.
+    # A task about an existing app (VAIC passed its app_id) makes a new version of that app.
     task = await ledger.get_ticket(draft["task_id"]) if draft["task_id"] else None
     target = str((task or {}).get("app_id") or "")
     if target and await get_app(ledger, target):

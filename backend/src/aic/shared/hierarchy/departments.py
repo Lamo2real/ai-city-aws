@@ -1,6 +1,6 @@
 """Departments on demand: the owner builds one, or demolishes one (decision 134).
 
-Shared by AIC's tools and the HTTP API, so the City, Settings and a word to AIC do exactly the same thing.
+Shared by VAIC's tools and the HTTP API, so the City, Settings and a word to VAIC do exactly the same thing.
 """
 
 from __future__ import annotations
@@ -139,7 +139,7 @@ async def demolition_plan(d: CityDeps, dept: Record) -> dict[str, Any]:
 
 async def demolish_department(d: CityDeps, dept: Record) -> dict[str, Any]:
     """Demolishes a standing department: every worker goes home, every open part of it is cancelled and handed
-    back to the Orchestrator (one message per job, so it can re-plan with the other departments or tell AIC),
+    back to the Orchestrator (one message per job, so it can re-plan with the other departments or tell VAIC),
     the manager retires, and the record stays in the ledger as history (``state: demolished``) so a demolished
     preset is not put back. One ``department.demolished`` event; the City plays the demolition."""
     plan = await demolition_plan(d, dept)
@@ -176,7 +176,7 @@ async def demolish_department(d: CityDeps, dept: Record) -> dict[str, Any]:
                 "body": (
                     f"The owner demolished the {dept['name']} department. Its part of this job was cancelled: "
                     + "; ".join(g for g in goals if g)
-                    + ". Hand that part to another standing department if one fits, or report to AIC what is "
+                    + ". Hand that part to another standing department if one fits, or report to VAIC what is "
                     f"left undone. Do not create or use {dept['name']} again."
                 ),
             },

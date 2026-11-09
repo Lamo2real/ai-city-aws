@@ -1,4 +1,4 @@
-"""The owner may say exactly how many workers a task gets ("use 5 agents"): AIC passes it, the Orchestrator
+"""The owner may say exactly how many workers a task gets ("use 5 agents"): VAIC passes it, the Orchestrator
 hands it to the department, and the manager hires exactly that many, beyond the usual caps (2026-11-08)."""
 
 from dataclasses import replace

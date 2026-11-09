@@ -19,7 +19,7 @@ async function deliver(line: ChatLine) {
       body: { text: line.text, conversation: CONVERSATION, client_id: line.id, ...(line.voice ? { voice: true } : {}) },
     });
     patchLine(line.id, { state: "sent" });
-    // Only if AIC has not answered yet: its reply can arrive before this request returns (it is always warm),
+    // Only if VAIC has not answered yet: its reply can arrive before this request returns (it is always warm),
     // and "thinking" must not come back after it.
     if (store.get().chat.at(-1)?.id === line.id) store.set({ presence: "thinking" });
   } catch (e) {
@@ -29,7 +29,7 @@ async function deliver(line: ChatLine) {
   }
 }
 
-/** Sends a message to AIC. `voice`: the owner said it (AIC then answers aloud when speaking is "auto"). */
+/** Sends a message to VAIC. `voice`: the owner said it (VAIC then answers aloud when speaking is "auto"). */
 export async function sendMessage(text: string, opts: { voice?: boolean } = {}) {
   const clean = text.trim();
   if (!clean) return;
@@ -54,7 +54,7 @@ export async function sendMessage(text: string, opts: { voice?: boolean } = {}) 
   await deliver(line);
 }
 
-// A service the owner was offered is connected: AIC picks their request up again (decision 130).
+// A service the owner was offered is connected: VAIC picks their request up again (decision 130).
 store.onResume = (text) => void sendMessage(text);
 
 /** Coming back to AI City (after signing up or signing in on a service's own page): look again at whatever a card

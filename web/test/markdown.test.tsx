@@ -4,7 +4,7 @@ import { Markdown } from "../src/lib/markdown.tsx";
 
 afterEach(cleanup);
 
-describe("AIC's replies render Markdown", () => {
+describe("VAIC's replies render Markdown", () => {
   it("headings, lists, tables, code and inline styles", () => {
     const text = [
       "# Status",

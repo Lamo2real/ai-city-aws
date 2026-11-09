@@ -1,4 +1,4 @@
-"""Departments on demand (decision 134): the owner builds a department, by a word to AIC or from the City or
+"""Departments on demand (decision 134): the owner builds a department, by a word to VAIC or from the City or
 Settings, with a Fable 5.1 manager and Opus 5.5 workers unless they ask for Fable workers; and demolishes one:
 its workers go home, its open work goes back to the Orchestrator, its history stays."""
 

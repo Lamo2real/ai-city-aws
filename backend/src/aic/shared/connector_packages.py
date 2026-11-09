@@ -263,7 +263,7 @@ async def registry_packages(name: str, net: Net) -> tuple[list[Record], bool]:
 
 
 # ---------- add_connector ----------
-ROLE_NAMES = {"ace": "AIC", "orchestrator": "the Orchestrator", "manager": "Managers", "worker": "Workers"}
+ROLE_NAMES = {"ace": "VAIC", "orchestrator": "the Orchestrator", "manager": "Managers", "worker": "Workers"}
 
 
 def _used_by(roles: Mapping[str, str]) -> str:

@@ -64,7 +64,7 @@ describe("IAM", () => {
       .flatMap((s) => s.Resource);
     expect(workerQueues).toEqual([expect.stringMatching(/aic-prod-manager$/)]);
   });
-  it("Fable roles may invoke their Opus fallback; AIC only its own model (Haiku)", () => {
+  it("Fable roles may invoke their Opus fallback; VAIC only its own model (Haiku)", () => {
     const models = (role: string) =>
       (rolePolicies(role) as Stmt[])
         .filter((s) => actions([s]).includes("bedrock:InvokeModel"))
@@ -167,7 +167,7 @@ describe("knowledge base (docs/KNOWLEDGE.md)", () => {
   for (const st of Object.values(asl.States)) for (const b of st.Branches ?? []) scopes.push(b.States);
   const allStates = scopes.flatMap((sc) => Object.entries(sc));
 
-  it("IAM: no IAM beyond passing the MediaConvert role, Bedrock only on Titan/Haiku, only AIC adds knowledge", () => {
+  it("IAM: no IAM beyond passing the MediaConvert role, Bedrock only on Titan/Haiku, only VAIC adds knowledge", () => {
     expect(checkKnowledge()).toEqual([]);
     for (const r of ["ace", "orchestrator", "manager", "worker"])
       expect(actions(rolePolicies(r) as Stmt[])).toContain("bedrock:Retrieve");
@@ -495,7 +495,7 @@ describe("app-bridge Lambda (docs/APPS.md v2)", () => {
     const tf = api();
     const apiPerms = block(tf, "    api = [");
     expect(apiPerms).toContain('function:${local.app_bridge_name}"');
-    // Its one AgentCore right is signing the voice address to AIC's runtime (decision 120).
+    // Its one AgentCore right is signing the voice address to VAIC's runtime (decision 120).
     expect(apiPerms.replace(/bedrock-agentcore:InvokeAgentRuntimeWithWebSocketStream/, "")).not.toMatch(/bedrock-agentcore/);
     const invokes = [...tf.matchAll(/app_bridge_name\}"\]/g)].length;
     expect(invokes).toBe(1);
@@ -535,7 +535,7 @@ describe("app-bridge Lambda (docs/APPS.md v2)", () => {
   });
 });
 
-describe("AIC's voice (Polly generative)", () => {
+describe("VAIC's voice (Polly generative)", () => {
   it("the HUD may call Polly in its own region, which config.json names", async () => {
     const { readFileSync } = await import("node:fs");
     const fe = readFileSync("infra/modules/frontend/main.tf", "utf8");
@@ -551,7 +551,7 @@ describe("AIC's voice (Polly generative)", () => {
   });
 });
 
-describe("AIC's ears (Transcribe streaming in Frankfurt)", () => {
+describe("VAIC's ears (Transcribe streaming in Frankfurt)", () => {
   it("Transcribe, its vocabulary, the CSP and config.json all use transcribe_region; the identity pool stays home", () => {
     const fe = readFileSync("infra/modules/frontend/main.tf", "utf8");
     const connect = fe.split("\n").find((l) => l.includes('"connect-src')) ?? "";
@@ -566,7 +566,7 @@ describe("AIC's ears (Transcribe streaming in Frankfurt)", () => {
     expect(vars).toMatch(/variable "transcribe_region"[\s\S]*?default\s+= "eu-central-1"/);
     const auth = readFileSync("infra/modules/auth/main.tf", "utf8");
     expect(auth).toMatch(/resource "aws_transcribe_vocabulary" "speech_names" \{\s+provider\s+= aws\.speech/);
-    // The owner's rule (2026-11-09): Transcribe writes "Ace" as AIC, through a table vocabulary in the speech region.
+    // The owner's rule (2026-11-09): Transcribe writes "Ace" as VAIC, through a table vocabulary in the speech region.
     expect(auth).toMatch(/"Ace\\t\\t\\tAIC"/);
     expect(auth).toMatch(/vocabulary_file_uri = "s3:\/\/\$\{aws_s3_bucket\.speech\.id\}/);
     expect(auth).toMatch(/resource "aws_s3_bucket" "speech" \{[\s\S]*?provider = aws\.speech/);
@@ -578,11 +578,11 @@ describe("AIC's ears (Transcribe streaming in Frankfurt)", () => {
   });
 });
 
-describe("AIC warm-keeper (the owner's under-3-seconds target)", () => {
+describe("VAIC warm-keeper (the owner's under-3-seconds target)", () => {
   const api = readFileSync("infra/modules/api/main.tf", "utf8");
   const agents = readFileSync("infra/modules/agents/main.tf", "utf8");
   const deploy = readFileSync(".github/workflows/deploy.yml", "utf8");
-  it("the scheduler pings AIC's runtime every 2 minutes, enabled from the start, and may invoke only that runtime", () => {
+  it("the scheduler pings VAIC's runtime every 2 minutes, enabled from the start, and may invoke only that runtime", () => {
     expect(api).toMatch(
       /warm-ace\s*=\s*\{ schedule = "rate\(2 minutes\)", fn = "scheduler", input = \{ job = "warm_ace" \}, state = "ENABLED" \}/,
     );
@@ -627,14 +627,14 @@ describe("AIC warm-keeper (the owner's under-3-seconds target)", () => {
     // SnapStart and provisioned concurrency never meet on one function.
     expect(api).toMatch(/for_each = each\.key == "api" \? \[1\] : \[\]/);
   });
-  it("AIC's session lives all day with a 30-minute idle window; the other coordinators keep an hour", () => {
+  it("VAIC's session lives all day with a 30-minute idle window; the other coordinators keep an hour", () => {
     expect(agents).toMatch(/idle_runtime_session_timeout = each\.key == "ace" \? 1800 : 900/);
     expect(agents).toMatch(/max_lifetime\s*=\s*contains\(\["ace", "worker"\], each\.key\) \? 28800 : 3600/);
   });
-  it("the deploy warms AIC right after apply, and a miss never fails the deploy", () => {
+  it("the deploy warms VAIC right after apply, and a miss never fails the deploy", () => {
     const i = deploy.indexOf("terraform apply -input=false prod.tfplan");
     const after = deploy.slice(i, i + 900);
-    expect(after).toMatch(/warm AIC's runtime/);
+    expect(after).toMatch(/warm VAIC's runtime/);
     expect(after).toMatch(/aws lambda invoke --function-name "\$fn" --payload '\{"job":"warm_ace"\}'/);
     expect(after).toMatch(/\|\| echo "warm-up skipped"/);
   });
@@ -818,19 +818,19 @@ describe("pre-configured departments (decision 113)", () => {
   });
 });
 
-describe("AIC's real-time voice (Nova Sonic, decision 120)", () => {
+describe("VAIC's real-time voice (Nova Sonic, decision 120)", () => {
   const apiTf = readFileSync("infra/modules/api/main.tf", "utf8");
   const agentsTf = readFileSync("infra/modules/agents/main.tf", "utf8");
   const boundary = readFileSync("infra/modules/security/main.tf", "utf8");
   const fe = readFileSync("infra/modules/frontend/main.tf", "utf8");
-  it("only AIC's role opens the two-way audio stream, on the voice models in config/models.json", () => {
+  it("only VAIC's role opens the two-way audio stream, on the voice models in config/models.json", () => {
     expect(boundary).toContain('"bedrock:InvokeModelWithBidirectionalStream"');
     const voice = agentsTf.slice(agentsTf.indexOf('resource "aws_iam_role_policy" "voice"'));
     expect(voice).toMatch(/role = aws_iam_role\.agent\["ace"\]\.id/);
     expect(voice).toContain("local.models.voice.speech");
     expect(agentsTf.match(/InvokeModelWithBidirectionalStream/g)).toHaveLength(1);
   });
-  it("the API signs the browser's address to AIC's runtime only, and the HUD may open it", () => {
+  it("the API signs the browser's address to VAIC's runtime only, and the HUD may open it", () => {
     expect(apiTf).toContain('"POST /voice/session"');
     expect(apiTf).toContain('"POST /voice/live"');
     expect(apiTf).toContain('"POST /voice/check"');
@@ -890,7 +890,7 @@ describe("the executives (decision 140)", () => {
     expect(prod).toMatch(/executive_profile_arn = module\.agents\.executive_profile_arn/);
     expect(prod).toMatch(/executive_invoke_arns = module\.agents\.executive_invoke_arns/);
   });
-  it("only AIC's and the Orchestrator's runtimes may call them, through the executives' profile", () => {
+  it("only VAIC's and the Orchestrator's runtimes may call them, through the executives' profile", () => {
     expect(agents).toMatch(/consults = \["ace", "orchestrator"\]/);
     expect(agents).toMatch(/contains\(local\.consults, each\.key\) \? local\.invoke_arns\["executive"\] : \[\]/);
     expect(agents).toMatch(/AIC_APP_PROFILE_EXECUTIVE = aws_bedrock_inference_profile\.role\["executive"\]\.arn/);

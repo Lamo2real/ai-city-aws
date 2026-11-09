@@ -1,4 +1,4 @@
-"""AIC's reply streams to the HUD in small batches, straight to the WebSocket when the runtime knows it."""
+"""VAIC's reply streams to the HUD in small batches, straight to the WebSocket when the runtime knows it."""
 
 import json
 from typing import Any

@@ -73,7 +73,7 @@ class HostOptions:
     backoff: BackoffOptions | None = None
     timeout_ms: int | None = None
     live_sender: Callable[[dict[str, Any]], Send | None] | None = None
-    """For an AIC turn: how to send reply pieces straight to the HUD, or None to use the event bus."""
+    """For an VAIC turn: how to send reply pieces straight to the HUD, or None to use the event bus."""
     gateway: GatewayClient | None = None
     """The connectors Gateway (``AIC_GATEWAY_URL``), or None: no connector tools."""
     skills: SkillStore | None = None
@@ -81,7 +81,7 @@ class HostOptions:
     mail: MailService | None = None
     """Mail and calendar accounts (``AIC_MAIL_WORKLOAD``), or None: no mail tools."""
     git_auth: GitAuth | None = None
-    """git and gh signed in with the owner's GitHub token (AIC and workers), or None."""
+    """git and gh signed in with the owner's GitHub token (VAIC and workers), or None."""
 
 
 class AgentHost:
@@ -92,7 +92,7 @@ class AgentHost:
     async def ensure_core(self) -> None:
         await ensure_executives(self.d.ledger)  # decision 140: permanent, at home until the Orchestrator calls them in
         at = now_iso(self.d.ledger.now())
-        for id, role, model in (("ace", "AIC", "haiku-5-5"), ("orchestrator", "Orchestrator", "fable-5-1")):
+        for id, role, model in (("ace", "VAIC", "haiku-5-5"), ("orchestrator", "Orchestrator", "fable-5-1")):
             if not await self.d.ledger.get_agent(id):
                 await self.d.ledger.put_agent(
                     {
@@ -311,7 +311,7 @@ class AgentHost:
 
     async def _workflow_lines(self, inv: dict[str, Any]) -> list[str]:
         """AI workflows (decision 126): the run in progress in this chat, and the workflow the owner's words point
-        at, so AIC asks "Is this what you mean" or starts it, and never asks for an answer it already has."""
+        at, so VAIC asks "Is this what you mean" or starts it, and never asks for an answer it already has."""
         ledger = self.d.ledger
         runs = wf.Runs(ledger.table, ledger.now)
         live = await runs.live_in(str(inv.get("conversation") or "main"))
@@ -378,7 +378,7 @@ class AgentHost:
     async def _system_base(self, agent: dict[str, Any], inv: dict[str, Any]) -> tuple[str, list[str]]:
         role = inv["role"]
         if role == "ace":
-            # The app guide rides with AIC's instructions so "how do I…" is answered at once (the owner, 2026-11-09).
+            # The app guide rides with VAIC's instructions so "how do I…" is answered at once (the owner, 2026-11-09).
             return load_prompt("ace.md").body + "\n\n" + app_guide(), []
         if role == "orchestrator":
             return load_prompt("orchestrator.md").body, []
@@ -444,7 +444,7 @@ class AgentHost:
             if recent:
                 lines = [
                     "Conversation so far (most recent last):",
-                    *[f"{'AIC' if r['who'] == 'ace' else 'Owner'}: {r['text']}" for r in recent],
+                    *[f"{'VAIC' if r['who'] == 'ace' else 'Owner'}: {r['text']}" for r in recent],
                     "",
                     *lines,
                 ]

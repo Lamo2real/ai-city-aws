@@ -45,7 +45,7 @@ def caps_config() -> dict[str, Any]:
 
 
 def voice_config() -> dict[str, Any]:
-    """AIC's real-time voice (Nova 2 Sonic, decision 120): the models to try in order, the voice and endpointing."""
+    """VAIC's real-time voice (Nova 2 Sonic, decision 120): the models to try in order, the voice and endpointing."""
     return dict(models_config().get("voice") or {})
 
 

@@ -32,7 +32,7 @@ _MSG = iter(range(1, 10_000))
 
 
 def ace(conversation: str = "main", from_owner: bool = True, message_id: str | None = None) -> TurnCtx:
-    """AIC's turn on a new owner message each time (message ids m-1, m-2, …) unless one is given."""
+    """VAIC's turn on a new owner message each time (message ids m-1, m-2, …) unless one is given."""
     return TurnCtx(
         agent_id="ace", role="ace", department=None, ticket_id="", task_id="", conversation=conversation,
         from_owner=from_owner, message_id=message_id or f"m-{next(_MSG)}",
@@ -154,7 +154,7 @@ def test_the_spend_shows_daily_total_and_dates() -> None:
     assert wf.spend(w, {}) is None
 
 
-# ---------- AIC's tools: confirm first, one question at a time, never twice ----------
+# ---------- VAIC's tools: confirm first, one question at a time, never twice ----------
 async def test_nothing_starts_without_the_owners_yes_when_the_match_is_only_maybe() -> None:
     d = deps()
     start = tool(d, ace(), "start_workflow")
@@ -163,7 +163,7 @@ async def test_nothing_starts_without_the_owners_yes_when_the_match_is_only_mayb
     assert await wf.Runs(d.ledger.table).list() == []
     out = await start({"workflow_id": META, "owner_words": "yes", "owner_confirmed": True})
     assert "walk you through it" in out
-    # Not on a turn that isn't the owner's own message (a report, a reminder), whatever AIC claims.
+    # Not on a turn that isn't the owner's own message (a report, a reminder), whatever VAIC claims.
     d2 = deps()
     out = await tool(d2, ace(from_owner=False), "start_workflow")(
         {"workflow_id": META, "owner_words": "Let's create Meta ads", "owner_confirmed": True}
@@ -250,7 +250,7 @@ async def test_yes_to_the_money_hands_it_to_marketing_with_the_brief() -> None:
     shown_in = (await live(d))["confirm_shown_in"]
     assert "Shall I create it" in await tool(d, ace(message_id=shown_in), "run_workflow")({"confirm": True})
     assert not d.queue.sent
-    # Not on AIC's word alone: the turn must be the owner's own message.
+    # Not on VAIC's word alone: the turn must be the owner's own message.
     assert "Shall I create it" in await tool(d, ace(from_owner=False), "run_workflow")({"confirm": True})
     assert not d.queue.sent
     out = await go({"confirm": True})
@@ -315,7 +315,7 @@ async def test_list_workflows_says_whats_connected() -> None:
     assert "Google Ads campaign" in out and "not connected; Settings → Departments & tools → Marketing" in out
 
 
-# ---------- what AIC is told each turn ----------
+# ---------- what VAIC is told each turn ----------
 async def test_aics_prompt_names_the_workflow_and_whats_already_known() -> None:
     d = deps()
     host = AgentHost(d, HostOptions(engine=None))  # type: ignore[arg-type]
@@ -567,13 +567,13 @@ async def test_an_answer_that_differs_reaches_whoever_can_still_change_it() -> N
     look = next(q for q in qs.values() if q["default"] == "Clean and light")
     assert (await answer({"id": look["id"], "answer": "clean and light"})).startswith("Kept")
     assert len(d.queue.sent) == sent + 1
-    # AIC's own assumption goes to the Orchestrator, who passes it on.
+    # VAIC's own assumption goes to the Orchestrator, who passes it on.
     users = next(q for q in qs.values() if q["default"] == "Just me")
     assert (
         await answer({"id": users["id"], "answer": "My customers"})
     ) == "Sent to the team: they change it to “My customers”."
     assert d.queue.sent[-1]["role"] == "orchestrator" and d.queue.sent[-1]["taskId"] == t["id"]
-    # After the job: noted, and AIC offers a change.
+    # After the job: noted, and VAIC offers a change.
     await d.ledger.set_ticket_status(t["id"], "done")
     must = next(q for q in qs.values() if q["default"].startswith("The smallest"))
     assert "the job has finished" in await answer({"id": must["id"], "answer": "add a high score table"})

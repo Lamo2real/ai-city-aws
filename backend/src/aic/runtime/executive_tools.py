@@ -1,6 +1,6 @@
-"""Consulting the executives (decision 140): AIC's ``ask_executive`` and the Orchestrator's ``ask_executives``.
+"""Consulting the executives (decision 140): VAIC's ``ask_executive`` and the Orchestrator's ``ask_executives``.
 
-Both return advice as the tool's answer; neither starts work. AIC asks only on the owner's own message ("ask the
+Both return advice as the tool's answer; neither starts work. VAIC asks only on the owner's own message ("ask the
 CFO if this pays off"); the Orchestrator asks on big or cross-department decisions (its prompt says when).
 """
 

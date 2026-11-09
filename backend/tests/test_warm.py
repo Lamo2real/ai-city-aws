@@ -1,4 +1,4 @@
-"""AIC's warmer: every warm-keeper ping readies the WebSocket sender, the ledger and the model, in the background."""
+"""VAIC's warmer: every warm-keeper ping readies the WebSocket sender, the ledger and the model, in the background."""
 
 import asyncio
 import json

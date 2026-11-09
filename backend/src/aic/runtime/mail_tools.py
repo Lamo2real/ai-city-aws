@@ -164,7 +164,7 @@ async def _rule_for(s: MailService, rules: RuleStore, name: str, args: dict[str,
 
 
 def mail_tools(d: CityDeps, c: TurnCtx, s: MailService, level: str) -> list[ToolSpec]:
-    """``level`` is ``all`` (AIC) or ``read`` (the Orchestrator and managers, when the owner turned it on)."""
+    """``level`` is ``all`` (VAIC) or ``read`` (the Orchestrator and managers, when the owner turned it on)."""
     rules = RuleStore(d.ledger.table, d.ledger.now)
     names = list(SPECS) if level == "all" else list(READ_TOOLS)
 
@@ -216,7 +216,7 @@ def mail_tools(d: CityDeps, c: TurnCtx, s: MailService, level: str) -> list[Tool
 
 
 def mail_level(role: str, settings: dict[str, Any]) -> str | None:
-    """Which mail tools a role gets: AIC all, the Orchestrator and managers read when the owner turned it on,
+    """Which mail tools a role gets: VAIC all, the Orchestrator and managers read when the owner turned it on,
     workers never (decision 79)."""
     if role == "ace":
         return "all"

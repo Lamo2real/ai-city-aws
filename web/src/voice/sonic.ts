@@ -1,5 +1,5 @@
-// AIC's real-time voice (decision 120, docs/VOICE.md): Amazon Nova 2 Sonic listens and speaks, AIC stays the
-// brain. The browser asks the API for a five-minute signed address to AIC's own runtime, opens a WebSocket
+// VAIC's real-time voice (decision 120, docs/VOICE.md): Amazon Nova 2 Sonic listens and speaks, VAIC stays the
+// brain. The browser asks the API for a five-minute signed address to VAIC's own runtime, opens a WebSocket
 // to it, streams the microphone up as 16 kHz PCM and plays Sonic's 24 kHz speech as it arrives. When the
 // owner talks over it, Sonic says "interrupted" and every queued sound stops at once (barge-in).
 // The microphone is read with a ScriptProcessor, which needs no extra script file (the HUD's CSP is strict).
@@ -9,9 +9,9 @@ import { base64ToFloats, pcmToBase64, toPcm16k } from "./pcm.ts";
 export interface SonicHandlers {
   /** What the owner said (Sonic's final transcript). */
   onUserText(text: string): void;
-  /** What Sonic said; `aic` is true when it was saying AIC's answer, which reaches the chat on its own. */
+  /** What Sonic said; `aic` is true when it was saying VAIC's answer, which reaches the chat on its own. */
   onAssistantText(text: string, aic: boolean): void;
-  /** AIC is working on a request (on) or answered (off). */
+  /** VAIC is working on a request (on) or answered (off). */
   onThinking(on: boolean): void;
   /** Sonic's voice is playing (on) or quiet (off). */
   onSpeaking(on: boolean): void;
@@ -160,7 +160,7 @@ export async function startSonic(h: SonicHandlers): Promise<SonicCall> {
   };
 
   await new Promise<void>((resolve, reject) => {
-    const timer = window.setTimeout(() => fail(new Error("AIC's voice did not answer in time.")), READY_TIMEOUT_MS);
+    const timer = window.setTimeout(() => fail(new Error("VAIC's voice did not answer in time.")), READY_TIMEOUT_MS);
     let ready = false;
     const fail = (e: unknown) => {
       window.clearTimeout(timer);
@@ -207,7 +207,7 @@ export async function startSonic(h: SonicHandlers): Promise<SonicCall> {
           h.onThinking(m.on === true);
           return;
         case "error":
-          fail(new Error(m.message || "AIC's voice stopped."));
+          fail(new Error(m.message || "VAIC's voice stopped."));
           return;
         case "closed":
           if (ready && cleanup()) h.onEnd();
@@ -221,13 +221,13 @@ export async function startSonic(h: SonicHandlers): Promise<SonicCall> {
       void api<{ ok: boolean; reason: string }>("/voice/check", { method: "POST" }).then(
         (c) =>
           fail(
-            new Error(c.reason ? `the connection was refused: ${c.reason}` : "The connection to AIC's voice broke."),
+            new Error(c.reason ? `the connection was refused: ${c.reason}` : "The connection to VAIC's voice broke."),
           ),
-        () => fail(new Error("The connection to AIC's voice broke.")),
+        () => fail(new Error("The connection to VAIC's voice broke.")),
       );
     };
     ws.onclose = () =>
-      ready ? cleanup() && h.onEnd() : checking ? undefined : fail(new Error("AIC's voice is not available."));
+      ready ? cleanup() && h.onEnd() : checking ? undefined : fail(new Error("VAIC's voice is not available."));
   });
 
   return {

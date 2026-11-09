@@ -1,4 +1,4 @@
-"""AIC can look at one of the owner's jobs and stop it, in plain words (the owner's "idiot-proof" ask):
+"""VAIC can look at one of the owner's jobs and stop it, in plain words (the owner's "idiot-proof" ask):
 find the job by the owner's own words, describe its progress without ids or inside words, confirm before
 stopping, and when stopping: cancel every open part, send the workers home, drop what is still queued."""
 

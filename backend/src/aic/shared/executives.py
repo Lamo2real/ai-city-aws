@@ -1,16 +1,16 @@
 """The Executive Leadership layer: CEO, COO, CFO and CTO (decision 140). Advisory only.
 
-Executives govern direction and judge outcomes; they never run the work. The chain stays owner → AIC →
+Executives govern direction and judge outcomes; they never run the work. The chain stays owner → VAIC →
 Orchestrator → Department Managers → Workers, and every earlier rule of the owner's comes first. So:
 
 - **They only read, and recommend.** Each has a fixed set of read-only tools (``READ_TOOLS``: the city's
   status, jobs, costs, handoffs, deals, department reports, the company brief and the knowledge base), run by
   code through the policy gate before the model is called, and one write: ``send_recommendation``, which files
-  the advice for AIC or the Orchestrator. There is no hire, assign, start or execute tool, and the gate denies
+  the advice for VAIC or the Orchestrator. There is no hire, assign, start or execute tool, and the gate denies
   any such name for the ``executive`` role (``FORBIDDEN``), whoever asks.
-- **They never start on their own** (decision 138): they answer when the owner asks (AIC's ``ask_executive``,
+- **They never start on their own** (decision 138): they answer when the owner asks (VAIC's ``ask_executive``,
   only on the owner's own message), when the Orchestrator consults them on a big decision (``ask_executives``)
-  or in a review the owner switched on (``REVIEWS``, all off by default; a review is a short report in AIC's
+  or in a review the owner switched on (``REVIEWS``, all off by default; a review is a short report in VAIC's
   chat, never work).
 - **Advice is advice.** The Orchestrator and managers decide what to do; under Autopilot the Chief of Staff
   reads the recent recommendations as context.
@@ -107,7 +107,7 @@ READ_TOOLS: Final = (
 )
 """The executives' read-only tools. Each passes the policy gate as ``mcp__executive__<name>``."""
 WRITE_TOOLS: Final = ("send_recommendation",)
-"""Their one write: filing advice for AIC or the Orchestrator. Nothing else."""
+"""Their one write: filing advice for VAIC or the Orchestrator. Nothing else."""
 ALLOWED: Final = frozenset(f"mcp__executive__{t}" for t in (*READ_TOOLS, *WRITE_TOOLS))
 """The only calls an executive can make. Anything else (hire, assign, start, execute…) is denied (tested)."""
 
@@ -493,7 +493,7 @@ async def send_recommendation(
     review: str | None = None,
 ) -> dict[str, Any]:
     """The executives' one write: the recommendation is kept (62 days) and sent on the bus for the HUD. It goes back
-    to whoever asked (AIC or the Orchestrator) as the answer of their tool; it never starts work."""
+    to whoever asked (VAIC or the Orchestrator) as the answer of their tool; it never starts work."""
     ok, why = await exec_gate(d.ledger, who, "mcp__executive__send_recommendation", {"to": to})
     at = now_iso(d.ledger.now())
     rec: Record = {
@@ -588,7 +588,7 @@ async def due_reviews(ledger: Ledger, now: datetime | None = None) -> list[str]:
 
 async def run_reviews(d: ExecDeps) -> dict[str, Any]:
     """The hourly check: only reviews the owner switched on, each when it is due. A review is a short report in
-    AIC's chat (``main``); it never files a task, a handoff or an assignment."""
+    VAIC's chat (``main``); it never files a task, a handoff or an assignment."""
     done: list[str] = []
     for k in await due_reviews(d.ledger):
         r = REVIEWS[k]

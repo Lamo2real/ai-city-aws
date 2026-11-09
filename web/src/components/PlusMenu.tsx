@@ -192,7 +192,7 @@ export function PlusMenu(p: {
                     <Item
                       icon={<FilesIcon />}
                       label="Add files or photos"
-                      hint="Kept in Knowledge; AIC reads them with your message"
+                      hint="Kept in Knowledge; VAIC reads them with your message"
                       onClick={() => pick(files.current)}
                     />
                     <Item
@@ -211,7 +211,7 @@ export function PlusMenu(p: {
                     <Item
                       icon={<PlugIcon />}
                       label="Connectors"
-                      hint={connectors.length ? `${connectors.length} connected` : "Outside services AIC can use"}
+                      hint={connectors.length ? `${connectors.length} connected` : "Outside services VAIC can use"}
                       more
                       onClick={() => setPage("connectors")}
                     />
@@ -254,7 +254,7 @@ export function PlusMenu(p: {
                     <Item
                       icon={<PlusIcon size={20} />}
                       label="Add a connector…"
-                      hint="Name the service; AIC sets it up"
+                      hint="Name the service; VAIC sets it up"
                       onClick={() => insert("Add ___ as a connector", { where: "all", select: [4, 7] })}
                     />
                   </>

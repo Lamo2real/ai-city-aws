@@ -1,7 +1,7 @@
 """One prompt walks the whole chain with a fake model runner.
 
-owner → AIC → Orchestrator → creates a department → Manager hires three workers → workers report → manager
-rejects one (FAIL) → the worker fixes it → manager PASS → Orchestrator sign-off → AIC reports.
+owner → VAIC → Orchestrator → creates a department → Manager hires three workers → workers report → manager
+rejects one (FAIL) → the worker fixes it → manager PASS → Orchestrator sign-off → VAIC reports.
 """
 
 from __future__ import annotations
@@ -290,12 +290,12 @@ async def test_the_next_ace_turn_sees_the_earlier_exchange_typed_or_spoken() -> 
         return "Eighteen." if len(prompts) == 1 else "You asked about 9 + 9."
 
     city = make_city(scripted_engine({"ace": ace_chat}))
-    await city.owner_says("yo AIC, what's 9 + 9?")
+    await city.owner_says("yo VAIC, what's 9 + 9?")
     await city.run()
     await city.owner_says("what did I just ask?")
     await city.run()
-    assert "Owner: yo AIC, what's 9 + 9?" in prompts[1]
-    assert "AIC: Eighteen." in prompts[1]
+    assert "Owner: yo VAIC, what's 9 + 9?" in prompts[1]
+    assert "VAIC: Eighteen." in prompts[1]
 
 
 async def test_agent_instructions_reach_the_right_worker_with_its_manager_copied() -> None:

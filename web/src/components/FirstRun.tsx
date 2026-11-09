@@ -1,12 +1,12 @@
-// A four-step guide on first login: meet AIC, see the City, where the money is, connect the tools. Skippable, and it
+// A four-step guide on first login: meet VAIC, see the City, where the money is, connect the tools. Skippable, and it
 // can be opened again from Settings.
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./ui.tsx";
 
 const STEPS = [
   {
-    title: "Meet AIC",
-    text: "Talk to AIC like a friend. Type, or tap the mic and speak. Ask for anything. AIC tells you when it is done.",
+    title: "Meet VAIC",
+    text: "Talk to VAIC like a friend. Type, or tap the mic and speak. Ask for anything. VAIC tells you when it is done.",
   },
   {
     title: "See the City",

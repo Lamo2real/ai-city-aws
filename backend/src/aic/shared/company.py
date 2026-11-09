@@ -131,7 +131,7 @@ async def clear_brief(ledger: Ledger) -> bool:
 
 
 def context(brief: Record | None, role: str, department: str | None) -> str:
-    """The lines every non-AIC agent reads at the end of its system prompt."""
+    """The lines every non-VAIC agent reads at the end of its system prompt."""
     if not brief:
         return ""
     lines = [

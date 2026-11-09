@@ -28,7 +28,7 @@ _GREETING = (
     r"(?:yo|hi|hey|hello|hiya|ok|okay|morning|good (?:morning|afternoon|evening)|what'?s up|whats up|sup|"
     r"how'?s it going|hows it going)"
 )
-_NAME = r"(?:aic|a\.?\s?i\.?\s?c\.?|ace)"  # written AIC, said "Ace": both are its name
+_NAME = r"(?:vaic|v\.?\s?a\.?\s?i\.?\s?c\.?|vice|vais|aic|a\.?\s?i\.?\s?c\.?|ace)"  # written VAIC, said "Vice"; the old AIC/"Ace" still count
 _ADDRESSED = re.compile(rf"^\s*(?:{_GREETING}[\s,!.]*)?{_NAME}\b", re.I)
 _ENDS_WITH_NAME = re.compile(rf"[,\s]{_NAME}[\s?.!]*$", re.I)
 _MENTIONS = re.compile(rf"\b{_NAME}\b", re.I)
@@ -105,7 +105,7 @@ _TRIAGE_CACHE_MAX = 256
 TRIAGE_WHEN_UNSURE = Triage("department", None, "triage unavailable; the Orchestrator decides")
 
 _CITY_PARTS = re.compile(
-    r"\b(ai city|aic|ace|the city|city view|the map|hud|the app|this app|the iphone app|the voice|your voice|"
+    r"\b(ai city|vaic|vice|aic|ace|the city|city view|the map|hud|the app|this app|the iphone app|the voice|your voice|"
     r"the mic|microphone|the sound|the audio|the chat|the screen|the button|the buttons|settings|the login|"
     r"sign[- ]in|the workers|the team|the planner|the orchestrator)\b",
     re.I,
@@ -122,7 +122,7 @@ _EXPLICIT_TEAM = re.compile(r"\b(have the team|get the team|let the team|ask the
 
 def about_ai_city(text: str) -> bool:
     """Feedback, a complaint, a bug report or a question about AI City itself (its voice, screens, speed, app,
-    city view, team): never a job for the city. Those are answered by AIC and changed in the owner's builder
+    city view, team): never a job for the city. Those are answered by VAIC and changed in the owner's builder
     session. An explicit "have the team …" still goes through."""
     return bool(_CITY_PARTS.search(text) and _COMPLAINT.search(text) and not _EXPLICIT_TEAM.search(text))
 
@@ -148,7 +148,7 @@ def parse_triage(text: str) -> Triage | None:
 
 
 async def triage(request: str, departments: list[str], d: UtilityDeps) -> Triage:
-    """The Orchestrator's quick triage, on the utility model: may AIC just answer this itself?
+    """The Orchestrator's quick triage, on the utility model: may VAIC just answer this itself?
 
     A full Orchestrator turn only to decide would cost seconds; this is one short Haiku call, cached per
     request text, costed like every utility turn. Any failure routes to the Orchestrator as before.

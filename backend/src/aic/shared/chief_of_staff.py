@@ -440,7 +440,7 @@ def digest_text(rows: list[Record]) -> str:
 
 
 async def digest(ledger: Ledger, bus: EventBus) -> dict[str, Any]:
-    """One paragraph to AIC's conversation (``main``) about what was decided in the last day; nothing if nothing."""
+    """One paragraph to VAIC's conversation (``main``) about what was decided in the last day; nothing if nothing."""
     rows = await recent_decisions(ledger, days=1)
     if not rows:
         return {"digest": "nothing decided"}

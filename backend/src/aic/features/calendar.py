@@ -383,9 +383,9 @@ def _plain(ex: BaseException) -> str:
     return str(ex)[:300] or type(ex).__name__
 
 
-# ---------- what AIC reads ----------
+# ---------- what VAIC reads ----------
 def agenda_lines(events: Iterable[Json], tz: Any) -> list[Json]:
-    """Meetings in the owner's time zone, short: what AIC answers "what's on my calendar tomorrow" from."""
+    """Meetings in the owner's time zone, short: what VAIC answers "what's on my calendar tomorrow" from."""
     out = []
     for e in events:
         if e.get("all_day"):

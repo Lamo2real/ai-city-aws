@@ -16,7 +16,7 @@ again (within the cap) when work resumes.
 - standing_orders: every 5 minutes, each due standing order starts one ordinary job for its department
   (decision 125); one live job per order at a time. On the same beat the support desk moves each open customer
   ticket one step (decision 131).
-- warm_ace: keeps AIC's runtime container running (a "warm" ping every few minutes on the owner's conversation
+- warm_ace: keeps VAIC's runtime container running (a "warm" ping every few minutes on the owner's conversation
   session), so a message never pays the container's cold start. Created ENABLED: an idle container costs nothing.
 """
 
@@ -46,7 +46,7 @@ from .improve import improvement_allowed
 
 Job = Literal["sweep", "retire_idle", "reminders", "improve", "warm_ace", "calendar_import", "standing_orders"]
 
-# The conversations the HUD talks to AIC on (see api.py: POST /messages uses "main").
+# The conversations the HUD talks to VAIC on (see api.py: POST /messages uses "main").
 WARM_CONVERSATIONS = ("main",)
 
 

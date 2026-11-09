@@ -1,4 +1,4 @@
-"""AIC's reply, live: text is sent to the owner's open HUDs as it is written.
+"""VAIC's reply, live: text is sent to the owner's open HUDs as it is written.
 
 Small pieces are batched (about every 80 ms) and posted straight to the WebSocket connections, so the
 owner sees the reply grow word by word without the EventBridge → Lambda hop for every piece. When the

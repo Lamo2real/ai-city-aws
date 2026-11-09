@@ -56,7 +56,7 @@ function DecidedRow({ d }: { d: Decided }) {
         <p>{d.title}</p>
         {d.reason ? <p>{`Why: ${d.reason}`}</p> : null}
         <p className="mute">
-          {`${Number.isNaN(t) ? "" : `${new Date(t).toLocaleString()}. `}If this isn't what you want, tell AIC what to do instead.`}
+          {`${Number.isNaN(t) ? "" : `${new Date(t).toLocaleString()}. `}If this isn't what you want, tell VAIC what to do instead.`}
         </p>
       </div>
     </details>

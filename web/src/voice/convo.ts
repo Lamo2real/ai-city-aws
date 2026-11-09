@@ -1,4 +1,4 @@
-// The hands-free conversation loop ("speech to speech"): after AIC speaks a reply to something the owner said,
+// The hands-free conversation loop ("speech to speech"): after VAIC speaks a reply to something the owner said,
 // the mic reopens by itself for the next sentence, until the owner taps the mic, says "stop listening", a reply
 // goes unspoken (they typed, or speaking is off), or the mic fails. Pure, so the rules are testable.
 export type LoopEvent = "voice_sent" | "reply_spoken" | "reply_silent" | "mic_tap" | "stop_phrase" | "problem";
@@ -10,7 +10,7 @@ export function loopNext(on: boolean, e: LoopEvent): { on: boolean; reopen: bool
   return { on: false, reopen: false }; // a silent reply, a tap, the stop phrase or a problem all end it
 }
 
-/** "stop listening" (and close variants), said on its own, ends the conversation without being sent to AIC. */
+/** "stop listening" (and close variants), said on its own, ends the conversation without being sent to VAIC. */
 export function isStopPhrase(text: string): boolean {
   return /^\s*(?:please\s+)?(?:stop|quit)\s+(?:listening|the\s+mic(?:rophone)?)[\s.!,]*$/i.test(text);
 }
@@ -22,7 +22,7 @@ const words = (t: string) =>
     .split(/\s+/)
     .filter(Boolean);
 
-/** Whether what the mic heard is AIC's own reply coming back from the speakers (the mic stays open while AIC
+/** Whether what the mic heard is VAIC's own reply coming back from the speakers (the mic stays open while VAIC
  *  talks): most of the heard words are words of the reply. Short owner interjections ("wait", "stop") that
  *  are not in the reply always count as the owner. */
 export function isEcho(heard: string, reply: string): boolean {

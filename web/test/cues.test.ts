@@ -8,7 +8,7 @@ describe("thinking cues", () => {
     expect(new Set(said).size).toBeGreaterThan(4);
     for (const c of said) expect(c.split(" ").length).toBeLessThanOrEqual(8);
   });
-  it("start with a thinking line, later ones say AIC is still at it", () => {
+  it("start with a thinking line, later ones say VAIC is still at it", () => {
     expect(nextCue(0, () => 0)).toMatch(/think|second|check|moment|look|see/i);
     expect(nextCue(1, () => 0)).toMatch(/still|almost|bear|nearly/i);
   });

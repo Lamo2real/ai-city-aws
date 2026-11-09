@@ -1,6 +1,6 @@
 """The AI City guide (``agents/help/app_guide.md``): how to use every part of the app.
 
-AIC carries it with its instructions, so "how do I add a connector?" is answered at once (the owner, 2026-11-09); the
+VAIC carries it with its instructions, so "how do I add a connector?" is answered at once (the owner, 2026-11-09); the
 Knowledge base holds it as a built-in, read-only PDF (``aic/shared/knowledge/builtin.py``).
 """
 

@@ -1,4 +1,4 @@
-"""Connectors: adding one by asking AIC, the approval, provisioning, keys, sign-in, Cedar and the bridge.
+"""Connectors: adding one by asking VAIC, the approval, provisioning, keys, sign-in, Cedar and the bridge.
 
 Fakes only: an in-memory ledger and bus, a fake MCP server on a fake transport, recorded AgentCore and
 Secrets Manager clients. No AWS, no Bedrock, no network.
@@ -157,7 +157,7 @@ async def test_add_connector_writes_a_pending_record_and_an_approval_bound_to_id
     assert ap["hash"] == approval_hash("higgsfield", URL, DEFAULT_ROLES)
     assert ap["action"] == (
         "Connect higgsfield? You sign in on higgsfield's own page; your password never comes to AI City. "
-        f"({URL}, the link you gave. Used by: AIC, Managers, Workers.)"
+        f"({URL}, the link you gave. Used by: VAIC, Managers, Workers.)"
     )
     req = city.bus.of_type("approval.requested")[0]
     assert req["kind"] == "connector.add" and parse_event(req)["connector_id"] == "higgsfield"

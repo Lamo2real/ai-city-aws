@@ -1,4 +1,4 @@
-// Projects (docs/PRODUCT.md "Projects"): every app is a project with its own chat with AIC, a timeline of what
+// Projects (docs/PRODUCT.md "Projects"): every app is a project with its own chat with VAIC, a timeline of what
 // is happening, and its versions. A project's chat is the conversation `app-<app_id>`; a project started from
 // "New project" is `app-new-<short id>` until its app is published. Replies come as `ace.reply` events with
 // that conversation, multiple-choice questions also as `ace.question` events. The timeline comes from
@@ -71,7 +71,7 @@ const write = (key: string, value: unknown) => {
 export const conversationOf = (app: Pick<CityApp, "app_id">) => `app-${app.app_id}`;
 const newId = () => Math.random().toString(36).slice(2, 10);
 
-/** A short title from the owner's idea: its first words, capitalised. AIC names the app when it publishes. */
+/** A short title from the owner's idea: its first words, capitalised. VAIC names the app when it publishes. */
 export function titleFromIdea(idea: string): string {
   const t = capped(idea, 200)
     .replace(/^(please\s+)?(can you\s+)?((build|make|create)( me)?\s+)?(an?|the)\s+/i, "")
@@ -130,7 +130,7 @@ class Projects {
     });
   }
 
-  /** Sends the owner's words to AIC in this project's conversation. */
+  /** Sends the owner's words to VAIC in this project's conversation. */
   async send(conv: string, text: string) {
     const clean = text.trim();
     if (!clean) return;
@@ -226,7 +226,7 @@ class Projects {
   private reply(conv: string, text: string, done: boolean) {
     const lines = [...this.lines(conv)];
     const last = lines.at(-1);
-    // The final reply arrives twice (straight from AIC, and through the event bus).
+    // The final reply arrives twice (straight from VAIC, and through the event bus).
     if (done && last?.who === "ace" && last.state === "done" && last.text === text) return;
     if (last?.who === "ace" && last.state === "streaming")
       lines[lines.length - 1] = { ...last, text: done ? text : last.text + text, state: done ? "done" : "streaming" };
@@ -251,9 +251,9 @@ export function eventWords(e: {
   const app = (e.app ?? null) as Partial<CityApp> | null;
   const s = (v: unknown) => (typeof v === "string" ? v : "");
   if (e.type === "app.published" && s(e.app_id))
-    return { conv: `app-${s(e.app_id)}`, who: "AIC", text: "The app is live" };
+    return { conv: `app-${s(e.app_id)}`, who: "VAIC", text: "The app is live" };
   if (e.type === "app.updated" && app?.app_id && app.version)
-    return { conv: `app-${app.app_id}`, who: "AIC", text: `Version ${app.version} is live` };
+    return { conv: `app-${app.app_id}`, who: "VAIC", text: `Version ${app.version} is live` };
   if (e.type === "approval.requested" && e.kind === "app.publish" && s(e.replaces))
     return { conv: `app-${s(e.replaces)}`, who: "Builder", text: "A new version is ready for you to try in Open items (Settings → While I'm away)" };
   if (e.type === "app.draft" && s(e.replaces)) {
@@ -308,7 +308,7 @@ export async function loadActivity(appId: string): Promise<TimelineItem[] | null
     const r = await api<{ items?: TimelineItem[] }>(`/apps/${encodeURIComponent(appId)}/activity`);
     return (r.items ?? [])
       .filter((i) => i && typeof i.text === "string")
-      .map((i) => ({ at: String(i.at ?? ""), who: capped(i.who || "AIC", 24), text: capped(i.text, 240) }));
+      .map((i) => ({ at: String(i.at ?? ""), who: capped(i.who || "VAIC", 24), text: capped(i.text, 240) }));
   } catch {
     return null;
   }

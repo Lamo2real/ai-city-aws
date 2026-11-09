@@ -27,7 +27,7 @@ const STATUS: Record<MailAccount["status"], string> = {
   removed: "Removed",
 };
 
-/** One mailbox's details: sign-in or app password when needed, which calendars AIC sees, disconnect. */
+/** One mailbox's details: sign-in or app password when needed, which calendars VAIC sees, disconnect. */
 export function MailAccountCard(p: { a: MailAccount; onChange: (a: MailAccount | null) => void }) {
   const { a } = p;
   const [removing, setRemoving] = useState(false);
@@ -56,7 +56,7 @@ export function MailAccountCard(p: { a: MailAccount; onChange: (a: MailAccount |
       ) : null}
       {a.calendars?.length ? (
         <fieldset className="roles">
-          <legend>Calendars AIC sees</legend>
+          <legend>Calendars VAIC sees</legend>
           {a.calendars.map((c) => (
             <label key={c.id} className="switch">
               <input
@@ -151,7 +151,7 @@ export function AddMailAccount(p: { onAdded: () => void; onCancel: () => void })
   );
 }
 
-/** Who may read mail (AIC always, workers never) and the owner's standing rules. */
+/** Who may read mail (VAIC always, workers never) and the owner's standing rules. */
 export function MailSettings(p: {
   accounts: MailAccount[];
   access: Record<string, string>;
@@ -174,7 +174,7 @@ export function MailSettings(p: {
   return (
     <div className="mail-accounts">
       <h4>Who may read mail</h4>
-      <p className="mute">AIC always can. Workers never can, by design.</p>
+      <p className="mute">VAIC always can. Workers never can, by design.</p>
       {(["orchestrator", "manager"] as const).map((role) => (
         <label key={role} className="field">
           {role === "orchestrator" ? "Orchestrator" : "Managers"}
@@ -186,7 +186,7 @@ export function MailSettings(p: {
       ))}
       <h4>Standing rules</h4>
       <p className="mute">
-        Exceptions you trust: AIC may send to these people, or accept invitations from them when nothing clashes,
+        Exceptions you trust: VAIC may send to these people, or accept invitations from them when nothing clashes,
         without asking each time. Everything else still waits for you.
       </p>
       {rules.map((r) => (

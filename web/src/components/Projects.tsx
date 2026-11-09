@@ -1,7 +1,7 @@
 // Projects: every app is a project (docs/PRODUCT.md "Projects"). The list is a row of big cards you swipe
-// through, "New project" first. A project opens as a studio: a chat with AIC about this app only, what is
+// through, "New project" first. A project opens as a studio: a chat with VAIC about this app only, what is
 // happening, its versions, and a live preview at phone, tablet, laptop or any size. No code and no jargon:
-// one sentence starts a project, and AIC asks before it guesses.
+// one sentence starts a project, and VAIC asks before it guesses.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import type { CityApp } from "../city/city-state.js";
 import { capped, loadApps, removeApp, rollbackApp } from "../lib/apps.ts";
@@ -80,7 +80,7 @@ export function ProjectsScreen() {
           <p className="mute">
             {list.length
               ? "Every app is a project. Open one to try it or change it, or start a new one."
-              : "No apps yet. Describe one in a sentence and AIC builds it with you."}
+              : "No apps yet. Describe one in a sentence and VAIC builds it with you."}
           </p>
         </div>
         {list.length > 2 ? (
@@ -135,7 +135,7 @@ function ProjectCard({ p }: { p: Project }) {
   const thinking = useProjects((s) => !!s.thinking[p.conversation]);
   const status = !p.app
     ? thinking
-      ? "AIC is on it"
+      ? "VAIC is on it"
       : "Being planned"
     : p.app.version && p.app.version > 1
       ? `Live · version ${p.app.version}`
@@ -188,7 +188,7 @@ function NewProject({ onClose }: { onClose: () => void }) {
       >
         <h2 id="newproj-title">What should your app do?</h2>
         <p className="mute">
-          One sentence is enough. AIC asks you a few short questions before it builds, so the app comes out the way you
+          One sentence is enough. VAIC asks you a few short questions before it builds, so the app comes out the way you
           picture it.
         </p>
         <label className="sr" htmlFor="newproj-idea">
@@ -366,7 +366,7 @@ export function ProjectPage({ slug, go }: { slug: string; go: (view: string) => 
       {removing && app ? (
         <Confirm
           title={`Remove ${title}?`}
-          what="It disappears from Projects and its files are deleted. To get it back, ask AIC to build it again."
+          what="It disappears from Projects and its files are deleted. To get it back, ask VAIC to build it again."
           cost="Nothing to pay; it can't be undone."
           confirmLabel="Remove"
           danger
@@ -416,13 +416,13 @@ function ProjectChat({ project }: { project: Project }) {
   };
   return (
     <div className="pj-chat">
-      <div className="pj-log" ref={log} aria-live="polite" aria-label={`Conversation with AIC about ${project.title}`}>
+      <div className="pj-log" ref={log} aria-live="polite" aria-label={`Conversation with VAIC about ${project.title}`}>
         {chat.length === 0 ? (
           <div className="pj-hello">
             <p>
               {project.app
-                ? `Tell AIC what to change in ${project.title}. It asks if anything is unclear, then the builders make a new version for you to try.`
-                : "Describe your app in one sentence. AIC asks a few questions, then the builders get to work."}
+                ? `Tell VAIC what to change in ${project.title}. It asks if anything is unclear, then the builders make a new version for you to try.`
+                : "Describe your app in one sentence. VAIC asks a few questions, then the builders get to work."}
             </p>
             {project.app ? (
               <div className="choices" aria-label="Changes to start from">
@@ -437,7 +437,7 @@ function ProjectChat({ project }: { project: Project }) {
         ) : null}
         {chat.map((l) => (
           <article key={l.id} className={`pj-msg pj-${l.who}`} aria-busy={l.state === "streaming" || undefined}>
-            <span className="sr">{l.who === "ace" ? "AIC:" : "You:"}</span>
+            <span className="sr">{l.who === "ace" ? "VAIC:" : "You:"}</span>
             {l.who === "ace" ? <Markdown text={l.text} /> : <p>{l.text}</p>}
             {l.state === "failed" ? (
               <span className="pj-note">
@@ -450,7 +450,7 @@ function ProjectChat({ project }: { project: Project }) {
           </article>
         ))}
         {thinking && chat.at(-1)?.who !== "ace" ? (
-          <article className="pj-msg pj-ace pj-thinking" aria-label="AIC is thinking">
+          <article className="pj-msg pj-ace pj-thinking" aria-label="VAIC is thinking">
             <span className="dots" aria-hidden="true">
               <i />
               <i />
@@ -473,14 +473,14 @@ function ProjectChat({ project }: { project: Project }) {
       </div>
       <form className="pj-composer" onSubmit={submit}>
         <label className="sr" htmlFor="pj-text">
-          {`Message AIC about ${project.title}`}
+          {`Message VAIC about ${project.title}`}
         </label>
         <textarea
           id="pj-text"
           rows={1}
           value={text}
           maxLength={4000}
-          placeholder={ask ? "Or write your own answer" : project.app ? "What should change?" : "Tell AIC more"}
+          placeholder={ask ? "Or write your own answer" : project.app ? "What should change?" : "Tell VAIC more"}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) submit(e);
@@ -516,12 +516,12 @@ function Timeline({ project }: { project: Project }) {
       if (l.state !== "streaming")
         out.push({
           at: new Date(l.at).toISOString(),
-          who: l.who === "ace" ? "AIC" : "You",
-          text: l.who === "ace" ? `AIC answered: ${capped(l.text, 90)}` : `You asked: ${capped(l.text, 90)}`,
+          who: l.who === "ace" ? "VAIC" : "You",
+          text: l.who === "ace" ? `VAIC answered: ${capped(l.text, 90)}` : `You asked: ${capped(l.text, 90)}`,
         });
     const app = project.app;
     if (app?.published_at)
-      out.push({ at: app.published_at, who: "AIC", text: `Version ${app.version ?? 1} went live` });
+      out.push({ at: app.published_at, who: "VAIC", text: `Version ${app.version ?? 1} went live` });
     return out.sort((a, b) => b.at.localeCompare(a.at));
   }, [server, feed, chat, project.app]);
   return (
@@ -529,14 +529,14 @@ function Timeline({ project }: { project: Project }) {
       <h2>What's happening</h2>
       {thinking ? (
         <p className="pj-now" role="status">
-          <span className="pulse" aria-hidden="true" /> AIC is working on your last message
+          <span className="pulse" aria-hidden="true" /> VAIC is working on your last message
         </p>
       ) : null}
       {items.length ? (
         <ol className="timeline">
           {items.slice(0, 30).map((i, n) => (
             <li key={`${i.at}-${n}`}>
-              <span className={`tl-who tl-${i.who === "You" ? "you" : i.who === "AIC" ? "aic" : "builder"}`}>
+              <span className={`tl-who tl-${i.who === "You" ? "you" : i.who === "VAIC" ? "aic" : "builder"}`}>
                 {i.who}
               </span>
               <span className="tl-text">{i.text}</span>
@@ -547,7 +547,7 @@ function Timeline({ project }: { project: Project }) {
           ))}
         </ol>
       ) : (
-        <p className="mute">Nothing yet. When you send AIC a message, every step shows here in plain words.</p>
+        <p className="mute">Nothing yet. When you send VAIC a message, every step shows here in plain words.</p>
       )}
     </div>
   );
@@ -596,13 +596,13 @@ function Versions({ app, onError }: { app: CityApp | null; onError: (e: string |
         ))}
       </ol>
       {!history.length ? (
-        <p className="mute">When AIC makes a change, the earlier version stays here so you can go back.</p>
+        <p className="mute">When VAIC makes a change, the earlier version stays here so you can go back.</p>
       ) : null}
       {target !== null ? (
         <Confirm
           title={`Go back to version ${goalN}?`}
           what={`${dropped.length > 1 ? `Versions ${dropped.join(", ")} are` : `Version ${dropped[0]} is`} deleted and ${title} opens as it was before. Its saved data (such as scores) stays.`}
-          cost="Nothing to pay. A deleted version can't be brought back, but you can ask AIC for the change again."
+          cost="Nothing to pay. A deleted version can't be brought back, but you can ask VAIC for the change again."
           confirmLabel="Go back"
           onCancel={() => setTarget(null)}
           onConfirm={async () => {

@@ -57,7 +57,7 @@ test("first sign-in on our own screens: temporary password, own password, authen
   await page.getByLabel("6-digit code").fill("123456");
   await page.getByRole("button", { name: "Confirm and sign in" }).click();
 
-  await expect(page.getByRole("button", { name: "AI City — talk to AIC" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "AI City — talk to VAIC" })).toBeVisible();
 });
 
 test("later sign-ins: a wrong password says so plainly; then password and code", async ({ page }) => {
@@ -73,7 +73,7 @@ test("later sign-ins: a wrong password says so plainly; then password and code",
   await page.getByLabel("6-digit code", { exact: true }).fill("12a3456"); // only digits are kept
   await expect(page.getByLabel("6-digit code", { exact: true })).toHaveValue("123456");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "AI City — talk to AIC" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "AI City — talk to VAIC" })).toBeVisible();
 });
 
 test("sign in once: closing the tab and coming back later opens AI City already signed in", async ({
@@ -87,16 +87,16 @@ test("sign in once: closing the tab and coming back later opens AI City already 
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.getByLabel("6-digit code", { exact: true }).fill("123456");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "AI City — talk to AIC" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "AI City — talk to VAIC" })).toBeVisible();
   await page.close(); // the tab is gone (sessionStorage with it)
 
   const later = await context.newPage();
   await mockBackend(later, { signedIn: false });
   await later.goto("/");
-  await expect(later.getByRole("textbox", { name: "Message to AIC" })).toBeVisible();
+  await expect(later.getByRole("textbox", { name: "Message to VAIC" })).toBeVisible();
   await expect(later.getByRole("heading", { name: /Sign in/ })).toHaveCount(0);
   await later.reload();
-  await expect(later.getByRole("textbox", { name: "Message to AIC" })).toBeVisible();
+  await expect(later.getByRole("textbox", { name: "Message to VAIC" })).toBeVisible();
 });
 
 test("a sign-in that expired or was revoked lands on sign-in with a plain message", async ({ page }) => {
@@ -123,7 +123,7 @@ test("signing out clears the sign-in and this device's conversation", async ({ p
     localStorage.setItem("aic.draft", "half a thought");
   });
   await page.reload();
-  await page.getByRole("textbox", { name: "Message to AIC" }).fill("remember me?");
+  await page.getByRole("textbox", { name: "Message to VAIC" }).fill("remember me?");
   await page.keyboard.press("Enter");
   await expect.poll(() => page.evaluate(() => localStorage.getItem("aic.chat") ?? "")).toContain("remember me?");
   await page.goto("/#/settings/general");
@@ -162,7 +162,7 @@ test("forgot password and a new first-login email, without leaving AI City", asy
 test("first login shows a three-step guide that can be skipped", async ({ page }) => {
   await mockBackend(page, { firstRunDone: false });
   await page.goto("/");
-  await expect(page.getByRole("dialog", { name: "Meet AIC" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Meet VAIC" })).toBeVisible();
   await shot(page, "first-run-guide");
   await page.getByRole("button", { name: "Next" }).click();
   await expect(page.getByRole("heading", { name: "See the City" })).toBeVisible();
@@ -170,31 +170,31 @@ test("first login shows a three-step guide that can be skipped", async ({ page }
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
-test("lands on AIC with the input focused; asking something shows AIC's streamed reply", async ({ page }) => {
+test("lands on VAIC with the input focused; asking something shows VAIC's streamed reply", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/");
-  const box = page.getByRole("textbox", { name: "Message to AIC" });
+  const box = page.getByRole("textbox", { name: "Message to VAIC" });
   await expect(box).toBeFocused();
-  await expect(page.getByRole("button", { name: "Talk to AIC", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Talk to VAIC", exact: true })).toBeVisible();
   await expect(page.getByText(/Today: \$/)).toHaveCount(0); // costs live on the Costs screen only
   expect(await primaries(page)).toBeLessThanOrEqual(1);
-  await box.fill("yo AIC, what's 9 + 9?");
-  await page.getByRole("button", { name: "Send to AIC" }).click();
+  await box.fill("yo VAIC, what's 9 + 9?");
+  await page.getByRole("button", { name: "Send to VAIC" }).click();
   await expect
     .poll(() => m.calls.find((c) => c.path === "/messages")?.body)
-    .toMatchObject({ text: "yo AIC, what's 9 + 9?", conversation: "main" });
-  await expect(page.locator(".msg-pending")).toBeVisible(); // AIC's status row while it works
+    .toMatchObject({ text: "yo VAIC, what's 9 + 9?", conversation: "main" });
+  await expect(page.locator(".msg-pending")).toBeVisible(); // VAIC's status row while it works
   m.send({ type: "ace.reply", conversation: "main", text: "Eigh", done: false });
   m.send({ type: "ace.reply", conversation: "main", text: "Eighteen.", done: true });
-  await expect(page.getByLabel("Conversation with AIC").getByText("Eighteen.")).toBeVisible();
-  // The owner on the right in a bubble, AIC on the left as plain text with Markdown rendered.
+  await expect(page.getByLabel("Conversation with VAIC").getByText("Eighteen.")).toBeVisible();
+  // The owner on the right in a bubble, VAIC on the left as plain text with Markdown rendered.
   m.send({
     type: "ace.reply",
     conversation: "main",
     text: "## Today\n- **Research**: 3 workers\n- Engineering: idle\n\n| Dept | Spend |\n|---|---|\n| Research | $0.30 |",
     done: true,
   });
-  const log = page.getByLabel("Conversation with AIC");
+  const log = page.getByLabel("Conversation with VAIC");
   await expect(log.getByRole("heading", { name: "Today" })).toBeVisible();
   await expect(log.getByRole("cell", { name: "$0.30" })).toBeVisible();
   const mine = (await log.locator(".msg-owner .msg-body").first().boundingBox())!;
@@ -204,7 +204,7 @@ test("lands on AIC with the input focused; asking something shows AIC's streamed
   expect(theirs.x).toBeLessThan(panel.x + 40); // starts at the left edge
   expect(mine.x).toBeGreaterThan(theirs.x + 100);
   await expect(page.getByText(/Not sent yet/)).toHaveCount(0); // delivered, so nothing waits in the outbox
-  // The chat panel runs up behind the top bar (no "Chat with AIC" header); the first message starts below the
+  // The chat panel runs up behind the top bar (no "Chat with VAIC" header); the first message starts below the
   // bar; the brand is the wordmark alone, no eye.
   const bar = (await page.locator("header.top").boundingBox())!;
   const talkBox = (await page.locator(".talk").boundingBox())!;
@@ -214,19 +214,19 @@ test("lands on AIC with the input focused; asking something shows AIC's streamed
   await expect(page.locator(".brand .eyes")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Clear conversation on this device" })).toBeVisible();
   await shot(page, "ace");
-  await noSeriousA11y(page, "AIC");
+  await noSeriousA11y(page, "VAIC");
 });
 
-test("push-to-talk sends what the owner said to AIC", async ({ page }) => {
+test("push-to-talk sends what the owner said to VAIC", async ({ page }) => {
   const m = await mockBackend(page);
   await page.addInitScript(
-    () => ((window as unknown as { __heard: string }).__heard = "hey AIC, what's the status of the product?"),
+    () => ((window as unknown as { __heard: string }).__heard = "hey VAIC, what's the status of the product?"),
   );
   await page.goto("/");
-  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   await expect
     .poll(() => m.calls.find((c) => c.path === "/messages")?.body)
-    .toMatchObject({ text: "hey AIC, what's the status of the product?" });
+    .toMatchObject({ text: "hey VAIC, what's the status of the product?" });
 });
 
 test("one voice button: the conversation stays on, the voice bar shows who is talking, a second tap ends it", async ({
@@ -244,7 +244,7 @@ test("one voice button: the conversation stays on, the voice bar shows who is ta
   await expect(page.getByRole("checkbox")).toHaveCount(0);
   await expect(page.getByRole("radio")).toHaveCount(0);
   await expect(page.locator(".voice")).toHaveCount(0);
-  const button = page.getByRole("button", { name: "Talk to AIC", exact: true });
+  const button = page.getByRole("button", { name: "Talk to VAIC", exact: true });
   await expect(button).toHaveAttribute("aria-pressed", "false");
   await button.click();
   const strip = page.locator(".voice");
@@ -254,18 +254,18 @@ test("one voice button: the conversation stays on, the voice bar shows who is ta
   const end = page.getByRole("button", { name: "End the voice conversation" });
   await expect(end).toHaveAttribute("aria-pressed", "true");
   await shot(page, "ace-you-talking");
-  await noSeriousA11y(page, "AIC in a voice conversation");
+  await noSeriousA11y(page, "VAIC in a voice conversation");
 
-  // AIC's answer in the conversation is spoken, and the bar says so.
-  await page.getByRole("textbox", { name: "Message to AIC" }).fill("status?");
+  // VAIC's answer in the conversation is spoken, and the bar says so.
+  await page.getByRole("textbox", { name: "Message to VAIC" }).fill("status?");
   await page.keyboard.press("Enter");
   await expect.poll(() => m.calls.some((c) => c.path === "/messages")).toBe(true);
   m.send({ type: "ace.reply", conversation: "main", text: "All quiet. Nothing needs you.", done: true });
   await expect(strip).toHaveAttribute("data-speaker", "aic");
-  await expect(strip.getByRole("status")).toHaveText("AIC is talking");
+  await expect(strip.getByRole("status")).toHaveText("VAIC is talking");
   await shot(page, "ace-aic-talking");
 
-  // A second tap ends it: AIC stops, the mic closes, the bar goes.
+  // A second tap ends it: VAIC stops, the mic closes, the bar goes.
   await end.click();
   await expect(strip).toHaveCount(0);
   await expect(button).toHaveAttribute("aria-pressed", "false");
@@ -277,30 +277,30 @@ test("a microphone failure names the real cause and logs it to the console", asy
   const logged: string[] = [];
   page.on("console", (msg) => msg.type() === "error" && logged.push(msg.text()));
   await page.goto("/");
-  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Microphone access is blocked for this site");
   // The conversation ends with the failure: the button is off again and the voice bar is gone.
-  await expect(page.getByRole("button", { name: "Talk to AIC", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("button", { name: "Talk to VAIC", exact: true })).toHaveAttribute("aria-pressed", "false");
   await expect(page.locator(".voice")).toHaveCount(0);
   expect(
-    logged.some((t) => t.includes("[AIC voice] the microphone could not start:") && t.includes("NotAllowedError")),
+    logged.some((t) => t.includes("[VAIC voice] the microphone could not start:") && t.includes("NotAllowedError")),
   ).toBe(true);
 });
 
-test("AIC's reply: its steps with a shimmering status first, then words flowing in, then the steps folded", async ({
+test("VAIC's reply: its steps with a shimmering status first, then words flowing in, then the steps folded", async ({
   page,
 }) => {
   const m = await mockBackend(page);
   await page.goto("/");
-  const log = page.getByLabel("Conversation with AIC");
-  await page.getByRole("textbox", { name: "Message to AIC" }).fill("tell me about the city");
+  const log = page.getByLabel("Conversation with VAIC");
+  await page.getByRole("textbox", { name: "Message to VAIC" }).fill("tell me about the city");
   await page.keyboard.press("Enter");
-  const status = log.getByRole("status", { name: /^AIC: / });
-  await expect(status).toHaveAccessibleName("AIC: Understanding your message"); // before any event arrives
+  const status = log.getByRole("status", { name: /^VAIC: / });
+  await expect(status).toHaveAccessibleName("VAIC: Understanding your message"); // before any event arrives
   await expect(status.locator(".shimmer")).toHaveCSS("animation-name", "shimmer-sweep");
   m.send({ type: "activity", id: "ace", activity: "understanding" });
   m.send({ type: "activity", id: "ace", activity: "working", detail: "get_status" });
-  await expect(status).toHaveAccessibleName("AIC: Checking how things are going");
+  await expect(status).toHaveAccessibleName("VAIC: Checking how things are going");
   await expect(status).toContainText(/\ds$/);
   await shot(page, "ace-working");
   const words = Array.from({ length: 60 }, (_, i) => `word${i}`).join(" ");
@@ -333,34 +333,34 @@ test("with reduced motion the reply appears directly, without the typing effect"
   await page.emulateMedia({ reducedMotion: "reduce" });
   const m = await mockBackend(page);
   await page.goto("/");
-  await page.getByRole("textbox", { name: "Message to AIC" }).fill("status?");
+  await page.getByRole("textbox", { name: "Message to VAIC" }).fill("status?");
   await page.keyboard.press("Enter");
   await expect(page.locator(".shimmer")).toHaveCSS("animation-name", "none");
   await expect(page.locator(".aic-status-eye")).toHaveCSS("animation-name", "none");
   const text = "One two three four five six seven eight nine ten eleven twelve.";
   m.send({ type: "ace.reply", conversation: "main", text, done: false });
-  await expect(page.getByLabel("Conversation with AIC").locator(".msg-ace .msg-body").last()).toHaveText(text, {
+  await expect(page.getByLabel("Conversation with VAIC").locator(".msg-ace .msg-body").last()).toHaveText(text, {
     timeout: 150,
   });
 });
 
 test("typed and dictated messages get text; the voice conversation gets speech", async ({ page }) => {
   const m = await mockBackend(page);
-  await page.addInitScript(() => ((window as unknown as { __heard: string }).__heard = "hey AIC, status?"));
+  await page.addInitScript(() => ((window as unknown as { __heard: string }).__heard = "hey VAIC, status?"));
   await page.goto("/");
   const spoken = () => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []);
 
   // Typed: a text-only answer.
-  await page.getByRole("textbox", { name: "Message to AIC" }).fill("status?");
+  await page.getByRole("textbox", { name: "Message to VAIC" }).fill("status?");
   await page.keyboard.press("Enter");
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
   m.send({ type: "ace.reply", conversation: "main", text: "Typed answer.", done: true });
-  await expect(page.getByLabel("Conversation with AIC").getByText("Typed answer.")).toBeVisible();
+  await expect(page.getByLabel("Conversation with VAIC").getByText("Typed answer.")).toBeVisible();
   await page.waitForTimeout(300);
   expect(await spoken()).toEqual([]);
 
   // The voice conversation: spoken back.
-  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(2);
   expect(m.calls.filter((c) => c.path === "/messages")[1]?.body).toMatchObject({ voice: true });
   await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "stop listening"));
@@ -376,7 +376,7 @@ test("Dictate: words land in the box live, nothing is sent until Send, and the a
     w.__heard = "remind me to call the bank";
   });
   await page.goto("/");
-  const box = page.getByRole("textbox", { name: "Message to AIC" });
+  const box = page.getByRole("textbox", { name: "Message to VAIC" });
   await page.getByRole("button", { name: "Dictate into the box" }).click(); // the icon beside Send
   await expect(box).toHaveValue("remind me to call"); // a live partial
   await expect(box).toHaveValue("remind me to call the bank");
@@ -384,21 +384,21 @@ test("Dictate: words land in the box live, nothing is sent until Send, and the a
   const bar = page.getByRole("group", { name: "Dictation" });
   await expect(bar.getByRole("button", { name: "Cancel dictation" })).toBeVisible();
   await expect(bar.locator("canvas.mic-wave")).toBeVisible();
-  await expect(bar.getByRole("button", { name: "Send to AIC" })).toBeEnabled();
+  await expect(bar.getByRole("button", { name: "Send to VAIC" })).toBeEnabled();
   await expect(page.getByRole("button", { name: "Add to your message" })).toHaveCount(0); // the row is the bar now
   await shot(page, "ace-dictating");
-  await noSeriousA11y(page, "AIC while dictating");
+  await noSeriousA11y(page, "VAIC while dictating");
   await page.getByRole("button", { name: "Stop dictating" }).click();
   expect(m.calls.filter((c) => c.path === "/messages")).toHaveLength(0); // nothing sent by itself
   await box.press("End");
   await box.pressSequentially(" tomorrow"); // the owner can fix the words before sending
-  await page.getByRole("button", { name: "Send to AIC" }).click();
+  await page.getByRole("button", { name: "Send to VAIC" }).click();
   await expect
     .poll(() => m.calls.find((c) => c.path === "/messages")?.body)
     .toMatchObject({ text: "remind me to call the bank tomorrow" });
   expect(m.calls.find((c) => c.path === "/messages")?.body).not.toHaveProperty("voice");
   m.send({ type: "ace.reply", conversation: "main", text: "Tomorrow it is.", done: true });
-  await expect(page.getByLabel("Conversation with AIC").getByText("Tomorrow it is.")).toBeVisible();
+  await expect(page.getByLabel("Conversation with VAIC").getByText("Tomorrow it is.")).toBeVisible();
   await page.waitForTimeout(300);
   expect(await page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? [])).toEqual([]);
 });
@@ -409,7 +409,7 @@ test("a spoken reply starts with its first sentence while the rest still streams
   const m = await mockBackend(page);
   await page.goto("/");
   const spoken = () => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []);
-  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click(); // asked by voice
+  await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click(); // asked by voice
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
   m.send({ type: "ace.reply", conversation: "main", text: "All **quiet** in the city 🎉. Research", done: false });
   await expect.poll(spoken).toEqual(["All quiet in the city."]); // talking before the reply is complete
@@ -432,7 +432,7 @@ test("a spoken reply starts with its first sentence while the rest still streams
   await expect(page.locator(".voice")).toHaveCount(0);
 });
 
-test("a three-sentence streamed reply plays three clips, in order, once each; Send cuts AIC off", async ({ page }) => {
+test("a three-sentence streamed reply plays three clips, in order, once each; Send cuts VAIC off", async ({ page }) => {
   const m = await mockBackend(page);
   await page.addInitScript(() => ((window as unknown as { __speakMs: number }).__speakMs = 250));
   await page.goto("/");
@@ -441,9 +441,9 @@ test("a three-sentence streamed reply plays three clips, in order, once each; Se
       const x = window as unknown as { __spoken?: string[]; __overlaps?: number };
       return { spoken: x.__spoken ?? [], overlaps: x.__overlaps ?? 0 };
     });
-  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click(); // asked by voice
+  await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click(); // asked by voice
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
-  expect(m.calls.find((c) => c.path === "/messages")?.body).toMatchObject({ voice: true }); // AIC keeps it short
+  expect(m.calls.find((c) => c.path === "/messages")?.body).toMatchObject({ voice: true }); // VAIC keeps it short
   await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "stop listening"));
   const pieces = ["Hi there", ". The city is qu", "iet. Research", " has two work", "ers."];
   for (const text of pieces) m.send({ type: "ace.reply", conversation: "main", text, done: false });
@@ -454,16 +454,16 @@ test("a three-sentence streamed reply plays three clips, in order, once each; Se
   await page.waitForTimeout(700); // nothing more comes later
   expect(await w()).toEqual({ spoken: all, overlaps: 0 });
 
-  // A long reply in a new conversation: the owner types and sends while AIC talks, and AIC stops.
+  // A long reply in a new conversation: the owner types and sends while VAIC talks, and VAIC stops.
   await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "status?"));
-  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(2);
-  await page.getByRole("textbox", { name: "Message to AIC" }).fill("status?");
+  await page.getByRole("textbox", { name: "Message to VAIC" }).fill("status?");
   await page.keyboard.press("Enter");
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(3); // the typed one too
   m.send({ type: "ace.reply", conversation: "main", text: "One. Two. Three. Four. Five. Six.", done: true });
   await expect.poll(async () => (await w()).spoken.length).toBeGreaterThan(3);
-  await page.getByRole("textbox", { name: "Message to AIC" }).fill("stop");
+  await page.getByRole("textbox", { name: "Message to VAIC" }).fill("stop");
   await page.keyboard.press("Enter");
   const cut = (await w()).spoken.length;
   await page.waitForTimeout(1200);
@@ -471,10 +471,10 @@ test("a three-sentence streamed reply plays three clips, in order, once each; Se
   expect((await w()).spoken).not.toContain("Six.");
 });
 
-test("Settings: an OpenAI key switches AIC to OpenAI's voice; the key is never shown back", async ({ page }) => {
+test("Settings: an OpenAI key switches VAIC to OpenAI's voice; the key is never shown back", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/#/settings/voice");
-  await expect(page.getByRole("combobox", { name: "AIC's voice" })).toHaveAttribute("data-value", "Ruth"); // Polly until a key is in
+  await expect(page.getByRole("combobox", { name: "VAIC's voice" })).toHaveAttribute("data-value", "Ruth"); // Polly until a key is in
   await page.getByRole("button", { name: "Add an OpenAI key" }).click();
   const field = page.getByLabel("OpenAI key", { exact: true });
   await expect(field).toHaveAttribute("type", "password");
@@ -487,17 +487,17 @@ test("Settings: an OpenAI key switches AIC to OpenAI's voice; the key is never s
   await expect(page.getByLabel("OpenAI key", { exact: true })).toHaveCount(0); // the field closes
   expect(await page.content()).not.toContain("sk-test-123");
   expect(m.calls.filter((c) => c.path === "/voice/openai-key").at(-1)?.body).toEqual({ key: "sk-test-123" });
-  const voice = page.getByRole("combobox", { name: "AIC's voice" });
+  const voice = page.getByRole("combobox", { name: "VAIC's voice" });
   await expect(voice).toHaveAttribute("data-value", "alloy"); // OpenAI's default
   await voice.click();
   await page.getByRole("option", { name: /^Nova/ }).click();
   await page.getByRole("button", { name: "Test voice" }).click();
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []))
-    .toEqual(["openai:nova:Hi, I'm AIC. This is how I'll sound when I answer you."]);
+    .toEqual(["openai:nova:Hi, I'm VAIC. This is how I'll sound when I answer you."]);
   await expect(page.getByText(/^Played\./)).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("combobox", { name: "AIC's voice" })).toHaveAttribute("data-value", "nova");
+  await expect(page.getByRole("combobox", { name: "VAIC's voice" })).toHaveAttribute("data-value", "nova");
   await expect(page.getByRole("button", { name: "Replace the OpenAI key" })).toBeVisible();
 });
 
@@ -508,7 +508,7 @@ test("with an OpenAI key, a spoken reply plays through OpenAI, sentence by sente
   m.openai.key = "sk-test";
   await page.goto("/");
   const spoken = () => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []);
-  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
   await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "stop listening"));
   for (const text of ["Hi there. The ci", "ty is quiet. Research", " has two workers."])
@@ -527,7 +527,7 @@ test("with an OpenAI key, a spoken reply plays through OpenAI, sentence by sente
   // OpenAI refuses: this reply and the rest of the visit speak with Polly, and the voice line says so once.
   m.openai.error = { code: "rate_limited", message: "OpenAI is busy right now" };
   await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "status?"));
-  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(2);
   await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "stop listening"));
   m.send({ type: "ace.reply", conversation: "main", text: "Still quiet. All good.", done: true });
@@ -538,29 +538,29 @@ test("with an OpenAI key, a spoken reply plays through OpenAI, sentence by sente
   expect(m.calls.filter((c) => c.path === "/speech")).toHaveLength(4); // tried once, then Polly
 });
 
-test("Settings: pick AIC's voice; it is remembered on this device and can be heard", async ({ page }) => {
+test("Settings: pick VAIC's voice; it is remembered on this device and can be heard", async ({ page }) => {
   await mockBackend(page);
   await page.goto("/#/settings/voice");
-  const voice = page.getByRole("combobox", { name: "AIC's voice" });
+  const voice = page.getByRole("combobox", { name: "VAIC's voice" });
   await expect(voice).toHaveAttribute("data-value", "Ruth"); // the deploy's default
   await voice.click();
   await page.getByRole("option", { name: /^Danielle/ }).click();
   await page.getByRole("button", { name: "Test voice" }).click();
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []))
-    .toEqual(["Hi, I'm AIC. This is how I'll sound when I answer you."]);
+    .toEqual(["Hi, I'm VAIC. This is how I'll sound when I answer you."]);
   await expect(page.getByText(/^Played\./)).toBeVisible(); // the button says it worked
   await page.reload();
-  await expect(page.getByRole("combobox", { name: "AIC's voice" })).toHaveAttribute("data-value", "Danielle");
+  await expect(page.getByRole("combobox", { name: "VAIC's voice" })).toHaveAttribute("data-value", "Danielle");
   expect(await page.evaluate(() => localStorage.getItem("aic.voice"))).toBe("Danielle");
 });
 
-test("while the work AIC handed on runs, its steps shimmer with a live clock; they settle when the result is back", async ({
+test("while the work VAIC handed on runs, its steps shimmer with a live clock; they settle when the result is back", async ({
   page,
 }) => {
   const m = await mockBackend(page);
   await page.goto("/");
-  await page.getByRole("textbox", { name: "Message to AIC" }).fill("build me a budget app");
+  await page.getByRole("textbox", { name: "Message to VAIC" }).fill("build me a budget app");
   await page.keyboard.press("Enter");
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
   m.send({ type: "activity", id: "ace", activity: "understanding" });
@@ -569,7 +569,7 @@ test("while the work AIC handed on runs, its steps shimmer with a live clock; th
   m.send({ type: "ticket.status", previous: null, ticket: { ...t, status: "open" } });
   m.send({ type: "ace.reply", conversation: "main", text: "On it. The Orchestrator has it.", done: true });
 
-  const steps = page.getByLabel("Conversation with AIC").locator("details.aic-steps").last();
+  const steps = page.getByLabel("Conversation with VAIC").locator("details.aic-steps").last();
   await expect(steps).toHaveClass(/is-running/);
   await expect(steps.locator(".shimmer")).toHaveText("Working on it: Passing this to my team…");
   await expect(steps.locator(".shimmer")).toHaveCSS("animation-name", "shimmer-sweep");
@@ -590,7 +590,7 @@ test("while the work AIC handed on runs, its steps shimmer with a live clock; th
   await expect(steps.locator("summary")).toHaveText(/^What I did · \d+ s$/);
 });
 
-test("after a long conversation the AIC screen still fits the window: only the chat scrolls, inside its panel", async ({
+test("after a long conversation the VAIC screen still fits the window: only the chat scrolls, inside its panel", async ({
   page,
 }) => {
   const m = await mockBackend(page);
@@ -602,13 +602,13 @@ test("after a long conversation the AIC screen still fits the window: only the c
     await page.setViewportSize({ width, height });
     await page.goto("/");
     for (let i = 0; i < 12; i++) {
-      await page.getByRole("textbox", { name: "Message to AIC" }).fill(`question ${i}`);
+      await page.getByRole("textbox", { name: "Message to VAIC" }).fill(`question ${i}`);
       await page.keyboard.press("Enter");
       m.send({ type: "ace.reply", conversation: "main", text: `Answer ${i}. `.repeat(20), done: true });
     }
     await expect(
       page
-        .getByLabel("Conversation with AIC")
+        .getByLabel("Conversation with VAIC")
         .getByText(/Answer 11\./)
         .first(),
     ).toBeVisible();
@@ -641,13 +641,13 @@ test("after a long conversation the AIC screen still fits the window: only the c
   }
 });
 
-test("a plain chat: nothing is suggested under AIC's replies, even after a question", async ({ page }) => {
+test("a plain chat: nothing is suggested under VAIC's replies, even after a question", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/");
-  await page.getByRole("textbox", { name: "Message to AIC" }).fill("check the GT3 sentences");
+  await page.getByRole("textbox", { name: "Message to VAIC" }).fill("check the GT3 sentences");
   await page.keyboard.press("Enter");
   m.send({ type: "ace.reply", conversation: "main", text: "On it. Want me to tell you when it's done?", done: true });
-  await expect(page.getByLabel("Conversation with AIC").getByText("Want me to tell you when it's done?")).toBeVisible();
+  await expect(page.getByLabel("Conversation with VAIC").getByText("Want me to tell you when it's done?")).toBeVisible();
   await expect(page.getByRole("group", { name: "Quick replies" })).toHaveCount(0);
   for (const label of ["Yes", "No", "How's it going?", "Stop it"])
     await expect(page.getByRole("button", { name: label, exact: true })).toHaveCount(0);
@@ -661,7 +661,7 @@ test("plain words: Work in the menu, What I did under replies, today's spend wit
   const nav = page.getByRole("navigation", { name: "Screens" });
   await expect(nav.getByRole("link", { name: "Work" })).toBeVisible();
   await expect(nav.getByText("Tickets")).toHaveCount(0);
-  await page.getByRole("textbox", { name: "Message to AIC" }).fill("status?");
+  await page.getByRole("textbox", { name: "Message to VAIC" }).fill("status?");
   await page.keyboard.press("Enter");
   m.send({ type: "activity", id: "ace", activity: "working", detail: "get_status" });
   m.send({ type: "ace.reply", conversation: "main", text: "All quiet.", done: true });
@@ -678,7 +678,7 @@ test("the message box starts one line tall, grows with more lines up to a limit,
 }) => {
   const m = await mockBackend(page);
   await page.goto("/");
-  const box = page.getByRole("textbox", { name: "Message to AIC" });
+  const box = page.getByRole("textbox", { name: "Message to VAIC" });
   const height = () => box.evaluate((e) => e.getBoundingClientRect().height);
   const oneLine = await height();
   expect(oneLine).toBeLessThan(60); // one line plus padding, level with the send button
@@ -706,7 +706,7 @@ test("the message box starts one line tall, grows with more lines up to a limit,
   expect(await height()).toBe(oneLine);
 });
 
-test("speech to speech: AIC answers aloud while it keeps listening; its own echo is ignored, the owner is not", async ({
+test("speech to speech: VAIC answers aloud while it keeps listening; its own echo is ignored, the owner is not", async ({
   page,
 }) => {
   const m = await mockBackend(page);
@@ -717,13 +717,13 @@ test("speech to speech: AIC answers aloud while it keeps listening; its own echo
   await page.goto("/");
   const strip = page.locator(".voice");
   const said = (t: string) => page.evaluate((x) => ((window as unknown as { __heard: string }).__heard = x), t);
-  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
   // While voice is on, the screen says so plainly.
   await expect(page.getByText("Voice on")).toBeVisible();
   m.send({ type: "ace.reply", conversation: "main", text: "All quiet. Nothing needs you.", done: true });
   await expect(strip).toHaveAttribute("data-speaker", "aic");
-  // The mic is open while AIC talks: AIC's own words coming back from the speakers are not sent.
+  // The mic is open while VAIC talks: VAIC's own words coming back from the speakers are not sent.
   await said("nothing needs you");
   await page.waitForTimeout(300);
   expect(m.calls.filter((c) => c.path === "/messages")).toHaveLength(1);
@@ -732,13 +732,13 @@ test("speech to speech: AIC answers aloud while it keeps listening; its own echo
       intervals: [50],
     })
     .toEqual(["All quiet.", "Nothing needs you."]); // spoken, sentence by sentence, no typing
-  // AIC finished: still listening, no tap needed for the next question.
+  // VAIC finished: still listening, no tap needed for the next question.
   await expect(strip).toHaveAttribute("data-speaker", "you");
   await said("and the costs?");
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(2);
   expect(m.calls.filter((c) => c.path === "/messages")[1]?.body).toMatchObject({ text: "and the costs?", voice: true });
 
-  // The owner talks in the middle of AIC's answer: AIC stops, and what the owner said goes out.
+  // The owner talks in the middle of VAIC's answer: VAIC stops, and what the owner said goes out.
   await page.evaluate(() => ((window as unknown as { __speakMs: number }).__speakMs = 4000));
   m.send({ type: "ace.reply", conversation: "main", text: "About two dollars today, mostly research.", done: true });
   await expect(strip).toHaveAttribute("data-speaker", "aic");
@@ -755,14 +755,14 @@ test("speech to speech: AIC answers aloud while it keeps listening; its own echo
   await expect(strip).toHaveCount(0);
   await page.waitForTimeout(300);
   expect(m.calls.filter((c) => c.path === "/messages")).toHaveLength(3);
-  await expect(page.getByRole("button", { name: "Talk to AIC", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("button", { name: "Talk to VAIC", exact: true })).toHaveAttribute("aria-pressed", "false");
 
   // Outside the conversation a typed message is answered in text, and the mic stays closed.
-  await page.getByRole("textbox", { name: "Message to AIC" }).fill("hello");
+  await page.getByRole("textbox", { name: "Message to VAIC" }).fill("hello");
   await page.keyboard.press("Enter");
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(4);
   m.send({ type: "ace.reply", conversation: "main", text: "Hi.", done: true });
-  await expect(page.getByLabel("Conversation with AIC").getByText("Hi.")).toBeVisible();
+  await expect(page.getByLabel("Conversation with VAIC").getByText("Hi.")).toBeVisible();
   await page.waitForTimeout(400);
   expect(await page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken)).not.toContain("Hi.");
   await expect(strip).toHaveCount(0);
@@ -776,10 +776,10 @@ test("'speaking' shows only while sound plays, and a voice that fails says why",
   });
   await page.goto("/");
   const strip = page.locator(".voice");
-  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click(); // asked by voice
+  await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click(); // asked by voice
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
   m.send({ type: "ace.reply", conversation: "main", text: "All quiet.", done: true });
-  await expect(page.getByLabel("Conversation with AIC").getByText("All quiet.")).toBeVisible();
+  await expect(page.getByLabel("Conversation with VAIC").getByText("All quiet.")).toBeVisible();
   // The reply is done, but its audio is still being made: not "speaking" yet.
   await page.waitForTimeout(400);
   await expect(strip).not.toHaveAttribute("data-speaker", "aic");
@@ -796,28 +796,28 @@ test("'speaking' shows only while sound plays, and a voice that fails says why",
     w.__synthError = "AccessDeniedException";
     w.__heard = "status?";
   });
-  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(2);
   await page.evaluate(() => {
     delete (window as unknown as { speechSynthesis?: unknown }).speechSynthesis; // no browser voice to fall back on
   });
   m.send({ type: "ace.reply", conversation: "main", text: "Still quiet.", done: true });
-  await expect(page.getByRole("alert")).toContainText("AIC's voice could not play (AccessDeniedException");
+  await expect(page.getByRole("alert")).toContainText("VAIC's voice could not play (AccessDeniedException");
   await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "stop listening"));
   await expect(page.locator('.voice[data-speaker="aic"]')).toHaveCount(0);
 
   // The Test voice button reports the same failure, exactly.
   await page.goto("/#/settings/voice");
   await page.getByRole("button", { name: "Test voice" }).click();
-  await expect(page.getByText(/AIC's voice could not play \(AccessDeniedException/)).toBeVisible();
+  await expect(page.getByText(/VAIC's voice could not play \(AccessDeniedException/)).toBeVisible();
 });
 
 test("a draft survives a reload", async ({ page }) => {
   await mockBackend(page);
   await page.goto("/");
-  await page.getByRole("textbox", { name: "Message to AIC" }).fill("half a thought");
+  await page.getByRole("textbox", { name: "Message to VAIC" }).fill("half a thought");
   await page.reload();
-  await expect(page.getByRole("textbox", { name: "Message to AIC" })).toHaveValue("half a thought");
+  await expect(page.getByRole("textbox", { name: "Message to VAIC" })).toHaveValue("half a thought");
 });
 
 test("watching the City: a department goes up and workers appear when hired", async ({ page }) => {
@@ -863,7 +863,7 @@ test("watching the City: a department goes up and workers appear when hired", as
   await expect(feed).toContainText("Engineering started a part");
   await expect(feed).not.toContainText("wkr-"); // no ids
   await expect(feed).not.toContainText("→");
-  await expect.poll(async () => Number(await city.getAttribute("data-people"))).toBeGreaterThanOrEqual(6); // AIC, Orchestrator, manager, 3 workers
+  await expect.poll(async () => Number(await city.getAttribute("data-people"))).toBeGreaterThanOrEqual(6); // VAIC, Orchestrator, manager, 3 workers
   await page.waitForTimeout(800); // let the walk-in finish for the picture
   await shot(page, "city-workers");
   await depts.getByRole("button", { name: /Engineering/ }).click();
@@ -1023,7 +1023,7 @@ test("hitting the spend cap: the City says so plainly and points at Costs", asyn
 test("a lost connection says what happened and that nothing was lost", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/");
-  await expect(page.getByRole("textbox", { name: "Message to AIC" })).toBeFocused();
+  await expect(page.getByRole("textbox", { name: "Message to VAIC" })).toBeFocused();
   await expect
     .poll(() => {
       try {
@@ -1138,7 +1138,7 @@ test("the + menu: files ride along with the message, slash commands become plain
   });
   m.connectors.push({ id: "heygen", label: "HeyGen", status: "ready", tools: [{ name: "make_video" }] });
   await page.goto("/");
-  const box = page.getByRole("textbox", { name: "Message to AIC" });
+  const box = page.getByRole("textbox", { name: "Message to VAIC" });
   const plus = page.getByRole("button", { name: "Add to your message" });
   await expect(plus).toBeVisible();
   await expect(plus).toHaveAttribute("aria-expanded", "false");
@@ -1159,7 +1159,7 @@ test("the + menu: files ride along with the message, slash commands become plain
   const plusBox = (await plus.boundingBox())!;
   expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(plusBox.y + 1); // a drop-up, above the button
   await shot(page, "plus-menu");
-  await noSeriousA11y(page, "AIC with the + menu open");
+  await noSeriousA11y(page, "VAIC with the + menu open");
 
   // Connectors: each one with its status; "Add a connector…" writes the sentence with the name selected.
   await menu.getByRole("menuitem", { name: /Connectors/ }).click();
@@ -1179,7 +1179,7 @@ test("the + menu: files ride along with the message, slash commands become plain
   await expect(box).toHaveValue("/pdf-report ");
   await expect(box).toBeFocused();
   await page.keyboard.type("one for Q3");
-  await page.getByRole("button", { name: "Send to AIC" }).click();
+  await page.getByRole("button", { name: "Send to VAIC" }).click();
   await expect
     .poll(() => m.calls.filter((c) => c.path === "/messages").at(-1)?.body)
     .toMatchObject({ text: "Use the “pdf-report” skill: one for Q3" });
@@ -1201,7 +1201,7 @@ test("the + menu: files ride along with the message, slash commands become plain
   await expect(box).toHaveValue("/connect");
   await box.fill("");
 
-  // Files go into the knowledge base; the chips show their status; the message names them for AIC.
+  // Files go into the knowledge base; the chips show their status; the message names them for VAIC.
   await plus.click();
   await menu.getByRole("menuitem", { name: /Add files or photos/ }).click();
   await page
@@ -1331,7 +1331,7 @@ test("Settings is a menu of pages, each with its own address and a way back; App
     /^Departments & tools/,
     /^Connectors/,
     /^GitHub/,
-    /^AIC's voice/,
+    /^VAIC's voice/,
     /^Apps/,
     /^Limits & spending/,
     /^Start over/,
@@ -1367,7 +1367,7 @@ test("Settings is a menu of pages, each with its own address and a way back; App
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await page.goto("/");
-  await noSeriousA11y(page, "AIC in light");
+  await noSeriousA11y(page, "VAIC in light");
   await shot(page, "ace-light");
   await page.goto("/#/settings/general");
   await page.getByText("Dark", { exact: true }).click();
@@ -1382,7 +1382,7 @@ test("dictation: × puts the box back as it was, and send goes out at once witho
     w.__heard = "book a table for two";
   });
   await page.goto("/");
-  const box = page.getByRole("textbox", { name: "Message to AIC" });
+  const box = page.getByRole("textbox", { name: "Message to VAIC" });
   await box.fill("Hi,");
   await page.getByRole("button", { name: "Dictate into the box" }).click();
   await expect(box).toHaveValue("Hi, book a table for two");
@@ -1394,7 +1394,7 @@ test("dictation: × puts the box back as it was, and send goes out at once witho
   await box.fill("");
   await page.getByRole("button", { name: "Dictate into the box" }).click();
   await expect(box).toHaveValue("book a table for two");
-  await page.getByRole("group", { name: "Dictation" }).getByRole("button", { name: "Send to AIC" }).click();
+  await page.getByRole("group", { name: "Dictation" }).getByRole("button", { name: "Send to VAIC" }).click();
   await expect
     .poll(() => m.calls.filter((c) => c.path === "/messages").at(-1)?.body)
     .toMatchObject({ text: "book a table for two" });

@@ -6,7 +6,7 @@ import { api } from "./api.ts";
 export const ROLES = ["ace", "orchestrator", "manager", "worker"] as const;
 export type Role = (typeof ROLES)[number];
 export const ROLE_LABEL: Record<Role, string> = {
-  ace: "AIC",
+  ace: "VAIC",
   orchestrator: "Orchestrator",
   manager: "Managers",
   worker: "Workers",

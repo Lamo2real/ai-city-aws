@@ -1,5 +1,5 @@
 """The owner's GitHub token (docs/GITHUB_ACCESS.md, decision 110): the Settings routes, git and gh signed in
-inside the runtime, AIC's run_command through the policy gate, and the GitHub connector hints."""
+inside the runtime, VAIC's run_command through the policy gate, and the GitHub connector hints."""
 
 from __future__ import annotations
 
@@ -215,7 +215,7 @@ def test_real_git_answers_the_token_for_github_through_the_helper_only(tmp_path:
     assert TOKEN not in other.stdout  # the helper answers for github.com only
 
 
-# ---------- AIC's terminal ----------
+# ---------- VAIC's terminal ----------
 async def _run_command(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[Any, Any]:
     monkeypatch.setenv("AIC_ACE_WORKSPACE", str(tmp_path / "workspace"))
     monkeypatch.setenv("GH_TOKEN", TOKEN)

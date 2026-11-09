@@ -1,4 +1,4 @@
-// Autopilot on the screen: "While you were away" at the top of AIC's screen, and Settings → While I'm away
+// Autopilot on the screen: "While you were away" at the top of VAIC's screen, and Settings → While I'm away
 // (the Autopilot switch, standing orders, and the open items left from before). Calm by design: no badges, no
 // counts that nag; what only the owner's hands can do comes with one button that does it.
 import { useEffect, useState } from "react";
@@ -290,7 +290,7 @@ export function AwaySettings() {
       <Button variant="primary" onClick={startOrderInChat}>
         Add a standing order
       </Button>
-      <p className="mute">AIC's chat opens with “While I'm away, …”: say what to handle and how often.</p>
+      <p className="mute">VAIC's chat opens with “While I'm away, …”: say what to handle and how often.</p>
 
       {open ? (
         <>
@@ -314,7 +314,7 @@ export function AwaySettings() {
         <Confirm
           title="Delete this standing order?"
           what={orderWords(removing)}
-          cost="You can add it again any time by asking AIC."
+          cost="You can add it again any time by asking VAIC."
           confirmLabel="Delete"
           onCancel={() => setRemoving(null)}
           onConfirm={async () => {

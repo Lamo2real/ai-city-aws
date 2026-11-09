@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { speechDetector, speechThreshold } from "../src/voice/bargeIn.ts";
 
-describe("talking over AIC in the standard voice", () => {
+describe("talking over VAIC in the standard voice", () => {
   it("sets the bar above the room's noise, never absurdly low or high", () => {
     expect(speechThreshold(0)).toBe(0.1);
     expect(speechThreshold(0.05)).toBeCloseTo(0.2);

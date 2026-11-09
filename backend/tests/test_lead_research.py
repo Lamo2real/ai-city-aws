@@ -122,7 +122,7 @@ async def test_find_me_two_leads_walks_to_sales_and_comes_back_as_a_table_and_a_
     assert body == CSV.encode() and content_type.startswith("text/csv")
     item = await w.store.get_item(key.split("/")[1])
     assert item and item["kind"] == "document" and item["title"].startswith("Leads: Sales: lead research")
-    assert "| Ada Berg | CTO | Kassa AB" in seen["ace"]  # the table reaches AIC for the chat
+    assert "| Ada Berg | CTO | Kassa AB" in seen["ace"]  # the table reaches VAIC for the chat
     assert "Saved to the owner's knowledge base as a CSV: “Leads:" in seen["ace"]
 
     assert await save_lead_csvs(city.ledger, w.service, task["id"]) == []  # a re-delivered report saves nothing

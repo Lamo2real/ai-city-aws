@@ -1,6 +1,6 @@
 // Departments on demand (decision 134): build a new department next to the twelve preset ones, or demolish one.
 // The same two controls appear in the City (the side list and a tower's panel) and in Settings → Departments &
-// tools; asking AIC ("make a Customer Success department") does exactly the same.
+// tools; asking VAIC ("make a Customer Success department") does exactly the same.
 import { useState, type FormEvent } from "react";
 import { standingDepartments, type CityState } from "../city/city-state.js";
 import { api, ApiError } from "../lib/api.ts";
@@ -74,7 +74,7 @@ export function BuildDepartment({ onDone, compact = false }: { onDone?: (name: s
         />
       </label>
       <label className="field">
-        {compact ? "What it does (optional)" : "What it does (optional; AIC fills it in if you leave it empty)"}
+        {compact ? "What it does (optional)" : "What it does (optional; VAIC fills it in if you leave it empty)"}
         <input
           value={mission}
           onChange={(e) => setMission(e.target.value)}
@@ -162,7 +162,7 @@ export function YourDepartments() {
     <section className="presets yourdepts" aria-labelledby="yourdepts-title">
       <h2 id="yourdepts-title">Build or demolish a department</h2>
       <p className="mute">
-        Next to the twelve ready-made departments you can build your own, or ask AIC: “make a Customer Success
+        Next to the twelve ready-made departments you can build your own, or ask VAIC: “make a Customer Success
         department”. Demolishing one sends its workers home and hands its unfinished work back to the Orchestrator.
       </p>
       <BuildDepartment />

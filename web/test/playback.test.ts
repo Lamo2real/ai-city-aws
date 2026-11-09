@@ -59,7 +59,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 const mp3 = () => new Blob([new Uint8Array([1, 2, 3, 4])], { type: "audio/mpeg" });
 
-describe("AIC's reply plays through the tap-unlocked AudioContext", () => {
+describe("VAIC's reply plays through the tap-unlocked AudioContext", () => {
   it("decodes the clip, starts a buffer source, says when sound begins and resolves when it ends", async () => {
     const v = getVoice();
     v.prime?.(); // the owner's tap

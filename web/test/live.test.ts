@@ -1,5 +1,5 @@
-// AIC's real-time voice on GPT-Live (decision 128), with WebRTC, audio and the API faked: the offer goes to
-// /voice/live, the owner's words go to AIC on a delegation, and AIC's answer goes back to be said.
+// VAIC's real-time voice on GPT-Live (decision 128), with WebRTC, audio and the API faked: the offer goes to
+// /voice/live, the owner's words go to VAIC on a delegation, and VAIC's answer goes back to be said.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const posted: Array<{ path: string; body: unknown }> = [];
@@ -80,8 +80,8 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-describe("GPT-Live as AIC's voice", () => {
-  it("opens through /voice/live, sends the owner's words to AIC on a delegation and AIC's answer back", async () => {
+describe("GPT-Live as VAIC's voice", () => {
+  it("opens through /voice/live, sends the owner's words to VAIC on a delegation and VAIC's answer back", async () => {
     const asked: string[] = [];
     const thinking: boolean[] = [];
     const call = await startLive({

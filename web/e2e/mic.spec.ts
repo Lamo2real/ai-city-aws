@@ -60,10 +60,10 @@ test("the real mic path gets the microphone and audio running, and names the spe
   const errors: string[] = [];
   page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
   await page.goto("/");
-  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("NotAuthorizedException");
   expect(identityCalls).toBeGreaterThan(0); // mic, AudioContext and the SDK all worked up to the AWS call
-  expect(errors.some((t) => t.includes("[AIC voice]"))).toBe(true);
+  expect(errors.some((t) => t.includes("[VAIC voice]"))).toBe(true);
 });
 
 test("when the speech service refuses, the browser's own recognition takes over for the session", async ({ page }) => {
@@ -72,7 +72,7 @@ test("when the speech service refuses, the browser's own recognition takes over 
   let identityCalls = 0;
   await refuse(page, () => identityCalls++);
   await page.goto("/");
-  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click(); // Talk and send
+  await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click(); // Talk and send
   await expect(page.getByText("Using your browser's speech recognition.")).toBeVisible();
   await expect
     .poll(() => m.calls.find((c) => c.path === "/messages")?.body)
@@ -83,22 +83,22 @@ test("when the speech service refuses, the browser's own recognition takes over 
   // The rest of this session goes straight to the browser's recognition, without asking AWS again.
   const before = identityCalls;
   await page.getByRole("button", { name: "Dictate into the box" }).click();
-  await expect(page.getByRole("textbox", { name: "Message to AIC" })).toHaveValue("what's the status");
+  await expect(page.getByRole("textbox", { name: "Message to VAIC" })).toHaveValue("what's the status");
   expect(identityCalls).toBe(before);
   await page.getByRole("button", { name: "Stop dictating" }).click();
 
   // A new page load tries Transcribe again.
   await page.evaluate(() => sessionStorage.removeItem("aic.speech.engine")); // what closing the tab does
   await page.reload();
-  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   await expect.poll(() => identityCalls).toBeGreaterThan(before);
 });
 
 test("a page opened before a deploy says to reload, instead of a generic mic failure", async ({ page }) => {
   await mockBackend(page, { realVoice: true });
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Talk to AIC", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Talk to VAIC", exact: true })).toBeVisible();
   await page.route("**/assets/**", (r) => r.fulfill({ status: 404, body: "gone" })); // the new deploy removed them
-  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("AI City was updated since this page opened. Reload the page");
 });

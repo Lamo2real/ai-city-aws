@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { nextShown, revealable } from "../src/components/StreamedText.tsx";
 
-describe("AIC's reply is revealed at a steady pace", () => {
+describe("VAIC's reply is revealed at a steady pace", () => {
   it("moves a little each frame, never past what has arrived", () => {
     expect(nextShown(0, 200, 16)).toBeGreaterThan(0);
     expect(nextShown(0, 200, 16)).toBeLessThan(200);

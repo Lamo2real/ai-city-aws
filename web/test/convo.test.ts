@@ -11,7 +11,7 @@ describe("the hands-free conversation loop", () => {
     let s = loopNext(false, "voice_sent");
     expect(s).toEqual({ on: true, reopen: false });
     s = loopNext(s.on, "reply_spoken");
-    expect(s).toEqual({ on: true, reopen: true }); // AIC finished talking: listen again
+    expect(s).toEqual({ on: true, reopen: true }); // VAIC finished talking: listen again
     s = loopNext(s.on, "reply_spoken");
     expect(s.reopen).toBe(true); // and again, turn after turn
   });
@@ -30,7 +30,7 @@ describe("the hands-free conversation loop", () => {
     expect(isStopPhrase("stop the microphone")).toBe(true);
     expect(isStopPhrase("don't stop listening to feedback")).toBe(false);
     expect(isStopPhrase("stop the deploy")).toBe(false);
-    expect(isStopPhrase("stop")).toBe(false); // "stop" alone is a message for AIC (it can cancel work)
+    expect(isStopPhrase("stop")).toBe(false); // "stop" alone is a message for VAIC (it can cancel work)
   });
 });
 
@@ -72,7 +72,7 @@ describe("a reply that cannot be spoken is reported, never swallowed", () => {
       /blocked the sound.*Tap the mic/,
     );
     expect(speakProblem(Object.assign(new Error("not authorized"), { name: "AccessDeniedException" }))).toMatch(
-      /AIC's voice could not play \(AccessDeniedException: not authorized\)/,
+      /VAIC's voice could not play \(AccessDeniedException: not authorized\)/,
     );
   });
 });
@@ -87,13 +87,13 @@ describe("the browser-voice fallback is remembered for the page session only", (
   });
 });
 
-describe("telling AIC's own voice from the owner's while the mic stays open", async () => {
+describe("telling VAIC's own voice from the owner's while the mic stays open", async () => {
   const { isEcho } = await import("../src/voice/convo.ts");
-  it("AIC's words coming back from the speakers are an echo", () => {
+  it("VAIC's words coming back from the speakers are an echo", () => {
     expect(isEcho("nothing needs you", "All quiet. Nothing needs you.")).toBe(true);
     expect(isEcho("All quiet", "All quiet. Nothing needs you.")).toBe(true);
   });
-  it("the owner talking over AIC is not", () => {
+  it("the owner talking over VAIC is not", () => {
     expect(isEcho("wait, what about yesterday?", "About two dollars today, mostly research.")).toBe(false);
     expect(isEcho("stop", "All quiet. Nothing needs you.")).toBe(false);
   });

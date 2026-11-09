@@ -3,19 +3,19 @@ import { confidence, isOwnerSpeech, newWords, standsOut } from "../src/voice/hea
 
 const reply = "Sir, I only caught OK there. Was that a yes to something I said, or did you want me to do something?";
 
-describe("AIC's own voice is never sent as the owner's words", () => {
+describe("VAIC's own voice is never sent as the owner's words", () => {
   const spans = [{ start: 1000, end: 6000 }];
-  it("drops the echoes from the owner's screenshot: 'OK. OK.', 'Oh. something.' while AIC spoke", () => {
+  it("drops the echoes from the owner's screenshot: 'OK. OK.', 'Oh. something.' while VAIC spoke", () => {
     expect(isOwnerSpeech("OK. OK.", reply, 2000, spans)).toBe(false);
     expect(isOwnerSpeech("Oh. something.", reply, 5000, spans)).toBe(false);
-    expect(isOwnerSpeech("something", reply, 6400, spans)).toBe(false); // the tail, just after AIC stopped
+    expect(isOwnerSpeech("something", reply, 6400, spans)).toBe(false); // the tail, just after VAIC stopped
   });
-  it("keeps the owner talking over AIC with new words, and anything said after AIC finished", () => {
+  it("keeps the owner talking over VAIC with new words, and anything said after VAIC finished", () => {
     expect(isOwnerSpeech("No, check the calendar instead", reply, 3000, spans)).toBe(true);
     expect(isOwnerSpeech("yes", reply, 8000, spans)).toBe(true); // an answer after the question
     expect(newWords("check my email", reply)).toBe(3);
   });
-  it("without timings, only an AIC that is still speaking counts", () => {
+  it("without timings, only an VAIC that is still speaking counts", () => {
     expect(isOwnerSpeech("OK", reply, null, [{ start: 1000, end: Infinity }])).toBe(false);
     expect(isOwnerSpeech("OK", reply, null, spans)).toBe(true);
   });

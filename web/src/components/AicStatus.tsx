@@ -1,4 +1,4 @@
-// AIC at work, before its first words: a small copy of the owner's eye with a calm slow blink, the current
+// VAIC at work, before its first words: a small copy of the owner's eye with a calm slow blink, the current
 // step in silver with a soft shimmer sweeping across it, and the seconds so far. Below a finished reply, the
 // steps it took fold into one line that opens on a tap.
 import { useEffect, useState } from "react";
@@ -13,7 +13,7 @@ export function AicStatus({ turn }: { turn: AceTurn }) {
   const step = turn.steps.at(-1) ?? "Working on it";
   const secs = Math.max(0, Math.floor((now - turn.started) / 1000));
   return (
-    <div className="aic-status" role="status" aria-label={`AIC: ${step}`}>
+    <div className="aic-status" role="status" aria-label={`VAIC: ${step}`}>
       <span className="aic-status-eye" aria-hidden="true" />
       <span className="shimmer" aria-hidden="true">
         {step}…
@@ -25,7 +25,7 @@ export function AicStatus({ turn }: { turn: AceTurn }) {
   );
 }
 
-/** The steps under a finished reply. While work AIC handed on is still running (`running`), the line carries the
+/** The steps under a finished reply. While work VAIC handed on is still running (`running`), the line carries the
  *  same silver shimmer as the live status row, with the current step and a clock counting from when the owner
  *  sent; when the work finishes or reports back it settles to the plain list. */
 export function AicSteps({

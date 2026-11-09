@@ -1,6 +1,6 @@
 """The owner's jobs, in plain words: find one by what the owner calls it, say how it is going, stop it.
 
-AIC uses this for "how's the Porsche thing going?" and "stop it". Nothing here returns ids or the word
+VAIC uses this for "how's the Porsche thing going?" and "stop it". Nothing here returns ids or the word
 "ticket": the text is meant to be read out as it is.
 """
 
@@ -69,7 +69,7 @@ async def recent_tasks(ledger: Ledger, limit: int = 20) -> list[Record]:
 
 async def find_task(ledger: Ledger, query: str) -> tuple[Record | None, list[Record]]:
     """The job the owner means, by the words they used. Returns (match, candidates): a match when one job
-    clearly fits; otherwise no match and up to five candidates for AIC to ask about (empty = nothing fits)."""
+    clearly fits; otherwise no match and up to five candidates for VAIC to ask about (empty = nothing fits)."""
     tasks = await recent_tasks(ledger)
     live = [t for t in tasks if t["status"] in LIVE]
     q = _words(query)
@@ -179,7 +179,7 @@ async def job_cost(ledger: Ledger, task: Record) -> float:
 
 
 async def describe_task(ledger: Ledger, task: Record) -> str:
-    """Plain-language progress of one job, for AIC to say as it is."""
+    """Plain-language progress of one job, for VAIC to say as it is."""
     now = ledger.now()
     tree = await task_tree(ledger, task["id"])
     ids = {t["id"] for t in tree}
@@ -225,7 +225,7 @@ async def describe_task(ledger: Ledger, task: Record) -> str:
 
 
 async def cancel_preview(ledger: Ledger, task: Record) -> str:
-    """One line for AIC to confirm with the owner before stopping a job."""
+    """One line for VAIC to confirm with the owner before stopping a job."""
     tree = await task_tree(ledger, task["id"])
     ids = {t["id"] for t in tree}
     workers = _workers_of(await ledger.list_agents(), ids)

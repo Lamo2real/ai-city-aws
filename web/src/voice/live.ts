@@ -1,19 +1,19 @@
-// AIC's real-time voice on OpenAI GPT-Live (the owner's choice, 2026-11-09, decision 128; docs/VOICE.md). GPT-Live
-// listens and speaks at the same time (full duplex), so the owner can talk over it naturally; AIC stays the brain.
+// VAIC's real-time voice on OpenAI GPT-Live (the owner's choice, 2026-11-09, decision 128; docs/VOICE.md). GPT-Live
+// listens and speaks at the same time (full duplex), so the owner can talk over it naturally; VAIC stays the brain.
 // The browser makes a WebRTC offer, the API opens the call with the owner's key (POST /voice/live) and returns
 // OpenAI's answer; audio then flows straight between the browser and OpenAI. Client delegation: when GPT-Live
 // decides a request needs the backend, it sends `session.delegation.created`; the owner's words since the last
-// request (from the input transcript) go to AIC through the normal chat, and AIC's answer goes back as
+// request (from the input transcript) go to VAIC through the normal chat, and VAIC's answer goes back as
 // `session.commentary.append`, which GPT-Live says in its own words. When this can't open, Nova Sonic takes over.
 import { api } from "../lib/api.ts";
 import { primedContext, type SonicCall } from "./sonic.ts";
 
 export interface LiveHandlers {
-  /** The owner's request, for AIC; resolves with AIC's answer (text to say). */
+  /** The owner's request, for VAIC; resolves with VAIC's answer (text to say). */
   ask(text: string): Promise<string>;
   /** The owner's words so far in this turn (for "stop listening"). */
   onUserWords(text: string): void;
-  /** AIC is working on a request (on) or answered (off). */
+  /** VAIC is working on a request (on) or answered (off). */
   onThinking(on: boolean): void;
   /** The voice is playing (on) or quiet (off). */
   onSpeaking(on: boolean): void;
@@ -43,7 +43,7 @@ export function liveWanted(): boolean {
   }
 }
 
-/** What AIC answered, ready to be said: no Markdown, links or code, and within GPT-Live's limit. */
+/** What VAIC answered, ready to be said: no Markdown, links or code, and within GPT-Live's limit. */
 export function forSpeech(answer: string): string {
   const t = answer
     .replace(/```[\s\S]*?```/g, " (there's code in the chat) ")
@@ -149,7 +149,7 @@ export async function startLive(h: LiveHandlers): Promise<SonicCall> {
     try {
       answer = forSpeech(await h.ask(text));
     } catch (e) {
-      answer = `AIC couldn't answer that (${(e as Error)?.message || "no reason given"}).`;
+      answer = `VAIC couldn't answer that (${(e as Error)?.message || "no reason given"}).`;
     }
     asking--;
     if (!asking) h.onThinking(false);

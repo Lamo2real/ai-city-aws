@@ -3,7 +3,7 @@ import { appendDictation, readSpeakMode, shouldSpeak } from "../src/voice/modes.
 
 afterEach(() => localStorage.clear());
 
-describe("when AIC speaks its reply", () => {
+describe("when VAIC speaks its reply", () => {
   it("by default only when the owner's message came in by voice", () => {
     expect(readSpeakMode()).toBe("auto");
     expect(shouldSpeak("auto", true)).toBe(true);

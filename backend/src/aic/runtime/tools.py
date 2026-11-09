@@ -84,9 +84,9 @@ from aic.shared.utility import UtilityDeps, about_ai_city, triage
 CITY_SERVER = "city"
 DONE_OR_GONE = ("done", "failed", "cancelled")
 ACE_WORKSPACE_DEFAULT = "/workspace"
-"""AIC's own folder for quick git and shell jobs (``run_command``); it lives as long as the runtime (about 8 h)."""
+"""VAIC's own folder for quick git and shell jobs (``run_command``); it lives as long as the runtime (about 8 h)."""
 OUTPUT_CAP = 20_000
-"""About 20 KB of command output reaches AIC; the middle is cut with a plain note."""
+"""About 20 KB of command output reaches VAIC; the middle is cut with a plain note."""
 DEFAULT_TIMEOUT_S, MAX_TIMEOUT_S = 120, 600
 
 Handler = Callable[[dict[str, Any]], Awaitable[str]]
@@ -290,7 +290,7 @@ def _run_command_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
     )
 
 
-# ---------- AIC ----------
+# ---------- VAIC ----------
 def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
     async def delegate(a: dict[str, Any]) -> str:
         cons = a.get("constraints")
@@ -306,7 +306,7 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 "no job for the team. Answer the owner yourself, and say that changes to AI City are made in "
                 "their builder session, not by the team. No task was created."
             )
-        # A project chat about one app (conversation "app-<app_id>") changes that app unless AIC says otherwise.
+        # A project chat about one app (conversation "app-<app_id>") changes that app unless VAIC says otherwise.
         if not a.get("app_id") and (own := app_of_conversation(c.conversation)):
             a = {**a, "app_id": own}
         target = await get_app(d.ledger, str(a["app_id"])) if a.get("app_id") else None
@@ -316,7 +316,7 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         verdict = None
         if d.utility_runner is not None and not target:
             # The Orchestrator's quick triage (one short utility call): most questions, lists and drafts are
-            # AIC's to answer right now; only real work becomes a task.
+            # VAIC's to answer right now; only real work becomes a task.
             t0 = time.monotonic()
             names = [str(x.get("name", "")) for x in await d.ledger.list_departments()]
             verdict = await triage(
@@ -350,7 +350,7 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 f"{open_cap}). Tell the owner; they can stop one, or raise the limit in Settings."
             )
         if not a.get("confirm"):
-            # A job starts only on the owner's explicit yes: nothing is created until AIC has asked.
+            # A job starts only on the owner's explicit yes: nothing is created until VAIC has asked.
             who = (
                 f"the {target['title']} app's team"
                 if target
@@ -458,7 +458,7 @@ def _ace_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
 
     async def answer(a: dict[str, Any]) -> str:
         # Only the owner answers the team's questions. The answer must be words the owner actually typed or
-        # said in this conversation after the question was asked; AIC never fills in a default on its own.
+        # said in this conversation after the question was asked; VAIC never fills in a default on its own.
         q = await d.ledger.get_question(str(a["question_id"]))
         if not q or q.get("status") != "open":
             return "That question was already answered or does not exist."
@@ -720,7 +720,7 @@ def _ask_owner(d: CityDeps, c: TurnCtx) -> ToolSpec:
 
     return ToolSpec(
         "ask_owner",
-        "Ask the owner a question through AIC. Always give options and a default.",
+        "Ask the owner a question through VAIC. Always give options and a default.",
         _obj({"question": _s(3), "options": {**_STRS, "minItems": 1}, "default_answer": _s(1)}),
         ask,
     )
@@ -772,7 +772,7 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         gone = await d.ledger.get_department(name)
         if gone and gone.get("state") == "demolished":  # decision 134: only the owner builds it again
             return (
-                f"Refused: the owner demolished {gone['name']}. Use one of the standing departments, or tell AIC "
+                f"Refused: the owner demolished {gone['name']}. Use one of the standing departments, or tell VAIC "
                 "that the owner would have to build it again."
             )
         dept, created = await d.ledger.create_department(name, str(a["mission"]), manager_id(name))
@@ -920,16 +920,16 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             return "Sent back for fixes."
         if apps:
             return (
-                f"Signed off. The owner is asked to publish {len(apps)} app(s) in Needs you; tell AIC it appears "
-                "under Apps once the owner approves it (it is not live yet). Now report to AIC."
+                f"Signed off. The owner is asked to publish {len(apps)} app(s) in Needs you; tell VAIC it appears "
+                "under Apps once the owner approves it (it is not live yet). Now report to VAIC."
             )
-        return "Signed off. Now report to AIC."
+        return "Signed off. Now report to VAIC."
 
     async def report_to_ace(a: dict[str, Any]) -> str:
         signed = await d.ledger.table.get(f"TICKET#{c.task_id}", "SIGNOFF")
         if (signed or {}).get("verdict") != "PASS":
             return "Sign off with PASS before reporting."
-        task = await move(d, c.task_id, "done", "reported to AIC", {"result": str(a["summary"])})
+        task = await move(d, c.task_id, "done", "reported to VAIC", {"result": str(a["summary"])})
         await d.bus.put({"type": "result", "ticket_id": c.task_id, "summary": str(a["summary"])[:500]})
         msg: dict[str, Any] = {
             "role": "ace",
@@ -944,7 +944,7 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         if task.get("conversation"):
             msg["conversation"] = task["conversation"]
         await send(d, msg)
-        return "Reported to AIC."
+        return "Reported to VAIC."
 
     return [
         ToolSpec(
@@ -978,7 +978,7 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         _ask_owner(d, c),
         ToolSpec(
             "report_to_ace",
-            "Report the finished task to AIC. Only after a PASS sign-off.",
+            "Report the finished task to VAIC. Only after a PASS sign-off.",
             _obj({"summary": _s(3)}),
             report_to_ace,
         ),
@@ -1474,7 +1474,7 @@ def brief_note(brief: str) -> str:
 
 
 async def task_brief(d: CityDeps, ticket_id: str) -> str | None:
-    """The brief the owner agreed with AIC, from the job a ticket belongs to (its parts up to three levels down)."""
+    """The brief the owner agreed with VAIC, from the job a ticket belongs to (its parts up to three levels down)."""
     t = await d.ledger.get_ticket(ticket_id) if ticket_id else None
     for _ in range(4):
         if not t:
@@ -1649,7 +1649,7 @@ def _ace_knowledge_tools(d: CityDeps) -> list[ToolSpec]:
 
 
 def _calendar_agenda_tool(d: CityDeps) -> ToolSpec:
-    """AIC reads the owner's combined calendar (City → Features → Calendar) from the ledger copy: every account,
+    """VAIC reads the owner's combined calendar (City → Features → Calendar) from the ledger copy: every account,
     the same meeting merged. Read-only: there is no write here (accepting or changing meetings is the mail
     tools', and those ask the owner)."""
 
@@ -2008,7 +2008,7 @@ def _deal_line(x: dict[str, Any]) -> str:
 
 
 def _deal_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
-    who = "AIC" if c.role == "ace" else (c.department or c.agent_id)
+    who = "VAIC" if c.role == "ace" else (c.department or c.agent_id)
 
     async def listing(a: dict[str, Any]) -> str:
         stale = a.get("stale_days")

@@ -1,4 +1,4 @@
-"""Skills: upload checks, versioned storage, the city-owned plugin folder and AIC's use_skill. Fake S3 only."""
+"""Skills: upload checks, versioned storage, the city-owned plugin folder and VAIC's use_skill. Fake S3 only."""
 
 from __future__ import annotations
 
@@ -268,4 +268,4 @@ async def test_use_skill_lists_reads_and_serves_files_as_the_owners_instructions
     assert "print(1)" in await tool.handler({"name": "pdf-report", "file": "scripts/build.py"})
     assert "binary" in await tool.handler({"name": "pdf-report", "file": "logo.png"})
     assert "no file" in await tool.handler({"name": "pdf-report", "file": "../../etc/passwd"})
-    assert "no skill" in await tool.handler({"name": "other"})  # a manager's skill isn't AIC's
+    assert "no skill" in await tool.handler({"name": "other"})  # a manager's skill isn't VAIC's

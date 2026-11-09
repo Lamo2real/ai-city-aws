@@ -63,7 +63,7 @@ def sk(id: str) -> str:
 
 
 def gateway_name(id: str, tool: str) -> str:
-    """The Gateway's tool name, and the Converse name on AIC's direct path."""
+    """The Gateway's tool name, and the Converse name on VAIC's direct path."""
     return f"{id}{SEP}{tool}"
 
 

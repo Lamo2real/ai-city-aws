@@ -1,4 +1,4 @@
-// AIC's voice through OpenAI text-to-speech (docs/VOICE.md), with Amazon Polly behind it.
+// VAIC's voice through OpenAI text-to-speech (docs/VOICE.md), with Amazon Polly behind it.
 //   status:   GET /voice/openai, loaded once per page (and again after the key is saved).
 //   speech:   POST /speech per sentence → MP3 bytes, played by the same strict in-order player as Polly clips.
 //   fallback: not configured → Polly, silently. A failure → Polly for the rest of the page session, said once

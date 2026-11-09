@@ -111,7 +111,7 @@ def test_the_bridge_script_offers_state() -> None:
     assert "state.get" in js_src and "state.set" in js_src
 
 
-# ---------- AIC and the Orchestrator target an existing app ----------
+# ---------- VAIC and the Orchestrator target an existing app ----------
 ACE = TurnCtx(agent_id="ace", role="ace", department=None, ticket_id="", task_id="")
 
 

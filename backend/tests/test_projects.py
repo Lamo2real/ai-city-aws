@@ -1,4 +1,4 @@
-"""The Projects studio (docs/APPS.md § Projects): AIC agrees the plan before it builds, the agreed brief travels
+"""The Projects studio (docs/APPS.md § Projects): VAIC agrees the plan before it builds, the agreed brief travels
 with the build, new-project chats are linked to the app they became, tappable choices, and an app's activity
 in plain words. Fakes only: no AWS, no Bedrock."""
 
@@ -20,7 +20,7 @@ def ace(conversation: str) -> TurnCtx:
     return TurnCtx(agent_id="ace", role="ace", department=None, ticket_id="", task_id="", conversation=conversation)
 
 
-# ---------- AIC asks before it builds ----------
+# ---------- VAIC asks before it builds ----------
 def test_aics_prompt_asks_unclear_requests_first_and_builds_clear_ones_straight_away() -> None:
     p = load_prompt("ace.md")
     assert "offer_choices" in p.tools
@@ -191,14 +191,14 @@ async def test_the_activity_tells_an_apps_story_in_plain_words_newest_last() -> 
     assert [i["at"] for i in items] == sorted(i["at"] for i in items)
     texts = " | ".join(f"{i['who']}: {i['text']}" for i in items)
     for line in (
-        "AIC: Passed your request to the team: Build the shopping list",
+        "VAIC: Passed your request to the team: Build the shopping list",
         "Planner: Asked the Apps team: Shopping list app",
         "Manager: Gave a builder the work: Build",
         "Builder: Started working.",
         "Builder: Finished a version and sent it for a check.",
         "Reviewer: Asked for changes: The tick button does nothing on",
-        "AIC: Asked you to approve: Publish the app “Shopping List” under Apps.",
-        "AIC: Version 1 went live.",
+        "VAIC: Asked you to approve: Publish the app “Shopping List” under Apps.",
+        "VAIC: Version 1 went live.",
         "App: Asked to add an event to your calendar. It is waiting for you in Needs you.",
     ):
         assert line in texts, line

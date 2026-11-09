@@ -1,7 +1,7 @@
-// Turning AIC's streamed reply into natural speech, sentence by sentence, so it starts talking as soon as the
+// Turning VAIC's streamed reply into natural speech, sentence by sentence, so it starts talking as soon as the
 // first sentence is complete instead of reading the whole page at the end.
 //   SentenceSplitter: cuts the arriving text at sentence ends and line ends; skips code blocks and table rules.
-//   speakable:        what a person would say: no Markdown, emoji or URLs; "AIC" said as letters.
+//   speakable:        what a person would say: no Markdown, emoji or URLs; "VAIC" said as letters.
 //   SpeechQueue:      one reply, each sentence once: synthesizes one sentence at a time (ahead of playback, so
 //                     the next clip is ready when the current one ends) and plays the clips strictly in order,
 //                     with a short pause between them. Polly is never hit in parallel.
@@ -76,7 +76,7 @@ export function speakable(md: string): string {
       .replace(/\s*\|\s*/g, ", ");
   t = t
     .replace(EMOJI, "")
-    .replace(/\bAIC\b/g, "Ace") // written AIC, said "Ace" (the owner's rule)
+    .replace(/\bV?AIC\b/g, "Vice") // written VAIC, said "Vice" (the owner's rule, 2026-11-09)
     .replace(/\s+/g, " ")
     .replace(/\s+([.,!?;:])/g, "$1")
     .trim();

@@ -40,13 +40,13 @@ describe("microphone errors say what went wrong and what to do", () => {
   it("the real error goes to the console so it can be diagnosed", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     logVoiceError("the microphone could not start", err("NotAllowedError"));
-    expect(spy.mock.calls[0]?.slice(0, 2)).toEqual(["[AIC voice] the microphone could not start:", "NotAllowedError"]);
+    expect(spy.mock.calls[0]?.slice(0, 2)).toEqual(["[VAIC voice] the microphone could not start:", "NotAllowedError"]);
     spy.mockRestore();
   });
 });
 
 describe("the voice strip", () => {
-  it("maps AIC's presence to who is talking", () => {
+  it("maps VAIC's presence to who is talking", () => {
     expect(speakerOf("listening")).toBe("you");
     expect(speakerOf("speaking")).toBe("aic");
     expect(speakerOf("thinking")).toBe("thinking");
@@ -55,8 +55,8 @@ describe("the voice strip", () => {
   });
   it.each([
     ["listening", "you", "Listening to you"],
-    ["speaking", "aic", "AIC is talking"],
-    ["thinking", "thinking", "AIC is thinking…"],
+    ["speaking", "aic", "VAIC is talking"],
+    ["thinking", "thinking", "VAIC is thinking…"],
     ["idle", "idle", "Tap the mic or type"],
   ] as const)("says the %s state in words, not only colour", (presence, speaker, words) => {
     const { container } = render(
@@ -65,7 +65,7 @@ describe("the voice strip", () => {
     expect(container.querySelector(".voice")?.getAttribute("data-speaker")).toBe(speaker);
     expect(screen.getByRole("status").textContent).toContain(words);
     expect(
-      screen.getByRole("button", { name: presence === "listening" ? "Stop listening" : "Talk to AIC" }),
+      screen.getByRole("button", { name: presence === "listening" ? "Stop listening" : "Talk to VAIC" }),
     ).toBeTruthy();
   });
 });

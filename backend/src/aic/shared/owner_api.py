@@ -1,16 +1,16 @@
-"""AIC acting for the owner through the HUD's own API (the owner, 2026-11-09, decision 143).
+"""VAIC acting for the owner through the HUD's own API (the owner, 2026-11-09, decision 143).
 
-"I want the AIC agent to do these kind of things for me, no questions nor restrictions… anything and everything in
-the settings and all other tabs; it has both read and write access to all things in AI City." So AIC gets the same
+"I want the VAIC agent to do these kind of things for me, no questions nor restrictions… anything and everything in
+the settings and all other tabs; it has both read and write access to all things in AI City." So VAIC gets the same
 routes the HUD calls, run by the same code with the same checks, as the owner. Three things stay out, because they
 are the city's invariants rather than restrictions on the owner:
 
 * routes that take a secret (a token, key, password or private key) — secrets never pass through a chat or a model
-  (CLAUDE.md); AIC opens the page instead and the owner pastes it there;
-* ``/messages`` and ``/wake-check`` — those are AIC itself;
+  (CLAUDE.md); VAIC opens the page instead and the owner pastes it there;
+* ``/messages`` and ``/wake-check`` — those are VAIC itself;
 * nothing here reaches IAM, the policy file or Terraform: the API has no such route.
 
-Deleting things and starting over stay possible; AIC passes ``confirm`` when the owner's own words asked for it.
+Deleting things and starting over stay possible; VAIC passes ``confirm`` when the owner's own words asked for it.
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ def clean_path(path: str) -> str:
 
 
 def refusal(method: str, path: str) -> str | None:
-    """Why AIC may not make this call, or None. Checked in the runtime tool and again in the API."""
+    """Why VAIC may not make this call, or None. Checked in the runtime tool and again in the API."""
     m, p = method.upper(), clean_path(path)
     if m not in METHODS:
         return f"{m} is not a method the API takes (GET, POST, PUT or DELETE)."
@@ -90,7 +90,7 @@ def to_event(method: str, path: str, body: Any = None) -> dict[str, Any]:
 
 
 def summarise(response: dict[str, Any], cap: int = 6000) -> str:
-    """The API's answer as AIC reads it: status and body, cut to fit."""
+    """The API's answer as VAIC reads it: status and body, cut to fit."""
     status = response.get("statusCode", 500)
     body = response.get("body") or ""
     if response.get("isBase64Encoded"):

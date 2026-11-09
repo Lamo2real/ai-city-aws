@@ -1,4 +1,4 @@
-"""What the HTTP API and AIC's tools do with the knowledge base (§5, §7).
+"""What the HTTP API and VAIC's tools do with the knowledge base (§5, §7).
 
 Adding something only writes the item record and an object under ``raw/<id>/``; that object starts the
 pipeline (S3 → EventBridge → Step Functions). Errors are ``KnowledgeError`` with plain words.
@@ -93,7 +93,7 @@ class KnowledgeService:
     blobs: Blobs
     bus: EventBus
     kb: KnowledgeBase | None = None
-    """Only the API needs it (re-ingests after a scope change, deletes documents); AIC only adds."""
+    """Only the API needs it (re-ingests after a scope change, deletes documents); VAIC only adds."""
 
     async def _new(
         self,
@@ -321,7 +321,7 @@ class KnowledgeService:
 
 @dataclass
 class KnowledgeAccess:
-    """What agent turns get: search for every role (store + KB), adding for AIC (the service)."""
+    """What agent turns get: search for every role (store + KB), adding for VAIC (the service)."""
 
     store: KnowledgeStore
     kb: KnowledgeBase | None = None

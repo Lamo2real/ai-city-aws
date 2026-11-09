@@ -1,13 +1,13 @@
-// Talking over AIC in the step-by-step voice: while AIC's reply plays, a quiet listener watches the microphone
-// (with the browser's echo cancellation, so AIC's own voice from the speakers mostly cancels out). When the
-// owner's voice stays clearly above the room's noise for a moment, AIC stops at once and the mic opens.
+// Talking over VAIC in the step-by-step voice: while VAIC's reply plays, a quiet listener watches the microphone
+// (with the browser's echo cancellation, so VAIC's own voice from the speakers mostly cancels out). When the
+// owner's voice stays clearly above the room's noise for a moment, VAIC stops at once and the mic opens.
 // The real-time voice (sonic.ts) does this on the server instead; this is the same promise for the fallback.
 
 /** Loudness (0..1) above which a frame counts as speech, given the room's noise measured at the start. */
 export function speechThreshold(noise: number): number {
-  // Calibrated while AIC is already talking, so `noise` includes what is left of AIC's own voice after echo
+  // Calibrated while VAIC is already talking, so `noise` includes what is left of VAIC's own voice after echo
   // cancellation; on a phone that is loud, hence a high bar (it stopped itself on its own echo, 2026-11-09). Words
-  // the owner says over AIC also stop it through the transcript (useVoice), so this only needs to catch clear speech.
+  // the owner says over VAIC also stop it through the transcript (useVoice), so this only needs to catch clear speech.
   return Math.min(0.5, Math.max(0.1, noise * 4));
 }
 

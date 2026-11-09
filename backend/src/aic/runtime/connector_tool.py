@@ -1,4 +1,4 @@
-"""AIC's ``add_connector`` city tool (``docs/CONNECTORS_SKILLS.md`` §1.3, §1.8).
+"""VAIC's ``add_connector`` city tool (``docs/CONNECTORS_SKILLS.md`` §1.3, §1.8).
 
 Offered only on turns whose input is the owner's own message. The handler (city code, not the model)
 resolves the query, by an https URL (checked: no private addresses, no keys in the link) or by a name in the
@@ -67,7 +67,7 @@ async def connect_mail_account(d: CityDeps, c: TurnCtx, provider: str, label: st
     return result
 
 
-ROLE_NAMES = {"ace": "AIC", "orchestrator": "the Orchestrator", "manager": "Managers", "worker": "Workers"}
+ROLE_NAMES = {"ace": "VAIC", "orchestrator": "the Orchestrator", "manager": "Managers", "worker": "Workers"}
 
 
 def _used_by(roles: dict[str, str]) -> str:

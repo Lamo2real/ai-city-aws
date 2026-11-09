@@ -4,7 +4,7 @@ Triggers:
 - EventBridge ``question.asked`` / ``approval.requested``: that one item, at once.
 - ``{"job": "sweep"}`` every 5 minutes: anything still open and undecided (a missed event, a failed try,
   the switch just turned back on).
-- ``{"job": "digest"}`` once a day: one paragraph in AIC's conversation about what was decided.
+- ``{"job": "digest"}`` once a day: one paragraph in VAIC's conversation about what was decided.
 
 Decisions are carried out by the api Lambda (``api.steward_apply``, a direct invoke), so they take the same path
 as the owner's clicks. This function itself only reads the ledger, calls its model and writes its own marks.

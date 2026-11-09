@@ -190,14 +190,17 @@ resource "aws_cognito_identity_pool_roles_attachment" "voice" {
 
 # In the speech region (var.transcribe_region in prod), where the HUD runs Transcribe streaming.
 # A table vocabulary, so Transcribe itself writes what was heard the owner's way (the owner's rule, 2026-11-09):
-# "Ace" (and "A C E" spelled out) is always written AIC. DisplayAs needs the table format, and Transcribe reads a
+# the assistant is VAIC, said "Vice" (the rebrand, 2026-11-09). "V.A.I.C." and the retired name ("Ace", "A.I.C.")
+# are written VAIC here; "Vice" is an ordinary word Transcribe already knows and stays as heard, because "vice president" must stay as said: the HUD's
+# cleanSpeech (web/src/voice/clean.ts) turns the name into VAIC and leaves ordinary uses alone. DisplayAs needs the table format, and Transcribe reads a
 # table only from S3 in its own region, hence the small bucket below. The file name carries a hash of the table so
 # every change updates the vocabulary.
 locals {
   vocabulary_table = join("\n", concat(["Phrase\tSoundsLike\tIPA\tDisplayAs"], [
-    "Ace\t\t\tAIC",
-    "A.C.E.\t\t\tAIC",
-    "A.I.C.\t\t\tAIC",
+    "V.A.I.C.\t\t\tVAIC",
+    "Ace\t\t\tVAIC",
+    "A.C.E.\t\t\tVAIC",
+    "A.I.C.\t\t\tVAIC",
     "AI-City\t\t\tAI City",
     "Orchestrator\t\t\tOrchestrator",
   ]))

@@ -26,7 +26,7 @@ const status = (configured: boolean) => ({
 });
 const polly = async (t: string) => `polly:${t}`;
 
-describe("AIC's voice: OpenAI when its key is in, Polly behind it", () => {
+describe("VAIC's voice: OpenAI when its key is in, Polly behind it", () => {
   it("without a key, Polly speaks and /speech is never called", async () => {
     const o = await import("../src/voice/openai.ts");
     replies["/voice/openai"] = status(false);

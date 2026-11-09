@@ -1,4 +1,4 @@
-"""git and the GitHub CLI signed in as the owner, inside every AIC and worker runtime (``docs/GITHUB_ACCESS.md``).
+"""git and the GitHub CLI signed in as the owner, inside every VAIC and worker runtime (``docs/GITHUB_ACCESS.md``).
 
 At the start of a runtime session, and again at each turn, the city's GitHub token (``aic/prod/github``) is read.
 When there is one: ``GH_TOKEN`` and ``GITHUB_TOKEN`` are set for ``gh``, git gets a credential helper for

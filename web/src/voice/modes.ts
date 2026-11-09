@@ -1,8 +1,8 @@
 // The owner's voice choices, kept in localStorage:
-//   speak mode — when AIC reads its reply aloud: "auto" (only when the owner's message came in by voice; the
+//   speak mode — when VAIC reads its reply aloud: "auto" (only when the owner's message came in by voice; the
 //                default), "always" or "never".
 //   (The mic button always sends what was said; the dictate icon in the message box puts the words in the box.)
-// A dictated message counts as voice (so AIC answers aloud in "auto") only if the keyboard never touched the
+// A dictated message counts as voice (so VAIC answers aloud in "auto") only if the keyboard never touched the
 // box since the last send; any typing, before or after dictating, makes it a typed message.
 export type SpeakMode = "auto" | "always" | "never";
 
@@ -33,7 +33,7 @@ export function readSpeakMode(): SpeakMode {
 }
 export const saveSpeakMode = (m: SpeakMode) => write(SPEAK_KEY, m);
 
-/** Whether AIC should read this reply aloud, given the owner message it answers. */
+/** Whether VAIC should read this reply aloud, given the owner message it answers. */
 export function shouldSpeak(mode: SpeakMode, askedByVoice: boolean | undefined): boolean {
   return mode === "always" || (mode === "auto" && askedByVoice === true);
 }

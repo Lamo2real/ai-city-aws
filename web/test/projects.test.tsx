@@ -1,4 +1,4 @@
-// Projects (docs/PRODUCT.md "Projects"): project chats stay out of AIC's main chat, choice chips answer, the
+// Projects (docs/PRODUCT.md "Projects"): project chats stay out of VAIC's main chat, choice chips answer, the
 // preview sizes, the list, and going back several versions.
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -49,7 +49,7 @@ afterEach(() => {
 });
 
 describe("project chats", () => {
-  it("replies with an app- conversation go to the project, not AIC's main chat", () => {
+  it("replies with an app- conversation go to the project, not VAIC's main chat", () => {
     const e = { type: "ace.reply", conversation: "app-app-snake", text: "Which colour?", done: true };
     store.event(e);
     projects.event(e);
@@ -83,7 +83,7 @@ describe("project chats", () => {
       }),
     );
     expect(screen.queryByRole("group", { name: /How fast/ })).toBeNull();
-    expect(screen.getByLabelText("AIC is thinking")).toBeTruthy();
+    expect(screen.getByLabelText("VAIC is thinking")).toBeTruthy();
   });
 
   it("starting a project sends the idea as the first message of app-new-<id>", async () => {
@@ -130,7 +130,7 @@ describe("timeline", () => {
   it("app events become plain words for their project", () => {
     expect(eventWords({ type: "app.updated", app: { app_id: "a1", version: 3 } })).toEqual({
       conv: "app-a1",
-      who: "AIC",
+      who: "VAIC",
       text: "Version 3 is live",
     });
     expect(eventWords({ type: "approval.requested", kind: "app.publish", replaces: "a1" })?.text).toMatch(/Open items/);

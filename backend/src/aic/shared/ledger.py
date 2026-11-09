@@ -496,7 +496,7 @@ class Ledger:
 
     # ---------- the owner's "start over" ----------
     async def reset_city(self, budget_s: float | None = None) -> dict[str, Any]:
-        """Empties the city: every agent (AIC and the Orchestrator are recreated on the next message),
+        """Empties the city: every agent (VAIC and the Orchestrator are recreated on the next message),
         department, ticket with its history, turn, tool call, event, conversation line, question, approval,
         work lease, app draft, worker-slot counter, idempotency key and rate record. Everything the owner set
         up stays: settings (CONFIG), spend history, devices, connectors, skills, knowledge, apps and their
@@ -624,7 +624,7 @@ class Ledger:
         return [_strip(i) for i in await self.table.query(f"TOOL#{agent_id}")]
 
     async def add_conversation_line(self, conversation: str, who: Literal["owner", "ace"], text: str) -> None:
-        """AIC's conversation: typed and spoken turns share it. Kept 30 days; the prompt uses the last few lines."""
+        """VAIC's conversation: typed and spoken turns share it. Kept 30 days; the prompt uses the last few lines."""
         at = self._iso()
         await self.table.put(
             {

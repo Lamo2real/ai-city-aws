@@ -1,4 +1,4 @@
-"""AIC's direct Bedrock engine: streams text, runs city tools through the policy gate, loops on tool use."""
+"""VAIC's direct Bedrock engine: streams text, runs city tools through the policy gate, loops on tool use."""
 
 from types import SimpleNamespace
 from typing import Any
@@ -56,7 +56,7 @@ def request(tools: list[ToolSpec], texts: list[str]) -> Any:
 
     return SimpleNamespace(
         turn=SimpleNamespace(prompt="what's the status?", model=SimpleNamespace(invoke_id="arn:profile/aic-ace")),
-        system="You are AIC.",
+        system="You are VAIC.",
         tools=tools,
         builtins=[],
         on_text=on_text,
@@ -78,7 +78,7 @@ async def test_streams_text_as_it_arrives_and_returns_the_whole_reply() -> None:
     assert out.text == "Eighteen." and out.stop_reason == "end_turn"
     assert out.usage.input == 100 and out.usage.output == 10
     assert fake.calls[0]["modelId"] == "arn:profile/aic-ace"
-    assert fake.calls[0]["system"] == [{"text": "You are AIC."}]
+    assert fake.calls[0]["system"] == [{"text": "You are VAIC."}]
     assert "toolConfig" not in fake.calls[0]
 
 

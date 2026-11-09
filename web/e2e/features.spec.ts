@@ -1,5 +1,5 @@
 // City → Features and the Calendar (docs/MAIL_CALENDAR.md §12), against the mocked backend: the City | Features
-// tabs, the gallery with its on/off switch and "Add a feature" through AIC, the four calendar views, a meeting's
+// tabs, the gallery with its on/off switch and "Add a feature" through VAIC, the four calendar views, a meeting's
 // details with its Join button, Refresh now, and the empty and problem states. Nothing leaves the machine.
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
@@ -88,7 +88,7 @@ async function withCalendar(page: Page): Promise<Mock> {
   return m;
 }
 
-test("the City tab has City | Features; Features lists Calendar and adds a feature through AIC", async ({ page }) => {
+test("the City tab has City | Features; Features lists Calendar and adds a feature through VAIC", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/#/city");
   const tabs = page.getByRole("navigation", { name: "City pages" });

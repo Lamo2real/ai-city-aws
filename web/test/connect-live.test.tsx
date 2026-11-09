@@ -1,5 +1,5 @@
 // Connecting any tool end to end (decision 141): checked sign-up links that open in a new tab, the status that turns
-// connected by itself when the owner comes back, AIC's "… is connected, Sir." line, the green live dot, the token
+// connected by itself when the owner comes back, VAIC's "… is connected, Sir." line, the green live dot, the token
 // option for sign-ins without self-registration, and every error in full.
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { readFileSync } from "node:fs";
@@ -94,7 +94,7 @@ describe("coming back after signing up and in", () => {
     expect(store.following().connectors).toEqual(["higgsfield"]);
   };
 
-  it("the card turns connected, AIC says so once, and nothing is followed any more", async () => {
+  it("the card turns connected, VAIC says so once, and nothing is followed any more", async () => {
     follow();
     vi.mocked(api).mockImplementation(async (path: string) => {
       if (path === "/connectors")

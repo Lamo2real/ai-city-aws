@@ -74,7 +74,7 @@ async def _route(
         store = CalendarStore(c.table, c.now)
         tz = str(q.get("tz") or "")
         if tz and len(tz) <= 64 and _TZ.match(tz):
-            await store.set_time_zone(tz)  # what AIC answers in ("what's on tomorrow")
+            await store.set_time_zone(tz)  # what VAIC answers in ("what's on tomorrow")
         accounts = [
             {k: a.get(k) for k in ("id", "label", "provider", "address", "status", "color")}
             for a in await AccountStore(c.table).all()

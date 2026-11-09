@@ -106,11 +106,11 @@ function SetupGuide(p: { groups: Group[]; ready: (c: PresetConnector) => boolean
           city can create repositories, push code and manage secrets.
         </li>
         <li>
-          <b>Optional: AIC’s voice.</b> In Settings → <a href="#/settings/voice">AIC’s voice</a>, paste an OpenAI key
+          <b>Optional: VAIC’s voice.</b> In Settings → <a href="#/settings/voice">VAIC’s voice</a>, paste an OpenAI key
           for the most natural voice.
         </li>
         <li>
-          <b>Ask AIC for work.</b> “Make a launch campaign for my new product”, or “build a landing page that sells it
+          <b>Ask VAIC for work.</b> “Make a launch campaign for my new product”, or “build a landing page that sells it
           with Stripe”. The right department picks it up.
         </li>
       </ol>

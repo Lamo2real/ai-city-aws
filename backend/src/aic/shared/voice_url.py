@@ -1,7 +1,7 @@
-"""A short-lived address for AIC's real-time voice (decision 120): a SigV4 presigned WebSocket URL to AIC's own
+"""A short-lived address for VAIC's real-time voice (decision 120): a SigV4 presigned WebSocket URL to VAIC's own
 AgentCore runtime (``/runtimes/<arn>/ws``), signed by the API's role, as AgentCore documents for browsers. It lasts
-five minutes (AgentCore's maximum), only opens the connection, and names AIC's warm session so the voice runs next
-to AIC's warm clients.
+five minutes (AgentCore's maximum), only opens the connection, and names VAIC's warm session so the voice runs next
+to VAIC's warm clients.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ def presigned_voice_url(d: VoiceUrlDeps) -> str:
 async def check_voice_url(url: str, timeout_s: float = 8.0) -> tuple[int, str]:
     """Opens the WebSocket handshake to ``url`` the way the browser does and returns AWS's answer: ``(101, "")`` when
     it connects, otherwise the HTTP status and the start of the error body. Browsers hide why a WebSocket was
-    refused; this shows the owner the real reason (the owner, 2026-11-09: "the connection to AIC's voice broke")."""
+    refused; this shows the owner the real reason (the owner, 2026-11-09: "the connection to VAIC's voice broke")."""
     import asyncio
     import base64
     import os

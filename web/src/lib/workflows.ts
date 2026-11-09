@@ -1,6 +1,6 @@
-// AI workflows (docs/PRODUCT.md "AI workflows"): AIC recognises a workflow in the owner's words (a Meta Ads or
+// AI workflows (docs/PRODUCT.md "AI workflows"): VAIC recognises a workflow in the owner's words (a Meta Ads or
 // Google Ads campaign, an App build), and once the owner says yes it walks the owner through it one page at a time (mode
-// "guide") or does it (mode "do"). Missing inputs are asked one at a time in AIC's chat. Runs come from
+// "guide") or does it (mode "do"). Missing inputs are asked one at a time in VAIC's chat. Runs come from
 // `GET /workflows` and stay current through `workflow.updated` events. A 404 means the backend is not deployed
 // yet: nothing to show.
 import { useSyncExternalStore } from "react";
@@ -29,7 +29,7 @@ export interface RunInput {
   key: string;
   label: string;
   question: string;
-  /** Display text ("300 per day"), or null while AIC still has to ask. */
+  /** Display text ("300 per day"), or null while VAIC still has to ask. */
   value: string | null;
   /** The owner is away and this is the default; it is also a taste question they can change. */
   assumed?: boolean;

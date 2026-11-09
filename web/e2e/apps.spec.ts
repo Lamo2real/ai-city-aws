@@ -107,7 +107,7 @@ test("open an app from Projects, play it, and come back", async ({ page }) => {
   // The frame fills the page under the top row.
   const frame = (await page.locator("iframe.appframe").boundingBox())!;
   expect(frame.height).toBeGreaterThan(500);
-  await expect(page.getByRole("button", { name: "Talk to AIC", exact: true })).toHaveCount(0); // nothing floats over the game
+  await expect(page.getByRole("button", { name: "Talk to VAIC", exact: true })).toHaveCount(0); // nothing floats over the game
   await noSeriousA11y(page, "App page");
   expect(await primaries(page)).toBeLessThanOrEqual(1);
   await page.screenshot({ path: `${SHOTS}/app-page.png` });

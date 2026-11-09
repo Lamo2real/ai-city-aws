@@ -22,12 +22,12 @@ describe("money", () => {
 });
 
 describe("the ported City state", () => {
-  it("has AIC and the Orchestrator as the core, and no Secretary or Reviewer", () => {
+  it("has VAIC and the Orchestrator as the core, and no Secretary or Reviewer", () => {
     expect([...CORE]).toEqual(["ace", "orchestrator"]);
   });
   it("puts a hired worker at a desk in its department and sends a released one home", () => {
     let s = applySnapshot(initialState(), {
-      agents: [{ id: "ace", kind: "core", role: "AIC", department: null, model: "sonnet-5-5", state: "active" }],
+      agents: [{ id: "ace", kind: "core", role: "VAIC", department: null, model: "sonnet-5-5", state: "active" }],
       departments: [],
     });
     s = reduce(s, {
@@ -123,7 +123,7 @@ describe("the ported City state", () => {
   });
 });
 
-describe("AIC's chat streaming", () => {
+describe("VAIC's chat streaming", () => {
   it("joins streamed chunks into one reply and marks it done", () => {
     store.set({ chat: [] });
     store.event({ type: "ace.reply", conversation: "main", text: "Eigh", done: false });
@@ -175,10 +175,10 @@ describe("dangerous actions need a clear confirmation", () => {
   });
 });
 
-describe("AIC's eyes", () => {
+describe("VAIC's eyes", () => {
   it.each(["idle", "listening", "thinking", "speaking", "waiting"] as const)("say the %s state in words", (p) => {
     render(<Eyes presence={p} />);
-    expect(screen.getByRole("img").getAttribute("aria-label")).toMatch(/AIC is/);
+    expect(screen.getByRole("img").getAttribute("aria-label")).toMatch(/VAIC is/);
   });
 });
 

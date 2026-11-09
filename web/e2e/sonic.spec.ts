@@ -1,4 +1,4 @@
-// AIC's real-time voice on Nova Sonic (decision 120): the signed address, the call, barge-in, the chat, and the
+// VAIC's real-time voice on Nova Sonic (decision 120): the signed address, the call, barge-in, the chat, and the
 // step-by-step voice taking over when Sonic is not there. The runtime's WebSocket is mocked; nothing leaves.
 import { expect, test } from "@playwright/test";
 import { CONFIG, mockBackend } from "./mock.ts";
@@ -25,7 +25,7 @@ async function realtime(page: import("@playwright/test").Page) {
   });
 }
 
-test("the voice button opens a real-time call: the owner's words reach the chat, AIC's answer is not read twice, talking over it stops it at once", async ({
+test("the voice button opens a real-time call: the owner's words reach the chat, VAIC's answer is not read twice, talking over it stops it at once", async ({
   page,
 }) => {
   const m = await mockBackend(page);
@@ -44,21 +44,21 @@ test("the voice button opens a real-time call: the owner's words reach the chat,
   });
   await page.goto("/");
   const strip = page.locator(".voice");
-  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   expect(sessions).toBe(1);
   // The microphone streams up as 16 kHz PCM frames.
   await expect.poll(() => fromBrowser.filter((f) => f.type === "audio").length).toBeGreaterThan(1);
   await expect(strip).toHaveAttribute("data-speaker", "you");
 
   say({ type: "transcript", role: "user", text: "what's the status?" });
-  const chat = page.getByLabel("Conversation with AIC");
+  const chat = page.getByLabel("Conversation with VAIC");
   await expect(chat.getByText("what's the status?")).toBeVisible();
   say({ type: "thinking", on: true, request: "what's the status of the city?" });
   await expect(strip).toHaveAttribute("data-speaker", "thinking");
-  // Nothing went through /messages: Sonic hands the request to AIC on the runtime itself.
+  // Nothing went through /messages: Sonic hands the request to VAIC on the runtime itself.
   expect(m.calls.filter((c) => c.path === "/messages")).toHaveLength(0);
 
-  // AIC answers through the city's own channel, and Sonic says it.
+  // VAIC answers through the city's own channel, and Sonic says it.
   say({ type: "thinking", on: false });
   m.send({ type: "ace.reply", conversation: "main", text: "All quiet. Nothing needs you.", done: true });
   say({ type: "audio", data: tone() });
@@ -70,7 +70,7 @@ test("the voice button opens a real-time call: the owner's words reach the chat,
   await expect(strip).toHaveAttribute("data-speaker", "you", { timeout: 300 });
   await page.waitForTimeout(400);
   await expect(strip).toHaveAttribute("data-speaker", "you");
-  // Polly / OpenAI never read AIC's answer a second time; Sonic's own words for it are not added to the chat.
+  // Polly / OpenAI never read VAIC's answer a second time; Sonic's own words for it are not added to the chat.
   expect(await page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? [])).toEqual([]);
   await expect(chat.getByText("All quiet, nothing needs you.")).toHaveCount(0);
 
@@ -92,17 +92,17 @@ test("when the real-time voice is not set up, the step-by-step voice takes over"
     r.fulfill({ status: 503, json: { error: "not_configured", message: "Real-time voice is not set up." } }),
   );
   await page.goto("/");
-  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
   expect(m.calls.find((c) => c.path === "/messages")?.body).toMatchObject({ text: "what's the status?", voice: true });
 });
 
-test("in the standard voice, the sound of the owner talking over AIC silences it at once", async ({ page }) => {
+test("in the standard voice, the sound of the owner talking over VAIC silences it at once", async ({ page }) => {
   const m = await mockBackend(page);
   await page.addInitScript(() => {
     const w = window as unknown as { __heard: string; __speakMs: number; __loud: (on: boolean) => void };
     w.__heard = "what's the status?";
-    w.__speakMs = 6000; // AIC would talk for six seconds
+    w.__speakMs = 6000; // VAIC would talk for six seconds
     (window as unknown as { __aicSonic: boolean }).__aicSonic = true;
     // A microphone the test can make loud: a tone behind a gain set to silence.
     let gain: GainNode | null = null;
@@ -123,7 +123,7 @@ test("in the standard voice, the sound of the owner talking over AIC silences it
   );
   await page.goto("/");
   const strip = page.locator(".voice");
-  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   // The reason the real-time voice is not in use is shown, in plain words.
   await expect(page.getByText(/Real-time voice didn't connect \(Real-time voice is not set up\)/)).toBeVisible();
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
@@ -140,7 +140,7 @@ test("in the standard voice, the sound of the owner talking over AIC silences it
   expect(m.calls.filter((c) => c.path === "/messages")[1]?.body).toMatchObject({ text: "wait, the costs?" });
 });
 
-test("the standard voice says a short thinking cue only when AIC takes a moment, and the bar says which voice is on", async ({
+test("the standard voice says a short thinking cue only when VAIC takes a moment, and the bar says which voice is on", async ({
   page,
 }) => {
   const m = await mockBackend(page);
@@ -153,11 +153,11 @@ test("the standard voice says a short thinking cue only when AIC takes a moment,
   );
   await page.goto("/");
   const spoken = () => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []);
-  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   await expect(page.getByText("Voice on · standard")).toBeVisible();
   await expect(page.getByText("Real-time voice didn't connect: Real-time voice is not set up")).toBeVisible();
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
-  // AIC takes a while: one short cue.
+  // VAIC takes a while: one short cue.
   await expect.poll(spoken, { timeout: 4000 }).toHaveLength(1);
   expect((await spoken())[0]).toMatch(/think|second|check|moment|look|see/i);
   m.send({ type: "ace.reply", conversation: "main", text: "All quiet.", done: true });
@@ -181,7 +181,7 @@ test("voice mode drops ums and stammers, sends nothing for filler-only sounds, a
   await page.goto("/");
   const said = (t: string) => page.evaluate((x) => ((window as unknown as { __heard: string }).__heard = x), t);
   const sent = () => m.calls.filter((c) => c.path === "/messages").map((c) => (c.body as { text: string }).text);
-  await page.getByRole("button", { name: "Talk to AIC", exact: true }).click();
+  await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   await page.waitForTimeout(1800);
   expect(sent()).toEqual([]); // only fillers: nothing goes out
   await said("They");

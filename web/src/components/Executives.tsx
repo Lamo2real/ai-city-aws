@@ -1,5 +1,5 @@
 // Settings → Executives (decision 140): the CEO, COO, CFO and CTO, an advisory layer on top of the city. They only
-// speak when asked (the owner through AIC, or the Orchestrator on a big decision) and never start or assign work.
+// speak when asked (the owner through VAIC, or the Orchestrator on a big decision) and never start or assign work.
 // Here: each one on or off, their latest advice with what it was based on, and the optional reviews (off by default).
 //   `GET /executives` → {executives, recommendations, reviews}; `PUT /executives {enabled?, reviews?}` → the same.
 //   A 404 means the backend is not deployed yet: a quiet note, nothing to switch.
@@ -132,7 +132,7 @@ export function Executives() {
     <>
       <h2>Executives</h2>
       <p className="mute">
-        Four advisers on top of your city. They give advice only when you ask AIC (“ask the CFO if this pays off”) or
+        Four advisers on top of your city. They give advice only when you ask VAIC (“ask the CFO if this pays off”) or
         when the Orchestrator weighs a big decision. They never start, assign or run work: your rules and your city's
         chain of command stay exactly as they are.
       </p>
@@ -159,7 +159,7 @@ export function Executives() {
 
       <h2>Latest advice</h2>
       {data.recommendations.length === 0 ? (
-        <p className="empty">No advice yet. Ask AIC, for example “what does the CTO think about this?”.</p>
+        <p className="empty">No advice yet. Ask VAIC, for example “what does the CTO think about this?”.</p>
       ) : (
         <ul className="exec-advice">
           {data.recommendations.map((r) => (
@@ -200,7 +200,7 @@ export function Executives() {
 
       <h2>Reviews</h2>
       <p className="mute">
-        Optional, and off until you turn them on. A review is a short report in AIC's chat; it never starts work.
+        Optional, and off until you turn them on. A review is a short report in VAIC's chat; it never starts work.
       </p>
       <ul className="orders">
         {data.reviews.map((r) => {

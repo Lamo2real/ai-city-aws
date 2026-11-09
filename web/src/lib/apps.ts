@@ -5,7 +5,7 @@ import { api } from "./api.ts";
 import { store } from "./store.ts";
 
 /** `#/apps/<slug>` → { view: "apps", slug }, `#/settings/<page>` → { view: "settings", slug: page }; a view not
- *  in `views` → the first one (AIC). */
+ *  in `views` → the first one (VAIC). */
 export function route<V extends string>(hash: string, views: readonly V[]): { view: V; slug: string | null } {
   const [head = "", ...rest] = hash.replace(/^#\/?/, "").split("/");
   const view = (views as readonly string[]).includes(head) ? (head as V) : views[0]!;

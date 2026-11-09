@@ -1,4 +1,4 @@
-"""AIC does anything the owner can do in AI City (decision 143): `city_api` and `hud_action`."""
+"""VAIC does anything the owner can do in AI City (decision 143): `city_api` and `hud_action`."""
 
 from __future__ import annotations
 
@@ -99,7 +99,7 @@ async def test_a_query_string_reaches_the_route() -> None:
 
 
 async def test_an_http_request_can_never_take_the_aic_path() -> None:
-    # The key exists only on a direct Lambda invoke (IAM: AIC's role). Over HTTP the authorizer still decides.
+    # The key exists only on a direct Lambda invoke (IAM: VAIC's role). Over HTTP the authorizer still decides.
     e = ev("PUT", "/settings", {"autopilot": False}, groups=None)
     e["aic_call"] = {"method": "PUT", "path": "/settings", "body": {"autopilot": False}}
     assert (await handle_http(e, make()))["statusCode"] == 403

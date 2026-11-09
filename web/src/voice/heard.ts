@@ -1,13 +1,13 @@
 // Which words the microphone heard are really the owner's (the owner, 2026-11-09: "it's just adding stuff on my
 // side… I was completely quiet", "it's listening to the music and the noise"). Pure, so the rules are tested.
 //
-// 1. AIC's own voice: the phone's speaker plays AIC's reply into its microphone, and Transcribe hands the pieces
-//    back a moment later ("OK", "something"). A phrase that STARTED while AIC was audibly speaking counts as the
-//    owner's only when it says something AIC did not: at least two words that aren't in AIC's reply.
+// 1. VAIC's own voice: the phone's speaker plays VAIC's reply into its microphone, and Transcribe hands the pieces
+//    back a moment later ("OK", "something"). A phrase that STARTED while VAIC was audibly speaking counts as the
+//    owner's only when it says something VAIC did not: at least two words that aren't in VAIC's reply.
 // 2. The room: music, a TV, people nearby. Transcribe is unsure of such words (low confidence) and they are not
 //    much louder than the room's steady background; the owner, close to the microphone, is.
 
-/** When AIC's voice was audible (ms since epoch). `end` is open (Infinity) while it is still speaking. */
+/** When VAIC's voice was audible (ms since epoch). `end` is open (Infinity) while it is still speaking. */
 export interface Span {
   start: number;
   end: number;
@@ -23,18 +23,18 @@ const words = (t: string) =>
 /** Echo arrives a little after the sound left the speaker. */
 const TAIL_MS = 600;
 
-/** Whether a phrase that started at `startedAt` overlapped AIC's audible speech. */
+/** Whether a phrase that started at `startedAt` overlapped VAIC's audible speech. */
 export function duringAic(startedAt: number, spans: Span[]): boolean {
   return spans.some((s) => startedAt >= s.start - 200 && startedAt <= s.end + TAIL_MS);
 }
 
-/** Words the owner said that AIC's reply doesn't contain. */
+/** Words the owner said that VAIC's reply doesn't contain. */
 export function newWords(heard: string, reply: string): number {
   const r = new Set(words(reply));
   return words(heard).filter((w) => !r.has(w)).length;
 }
 
-/** The owner's words, or AIC's own voice coming back? `startedAt` is when the phrase began (from Transcribe's
+/** The owner's words, or VAIC's own voice coming back? `startedAt` is when the phrase began (from Transcribe's
  *  timings); without it, only the words decide. */
 export function isOwnerSpeech(heard: string, reply: string, startedAt: number | null, spans: Span[]): boolean {
   if (!words(heard).length) return false;

@@ -1,4 +1,4 @@
-"""The AI City guide: AIC answers "how do I…" from it at once, it covers every screen, and it sits in Knowledge."""
+"""The AI City guide: VAIC answers "how do I…" from it at once, it covers every screen, and it sits in Knowledge."""
 
 import re
 from pathlib import Path
@@ -17,7 +17,7 @@ def test_the_guide_covers_every_tab_and_every_settings_page() -> None:
     assert len(pages) >= 10
     for _id, title in pages:
         assert title.split(" ")[0] in g, f"the guide doesn't mention Settings → {title}"
-    for tab in ("AIC", "City", "Work", "Projects", "Knowledge", "Skills", "Costs", "Settings"):
+    for tab in ("VAIC", "City", "Work", "Projects", "Knowledge", "Skills", "Costs", "Settings"):
         assert f"**{tab}**" in g
     assert '"ace"' in app or "ace" in app
     # The how-tos the owner asked about by name.

@@ -1,5 +1,5 @@
 // Ported from the owner's Mac HUD (ai-city/jarvis/hud/city-state.js) and adapted to AI City on AWS:
-// AIC and the Orchestrator are the core; there is no Secretary or Reviewer; events and snapshots come
+// VAIC and the Orchestrator are the core; there is no Secretary or Reviewer; events and snapshots come
 // from the AWS API and WebSocket. Pure functions, no DOM, unit-tested in Node.
 // The City View's state: what the scene draws, as plain data. Pure functions, no DOM, no three.js,
 // so the event → state step is unit-tested in Node. The scene reads this; it never reads the server.
@@ -102,7 +102,7 @@ const shortGoal = (text) => plainText(text, 60).short;
 
 /** Who someone is, in words the owner knows: never an id. */
 export function plainWho(state, id) {
-  if (id === "ace") return "AIC";
+  if (id === "ace") return "VAIC";
   if (id === "orchestrator") return "The planner";
   const a = state.agents?.[id];
   if (!a) return "Someone on the team";
@@ -312,7 +312,7 @@ function reduceEvent(state, event, now) {
       return { ...state, now, agents: { ...state.agents, [a.id]: { ...a, awaiting_merge: null } }, feed: feed(state, `${event.branch} is settled; ${a.id} can leave its desk`, "done", now) };
     }
     case "ace.visit":
-      return { ...state, now, feed: feed(state, `AIC ${event.kind === "ask" ? "asks" : "checks in with"} ${event.to}`, "worker", now) };
+      return { ...state, now, feed: feed(state, `VAIC ${event.kind === "ask" ? "asks" : "checks in with"} ${event.to}`, "worker", now) };
     case "colleague.ask":
       return { ...state, now, feed: feed(state, event.refused ? `${event.from} and ${event.to} have asked each other too much; ${event.from} was told to stop` : `${event.from} asks ${event.to}: ${event.question.slice(0, 60)}`, event.refused ? "fail" : "worker", now) };
     case "colleague.answer":
@@ -639,7 +639,7 @@ export function cityMessage(state) {
   return null;
 }
 
-// AIC's status call can fire many times in a row; only the first of a burst is a visit.
+// VAIC's status call can fire many times in a row; only the first of a burst is a visit.
 export const visitAllowed = (lastAt, now, to) => to !== "ace" && now - lastAt >= 1000;
 
 export const currentTicket = (state, id) => Object.values(state.tickets).filter((t) => t.to === id).sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""))[0] ?? null;
@@ -694,7 +694,7 @@ export function topBar(state) {
   return {
     agentsTotal: agents.length,
     // "Agents working now" = workers running right now (not waiting on an answer, not in review). Managers,
-    // the Orchestrator and AIC never count, nor do idle or finished workers (the owner, 2026-11-08).
+    // the Orchestrator and VAIC never count, nor do idle or finished workers (the owner, 2026-11-08).
     agentsActive: workersWorking(state),
     ticketsRunning: Object.values(state.tickets).filter((t) => t.status === "in_progress" || t.status === "in_review").length,
     questionsWaiting: Object.keys(state.questions).length + Object.keys(state.approvals).length,

@@ -103,7 +103,7 @@ def _has(text: str, phrase: str) -> bool:
 
 def recognise(text: str) -> list[Record]:
     """The workflows the owner's words point at: ``[{id, name, direct}]``, direct ones first. ``direct`` = the owner
-    asked to do it ("let's create Meta ads"), so it can start; otherwise AIC asks "Is this what you mean". Words that
+    asked to do it ("let's create Meta ads"), so it can start; otherwise VAIC asks "Is this what you mean". Words that
     mean something else (a report, pausing) match nothing."""
     t = norm(text)
     out: list[Record] = []
@@ -132,7 +132,7 @@ _AWAY = ("im away", "i am away", "ill be away", "i will be away", "im out", "wit
 
 
 def presence_in(text: str) -> bool | None:
-    """True when the owner said they are here to decide with AIC, False when they said they are away; else None."""
+    """True when the owner said they are here to decide with VAIC, False when they said they are away; else None."""
     t = norm(text)
     if any(_has(t, p) for p in _AWAY):
         return False
@@ -339,7 +339,7 @@ def parse_answer(inp: Mapping[str, Any], text: str, today: date) -> Record:
 
 def extract(w: Mapping[str, Any], text: str, today: date) -> dict[str, Record]:
     """What the owner already said in their own words, before anything is asked. Only what is clear: an amount with
-    a per-day word or 'budget', a start or end phrase, a web address, one option's words. Free-text inputs are AIC's
+    a per-day word or 'budget', a start or end phrase, a web address, one option's words. Free-text inputs are VAIC's
     to pass from what it understood."""
     t = norm(text)
     out: dict[str, Record] = {}
@@ -663,7 +663,7 @@ def strip(r: Mapping[str, Any]) -> Record:
     return {k: v for k, v in r.items() if k not in ("pk", "sk")}
 
 
-# ---------- changing a run (AIC's tools and the HUD's routes share these) ----------
+# ---------- changing a run (VAIC's tools and the HUD's routes share these) ----------
 async def set_values(runs: Runs, run: Record, w: Mapping[str, Any], raw: Mapping[str, Any]) -> tuple[Record, list[str]]:
     """Reads the owner's words for each named input; returns the run and one plain sentence per answer that could
     not be read (that input stays missing)."""
@@ -720,9 +720,9 @@ async def mark_asked(runs: Runs, run: Record, key: str) -> Record:
     return await runs.update(run["id"], {"asked": [*asked, key]}) or run
 
 
-# ---------- what AIC is told each turn ----------
+# ---------- what VAIC is told each turn ----------
 def match_line(text: str, conn_of: Mapping[str, Mapping[str, Any]]) -> str | None:
-    """One line for AIC's prompt when the owner's words point at a workflow (``conn_of``: workflow id → connector
+    """One line for VAIC's prompt when the owner's words point at a workflow (``conn_of``: workflow id → connector
     info)."""
     found = recognise(text)
     if not found:
@@ -750,7 +750,7 @@ def match_line(text: str, conn_of: Mapping[str, Mapping[str, Any]]) -> str | Non
 
 
 def run_line(run: Mapping[str, Any], w: Mapping[str, Any], conn: Mapping[str, Any]) -> str:
-    """The live run in this conversation, for AIC's prompt: what is known and the one next thing."""
+    """The live run in this conversation, for VAIC's prompt: what is known and the one next thing."""
     values = run.get("values") or {}
     known = "; ".join(f"{i['label']}: {values[i['key']]['text']}" for i in w.get("inputs") or [] if i["key"] in values)
     need = next_need(run, w, bool(conn.get("connected")))
@@ -858,7 +858,7 @@ def same_choice(a: str, b: str) -> bool:
 
 
 def taste_line(open_qs: Sequence[Mapping[str, Any]]) -> str | None:
-    """For AIC's prompt: the open taste questions, so it can raise them while the owner is talking to it."""
+    """For VAIC's prompt: the open taste questions, so it can raise them while the owner is talking to it."""
     if not open_qs:
         return None
     shown = "; ".join(

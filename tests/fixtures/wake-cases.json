@@ -2,11 +2,31 @@
   "$comment": "Wake-word answers both halves must give: the browser (web/src/voice/wake.ts) and the server (backend/src/aic/shared/utility.py). Tests on both sides read this file.",
   "cases": [
     {
-      "text": "yo AIC",
+      "text": "hey Vice",
       "want": "yes"
     },
     {
-      "text": "hi AIC, status",
+      "text": "yo vice, what's the status",
+      "want": "yes"
+    },
+    {
+      "text": "thanks Vice",
+      "want": "yes"
+    },
+    {
+      "text": "the vice president called",
+      "want": "unclear"
+    },
+    {
+      "text": "hey V A I C, status",
+      "want": "yes"
+    },
+    {
+      "text": "yo VAIC",
+      "want": "yes"
+    },
+    {
+      "text": "hi VAIC, status",
       "want": "yes"
     },
     {
@@ -14,19 +34,19 @@
       "want": "yes"
     },
     {
-      "text": "what's up AIC",
+      "text": "what's up VAIC",
       "want": "yes"
     },
     {
-      "text": "how's it going AIC",
+      "text": "how's it going VAIC",
       "want": "yes"
     },
     {
-      "text": "AIC, pause everything",
+      "text": "VAIC, pause everything",
       "want": "yes"
     },
     {
-      "text": "what's the status of the product, AIC?",
+      "text": "what's the status of the product, VAIC?",
       "want": "yes"
     },
     {
@@ -38,7 +58,7 @@
       "want": "yes"
     },
     {
-      "text": "AIC hello",
+      "text": "VAIC hello",
       "want": "yes"
     },
     {
@@ -46,7 +66,7 @@
       "want": "no"
     },
     {
-      "text": "so I told AIC about it",
+      "text": "so I told VAIC about it",
       "want": "unclear"
     },
     {
@@ -54,7 +74,7 @@
       "want": "no"
     },
     {
-      "text": "hello AIC.",
+      "text": "hello VAIC.",
       "want": "yes"
     },
     {

@@ -55,7 +55,7 @@ def _who_asked(agent_id: str) -> str:
         return "Manager"
     if agent_id == "orchestrator":
         return "Planner"
-    return "AIC"
+    return "VAIC"
 
 
 def _status_line(t: Record, to: str) -> tuple[str, str] | None:
@@ -65,11 +65,11 @@ def _status_line(t: Record, to: str) -> tuple[str, str] | None:
     goal = plain(t.get("goal"))
     if kind == "task":
         return {
-            "open": ("AIC", f"Passed your request to the team: {goal}"),
-            "waiting_on_owner": ("AIC", "The team is waiting for you."),
-            "done": ("AIC", "The job is finished."),
-            "failed": ("AIC", "The job ran into a problem and stopped."),
-            "cancelled": ("AIC", "The job was stopped."),
+            "open": ("VAIC", f"Passed your request to the team: {goal}"),
+            "waiting_on_owner": ("VAIC", "The team is waiting for you."),
+            "done": ("VAIC", "The job is finished."),
+            "failed": ("VAIC", "The job ran into a problem and stopped."),
+            "cancelled": ("VAIC", "The job was stopped."),
         }.get(to)
     if t.get("from") == "orchestrator":  # a department's part
         return {
@@ -148,7 +148,7 @@ async def app_activity(ledger: Ledger, app_id: str) -> list[Record] | None:
                 add(e.get("at"), *line)
 
     for v in versions:
-        add(v.get("published_at"), "AIC", f"Version {int(v.get('version') or 1)} went live.")
+        add(v.get("published_at"), "VAIC", f"Version {int(v.get('version') or 1)} went live.")
 
     approvals = [
         a
@@ -159,7 +159,7 @@ async def app_activity(ledger: Ledger, app_id: str) -> list[Record] | None:
         status = str(a.get("status") or "")
         if a.get("kind") == "app.publish" and str(a.get("draft_id")) in draft_ids:
             waiting = " It is waiting for you in Needs you." if status == "pending" else _DECIDED.get(status, "")
-            add(a.get("created_at"), "AIC", f"Asked you to approve: {plain(a.get('action'))}.{waiting}")
+            add(a.get("created_at"), "VAIC", f"Asked you to approve: {plain(a.get('action'))}.{waiting}")
         elif a.get("requested_by") == f"app:{app_id}":
             what = _PROPOSALS.get(str(a.get("tool")), "do something for you")
             waiting = " It is waiting for you in Needs you." if status == "pending" else _DECIDED.get(status, "")

@@ -230,9 +230,9 @@ class ApiDeps:
     push: PushDeps | None = None
     """iPhone notifications: device registration and the owner's Apple key; None = not deployed (503)."""
     speech: SpeechDeps | None = None
-    """AIC's voice through OpenAI text-to-speech (``/speech``, ``/voice/openai*``); None = not configured (503)."""
+    """VAIC's voice through OpenAI text-to-speech (``/speech``, ``/voice/openai*``); None = not configured (503)."""
     voice: VoiceUrlDeps | None = None
-    """AIC's real-time voice (Nova Sonic on AIC's runtime): presigned WebSocket URLs; None = not deployed (503)."""
+    """VAIC's real-time voice (Nova Sonic on VAIC's runtime): presigned WebSocket URLs; None = not deployed (503)."""
     github: GitHubDeps | None = None
     """The owner's GitHub token (``/github``, ``/github/token``); None = not configured (503 on store)."""
 
@@ -424,7 +424,7 @@ OPENAI_FLAG = ("VOICE#openai", "META")
 
 
 async def _speech_routes(method: str, path: str, event: dict[str, Any], d: ApiDeps) -> dict[str, Any] | None:
-    """AIC's voice through OpenAI: ``POST /speech`` (MP3 bytes), ``GET /voice/openai``, ``PUT /voice/openai-key``."""
+    """VAIC's voice through OpenAI: ``POST /speech`` (MP3 bytes), ``GET /voice/openai``, ``PUT /voice/openai-key``."""
     if path not in ("/speech", "/voice/openai", "/voice/openai-key", "/voice/live"):
         return None
     s = d.speech
@@ -459,7 +459,7 @@ async def _speech_routes(method: str, path: str, event: dict[str, Any], d: ApiDe
         log("info", "speech.key_saved")
         return reply(200, {"ok": True, "saved_at": at})
     if method == "POST" and path == "/voice/live":
-        # AIC's real-time voice on GPT-Live (decision 128): the browser's WebRTC offer in, OpenAI's answer out.
+        # VAIC's real-time voice on GPT-Live (decision 128): the browser's WebRTC offer in, OpenAI's answer out.
         try:
             if s is None:
                 raise NotConfigured()
@@ -599,7 +599,7 @@ async def _push_routes(method: str, path: str, event: dict[str, Any], d: ApiDeps
 
 async def _workflow_routes(method: str, path: str, event: dict[str, Any], d: ApiDeps) -> dict[str, Any] | None:
     """AI workflows (decision 126): the walkthrough's pages, its mode and Stop. Saying yes to the money is never a
-    route: it is the owner's own words to AIC (``run_workflow``)."""
+    route: it is the owner's own words to VAIC (``run_workflow``)."""
     if not path.startswith("/workflows"):
         return None
     from aic.shared import workflow_jobs as jobs
@@ -623,7 +623,7 @@ async def _workflow_routes(method: str, path: str, event: dict[str, Any], d: Api
     cd = _action_deps(d)
     m = re.fullmatch(r"/workflows/taste/(tq-[\w-]{1,40})", path)
     if m and method == "POST":
-        # A tap on the card: the owner's own choice, applied like their words to AIC (decision 127).
+        # A tap on the card: the owner's own choice, applied like their words to VAIC (decision 127).
         b = _body(event)
         try:
             said = await jobs.answer(cd, m.group(1), str(b.get("answer") or ""))
@@ -724,7 +724,7 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         b = _body(event)
         agent_id = _str(b.get("agent_id"), "Agent")
         text = _str(b.get("text"), "Instruction")
-        # The instruction goes through AIC like every owner message, so the same gate applies.
+        # The instruction goes through VAIC like every owner message, so the same gate applies.
         conversation = b["conversation"] if isinstance(b.get("conversation"), str) else "hud"
         await d.queue.send(
             cast(
@@ -795,18 +795,18 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         return reply(200, {"ticket": t, "history": history, "trace": trace, "children": children})
     if is_("POST", r"/voice/session"):
         if d.voice is None:
-            return reply(503, {"error": "not_configured", "message": "AIC's real-time voice isn't set up here."})
+            return reply(503, {"error": "not_configured", "message": "VAIC's real-time voice isn't set up here."})
         try:
             url = await asyncio.to_thread(presigned_voice_url, d.voice)
         except Exception as e:
             log("warn", "voice.presign_failed", error=type(e).__name__)
-            return reply(503, {"error": "unavailable", "message": "AIC's voice could not start. Try again."})
+            return reply(503, {"error": "unavailable", "message": "VAIC's voice could not start. Try again."})
         return reply(200, {"url": url, "expires_in": EXPIRES_S})
     if is_("POST", r"/voice/check"):
-        # Why the browser's WebSocket to AIC's voice was refused: the API opens the same handshake and reports AWS's
+        # Why the browser's WebSocket to VAIC's voice was refused: the API opens the same handshake and reports AWS's
         # answer (browsers never show it). Read-only; it opens and closes one connection.
         if d.voice is None:
-            return reply(200, {"ok": False, "reason": "AIC's real-time voice isn't set up here."})
+            return reply(200, {"ok": False, "reason": "VAIC's real-time voice isn't set up here."})
         try:
             url = await asyncio.to_thread(presigned_voice_url, d.voice)
             status, body = await check_voice_url(url)
@@ -822,7 +822,7 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
     if is_("GET", r"/departments"):
         return reply(200, {"departments": await d.ledger.list_departments()})
     if is_("POST", r"/departments"):
-        # The owner builds a department (City "+ Build", Settings): the same path as asking AIC (decision 134).
+        # The owner builds a department (City "+ Build", Settings): the same path as asking VAIC (decision 134).
         b = _body(event)
         try:
             dept, outcome = await build_department(
@@ -1214,10 +1214,10 @@ async def steward_apply(op: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
 
 
 async def aic_call(call: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
-    """One HUD route run for the owner by AIC (decision 143): the same router and checks as the owner's own request.
+    """One HUD route run for the owner by VAIC (decision 143): the same router and checks as the owner's own request.
 
-    Reached only by a direct invoke from AIC's runtime role (IAM); an HTTP event never has the ``aic_call`` key, so
-    nothing on the internet can take this path. The secret-taking and AIC's own routes are refused here too."""
+    Reached only by a direct invoke from VAIC's runtime role (IAM); an HTTP event never has the ``aic_call`` key, so
+    nothing on the internet can take this path. The secret-taking and VAIC's own routes are refused here too."""
     method, path = str(call.get("method") or "GET").upper(), str(call.get("path") or "")
     why = owner_api.refusal(method, path)
     if why:
@@ -1511,7 +1511,7 @@ def _voice_from_env(city: Any) -> VoiceUrlDeps | None:
         session=city.session,
         region=city.region,
         runtime_arn=arn,
-        # AIC's warm session (the same id the dispatcher uses), so the voice starts next to warm clients.
+        # VAIC's warm session (the same id the dispatcher uses), so the voice starts next to warm clients.
         session_id=lambda: session_id_for(cast(WorkMessage, {"role": "ace", "conversation": "main"}), owner, version),
     )
 
@@ -1544,7 +1544,7 @@ def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
         _deps = build_deps()
     if isinstance(event.get("chief_of_staff"), dict):  # a direct invoke from the chief-of-staff Lambda
         return run(steward_apply(event["chief_of_staff"], _deps))
-    if isinstance(event.get("aic_call"), dict):  # a direct invoke from AIC's runtime (decision 143)
+    if isinstance(event.get("aic_call"), dict):  # a direct invoke from VAIC's runtime (decision 143)
         return run(aic_call(event["aic_call"], _deps))
     return run(handle_http(event, _deps))
 

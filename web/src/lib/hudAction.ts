@@ -1,5 +1,5 @@
-// AIC changes what lives on the owner's device (decision 143): the theme, or which page is open. The event comes
-// from AIC's `hud_action` tool, which only runs on the owner's own message.
+// VAIC changes what lives on the owner's device (decision 143): the theme, or which page is open. The event comes
+// from VAIC's `hud_action` tool, which only runs on the owner's own message.
 import { saveTheme } from "./theme.ts";
 
 export function hudAction(e: { [k: string]: unknown }) {

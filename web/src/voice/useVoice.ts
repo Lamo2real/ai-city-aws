@@ -1,13 +1,13 @@
-// Voice for the AIC screen and the City view's big mic button. Typed and spoken turns go into the same chat.
-//   voice conversation: the AIC screen's voice button (decision 112). Tap once and it stays on: the mic listens,
-//                       what you said is sent when you stop talking, AIC answers aloud, the mic opens again, and
+// Voice for the VAIC screen and the City view's big mic button. Typed and spoken turns go into the same chat.
+//   voice conversation: the VAIC screen's voice button (decision 112). Tap once and it stays on: the mic listens,
+//                       what you said is sent when you stop talking, VAIC answers aloud, the mic opens again, and
 //                       so on until you tap it off (or say "stop listening"). Speech to speech, nothing to type.
 //   dictate (the box):  the dictate icon beside Send: the words go into the box (live partials too) until you tap
 //                       again; nothing is sent by itself, and the answer to a dictated message is text only.
 //   the City's mic:     tap, talk, sent when you stop talking; the answer is spoken unless the City is muted.
 // The voice conversation runs on Nova 2 Sonic when it can (decision 120, sonic.ts): real-time, the owner can talk
-// over AIC and it stops at once, short spoken cues while AIC works. Sonic is only the voice; every request is
-// an ordinary AIC turn. When Sonic cannot start, the step-by-step loop above takes over.
+// over VAIC and it stops at once, short spoken cues while VAIC works. Sonic is only the voice; every request is
+// an ordinary VAIC turn. When Sonic cannot start, the step-by-step loop above takes over.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { sendMessage } from "../lib/actions.ts";
 import { store, useHud } from "../lib/store.ts";
@@ -33,9 +33,9 @@ export interface DictationTarget {
   onStop(): void;
 }
 
-// AIC's reply being spoken: which line, its queue, whether the owner asked by voice, whether anything has
+// VAIC's reply being spoken: which line, its queue, whether the owner asked by voice, whether anything has
 // actually played, the first failure, and whether it was cut off. Kept outside React (one player for the
-// whole page, shared by the AIC and City screens), so re-renders and switching screens never restart or
+// whole page, shared by the VAIC and City screens), so re-renders and switching screens never restart or
 // double a reply.
 type Talker = Pick<SpeechQueue<unknown>, "update" | "end" | "stop">;
 interface Talk {
@@ -49,7 +49,7 @@ interface Talk {
 const talk: { current: Talk | null } = { current: null };
 // The hands-free loop: armed by a spoken send; while armed, the mic reopens after each spoken reply.
 const loop = { current: false };
-// The voice conversation (the AIC screen's voice button): on until the owner taps it off.
+// The voice conversation (the VAIC screen's voice button): on until the owner taps it off.
 const convo = { current: false };
 const startRef: { current: ((reopened?: boolean) => void) | null } = { current: null };
 // The pieces of what the owner is saying, joined into one message after a short pause (voice conversation).
@@ -69,7 +69,7 @@ function stopCues() {
   window.clearTimeout(cue.timer);
   cue.timer = undefined;
 }
-/** Says one short cue with whatever voice AIC is using; never throws. */
+/** Says one short cue with whatever voice VAIC is using; never throws. */
 function sayCue(text: string) {
   cue.last = text;
   cue.at = Date.now();
@@ -83,15 +83,15 @@ function sayCue(text: string) {
   done(v.speak(text));
 }
 
-// While AIC talks in a voice conversation, a quiet listener for the owner talking over it (bargeIn.ts).
+// While VAIC talks in a voice conversation, a quiet listener for the owner talking over it (bargeIn.ts).
 const barge: { current: (() => void) | null } = { current: null };
 function stopBargeIn() {
   barge.current?.();
   barge.current = null;
 }
 
-/** Cuts AIC off: drops the reply's queue, stops the clip playing now and any browser voice. */
-// When AIC's voice was audible, so its echo from the speakers is never taken for the owner (heard.ts).
+/** Cuts VAIC off: drops the reply's queue, stops the clip playing now and any browser voice. */
+// When VAIC's voice was audible, so its echo from the speakers is never taken for the owner (heard.ts).
 const spans: Span[] = [];
 function aicSpeaks() {
   if (spans.at(-1)?.end === Infinity) return;
@@ -102,7 +102,7 @@ function aicQuiet() {
   const s = spans.at(-1);
   if (s && s.end === Infinity) s.end = Date.now();
 }
-/** What AIC last said (its reply, or a thinking cue), for telling its echo from the owner's words. */
+/** What VAIC last said (its reply, or a thinking cue), for telling its echo from the owner's words. */
 function aicWords(): string {
   return `${store.get().chat.findLast((l) => l.who === "ace")?.text ?? ""} ${cue.last ?? ""}`;
 }
@@ -120,7 +120,7 @@ function stopTalking() {
   if (store.get().presence === "speaking") store.set({ presence: "idle" });
 }
 
-/** GPT-Live's requests (live.ts): sent to AIC as a spoken chat message; resolves with AIC's answer when it is
+/** GPT-Live's requests (live.ts): sent to VAIC as a spoken chat message; resolves with VAIC's answer when it is
  *  done, or a short note when it fails or takes longer than two minutes (the answer still lands in the chat). */
 function askAic(text: string): Promise<string> {
   const before = store.get().chat.length;
@@ -133,7 +133,7 @@ function askAic(text: string): Promise<string> {
       resolve(answer);
     };
     const timer = window.setTimeout(
-      () => settle("AIC is still working on it. The answer will be in the chat."),
+      () => settle("VAIC is still working on it. The answer will be in the chat."),
       120_000,
     );
     const check = () => {
@@ -141,7 +141,7 @@ function askAic(text: string): Promise<string> {
       const answer = fresh.find((l) => l.who === "ace" && l.state === "done");
       if (answer) return settle(answer.text);
       if (fresh.some((l) => l.who === "owner" && l.state === "failed"))
-        settle("The message didn't reach AIC. Check the connection.");
+        settle("The message didn't reach VAIC. Check the connection.");
     };
     off = store.subscribe(check);
     check();
@@ -173,7 +173,7 @@ export function useVoice(dictation?: DictationTarget) {
   // synthesize sentence by sentence, speaking starts with the first complete sentence while the rest streams.
   useEffect(() => {
     const last = chat.at(-1);
-    // AIC goes into thinking on a spoken message in the voice conversation: after a moment without an answer,
+    // VAIC goes into thinking on a spoken message in the voice conversation: after a moment without an answer,
     // a short cue ("Hmm, let me think."), then another now and then while it keeps working.
     stopCues();
     if (last?.who === "owner" && last.voice && convo.current && !sonic.current && !dictating.current) {
@@ -191,7 +191,7 @@ export function useVoice(dictation?: DictationTarget) {
       };
       cue.timer = window.setTimeout(tick, CUE_AFTER_MS);
     }
-    // The owner sent something new (typed or spoken): whatever AIC was still saying stops.
+    // The owner sent something new (typed or spoken): whatever VAIC was still saying stops.
     if (last?.who === "owner" && talk.current && !talk.current.cancelled && talk.current.id !== last.id) {
       stopTalking();
       return;
@@ -210,8 +210,8 @@ export function useVoice(dictation?: DictationTarget) {
       stopBargeIn();
       const next = loopNext(loop.current, spokenAloud && askedVoice ? "reply_spoken" : "reply_silent");
       loop.current = next.on;
-      // In a voice conversation the mic always opens again after AIC's answer; otherwise the City's loop decides.
-      // In a voice conversation the mic never closed: AIC simply goes back to listening.
+      // In a voice conversation the mic always opens again after VAIC's answer; otherwise the City's loop decides.
+      // In a voice conversation the mic never closed: VAIC simply goes back to listening.
       if (convo.current && stop.current && !dictating.current) {
         store.set({ presence: "listening" });
         return;
@@ -229,7 +229,7 @@ export function useVoice(dictation?: DictationTarget) {
       const v = getVoice();
       // A voice conversation always answers aloud; otherwise only a message said into the City's mic is.
       const say = convo.current || shouldSpeak(speakMode, asked?.voice);
-      // In a voice conversation the mic stays open while AIC talks (the owner's wish: always listening); its own
+      // In a voice conversation the mic stays open while VAIC talks (the owner's wish: always listening); its own
       // voice is told apart by echo cancellation and isEcho (convo.ts).
       const t: Talk = {
         id: last.id,
@@ -262,7 +262,7 @@ export function useVoice(dictation?: DictationTarget) {
           },
         );
       talk.current = t;
-      // Talking over AIC stops it at once and opens the mic (in the voice conversation).
+      // Talking over VAIC stops it at once and opens the mic (in the voice conversation).
       if (say && convo.current && !dictating.current) {
         stopBargeIn();
         barge.current = watchForBargeIn(() => {
@@ -291,7 +291,7 @@ export function useVoice(dictation?: DictationTarget) {
           }
           // Nothing played at all (Polly refused, or the clip was blocked): the browser's own voice takes
           // over for the rest of this page session, like the recognition fallback.
-          // Only for this reply: the next one tries AIC's own voice again (a sticky switch once left Safari silent
+          // Only for this reply: the next one tries VAIC's own voice again (a sticky switch once left Safari silent
           // for the whole visit, the owner, 2026-11-09).
           if (!usingBrowserVoice() && browserVoiceAvailable()) {
             const q = new SpeechQueue<string>(
@@ -369,7 +369,7 @@ export function useVoice(dictation?: DictationTarget) {
             return;
           }
           if (convo.current) {
-            // Always listening: words heard while AIC talks are the owner's, unless they are AIC's own
+            // Always listening: words heard while VAIC talks are the owner's, unless they are VAIC's own
             // words coming back from the speakers.
             const t = talk.current;
             if (t && !t.cancelled && t.started) {
@@ -397,7 +397,7 @@ export function useVoice(dictation?: DictationTarget) {
               return clean ? target.current?.onFinal(clean) : undefined;
             }
             if (!convo.current) return said(text);
-            // AIC's own voice coming back from the speakers is not the owner (the owner, 2026-11-09).
+            // VAIC's own voice coming back from the speakers is not the owner (the owner, 2026-11-09).
             if (!isOwnerSpeech(text, aicWords(), heard?.startedAt ?? null, spans)) return;
             if (isStopPhrase(cleanSpeech(text))) {
               thought.parts = []; // "stop listening" acts at once, never joined to what follows
@@ -410,7 +410,7 @@ export function useVoice(dictation?: DictationTarget) {
           dictate
             ? (text) => target.current?.onPartial(cleanSpeech(text))
             : (text) => {
-                // The owner talks over AIC with words of their own: AIC stops at once.
+                // The owner talks over VAIC with words of their own: VAIC stops at once.
                 const t = talk.current;
                 if (convo.current && t && t.started && !t.cancelled && isOwnerSpeech(text, aicWords(), null, spans)) {
                   stopTalking();
@@ -466,7 +466,7 @@ export function useVoice(dictation?: DictationTarget) {
           setListening(false);
           store.set({ presence: "idle" });
         },
-        // AIC's own answer reaches the chat from AIC; only Sonic's small talk (a greeting, "sure") is added here.
+        // VAIC's own answer reaches the chat from VAIC; only Sonic's small talk (a greeting, "sure") is added here.
         onAssistantText: (text, aic) => !aic && add("ace", text),
         onThinking: (on) => presence(on ? "thinking" : "listening"),
         onSpeaking: (on) => presence(on ? "speaking" : "listening"),
@@ -478,7 +478,7 @@ export function useVoice(dictation?: DictationTarget) {
             const why = ((e as Error).message ?? "").trim().replace(/\.$/, "").slice(0, 160);
             setEngine({ kind: "standard", why: why || "no reason given" });
             toast({
-              text: `Real-time voice stopped${why ? ` (${why})` : ""}, so AIC is using its standard voice.`,
+              text: `Real-time voice stopped${why ? ` (${why})` : ""}, so VAIC is using its standard voice.`,
               tone: "info",
             });
             getVoice().prime?.();
@@ -489,7 +489,7 @@ export function useVoice(dictation?: DictationTarget) {
           store.set({ presence: "idle" });
           if (e) {
             logVoiceError("the voice call stopped", e);
-            setProblem(`${(e as Error).message || "AIC's voice stopped."} Tap the voice button to talk again.`);
+            setProblem(`${(e as Error).message || "VAIC's voice stopped."} Tap the voice button to talk again.`);
           }
         },
       };
@@ -543,7 +543,7 @@ export function useVoice(dictation?: DictationTarget) {
       const why = liveWhy ? `GPT-Live: ${liveWhy}. Nova Sonic: ${sonicWhy || "no reason given"}` : sonicWhy;
       setEngine({ kind: "standard", why: why || "no reason given" });
       toast({
-        text: `Real-time voice didn't connect${why ? ` (${why})` : ""}, so AIC is using its standard voice.`,
+        text: `Real-time voice didn't connect${why ? ` (${why})` : ""}, so VAIC is using its standard voice.`,
         tone: "info",
       });
       getVoice().prime?.();
@@ -559,7 +559,7 @@ export function useVoice(dictation?: DictationTarget) {
 
   return {
     listening,
-    /** The voice conversation is on (the AIC screen's voice button). */
+    /** The voice conversation is on (the VAIC screen's voice button). */
     conversation,
     /** Which voice the conversation runs on, and why the standard one, for the voice bar. */
     engine,
@@ -577,7 +577,7 @@ export function useVoice(dictation?: DictationTarget) {
       getVoice().prime?.(); // synchronously, inside the tap (Safari)
       void start();
     },
-    /** The AIC screen's voice button: a speech-to-speech conversation, on until tapped off. */
+    /** The VAIC screen's voice button: a speech-to-speech conversation, on until tapped off. */
     toggleConversation: () => {
       if (convo.current) {
         loop.current = false;

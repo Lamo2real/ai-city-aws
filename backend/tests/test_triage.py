@@ -1,4 +1,4 @@
-"""AIC's quick triage: most questions, lists and drafts are AIC's to answer now; only real work becomes a task."""
+"""VAIC's quick triage: most questions, lists and drafts are VAIC's to answer now; only real work becomes a task."""
 
 import json
 from typing import Any
@@ -122,7 +122,7 @@ async def test_a_complaint_about_ai_city_is_never_a_job_even_on_yes() -> None:
         city = make_city(scripted_engine({}))
         city.deps.utility_runner = runner_saying('{"route": "new_department", "department": "Voice Engineering"}')
         spec = next(t for t in tools_for(city.deps, ctx()) if t.name == "delegate_to_orchestrator")
-        out = await spec.handler({"goal": "Fix AIC's voice", "owner_words": words, "confirm": True})
+        out = await spec.handler({"goal": "Fix VAIC's voice", "owner_words": words, "confirm": True})
         assert "about AI City itself" in out and "builder session" in out, words
         assert city.queue.pending == []
         assert city.deps.utility_runner.seen == []  # not even triaged

@@ -310,7 +310,7 @@ export function ConnectorsHub(p: {
       sub: a.address || PROVIDER_LABEL[a.provider],
       logo: a.provider === "google" ? "gmail" : a.provider === "microsoft" ? "microsoft" : undefined,
       type: "Mail & calendar",
-      teams: "AIC",
+      teams: "VAIC",
       groups: [],
       status: {
         text: a.status === "error" && a.error ? `Problem: ${a.error}` : MAIL_STATUS[a.status],
@@ -547,7 +547,7 @@ export function ConnectorsHub(p: {
               <h3 id="hub-mail">Mail &amp; calendar</h3>
               {!mail.length ? (
                 <p className="mute">
-                  No mailboxes or calendars yet. Ask AIC ("connect my work Outlook"), or use + Add → Mailbox or
+                  No mailboxes or calendars yet. Ask VAIC ("connect my work Outlook"), or use + Add → Mailbox or
                   calendar.
                 </p>
               ) : null}
@@ -583,7 +583,7 @@ export function ConnectorsHub(p: {
           {presets && !shownKits.length ? empty(`No tool in the catalog matches "${q}".`) : null}
           <div className="card hub-own">
             <p>
-              <b>Don't see yours?</b> Ask AIC in plain words ("I need my Zendesk"): it finds the right one and helps you
+              <b>Don't see yours?</b> Ask VAIC in plain words ("I need my Zendesk"): it finds the right one and helps you
               sign in. Or add any tool by its link.
             </p>
             <Button variant="secondary" onClick={() => setAdding("link")}>

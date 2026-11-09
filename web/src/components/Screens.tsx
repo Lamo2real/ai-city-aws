@@ -125,7 +125,7 @@ export function Tickets({ page = null }: { page?: string | null }) {
       {!data && !error && !other ? <Loading what="your work" /> : null}
       {data && !data.jobs.length ? (
         <p className="empty">
-          {which === "live" ? "Nothing is being worked on. Ask AIC for something." : "Nothing is finished yet."}
+          {which === "live" ? "Nothing is being worked on. Ask VAIC for something." : "Nothing is finished yet."}
         </p>
       ) : null}
       <ul className="jobs">
@@ -395,7 +395,7 @@ export const SETTINGS_PAGES = [
     about: "Every connected service, who may use it, mail and calendars, add by link",
   },
   { id: "github", title: "GitHub", about: "Your GitHub token for repositories, pushes and secrets" },
-  { id: "voice", title: "AIC's voice", about: "The voice AIC speaks with, and the OpenAI key" },
+  { id: "voice", title: "VAIC's voice", about: "The voice VAIC speaks with, and the OpenAI key" },
   { id: "apps", title: "Apps", about: "The apps the city built: pinned, removed, what they may read" },
   { id: "limits", title: "Limits & spending", about: "Optional spend caps and how many workers at once" },
   { id: "reset", title: "Start over", about: "Empty the city and start fresh" },
@@ -756,7 +756,7 @@ function SettingsPageView({
     </section>
   );
 }
-/** AIC's voice, chosen per device (no Save needed): Polly's generative voices, the most natural ones. */
+/** VAIC's voice, chosen per device (no Save needed): Polly's generative voices, the most natural ones. */
 function VoiceSettings() {
   const [openai, setOpenai] = useState<OpenAiStatus | null>(openAiStatus);
   const [id, setId] = useState(() => readVoiceId(config().pollyVoice));
@@ -779,7 +779,7 @@ function VoiceSettings() {
     setTest(null);
     const v = getVoice();
     v.prime?.(); // this click is the gesture that unlocks sound (Safari)
-    const sentence = "Hi, I'm AIC. This is how I'll sound when I answer you.";
+    const sentence = "Hi, I'm VAIC. This is how I'll sound when I answer you.";
     try {
       if (v.synth && v.play) {
         const clip = onOpenAi ? await openAiSynth(sentence) : await v.synth(sentence);
@@ -808,14 +808,14 @@ function VoiceSettings() {
         const st = await loadOpenAi(true);
         setOpenai(st);
         setOaVoice(readOpenAiVoice());
-        toast({ tone: "good", text: "OpenAI key saved. AIC now speaks with OpenAI's voice." });
+        toast({ tone: "good", text: "OpenAI key saved. VAIC now speaks with OpenAI's voice." });
       })
       .catch((err: unknown) => setKeyProblem(err instanceof ApiError ? err.message : "The key could not be saved."))
       .finally(() => setBusy(false));
   };
   return (
     <>
-      <h2>AIC's voice</h2>
+      <h2>VAIC's voice</h2>
       <p className="mute">
         {onOpenAi
           ? "OpenAI's voice, styled after ChatGPT's Sol. The choice is remembered on this device."
@@ -825,7 +825,7 @@ function VoiceSettings() {
         Voice
         {onOpenAi ? (
           <Select
-            aria-label="AIC's voice"
+            aria-label="VAIC's voice"
             value={oaVoice}
             onChange={(e) => {
               setOaVoice(e.target.value);
@@ -840,7 +840,7 @@ function VoiceSettings() {
           </Select>
         ) : (
           <Select
-            aria-label="AIC's voice"
+            aria-label="VAIC's voice"
             value={id}
             onChange={(e) => {
               setId(e.target.value);

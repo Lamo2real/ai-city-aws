@@ -1,7 +1,7 @@
-// The voice strip under AIC's eye: who is talking, shown by shape, words and colour together (never colour alone).
+// The voice strip under VAIC's eye: who is talking, shown by shape, words and colour together (never colour alone).
 //   you      → upright bars that follow the owner's microphone level, blue, "You're talking" / "Listening to you"
-//   aic      → a smooth flowing wave that follows AIC's spoken reply (Polly), wood brown, "AIC is talking"
-//   thinking → three dots travelling along the line, "AIC is thinking"
+//   aic      → a smooth flowing wave that follows VAIC's spoken reply (Polly), wood brown, "VAIC is talking"
+//   thinking → three dots travelling along the line, "VAIC is thinking"
 //   idle     → a flat, quiet line, "Tap the mic or type"
 // Levels come from getVoice().levels() (Web Audio analysers on the mic and on the reply). With
 // prefers-reduced-motion the strip draws one still picture per state instead of animating.
@@ -23,7 +23,7 @@ export function VoiceVisualizer(p: {
   presence: Presence;
   listening: boolean;
   onMic: () => void;
-  /** The line and the words only, no mic button (the AIC screen's voice bar; the button is in the message box). */
+  /** The line and the words only, no mic button (the VAIC screen's voice bar; the button is in the message box). */
   bare?: boolean;
   /** Which voice the conversation runs on (the voice bar's badge), and why the standard one. */
   engine?: { kind: "realtime" | "standard"; why?: string } | null;
@@ -128,9 +128,9 @@ export function VoiceVisualizer(p: {
         ? "You’re talking"
         : "Listening to you…"
       : speaker === "aic"
-        ? "AIC is talking"
+        ? "VAIC is talking"
         : speaker === "thinking"
-          ? "AIC is thinking…"
+          ? "VAIC is thinking…"
           : p.bare
             ? "Your turn: just talk"
             : "Tap the mic or type";
@@ -147,7 +147,7 @@ export function VoiceVisualizer(p: {
             className={`mic ${p.listening ? "on" : ""}`}
             onClick={p.onMic}
             aria-pressed={p.listening}
-            aria-label={p.listening ? "Stop listening" : "Talk to AIC"}
+            aria-label={p.listening ? "Stop listening" : "Talk to VAIC"}
           >
             <MicIcon size={26} />
           </button>
@@ -162,7 +162,7 @@ export function VoiceVisualizer(p: {
         <p className="voice-label">
           {speaker === "you" || speaker === "aic" ? (
             <span className="voice-who" aria-hidden="true">
-              {speaker === "you" ? "You" : "AIC"}
+              {speaker === "you" ? "You" : "VAIC"}
             </span>
           ) : null}
           <span aria-hidden="true">{words}</span>
@@ -230,7 +230,7 @@ export function MicWave() {
 
 /** The City dock's voice line (the owner's wish, 2026-11-09: subtle, integrated, a flat voice animation that
  *  shows who is speaking). One thin line: blue and rippling with your voice when you talk, brown and flowing with
- *  AIC's when AIC talks, a dot travelling along it while AIC thinks, flat when nobody does. */
+ *  VAIC's when VAIC talks, a dot travelling along it while VAIC thinks, flat when nobody does. */
 export function FlatWave({ speaker }: { speaker: Speaker }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -286,7 +286,7 @@ export function FlatWave({ speaker }: { speaker: Speaker }) {
 /** The voice conversation's light (the owner, 2026-11-09: an effect around the message box that follows how loud
  *  you speak, with AI City's own touch). An aurora rising from the message box: a soft horizon of light whose crest
  *  ripples and climbs with the voice level, a second, slower veil behind it, and sparks that drift up when the voice
- *  is loud. Blue while you talk, amber while AIC talks, a slow breathing glow while AIC thinks, a faint ember when
+ *  is loud. Blue while you talk, amber while VAIC talks, a slow breathing glow while VAIC thinks, a faint ember when
  *  nobody does. With reduced motion: one still glow per state. */
 const AURORA = {
   you: ["79,143,214", "138,180,255"],

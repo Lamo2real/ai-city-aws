@@ -1,7 +1,7 @@
 """The owner's personal features (City → Features in the HUD, ``docs/PRODUCT.md``).
 
 A feature is a built-in part of AI City the owner turns on or off. Rows: ``FEATURES`` / ``<id>`` →
-``{enabled, updated_at}``; a feature with no row has its default. New ones are asked for in AIC's chat."""
+``{enabled, updated_at}``; a feature with no row has its default. New ones are asked for in VAIC's chat."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-// AI workflows (docs/PRODUCT.md "AI workflows"): the walkthrough card under AIC's chat pages one step at a
+// AI workflows (docs/PRODUCT.md "AI workflows"): the walkthrough card under VAIC's chat pages one step at a
 // time, switches modes, points to Settings to connect, and "Yes, create it" is a chat message, not a spend call.
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -132,7 +132,7 @@ describe("workflow runs", () => {
     await waitFor(() => expect(screen.getByText("Step 1 of 3")).toBeTruthy());
     expect(calls.at(-1)?.body).toEqual({ to: "back" });
     show(run({ step: 2, updated_at: "2100-01-01T00:00:00Z" }));
-    expect(screen.getByText("AIC will ask")).toBeTruthy();
+    expect(screen.getByText("VAIC will ask")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(calls.at(-1)?.body).toEqual({ to: "done" }));
   });

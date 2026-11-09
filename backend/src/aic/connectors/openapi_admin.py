@@ -142,7 +142,7 @@ async def sync(d: ConnectorsDeps, id: str, specs: Any) -> Record | None:
         return rec
     key = (rec.get("openapi") or {}).get("spec_key")
     if not key:
-        return await _fail(d, id, "The API description isn't stored yet. Remove it and ask AIC again.")
+        return await _fail(d, id, "The API description isn't stored yet. Remove it and ask VAIC again.")
     await _set(d, id, {"status": "syncing"})
     try:
         spec = json.loads(await asyncio.to_thread(specs.get, key))

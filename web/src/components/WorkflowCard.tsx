@@ -1,7 +1,7 @@
-// The walkthrough card under AIC's chat (docs/PRODUCT.md "AI workflows"): the newest open workflow run in the
-// conversation. Guide mode shows one page at a time with Back / Next; do mode shows what AIC will create and, once
+// The walkthrough card under VAIC's chat (docs/PRODUCT.md "AI workflows"): the newest open workflow run in the
+// conversation. Guide mode shows one page at a time with Back / Next; do mode shows what VAIC will create and, once
 // everything is known, "Yes, create it", which is the owner's own words sent in the chat (nothing spends from a
-// click that bypasses AIC).
+// click that bypasses VAIC).
 import { useState } from "react";
 import { sendMessage } from "../lib/actions.ts";
 import { ApiError } from "../lib/api.ts";
@@ -27,7 +27,7 @@ function Inputs({ inputs }: { inputs: RunInput[] }) {
         <div key={i.key}>
           <dt>{i.label}</dt>
           <dd className={i.value ? undefined : "mute"}>
-            {i.value ?? "AIC will ask"}
+            {i.value ?? "VAIC will ask"}
             {i.value && i.assumed ? <span className="mute"> (my pick; change it below)</span> : null}
           </dd>
         </div>
@@ -163,7 +163,7 @@ function RunCard({ run }: { run: WorkflowRun }) {
   else if (run.next.kind === "confirm")
     body = (
       <>
-        <p>AIC will {run.spend ? "create" : "build"} this:</p>
+        <p>VAIC will {run.spend ? "create" : "build"} this:</p>
         <Inputs inputs={run.inputs} />
         {run.spend ? <p className="wf-spend">{run.spend.text}</p> : null}
         <Button variant="primary" onClick={() => sendMessage(CONFIRM_WORDS)}>
@@ -177,7 +177,7 @@ function RunCard({ run }: { run: WorkflowRun }) {
   else
     body = (
       <>
-        <p>{run.next.question ? `AIC is asking: ${run.next.question}` : run.summary}</p>
+        <p>{run.next.question ? `VAIC is asking: ${run.next.question}` : run.summary}</p>
         <Inputs inputs={run.inputs} />
         {run.mode === "do" ? (
           <Button variant="secondary" onClick={() => setMode("guide")}>

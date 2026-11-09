@@ -150,7 +150,7 @@ export function GrantList({ app }: { app: CityApp }) {
       {revoking ? (
         <Confirm
           title={`Stop ${title} from this?`}
-          what={`${capLabel(revoking) ?? revoking.id}. It stops with its next request. To allow it again, ask AIC to build the app again.`}
+          what={`${capLabel(revoking) ?? revoking.id}. It stops with its next request. To allow it again, ask VAIC to build the app again.`}
           cost="Nothing to pay; the app may show less."
           confirmLabel="Stop it"
           onCancel={() => setRevoking(null)}
@@ -193,7 +193,7 @@ export function SettingsApps() {
           ))}
         </ul>
       ) : (
-        <p className="mute">No apps yet. Ask AIC for one.</p>
+        <p className="mute">No apps yet. Ask VAIC for one.</p>
       )}
       <p className="mute">{`Up to ${MAX_PINS} apps fit in the top bar.`}</p>
     </>

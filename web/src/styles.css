@@ -23,7 +23,7 @@
   --focus: #2257c5;
   --amber: #f2b33d;
   --red: #d8392b;
-  --day: #fbf3e2; /* the AIC screen's daytime ground (the City's legend keeps it) */
+  --day: #fbf3e2; /* the VAIC screen's daytime ground (the City's legend keeps it) */
   --sheet: #fffdf7;
   --sky: #e7f0ff;
   --you: #2a56a8; /* the owner speaking */
@@ -633,7 +633,7 @@ main {
   color: var(--bad-l);
 }
 
-/* ---------- AIC ---------- */
+/* ---------- VAIC ---------- */
 .eyes {
   display: grid;
   justify-items: center;
@@ -663,13 +663,13 @@ main {
     animation: none;
   }
 }
-/* The AIC screen: the eye and the voice line on the lit night, the conversation in one glass sheet.
+/* The VAIC screen: the eye and the voice line on the lit night, the conversation in one glass sheet.
    Every text pair here passes WCAG AA (body ≥ 4.5:1, outlines and marks ≥ 3:1). */
 .view-ace main {
   background: transparent;
   color: var(--gtext);
 }
-/* On the AIC screen the top bar floats over the page and the chat panel runs up behind it, its messages
+/* On the VAIC screen the top bar floats over the page and the chat panel runs up behind it, its messages
    fading into the bar's glass (decision 108). `--top-h` is the bar's measured height (App.tsx). */
 .view-ace .top {
   position: absolute;
@@ -1021,7 +1021,7 @@ main {
   margin: var(--s3) var(--s4) 0;
 }
 .chat {
-  /* The containing block for the visually hidden "You:"/"AIC:" labels: without it they were placed relative to
+  /* The containing block for the visually hidden "You:"/"VAIC:" labels: without it they were placed relative to
      <main> and stretched its scroll area far below the chat into empty space. */
   position: relative;
   flex: 1;
@@ -1040,7 +1040,7 @@ main {
   color: var(--gmute);
   font-size: var(--fs-m);
 }
-/* Owner on the right in a blue glass bubble; AIC on the left as plain, full-width text. */
+/* Owner on the right in a blue glass bubble; VAIC on the left as plain, full-width text. */
 .msg {
   display: flex;
   flex-direction: column;
@@ -1147,7 +1147,7 @@ main {
   font-size: 14px;
   color: var(--bad-l);
 }
-/* AIC's turn before its first words: the eye blinking slowly, the step in silver with a soft shimmer, seconds. */
+/* VAIC's turn before its first words: the eye blinking slowly, the step in silver with a soft shimmer, seconds. */
 .msg-pending {
   min-height: 28px;
   justify-content: center;
@@ -1223,7 +1223,7 @@ main {
 .aic-steps li + li {
   margin-top: 2px;
 }
-/* Work AIC handed on is still running: the summary shimmers like the live status row, the clock counts. */
+/* Work VAIC handed on is still running: the summary shimmers like the live status row, the clock counts. */
 .aic-steps.is-running summary {
   gap: var(--s3);
   font-weight: 600;
@@ -1232,7 +1232,7 @@ main {
   color: var(--gtext);
   font-weight: 700;
 }
-/* A thin caret at the end of the words while AIC's reply is still coming in. */
+/* A thin caret at the end of the words while VAIC's reply is still coming in. */
 .msg-ace.is-streaming .msg-body > :is(p, h3, h4, h5, h6):last-child::after,
 .msg-ace.is-streaming .msg-body > :is(ul, ol):last-child > li:last-child::after {
   content: "";
@@ -1344,7 +1344,7 @@ main {
   min-height: 0;
 }
 /* While the voice conversation is on: the page stays as it is (the owner, 2026-11-09: no dark backdrop), and the
-   aurora (VoiceVisualizer.tsx) rises from the message box: blue for you, amber for AIC, its crest following how
+   aurora (VoiceVisualizer.tsx) rises from the message box: blue for you, amber for VAIC, its crest following how
    loud the voice is. The bars are not shown; the badge and who is talking sit on the light. */
 .voice-bare {
   position: relative;
@@ -5015,7 +5015,7 @@ summary,
   overflow-wrap: anywhere;
 }
 
-/* Autopilot: "While you were away" at the top of AIC's screen (its clock in the panel's top-left corner), and the
+/* Autopilot: "While you were away" at the top of VAIC's screen (its clock in the panel's top-left corner), and the
    standing orders in Settings → While I'm away. Calm: no badges, no red. */
 .talk-away {
   position: absolute;

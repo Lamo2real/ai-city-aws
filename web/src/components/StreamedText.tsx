@@ -1,4 +1,4 @@
-// AIC's reply as it streams: the text arriving from the server (in ~80 ms batches) is revealed at a steady
+// VAIC's reply as it streams: the text arriving from the server (in ~80 ms batches) is revealed at a steady
 // pace, like typing, catching up when it falls behind. Half-arrived Markdown is held back so nothing flickers
 // (an unclosed **bold** or `code`, a table row still arriving, a table header before its rule line). When the
 // reply is done it snaps to the final text. With prefers-reduced-motion the text appears directly.

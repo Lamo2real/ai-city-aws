@@ -1,4 +1,4 @@
-"""AIC's real-time voice (decision 120): Nova 2 Sonic as the voice, AIC as the brain, with a fake Bedrock stream."""
+"""VAIC's real-time voice (decision 120): Nova 2 Sonic as the voice, VAIC as the brain, with a fake Bedrock stream."""
 
 import asyncio
 import json
@@ -72,7 +72,7 @@ class Rig:
             send_client=send,
             ask_aic=ask,
             open_stream=open_stream,
-            system_prompt="You are the voice of AIC.",
+            system_prompt="You are the voice of VAIC.",
             candidates=[("nova-2", "eu-north-1"), ("nova-2", "us-east-1"), ("nova-1", "eu-north-1")],
             clock=lambda: self.now,
         )
@@ -121,7 +121,7 @@ async def test_it_opens_sonic_with_aic_as_its_only_tool_and_streams_the_mic_in()
     assert start["audioOutputConfiguration"]["sampleRateHertz"] == 24000
     assert r.stream.sent[0]["sessionStart"]["turnDetectionConfiguration"]["endpointingSensitivity"] == "MEDIUM"
     system = next(e for e in r.stream.sent if "textInput" in e)["textInput"]["content"]
-    assert system == "You are the voice of AIC."
+    assert system == "You are the voice of VAIC."
     assert r.stream.sent[-1]["contentStart"]["type"] == "AUDIO"
     await r.s.on_client({"type": "audio", "data": "AAAA"})
     assert r.stream.sent[-1] == {
@@ -143,7 +143,7 @@ async def test_a_spoken_request_goes_to_aic_and_its_answer_comes_back_to_sonic()
     assert json.loads(tr["content"]) == {"answer": "Two departments are busy."}
     start = next(e for e in r.stream.sent if e.get("contentStart", {}).get("type") == "TOOL")["contentStart"]
     assert start["toolResultInputConfiguration"]["toolUseId"] == "tu-1"
-    # Sonic says it; the final text is marked as AIC's answer for the chat.
+    # Sonic says it; the final text is marked as VAIC's answer for the chat.
     await say(
         r,
         {"contentStart": {"role": "ASSISTANT", "additionalModelFields": '{"generationStage":"FINAL"}'}},
@@ -212,7 +212,7 @@ def test_the_voice_prompt_keeps_aic_the_brain() -> None:
     assert p.tools == ["ask_aic"]
     body = p.body
     assert "Never answer facts, status, plans, numbers or tasks from your own knowledge" in body
-    assert "[status]" in body and "stop at once and listen" in body and '"Ace"' in body
+    assert "[status]" in body and "stop at once and listen" in body and '"Vice"' in body
 
 
 def test_the_runtime_serves_the_voice_on_ws() -> None:

@@ -1,5 +1,5 @@
 // Voice behind one small interface. Production: Amazon Transcribe streaming (speech → text, with a
-// custom vocabulary for "AIC") and Amazon Polly (text → speech, neural voice), both called
+// custom vocabulary for "VAIC") and Amazon Polly (text → speech, neural voice), both called
 // from the browser with short-lived credentials from a Cognito identity pool scoped to those two
 // actions only. Tests inject a fake on window.__aicVoice. Transcribe and Polly are AWS speech
 // services, not language models.
@@ -34,12 +34,12 @@ export interface Voice {
   prime?(): void;
   /** Says a whole text at once (fakes; and the fallback when synth/play are missing). */
   speak(text: string): Promise<void>;
-  /** One sentence to audio, and playing a clip: AIC's replies are spoken sentence by sentence with these.
+  /** One sentence to audio, and playing a clip: VAIC's replies are spoken sentence by sentence with these.
    *  `onBegin` fires when sound really starts, so the HUD can show "speaking" only while audio plays. */
   synth?(text: string): Promise<Blob | null>;
   play?(clip: Blob, onBegin?: () => void): Promise<void>;
   stopSpeaking(): void;
-  /** Loudness right now, 0..1: the owner's microphone and AIC's spoken reply. Drives the voice visualizer. */
+  /** Loudness right now, 0..1: the owner's microphone and VAIC's spoken reply. Drives the voice visualizer. */
   levels?(): { input: number; output: number };
 }
 
@@ -111,22 +111,22 @@ export function micProblem(e: unknown): string {
 /** Logs the real error so it can be diagnosed in the browser console. Never logs tokens. */
 export function logVoiceError(where: string, e: unknown) {
   const err = e as { name?: string; message?: string; $metadata?: unknown } | null;
-  console.error(`[AIC voice] ${where}:`, err?.name ?? "Error", err?.message ?? "", err?.$metadata ?? "", e);
+  console.error(`[VAIC voice] ${where}:`, err?.name ?? "Error", err?.message ?? "", err?.$metadata ?? "", e);
 }
 
 const named = (name: string, message: string) => Object.assign(new Error(message), { name });
 
-/** Plain words for why AIC's reply could not be spoken (Polly or its playback), shown on the voice line. */
+/** Plain words for why VAIC's reply could not be spoken (Polly or its playback), shown on the voice line. */
 export function speakProblem(e: unknown): string {
   const name = (e as { name?: string } | null)?.name ?? "";
   if (name === "AudioPlayError" || name === "NotAllowedError")
     return "The browser blocked the sound until you tap something. Tap the mic and ask again.";
-  if (name === "SignedOut") return "AIC's voice needs a fresh sign-in. Sign out and in again.";
+  if (name === "SignedOut") return "VAIC's voice needs a fresh sign-in. Sign out and in again.";
   if (name === "AudioSuspended") return "The browser kept sound paused. Tap the mic once, then ask again.";
   if (name === "EmptyAudio") return "The speech service returned no audio. Try another voice in Settings.";
   if (name === "DecodeError") return "The reply's audio arrived, but this browser could not decode it.";
   if (name === "OpenAiVoice") return `OpenAI's voice could not speak: ${(e as Error).message}`;
-  return `AIC's voice could not play (${name || "Error"}${awsSays(e)}). The text above is the answer; typing still works.`;
+  return `VAIC's voice could not play (${name || "Error"}${awsSays(e)}). The text above is the answer; typing still works.`;
 }
 
 declare global {
@@ -214,7 +214,7 @@ class AwsVoice implements Voice {
   private outBuf: Float32Array<ArrayBuffer> | null = null;
   private outFallback = false;
   /** A media element unlocked inside the owner's tap (Safari then lets it play later, without a gesture): the
-   *  second way to play AIC's voice when Safari has paused the Web Audio context, e.g. after the microphone
+   *  second way to play VAIC's voice when Safari has paused the Web Audio context, e.g. after the microphone
    *  opened (the owner heard nothing, 2026-11-09). */
   private el: HTMLAudioElement | null = null;
   private elUrl: string | null = null;
@@ -242,7 +242,7 @@ class AwsVoice implements Voice {
       // play at any later moment, which a fresh, un-gestured element would not be allowed to do.
       this.outCtx ??= new AudioContext();
       void this.outCtx.resume().catch(() => undefined);
-      // A new tap tries AIC's own voice again, even if this visit fell back to the browser's once.
+      // A new tap tries VAIC's own voice again, even if this visit fell back to the browser's once.
       try {
         sessionStorage.removeItem("aic.voice.tts");
       } catch {
@@ -434,7 +434,7 @@ class AwsVoice implements Voice {
     };
   }
 
-  /** The analyser every clip plays through, so the voice line can follow AIC's loudness. Built once. */
+  /** The analyser every clip plays through, so the voice line can follow VAIC's loudness. Built once. */
   private ensureMeter(ctx: AudioContext): AudioNode {
     if (!this.meterNode) {
       try {

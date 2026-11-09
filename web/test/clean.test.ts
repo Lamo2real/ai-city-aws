@@ -27,10 +27,19 @@ describe("the owner's words without the stumbles", () => {
     expect(cleanSpeech("Ahmed and Erik have a meeting with Humana")).toBe("Ahmed and Erik have a meeting with Humana");
     expect(cleanSpeech("That that is fine")).toBe("That is fine");
   });
-  it("Ace, heard or spelled, is always written AIC; quoted words stay", () => {
-    expect(cleanSpeech("Hey Ace, what's the status?")).toBe("Hey AIC, what's the status?");
-    expect(cleanSpeech("ace can you check A C E's tasks")).toBe("AIC can you check AIC's tasks");
-    expect(cleanSpeech("A-C-E, ship it")).toBe("AIC, ship it");
+  it("Vice, heard or spelled, is always written VAIC; ordinary uses of the word stay (the rebrand, 2026-11-09)", () => {
+    expect(cleanSpeech("Hey Vice, what's the status?")).toBe("Hey VAIC, what's the status?");
+    expect(cleanSpeech("yo vice can you check V A I C's tasks")).toBe("yo VAIC can you check VAIC's tasks");
+    expect(cleanSpeech("the vice president said it's vice versa")).toBe("the vice president said it's vice versa");
+    expect(cleanSpeech("like Vice City in GTA")).toBe("like Vice City in GTA");
+    expect(cleanSpeech("AIC, ship it")).toBe("VAIC, ship it");
+    expect(cleanSpeech('Name the button "Vice"')).toBe('Name the button "Vice"');
+    expect(cleanSpeech("advice and device stay")).toBe("advice and device stay");
+  });
+  it("Ace, heard or spelled, is always written VAIC; quoted words stay", () => {
+    expect(cleanSpeech("Hey Ace, what's the status?")).toBe("Hey VAIC, what's the status?");
+    expect(cleanSpeech("ace can you check A C E's tasks")).toBe("VAIC can you check VAIC's tasks");
+    expect(cleanSpeech("A-C-E, ship it")).toBe("VAIC, ship it");
     expect(cleanSpeech('Name the button "Ace"')).toBe('Name the button "Ace"');
     expect(cleanSpeech("Grace and Candace are here")).toBe("Grace and Candace are here");
   });

@@ -1,4 +1,4 @@
-// Raw audio for AIC's real-time voice (decision 120): the microphone goes out as 16 kHz 16-bit mono PCM,
+// Raw audio for VAIC's real-time voice (decision 120): the microphone goes out as 16 kHz 16-bit mono PCM,
 // Nova Sonic's speech comes back as 24 kHz 16-bit mono PCM, both base64 in JSON frames.
 
 /** Averages the microphone's samples down to 16 kHz and turns them into 16-bit integers. */

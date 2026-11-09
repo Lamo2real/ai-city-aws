@@ -1,4 +1,4 @@
-"""AIC's real-time voice on OpenAI GPT-Live (decision 128): the API opens the call with the owner's key."""
+"""VAIC's real-time voice on OpenAI GPT-Live (decision 128): the API opens the call with the owner's key."""
 
 import json
 
@@ -23,7 +23,7 @@ async def test_the_offer_goes_to_gpt_live_with_client_delegation_and_the_answer_
     assert call["headers"]["Authorization"] == f"Bearer {KEY}"
     s = call["body"]["session"]
     assert s["model"] == "gpt-live-1"
-    assert s["delegation"] == {"type": "client"}  # GPT-Live only speaks; AIC answers
+    assert s["delegation"] == {"type": "client"}  # GPT-Live only speaks; VAIC answers
     assert '"Sir"' in s["instructions"] and "Delegate everything" in s["instructions"]
     assert call["body"]["transport"] == {"type": "webrtc", "sdp": OFFER}
 

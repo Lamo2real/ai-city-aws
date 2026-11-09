@@ -1,7 +1,7 @@
 """The executives Lambda (decision 140): the optional scheduled reviews, and nothing else.
 
 Every hour EventBridge sends ``{"job": "reviews"}``. Only reviews the owner switched on in Settings → Executives
-run (all are off by default), each when it is due; a review is a short report in AIC's chat and never starts work.
+run (all are off by default), each when it is due; a review is a short report in VAIC's chat and never starts work.
 With every review off, the function reads one ledger record and returns.
 """
 

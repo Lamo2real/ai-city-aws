@@ -1,4 +1,4 @@
-// Autopilot, against the mocked backend: there is no Needs you tab and nothing nags; AIC's screen opens with
+// Autopilot, against the mocked backend: there is no Needs you tab and nothing nags; VAIC's screen opens with
 // "While you were away" after more than 12 hours away (and from the clock any time) with one button per thing only
 // the owner can do; the Chief of Staff's decisions are under Work → "Decided for you"; Settings → While I'm away
 // holds the Autopilot switch, the standing orders and the open items from before. A backend without these routes
@@ -100,7 +100,7 @@ async function setup(page: Page): Promise<Mock> {
   return m;
 }
 
-test("back after two days: AIC opens with While you were away, calm, with one button per thing only you can do", async ({
+test("back after two days: VAIC opens with While you were away, calm, with one button per thing only you can do", async ({
   page,
 }) => {
   const m = await setup(page);
@@ -138,7 +138,7 @@ test("here an hour ago: no panel by itself, but the clock opens it; Close hides 
   await setup(page);
   await awayFor(page, 1);
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Talk to AIC" })).toBeAttached();
+  await expect(page.getByRole("heading", { name: "Talk to VAIC" })).toBeAttached();
   await expect(page.getByRole("region", { name: "While you were away" })).toHaveCount(0);
   await page.getByRole("button", { name: "While you were away" }).click();
   const panel = page.getByRole("region", { name: "While you were away" });
@@ -202,7 +202,7 @@ test("Settings → While I'm away: Autopilot, standing orders in plain words, an
   await page.getByRole("link", { name: "‹ While I'm away" }).click();
   await expect(page).toHaveURL(/#\/settings\/away$/);
 
-  // Add opens AIC's chat with the words started.
+  // Add opens VAIC's chat with the words started.
   await page.getByRole("button", { name: "Add a standing order" }).click();
   await expect(page.getByRole("textbox", { name: /message/i })).toHaveValue("While I'm away, ");
 });
@@ -236,7 +236,7 @@ test("without these routes on the backend (404) nothing about them shows and not
   await mockBackend(page);
   await awayFor(page, 48);
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Talk to AIC" })).toBeAttached();
+  await expect(page.getByRole("heading", { name: "Talk to VAIC" })).toBeAttached();
   await expect(page.getByRole("button", { name: "While you were away" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "While you were away" })).toHaveCount(0);
   await page.goto("/#/tickets/decided");

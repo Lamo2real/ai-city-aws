@@ -132,7 +132,7 @@ async def test_a_worker_gets_only_the_connectors_on_its_hire() -> None:
     assert await turn_connector_tools(client, store, MemoryBus(), "manager", None) == []  # role not listed
 
 
-# ---------- gating on AIC's direct path ----------
+# ---------- gating on VAIC's direct path ----------
 def gw_spec(name: str, ask: str | None, ran: list[str]) -> ToolSpec:
     async def run(args: dict[str, Any]) -> str:
         ran.append(name)

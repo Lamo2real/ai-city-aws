@@ -4,7 +4,7 @@ One fixed, read-only document, ``kn-builtin-guide``: ``agents/help/app_guide.md`
 knowledge base's own folder (``normalized/builtin/``) and indexed straight into the vector store, so every agent can
 search it like any other document. It is not made through the item pipeline and it can't be changed, rescoped or
 deleted; the Knowledge tab shows it with a "Built in" label. When the guide changes, the PDF is rebuilt and indexed
-again. AIC also carries the guide in its instructions, so "how do I…" never waits on the index.
+again. VAIC also carries the guide in its instructions, so "how do I…" never waits on the index.
 """
 
 from __future__ import annotations
@@ -90,7 +90,7 @@ def _uri(bucket: str) -> str:
 
 async def ensure_builtin_guide(store: Any, blobs: Any, kb: Any) -> dict[str, Any] | None:
     """Makes sure the guide is in the Knowledge base and reports how far its indexing is. Never raises: the guide
-    still reaches AIC through its instructions. Returns the record, or None without a knowledge base."""
+    still reaches VAIC through its instructions. Returns the record, or None without a knowledge base."""
     if store is None or blobs is None or kb is None:
         return None
     try:

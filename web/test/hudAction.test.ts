@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { hudAction } from "../src/lib/hudAction.ts";
 
-describe("hud.action from AIC", () => {
+describe("hud.action from VAIC", () => {
   beforeEach(() => {
     localStorage.clear();
     window.location.hash = "#/ace";

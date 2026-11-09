@@ -1,4 +1,4 @@
-// A small Markdown renderer for AIC's replies: headings, paragraphs, bullet and numbered lists, tables,
+// A small Markdown renderer for VAIC's replies: headings, paragraphs, bullet and numbered lists, tables,
 // code blocks and inline **bold**, *italic*, `code` and [links](https://…). It builds React elements only
 // (never raw HTML), so a reply cannot inject markup or scripts. Links open only for http(s) addresses.
 import type { ReactNode } from "react";

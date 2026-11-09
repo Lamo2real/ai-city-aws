@@ -1,5 +1,5 @@
 // City → Features → Calendar (docs/MAIL_CALENDAR.md §12): the date logic in the owner's time zone, the Join
-// button's rules, and the Features gallery (on/off, "Add a feature" through AIC).
+// button's rules, and the Features gallery (on/off, "Add a feature" through VAIC).
 process.env.TZ = "Europe/Stockholm";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -114,7 +114,7 @@ describe("the Features gallery", () => {
   });
   afterEach(cleanup);
 
-  it("lists Calendar with its switch, and Add a feature opens AIC with a started sentence", async () => {
+  it("lists Calendar with its switch, and Add a feature opens VAIC with a started sentence", async () => {
     const go = vi.fn();
     render(<FeaturesScreen page="features" go={go} />);
     const sw = await screen.findByRole("switch", { name: "Calendar on or off" });

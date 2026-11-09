@@ -6,7 +6,7 @@
 //   has none of this yet: the HUD shows nothing about it.
 import { api, ApiError } from "./api.ts";
 
-/** Long enough away that AIC's screen opens with "While you were away". */
+/** Long enough away that VAIC's screen opens with "While you were away". */
 export const AWAY_MS = 12 * 3600_000;
 const SEEN = "aic.lastSeen";
 
@@ -156,7 +156,7 @@ export const setOrder = (id: string, patch: Partial<StandingOrder>) =>
   api(`/standing-orders/${encodeURIComponent(id)}`, { method: "PUT", body: patch });
 export const deleteOrder = (id: string) => api(`/standing-orders/${encodeURIComponent(id)}`, { method: "DELETE" });
 
-/** "Add" a standing order: AIC's chat opens with the words started. */
+/** "Add" a standing order: VAIC's chat opens with the words started. */
 export const ADD_PROMPT = "While I'm away, ";
 export function startOrderInChat() {
   try {

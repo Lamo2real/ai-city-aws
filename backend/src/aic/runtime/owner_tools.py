@@ -1,4 +1,4 @@
-"""AIC does anything the owner can do in AI City (the owner, 2026-11-09, decision 143).
+"""VAIC does anything the owner can do in AI City (the owner, 2026-11-09, decision 143).
 
 ``city_api`` runs any HUD route as the owner (read and write: settings, connectors, departments, knowledge, skills,
 standing orders, apps, mail, calendar…) through the API's own code and checks. ``hud_action`` does what lives on the

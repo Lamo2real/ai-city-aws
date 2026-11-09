@@ -54,7 +54,7 @@ class TicketRecord(_M):
     result: str | None = None
     review_rounds: float = 0
     conversation: str | None = None
-    """AIC's conversation the task came from, so the result is spoken back there."""
+    """VAIC's conversation the task came from, so the result is spoken back there."""
     standing_order: str | None = None
     """The standing order that started this job (decision 125); None for the owner's own jobs."""
     created_at: str
@@ -342,7 +342,7 @@ class AceReply(_E):
 
 
 class AceQuestion(_E):
-    """AIC asks the owner a multiple-choice question: the HUD shows the options as tappable chips, and a tap
+    """VAIC asks the owner a multiple-choice question: the HUD shows the options as tappable chips, and a tap
     comes back as an ordinary owner message in the same conversation."""
 
     type: Literal["ace.question"]
@@ -352,7 +352,7 @@ class AceQuestion(_E):
 
 
 class HudAction(_E):
-    """AIC changes something that lives on the owner's device (decision 143): ``theme`` (light, dark, system) or
+    """VAIC changes something that lives on the owner's device (decision 143): ``theme`` (light, dark, system) or
     ``open`` (bring a HUD page up). Every open HUD applies it."""
 
     type: Literal["hud.action"]

@@ -1,4 +1,4 @@
-// City → Features: the owner's personal features (a gallery, on/off, "Add a feature" through AIC), and the first
+// City → Features: the owner's personal features (a gallery, on/off, "Add a feature" through VAIC), and the first
 // one, the Calendar: every meeting from every connected account in one place, with a big Join button.
 // Read-only: nothing here accepts, declines or changes a meeting (docs/MAIL_CALENDAR.md §12).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -103,7 +103,7 @@ function FeatureGallery({ go }: { go: (v: string) => void }) {
     try {
       localStorage.setItem("aic.draft", ADD_DRAFT);
     } catch {
-      /* AIC still opens */
+      /* VAIC still opens */
     }
     go("ace");
   };
@@ -151,7 +151,7 @@ function FeatureGallery({ go }: { go: (v: string) => void }) {
               </span>
               <span className="feature-name">Add a feature</span>
               <span className="feature-blurb">
-                Tell AIC what you'd like, in your own words. "A feature that…" is enough.
+                Tell VAIC what you'd like, in your own words. "A feature that…" is enough.
               </span>
             </button>
           </li>
@@ -620,7 +620,7 @@ function MeetingSheet({ m, onClose, now }: { m: Meeting; onClose: () => void; no
         </dl>
         {m.description ? <p className="mt-notes">{m.description}</p> : null}
         <p className="mute small">
-          AI City only shows your meetings. To answer or change one, ask AIC, and it checks with you first.
+          AI City only shows your meetings. To answer or change one, ask VAIC, and it checks with you first.
         </p>
         <div className="row-end">
           <Button variant="quiet" onClick={onClose}>

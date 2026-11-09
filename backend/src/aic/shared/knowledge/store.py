@@ -28,7 +28,7 @@ class KnowledgeStore:
 
     # ---------- items ----------
     async def create_item(self, item: dict[str, Any]) -> dict[str, Any]:
-        """The record only: the graph node appears when the pipeline starts (AIC may not write the graph)."""
+        """The record only: the graph node appears when the pipeline starts (VAIC may not write the graph)."""
         at = self.now_iso()
         rec = {
             "status": "uploading",

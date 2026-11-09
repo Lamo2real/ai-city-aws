@@ -1,4 +1,4 @@
-// The connect cards under AIC's chat, shared by connectors and mail accounts (MAIL_CALENDAR.md §7):
+// The connect cards under VAIC's chat, shared by connectors and mail accounts (MAIL_CALENDAR.md §7):
 // a sign-in button, a secure key field, the app-password form, and the add-connector approval.
 // Keys and passwords go straight to the API in their own request; they never enter the chat or the store.
 import { useState, type FormEvent } from "react";

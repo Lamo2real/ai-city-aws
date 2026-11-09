@@ -32,7 +32,7 @@ class EngineRequest:
     ctx: TurnCtx
     ledger: Ledger
     on_text: Callable[[str], Awaitable[None]] | None = None
-    """Text as it streams, for AIC's spoken replies."""
+    """Text as it streams, for VAIC's spoken replies."""
     on_needs_approval: Callable[[str, dict[str, Any], str, str], Awaitable[None]] | None = None
     """Called when a built-in tool call needs the owner's approval for this exact action (tool, input, hash, reason)."""
     on_activity: Callable[[str, str | None], Awaitable[None]] | None = None
@@ -228,7 +228,7 @@ async def _consume(messages: AsyncIterator[Any], req: EngineRequest, b: _Binding
 
 
 async def sdk_engine(req: EngineRequest) -> TurnOutput:
-    """The production engine: the Claude Agent SDK, on Bedrock, with the city tools in-process. AIC, which has
+    """The production engine: the Claude Agent SDK, on Bedrock, with the city tools in-process. VAIC, which has
     only city tools and must answer within seconds, talks to Bedrock directly instead (see ``direct``)."""
     if req.ctx.role == "ace" and not req.builtins:
         from .direct import direct_engine

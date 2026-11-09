@@ -5,8 +5,8 @@ import { store } from "../src/lib/store.ts";
 afterEach(() => store.set({ chat: [], turn: null, presence: "idle" }));
 const ev = (activity: string, detail?: string) => store.event({ type: "activity", id: "ace", activity, detail });
 
-describe("AIC's steps in plain words", () => {
-  it("names the tool AIC used, else the activity, and skips idle", () => {
+describe("VAIC's steps in plain words", () => {
+  it("names the tool VAIC used, else the activity, and skips idle", () => {
     expect(stepWords("working", "get_status")).toBe("Checking how things are going");
     expect(stepWords("delegating", "delegate_to_orchestrator")).toBe("Passing this to my team");
     expect(stepWords("working", "mcp__city__list_notes")).toBe("Reading your notes");
@@ -16,12 +16,12 @@ describe("AIC's steps in plain words", () => {
     expect(stepWords("something_new")).toBe("Working on it");
     expect(stepWords("idle")).toBeNull();
   });
-  it("collects the turn's steps without repeats and puts them on AIC's reply", () => {
+  it("collects the turn's steps without repeats and puts them on VAIC's reply", () => {
     store.beginTurn();
     ev("understanding");
     ev("working", "get_status");
     ev("working", "get_status");
-    store.event({ type: "activity", id: "orchestrator", activity: "delegating" }); // not AIC's step
+    store.event({ type: "activity", id: "orchestrator", activity: "delegating" }); // not VAIC's step
     ev("idle");
     expect(store.get().turn?.steps).toEqual(["Understanding your message", "Checking how things are going"]);
     store.event({ type: "ace.reply", conversation: "main", text: "All quiet.", done: true });

@@ -1,5 +1,5 @@
-// The + menu's brains (docs/PRODUCT.md, "The + menu"): slash commands that become plain sentences for AIC,
-// and files attached to a message, which go into the knowledge base so AIC can read them. Pure functions
+// The + menu's brains (docs/PRODUCT.md, "The + menu"): slash commands that become plain sentences for VAIC,
+// and files attached to a message, which go into the knowledge base so VAIC can read them. Pure functions
 // (tested); the menu itself is in components/PlusMenu.tsx.
 import type { KnowledgeItem } from "./api.ts";
 import { listConnectors, listSkills, type Connector, type Skill } from "./connect.ts";
@@ -9,7 +9,7 @@ export interface SlashCommand {
   name: string;
   /** What it does, in the menu. */
   hint: string;
-  /** What AIC is sent; `$1` is the words typed after the command. Null: handled by the HUD itself (/clear). */
+  /** What VAIC is sent; `$1` is the words typed after the command. Null: handled by the HUD itself (/clear). */
   says: string | null;
   /** Named when the command needs words after it ("service" for /connect). */
   arg?: string;
@@ -81,10 +81,10 @@ export function folderFiles(list: File[]): { files: File[]; hidden: number; skip
   };
 }
 
-/** A message may go once every attachment has left the browser (processing can finish while AIC reads). */
+/** A message may go once every attachment has left the browser (processing can finish while VAIC reads). */
 export const sendable = (items: KnowledgeItem[]) => items.every((i) => i.status !== "uploading");
 
-/** The line under a message that names what was attached, so AIC knows where to look. */
+/** The line under a message that names what was attached, so VAIC knows where to look. */
 export function attachedLine(items: KnowledgeItem[]): string {
   const one = (i: KnowledgeItem) => {
     const state =

@@ -1,4 +1,4 @@
-// On a phone: AIC is the default, the mic is in reach, the City fits and the money is visible.
+// On a phone: VAIC is the default, the mic is in reach, the City fits and the money is visible.
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { appRecord, hired, mockBackend } from "./mock.ts";
@@ -11,21 +11,21 @@ async function noSeriousA11y(page: Page, label: string) {
   expect(bad.map((v) => `${label}: ${v.id} — ${v.nodes.map((n) => n.target.join(" ")).join(" | ")}`)).toEqual([]);
 }
 
-test("phone: AIC and the City work at 412px wide", async ({ page }) => {
+test("phone: VAIC and the City work at 412px wide", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/");
-  await expect(page.getByRole("textbox", { name: "Message to AIC" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Message to VAIC" })).toBeVisible();
   await expect(page.getByText(/Today: \$/)).toHaveCount(0); // costs live on the Costs screen only
-  const mic = page.getByRole("button", { name: "Talk to AIC", exact: true });
+  const mic = page.getByRole("button", { name: "Talk to VAIC", exact: true });
   const box = (await mic.boundingBox())!;
   expect(box.height).toBeGreaterThanOrEqual(44);
   await expect(page.locator(".ace-stage")).toHaveCount(0); // only the chat, no voice column
-  await expect(page.getByRole("button", { name: "Send to AIC" })).toBeInViewport({ ratio: 1 }); // wholly on screen
+  await expect(page.getByRole("button", { name: "Send to VAIC" })).toBeInViewport({ ratio: 1 }); // wholly on screen
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: `${SHOTS}/phone-ace.png` });
-  await noSeriousA11y(page, "AIC at 412px");
-  await page.getByRole("textbox", { name: "Message to AIC" }).fill("what's going on in the city today?");
-  await page.getByRole("button", { name: "Send to AIC" }).click();
+  await noSeriousA11y(page, "VAIC at 412px");
+  await page.getByRole("textbox", { name: "Message to VAIC" }).fill("what's going on in the city today?");
+  await page.getByRole("button", { name: "Send to VAIC" }).click();
   m.send({
     type: "ace.reply",
     conversation: "main",
@@ -90,7 +90,7 @@ test("phone: Apps, an app page and a publish preview fit at 412px wide", async (
   await expect(page.getByRole("link", { name: "← Projects" })).toBeInViewport();
   await expect(page.getByRole("button", { name: "Remove" })).toBeInViewport();
   // On a phone the chat comes first and the preview is the tab beside it.
-  await expect(page.getByRole("textbox", { name: "Message AIC about Star Sweeper" })).toBeInViewport();
+  await expect(page.getByRole("textbox", { name: "Message VAIC about Star Sweeper" })).toBeInViewport();
   await page.getByRole("tab", { name: "Preview" }).click();
   const frame = (await page.locator("iframe.appframe").boundingBox())!;
   expect(frame.width).toBeGreaterThanOrEqual(page.viewportSize()!.width - 1);
@@ -162,7 +162,7 @@ test("phone: the + menu opens upwards inside the screen and its rows are easy to
   for (const item of await menu.getByRole("menuitem").all())
     expect((await item.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await page.screenshot({ path: `${SHOTS}/phone-plus-menu.png` });
-  await noSeriousA11y(page, "AIC at 412px with the + menu open");
+  await noSeriousA11y(page, "VAIC at 412px with the + menu open");
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
   await expect(plus).toBeFocused();

@@ -94,7 +94,7 @@ describe("Settings → GitHub", () => {
   });
 });
 
-describe("AIC's terminal in the chat", () => {
+describe("VAIC's terminal in the chat", () => {
   it("shows the running command as the step, and a github.com sign-in card offers a token instead", () => {
     expect(stepWords("running", "Running: git push origin main")).toBe("Running: git push origin main");
     expect(stepWords("running", "run_command")).toBe("Working on it");

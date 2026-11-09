@@ -51,13 +51,13 @@ class CityDeps:
     resolve: Any = None
     """DNS for the connector URL check (an ``aic.shared.connectors.Resolver``); None = the system's."""
     utility_runner: Any = None
-    """A ``ModelRunner`` for the utility model (AIC's quick triage before delegating); None = always delegate."""
+    """A ``ModelRunner`` for the utility model (VAIC's quick triage before delegating); None = always delegate."""
     advisor_runner: Any = None
-    """A ``ModelRunner`` for the executives (decision 140), on AIC's and the Orchestrator's runtimes; None = no
+    """A ``ModelRunner`` for the executives (decision 140), on VAIC's and the Orchestrator's runtimes; None = no
     executive tools."""
     owner_api: Any = None
-    """AIC's door to the HUD's own API (decision 143): an async ``(call: {method, path, body}) -> response`` that
-    runs one route as the owner; None = not wired (only AIC's runtime has it)."""
+    """VAIC's door to the HUD's own API (decision 143): an async ``(call: {method, path, body}) -> response`` that
+    runs one route as the owner; None = not wired (only VAIC's runtime has it)."""
 
 
 FINAL = ("done", "failed", "cancelled")
@@ -92,7 +92,7 @@ STAND_DOWN_NOTE = "The owner sent everyone home; do not hire or assign anything 
 
 
 async def send_home(d: CityDeps, workers: list[Record]) -> dict[str, int]:
-    """The owner's "send him home" for some workers (one clicked in the City, or the ones AIC picked): each
+    """The owner's "send him home" for some workers (one clicked in the City, or the ones VAIC picked): each
     one's open assignments are cancelled with a note for its manager and the worker is released (one
     `agent.retired` each, so the City walks it out). Nobody is woken or re-hired for the dropped parts: the job
     stays as it is with fewer hands, and the owner starts a new job if they want it done. Managers, jobs and

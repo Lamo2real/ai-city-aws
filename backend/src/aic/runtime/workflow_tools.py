@@ -1,8 +1,8 @@
-"""AIC's tools for AI workflows (decision 126, ``aic.shared.workflows``).
+"""VAIC's tools for AI workflows (decision 126, ``aic.shared.workflows``).
 
-AIC recognises a workflow (the turn's prompt names it), the owner says yes (or asked for it directly), then AIC
+VAIC recognises a workflow (the turn's prompt names it), the owner says yes (or asked for it directly), then VAIC
 either walks them through it page by page or, in ``do`` mode, hands it to the Orchestrator with a brief once every
-input is known and the owner said yes to the money shown. Every tool answers with the one next thing AIC says, so
+input is known and the owner said yes to the money shown. Every tool answers with the one next thing VAIC says, so
 it never asks for something twice. All of them pass the policy gate like every city tool (``gate_tools``).
 """
 
@@ -31,7 +31,7 @@ emit = jobs.emit
 
 
 async def next_words(d: CityDeps, c: TurnCtx, runs: wf.Runs, run: dict[str, Any], w: dict[str, Any]) -> str:
-    """Records what is being asked, shows it on the owner's screen, and tells AIC the one thing to say."""
+    """Records what is being asked, shows it on the owner's screen, and tells VAIC the one thing to say."""
     conn = await _conn(d, w)
     need = wf.next_need(run, w, bool(conn["connected"]))
     kind = need["kind"]
@@ -287,7 +287,7 @@ def workflow_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             stop,
         ),
         ToolSpec(
-            "list_workflows", "The workflows AIC knows, and whether their connector is set up.", _obj({}), listing
+            "list_workflows", "The workflows VAIC knows, and whether their connector is set up.", _obj({}), listing
         ),
     ]
 

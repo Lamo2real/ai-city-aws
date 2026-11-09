@@ -1,16 +1,16 @@
-"""AIC's real-time voice (decision 120): Amazon Nova 2 Sonic as the voice, AIC as the brain.
+"""VAIC's real-time voice (decision 120): Amazon Nova 2 Sonic as the voice, VAIC as the brain.
 
-The browser opens a WebSocket to AIC's own AgentCore runtime (``/ws``, a presigned URL from ``POST /voice/session``)
+The browser opens a WebSocket to VAIC's own AgentCore runtime (``/ws``, a presigned URL from ``POST /voice/session``)
 and streams microphone audio. This module keeps one Nova 2 Sonic bidirectional stream per connection: Sonic hears,
 takes turns (it knows when the owner has finished), speaks, and stops the moment the owner talks over it (barge-in).
-It never answers on its own: every real request goes to the one tool it has, ``ask_aic``, which runs a normal AIC turn
+It never answers on its own: every real request goes to the one tool it has, ``ask_aic``, which runs a normal VAIC turn
 in this same process (same model, tools, ledger and departments), and Sonic speaks the answer.
 
 Browser → relay (JSON text frames): ``{"type": "audio", "data": <base64 PCM16 16 kHz mono>}``, ``{"type": "stop"}``.
 Relay → browser: ``ready`` (model, region), ``audio`` (base64 PCM16 24 kHz), ``transcript`` (role, text),
-``interrupted`` (stop playback now), ``thinking`` (on: AIC is working), ``error`` (message), ``closed``.
+``interrupted`` (stop playback now), ``thinking`` (on: VAIC is working), ``error`` (message), ``closed``.
 
-Thinking cues: Sonic says a short cue itself before calling the tool (its prompt asks for it); if AIC is still working
+Thinking cues: Sonic says a short cue itself before calling the tool (its prompt asks for it); if VAIC is still working
 after ``CUE_AFTER_S`` (and again after ``CUE_AGAIN_S``), a ``[status]`` line asks Sonic for a two-to-three-word cue.
 Sessions: Bedrock closes a stream after 8 minutes; the relay starts a fresh one before that, while Sonic is quiet,
 and replays the conversation so far as text, so the owner never notices.
@@ -68,7 +68,7 @@ def _tool_spec() -> dict[str, Any]:
     return {
         "toolSpec": {
             "name": "ask_aic",
-            "description": "Ask AIC, the owner's assistant: it knows the city, the departments, the owner's knowledge and"
+            "description": "Ask VAIC, the owner's assistant: it knows the city, the departments, the owner's knowledge and"
             " tools, and starts or stops work. Use it for every request except greetings and thanks.",
             "inputSchema": {"json": json.dumps(schema)},
         }
@@ -103,7 +103,7 @@ class SonicSession:
     _closed: bool = False
     _got_output: bool = False
     _tried: int = 0
-    # Thinking cues (config/models.json voice.cues): after how long AIC is "thinking", how often, how many.
+    # Thinking cues (config/models.json voice.cues): after how long VAIC is "thinking", how often, how many.
     cue_after_s: float = CUE_AFTER_S
     cue_again_s: float = CUE_AGAIN_S
     max_cues: int = 2
@@ -320,7 +320,7 @@ class SonicSession:
             result: dict[str, Any] = {"answer": answer}
         except Exception as e:
             log("warn", "voice.ask_failed", error=type(e).__name__)
-            result = {"error": "AIC could not answer just now."}
+            result = {"error": "VAIC could not answer just now."}
         finally:
             cues.cancel()
             await self.send_client({"type": "thinking", "on": False})
@@ -347,12 +347,12 @@ class SonicSession:
         await self._send({"contentEnd": {"promptName": self.prompt, "contentName": name}})
 
     async def _cues(self) -> None:
-        """Short, human cues while AIC works longer than a moment: the first after ``cue_after_s``, then every
+        """Short, human cues while VAIC works longer than a moment: the first after ``cue_after_s``, then every
         ``cue_again_s``, at most ``max_cues``. Never while the owner is talking: it waits for a quiet moment."""
         notes = [
-            "[status] thinking: AIC needs a moment for this one.",
-            "[status] AIC is still working; it is a bigger one.",
-            "[status] AIC is still on it.",
+            "[status] thinking: VAIC needs a moment for this one.",
+            "[status] VAIC is still working; it is a bigger one.",
+            "[status] VAIC is still on it.",
         ]
         for i in range(self.max_cues):
             await asyncio.sleep(self.cue_after_s if i == 0 else self.cue_again_s)

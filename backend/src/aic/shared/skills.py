@@ -81,7 +81,7 @@ def reduce_frontmatter(text: str) -> tuple[str, dict[str, str], list[str]]:
 
 def valid_roles(v: Any) -> list[str]:
     if not isinstance(v, list) or not v or any(r not in ROLES for r in v):
-        raise SkillInvalid("Roles must be some of AIC, Orchestrator, Managers and Workers.")
+        raise SkillInvalid("Roles must be some of VAIC, Orchestrator, Managers and Workers.")
     return [r for r in ROLES if r in v]
 
 

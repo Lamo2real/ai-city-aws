@@ -20,8 +20,8 @@ ACE = TurnCtx(agent_id="ace", role="ace", department=None, ticket_id="conv-main"
 async def test_deals_are_added_moved_and_go_stale_after_a_week_without_contact() -> None:
     clock = Clock()
     d = make(clock)
-    a = await deals.add_deal(d.ledger, {"name": "Acme", "contact": "Bo", "value": "$5,000", "currency": "usd"}, "AIC")
-    b = await deals.add_deal(d.ledger, {"company": "Globex", "stage": "won"}, "AIC")
+    a = await deals.add_deal(d.ledger, {"name": "Acme", "contact": "Bo", "value": "$5,000", "currency": "usd"}, "VAIC")
+    b = await deals.add_deal(d.ledger, {"company": "Globex", "stage": "won"}, "VAIC")
     assert (a["stage"], a["value"], a["currency"], a["words"]) == ("lead", 5000.0, "USD", "New lead")
     clock.t += timedelta(days=8)
     assert [x["id"] for x in await deals.list_deals(d.ledger, stale_days=7)] == [a["id"]]  # won is never chased

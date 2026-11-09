@@ -1,6 +1,6 @@
 // The City view scene, ported from the owner's Mac HUD (ai-city/jarvis/hud/city.js): the same pixel art,
 // drawn in code, the same streets, plaza, fountain, offices, free lots and houses. Changed for AWS:
-// AIC stands in the plaza where Jarvis stood, the Orchestrator at the HQ entrance, no Secretary or
+// VAIC stands in the plaza where Jarvis stood, the Orchestrator at the HQ entrance, no Secretary or
 // Reviewer; each department's manager stands at its door; panels are React (see CityView.tsx).
 // The City View: a small game world of the agents, drawn pixel by pixel on a canvas from city-state.js.
 // All of the art is drawn here in code. Every person on screen is a real agent; only the scenery moves on its own.
@@ -475,7 +475,7 @@ function freeLot(g, l, text) {
 }
 
 // Where the four of the core stand on the plaza, in art pixels from the corner of HQ's plot.
-// The Orchestrator stands on the podium at the HQ entrance; AIC in the plaza, by the fountain.
+// The Orchestrator stands on the podium at the HQ entrance; VAIC in the plaza, by the fountain.
 const CORE_SPOT = { orchestrator: [96, 100], ace: [62, 152] };
 // The executives' places at HQ while they advise (decision 140): in front of the boardroom window, left of the door.
 const EXEC_SPOT = { "exec-ceo": [22, 92], "exec-coo": [36, 92], "exec-cfo": [22, 106], "exec-cto": [36, 106] };
@@ -661,7 +661,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       let p = people.get(id);
       const fresh = !p;
       if (fresh) { const start = !still && to.key.startsWith("desk") ? homeSpot(world, homes.get(id) ?? 0) ?? to : to; p = { id, x: start.x, y: start.y, key: fresh && start === to ? to.key : "home", phase: hashOf(id) % 4, flip: false, hop: 0 }; setInside(p, start === to && !!to.inside); people.set(id, p); }
-      if (p.visiting) continue; // AIC is out; it comes back by itself
+      if (p.visiting) continue; // VAIC is out; it comes back by itself
       p.seated = to.seated;
       if (p.key === to.key) { if (!p.move && !p.route) { p.x = to.x; p.y = to.y; } else if (p.route) p.route[p.route.length - 1] = to; else if (p.move) p.move.to = to; continue; } // a new layout only shifts them
       const fromKey = p.key;
@@ -925,7 +925,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     if (r.job && (r.job.letters ?? 1) > 1 && r.carrying) label(`x${r.job.letters}`, r.x + 12, r.y - 36, INK, "#fff6e0");
   }
 
-  // AIC dashes over, says what it is doing, and comes back. Its status call can repeat fast: those are not new visits.
+  // VAIC dashes over, says what it is doing, and comes back. Its status call can repeat fast: those are not new visits.
   function aceVisit({ to, kind }) {
     const now = Date.now(), allowed = visitAllowed(lastVisit, now, to);
     lastVisit = now;
@@ -1229,11 +1229,11 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     // The one being looked at gets an arrow and its name; so does whoever the mouse is on, and the core keep name plates.
     for (const p of order) if (p.id === selected || p.id === hover || CORE.has(p.id)) {
       const a = state.agents[p.id];
-      if (a) label(p.id === hover && p.visual && p.visual !== "idle" ? `${p.id === "ace" ? "AIC" : p.id}: ${VISUALS[p.visual].label}` : p.id === "ace" ? "AIC" : p.id, p.x, p.y + 4, p.id === selected ? INK : "#fff6e0", p.id === selected ? "#ffd84a" : INK);
+      if (a) label(p.id === hover && p.visual && p.visual !== "idle" ? `${p.id === "ace" ? "VAIC" : p.id}: ${VISUALS[p.visual].label}` : p.id === "ace" ? "VAIC" : p.id, p.x, p.y + 4, p.id === selected ? INK : "#fff6e0", p.id === selected ? "#ffd84a" : INK);
     }
     // A publish approval is open: the Apps building waits for the owner.
     for (const b of waitingBuildings()) { const k = reduced() ? 1 : f % 2, cx = (b.x + b.w / 2) * TILE, y = b.y * TILE - 12; if (k) { ctx.fillStyle = "rgba(255,216,74,.35)"; ctx.fillRect(Math.round(cx - 50 - cam.x), Math.round(y - 3 - cam.y), 100, 15); } label("WAITING FOR YOU", cx, y, INK, "#ffd84a"); }
-    for (const p of order) if (p.say && p.say.until > performance.now()) label(p.say.text, p.x, p.y - 46, INK, "#8fdcff"); // AIC's word stays on top of every mark
+    for (const p of order) if (p.say && p.say.until > performance.now()) label(p.say.text, p.x, p.y - 46, INK, "#8fdcff"); // VAIC's word stays on top of every mark
     const s = selected && people.get(selected);
     if (s) { const bob = reduced() ? 0 : [0, 1, 2, 1][f]; const x = Math.round(s.x) - OX, y = Math.round(s.y) - OY - (s.visual && s.visual !== "idle" ? 46 : 32) + bob; R(ctx, x - 4, y, 8, 2, INK); R(ctx, x - 3, y, 6, 2, "#ffd84a"); R(ctx, x - 3, y + 2, 6, 2, INK); R(ctx, x - 2, y + 2, 4, 1, "#ffd84a"); R(ctx, x - 1, y + 4, 2, 2, INK); }
   }

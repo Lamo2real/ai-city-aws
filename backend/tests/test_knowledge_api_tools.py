@@ -295,16 +295,16 @@ async def test_a_real_ace_turn_gets_the_block_and_can_search() -> None:
 
     c = make_city(scripted_engine({"ace": ace}))
     c.deps.knowledge = KnowledgeAccess(store=w.store, kb=w.kb)
-    await c.owner_says("AIC, where do I live?")
+    await c.owner_says("VAIC, where do I live?")
     await c.run()
     sys = seen["system"]
-    assert sys.index("You are AIC") < sys.index("<owner-knowledge>") and sys.rstrip().endswith("</owner-knowledge>")
+    assert sys.index("You are VAIC") < sys.index("<owner-knowledge>") and sys.rstrip().endswith("</owner-knowledge>")
     assert "The owner lives in Stockholm." in sys
     assert "Stockholm, Sweden" in seen["found"]
 
 
 async def test_aic_direct_engine_searches_and_stores_through_the_gate() -> None:
-    """AIC answers through ``runtime.direct`` (Bedrock ConverseStream), not the SDK: the knowledge tools must
+    """VAIC answers through ``runtime.direct`` (Bedrock ConverseStream), not the SDK: the knowledge tools must
     reach it too, gated and audited like every other tool."""
     from types import SimpleNamespace
 
@@ -360,7 +360,7 @@ async def test_aic_direct_engine_searches_and_stores_through_the_gate() -> None:
 
     req = SimpleNamespace(
         turn=SimpleNamespace(prompt="what's in my plan? also save example.com/a", model=SimpleNamespace(invoke_id="p")),
-        system="You are AIC.",
+        system="You are VAIC.",
         tools=tools,
         builtins=[],
         on_text=on_text,

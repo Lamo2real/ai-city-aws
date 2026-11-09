@@ -4,7 +4,7 @@
 file (``GetObject`` only) into a cache keyed by version and builds a **city-owned plugin folder** that holds
 ``.claude-plugin/plugin.json`` and ``skills/<name>/…`` and nothing else: no hooks, commands, agents or MCP
 config. The SDK path loads it with ``plugins=[{"type": "local", ...}]`` (never the ``skills`` option, which
-pre-approves skills past ``can_use_tool``); AIC's direct path gets the ``use_skill`` tool instead.
+pre-approves skills past ``can_use_tool``); VAIC's direct path gets the ``use_skill`` tool instead.
 """
 
 from __future__ import annotations
@@ -121,7 +121,7 @@ def skill_allowed(requested: Any, names: frozenset[str]) -> bool:
 
 
 def use_skill_tool(store: SkillStore, rows: list[Row]) -> ToolSpec:
-    """AIC's city tool: list the skills, read one's SKILL.md body, or read one of its files."""
+    """VAIC's city tool: list the skills, read one's SKILL.md body, or read one of its files."""
     by_name = {r["name"]: r for r in rows}
     listing = "; ".join(f"{r['name']}: {str(r.get('description', ''))[:200]}" for r in rows) or "none yet"
 

@@ -67,7 +67,7 @@ def test_the_prompt_keeps_send_home_and_stop_apart_and_never_pauses() -> None:
 
 
 def test_aic_releases_workers_in_process_never_through_the_factory_lambda() -> None:
-    """AIC's role may not invoke the Agent Factory Lambda (only managers hire), so its send-home and cancel
+    """VAIC's role may not invoke the Agent Factory Lambda (only managers hire), so its send-home and cancel
     must not depend on it: the ace runtime gets the in-process factory, the other roles the Lambda client."""
     from types import SimpleNamespace
 
@@ -77,7 +77,7 @@ def test_aic_releases_workers_in_process_never_through_the_factory_lambda() -> N
 
     class NeverCalled:
         def client(self, *_: object, **__: object) -> object:
-            raise AssertionError("AIC must not build a Lambda client for releasing")
+            raise AssertionError("VAIC must not build a Lambda client for releasing")
 
     async def settings() -> dict[str, object]:
         return {}

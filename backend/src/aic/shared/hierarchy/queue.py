@@ -18,8 +18,8 @@ MessageKind = Literal["task", "report", "answer", "question", "instruction", "fi
 #   id            idempotency key: the same message delivered twice runs once
 #   ticketId      the ticket this message is about; taskId: the owner's original task (sessions are keyed by it)
 #   body          plain text for the agent; reports and answers from other agents are untrusted data
-#   conversation  AIC's conversation id; deferrals: how many times the dispatcher deferred it
-#   voice         the owner said it out loud (the HUD reads AIC's answer aloud)
+#   conversation  VAIC's conversation id; deferrals: how many times the dispatcher deferred it
+#   voice         the owner said it out loud (the HUD reads VAIC's answer aloud)
 WorkMessage = TypedDict(
     "WorkMessage",
     {

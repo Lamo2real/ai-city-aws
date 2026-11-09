@@ -93,7 +93,7 @@ async def on_connector_approval(c: ConnectorsApi, approval: Mapping[str, Any], a
         return
     if approval_hash(rec["id"], rec["url"], rec.get("roles") or {}) != approval.get("hash"):
         # The record no longer matches what the owner saw on the card: nothing is provisioned.
-        await _set(c, rec["id"], {"status": "error", "error": "It changed after the card was made. Ask AIC again."})
+        await _set(c, rec["id"], {"status": "error", "error": "It changed after the card was made. Ask VAIC again."})
         return
     if await _set(c, rec["id"], {"status": "provisioning"}, {"status": "pending_approval"}):
         await _start(c, rec)
@@ -149,7 +149,7 @@ async def _bearer_key(c: ConnectorsApi, rec: Record, key: str) -> None:
 def _roles(v: Any) -> dict[str, str]:
     r = valid_roles(v)
     if r is None:
-        raise ValueError("Roles must map AIC, Orchestrator, Managers or Workers to read or all.")
+        raise ValueError("Roles must map VAIC, Orchestrator, Managers or Workers to read or all.")
     return r
 
 
@@ -211,7 +211,7 @@ async def _add_direct(c: ConnectorsApi, b: dict[str, Any]) -> Answer:
     if bad := check_url(url, c.resolve):
         return _err(400, bad)
     label = str(b["label"]).strip()[:40] if b.get("label") else None
-    # No roles chosen (Add by link, a department's switch): the usual default, AIC, managers and workers.
+    # No roles chosen (Add by link, a department's switch): the usual default, VAIC, managers and workers.
     roles = _roles(b["roles"]) if b.get("roles") is not None else dict(DEFAULT_ROLES)
     id = make_id(name_from_url(url), label)
     rec: Record = {

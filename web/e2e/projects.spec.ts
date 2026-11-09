@@ -1,5 +1,5 @@
 // Projects (docs/PRODUCT.md "Projects"): every app is a project. A row of cards you swipe through, "New
-// project" first; a project opens as a studio with its own chat with AIC, choice chips for AIC's questions,
+// project" first; a project opens as a studio with its own chat with VAIC, choice chips for VAIC's questions,
 // a timeline, versions with "go back", and a live preview at phone, tablet, laptop or a custom size.
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
@@ -60,7 +60,7 @@ test("the projects scroll sideways card by card, New project first", async ({ pa
   await page.screenshot({ path: `${SHOTS}/projects.png` });
 });
 
-test("a new project: one sentence, AIC asks with choice chips, the answer goes to that project only", async ({
+test("a new project: one sentence, VAIC asks with choice chips, the answer goes to that project only", async ({
   page,
 }) => {
   const m = await mockBackend(page);
@@ -80,10 +80,10 @@ test("a new project: one sentence, AIC asks with choice chips, the answer goes t
   await expect
     .poll(() => messages(m))
     .toEqual([expect.objectContaining({ text: "A tip calculator that splits the bill", conversation: conv })]);
-  await expect(page.getByLabel("AIC is thinking")).toBeVisible();
+  await expect(page.getByLabel("VAIC is thinking")).toBeVisible();
   await expect(page.getByText("Your app appears here as soon as its first version is ready.")).toBeVisible();
 
-  // AIC asks before it builds: words in the chat, and the choices as chips.
+  // VAIC asks before it builds: words in the chat, and the choices as chips.
   m.send({ type: "ace.reply", conversation: conv, text: "Happy to. How many people", done: false });
   m.send({
     type: "ace.reply",
@@ -105,13 +105,13 @@ test("a new project: one sentence, AIC asks with choice chips, the answer goes t
   await expect(ask).toHaveCount(0);
   await expect.poll(() => messages(m).at(-1)).toMatchObject({ text: "Any number", conversation: conv });
 
-  // None of it reached AIC's main chat.
+  // None of it reached VAIC's main chat.
   await page.goto("/#/ace");
   await expect(page.getByText("split the bill, usually?")).toHaveCount(0);
   // The project is on the list, being planned, and comes back after a reload with its chat.
   await page.goto("/#/apps");
   await expect(
-    page.getByRole("link", { name: /Tip calculator that splits, (AIC is on it|Being planned)/ }),
+    page.getByRole("link", { name: /Tip calculator that splits, (VAIC is on it|Being planned)/ }),
   ).toBeVisible();
   await page.reload();
   await page.getByRole("link", { name: /Tip calculator/ }).click();
@@ -124,7 +124,7 @@ test("a new project: one sentence, AIC asks with choice chips, the answer goes t
   await expect(page).toHaveURL(/#\/apps\/bill-splitter$/);
   await expect(page.getByRole("heading", { name: "Bill Splitter" })).toBeVisible();
   await expect(page.getByText("Happy to. How many people split the bill, usually?")).toBeVisible();
-  await page.getByRole("textbox", { name: "Message AIC about Bill Splitter" }).fill("Add a tip slider");
+  await page.getByRole("textbox", { name: "Message VAIC about Bill Splitter" }).fill("Add a tip slider");
   await page.getByRole("button", { name: "Send" }).click();
   await expect
     .poll(() => messages(m).at(-1))
@@ -157,7 +157,7 @@ test("open a project, send a change, switch device sizes, see what's happening",
   await expect(page.frameLocator("iframe.appframe").getByRole("button", { name: "Sweep" })).toBeVisible();
 
   // The chat is about this app only.
-  const box = page.getByRole("textbox", { name: "Message AIC about Star Sweeper" });
+  const box = page.getByRole("textbox", { name: "Message VAIC about Star Sweeper" });
   await box.fill("Make the stars fall slower");
   await box.press("Enter");
   await expect

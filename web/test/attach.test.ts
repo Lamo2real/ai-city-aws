@@ -35,7 +35,7 @@ describe("slash commands", () => {
     expect(matchCommands("/status now", commands)).toEqual([]); // words after it: no longer a hint
   });
 
-  it("becomes the plain sentence AIC understands", () => {
+  it("becomes the plain sentence VAIC understands", () => {
     expect(expandSlash("/status", commands)).toEqual({ kind: "send", text: "What's the status of the city?" });
     expect(expandSlash("/home", commands)).toEqual({ kind: "send", text: "Send everyone home." });
     expect(expandSlash("/status please, in one line", commands)).toEqual({

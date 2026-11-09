@@ -1,5 +1,5 @@
 """The team listens to the owner, and only to the owner: questions are answered with the owner's own words,
-never a default AIC fills in; hard ceilings stop runaway hiring, jobs and departments even if prompts fail."""
+never a default VAIC fills in; hard ceilings stop runaway hiring, jobs and departments even if prompts fail."""
 
 from typing import Any
 
@@ -64,7 +64,7 @@ async def test_no_more_departments_than_the_ceiling() -> None:
 
 def test_what_counts_as_about_ai_city() -> None:
     for text in ("the voice is bugged", "make the voice more humane", "why is the city so slow", "I don't want the button",
-                 "AIC you're not listening", "the app crashed"):  # fmt: skip
+                 "VAIC you're not listening", "the app crashed"):  # fmt: skip
         assert about_ai_city(text), text
     for text in ("build me a snake game", "write me an email to Anna", "have the team fix the voice recorder app",
                  "what's 9 + 9", "research the best CRMs"):  # fmt: skip

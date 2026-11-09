@@ -270,7 +270,7 @@ export function CityView({ go }: { go: (view: string) => void }) {
           className={`actions dockbar${voice.listening || speaker !== "idle" ? " live" : ""}`}
           data-speaker={speaker}
         >
-          <button type="button" className="dockbtn" onClick={() => go("ace")} aria-label="Chat with AIC">
+          <button type="button" className="dockbtn" onClick={() => go("ace")} aria-label="Chat with VAIC">
             <Glyph d="M4 5h16v10H9l-5 4z" />
           </button>
           <button type="button" className="dockbtn" onClick={() => go("tickets")} aria-label="Tickets">
@@ -282,7 +282,7 @@ export function CityView({ go }: { go: (view: string) => void }) {
               className={`dockbtn dockmic ${voice.listening ? "on" : ""}`}
               onClick={voice.pushToTalk}
               aria-pressed={voice.listening}
-              aria-label={voice.listening ? "Stop listening" : "Talk to AIC"}
+              aria-label={voice.listening ? "Stop listening" : "Talk to VAIC"}
             >
               <MicIcon size={20} />
             </button>
@@ -292,7 +292,7 @@ export function CityView({ go }: { go: (view: string) => void }) {
                 {speaker === "you"
                   ? "You"
                   : speaker === "aic"
-                    ? "AIC"
+                    ? "VAIC"
                     : speaker === "thinking"
                       ? "Thinking"
                       : "Listening"}
@@ -551,7 +551,7 @@ function DeptPanel({
     <div>
       <p className="doing">
         {name === "HQ"
-          ? "AIC and the team lead work here."
+          ? "VAIC and the team lead work here."
           : `${workers.length ? `${workers.length} workers at their desks.` : "Nobody hired right now."} ${d?.mission ?? ""}`}
       </p>
       {name !== "HQ" ? <Row k="Manager" v={d?.manager_id ? `${d.manager_id} · Fable 5.1` : "—"} /> : null}

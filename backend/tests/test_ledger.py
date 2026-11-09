@@ -289,7 +289,7 @@ async def test_reset_city_stops_at_its_time_budget_and_says_it_is_not_done() -> 
 async def test_reset_city_removes_the_work_and_keeps_what_the_owner_set_up() -> None:
     table = MemoryTable()
     led = Ledger(table)
-    await led.put_agent({"id": "ace", "kind": "core", "role": "AIC", "department": None, "model": "haiku-5-5",
+    await led.put_agent({"id": "ace", "kind": "core", "role": "VAIC", "department": None, "model": "haiku-5-5",
                          "parent": None, "state": "active", "total_cost_usd": 0})  # fmt: skip
     await led.create_department("Writing", "Writing work.", "mgr-writing")
     t = await led.create_ticket({"goal": "g", "from": "ace", "to": "orchestrator", "department": None, "parent_id": None,

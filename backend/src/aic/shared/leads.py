@@ -1,8 +1,8 @@
 """Lead lists into the knowledge base (decision 121).
 
 A worker following the ``lead-research`` skill ends its report with the leads as one fenced ```` ```csv ```` block.
-When the Orchestrator reports the finished job to AIC, AIC's runtime (the only role that may add to the knowledge
-base) walks the job's tickets, saves each CSV block it finds as a ``.csv`` document and tells AIC its title, so the
+When the Orchestrator reports the finished job to VAIC, VAIC's runtime (the only role that may add to the knowledge
+base) walks the job's tickets, saves each CSV block it finds as a ``.csv`` document and tells VAIC its title, so the
 owner gets the table in the chat and the file under Knowledge. Plain code, no model: nothing is retyped.
 """
 
@@ -18,7 +18,7 @@ _CSV = re.compile(r"```csv[^\n]*\n(.*?)```", re.S)
 
 
 def is_job_report(role: str, inv: dict[str, Any]) -> bool:
-    """AIC's turn on the Orchestrator's finished-job report (``report_to_ace``)."""
+    """VAIC's turn on the Orchestrator's finished-job report (``report_to_ace``)."""
     return role == "ace" and inv.get("kind") == "report" and inv.get("from") == "orchestrator"
 
 

@@ -23,9 +23,9 @@ from ._runtime import run
 
 
 def session_id_for(m: WorkMessage, owner: str = "owner", version: str = "") -> str:
-    """AIC's session also carries the runtime version (the image tag), so after a deploy the next message
+    """VAIC's session also carries the runtime version (the image tag), so after a deploy the next message
     starts a fresh session on the new code instead of reusing a container that still runs the old one.
-    AIC's conversation lives in the ledger, so nothing is lost. Other roles keep their sessions: a
+    VAIC's conversation lives in the ledger, so nothing is lost. Other roles keep their sessions: a
     worker's checkout lives in its session."""
     role = m["role"]
     if role == "ace":
@@ -44,7 +44,7 @@ class AgentCoreInvoker:
     def __init__(self, client: Any, arns: Mapping[str, str], live: Mapping[str, str] | None = None) -> None:
         self._client = client
         self._arns = arns
-        # Where AIC streams its reply straight to the HUD (the WebSocket endpoint and connections table).
+        # Where VAIC streams its reply straight to the HUD (the WebSocket endpoint and connections table).
         # Passed per invocation because the runtime is created before the WebSocket API.
         self._live = dict(live or {})
 

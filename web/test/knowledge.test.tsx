@@ -68,7 +68,7 @@ describe("the knowledge reducer", () => {
     expect(s.items[0]!.error).toBe("The PDF is locked with a password.");
     s = reduceKnowledge(s, { ...ev, status: "ready", error: "stale" });
     expect(s.items[0]!.error).toBeNull();
-    s = reduceKnowledge(s, { ...ev, id: "k-9", title: "From AIC", kind: "link", status: "processing" });
+    s = reduceKnowledge(s, { ...ev, id: "k-9", title: "From VAIC", kind: "link", status: "processing" });
     expect(s.items[0]!.id).toBe("k-9");
   });
 

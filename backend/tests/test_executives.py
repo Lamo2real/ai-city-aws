@@ -1,6 +1,6 @@
 """The Executive Leadership layer (decision 140): CEO, COO, CFO and CTO advise and never run work.
 
-Fake models only: no Bedrock. The runtime path (AIC and the Orchestrator calling the tools) runs through the real
+Fake models only: no Bedrock. The runtime path (VAIC and the Orchestrator calling the tools) runs through the real
 AgentHost with a scripted engine.
 """
 
@@ -202,14 +202,14 @@ async def test_aic_asks_only_on_the_owners_own_message() -> None:
 
 
 async def test_the_owner_asks_aic_and_hears_the_cfo() -> None:
-    """End to end through the real host: the owner's message → AIC → ask_executive → the CFO's advice → reply."""
+    """End to end through the real host: the owner's message → VAIC → ask_executive → the CFO's advice → reply."""
     m = Model()
 
     async def ace(req: Any, call: Any) -> str:
         return await call("ask_executive", {"question": "Ask the CFO if hiring a video team pays off", "who": ["cfo"]})
 
     c = city(m, {"ace": ace})
-    await c.host.ensure_core()  # AIC and the Orchestrator exist before any message
+    await c.host.ensure_core()  # VAIC and the Orchestrator exist before any message
     before = await snapshot(c)
     await c.owner_says("Ask the CFO if hiring a video team pays off")
     await c.run()
@@ -217,7 +217,7 @@ async def test_the_owner_asks_aic_and_hears_the_cfo() -> None:
     reply = c.bus.of_type("ace.reply")[-1]["text"]
     assert reply.startswith("CFO (medium confidence): Go ahead")
     tickets, agents, _ = await snapshot(c)
-    assert (tickets, agents) == before[:2]  # no job, no hire: only AIC's own turn ran
+    assert (tickets, agents) == before[:2]  # no job, no hire: only VAIC's own turn ran
 
 
 async def test_without_a_model_runner_no_executive_tools_appear() -> None:

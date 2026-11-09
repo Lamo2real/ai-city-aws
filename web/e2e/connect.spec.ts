@@ -1,4 +1,4 @@
-// Connectors, mail accounts and skills, the way the owner meets them: cards under AIC's chat, Settings →
+// Connectors, mail accounts and skills, the way the owner meets them: cards under VAIC's chat, Settings →
 // Connectors, the Skills screen. Every backend is mocked (mock.ts); provider sign-in pages are faked too.
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
@@ -58,7 +58,7 @@ test("adding a skill: pick a SKILL.md, see what's dropped, choose who may use it
   await expect(page.getByText("No skills yet.")).toBeVisible();
 });
 
-test("adding an MCP server by asking AIC: approve the card, sign in, come back connected", async ({
+test("adding an MCP server by asking VAIC: approve the card, sign in, come back connected", async ({
   page,
   context,
 }) => {
@@ -71,7 +71,7 @@ test("adding an MCP server by asking AIC: approve the card, sign in, come back c
     kind: "connector.add",
     connector_id: "higgsfield",
     action:
-      "Connect Higgsfield? You sign in on Higgsfield's own page; your password never comes to AI City. (https://mcp.higgsfield.test/mcp, from the MCP Registry. Used by: AIC, Managers, Workers.)",
+      "Connect Higgsfield? You sign in on Higgsfield's own page; your password never comes to AI City. (https://mcp.higgsfield.test/mcp, from the MCP Registry. Used by: VAIC, Managers, Workers.)",
     reason: "Your agents can then use it for you. You can remove it any time in Settings, Connectors.",
   });
   const approve = page.getByRole("group", { name: "Connect a service?" });
@@ -102,13 +102,13 @@ test("adding an MCP server by asking AIC: approve the card, sign in, come back c
   expect(new URL(page.url()).search).toBe("");
 });
 
-test("a plain request offers the service it needs, and AIC carries on once it is connected", async ({ page }) => {
+test("a plain request offers the service it needs, and VAIC carries on once it is connected", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/#/ace");
-  await page.getByLabel("Message to AIC").fill("find designer jobs in Stockholm on Indeed");
+  await page.getByLabel("Message to VAIC").fill("find designer jobs in Stockholm on Indeed");
   await page.keyboard.press("Enter");
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
-  // AIC offers Indeed: a card in plain words, no jargon.
+  // VAIC offers Indeed: a card in plain words, no jargon.
   m.send({
     type: "approval.requested",
     id: "ap-3",
@@ -116,7 +116,7 @@ test("a plain request offers the service it needs, and AIC carries on once it is
     kind: "connector.add",
     connector_id: "indeed",
     action:
-      "Connect Indeed so I can look for jobs? You sign in on Indeed's own page; your password never comes to AI City. (https://mcp.indeed.com/claude/mcp, checked by AI City. Used by: AIC, Managers, Workers.)",
+      "Connect Indeed so I can look for jobs? You sign in on Indeed's own page; your password never comes to AI City. (https://mcp.indeed.com/claude/mcp, checked by AI City. Used by: VAIC, Managers, Workers.)",
     reason: "Your agents can then use it for you. You can remove it any time in Settings, Connectors.",
   });
   const card = page.getByRole("group", { name: "Connect a service?" });
@@ -126,7 +126,7 @@ test("a plain request offers the service it needs, and AIC carries on once it is
   m.send({ type: "approval.decided", id: "ap-3", approved: true });
   m.send({ type: "connector.updated", id: "indeed", label: "Indeed", status: "needs_login", auth: "oauth" });
   await expect(page.getByRole("button", { name: "Sign in to Indeed" })).toBeVisible();
-  // Signed in elsewhere; once it is ready AIC picks the request up again, by itself, once.
+  // Signed in elsewhere; once it is ready VAIC picks the request up again, by itself, once.
   m.send({ type: "connector.updated", id: "indeed", label: "Indeed", status: "ready", auth: "oauth" });
   m.send({ type: "connector.updated", id: "indeed", label: "Indeed", status: "ready", auth: "oauth" });
   await expect
@@ -199,7 +199,7 @@ test("a failed connection shows its reason in full, in the chat and in Settings"
 test("an API key goes into a secure field, never the chat", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/#/ace");
-  await page.getByLabel("Message to AIC").fill("my tavily key is tvly-AbCdEf1234567890");
+  await page.getByLabel("Message to VAIC").fill("my tavily key is tvly-AbCdEf1234567890");
   await page.keyboard.press("Enter");
   await expect(page.getByText(/looks like a key or password, so it wasn't sent/)).toBeVisible();
   expect(m.calls.some((c) => c.path === "/messages")).toBe(false);

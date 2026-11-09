@@ -1,4 +1,4 @@
-// The live connection: city events and AIC's streamed replies. Reconnects on its own with back-off,
+// The live connection: city events and VAIC's streamed replies. Reconnects on its own with back-off,
 // pings every 4 minutes so the connection stays listed, and tells listeners when it is up or down.
 import { idToken } from "./auth.ts";
 import { config } from "./config.ts";

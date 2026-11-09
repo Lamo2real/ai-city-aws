@@ -1,5 +1,5 @@
-// The landing screen: AIC's eye with the voice strip on the left, the conversation on the right (stacked on a
-// phone). Everything else can be done by asking AIC ("send the workers home", "what's the status?").
+// The landing screen: VAIC's eye with the voice strip on the left, the conversation on the right (stacked on a
+// phone). Everything else can be done by asking VAIC ("send the workers home", "what's the status?").
 import { ChatCards } from "./ConnectCard.tsx";
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { sendMessage } from "../lib/actions.ts";
@@ -102,7 +102,7 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
   useEffect(() => {
     log.current?.scrollTo({ top: log.current.scrollHeight });
   }, [chat]);
-  // While AIC's reply is being revealed, keep it in view unless the owner has scrolled up to read.
+  // While VAIC's reply is being revealed, keep it in view unless the owner has scrolled up to read.
   const follow = () => {
     const el = log.current;
     if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 120) el.scrollTop = el.scrollHeight;
@@ -192,12 +192,12 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
     setText("");
     base.current = "";
     setAttached([]);
-    // Typed or dictated, the message is text and AIC answers in text; the voice button is for talking.
+    // Typed or dictated, the message is text and VAIC answers in text; the voice button is for talking.
     await sendMessage(body);
     input.current?.focus();
   };
   const lastLine = chat.at(-1);
-  // Right after the owner sends, AIC's status row (eye, current step, seconds) shows until its first words.
+  // Right after the owner sends, VAIC's status row (eye, current step, seconds) shows until its first words.
   const waitingForAic = presence === "thinking" && lastLine?.who === "owner" && lastLine.state !== "failed";
 
   const unsent = chat.filter((l) => l.who === "owner" && (l.state === "failed" || l.state === "queued")).length;
@@ -205,9 +205,9 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
   return (
     <section className={`ace${voice.conversation ? " voice-live" : ""}`} aria-labelledby="ace-title">
       <h1 id="ace-title" className="sr">
-        Talk to AIC
+        Talk to VAIC
       </h1>
-      <div className="talk" role="region" aria-label="Chat with AIC">
+      <div className="talk" role="region" aria-label="Chat with VAIC">
         {/* No header: the panel runs up behind the top bar (decision 108); the clear button floats in its corner. */}
         {chat.length ? (
           <button
@@ -247,7 +247,7 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
             </Banner>
           ) : null}
         </div>
-        <div className="chat" ref={log} aria-live="polite" aria-label="Conversation with AIC" tabIndex={0}>
+        <div className="chat" ref={log} aria-live="polite" aria-label="Conversation with VAIC" tabIndex={0}>
           {chat.length === 0 ? <p className="hello">Say hi. Type, or tap the voice button and just talk.</p> : null}
           {chat.map((l) => (
             <article
@@ -255,7 +255,7 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
               className={`msg msg-${l.who} ${l.state === "streaming" ? "is-streaming" : ""}`}
               aria-busy={l.state === "streaming" || undefined}
             >
-              <span className="sr">{l.who === "ace" ? "AIC:" : "You:"}</span>
+              <span className="sr">{l.who === "ace" ? "VAIC:" : "You:"}</span>
               <div className="msg-body">
                 {l.who === "ace" ? (
                   <StreamedText text={l.text} streaming={l.state === "streaming"} onGrow={follow} />
@@ -332,7 +332,7 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
             <PlusMenu lists={lists} onFiles={(f, folder) => void onFiles(f, folder)} onInsert={insert} go={go} />
           )}
           <label className="sr" htmlFor="say">
-            Message to AIC
+            Message to VAIC
           </label>
           <textarea
             id="say"
@@ -375,7 +375,7 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
                 type="button"
                 className="send dict-send"
                 onClick={() => void submit()}
-                aria-label="Send to AIC"
+                aria-label="Send to VAIC"
                 disabled={!text.trim() && !items.length}
               >
                 <SendIcon />
@@ -398,15 +398,15 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
                 className={`voice-btn ${voice.conversation ? "on" : ""}`}
                 onClick={voice.toggleConversation}
                 aria-pressed={voice.conversation}
-                aria-label={voice.conversation ? "End the voice conversation" : "Talk to AIC"}
-                title={voice.conversation ? "End the voice conversation" : "Talk to AIC: speak, AIC answers aloud"}
+                aria-label={voice.conversation ? "End the voice conversation" : "Talk to VAIC"}
+                title={voice.conversation ? "End the voice conversation" : "Talk to VAIC: speak, VAIC answers aloud"}
               >
                 <WaveIcon />
               </button>
               <button
                 type="submit"
                 className="send"
-                aria-label="Send to AIC"
+                aria-label="Send to VAIC"
                 disabled={(!text.trim() && !items.length) || !sendable(items)}
               >
                 <SendIcon />

@@ -135,7 +135,7 @@ describe("Settings → Executives", () => {
   it("no advice yet says how to ask", async () => {
     get = () => new Response(JSON.stringify({ ...STATE, recommendations: [] }));
     render(<Executives />);
-    expect(await screen.findByText(/No advice yet\. Ask AIC/)).toBeTruthy();
+    expect(await screen.findByText(/No advice yet\. Ask VAIC/)).toBeTruthy();
   });
 
   it("a 404 before the backend is deployed is a quiet note", async () => {

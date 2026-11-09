@@ -186,7 +186,7 @@ export function placement(
 ): { place: "hq" | "station" | "home"; dept: string; why: string } | null;
 export function topBar(state: CityState): {
   agentsTotal: number;
-  /** Workers on a job right now (not managers, the Orchestrator or AIC). */
+  /** Workers on a job right now (not managers, the Orchestrator or VAIC). */
   agentsActive: number;
   ticketsRunning: number;
   questionsWaiting: number;

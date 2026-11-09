@@ -187,7 +187,7 @@ def test_more_than_200_operations_offers_the_first_200_read_only_ones() -> None:
     s = norm(doc)
     assert s["capped"] and s["total"] == 500 and len(s["operations"]) == 200
     assert all(o["method"] == "GET" for o in s["operations"]) and s["operations"][-1]["path"] == "/r199"
-    assert "200 actions (the first 200 read-only ones of 500)" in openapi.card("Petstore API", s, SPEC_URL, "AIC")
+    assert "200 actions (the first 200 read-only ones of 500)" in openapi.card("Petstore API", s, SPEC_URL, "VAIC")
 
 
 def test_a_relative_or_plain_http_server_is_handled() -> None:
@@ -306,7 +306,7 @@ async def test_add_connector_with_a_spec_link_files_the_card_from_the_spec() -> 
     assert ap["hash"] == approval_hash("petstore", SPEC_URL, DEFAULT_ROLES)
     assert ap["action"] == (
         f"Connect the Petstore API at {BASE} (from {SPEC_URL}): 6 actions, 4 read-only, 1 delete. "
-        "Used by: AIC, Managers, Workers. Approve?"
+        "Used by: VAIC, Managers, Workers. Approve?"
     )
     assert city.bus.of_type("approval.requested")[0]["connector_id"] == "petstore"
 

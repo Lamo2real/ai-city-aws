@@ -192,7 +192,7 @@ export const baseSnapshot = () => ({
     {
       id: "ace",
       kind: "core",
-      role: "AIC",
+      role: "VAIC",
       department: null,
       model: "sonnet-5-5",
       parent: null,
@@ -401,7 +401,7 @@ export async function mockBackend(
       };
       // A fake voice: the mic "hears" whatever the test puts in window.__heard (or nothing when __micHold is set,
       // so the screen stays in "listening"); window.__micError makes the mic fail with that DOMException name;
-      // window.__speakMs keeps AIC "talking" that long. levels() wobbles so the voice strip moves.
+      // window.__speakMs keeps VAIC "talking" that long. levels() wobbles so the voice strip moves.
       const w = window as unknown as {
         __heard?: string;
         __micHold?: boolean;
@@ -428,7 +428,7 @@ export async function mockBackend(
           // Live partials first (window.__partials, 100 ms apart), then the final transcript.
           const timers = (w.__partials ?? []).map((p, i) => setTimeout(() => onPartial?.(p), 100 * (i + 1)));
           const delay = 100 * ((w.__partials ?? []).length + 1) + 200;
-          if (!w.__micHold) timers.push(setTimeout(() => onText(w.__heard ?? "yo AIC, status?"), delay));
+          if (!w.__micHold) timers.push(setTimeout(() => onText(w.__heard ?? "yo VAIC, status?"), delay));
           // The mic stays open in a voice conversation: whatever the test sets __heard to next is heard then.
           let last = w.__heard;
           const watch = setInterval(() => {

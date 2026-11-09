@@ -1,6 +1,6 @@
 """``add_connector`` for an OpenAPI 3 link (``docs/CONNECTORS_SKILLS.md`` §1.11).
 
-Called by AIC's tool after the link passed the URL checks. It GETs the link once: anything that isn't an OpenAPI
+Called by VAIC's tool after the link passed the URL checks. It GETs the link once: anything that isn't an OpenAPI
 document returns None, and the tool goes on as for an MCP server. For a spec, it parses it, writes the record
 (``pending_approval``, ``transport = "openapi"``, the normalized spec's hash) and files the owner's card. Nothing
 is fetched with a credential and nothing is provisioned until the owner says yes.

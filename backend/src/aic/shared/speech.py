@@ -1,4 +1,4 @@
-"""AIC's voice through OpenAI text-to-speech (the owner's choice, decision 96).
+"""VAIC's voice through OpenAI text-to-speech (the owner's choice, decision 96).
 
 A voice service only: the agents stay on Anthropic models through Bedrock. The HUD sends a sentence to
 ``POST /speech`` and gets MP3 bytes back; the key lives in Secrets Manager (``aic/prod/openai``), pasted by the
@@ -40,7 +40,7 @@ VOICES = (
 )
 DEFAULT_VOICE = "marin"
 """The voice closest to ChatGPT's "Sol" (the owner's choice, decision 105). ChatGPT's own voices (Sol, Cove, …)
-are not offered by any OpenAI API, so AIC uses ``marin``, one of the two voices OpenAI recommends, with
+are not offered by any OpenAI API, so VAIC uses ``marin``, one of the two voices OpenAI recommends, with
 ``INSTRUCTIONS`` that ask for Sol's manner."""
 INSTRUCTIONS = (
     "Speak like ChatGPT's Sol voice: savvy and relaxed. A warm, lower register; unhurried, natural "
@@ -194,7 +194,7 @@ async def synthesize(d: SpeechDeps, text: Any, voice: Any = None) -> bytes:
     raise SpeechError(502, "openai_error", "No speech model answered.")
 
 
-# ---------- AIC's real-time voice on OpenAI GPT-Live (the owner's choice, 2026-11-09, decision 128) ----------
+# ---------- VAIC's real-time voice on OpenAI GPT-Live (the owner's choice, 2026-11-09, decision 128) ----------
 LIVE_URL = "https://api.openai.com/v1/live/sessions"
 LIVE_MAX_SDP = 64 * 1024
 LIVE_TIMEOUT_S = 15.0
@@ -217,7 +217,7 @@ async def create_live_session(d: SpeechDeps, sdp: Any) -> dict[str, str]:
 
     The browser never sees the key: it sends its offer here, the call is created with the owner's key, and the
     audio then flows straight between the browser and OpenAI. Client delegation: GPT-Live only listens and
-    speaks; the HUD hands every request to AIC through the normal chat and sends AIC's answer back to be said.
+    speaks; the HUD hands every request to VAIC through the normal chat and sends VAIC's answer back to be said.
     """
     offer = str(sdp or "")
     if not offer.strip():

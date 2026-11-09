@@ -1,6 +1,6 @@
 """Where workflows meet the team (decisions 126, 127): handing a run to the Orchestrator, and taste questions.
 
-Shared by AIC's tools (``aic.runtime.workflow_tools``), the team's ``ask_taste`` and the HUD's routes, so a run
+Shared by VAIC's tools (``aic.runtime.workflow_tools``), the team's ``ask_taste`` and the HUD's routes, so a run
 handed over or an answer applied is the same whichever way it came.
 """
 
@@ -33,7 +33,7 @@ async def emit(d: CityDeps, run: Record, w: Record, conn: Record | None = None) 
 
 async def hand_off(d: CityDeps, runs: wf.Runs, run: Record, w: Record) -> tuple[Record, str]:
     """Gives the run to the Orchestrator (the department the workflow names) with its brief; files a taste question
-    for every input that was assumed while the owner is away. Returns the run and AIC's next words."""
+    for every input that was assumed while the owner is away. Returns the run and VAIC's next words."""
     open_cap = int((await d.settings()).get("max_open_jobs") or 3)
     open_jobs = len([j for j in await running_jobs(d) if not j.get("standing_order")])
     if open_jobs >= open_cap:
@@ -93,7 +93,7 @@ async def hand_off(d: CityDeps, runs: wf.Runs, run: Record, w: Record) -> tuple[
     for k in assumed:
         inp = inputs[k]
         default = str(values[k]["text"])
-        options = [o["label"] for o in inp.get("options") or []] or [default, "Something else (tell AIC)"]
+        options = [o["label"] for o in inp.get("options") or []] or [default, "Something else (tell VAIC)"]
         await taste.add(
             {
                 "task_id": t["id"],
@@ -159,7 +159,7 @@ async def ask(d: CityDeps, agent_id: str, ticket_id: str, a: Record) -> str:
 
 async def answer(d: CityDeps, id: str, said: str) -> str:
     """The owner's answer to a taste question. When it differs from what the team went with, it goes to the agent
-    who asked (or the Orchestrator when that one has gone home) while the job runs; after the job, AIC offers a
+    who asked (or the Orchestrator when that one has gone home) while the job runs; after the job, VAIC offers a
     change."""
     store = wf.Taste(d.ledger.table, d.ledger.now)
     q = await store.get(id)

@@ -152,7 +152,7 @@ export function PipelineBoard() {
       {!data && !error ? <Loading what="your deals" /> : null}
       {data && !data.deals.length ? (
         <p className="empty">
-          No deals yet. If you use HubSpot, Pipedrive or another CRM, Sales works there. Otherwise tell AIC about a deal
+          No deals yet. If you use HubSpot, Pipedrive or another CRM, Sales works there. Otherwise tell VAIC about a deal
           (“Add a deal: Acme, 5,000, talked to Bo”) and ask it to “follow up on my sales pipeline every day”.
         </p>
       ) : null}

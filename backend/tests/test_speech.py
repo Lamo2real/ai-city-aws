@@ -1,4 +1,4 @@
-"""AIC's voice through OpenAI text-to-speech: the key is a secret the owner pastes, /speech returns MP3 bytes."""
+"""VAIC's voice through OpenAI text-to-speech: the key is a secret the owner pastes, /speech returns MP3 bytes."""
 
 import base64
 from typing import Any

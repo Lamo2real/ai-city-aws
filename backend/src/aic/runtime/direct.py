@@ -1,6 +1,6 @@
-"""AIC's fast engine: Bedrock ConverseStream directly, with the city tools, no Claude Code process.
+"""VAIC's fast engine: Bedrock ConverseStream directly, with the city tools, no Claude Code process.
 
-AIC has no shell or file tools, only city tools, so it doesn't need the Claude Code CLI (whose start-up
+VAIC has no shell or file tools, only city tools, so it doesn't need the Claude Code CLI (whose start-up
 costs seconds). This loop streams text as it is written, runs tool calls through the same policy gate
 and audit as the SDK path (under the same ``mcp__city__<tool>`` and ``mcp__gateway__<id>___<tool>`` names), and stops after a few tool rounds.
 """
@@ -182,7 +182,7 @@ async def _run_tool(req: EngineRequest, tools: dict[str, Any], use: dict[str, An
     if r.decision != "allow":
         return result(r.reason, True)
     if req.on_activity:
-        # The tool name rides along as the detail, so the HUD can show AIC's steps in plain words; a tool with
+        # The tool name rides along as the detail, so the HUD can show VAIC's steps in plain words; a tool with
         # ``step`` says it from its arguments ("Running: git push").
         await req.on_activity(activity_for(full), spec.step(args) if spec.step else name)
     try:

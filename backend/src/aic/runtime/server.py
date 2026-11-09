@@ -42,7 +42,7 @@ class TurnRunner(Protocol):
 Warm = Callable[[dict[str, Any]], Awaitable[Any]]
 VoiceFactory = Callable[[Callable[[dict[str, Any]], Awaitable[None]], dict[str, str]], Any]
 """``voice(send, live)``: a voice session (``aic.runtime.voice.SonicSession``) for one browser connection. ``live`` is
-where AIC streams replies to the HUD, as last seen on an invocation."""
+where VAIC streams replies to the HUD, as last seen on an invocation."""
 
 
 def create_app(
@@ -51,10 +51,10 @@ def create_app(
     on_startup: list[Callable[[], Any]] | None = None,
     voice: VoiceFactory | None = None,
 ) -> Starlette:
-    """``warm`` runs in the background on every warm-keeper ping (AIC only); ``on_startup`` runs when the server
+    """``warm`` runs in the background on every warm-keeper ping (VAIC only); ``on_startup`` runs when the server
     starts (eager client creation). Neither may fail a request: both are logged and dropped."""
     state = {"running": 0, "last_update": int(time.time())}
-    live: dict[str, str] = {}  # where AIC's replies stream to the HUD, remembered from invocations for voice turns
+    live: dict[str, str] = {}  # where VAIC's replies stream to the HUD, remembered from invocations for voice turns
     background: set[asyncio.Task[Any]] = set()
 
     def spawn(coro: Awaitable[Any], what: str) -> None:
@@ -89,7 +89,7 @@ def create_app(
                 raise ValueError("payload too large")
             inv = json.loads(raw)
             if isinstance(inv, dict) and inv.get("kind") == "warm":
-                # The warm-keeper's ping: answer at once; AIC's warmer then heats the reply path in the background.
+                # The warm-keeper's ping: answer at once; VAIC's warmer then heats the reply path in the background.
                 if warm is not None:
                     spawn(warm(inv), "aic.warm")
                 return JSONResponse({"status": "warm"})
@@ -131,7 +131,7 @@ def create_app(
             return JSONResponse({"status": "error", "error": type(e).__name__}, status_code=500)
 
     async def voice_ws(ws: WebSocket) -> None:
-        """AIC's real-time voice (decision 120): one Nova Sonic session per connection, AIC as its tool."""
+        """VAIC's real-time voice (decision 120): one Nova Sonic session per connection, VAIC as its tool."""
         await ws.accept()
         if voice is None:
             await ws.send_text(json.dumps({"type": "error", "message": "Voice is not available here."}))
@@ -211,7 +211,7 @@ def _skills(city: Any, e: Mapping[str, str]) -> Any:
 
 
 def _owner_api(city: Any, e: Mapping[str, str]) -> Callable[[dict[str, Any]], Awaitable[dict[str, Any]]] | None:
-    """AIC runs a HUD route as the owner by invoking the API Lambda directly (decision 143); IAM lets only AIC's
+    """VAIC runs a HUD route as the owner by invoking the API Lambda directly (decision 143); IAM lets only VAIC's
     role do that, and the API refuses secret-taking routes on this path too."""
     fn = e.get("AIC_API_FUNCTION")
     if not fn:
@@ -232,7 +232,7 @@ def _owner_api(city: Any, e: Mapping[str, str]) -> Callable[[dict[str, Any]], Aw
 
 
 def factory_for(role: str, city: Any, e: Mapping[str, str]) -> FactoryClient:
-    """Managers hire through the Agent Factory Lambda (it holds the hiring logic and rights). AIC never hires;
+    """Managers hire through the Agent Factory Lambda (it holds the hiring logic and rights). VAIC never hires;
     it only sends workers home (`send_workers_home`, `cancel_task`), which is a ledger write and one event, so
     it uses the in-process factory: no Lambda invoke, and nothing for IAM to refuse."""
     if role == "ace":
@@ -263,9 +263,9 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
             factory=factory,
             settings=city.settings,
             max_review_rounds=caps["max_review_rounds"],
-            # AIC's quick triage before delegating runs on the utility model through the runtime's own Bedrock client.
+            # VAIC's quick triage before delegating runs on the utility model through the runtime's own Bedrock client.
             utility_runner=bedrock_converse_runner(_bedrock()) if role == "ace" else None,
-            # The executives (decision 140): advice for AIC (when the owner asks) and the Orchestrator (big decisions).
+            # The executives (decision 140): advice for VAIC (when the owner asks) and the Orchestrator (big decisions).
             advisor_runner=bedrock_converse_runner(_bedrock()) if role in ("ace", "orchestrator") else None,
             workspace=workspace_from_env(city.session, e) if role == "worker" else None,
             knowledge=_knowledge(city.session, city.bus, role, e),
@@ -300,7 +300,7 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
 
 
 def _voice(host: TurnRunner, city: Any) -> VoiceFactory:
-    """AIC's voice: Nova Sonic speaks and listens; every request runs as a normal AIC turn, here, in-process."""
+    """VAIC's voice: Nova Sonic speaks and listens; every request runs as a normal VAIC turn, here, in-process."""
     from aic.shared.config import voice_config
     from aic.shared.ids import new_id
 
@@ -346,7 +346,7 @@ def _voice(host: TurnRunner, city: Any) -> VoiceFactory:
 
 
 def _git_auth(city: Any, e: Mapping[str, str]) -> Any:
-    """git and gh signed in with the owner's token (docs/GITHUB_ACCESS.md): AIC's run_command and workers' shells."""
+    """git and gh signed in with the owner's token (docs/GITHUB_ACCESS.md): VAIC's run_command and workers' shells."""
     from aic.shared.github import GitHubDeps
 
     from .github_auth import GitAuth
@@ -360,7 +360,7 @@ def _git_auth(city: Any, e: Mapping[str, str]) -> Any:
 
 
 def _warmer(city: Any, e: Mapping[str, str]) -> Any:
-    """AIC's warmer: the Bedrock client, the HUD's WebSocket sender, a ledger read and a one-token model call."""
+    """VAIC's warmer: the Bedrock client, the HUD's WebSocket sender, a ledger read and a one-token model call."""
     from aic.shared.models import resolve_role_from_env
 
     from .direct import _bedrock
@@ -379,7 +379,7 @@ def _warmer(city: Any, e: Mapping[str, str]) -> Any:
 
 
 def _knowledge(session: Any, bus: Any, role: str, env: Mapping[str, str]) -> KnowledgeAccess | None:
-    """Search for every role; AIC also adds links and texts (it may write ``raw/*`` and ``ITEM#*``)."""
+    """Search for every role; VAIC also adds links and texts (it may write ``raw/*`` and ``ITEM#*``)."""
     k = knowledge_from_env(session, env)
     if not k:
         return None

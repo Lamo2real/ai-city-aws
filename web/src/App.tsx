@@ -31,7 +31,7 @@ import { Wordmark } from "./components/Wordmark.tsx";
 const VIEWS = ["ace", "city", "tickets", "apps", "knowledge", "skills", "costs", "settings"] as const;
 type View = (typeof VIEWS)[number];
 const LABEL: Record<View, string> = {
-  ace: "AIC",
+  ace: "VAIC",
   city: "City",
   tickets: "Work",
   apps: "Projects",
@@ -50,7 +50,7 @@ export function App() {
   const [signInNote, setSignInNote] = useState<string | null>(null);
   const [{ view, slug }, setRoute] = useState<{ view: View; slug: string | null }>(() => route(location.hash, VIEWS));
   const [guide, setGuide] = useState(false);
-  // The top bar's height, as `--top-h`: on the AIC screen the chat runs up behind the bar (decision 108).
+  // The top bar's height, as `--top-h`: on the VAIC screen the chat runs up behind the bar (decision 108).
   const top = useRef<HTMLElement>(null);
   const [topH, setTopH] = useState(64);
   useEffect(() => {
@@ -162,7 +162,7 @@ export function App() {
         Skip to content
       </a>
       <header className="top" ref={top}>
-        <button type="button" className="brand" onClick={() => go("ace")} aria-label="AI City — talk to AIC">
+        <button type="button" className="brand" onClick={() => go("ace")} aria-label="AI City — talk to VAIC">
           <Wordmark />
         </button>
         <nav aria-label="Screens">
@@ -191,8 +191,8 @@ export function App() {
       <Toaster />
       {view !== "ace" && !(view === "city" && !slug) && !(view === "apps" && slug) ? (
         <div className="fab">
-          <Button variant="quiet" onClick={() => go("ace")} label="Talk to AIC">
-            Talk to AIC
+          <Button variant="quiet" onClick={() => go("ace")} label="Talk to VAIC">
+            Talk to VAIC
           </Button>
         </div>
       ) : null}

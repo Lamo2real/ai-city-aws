@@ -1,4 +1,4 @@
-"""Keeps AIC's reply path hot, so the owner's first message after a quiet spell pays nothing extra.
+"""Keeps VAIC's reply path hot, so the owner's first message after a quiet spell pays nothing extra.
 
 The warm-keeper (``scheduler.warm_ace``) pings the runtime every couple of minutes. Answering "I'm up" keeps the
 container alive, but the first real turn still paid for lazy work: creating the Bedrock and WebSocket clients,

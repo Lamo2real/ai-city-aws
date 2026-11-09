@@ -1,6 +1,6 @@
 """Web APIs without an MCP server, from their OpenAPI 3 document (``docs/CONNECTORS_SKILLS.md`` §1.11).
 
-The pure part, shared by AIC's ``add_connector`` (to write the card), the connectors Lambda (provision, sync) and
+The pure part, shared by VAIC's ``add_connector`` (to write the card), the connectors Lambda (provision, sync) and
 the bridge Lambda (calls): fetching and parsing the document, resolving its local ``$ref``s, turning each
 operation into a tool, reading the auth scheme, and building one pinned HTTPS request from a tool call.
 The document is untrusted data: its text is only ever shown or used as tool descriptions, never followed.
@@ -30,7 +30,7 @@ ARG_RE = re.compile(r"^[a-zA-Z0-9_.-]{1,64}$")
 IGNORED_HEADERS = {"accept", "content-type", "authorization"}
 BODY_ARG = "body"
 SWAGGER = "That's a Swagger 2.0 document; the city reads only OpenAPI 3. Ask the provider for an OpenAPI 3 link."
-CHANGED = "The API description changed after the card was made. Ask AIC again."
+CHANGED = "The API description changed after the card was made. Ask VAIC again."
 
 Spec = dict[str, Any]
 """The normalized spec: ``{version, title, base_url, auth, operations[], skipped[], total, capped}``."""

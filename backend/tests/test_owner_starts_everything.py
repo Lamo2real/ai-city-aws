@@ -1,4 +1,4 @@
-"""The owner's rule (2026-11-09, decision 138): nothing starts unless the owner said so to AIC.
+"""The owner's rule (2026-11-09, decision 138): nothing starts unless the owner said so to VAIC.
 
 "Don't start on anything unless I have explicitly said okay… Ace will instruct the orchestrator… it's not just
 projects. It could be anything." Every scheduled job runs on an empty city and starts nothing; the company brief is

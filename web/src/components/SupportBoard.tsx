@@ -245,7 +245,7 @@ export function SupportBoard() {
       {s.loaded && !s.error && !all.length ? (
         <p className="empty">
           No tickets yet. Customer messages from Slack or your support inbox, and work one department hands to another,
-          show here with every step. Ask AIC: “We're an online shop like Zalando; run it.”
+          show here with every step. Ask VAIC: “We're an online shop like Zalando; run it.”
         </p>
       ) : null}
       {all.length && !list.length ? <p className="empty">None of these yet.</p> : null}
