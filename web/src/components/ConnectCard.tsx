@@ -4,7 +4,7 @@
 import { useState, type FormEvent } from "react";
 import { decideApproval } from "../lib/actions.ts";
 import { api, ApiError } from "../lib/api.ts";
-import { IMAP_PRESETS, sendConnectorKey, sendImapForm, type ImapForm } from "../lib/connect.ts";
+import { APP_PASSWORD_HOWTO, IMAP_PRESETS, sendConnectorKey, sendImapForm, type ImapForm } from "../lib/connect.ts";
 import { rememberConnect } from "../lib/connectReturn.ts";
 import { store, type ConnectCardState } from "../lib/store.ts";
 import { Button } from "./ui.tsx";
@@ -21,11 +21,27 @@ export type SignInCardProps = {
 };
 
 /** Starts a provider's sign-in in a new tab; returns the problem in plain words, or null. */
-export async function openSignIn(p: Pick<SignInCardProps, "kind" | "id" | "signinPath" | "completePath">) {
+export async function openSignIn(
+  p: Pick<SignInCardProps, "kind" | "id" | "signinPath" | "completePath"> & {
+    onAppPassword?: (preset: string) => void;
+  },
+) {
   // Opened at once, inside the tap, so the browser doesn't block it; the address comes a moment later.
   const tab = window.open("about:blank", "_blank");
   try {
-    const r = await api<{ url: string; state?: string }>(p.signinPath, { method: "POST" });
+    const r = await api<{ url: string; state?: string; app_password?: boolean; preset?: string; message?: string }>(
+      p.signinPath,
+      { method: "POST" },
+    );
+    if (r.app_password) {
+      // Sign-in isn't switched on for this provider here: the mailbox connects with an app password instead.
+      tab?.close();
+      if (p.onAppPassword) {
+        p.onAppPassword(r.preset ?? "");
+        return null;
+      }
+      return r.message ?? "This mailbox connects with an app password: open Settings → Connectors.";
+    }
     rememberConnect({ kind: p.kind, id: p.id, state: r.state ?? "", completePath: p.completePath });
     if (tab) {
       tab.opener = null;
@@ -41,6 +57,16 @@ export async function openSignIn(p: Pick<SignInCardProps, "kind" | "id" | "signi
 export function SignInCard(p: SignInCardProps) {
   const [problem, setProblem] = useState<string | null>(null);
   const [withToken, setWithToken] = useState(false);
+  const [appPreset, setAppPreset] = useState<string | null>(null);
+  if (appPreset !== null)
+    return (
+      <ImapCard
+        targetId={p.id}
+        title={`Add the app password for ${p.title.replace(/^Sign in to /, "")}`}
+        status="pending"
+        preset={appPreset || undefined}
+      />
+    );
   if (withToken && p.tokenInstead)
     return (
       <KeyCard
@@ -57,7 +83,7 @@ export function SignInCard(p: SignInCardProps) {
     );
   const go = async () => {
     setProblem(null);
-    setProblem(await openSignIn(p));
+    setProblem(await openSignIn({ ...p, onAppPassword: p.kind === "mail" ? setAppPreset : undefined }));
   };
   return (
     <div className="connect-card" role="group" aria-label={p.title}>
@@ -141,8 +167,15 @@ const EMPTY_IMAP: ImapForm = {
 };
 
 /** The app-password form for an IMAP/CalDAV account (MAIL_CALENDAR.md §2.2). */
-export function ImapCard(p: { targetId: string; title: string; status: "pending" | "connected" }) {
-  const [f, setF] = useState<ImapForm>(EMPTY_IMAP);
+export function ImapCard(p: {
+  targetId: string;
+  title: string;
+  status: "pending" | "connected";
+  /** Fill in this provider's servers (an account standing in for Google/Microsoft sign-in). */
+  preset?: string;
+}) {
+  const start = { ...EMPTY_IMAP, ...((p.preset && IMAP_PRESETS[p.preset]) || {}) };
+  const [f, setF] = useState<ImapForm>(start);
   const [problem, setProblem] = useState<string | null>(null);
   if (p.status === "connected")
     return (
@@ -156,7 +189,7 @@ export function ImapCard(p: { targetId: string; title: string; status: "pending"
     setProblem(null);
     try {
       await sendImapForm(p.targetId, f);
-      setF(EMPTY_IMAP); // the password leaves the page's memory as soon as it's stored
+      setF(start); // the password leaves the page's memory as soon as it's stored
     } catch (err) {
       setF({ ...f, password: "" });
       setProblem(
@@ -167,11 +200,12 @@ export function ImapCard(p: { targetId: string; title: string; status: "pending"
   return (
     <form className="connect-card" onSubmit={submit} aria-label={p.title} autoComplete="off">
       <p>{p.title}. Use an app password from your provider, not your normal password.</p>
+      {p.preset && APP_PASSWORD_HOWTO[p.preset] ? <p className="mute">{APP_PASSWORD_HOWTO[p.preset]}</p> : null}
       <label className="field">
         Provider
         <select
           onChange={(e) => setF({ ...f, ...(IMAP_PRESETS[e.target.value] ?? {}) })}
-          defaultValue=""
+          defaultValue={p.preset && IMAP_PRESETS[p.preset] ? p.preset : ""}
           aria-label="Fill in the servers for"
         >
           <option value="">Other (type the servers)</option>
@@ -271,7 +305,8 @@ export function ChatCards({ cards }: { cards: ConnectCardState[] }) {
         if (c.kind === "approve") return <ApproveCard key={c.id} {...c} />;
         if (c.kind === "key")
           return <KeyCard key={c.id} targetId={c.targetId} title={c.title} needs={c.needs} names={c.names} />;
-        if (c.kind === "imap") return <ImapCard key={c.id} targetId={c.targetId} title={c.title} status={c.status} />;
+        if (c.kind === "imap")
+          return <ImapCard key={c.id} targetId={c.targetId} title={c.title} status={c.status} preset={c.preset} />;
         const base = c.target === "mail" ? `/mail/accounts/${c.targetId}` : `/connectors/${c.targetId}/login`;
         return (
           <SignInCard

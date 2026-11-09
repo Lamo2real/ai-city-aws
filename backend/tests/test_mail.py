@@ -461,6 +461,23 @@ async def test_sign_in_flow_binds_the_session_and_never_shows_the_token() -> Non
     assert SECRET_TOKEN not in json.dumps(body) and SECRET_TOKEN not in json.dumps(d.bus.events, default=str)
 
 
+async def test_without_google_sign_in_gmail_connects_by_app_password(monkeypatch: Any) -> None:
+    """No Google OAuth app here (AIC_MAIL_PROVIDERS empty): a new Gmail account is an app-password one with Gmail's
+    servers, and "Sign in" on an older one switches it instead of failing (2026-11-09)."""
+    monkeypatch.setenv("AIC_MAIL_PROVIDERS", "")
+    s, _, identity, secrets = make_service()
+    d = api(s, secrets)
+    r = js(await handle_http(ev("POST", "/mail/accounts", {"provider": "google", "label": "Personal"}), d))
+    assert r["account"]["provider"] == "imap" and r["account"]["preset"] == "Gmail (app password)"
+    assert "apppasswords" in r["note"]
+    old = await s.store.create("google", "Work")
+    out = await handle_http(ev("POST", f"/mail/accounts/{old['id']}/signin"), d)
+    body = js(out)
+    assert out["statusCode"] == 200 and body["app_password"] is True and "app password" in body["message"]
+    assert (await s.store.get(old["id"]))["provider"] == "imap"
+    assert not [k for k, _ in identity.calls if k == "token"]  # no sign-in was even tried
+
+
 class FakeImapConn:
     def __init__(self, ok: bool = True) -> None:
         self.ok = ok

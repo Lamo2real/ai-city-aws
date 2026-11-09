@@ -124,6 +124,8 @@ export interface MailAccount {
   mail?: boolean;
   calendar?: boolean;
   calendars?: Array<{ id: string; name: string; hidden?: boolean }>;
+  /** An app-password account standing in for Google/Microsoft sign-in: whose servers to fill in. */
+  preset?: string;
 }
 export const PROVIDER_LABEL: Record<MailAccount["provider"], string> = {
   google: "Google",
@@ -161,6 +163,13 @@ export const addRule = (r: Omit<MailRule, "id">) => api<{ rule: MailRule }>("/ma
 export const removeRule = (id: string) => api(`/mail/rules/${id}`, { method: "DELETE" });
 
 /** Presets for the app-password form (the owner can change every field). */
+/** One line on getting the app password, per preset (shown above the form). */
+export const APP_PASSWORD_HOWTO: Record<string, string> = {
+  "Gmail (app password)":
+    "Create an app password at myaccount.google.com/apppasswords (2-step verification must be on), then paste it here with your Gmail address.",
+  "Outlook.com":
+    "Create an app password at account.microsoft.com/security (Advanced security options), then paste it here with your address.",
+};
 export const IMAP_PRESETS: Record<string, Partial<ImapForm>> = {
   iCloud: {
     imap_host: "imap.mail.me.com",

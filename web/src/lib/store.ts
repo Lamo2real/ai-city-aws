@@ -43,7 +43,7 @@ export type ConnectCardState =
       tokenOk?: boolean;
     }
   | { kind: "key"; id: string; targetId: string; title: string; needs?: string; names?: string[] }
-  | { kind: "imap"; id: string; targetId: string; title: string; status: "pending" | "connected" };
+  | { kind: "imap"; id: string; targetId: string; title: string; status: "pending" | "connected"; preset?: string };
 export type Presence = "idle" | "listening" | "thinking" | "speaking" | "waiting";
 
 export interface HudState {
@@ -214,7 +214,14 @@ class Store {
           : `Sign in to ${s("provider") === "google" ? "Google" : "Microsoft"} (${label})`;
       return this.putCard(
         s("provider") === "imap"
-          ? { kind: "imap", id: `mail:${s("account_id")}`, targetId: s("account_id"), title, status: "pending" }
+          ? {
+              kind: "imap",
+              id: `mail:${s("account_id")}`,
+              targetId: s("account_id"),
+              title,
+              status: "pending",
+              ...(s("preset") ? { preset: s("preset") } : {}),
+            }
           : {
               kind: "signin",
               id: `mail:${s("account_id")}`,

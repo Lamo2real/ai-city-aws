@@ -33,7 +33,7 @@ export function MailAccountCard(p: { a: MailAccount; onChange: (a: MailAccount |
   return (
     <article className="card" aria-label={`${a.label} account`}>
       <p>
-        <b>{a.label}</b> · {PROVIDER_LABEL[a.provider]} {a.address ? `· ${a.address}` : ""}
+        <b>{a.label}</b> · {a.preset ? a.preset.split(" (")[0] : PROVIDER_LABEL[a.provider]} {a.address ? `· ${a.address}` : ""}
       </p>
       <p className={a.status === "connected" ? "good" : "mute"}>{STATUS[a.status]}</p>
       {a.status !== "connected" && a.provider !== "imap" ? (
@@ -47,7 +47,7 @@ export function MailAccountCard(p: { a: MailAccount; onChange: (a: MailAccount |
         />
       ) : null}
       {a.status !== "connected" && a.provider === "imap" ? (
-        <ImapCard targetId={a.id} title={`Add the app password for ${a.label}`} status="pending" />
+        <ImapCard targetId={a.id} title={`Add the app password for ${a.label}`} status="pending" preset={a.preset} />
       ) : null}
       {a.calendars?.length ? (
         <fieldset className="roles">

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import secrets as _secrets
 from collections.abc import Callable
 from functools import cache
@@ -14,6 +15,27 @@ from aic.shared.table import Table, UpdateOptions
 
 PK = "MAIL"
 PROVIDERS = ("google", "microsoft", "imap")
+
+# Sign-in with Google or Microsoft needs an OAuth app the owner sets up (AIC_MAIL_PROVIDERS names the ones that are
+# on). Until then such an account connects by app password instead, with the provider's servers filled in (the owner
+# hit "Something went wrong" on "Sign in to Google", 2026-11-09).
+APP_PASSWORD_PRESET = {"google": "Gmail (app password)", "microsoft": "Outlook.com"}
+APP_PASSWORD_HELP = {
+    "google": "Create a Gmail app password at myaccount.google.com/apppasswords (2-step verification must be on), "
+    "then paste it with your Gmail address in the form.",
+    "microsoft": "Create an app password at account.microsoft.com/security (Advanced security options), then paste "
+    "it with your address in the form.",
+}
+
+
+def oauth_enabled(provider: str) -> bool:
+    """Whether "Sign in to …" works for this provider here. Not wired at all (tests, local runs): assume it does."""
+    raw = os.environ.get("AIC_MAIL_PROVIDERS")
+    if raw is None:
+        return True
+    return provider in {p.strip() for p in raw.split(",") if p.strip()}
+
+
 STATUSES = ("signing_in", "connected", "needs_sign_in", "error")
 PRIVATE = ("pk", "sk", "session_uri", "session_expires_at", "secret_name", "state")
 SIGNIN_SECONDS = 600

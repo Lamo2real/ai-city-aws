@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .accounts import PROVIDERS, AccountStore, public
+from .accounts import APP_PASSWORD_HELP, APP_PASSWORD_PRESET, PROVIDERS, AccountStore, oauth_enabled, public
 
 _NAMES = {"google": "Google", "microsoft": "Microsoft", "imap": "your mail provider"}
 
@@ -21,6 +21,20 @@ async def connect_account(d: Any, a: dict[str, Any]) -> str:
         return (
             f"There's already a {provider} account labelled {label!r}. Ask the owner for another label "
             "(for example 'work' or 'personal') if this is a different account."
+        )
+    preset = ""
+    if provider in APP_PASSWORD_PRESET and not oauth_enabled(provider):
+        # Sign-in isn't switched on here: the same mailbox by app password, the servers filled in.
+        preset, help_ = APP_PASSWORD_PRESET[provider], APP_PASSWORD_HELP[provider]
+        acct = await store.create("imap", label)
+        acct = await store.update(acct["id"], {"preset": preset}) or acct
+        await d.bus.put(
+            {"type": "connect.signin", "account_id": acct["id"], "provider": "imap", "label": label, "preset": preset}
+        )
+        await d.bus.put({"type": "mail.account", "account": public(acct)})
+        return (
+            f'An "Add the app password for {label}" card is now in the chat, with the {preset.split(" (")[0]} servers '
+            f"filled in. Tell the owner in one or two sentences: {help_} Never ask for the password in chat."
         )
     acct = await store.create(provider, label)
     await d.bus.put({"type": "connect.signin", "account_id": acct["id"], "provider": provider, "label": label})

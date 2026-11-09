@@ -14,7 +14,16 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from aic.mail.accounts import PROVIDERS, SIGNIN_SECONDS, AccountStore, mail_config, public
+from aic.mail.accounts import (
+    APP_PASSWORD_HELP,
+    APP_PASSWORD_PRESET,
+    PROVIDERS,
+    SIGNIN_SECONDS,
+    AccountStore,
+    mail_config,
+    oauth_enabled,
+    public,
+)
 from aic.mail.http import ProviderError, Unauthorized, call
 from aic.mail.providers.caldav import CalDav
 from aic.mail.providers.imap import Imap
@@ -78,9 +87,14 @@ async def _route(c: MailApi, method: str, seg: list[str], body: Callable[[], dic
             b = body()
             if b.get("provider") not in PROVIDERS:
                 return _err(400, "Pick Google, Microsoft or another provider (IMAP).")
-            a = await c.store.create(
-                str(b["provider"]), _str(b.get("label") or b["provider"].capitalize(), "Label", 1, 40)
-            )
+            provider, label = str(b["provider"]), _str(b.get("label") or b["provider"].capitalize(), "Label", 1, 40)
+            if provider in APP_PASSWORD_PRESET and not oauth_enabled(provider):
+                # Sign-in isn't switched on here: the same mailbox by app password, the servers filled in.
+                a = await c.store.create("imap", label)
+                a = await c.store.update(a["id"], {"preset": APP_PASSWORD_PRESET[provider]}) or a
+                await c.tell(a)
+                return 201, {"account": public(a), "note": APP_PASSWORD_HELP[provider]}
+            a = await c.store.create(provider, label)
             await c.tell(a)
             return 201, {"account": public(a)}
         if len(seg) < 3:
@@ -158,6 +172,19 @@ async def _delete(c: MailApi, a: dict[str, Any]) -> Answer:
 async def _signin(c: MailApi, a: dict[str, Any]) -> Answer:
     if a.get("provider") not in ("google", "microsoft"):
         return _err(400, "This account uses an app password, not a sign-in.")
+    provider = str(a["provider"])
+    if not oauth_enabled(provider):
+        # No OAuth app for this provider here: switch the account to an app password (it used to crash with
+        # "Something went wrong on our side", 2026-11-09).
+        n = await c.store.update(a["id"], {"provider": "imap", "preset": APP_PASSWORD_PRESET[provider], "error": None})
+        if n:
+            await c.tell(n)
+        return 200, {
+            "app_password": True,
+            "preset": APP_PASSWORD_PRESET[provider],
+            "message": f"{provider.capitalize()} sign-in isn't switched on in this AI City, so this mailbox connects "
+            f"with an app password instead. {APP_PASSWORD_HELP[provider]}",
+        }
     if not c.hud_origin:
         return _err(503, "Sign-in isn't set up yet (no HUD address).", "The owner adds it with the next deploy.")
     state = _secrets.token_urlsafe(16)
