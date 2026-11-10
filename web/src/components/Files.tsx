@@ -9,11 +9,13 @@ import {
   byWords,
   crumbs,
   dateWords,
+  dropPreview,
   fileStatusWords,
   filesApi,
   KIND_WORD,
   loadFiles,
   loadMore,
+  localPreview,
   sizeWords,
   useFiles,
   files as filesStore,
@@ -351,11 +353,7 @@ export function FilesScreen() {
               <li key={f.id}>
                 <button type="button" className="file-tile" onClick={() => setOpen(f.id)} aria-label={`Open ${f.name}`}>
                   <span className="file-thumb" aria-hidden="true">
-                    {f.thumb_url ? (
-                      <img src={f.thumb_url} alt="" loading="lazy" decoding="async" />
-                    ) : (
-                      <span>{ICON[f.kind] ?? ICON.other}</span>
-                    )}
+                    <FileThumb f={f} />
                   </span>
                   <span className="file-name">{f.name}</span>
                   <span className="file-meta mute">
@@ -387,11 +385,7 @@ export function FilesScreen() {
               <li key={f.id}>
                 <button type="button" className="file-row" onClick={() => setOpen(f.id)} aria-label={`Open ${f.name}`}>
                   <span className="file-row-thumb" aria-hidden="true">
-                    {f.thumb_url ? (
-                      <img src={f.thumb_url} alt="" loading="lazy" decoding="async" />
-                    ) : (
-                      <span>{ICON[f.kind] ?? ICON.other}</span>
-                    )}
+                    <FileThumb f={f} />
                   </span>
                   <span className="file-row-main">
                     <span className="file-name">{f.name}</span>
@@ -627,5 +621,39 @@ export function FilePreview(p: { file: StoredFile; compact?: boolean }) {
       <span aria-hidden="true">{ICON[f.kind] ?? ICON.other}</span>
       <span className="mute">{KIND_WORD[f.kind] ?? "File"}: no preview, download it to open.</span>
     </div>
+  );
+}
+
+/** A tile's picture. A photo shows frosted glass (over a very blurred copy while this browser uploads it) with a
+ *  light sweeping across, until its thumbnail has loaded; then it comes into focus (the owner, 2026-11-10). */
+function FileThumb({ f }: { f: StoredFile }) {
+  const [shown, setShown] = useState(false);
+  const img = useRef<HTMLImageElement>(null);
+  const ghost = localPreview(f.id);
+  useEffect(() => {
+    if (img.current?.complete && img.current.naturalWidth) setShown(true);
+  }, [f.thumb_url]);
+  if (f.kind !== "image" && !f.thumb_url) return <span>{ICON[f.kind] ?? ICON.other}</span>;
+  if (f.kind !== "image")
+    return <img src={f.thumb_url} alt="" loading="lazy" decoding="async" />;
+  return (
+    <span className={`thumb-glass${shown ? " shown" : ""}`} data-state={shown ? "shown" : "loading"}>
+      {ghost ? <img className="thumb-ghost" src={ghost} alt="" /> : null}
+      <span className="thumb-frost" />
+      {f.thumb_url ? (
+        <img
+          ref={img}
+          className="thumb-real"
+          src={f.thumb_url}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          onLoad={() => {
+            setShown(true);
+            setTimeout(() => dropPreview(f.id), 900); // after the photo has come into focus
+          }}
+        />
+      ) : null}
+    </span>
   );
 }

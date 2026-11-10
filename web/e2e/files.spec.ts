@@ -26,7 +26,12 @@ test("files: upload anything, find it by what's in it, preview, rename, download
   await expect.poll(() => m.files.puts.length).toBe(3);
   const grid = page.getByRole("list", { name: "Your files" });
   await expect(grid.getByRole("button", { name: "Open IMG_sunrise.jpg" })).toBeVisible();
+  // A photo shows frosted glass over a blurred copy while it uploads, then comes into focus; the count counts it.
+  const photo = grid.getByRole("button", { name: "Open IMG_sunrise.jpg" }).locator(".thumb-glass");
+  await expect(page.getByText("3 files", { exact: true })).toBeVisible();
+  await expect(grid.locator(".thumb-glass")).toHaveCount(1); // only the photo; the PDF keeps its icon
   await expect(grid.getByRole("status")).toHaveCount(0, { timeout: 10_000 }); // every file described, no status left
+  await expect(photo).toHaveAttribute("data-state", "shown", { timeout: 10_000 });
   await noSeriousA11y(page, "files");
   await page.screenshot({ path: `${SHOTS}/files.png` });
 

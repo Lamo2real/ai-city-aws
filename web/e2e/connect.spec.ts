@@ -175,6 +175,10 @@ test("a connect card waiting in the chat doesn't stop the conversation: later tu
   expect(await y(first)).toBeLessThan(await y(card));
   expect(await y(card)).toBeLessThan(await y(asked));
   expect(await y(asked)).toBeLessThan(await y(later));
+  // A reload (or a sign-in tab that came back) keeps the card where it was (the owner, 2026-11-10).
+  await page.reload();
+  await expect(card).toBeVisible();
+  expect(await y(page.getByText("Tavily needs its key, Sir"))).toBeLessThan(await y(card));
   // And the card still works afterwards.
   await card.getByLabel(/key/i).first().fill("tvly-LATER-KEY-123456");
   await card.getByRole("button", { name: "Save securely" }).click();

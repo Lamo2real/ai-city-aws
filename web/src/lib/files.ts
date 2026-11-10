@@ -191,6 +191,7 @@ export function reduceFiles(s: FilesState, a: FilesAction): FilesState {
       return {
         ...s,
         files,
+        count: i < 0 ? s.count + 1 : s.count, // a new upload counts at once ("0 files" over one tile, 2026-11-10)
         folders: addFolder(s.folders, a.file.folder),
         progress: left ? without(s.progress, a.file.id) : s.progress,
       };
@@ -226,6 +227,7 @@ export function reduceFiles(s: FilesState, a: FilesAction): FilesState {
       return {
         ...s,
         files: s.files.filter((x) => x.id !== a.id),
+        count: s.files.some((x) => x.id === a.id) ? Math.max(0, s.count - 1) : s.count,
         progress: without(s.progress, a.id),
         localError: without(s.localError, a.id),
       };
@@ -360,6 +362,16 @@ export async function uploadToFiles(file: File, o: FileUploadOptions = {}): Prom
   }
 }
 
+/** A photo this browser is uploading, shown very blurred under glass until its real thumbnail arrives. */
+const previews = new Map<string, string>();
+export const localPreview = (id: string) => previews.get(id);
+export function dropPreview(id: string) {
+  const u = previews.get(id);
+  if (!u) return;
+  previews.delete(id);
+  URL.revokeObjectURL(u);
+}
+
 /** Uploads many files at once (two at a time); returns the problems in plain words. */
 export async function addToFiles(list: File[], folder = ""): Promise<string[]> {
   const problems: string[] = [];
@@ -375,6 +387,8 @@ export async function addToFiles(list: File[], folder = ""): Promise<string[]> {
         folder: folder || undefined,
         onCreated: (rec) => {
           id = rec.id;
+          if (f.type.startsWith("image/") && typeof URL.createObjectURL === "function")
+            previews.set(rec.id, URL.createObjectURL(f));
           files.dispatch({ type: "upsert", file: rec });
         },
         onProgress: (percent) => id && files.dispatch({ type: "progress", id, percent }),

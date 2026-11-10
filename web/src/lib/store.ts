@@ -87,6 +87,19 @@ type Listener = () => void;
 const CHAT_KEY = "vaic.chat";
 const RESUME_KEY = "vaic.resume";
 const RESUME_MS = 30 * 60_000;
+const CARDS_KEY = "vaic.cards";
+/** Connect cards survive a reload, a new tab or a sign-in that came back (the owner: "why does the pop up in the
+ * chat disappear after a while?", 2026-11-10). Approvals are left out: they may have been answered elsewhere, and
+ * Needs you keeps them. Cards hold no keys or passwords, only titles and ids. */
+const readCards = (): ConnectCardState[] => {
+  try {
+    return (JSON.parse(localStorage.getItem(CARDS_KEY) ?? "[]") as ConnectCardState[]).filter(
+      (c) => c && typeof c.id === "string" && c.kind !== "approve",
+    );
+  } catch {
+    return [];
+  }
+};
 const readChat = (): ChatLine[] => {
   try {
     return (JSON.parse(localStorage.getItem(CHAT_KEY) ?? "[]") as ChatLine[]).slice(-60);
@@ -106,7 +119,7 @@ class Store {
     presence: "idle",
     settings: null,
     turn: null,
-    cards: [],
+    cards: readCards(),
   };
   private listeners = new Set<Listener>();
   /** Messages whose answer the owner stopped (`owner-<line id>`): anything still in flight for them is dropped. */
@@ -129,6 +142,13 @@ class Store {
         localStorage.setItem(CHAT_KEY, JSON.stringify(patch.chat.slice(-60)));
       } catch {
         /* storage full or blocked: the chat still works for this session */
+      }
+    }
+    if (patch.cards) {
+      try {
+        localStorage.setItem(CARDS_KEY, JSON.stringify(patch.cards.filter((c) => c.kind !== "approve")));
+      } catch {
+        /* storage blocked: the cards last for this session */
       }
     }
     for (const l of this.listeners) l();

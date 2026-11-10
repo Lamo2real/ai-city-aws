@@ -6393,6 +6393,83 @@ a.btn-primary.chat-file-dl,
   height: 100%;
   object-fit: cover;
 }
+/* A photo while it loads: frosted glass over a very blurred copy (or a soft wash), a light sweeping across, and
+   then the photo comes into focus (the owner, 2026-11-10). */
+.thumb-glass {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(120% 90% at 20% 15%, rgba(255, 214, 150, 0.55), transparent 60%),
+    radial-gradient(110% 90% at 85% 90%, rgba(150, 170, 255, 0.5), transparent 60%),
+    var(--glass-deep);
+}
+.thumb-glass > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.thumb-ghost {
+  filter: blur(22px) saturate(1.5);
+  transform: scale(1.25);
+}
+.thumb-frost {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.06));
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  transition: opacity 0.6s var(--ease-out);
+}
+.thumb-frost::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.5) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: thumb-sweep 1.6s ease-in-out infinite;
+}
+@keyframes thumb-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+.thumb-real {
+  z-index: 2;
+  opacity: 0;
+  filter: blur(18px);
+  transform: scale(1.06);
+  transition:
+    opacity 0.6s var(--ease-out),
+    filter 0.7s var(--ease-out),
+    transform 0.7s var(--ease-out);
+}
+.thumb-glass.shown .thumb-real {
+  opacity: 1;
+  filter: none;
+  transform: none;
+}
+.thumb-glass.shown .thumb-frost {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .thumb-frost::after {
+    animation: none;
+  }
+  .thumb-real,
+  .thumb-frost {
+    transition: none;
+  }
+}
 .file-row-main {
   display: grid;
   min-width: 0;
