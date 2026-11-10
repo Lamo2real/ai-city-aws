@@ -114,6 +114,38 @@ function paintFigure(g, agent, poseName, f, stride = null) {
   if (prop && PROP[prop]) PROP[prop](g, 3, top + 8);
   if (prop === "lens") { const x = 10 + rx, y = top + 1; R(g, x + 1, y - 3, 4, 4, "#bfe6ff"); R(g, x, y - 2, 1, 2, "#c7a23c"); R(g, x + 5, y - 2, 1, 2, "#c7a23c"); R(g, x + 1, y - 4, 4, 1, "#c7a23c"); R(g, x + 1, y + 1, 4, 1, "#c7a23c"); }
 }
+// A seated figure seen from behind, facing its monitor (decision 166, the office floor): hair over the head, the
+// shirt's back, arms forward to the keyboard.
+function paintBack(g, agent) {
+  const id = agent.id, look = identity(id);
+  const skin = id === "ace" ? "#a7f0ff" : SKIN[look.skin];
+  let shirt = SHIRT[look.shirt], hair = HAIR[look.hair];
+  if (id === "ace") { shirt = "#54c8ee"; hair = null; }
+  if (id === "orchestrator") shirt = "#23222f";
+  if (agent.kind === "manager") shirt = hatColor(deptOf(agent));
+  const top = 2;
+  R(g, 2, top + 8, 2, 5, shirt); R(g, 10, top + 8, 2, 5, shirt); // arms, forward to the desk
+  R(g, 3, top + 8, 8, 6, shirt); R(g, 6, top + 9, 2, 4, "rgba(0,0,0,.12)");
+  R(g, 3, top + 1, 8, 7, skin); R(g, 4, top, 6, 1, skin);
+  if (hair) { R(g, 3, top, 8, 6, hair); R(g, 4, top - 1, 6, 1, hair); if (look.hairStyle === 3) R(g, 3, top + 6, 8, 2, hair); }
+  if (agent.kind === "manager") { const c = hatColor(deptOf(agent)); R(g, 3, top - 2, 8, 3, c); R(g, 2, top + 1, 10, 1, c); }
+}
+// The look of an agent for the HUD's office floor, as a picture: from the front, or from behind at its monitor.
+const sprites = new Map();
+export function agentSprite(agent, facing = "front") {
+  const key = `${agent.id}|${agent.kind}|${agent.department}|${facing}`;
+  if (!sprites.has(key)) {
+    const [c, g] = newCanvas(14, 21);
+    if (facing === "back") paintBack(g, agent); else paintFigure(g, agent, "rest", 0);
+    sprites.set(key, c.toDataURL());
+  }
+  return sprites.get(key);
+}
+// A tower's colours, the same as on the map: its facade and its department's accent (by its slot).
+export function towerLook(dept, slot = 0) {
+  const f = FACADES[hashOf(dept) % FACADES.length], [accent, light, dark] = ROOFS[((slot % ROOFS.length) + ROOFS.length) % ROOFS.length];
+  return { ...f, accent, light, dark };
+}
 const figures = new Map();
 function figure(agent, pose, f, stride) {
   const key = `${agent.id}|${agent.kind}|${agent.department}|${pose}|${f % 4}|${stride}`;
@@ -397,7 +429,10 @@ const FACADES = [
 function towerShape(b) {
   const X = b.x * TILE, Y = b.y * TILE, W = b.w * TILE, H = b.h * TILE;
   const cx = X + W / 2, foot = Y + H - 14; // the pavement in front takes the last 14 px
-  const tiers = [[112, 46], [92, 46], [70, 34], [46, 12]]; // [width, height] from the street up
+  // Sized to the plot (decision 166): wider lots get wider towers, taller lots more floors; three silhouettes.
+  const step = [[1, 0.82, 0.625, 0.41], [1, 0.9, 0.8, 0.45], [1, 0.7, 0.55, 0.4]][hashOf(`shape:${b.dept}`) % 3];
+  const k = Math.max(0.7, (H - 66) / 126), base = W - 32;
+  const tiers = [[base * step[0], 46 * k], [base * step[1], 46 * k], [base * step[2], 34 * k], [base * step[3], 12]].map(([w, h]) => [Math.round(w / 2) * 2, Math.round(h)]); // [width, height] from the street up
   const out = [];
   let top = foot;
   for (const [w, h] of tiers) { top -= h; out.push({ x: Math.round(cx - w / 2), y: top, w, h }); }
@@ -430,7 +465,7 @@ function site(g, b) {
 // The tower alone, drawn once into its own canvas, so it can rise, be built floor by floor, or be pulled down.
 const towerSprites = new Map();
 function towerSprite(b) {
-  const key = `${b.dept}|${b.slot}|${b.x},${b.y}`;
+  const key = `${b.dept}|${b.slot}|${b.x},${b.y},${b.w},${b.h}`;
   let c = towerSprites.get(key);
   if (!c) { const t = towerShape(b); const [cv, g] = newCanvas(t.W, t.H); g.translate(-t.X, -t.Y); towerBody(g, b); c = cv; towerSprites.set(key, c); }
   return c;
@@ -533,14 +568,15 @@ function bake(world, skip = new Map()) {
   const [c, g] = newCanvas(W + M * 2, H + M * 2);
   g.translate(M, M);
   lawn(g, -M, -M, W + M * 2, H + M * 2, "lawn");
-  const columns = [...new Set(world.buildings.concat(world.lots).map((b) => b.x))].sort((a, b) => a - b);
   const top = world.portrait ? world.hqStreet : -MARGIN, bottom = world.height + MARGIN; // every avenue runs on off the map
-  const verticals = [world.avenue, ...columns.slice(1).map((x) => x - 3).filter((x) => x !== world.avenue)];
-  for (const x of verticals) avenue(g, x, top, bottom, `ave${x}`);
+  // The avenue, the road west of HQ and the side streets between towers, each as long as it runs (decision 166).
+  const verticals = [{ x: world.avenue, y0: top, y1: bottom }, ...(world.lanes ?? [])];
+  for (const v of verticals) avenue(g, v.x, v.y0, v.y1, `ave${v.x},${v.y0}`);
   const roads = world.streets.map((s) => ({ ...s, x0: s.x0 === 0 ? -MARGIN : s.x0, x1: s.x1 === world.width ? world.width + MARGIN : s.x1 }));
-  for (const s of roads) street(g, s.x0, s.x1, s.y, `st${s.y}`, [world.avenue]);
+  const through = verticals.filter((v) => v.y0 <= top).map((v) => v.x);
+  for (const s of roads) street(g, s.x0, s.x1, s.y, `st${s.y}`, through);
   // Trees wherever nothing else stands, far to near.
-  const taken = [world.hq, ...world.buildings, ...world.lots, world.homes, ...roads.map((s) => ({ x: s.x0, y: s.y, w: s.x1 - s.x0, h: 3 })), ...verticals.map((x) => ({ x, y: top, w: 3, h: bottom - top }))];
+  const taken = [world.hq, ...world.buildings, ...world.lots, world.homes, ...roads.map((s) => ({ x: s.x0, y: s.y, w: s.x1 - s.x0, h: 3 })), ...verticals.map((v) => ({ x: v.x, y: v.y0, w: 3, h: v.y1 - v.y0 }))];
   const clear = (x, y) => taken.every((t) => x < (t.x * TILE) - 12 || x > (t.x + t.w) * TILE + 12 || y < t.y * TILE - 2 || y > (t.y + t.h) * TILE + 34);
   const spots = [];
   for (let i = 0; i < ((W + M * 2) * (H + M * 2)) / 3000; i++) { const x = -M + r() * (W + M * 2), y = -M + r() * (H + M * 2); if (clear(x, y)) spots.push([Math.round(x), Math.round(y)]); }
@@ -610,6 +646,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   root._people = people; // a read-only test hook: e2e/commute.spec.ts watches who stands where
   root._counts = counts; // and the roof counters (e2e/towers.spec.ts)
   root._doors = doors;
+  root._view = () => ({ x: cam.x, y: cam.y, zoom: cam.zoom }); // the camera, for tests that click a tower
   root._world = () => world; // the layout, for tests: towers keep one size whatever the headcount
   const winBox = document.createElement("div"); winBox.id = "citywindows"; winBox.hidden = true; winBox.setAttribute("aria-hidden", "true"); root.append(winBox);
   let selected = null, hover = null, lastVisit = 0, hiddenHomes = 0;
@@ -1352,6 +1389,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     zoomOut: () => zoomStep(-1),
     fit: () => { fitView(true); wake(); },
     select: (id) => { if (id) selectAgent(id); else { selected = null; wake(); } },
+    building: (dept) => world?.buildings.find((x) => x.dept === dept) ?? null,
     focusBuilding: (dept) => { const b = world && [world.hq, ...world.buildings].find((x) => x.dept === dept); if (b) zoomToBuilding(b); },
     resume() { resume(); if (world) { fitView(); wake(); } },
     get state() { return state; },

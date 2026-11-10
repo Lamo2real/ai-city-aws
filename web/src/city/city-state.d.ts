@@ -149,6 +149,8 @@ export interface CityWorld {
   buildings: CityBuilding[];
   lots: Array<CityPoint & { w: number; h: number; demolished?: string }>;
   streets: Array<{ y: number; x0: number; x1: number }>;
+  /** The road west of HQ and the side streets between towers, each as long as it runs (decision 166). */
+  lanes: Array<{ x: number; y0: number; y1: number }>;
   avenue: number;
   hq: CityBuilding;
   width: number;
@@ -160,6 +162,8 @@ export interface CityWorld {
   [k: string]: unknown;
 }
 export const TILE: number;
+/** A tower's footprint and height in tiles, from its name alone (decision 166). */
+export function towerSize(name: string, portrait?: boolean): { w: number; h: number };
 export function layout(
   state: CityState,
   opts?: { portrait?: boolean; seats?: Record<string, number>; houses?: number },

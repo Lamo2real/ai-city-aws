@@ -25,6 +25,8 @@ import { MicIcon } from "./ui.tsx";
 import { FlatWave, speakerOf } from "./VoiceVisualizer.tsx";
 import { Banner, Button, Loading } from "./ui.tsx";
 import { BuildDepartment, DemolishDepartment } from "./Departments.tsx";
+import { CityVisit } from "./CityVisit.tsx";
+import { visitHash } from "../lib/visit.ts";
 
 const REGION_CITY: Record<string, string> = {
   "eu-north-1": "Stockholm",
@@ -55,7 +57,14 @@ type Open =
   | { record: "workforce" | "health" | "parked" | "legend" }
   | null;
 
-export function CityView({ go }: { go: (view: string) => void }) {
+export function CityView({
+  go,
+  visit = null,
+}: {
+  go: (view: string) => void;
+  /** Inside a department's building (decision 166): on its street, or on one project's floor. */
+  visit?: { dept: string; project: string | null } | null;
+}) {
   const root = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const scene = useRef<CityScene | null>(null);
@@ -69,6 +78,26 @@ export function CityView({ go }: { go: (view: string) => void }) {
   const [health, setHealth] = useState<string | null>(null);
   const voice = useVoice();
   const speaker = speakerOf(useHud((s) => s.presence));
+
+  // Every step into a building is a history entry, so Back undoes it; our own "back" buttons go back through
+  // the same entries. A page opened straight on a building (a link) has none behind it: those steps replace.
+  const depth = visit ? (visit.project ? 2 : 1) : 0;
+  const base = useRef(depth);
+  const outTo = (to: number) => {
+    if (to >= depth) return;
+    if (to >= base.current) return history.go(to - depth);
+    base.current = to;
+    location.replace(`#${to === 0 || !visit ? "/city" : visitHash(visit.dept)}`);
+  };
+  const enter = (dept: string) => {
+    setOpen(null);
+    scene.current?.select(null);
+    go(visitHash(dept).slice(1));
+  };
+  useEffect(() => {
+    if (open && "agent" in open && !visit?.project) setOpen(null); // left the floor: its agent's card goes too
+    if (open && "dept" in open && visit) setOpen(null);
+  }, [visit?.dept, visit?.project]);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000);
@@ -84,7 +113,8 @@ export function CityView({ go }: { go: (view: string) => void }) {
       canvas: canvas.current,
       insets: wide,
       onSelectAgent: (id) => setOpen(id ? { agent: id } : null),
-      onSelectBuilding: (dept) => setOpen({ dept }),
+      // A department's tower: go and stand in front of it. HQ keeps its card.
+      onSelectBuilding: (dept) => (dept === "HQ" ? setOpen({ dept }) : enter(dept)),
       onOpenApp: (slug) => go(`apps/${encodeURIComponent(slug)}`),
     });
     scene.current = s;
@@ -323,6 +353,20 @@ export function CityView({ go }: { go: (view: string) => void }) {
           </button>
         </div>
       </div>
+      {visit ? (
+        <CityVisit
+          key={visit.dept}
+          dept={visit.dept}
+          project={visit.project}
+          city={city}
+          slot={scene.current?.building(visit.dept)?.slot ?? names.indexOf(visit.dept)}
+          turned={open && "agent" in open ? open.agent : null}
+          onPick={(p) => go(visitHash(visit.dept, p).slice(1))}
+          onBack={() => outTo(depth - 1)}
+          onExit={() => outTo(0)}
+          onAgent={(id) => setOpen({ agent: id })}
+        />
+      ) : null}
       {open ? (
         <CityPanel
           open={open}
@@ -332,6 +376,7 @@ export function CityView({ go }: { go: (view: string) => void }) {
             scene.current?.select(null);
           }}
           onZoom={(d) => scene.current?.focusBuilding(d)}
+          onVisit={enter}
           onBuilt={(d) => {
             setOpen({ dept: d });
             setTimeout(() => scene.current?.focusBuilding(d), 400);
@@ -384,12 +429,14 @@ export function CityPanel({
   city,
   onClose,
   onZoom,
+  onVisit,
   onBuilt,
 }: {
   open: NonNullable<Open>;
   city: CityState;
   onClose: () => void;
   onZoom: (dept: string) => void;
+  onVisit?: (dept: string) => void;
   onBuilt?: (dept: string) => void;
 }) {
   const ref = useRef<HTMLElement>(null);
@@ -423,7 +470,9 @@ export function CityPanel({
       </header>
       {"agent" in open ? <AgentPanel key={open.agent} id={open.agent} city={city} /> : null}
       {"build" in open ? <BuildDepartment compact onDone={onBuilt} /> : null}
-      {"dept" in open ? <DeptPanel name={open.dept} city={city} onZoom={onZoom} onGone={onClose} /> : null}
+      {"dept" in open ? (
+        <DeptPanel name={open.dept} city={city} onZoom={onZoom} onVisit={onVisit} onGone={onClose} />
+      ) : null}
       {"dept" in open ? <DeptApps name={open.dept} city={city} /> : null}
       {"record" in open && open.record === "legend" ? <Legend /> : null}
       {"record" in open && open.record === "parked" ? <Parked city={city} /> : null}
@@ -545,11 +594,13 @@ function DeptPanel({
   name,
   city,
   onZoom,
+  onVisit,
   onGone,
 }: {
   name: string;
   city: CityState;
   onZoom: (d: string) => void;
+  onVisit?: (d: string) => void;
   onGone: () => void;
 }) {
   const d = city.departments[name];
@@ -578,6 +629,7 @@ function DeptPanel({
           <li className="mute">None right now.</li>
         )}
       </ul>
+      {name !== "HQ" && onVisit ? <Button onClick={() => onVisit(name)}>Go inside</Button> : null}
       <Button variant="secondary" onClick={() => onZoom(name)}>
         Zoom in
       </Button>

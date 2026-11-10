@@ -1,7 +1,8 @@
-// On a phone: VAIC is the default, the mic is in reach, the City fits and the money is visible.
+// On a phone: the City is the default (decision 166), the mic is in reach, the City fits and the money is visible.
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { appRecord, hired, mockBackend } from "./mock.ts";
+import { visitSnapshot } from "./visit-data.ts";
 
 const SHOTS = `${import.meta.dirname}/../../docs/screenshots`;
 /** WCAG 2 A/AA at phone width: contrast, names, focus order (the map's canvas is described separately). */
@@ -14,6 +15,8 @@ async function noSeriousA11y(page: Page, label: string) {
 test("phone: VAIC and the City work at 412px wide", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/");
+  await expect(page.locator("section.city")).toHaveAttribute("data-city-ready", "1"); // the City opens first
+  await page.goto("/#/ace");
   await expect(page.getByRole("textbox", { name: "Message to VAIC" })).toBeVisible();
   await expect(page.getByText(/Today: \$/)).toHaveCount(0); // costs live on the Costs screen only
   const mic = page.getByRole("button", { name: "Talk to VAIC", exact: true });
@@ -107,7 +110,7 @@ test("phone: pinned apps move into the nav row", async ({ page }) => {
   await mockBackend(page, {
     apps: [appRecord("app-cal000000001", "star-calendar", "Star Calendar", { pinned: true, grants: [] })],
   });
-  await page.goto("/");
+  await page.goto("/#/ace");
   await expect(page.getByRole("navigation", { name: "Pinned apps" })).toBeHidden();
   const pin = page.getByRole("navigation", { name: "Screens" }).getByRole("link", { name: "Star Calendar" });
   await pin.scrollIntoViewIfNeeded();
@@ -149,7 +152,7 @@ test("phone: Needs you and Work read well at 412px, with big answer buttons", as
 
 test("phone: the + menu opens upwards inside the screen and its rows are easy to tap", async ({ page }) => {
   await mockBackend(page);
-  await page.goto("/");
+  await page.goto("/#/ace");
   const plus = page.getByRole("button", { name: "Add to your message" });
   await plus.click();
   const menu = page.getByRole("menu", { name: "Add to your message" });
@@ -181,4 +184,52 @@ test("phone: the City | Features highlight stays inside its pill on Features", a
     expect(t.y).toBeGreaterThanOrEqual(pill.y - 1);
     expect(t.x + t.width).toBeLessThanOrEqual(pill.x + pill.width + 1);
   }).toPass();
+});
+
+test("phone: tap a tower, pick a project, go up to its floor, an agent turns, and back out", async ({ page }) => {
+  await mockBackend(page, { snapshot: visitSnapshot() });
+  await page.goto("/");
+  await expect(page.locator("section.city")).toHaveAttribute("data-city-ready", "1");
+  await page.waitForTimeout(600);
+  // A spot on the Application tower that no panel covers.
+  const at = await page.evaluate(() => {
+    type H = HTMLElement & {
+      _world: () => { buildings: Array<{ dept: string; x: number; y: number; w: number; h: number }> };
+      _view: () => { x: number; y: number; zoom: number };
+    };
+    const root = document.querySelector("section.city") as H;
+    const b = root._world().buildings.find((x) => x.dept === "Application")!;
+    const v = root._view();
+    const r = root.getBoundingClientRect();
+    for (let dy = 90; dy < b.h * 16; dy += 8) {
+      // above the door, where the manager stands
+      const x = r.left + ((b.x + b.w / 2) * 16 - v.x) * v.zoom,
+        y = r.top + ((b.y + b.h) * 16 - dy - v.y) * v.zoom;
+      if (document.elementFromPoint(x, y) === root.querySelector(":scope > canvas")) return { x, y };
+    }
+    return null;
+  });
+  expect(at).not.toBeNull();
+  // A click, not touchscreen.tap: Playwright's emulated tap never reaches the canvas here (no pointer events at all).
+  await page.mouse.click(at!.x, at!.y);
+  const visit = page.getByRole("region", { name: "Application building" });
+  await expect(visit).toHaveAttribute("data-phase", "street");
+  const noScroll = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+  expect(await noScroll()).toBe(true);
+  await page.screenshot({ path: `${SHOTS}/phone-visit-street.png` });
+  await noSeriousA11y(page, "street at 412px");
+  await page.getByRole("button", { name: /booking page/ }).tap();
+  await expect(visit).toHaveAttribute("data-phase", "floor", { timeout: 5000 });
+  const tester = visit.getByRole("button", { name: /^Tester/ });
+  await tester.tap();
+  await expect(tester).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("dialog", { name: "Tester" })).toBeVisible();
+  expect(await noScroll()).toBe(true);
+  await page.waitForTimeout(700);
+  await page.screenshot({ path: `${SHOTS}/phone-visit-floor.png` });
+  await noSeriousA11y(page, "floor at 412px");
+  await page.getByRole("dialog", { name: "Tester" }).getByRole("button", { name: "Close" }).tap();
+  await page.getByRole("button", { name: "City map" }).tap();
+  await expect(visit).toHaveCount(0);
+  await expect(page.locator("section.city > canvas")).toBeVisible();
 });

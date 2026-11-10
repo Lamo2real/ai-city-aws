@@ -6,9 +6,13 @@ import { store } from "./store.ts";
 
 /** `#/apps/<slug>` → { view: "apps", slug }, `#/settings/<page>` → { view: "settings", slug: page }; a view not
  *  in `views` → the first one (VAIC). */
-export function route<V extends string>(hash: string, views: readonly V[]): { view: V; slug: string | null } {
+export function route<V extends string>(
+  hash: string,
+  views: readonly V[],
+  fallback: V = views[0]!,
+): { view: V; slug: string | null } {
   const [head = "", ...rest] = hash.replace(/^#\/?/, "").split("/");
-  const view = (views as readonly string[]).includes(head) ? (head as V) : views[0]!;
+  const view = (views as readonly string[]).includes(head) ? (head as V) : fallback;
   if ((view !== "apps" && view !== "settings" && view !== "city" && view !== "tickets") || !rest.length || !rest.join("")) return { view, slug: null };
   let slug = rest.join("/");
   try {
@@ -16,7 +20,7 @@ export function route<V extends string>(hash: string, views: readonly V[]): { vi
   } catch {
     /* keep it as typed */
   }
-  return { view, slug: slug.slice(0, 60) };
+  return { view, slug: slug.slice(0, view === "city" ? 200 : 60) }; // a building visit carries a department and a project
 }
 
 /**

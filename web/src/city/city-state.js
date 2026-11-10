@@ -514,36 +514,77 @@ const PLOT_W = 9, SEATS_PER_ROW = 4, STREET = 3, HQ_W = 12, HQ_H = 11, HOUSES_PE
 // How far the countryside and the roads run on past the town on every side, in tiles (the owner: a larger map).
 export const MAP_MARGIN = 48;
 
+// A tower's footprint and height in tiles, fixed by its name (decision 166): the skyline is uneven like a real
+// one, but a tower still never grows or shrinks with its headcount (decision 117) and never moves.
+export function towerSize(name, portrait = false) {
+  const h = hashOf(`size:${name}`);
+  return { w: 8 + (h % (portrait ? 3 : 4)), h: 11 + ((h >>> 4) % 5) };
+}
+// Between two towers on the same side of a row: a side street most of the time, now and then a strip of park.
+const gapAfter = (r, k) => (hashOf(`gap:${r}:${k}`) % 3 === 0 ? 2 : STREET);
+
 // An archived department keeps its slot, so a building never lands on another; it isn't drawn unless work is still open there.
 // `seats` is { dept: the highest seat in use + 1 }; it only adds a department the registry no longer lists (the
 // towers never grow).
+// The town (decision 166): HQ and the VAIC plaza in the middle with the neighbourhood under it, the towers on both
+// sides of it, each its own size, rows as tall as their tallest tower, side streets wherever they fall.
 export function layout(state, { portrait = false, seats = {}, houses = 0 } = {}) {
   const names = departmentNames(state);
   for (const d of Object.keys(seats)) if (d !== "HQ" && !names.includes(d)) names.push(d); // someone works in a department the registry no longer lists
   const n = names.length;
   const cols = portrait ? 2 : Math.max(2, n <= 4 ? 2 : Math.ceil(n / 3));
   const rows = Math.max(2, Math.ceil(n / cols));
-  const originX = portrait ? 1 : 1 + HQ_W + STREET, width = originX + cols * PLOT_W + (cols - 1) * STREET + 1;
-  // On the wide map HQ is as tall as a tower, so its street is the first row's street: one road, edge to edge.
-  const hqH = portrait ? HQ_H : TOWER_H;
-  const hq = { dept: "HQ", x: portrait ? Math.round((width - HQ_W) / 2) : 1, y: 1, w: HQ_W, h: hqH, color: DEPT_COLOR.HQ };
-  const buildings = [], lots = [];
-  const avenueX = portrait ? originX + PLOT_W : 1 + HQ_W;
-  // Every street runs the whole width and on off the map (the owner, 2026-11-09: no dead ends).
-  const streets = portrait ? [{ y: 1 + HQ_H, x0: 0, x1: width }] : [];
-  let y = portrait ? 1 + HQ_H + STREET : 1;
-  for (let r = 0; r < rows; r++) {
-    const h = TOWER_H;
-    for (let c = 0; c < cols; c++) {
-      const name = names[r * cols + c], x = originX + c * (PLOT_W + STREET);
-      if (!name) { lots.push({ x, y, w: PLOT_W, h }); continue; }
-      const reg = state.departments[name];
-      if (reg?.state === "demolished" && !seats[name]) { lots.push({ x, y, w: PLOT_W, h, demolished: name }); continue; }
-      buildings.push({ dept: name, slot: r * cols + c, x, y, w: PLOT_W, h, color: deptColor(name), builtAt: reg?.builtAt ?? 0, archived: reg?.state === "archived" && !seats[name] });
-    }
-    y += h;
-    streets.push({ y, x0: 0, x1: width });
-    y += STREET;
+  const sizeOf = (name) => (name ? towerSize(name, portrait) : { w: PLOT_W, h: TOWER_H });
+  const grid = Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => names[r * cols + c]));
+  const rowH = grid.map((row) => Math.max(...row.map((name) => sizeOf(name).h)));
+  const buildings = [], lots = [], lanes = [];
+  const place = (name, slot, x, y, w, h) => {
+    if (!name) { lots.push({ x, y, w, h }); return; }
+    const reg = state.departments[name];
+    if (reg?.state === "demolished" && !seats[name]) { lots.push({ x, y, w, h, demolished: name }); return; }
+    buildings.push({ dept: name, slot, x, y, w, h, color: deptColor(name), builtAt: reg?.builtAt ?? 0, archived: reg?.state === "archived" && !seats[name] });
+  };
+  let width, hqX, avenueX, hqH, westW = [];
+  const streets = [];
+  let y;
+  if (portrait) {
+    // A phone: HQ on top, the avenue down the middle, a tower on each side of it in every row.
+    const maxW = 10;
+    avenueX = 1 + maxW; width = avenueX + STREET + maxW + 1; hqX = Math.round((width - HQ_W) / 2); hqH = HQ_H;
+    streets.push({ y: 1 + HQ_H, x0: 0, x1: width });
+    y = 1 + HQ_H + STREET;
+    grid.forEach((row, r) => {
+      row.forEach((name, c) => { const s = sizeOf(name); place(name, r * cols + c, c === 0 ? avenueX - s.w : avenueX + STREET, y + rowH[r] - s.h, s.w, s.h); });
+      y += rowH[r]; streets.push({ y, x0: 0, x1: width }); y += STREET;
+    });
+  } else {
+    // Columns alternate east and west of HQ, nearest first: east of the avenue, then west of HQ, and outwards.
+    const side = (c) => (c % 2 === 0 ? "east" : "west");
+    westW = grid.map((row, r) => { let w = 0, k = 0; row.forEach((name, c) => { if (side(c) !== "west") return; w += (k ? gapAfter(r, `w${k - 1}`) : STREET) + sizeOf(name).w; k++; }); return w; });
+    hqX = 1 + Math.max(0, ...westW); avenueX = hqX + HQ_W; hqH = rowH[0];
+    width = 0; y = 1;
+    grid.forEach((row, r) => {
+      const top = y, bottom = y + rowH[r];
+      let east = avenueX + STREET, west = hqX - STREET, ke = 0, kw = 0;
+      const eastCount = row.filter((_, c) => side(c) === "east").length, westCount = row.length - eastCount;
+      row.forEach((name, c) => {
+        const s = sizeOf(name);
+        if (side(c) === "east") {
+          place(name, r * cols + c, east, bottom - s.h, s.w, s.h);
+          east += s.w;
+          if (ke < eastCount - 1) { const g = gapAfter(r, `e${ke}`); if (g === STREET) lanes.push({ x: east, y0: r ? top : -MAP_MARGIN, y1: bottom }); east += g; }
+          ke++;
+        } else {
+          const x = west - s.w;
+          place(name, r * cols + c, x, bottom - s.h, s.w, s.h);
+          west = x;
+          if (kw < westCount - 1) { const g = gapAfter(r, `w${kw}`); if (g === STREET) lanes.push({ x: west - STREET, y0: r ? top : -MAP_MARGIN, y1: bottom }); west -= g; }
+          kw++;
+        }
+      });
+      width = Math.max(width, east + 1);
+      y = bottom; streets.push({ y, x0: 0, x1: 0 }); y += STREET;
+    });
   }
   const officesEnd = y - STREET;
   const home = [];
@@ -556,18 +597,24 @@ export function layout(state, { portrait = false, seats = {}, houses = 0 } = {})
     for (let i = 0; i < houses; i++) home.push({ x: xs[i % xs.length], y: homesY + Math.floor(i / xs.length) * HOUSE_ROW_H });
     homesH = Math.max(Math.ceil(houses / xs.length) * HOUSE_ROW_H, HOUSE_ROW_H);
   } else {
-    // Under HQ, in blocks of three rows between the streets; more houses than fit add blocks (and streets) below.
-    const perBlock = HOUSES_PER_ROW * HOUSE_BLOCK_ROWS, block = TOWER_H + STREET;
+    // Under HQ, in a block between each pair of streets; more houses than fit add blocks (and streets) below.
     homesY = 1 + hqH + STREET; homesW = HQ_W;
-    for (let i = 0; i < houses; i++) {
-      const b = Math.floor(i / perBlock), k = i % perBlock;
-      home.push({ x: 1 + (k % HOUSES_PER_ROW) * HOUSE_W, y: homesY + b * block + Math.floor(k / HOUSES_PER_ROW) * HOUSE_ROW_H });
+    const blocks = [];
+    let top = homesY;
+    for (let r = 1; r < rows; r++) { blocks.push({ y: top, rows: Math.min(HOUSE_BLOCK_ROWS, Math.floor((rowH[r] - 3) / HOUSE_ROW_H) + 1), bottom: top + rowH[r] }); top += rowH[r] + STREET; }
+    let placed = 0, bottom = officesEnd;
+    for (let b = 0; placed < houses; b++) {
+      if (!blocks[b]) { blocks.push({ y, rows: HOUSE_BLOCK_ROWS, bottom: y + TOWER_H }); streets.push({ y: y + TOWER_H, x0: 0, x1: 0 }); y += TOWER_H + STREET; }
+      const bl = blocks[b];
+      for (let k = 0; k < HOUSES_PER_ROW * bl.rows && placed < houses; k++, placed++) home.push({ x: hqX + (k % HOUSES_PER_ROW) * HOUSE_W, y: bl.y + Math.floor(k / HOUSES_PER_ROW) * HOUSE_ROW_H });
+      bottom = Math.max(bottom, bl.bottom);
     }
-    const blocks = Math.max(1, Math.ceil(houses / perBlock));
-    for (let b = rows; b <= blocks; b++) { streets.push({ y: 1 + hqH + b * block, x0: 0, x1: width }); y += block; } // a street under every block
-    homesH = Math.max(blocks * block - STREET, officesEnd - homesY);
+    homesH = bottom - homesY;
+    for (const s of streets) s.x1 = width; // every street runs edge to edge, and on off the map
+    if (westW.some(Boolean)) lanes.push({ x: hqX - STREET, y0: -MAP_MARGIN, y1: Math.max(y, homesY + homesH + 1) + MAP_MARGIN }); // the road west of HQ
   }
-  return { hq, buildings, lots, streets, hqStreet: portrait ? 1 + HQ_H : 1 + hqH, officesEnd, avenue: avenueX, width, height: Math.max(y, homesY + homesH + 1), homes: { x: 1, y: homesY, w: homesW, h: homesH, houses: home }, portrait };
+  const hq = { dept: "HQ", x: hqX, y: 1, w: HQ_W, h: hqH, color: DEPT_COLOR.HQ };
+  return { hq, buildings, lots, lanes, streets, hqStreet: portrait ? 1 + HQ_H : 1 + hqH, officesEnd, avenue: avenueX, width, height: Math.max(y, homesY + homesH + 1), homes: { x: portrait ? 1 : hqX, y: homesY, w: homesW, h: homesH, houses: home }, portrait };
 }
 
 // Where a worker at work is: inside the tower, just behind its door (drawn hidden; the roof counts them). The seat

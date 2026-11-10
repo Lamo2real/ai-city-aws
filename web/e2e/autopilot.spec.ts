@@ -105,7 +105,7 @@ test("back after two days: VAIC opens with While you were away, calm, with one b
 }) => {
   const m = await setup(page);
   await awayFor(page, 48);
-  await page.goto("/");
+  await page.goto("/#/ace");
   const panel = page.getByRole("region", { name: "While you were away" });
   await expect(panel).toBeVisible();
   await expect(panel).toContainText("Build the landing page");
@@ -137,7 +137,7 @@ test("back after two days: VAIC opens with While you were away, calm, with one b
 test("here an hour ago: no panel by itself, but the clock opens it; Close hides it", async ({ page }) => {
   await setup(page);
   await awayFor(page, 1);
-  await page.goto("/");
+  await page.goto("/#/ace");
   await expect(page.getByRole("heading", { name: "Talk to VAIC" })).toBeAttached();
   await expect(page.getByRole("region", { name: "While you were away" })).toHaveCount(0);
   await page.getByRole("button", { name: "While you were away" }).click();
@@ -211,7 +211,7 @@ test("on a phone the panel and the standing orders fit the screen", async ({ pag
   await page.setViewportSize({ width: 390, height: 844 });
   await setup(page);
   await awayFor(page, 48);
-  await page.goto("/");
+  await page.goto("/#/ace");
   await expect(page.getByRole("region", { name: "While you were away" })).toBeVisible();
   const wide = () => page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   expect(await wide()).toBe(false);
@@ -226,7 +226,7 @@ test("light appearance reads well", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("aic.theme", "light"));
   await setup(page);
   await awayFor(page, 48);
-  await page.goto("/");
+  await page.goto("/#/ace");
   await expect(page.getByRole("region", { name: "While you were away" })).toBeVisible();
   await noSeriousA11y(page, "While you were away in light appearance");
   await shot(page, "away-panel-light");
@@ -235,7 +235,7 @@ test("light appearance reads well", async ({ page }) => {
 test("without these routes on the backend (404) nothing about them shows and nothing breaks", async ({ page }) => {
   await mockBackend(page);
   await awayFor(page, 48);
-  await page.goto("/");
+  await page.goto("/#/ace");
   await expect(page.getByRole("heading", { name: "Talk to VAIC" })).toBeAttached();
   await expect(page.getByRole("button", { name: "While you were away" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "While you were away" })).toHaveCount(0);

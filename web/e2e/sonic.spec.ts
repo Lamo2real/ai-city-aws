@@ -42,7 +42,7 @@ test("the voice button opens a real-time call: the owner's words reach the chat,
     ws.onMessage((raw) => fromBrowser.push(JSON.parse(String(raw))));
     say({ type: "ready", model: "amazon.nova-2-sonic-v1:0", region: "eu-north-1" });
   });
-  await page.goto("/");
+  await page.goto("/#/ace");
   const strip = page.locator(".voice");
   await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   expect(sessions).toBe(1);
@@ -91,7 +91,7 @@ test("when the real-time voice is not set up, the step-by-step voice takes over"
   await page.route(`${CONFIG.apiUrl}/voice/session`, (r) =>
     r.fulfill({ status: 503, json: { error: "not_configured", message: "Real-time voice is not set up." } }),
   );
-  await page.goto("/");
+  await page.goto("/#/ace");
   await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
   expect(m.calls.find((c) => c.path === "/messages")?.body).toMatchObject({ text: "what's the status?", voice: true });
@@ -121,7 +121,7 @@ test("in the standard voice, the sound of the owner talking over VAIC silences i
   await page.route(`${CONFIG.apiUrl}/voice/session`, (r) =>
     r.fulfill({ status: 503, json: { error: "not_configured", message: "Real-time voice is not set up." } }),
   );
-  await page.goto("/");
+  await page.goto("/#/ace");
   const strip = page.locator(".voice");
   await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   // The reason the real-time voice is not in use is shown, in plain words.
@@ -151,7 +151,7 @@ test("the standard voice says a short thinking cue only when VAIC takes a moment
   await page.route(`${CONFIG.apiUrl}/voice/session`, (r) =>
     r.fulfill({ status: 503, json: { error: "not_configured", message: "Real-time voice is not set up." } }),
   );
-  await page.goto("/");
+  await page.goto("/#/ace");
   const spoken = () => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []);
   await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   await expect(page.getByText("Voice on · standard")).toBeVisible();
@@ -178,7 +178,7 @@ test("voice mode drops ums and stammers, sends nothing for filler-only sounds, a
 }) => {
   const m = await mockBackend(page);
   await page.addInitScript(() => ((window as unknown as { __heard: string }).__heard = "Um, um, um, well, um, maybe, um."));
-  await page.goto("/");
+  await page.goto("/#/ace");
   const said = (t: string) => page.evaluate((x) => ((window as unknown as { __heard: string }).__heard = x), t);
   const sent = () => m.calls.filter((c) => c.path === "/messages").map((c) => (c.body as { text: string }).text);
   await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();

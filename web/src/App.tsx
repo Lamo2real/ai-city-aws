@@ -9,6 +9,7 @@ import { trackSeen } from "./lib/away.ts";
 import { chief } from "./lib/chief.ts";
 import { live } from "./lib/ws.ts";
 import { route } from "./lib/apps.ts";
+import { visitOf } from "./lib/visit.ts";
 import { forwardEvent } from "./lib/bridge.ts";
 import { PinnedApps } from "./components/Apps.tsx";
 import { ProjectPage, ProjectsScreen } from "./components/Projects.tsx";
@@ -51,7 +52,10 @@ export function App() {
   const [boot, setBoot] = useState<Boot>("starting");
   const [bootError, setBootError] = useState<string | null>(null);
   const [signInNote, setSignInNote] = useState<string | null>(null);
-  const [{ view, slug }, setRoute] = useState<{ view: View; slug: string | null }>(() => route(location.hash, VIEWS));
+  const [{ view, slug }, setRoute] = useState<{ view: View; slug: string | null }>(() =>
+    route(location.hash, VIEWS, "city"),
+  );
+  const visit = view === "city" ? visitOf(slug) : null; // inside a building (decision 166)
   const [guide, setGuide] = useState(false);
   // The top bar's height, as `--top-h`: on the VAIC screen the chat runs up behind the bar (decision 108).
   const top = useRef<HTMLElement>(null);
@@ -72,7 +76,7 @@ export function App() {
     // Needs you is gone (Autopilot): an old link opens what is still open from before.
     const on = () => {
       if (/^#\/?inbox\b/.test(location.hash)) return location.replace("#/settings/open-items");
-      setRoute(route(location.hash, VIEWS));
+      setRoute(route(location.hash, VIEWS, "city"));
     };
     on();
     window.addEventListener("hashchange", on);
@@ -159,7 +163,7 @@ export function App() {
 
   return (
     <div
-      className={`app view-${view === "city" && slug ? "features" : view}${view === "apps" && slug ? " view-app" : ""}`}
+      className={`app view-${view === "city" && slug && !visit ? "features" : view}${view === "apps" && slug ? " view-app" : ""}`}
       style={{ "--top-h": `${topH}px` } as React.CSSProperties}
     >
       <a className="skip" href="#main">
@@ -181,8 +185,8 @@ export function App() {
       </header>
       <main id="main" tabIndex={-1}>
         {view === "ace" ? <AceScreen go={go} /> : null}
-        {view === "city" && !slug ? <CityView go={go} /> : null}
-        {view === "city" && slug ? <FeaturesScreen page={slug} go={go} /> : null}
+        {view === "city" && (!slug || visit) ? <CityView go={go} visit={visit} /> : null}
+        {view === "city" && slug && !visit ? <FeaturesScreen page={slug} go={go} /> : null}
         {view === "tickets" ? <Tickets page={slug} /> : null}
         {view === "apps" && !slug ? <ProjectsScreen /> : null}
         {view === "apps" && slug ? <ProjectPage key={slug} slug={slug} go={go} /> : null}
@@ -194,7 +198,7 @@ export function App() {
       </main>
       {guide ? <FirstRun onDone={finishGuide} /> : null}
       <Toaster />
-      {view !== "ace" && !(view === "city" && !slug) && !(view === "apps" && slug) ? (
+      {view !== "ace" && !(view === "city" && (!slug || visit)) && !(view === "apps" && slug) ? (
         <div className="fab">
           <Button variant="quiet" onClick={() => go("ace")} label="Talk to VAIC">
             Talk to VAIC

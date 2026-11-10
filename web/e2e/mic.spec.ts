@@ -59,7 +59,7 @@ test("the real mic path gets the microphone and audio running, and names the spe
   await refuse(page, () => identityCalls++);
   const errors: string[] = [];
   page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
-  await page.goto("/");
+  await page.goto("/#/ace");
   await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("NotAuthorizedException");
   expect(identityCalls).toBeGreaterThan(0); // mic, AudioContext and the SDK all worked up to the AWS call
@@ -71,7 +71,7 @@ test("when the speech service refuses, the browser's own recognition takes over 
   await page.addInitScript(fakeBrowserSpeech);
   let identityCalls = 0;
   await refuse(page, () => identityCalls++);
-  await page.goto("/");
+  await page.goto("/#/ace");
   await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click(); // Talk and send
   await expect(page.getByText("Using your browser's speech recognition.")).toBeVisible();
   await expect
@@ -96,7 +96,7 @@ test("when the speech service refuses, the browser's own recognition takes over 
 
 test("a page opened before a deploy says to reload, instead of a generic mic failure", async ({ page }) => {
   await mockBackend(page, { realVoice: true });
-  await page.goto("/");
+  await page.goto("/#/ace");
   await expect(page.getByRole("button", { name: "Talk to VAIC", exact: true })).toBeVisible();
   await page.route("**/assets/**", (r) => r.fulfill({ status: 404, body: "gone" })); // the new deploy removed them
   await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();

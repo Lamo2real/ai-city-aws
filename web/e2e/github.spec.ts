@@ -47,7 +47,7 @@ test("Settings → GitHub: a token is saved once, says Connected as, is never sh
 
 test("a GitHub sign-in card offers a token instead, which goes to the connector's key route", async ({ page }) => {
   const m = await mockBackend(page);
-  await page.goto("/");
+  await page.goto("/#/ace");
   m.send({
     type: "connector.updated",
     id: "github",

@@ -9,7 +9,7 @@ test("an answer that repeats VAIC's words is sent, and VAIC answers it aloud", a
     (window as unknown as { __heard: string }).__heard = "check my mail";
     (window as unknown as { __speakMs: number }).__speakMs = 300;
   });
-  await page.goto("/");
+  await page.goto("/#/ace");
   const strip = page.locator(".voice");
   const messages = () => m.calls.filter((c) => c.path === "/messages");
   await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();

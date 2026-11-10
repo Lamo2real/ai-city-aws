@@ -26,7 +26,7 @@ test("a pinned calendar app reads granted events, gets not_granted after a revok
   page,
 }) => {
   const m = await mockBackend(page, { apps: [CAL()] });
-  await page.goto("/");
+  await page.goto("/#/ace");
   // The pin sits in the top bar after the nav and opens the app.
   const pins = page.getByRole("navigation", { name: "Pinned apps" });
   await expect(pins.getByRole("link", { name: "Star Calendar" })).toBeVisible();
