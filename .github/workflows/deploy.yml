@@ -1,10 +1,10 @@
 # Deploy prod. Runs automatically on every push to main (the owner's choice: no approval step), and can
 # also be started by hand. Docs-only pushes don't deploy. The owner provides:
-#   variable AIC_DEPLOY_ROLE_ARN  an IAM role GitHub can assume through OIDC (trust: docs/deploy-role-trust-policy.json)
-#   secret   AIC_OWNER_EMAIL      the only login (Cognito, admin-created) and where alerts go. A secret, not a
+#   variable VAIC_DEPLOY_ROLE_ARN  an IAM role GitHub can assume through OIDC (trust: docs/deploy-role-trust-policy.json)
+#   secret   VAIC_OWNER_EMAIL      the only login (Cognito, admin-created) and where alerts go. A secret, not a
 #                                 variable, so it is masked in the logs of this public repository.
-# Optional variables: AIC_REGION (default eu-north-1), AIC_MONTHLY_BUDGET_USD (alert amount, default 10000),
-# AIC_STATE_BUCKET (default lamo-labs-state-bucket; state key ai-city-aws/prod/terraform.tfstate).
+# Optional variables: VAIC_REGION (default eu-north-1), VAIC_MONTHLY_BUDGET_USD (alert amount, default 10000),
+# VAIC_STATE_BUCKET (default lamo-labs-state-bucket; state key ai-city-aws/prod/terraform.tfstate).
 #
 # One run deploys from nothing:
 #   web      - web tests and the HUD build                         } in parallel
@@ -34,8 +34,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  AWS_REGION: ${{ vars.AIC_REGION || 'eu-north-1' }}
-  TF_STATE_BUCKET: ${{ vars.AIC_STATE_BUCKET || 'lamo-labs-state-bucket' }}
+  AWS_REGION: ${{ vars.VAIC_REGION || vars.AIC_REGION || 'eu-north-1' }}
+  TF_STATE_BUCKET: ${{ vars.VAIC_STATE_BUCKET || vars.AIC_STATE_BUCKET || 'lamo-labs-state-bucket' }}
   TF_STATE_KEY: ai-city-aws/prod/terraform.tfstate
   TF_IN_AUTOMATION: "1"
 
@@ -111,12 +111,12 @@ jobs:
     steps:
       - name: check the repository settings
         env:
-          ROLE: ${{ vars.AIC_DEPLOY_ROLE_ARN }}
-          EMAIL: ${{ secrets.AIC_OWNER_EMAIL }}
+          ROLE: ${{ vars.VAIC_DEPLOY_ROLE_ARN || vars.AIC_DEPLOY_ROLE_ARN }}
+          EMAIL: ${{ secrets.VAIC_OWNER_EMAIL || secrets.AIC_OWNER_EMAIL }}
         run: |
           ok=1
-          [ -n "$ROLE" ] || { echo "::error::Set the variable AIC_DEPLOY_ROLE_ARN (Settings → Secrets and variables → Actions → Variables)."; ok=0; }
-          [ -n "$EMAIL" ] || { echo "::error::Set the secret AIC_OWNER_EMAIL (Settings → Secrets and variables → Actions → Secrets)."; ok=0; }
+          [ -n "$ROLE" ] || { echo "::error::Set the variable VAIC_DEPLOY_ROLE_ARN (Settings → Secrets and variables → Actions → Variables)."; ok=0; }
+          [ -n "$EMAIL" ] || { echo "::error::Set the secret VAIC_OWNER_EMAIL (Settings → Secrets and variables → Actions → Secrets)."; ok=0; }
           [ "$ok" = 1 ]
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v4
@@ -131,7 +131,7 @@ jobs:
             | python3 -c 'import sys,json,base64; p=json.load(sys.stdin)["value"].split(".")[1]; c=json.loads(base64.urlsafe_b64decode(p+"="*(-len(p)%4))); print(json.dumps({k:c.get(k) for k in ("sub","aud","repository","ref","environment","job_workflow_ref")}, indent=2))'
       - uses: aws-actions/configure-aws-credentials@v5
         with:
-          role-to-assume: ${{ vars.AIC_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ vars.VAIC_DEPLOY_ROLE_ARN || vars.AIC_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
       - name: Terraform state bucket (created on the first run if missing)
         id: state
@@ -146,14 +146,14 @@ jobs:
         env:
           STATE_BUCKET: ${{ steps.state.outputs.bucket }}
           STATE_REGION: ${{ steps.state.outputs.region }}
-          OWNER_EMAIL: ${{ secrets.AIC_OWNER_EMAIL }}
-          BUDGET: ${{ vars.AIC_MONTHLY_BUDGET_USD || '10000' }}
+          OWNER_EMAIL: ${{ secrets.VAIC_OWNER_EMAIL || secrets.AIC_OWNER_EMAIL }}
+          BUDGET: ${{ vars.VAIC_MONTHLY_BUDGET_USD || vars.AIC_MONTHLY_BUDGET_USD || '10000' }}
           IMAGE_TAG: ${{ needs.backend.outputs.image_tag }}
-          QUEUES_ENABLED: ${{ vars.AIC_QUEUES_ENABLED || 'true' }}
+          QUEUES_ENABLED: ${{ vars.VAIC_QUEUES_ENABLED || vars.AIC_QUEUES_ENABLED || 'true' }}
           # Optional JSON, e.g. {"google":{"enabled":true,"client_id":"…"},"microsoft":{"enabled":false,"client_id":"","tenant_id":"common"}}
-          MAIL_PROVIDERS: ${{ vars.AIC_MAIL_PROVIDERS }}
+          MAIL_PROVIDERS: ${{ vars.VAIC_MAIL_PROVIDERS || vars.AIC_MAIL_PROVIDERS }}
           # "true" once the owner has pasted the Apple APNs key in Settings (docs/NOTIFICATIONS.md).
-          APNS_ENABLED: ${{ vars.AIC_APNS_ENABLED || 'false' }}
+          APNS_ENABLED: ${{ vars.VAIC_APNS_ENABLED || vars.AIC_APNS_ENABLED || 'false' }}
         run: |
           terraform init -input=false \
             -backend-config="bucket=${STATE_BUCKET}" \
@@ -210,7 +210,7 @@ jobs:
           path: infra/envs/prod
       - uses: aws-actions/configure-aws-credentials@v5
         with:
-          role-to-assume: ${{ vars.AIC_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ vars.VAIC_DEPLOY_ROLE_ARN || vars.AIC_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
           role-duration-seconds: 7200 # the first apply builds the image under QEMU; the role allows 2 h
       # The plan builds the ARM64 agent image while it applies (scripts/push-image.sh).
@@ -270,7 +270,7 @@ jobs:
           path: web/dist
       - uses: aws-actions/configure-aws-credentials@v5
         with:
-          role-to-assume: ${{ vars.AIC_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ vars.VAIC_DEPLOY_ROLE_ARN || vars.AIC_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
       - name: upload the HUD (config.json is managed by Terraform) and refresh CloudFront
         env:

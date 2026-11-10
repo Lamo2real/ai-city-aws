@@ -59,20 +59,20 @@ describe("GitHub workflows", () => {
   it("deploy needs only the deploy role ARN and the owner's email (the rest is optional)", () => {
     const text = readFileSync(join(WF, "deploy.yml"), "utf8");
     const vars = new Set([...text.matchAll(/vars\.([A-Z0-9_]+)/g)].map((m) => m[1]));
-    expect([...vars].sort()).toEqual(
-      [
-        "AIC_APNS_ENABLED",
-        "AIC_QUEUES_ENABLED",
-        "AIC_DEPLOY_ROLE_ARN",
-        "AIC_MAIL_PROVIDERS",
-        "AIC_MONTHLY_BUDGET_USD",
-        "AIC_REGION",
-        "AIC_STATE_BUCKET",
-      ].sort(),
-    );
+    // Each setting is read as VAIC_* first, then the old AIC_* name, until the owner has renamed them (docs/RENAME_PLAN.md).
+    const names = [
+      "APNS_ENABLED",
+      "QUEUES_ENABLED",
+      "DEPLOY_ROLE_ARN",
+      "MAIL_PROVIDERS",
+      "MONTHLY_BUDGET_USD",
+      "REGION",
+      "STATE_BUCKET",
+    ];
+    expect([...vars].sort()).toEqual(names.flatMap((n) => [`VAIC_${n}`, `AIC_${n}`]).sort());
     // The owner email is a secret so it is masked in this public repository's logs.
     const secrets = new Set([...text.matchAll(/secrets\.([A-Z0-9_]+)/g)].map((m) => m[1]));
-    expect([...secrets]).toEqual(["AIC_OWNER_EMAIL"]);
+    expect([...secrets].sort()).toEqual(["AIC_OWNER_EMAIL", "VAIC_OWNER_EMAIL"]);
     expect(text).toMatch(/scripts\/ensure-state-bucket\.sh/); // the state bucket is created on the first run
     expect(text).toMatch(/AIC_STATE_BUCKET \|\| 'lamo-labs-state-bucket'/);
     expect(text).not.toMatch(/infra\/envs\/prod\/plan\.txt/); // the full plan stays in the masked log, not in an artifact

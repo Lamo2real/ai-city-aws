@@ -20,8 +20,9 @@ resource "aws_s3_bucket" "skills" {
   #checkov:skip=CKV_AWS_144:The owner keeps the originals; a replica of a few small files is not worth it.
   #checkov:skip=CKV_AWS_18:Access logging would need another bucket; CloudTrail data events can be enabled if needed.
   #checkov:skip=CKV2_AWS_62:No event notifications are needed.
-  bucket = "${var.name}-skills"
-  tags   = local.tags
+  bucket        = "${var.name}-skills"
+  force_destroy = true # the AIC → VAIC rename (docs/RENAME_PLAN.md)
+  tags          = local.tags
 }
 
 resource "aws_s3_bucket_versioning" "skills" {

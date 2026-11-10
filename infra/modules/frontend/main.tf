@@ -56,8 +56,9 @@ resource "aws_s3_bucket" "site" {
   #checkov:skip=CKV_AWS_18:Access logging would need another bucket; CloudFront is the only reader.
   #checkov:skip=CKV2_AWS_62:No event notifications are needed.
   #checkov:skip=CKV_AWS_145:The site bucket uses SSE-S3 so CloudFront with OAC can read it without a KMS key policy dance; it holds only public app files.
-  bucket = "${var.name}-hud"
-  tags   = local.tags
+  bucket        = "${var.name}-hud"
+  force_destroy = true # the AIC → VAIC rename (docs/RENAME_PLAN.md)
+  tags          = local.tags
 }
 
 resource "aws_s3_bucket_versioning" "site" {
@@ -144,6 +145,10 @@ resource "aws_wafv2_web_acl" "site" {
   provider = aws.us_east_1
   name     = "${var.name}-hud"
   scope    = "CLOUDFRONT"
+  # A renamed ACL is made before the old one goes: CloudFront still uses the old one until it is switched.
+  lifecycle {
+    create_before_destroy = true
+  }
   default_action {
     allow {}
   }

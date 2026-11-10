@@ -212,9 +212,10 @@ resource "aws_s3_bucket" "speech" {
   #checkov:skip=CKV_AWS_18:Access logging would need another bucket for one public-knowledge word list.
   #checkov:skip=CKV2_AWS_62:No event notifications are needed.
   #checkov:skip=CKV_AWS_145:The city's KMS key lives in var.region; this bucket is in the speech region, so SSE-S3.
-  provider = aws.speech
-  bucket   = "${var.name}-speech"
-  tags     = local.tags
+  provider      = aws.speech
+  bucket        = "${var.name}-speech"
+  force_destroy = true # the AIC → VAIC rename (docs/RENAME_PLAN.md)
+  tags          = local.tags
 }
 
 resource "aws_s3_bucket_versioning" "speech" {

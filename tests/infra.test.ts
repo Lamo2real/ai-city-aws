@@ -465,7 +465,7 @@ describe("apps origin (docs/APPS.md)", () => {
 
   it("the apps distribution has its own bucket, the HUD's WAF, no SPA rewrite, CORS GET/HEAD only", async () => {
     const tf = await read("infra/modules/apps/main.tf");
-    expect(tf).toMatch(/bucket = "\$\{var\.name\}-apps"/);
+    expect(tf).toMatch(/bucket += "\$\{var\.name\}-apps"/);
     expect(tf).toMatch(/web_acl_id\s+= var\.waf_acl_arn/);
     expect(tf).not.toMatch(/custom_error_response/);
     expect(tf).not.toMatch(/frame_options/);

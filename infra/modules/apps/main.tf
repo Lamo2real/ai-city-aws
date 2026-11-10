@@ -47,8 +47,9 @@ resource "aws_s3_bucket" "apps" {
   #checkov:skip=CKV_AWS_18:Access logging would need another bucket; CloudFront is the only reader.
   #checkov:skip=CKV2_AWS_62:No event notifications are needed; the apps Lambda is driven by app.submitted on the bus.
   #checkov:skip=CKV_AWS_145:SSE-S3 so CloudFront with OAC can read it (like the HUD bucket); it holds only public app files, never owner data.
-  bucket = "${var.name}-apps"
-  tags   = local.tags
+  bucket        = "${var.name}-apps"
+  force_destroy = true # the AIC → VAIC rename (docs/RENAME_PLAN.md)
+  tags          = local.tags
 }
 
 resource "aws_s3_bucket_versioning" "apps" {

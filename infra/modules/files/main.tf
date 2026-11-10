@@ -65,7 +65,7 @@ resource "aws_s3_bucket" "this" {
   #checkov:skip=CKV_AWS_144:One-region personal store; versioning and the KMS key protect it, cross-region replication would double the cost.
   #checkov:skip=CKV_AWS_18:Access logging would need another bucket; CloudTrail data events can be enabled if needed.
   bucket        = local.base
-  force_destroy = false
+  force_destroy = true # the AIC → VAIC rename (docs/RENAME_PLAN.md); back to false afterwards
   tags          = local.tags
 }
 

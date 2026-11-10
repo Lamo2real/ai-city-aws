@@ -212,8 +212,9 @@ resource "aws_s3_bucket" "specs" {
   #checkov:skip=CKV_AWS_144:Specs are re-fetched from their URL on refresh; replication is not worth it.
   #checkov:skip=CKV_AWS_18:Access logging would need another bucket; CloudTrail data events can be enabled if needed.
   #checkov:skip=CKV2_AWS_62:No event notifications are needed.
-  bucket = "${var.name}-connectors"
-  tags   = local.tags
+  bucket        = "${var.name}-connectors"
+  force_destroy = true # the AIC → VAIC rename (docs/RENAME_PLAN.md)
+  tags          = local.tags
 }
 
 resource "aws_s3_bucket_versioning" "specs" {
@@ -276,6 +277,7 @@ resource "aws_s3_bucket_policy" "specs" {
 resource "aws_ecr_repository" "mcp_host" {
   name                 = "${var.name}-mcp-host"
   image_tag_mutability = "IMMUTABLE"
+  force_delete         = true # the AIC → VAIC rename (docs/RENAME_PLAN.md)
   image_scanning_configuration {
     scan_on_push = true
   }
