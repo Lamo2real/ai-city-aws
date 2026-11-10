@@ -57,7 +57,7 @@ test("first sign-in on our own screens: temporary password, own password, authen
   await page.getByLabel("6-digit code").fill("123456");
   await page.getByRole("button", { name: "Confirm and sign in" }).click();
 
-  await expect(page.getByRole("button", { name: "VAIC — talk to VAIC" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "VAIC — the City" })).toBeVisible();
   await expect(page.getByRole("region", { name: "City view" })).toBeVisible(); // signed in, the City opens first
 });
 
@@ -74,7 +74,7 @@ test("later sign-ins: a wrong password says so plainly; then password and code",
   await page.getByLabel("6-digit code", { exact: true }).fill("12a3456"); // only digits are kept
   await expect(page.getByLabel("6-digit code", { exact: true })).toHaveValue("123456");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "VAIC — talk to VAIC" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "VAIC — the City" })).toBeVisible();
 });
 
 test("sign in once: closing the tab and coming back later opens AI City already signed in", async ({
@@ -88,7 +88,7 @@ test("sign in once: closing the tab and coming back later opens AI City already 
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.getByLabel("6-digit code", { exact: true }).fill("123456");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("button", { name: "VAIC — talk to VAIC" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "VAIC — the City" })).toBeVisible();
   await page.close(); // the tab is gone (sessionStorage with it)
 
   const later = await context.newPage();
@@ -1451,7 +1451,7 @@ test("the logo is the owner's eye with no background, in the top bar and the bro
 }) => {
   await mockBackend(page);
   await page.goto("/");
-  const brand = page.getByRole("button", { name: "VAIC — talk to VAIC" });
+  const brand = page.getByRole("link", { name: "VAIC — the City" });
   await expect(brand).toBeVisible();
   await expect(brand.locator(".wm-word")).toHaveText("VAIC");
   const look = () =>

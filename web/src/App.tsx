@@ -34,7 +34,7 @@ import { Wordmark } from "./components/Wordmark.tsx";
 const VIEWS = ["ace", "city", "tickets", "apps", "files", "knowledge", "skills", "costs", "settings"] as const;
 type View = (typeof VIEWS)[number];
 const LABEL: Record<View, string> = {
-  ace: "VAIC",
+  ace: "Chat",
   city: "City",
   tickets: "Work",
   apps: "Projects",
@@ -170,11 +170,17 @@ export function App() {
         Skip to content
       </a>
       <header className="top" ref={top}>
-        <button type="button" className="brand" onClick={() => go("ace")} aria-label="VAIC — talk to VAIC">
+        {/* The logo is the way to the City (the owner, 2026-11-10): the City has no tab of its own. */}
+        <a
+          className="brand"
+          href="#/city"
+          aria-label="VAIC — the City"
+          aria-current={view === "city" ? "page" : undefined}
+        >
           <Wordmark />
-        </button>
+        </a>
         <nav aria-label="Screens">
-          {VIEWS.map((v) => (
+          {VIEWS.filter((v) => v !== "city").map((v) => (
             <a key={v} href={`#/${v}`} aria-current={view === v ? "page" : undefined}>
               {LABEL[v]}
             </a>

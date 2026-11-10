@@ -618,8 +618,7 @@ function eased(o, step, toNext) {
 
 const DASH_MS = 320, WALK_SPEED = 46, SCENERY_MS = 125, TRAFFIC_MS = 50;
 // Zoom is smooth and continuous (the owner, 2026-11-10): from far out to close up, eased between, never in steps.
-// Below PLATE_BELOW the painted signs are too small to read, so every building gets a name plate in screen text.
-const ZOOM_MIN = 0.35, ZOOM_MAX = 8, ZOOM_STEP = 1.5, PLATE_BELOW = 2.6;
+const ZOOM_MIN = 0.35, ZOOM_MAX = 8, ZOOM_STEP = 1.5;
 
 // `insets()` says how much of the root the HUD's own bars cover, so the map is fitted into the free part.
 export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0, r: 0, b: 0 }), onSelectAgent = () => {}, onSelectBuilding = () => {}, onOpenApp = () => {}, onState = () => {} } = {}) {
@@ -652,9 +651,6 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   root._view = () => ({ x: cam.x, y: cam.y, zoom: cam.zoom }); // the camera, for tests that click a tower
   root._world = () => world; // the layout, for tests: towers keep one size whatever the headcount
   const winBox = document.createElement("div"); winBox.id = "citywindows"; winBox.hidden = true; winBox.setAttribute("aria-hidden", "true"); root.append(winBox);
-  // The buildings' names in real screen text, readable at any zoom (under the HUD's panels, over the map).
-  const plates = document.createElement("div"); plates.className = "city-plates"; plates.setAttribute("aria-hidden", "true"); canvas.after(plates);
-  const plateOf = new Map(); // dept → its plate
   let selected = null, hover = null, lastVisit = 0, hiddenHomes = 0;
 
   const visible = () => root.offsetParent !== null && !document.hidden;
@@ -1209,29 +1205,6 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       ctx.drawImage(img, x - 8, y - 15 + bounce);
     }
   }
-  // Name plates over the painted signs, in screen text, while those signs are too small to read.
-  function drawPlates() {
-    const show = cam.zoom < PLATE_BELOW;
-    if (plates.hidden !== !show) plates.hidden = !show;
-    if (!show) return;
-    const want = new Map();
-    const hq = world.hq;
-    want.set("HQ", { x: (hq.x + hq.w / 2) * TILE, y: hq.y * TILE + 36, w: 60 });
-    for (const b of world.buildings) {
-      if (b.archived || anims.has(b.dept)) continue;
-      const t = towerShape(b);
-      want.set(b.dept, { x: t.cx, y: t.tiers[0].y + 13, w: t.tiers[0].w });
-    }
-    for (const [d, el] of plateOf) if (!want.has(d)) { el.remove(); plateOf.delete(d); }
-    for (const [d, p] of want) {
-      let el = plateOf.get(d);
-      if (!el) { el = document.createElement("span"); el.textContent = d; el.dataset.dept = d; plates.append(el); plateOf.set(d, el); }
-      const sx = Math.round((p.x - OX) * cam.zoom), sy = Math.round((p.y - OY) * cam.zoom);
-      const t = `translate(${sx}px, ${sy}px) translate(-50%, -50%)`, mw = `${Math.max(64, Math.round(p.w * cam.zoom) + 16)}px`;
-      if (el.style.transform !== t) el.style.transform = t;
-      if (el.style.maxWidth !== mw) el.style.maxWidth = mw;
-    }
-  }
   function label(text, wx, wy, fg = "#fff6e0", bg = INK) {
     const t = fit(text, 120), w = textW(t) + 6, x = Math.round(wx - w / 2) - OX, y = Math.round(wy) - OY;
     ctx.fillStyle = bg; ctx.fillRect(x, y, w, 9); ctx.fillRect(x + 1, y - 1, w - 2, 11);
@@ -1340,7 +1313,6 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     // A publish approval is open: the Apps building waits for the owner.
     for (const b of waitingBuildings()) { const k = reduced() ? 1 : f % 2, cx = (b.x + b.w / 2) * TILE, y = b.y * TILE - 12; if (k) { ctx.fillStyle = "rgba(255,216,74,.35)"; ctx.fillRect(Math.round(cx - 50 - cam.x), Math.round(y - 3 - cam.y), 100, 15); } label("WAITING FOR YOU", cx, y, INK, "#ffd84a"); }
     for (const p of order) if (p.say && p.say.until > performance.now()) label(p.say.text, p.x, p.y - 46, INK, "#8fdcff"); // VAIC's word stays on top of every mark
-    drawPlates();
     const s = selected && people.get(selected);
     if (s) { const bob = reduced() ? 0 : [0, 1, 2, 1][f]; const x = Math.round(s.x) - OX, y = Math.round(s.y) - OY - (s.visual && s.visual !== "idle" ? 46 : 32) + bob; R(ctx, x - 4, y, 8, 2, INK); R(ctx, x - 3, y, 6, 2, "#ffd84a"); R(ctx, x - 3, y + 2, 6, 2, INK); R(ctx, x - 2, y + 2, 4, 1, "#ffd84a"); R(ctx, x - 1, y + 4, 2, 2, INK); }
   }

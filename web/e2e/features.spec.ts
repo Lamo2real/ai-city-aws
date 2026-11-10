@@ -93,17 +93,15 @@ test("the City tab has City | Features; Features lists Calendar and adds a featu
   await page.goto("/#/city");
   const tabs = page.getByRole("navigation", { name: "City pages" });
   await expect(tabs.getByRole("link", { name: "City" })).toHaveAttribute("aria-current", "page");
-  // The top bar keeps its tabs; Features lives under City, not beside it.
+  // The logo is the way to the City (no City tab); Features lives under City, not beside it.
   const top = page.getByRole("navigation", { name: "Screens" });
-  await expect(top.getByRole("link", { name: "City" })).toBeVisible();
+  await expect(top.getByRole("link", { name: "City" })).toHaveCount(0);
+  await expect(top.getByRole("link", { name: "Chat" })).toHaveAttribute("href", "#/ace");
   await expect(top.getByRole("link", { name: "Features" })).toHaveCount(0);
   await tabs.getByRole("link", { name: "Features" }).click();
   await expect(page).toHaveURL(/#\/city\/features$/);
   await expect(page.getByRole("heading", { name: "Features", level: 1 })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Screens" }).getByRole("link", { name: "City" })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
+  await expect(page.getByRole("link", { name: "VAIC — the City" })).toHaveAttribute("aria-current", "page");
   const sw = page.getByRole("switch", { name: "Calendar on or off" });
   await expect(sw).toBeChecked();
   await sw.click({ force: true });

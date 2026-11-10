@@ -45,10 +45,7 @@ test("click a tower → its street → pick a project → fly up into its floor 
   await page.goto("/");
   // The City is where the HUD opens.
   await expect(page.locator("section.city")).toHaveAttribute("data-city-ready", "1");
-  await expect(page.getByRole("navigation", { name: "Screens" }).getByRole("link", { name: "City" })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
+  await expect(page.getByRole("link", { name: "VAIC — the City" })).toHaveAttribute("aria-current", "page");
 
   await clickTower(page, "Application");
   const visit = page.getByRole("region", { name: "Application building" });

@@ -229,7 +229,7 @@ test("the rare cab: forced for a look, it drives the same lanes as every cab, bl
   await page.screenshot({ path: `${SHOTS}/city-rare-cab.png` });
 });
 
-test("names read at any zoom, and zoom is smooth from far out to close up", async ({ page }) => {
+test("zoom is smooth from far out to close up", async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   const created_at = new Date(Date.now() - 86_400_000).toISOString();
   const names = ["Application", "IT Infrastructure", "Customer Support", "Research", "Sales", "Legal"];
@@ -245,15 +245,8 @@ test("names read at any zoom, and zoom is smooth from far out to close up", asyn
   await expect.poll(() => hooks(page, (h) => h._anims?.size ?? 0), { timeout: 6000 }).toBe(0);
   const city = page.locator("section.city");
   const zoom = async () => Number(await city.getAttribute("data-zoom"));
-  // Fitted, the whole town shows and every building carries its name in 12px screen text.
-  const plates = page.locator(".city-plates > span");
-  await expect(plates).toHaveCount(names.length + 1); // and HQ
-  for (const name of [...names, "HQ"]) {
-    const plate = page.locator(`.city-plates > span[data-dept="${name}"]`);
-    await expect(plate).toBeVisible();
-    expect(await plate.evaluate((el) => getComputedStyle(el).fontSize)).toBe("12px");
-  }
-  await page.screenshot({ path: `${SHOTS}/city-names-fitted.png` });
+  // The names are the painted signs only (the owner took the screen-text plates back out, 2026-11-10).
+  await expect(page.locator(".city-plates")).toHaveCount(0);
   // The wheel zooms in proportion and eases there: values between the start and the end are passed through.
   const before = await zoom();
   const canvas = page.locator("section.city > canvas").first();
@@ -266,15 +259,12 @@ test("names read at any zoom, and zoom is smooth from far out to close up", asyn
   }
   await expect.poll(zoom).toBeGreaterThan(before * 1.6);
   expect(seen.size).toBeGreaterThan(2); // not one jump
-  // Far out, and the names still read.
+  // Far out: the whole countryside.
   for (let i = 0; i < 12; i++) await page.mouse.wheel(0, 400);
   await expect.poll(zoom).toBeLessThan(before * 0.6); // well past Fit: the whole countryside
-  await expect(page.locator('.city-plates > span[data-dept="Research"]')).toBeVisible();
-  await page.screenshot({ path: `${SHOTS}/city-names-far.png` });
-  // Close up: beyond the old largest step; the painted signs read on their own, so the plates step aside.
+  // Close up: beyond the old largest step.
   for (let i = 0; i < 20; i++) await page.mouse.wheel(0, -400);
   await expect.poll(zoom).toBeGreaterThan(6);
-  await expect(page.locator(".city-plates")).toBeHidden();
   // Fit brings the whole town back.
   await page.getByRole("button", { name: "Fit" }).click();
   await expect.poll(zoom).toBeCloseTo(before, 1);
