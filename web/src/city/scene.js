@@ -959,14 +959,24 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     const n = insets();
     return { l: n.l, t: n.t, r: root.clientWidth - n.r, b: root.clientHeight - n.b };
   }
-  function viewSize() {
+  // The canvas's size at this zoom, in art pixels (w, h). Only draw() applies it (apply = true), right before painting
+  // the whole frame: resizing a canvas wipes it, so a resize from a wheel or pinch handler could show as a flash.
+  // From one device pixel per art pixel up, the canvas holds art pixels and CSS scales them up, crisp. Further out,
+  // the canvas holds device pixels and the drawing is scaled down into it: one art pixel per canvas pixel there would
+  // make the canvas several times the screen, past what Safari will draw (it shows black), which made the map blink
+  // black while zooming out (the owner, 2026-11-10, decision 174).
+  function viewSize(apply = false) {
     const n = cam.zoom * dpr();
     const w = Math.max(1, Math.ceil(root.clientWidth * dpr() / n)), h = Math.max(1, Math.ceil(root.clientHeight * dpr() / n));
-    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
-    const cssW = `${(w * n) / dpr()}px`, cssH = `${(h * n) / dpr()}px`;
+    if (!apply) return { w, h };
+    const shrink = n < 1, cw = shrink ? Math.ceil(w * n) : w, ch = shrink ? Math.ceil(h * n) : h;
+    if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
+    const s = shrink ? n : 1;
+    ctx.setTransform(s, 0, 0, s, 0, 0);
+    const cssW = `${(cw * n) / s / dpr()}px`, cssH = `${(ch * n) / s / dpr()}px`;
     if (canvas.style.width !== cssW) { canvas.style.width = cssW; canvas.style.height = cssH; }
-    ctx.imageSmoothingEnabled = false;
-    const look = cam.zoom < 1 ? "auto" : ""; // shrunk below one art pixel, pixelated scaling would shimmer
+    ctx.imageSmoothingEnabled = shrink; // smaller than a device pixel, sharp sampling would shimmer
+    const look = cam.zoom < 1 ? "auto" : "";
     if (canvas.style.imageRendering !== look) canvas.style.imageRendering = look;
     const z = cam.zoom.toFixed(2);
     if (root.dataset.zoom !== z) root.dataset.zoom = z; // for tests
@@ -1219,7 +1229,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     }
   }
   function draw(now) {
-    const { w, h } = viewSize();
+    const { w, h } = viewSize(true);
     const f = reduced() ? 0 : Math.floor(now / SCENERY_MS / 2) % 4;
     ctx.fillStyle = "#2d5d53"; ctx.fillRect(0, 0, w, h);
     const ox = Math.round(cam.x), oy = Math.round(cam.y);

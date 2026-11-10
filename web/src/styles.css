@@ -2012,6 +2012,7 @@ table.costs tr:last-child td {
   left: 0;
   top: 0;
   display: block;
+  background: #2d5d53; /* the map's own ground, never the page's dark, under anything not yet painted */
   touch-action: none;
   image-rendering: pixelated;
 }
