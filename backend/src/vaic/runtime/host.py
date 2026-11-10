@@ -137,6 +137,7 @@ class AgentHost:
                 return ""
             if inv["role"] == "vaic" and await ledger.turn_stopped(inv["id"]):
                 log("info", "turn.skipped", agent=inv["agentId"], reason="the owner pressed Stop")
+                await self._remember_stopped(inv, "", [])
                 await ledger.finish_work(inv["id"])
                 return ""
             if ticket and ticket["status"] == "open" and ticket["to"] == agent["id"]:
@@ -239,7 +240,10 @@ class AgentHost:
 
             live = LiveReply(send, conversation or "", message_id=inv["id"] if is_vaic else None)
 
+            streamed: list[str] = []  # what VAIC had written so far, kept in the history if the owner presses Stop
+
             async def on_text(text: str) -> None:
+                streamed.append(text)
                 await live.add(text)
 
             async def runner(turn: TurnInput) -> TurnOutput:
@@ -283,7 +287,7 @@ class AgentHost:
             else:
                 done, stopped = await unless_stopped(gated, lambda: ledger.turn_stopped(inv["id"]))
                 if stopped or done is None:
-                    await self._stopped(inv, started, send)
+                    await self._stopped(inv, "".join(streamed), started, send)
                     return ""
                 result = done
             u = result.output.usage
@@ -318,25 +322,36 @@ class AgentHost:
                 await ledger.release_worker_slot(inv["department"])
                 await ledger.worker_turn_ended(inv["id"], failed)
 
-    async def _stopped(self, inv: dict[str, Any], started: list[dict[str, Any]], send: Send) -> None:
+    async def _stopped(self, inv: dict[str, Any], partial: str, started: list[dict[str, Any]], send: Send) -> None:
         """The owner pressed Stop mid-turn (decision 183): nothing more is said for that message. The HUD hears it
-        was dropped, with the tool calls already made; VAIC's memory keeps the exchange only if something was done,
-        so it knows later."""
+        was dropped, with the tool calls already made; the exchange stays in VAIC's history, marked stopped."""
         ledger, conversation = self.d.ledger, str(inv.get("conversation") or "")
         log("info", "vaic.stopped", message=inv["id"], tools=len(started))
         if conversation:
             # "done" sends it the reliable way too (the bus), not only straight to the open HUDs.
             event = {"type": "vaic.stopped", "conversation": conversation, "message_id": inv["id"], "tools": started}
             await send({**event, "done": True})
-            if started:
-                body = inv["body"] if inv.get("from") == "owner" else f"[{inv['kind']} from {inv.get('from')}]"
-                done = ", ".join(str(t.get("detail") or t.get("activity")) for t in started)
-                await ledger.add_conversation_line(conversation, "owner", body)
-                await ledger.add_conversation_line(
-                    conversation, "vaic", f"[The owner pressed Stop before I answered. Tools already called: {done}.]"
-                )
+            await self._remember_stopped(inv, partial, started)
         await self.d.bus.put({"type": "activity", "id": "vaic", "activity": "idle"})
         await ledger.finish_work(inv["id"])
+
+    async def _remember_stopped(self, inv: dict[str, Any], partial: str, started: list[dict[str, Any]]) -> None:
+        """A stopped exchange stays in the conversation for context (the owner, 2026-11-10: "still save them as chat
+        history"), like a stopped turn in ChatGPT or Claude: the owner's message, then VAIC's line starting with the
+        marker (first, so the 4,000-character cap can only cut the partial answer), so a later turn reads it as
+        dropped, not as a request to carry on."""
+        conversation = str(inv.get("conversation") or "")
+        if not conversation:
+            return
+        body = inv["body"] if inv.get("from") == "owner" else f"[{inv['kind']} from {inv.get('from')}]"
+        note = "(stopped by the owner"
+        note += " before VAIC answered" if not partial.strip() else ""
+        if started:
+            note += "; tools already called: " + ", ".join(str(t.get("detail") or t.get("activity")) for t in started)
+        note += ". Not an open request: do not carry it on unless the owner asks again.)"
+        text = f"{note} {partial.strip()}".strip() if partial.strip() else note
+        await self.d.ledger.add_conversation_line(conversation, "owner", body)
+        await self.d.ledger.add_conversation_line(conversation, "vaic", text)
 
     async def _project_lines(self, conversation: str, recent: list[dict[str, Any]]) -> list[str]:
         """A project chat in the Apps studio: which app it is about (and the chat it began in), or that it is

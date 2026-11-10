@@ -57,7 +57,12 @@ async def test_stop_mid_stream_drops_the_rest_of_the_reply() -> None:
     assert not city.bus.of_type("vaic.reply")  # no final reply, not even the safety-net copy
     stopped = city.bus.of_type("vaic.stopped")
     assert len(stopped) == 1 and stopped[0]["message_id"] == MSG and stopped[0]["tools"] == []
-    assert await city.ledger.recent_conversation("c1") == []  # dropped: nothing to remember
+    # Kept for context (the owner: "still save them as chat history"), marked stopped, with what had streamed.
+    lines = await city.ledger.recent_conversation("c1")
+    assert [(line["who"], line["text"]) for line in lines] == [
+        ("owner", "what's 9 + 9?"),
+        ("vaic", "(stopped by the owner. Not an open request: do not carry it on unless the owner asks again.) Eigh"),
+    ]
     assert await city.ledger.is_work_done(MSG)  # the crash sweep must not send it again
 
 
@@ -98,6 +103,9 @@ async def test_a_message_stopped_before_vaic_picked_it_up_never_runs() -> None:
     assert calls == []
     assert not city.bus.of_type("vaic.reply")
     assert await city.ledger.is_work_done(MSG)
+    lines = await city.ledger.recent_conversation("c1")
+    assert [line["who"] for line in lines] == ["owner", "vaic"]
+    assert lines[1]["text"].startswith("(stopped by the owner before VAIC answered.")
 
 
 async def test_tools_already_called_are_said_plainly_and_remembered() -> None:
@@ -117,7 +125,7 @@ async def test_tools_already_called_are_said_plainly_and_remembered() -> None:
     assert stopped["tools"] == [{"activity": "delegating", "detail": "delegate_to_orchestrator"}]
     lines = await city.ledger.recent_conversation("c1")
     assert [line["who"] for line in lines] == ["owner", "vaic"]
-    assert "delegate_to_orchestrator" in lines[1]["text"] and "Stop" in lines[1]["text"]
+    assert "delegate_to_orchestrator" in lines[1]["text"] and lines[1]["text"].startswith("(stopped by the owner")
 
 
 async def test_without_stop_the_turn_answers_as_before() -> None:
@@ -169,3 +177,30 @@ async def test_post_stop_flags_the_owners_message() -> None:
     assert await d.ledger.turn_stopped("owner-oabc12345")
     assert not await d.ledger.turn_stopped("owner-other1234")
     assert (await handle_http(ev("POST", "/messages/x/stop", {}), d))["statusCode"] == 404
+
+
+async def test_the_next_turn_reads_the_stopped_exchange_as_stopped_not_as_work_to_carry_on() -> None:
+    city: Any = None
+    prompts: list[str] = []
+
+    async def engine(req: EngineRequest) -> TurnOutput:
+        prompts.append(req.turn.prompt)
+        if len(prompts) == 1:
+            assert req.on_text
+            await req.on_text("Here are fifty sentences. One.")
+            await city.ledger.stop_turn(MSG)
+            await asyncio.sleep(0.5)
+        return TurnOutput(text="Hello again.", usage=Usage())
+
+    city = make_city(engine)
+    await city.owner_says("what's 9 + 9?")
+    await city.run()
+    await city.owner_says("hello", "c1")
+    await city.run()
+    later = prompts[1]
+    assert "Owner: what's 9 + 9?" in later
+    assert (
+        "VAIC: (stopped by the owner. Not an open request: do not carry it on unless the owner asks again.) "
+        "Here are fifty sentences. One." in later
+    )
+    assert later.index("Conversation so far") < later.index("Message (task) from owner:\nhello")
