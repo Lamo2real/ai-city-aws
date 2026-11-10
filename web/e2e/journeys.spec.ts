@@ -1475,8 +1475,13 @@ test("the logo is the owner's eye with no background, in the top bar and the bro
   await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
   expect(lum((await look()).fill)).toBeLessThan(200);
   // the tab icon: one SVG with no background shape that switches colour with the browser's theme
-  await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "/favicon.svg");
-  const svg = await (await page.request.get("/favicon.svg")).text();
+  // (at new file names, so the old amber icon a browser cached is dropped: decision 173), and the tab says VAIC
+  await expect(page).toHaveTitle("VAIC");
+  await expect(page.locator('link[rel="icon"]').first()).toHaveAttribute("href", "/vaic-icon.svg");
+  for (const png of ["/vaic-icon-dark.png", "/vaic-icon-light.png"])
+    expect((await page.request.get(png)).headers()["content-type"]).toContain("image/png");
+  expect((await page.request.get("/favicon.svg")).headers()["content-type"] ?? "").not.toContain("svg");
+  const svg = await (await page.request.get("/vaic-icon.svg")).text();
   expect(svg).toContain("prefers-color-scheme:dark");
   expect(svg).not.toMatch(/<rect|<circle/);
   expect((await page.request.get("/eye.svg")).ok()).toBe(true);
