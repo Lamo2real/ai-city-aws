@@ -1,0 +1,114 @@
+// Traffic (decision 173): lights at some junctions, a couple of roundabouts, highway pace out of town. The page's
+// own simulation is read through the read-only hooks on section.city (_traffic, _signals, _view).
+import { expect, test, type Page } from "@playwright/test";
+import { mockBackend } from "./mock.ts";
+
+type Junction = { id: string; kind: string; cx: number; cy: number };
+type Lane = { id: string; axis: "x" | "y"; len: number; townFrom: number; townTo: number; controls: Array<{ j: Junction; dc: number }> };
+type Car = { id: string; lane: Lane | null; d: number; v: number; rare: boolean };
+type Hooks = {
+  _traffic?: { junctions: Junction[]; cars: Car[]; t: number };
+  _signals?: () => Array<{ id: string; x: string; y: string }>;
+  _view?: () => { x: number; y: number; zoom: number };
+  dataset: DOMStringMap;
+};
+const hooks = <T>(page: Page, f: (h: Hooks) => T) =>
+  page.evaluate((src) => {
+    const h = document.querySelector("section.city") as unknown as Hooks;
+    return new Function("h", `return (${src})(h)`)(h);
+  }, f.toString()) as Promise<T>;
+
+async function openCity(page: Page) {
+  const created_at = new Date(Date.now() - 86_400_000).toISOString();
+  const departments = ["Research", "Sales", "Legal", "Media"].map((name) => ({
+    key: name.toLowerCase(),
+    name,
+    mission: "x",
+    manager_id: `mgr-${name.toLowerCase()}`,
+    state: "active",
+    created_at,
+  }));
+  await mockBackend(page, { snapshot: { departments } });
+  await page.goto("/#/city");
+  await expect(page.locator("section.city")).toHaveAttribute("data-city-ready", "1");
+}
+
+// Zooms the map in on a junction of the given kind, with the mouse wheel at its spot on screen.
+async function zoomTo(page: Page, kind: string) {
+  const canvas = page.locator("section.city > canvas").first();
+  const box = (await canvas.boundingBox())!;
+  for (let i = 0; i < 6; i++) {
+    const q = await page.evaluate((k) => {
+      const h = document.querySelector("section.city") as unknown as Hooks;
+      const j = h._traffic!.junctions.find((x) => x.kind === k)!;
+      const v = h._view!();
+      return { x: (j.cx - v.x) * v.zoom, y: (j.cy - v.y) * v.zoom, zoom: v.zoom };
+    }, kind);
+    if (q.zoom >= 4) break;
+    await page.mouse.move(box.x + Math.max(10, Math.min(box.width - 10, q.x)), box.y + Math.max(10, Math.min(box.height - 10, q.y)));
+    await page.mouse.wheel(0, -400);
+    await page.waitForTimeout(350);
+  }
+}
+
+test("lights at some junctions never go green both ways, and a cab waits at the red", async ({ page }, info) => {
+  test.slow();
+  await openCity(page);
+  const signals = Number(await hooks(page, (h) => h.dataset.signals));
+  const rounds = Number(await hooks(page, (h) => h.dataset.roundabouts));
+  const total = await hooks(page, (h) => h._traffic!.junctions.length);
+  expect(signals).toBeGreaterThan(0);
+  expect(signals).toBeLessThan(total); // some junctions, not all
+  expect(rounds).toBeGreaterThanOrEqual(2);
+  expect(rounds).toBeLessThanOrEqual(3);
+
+  // Sample the lights for a full cycle and more: one way is always red; every colour shows.
+  const seen = new Set<string>();
+  for (let i = 0; i < 60; i++) {
+    for (const s of await hooks(page, (h) => h._signals!())) {
+      expect(s.x === "red" || s.y === "red").toBe(true);
+      seen.add(s.x).add(s.y);
+    }
+    await page.waitForTimeout(200);
+  }
+  expect([...seen].sort()).toEqual(["amber", "green", "red"]);
+
+  // Some cab stands at a stop line while its light is red.
+  await expect
+    .poll(
+      () =>
+        hooks(page, (h) => {
+          const sig = new Map(h._signals!().map((s) => [s.id, s]));
+          return h._traffic!.cars.some((c) => {
+            if (!c.lane || c.rare || c.v > 0.5) return false;
+            const ctl = c.lane.controls.find((k) => k.j.kind === "light" && k.dc > c.d && k.dc - c.d < 80);
+            if (!ctl) return false;
+            const stopD = ctl.dc - 36 - c.lane.len / 2;
+            return Math.abs(c.d - stopD) < 1.5 && sig.get(ctl.j.id)?.[c.lane.axis] === "red";
+          });
+        }),
+      { timeout: 30_000, intervals: [100] },
+    )
+    .toBe(true);
+  await zoomTo(page, "light");
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: info.outputPath("city-traffic-light.png") });
+});
+
+test("cabs circle the roundabouts and run at highway pace out in the countryside", async ({ page }, info) => {
+  test.slow();
+  await openCity(page);
+  await expect
+    .poll(() => hooks(page, (h) => h._traffic!.cars.some((c) => !c.lane)), { timeout: 30_000, intervals: [100] })
+    .toBe(true); // someone on a roundabout
+  const pace = await hooks(page, (h) => {
+    const town = h._traffic!.cars.filter((c) => c.lane && c.d > c.lane.townFrom + 40 && c.d < c.lane.townTo - 40).map((c) => c.v);
+    const road = h._traffic!.cars.filter((c) => c.lane && (c.d < c.lane.townFrom - 200 || c.d > c.lane.townTo + 200)).map((c) => c.v);
+    return { town: Math.max(...town), road: Math.max(...road) };
+  });
+  expect(pace.town).toBeLessThan(45);
+  expect(pace.road).toBeGreaterThan(80);
+  await zoomTo(page, "roundabout");
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: info.outputPath("city-roundabout.png") });
+});

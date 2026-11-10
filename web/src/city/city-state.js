@@ -959,17 +959,6 @@ export function bikeSpeed(route, from) {
   return Math.max(BIKE_PX_S, len / (BIKE_LEG_MS / 1000));
 }
 
-// Yellow cabs. Each street has two lanes, westbound above the centre line and eastbound below it; each avenue has
-// two, southbound on the left and northbound on the right. Every lane runs the whole road, out through the
-// countryside to the map's faded border, so a cab arrives from beyond the edge and drives off beyond it.
-export function streetLanes(world) {
-  const M = MAP_MARGIN * TILE, x0 = -M, x1 = world.width * TILE + M;
-  return world.streets.map((s) => ({ y0: s.y * TILE + 17, y1: s.y * TILE + 33, x0: s.x0 === 0 ? x0 : s.x0 * TILE, x1: s.x1 === world.width ? x1 : s.x1 * TILE }));
-}
-export function avenueLanes(world) {
-  const M = MAP_MARGIN * TILE, top = world.portrait ? (world.hqStreet + STREET / 2) * TILE : -M, bottom = world.height * TILE + M;
-  return [{ x0: world.avenue * TILE + 18, x1: world.avenue * TILE + 30, y0: top, y1: bottom }];
-}
 // A cab's opacity: it fades in over the last stretch before a lane's end and out over the same stretch after it,
 // so it never appears or vanishes in the middle of a road.
 export const CAB_FADE_PX = 6 * TILE;
@@ -987,28 +976,231 @@ export function seededRandom(seed) {
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
 export const rareCab = (seed) => seededRandom(seed) < 1 / RARE_CAB_ODDS;
-// The cabs cruising on their own, placed by the clock alone (a slow frame never bunches them up). Cabs sharing a
-// lane share its speed, so they keep their distance; about one per 22 tiles of road each way.
+// ---------- Traffic (decision 173): signals at some junctions, give way at the rest, a couple of roundabouts, and
+// the open road outside the town driven at highway speed. A small simulation stepped by the scene's clock: every
+// cab follows the one in front, brakes for red and amber at the stop line, gives way, circles a roundabout and
+// takes its exit. The owner's sports car (the rare cab) runs the lights; it still never drives into anyone.
 export const CAB_PX_S = 34, CAB_GAP_PX = 22 * TILE;
-export function trafficAt(world, now) {
-  const out = [];
-  const lane = (id, from, to, place) => {
-    const span = to - from, n = Math.max(1, Math.round(span / CAB_GAP_PX)), speed = CAB_PX_S * (0.85 + (hashOf(id) % 30) / 100);
-    for (let k = 0; k < n; k++) {
-      const run = (now / 1000) * speed + (k * span) / n + (hashOf(`${id}:${k}`) % Math.max(1, Math.round(span / n / 2)));
-      const d = run % span, lap = Math.floor(run / span); // each lap past the border is a new cab arriving
-      out.push({ ...place(d), alpha: edgeAlpha(d, 0, span), id: `${id}:${k}`, rare: rareCab(`${id}:${k}:${lap}`) });
-    }
-  };
+export const TOWN_PX_S = CAB_PX_S, HIGHWAY_PX_S = 96, RING_PX_S = 22, ACCEL_PX_S2 = 44, BRAKE_PX_S2 = 50, CAR_GAP_PX = 6;
+export const JUNCTION_HALF = 24, STOP_AT = 36, RING_R = 20;
+const CAR_LEN = { x: 24, y: 18 }, RING_LEN = 20, LOOKAHEAD = 420, TAU = Math.PI * 2;
+// A light: green, amber, then a moment of red both ways before the crossing road goes green. Red lasts 5 s.
+export const SIGNAL_MS = { green: 3600, amber: 900, allRed: 250 };
+export const SIGNAL_CYCLE_MS = 2 * (SIGNAL_MS.green + SIGNAL_MS.amber + SIGNAL_MS.allRed);
+export const RED_MS = SIGNAL_CYCLE_MS - SIGNAL_MS.green - SIGNAL_MS.amber;
+// `x` is the street traffic (east and west), `y` the avenue traffic (north and south).
+export function signalAt(junction, t) {
+  const { green: G, amber: A, allRed: X } = SIGNAL_MS, half = G + A + X;
+  const p = ((((t + (junction.offset ?? 0)) % SIGNAL_CYCLE_MS) + SIGNAL_CYCLE_MS) % SIGNAL_CYCLE_MS);
+  const q = p < half ? p : p - half, go = q < G ? "green" : q < G + A ? "amber" : "red";
+  return p < half ? { x: go, y: "red" } : { x: "red", y: go };
+}
+
+// The roads that run north–south right through the map: the avenue and, when there are towers west of HQ, the road
+// west of HQ (in tiles). The short side streets between towers carry no traffic.
+export function throughRoads(world) {
+  const top = world.portrait ? world.hqStreet + STREET / 2 : -MAP_MARGIN;
+  return [{ x: world.avenue, y0: top, y1: world.height + MAP_MARGIN }, ...(world.lanes ?? []).filter((l) => l.y0 <= -MAP_MARGIN && l.y1 >= world.height)];
+}
+// Each street has two lanes, westbound above the centre line and eastbound below it; each through road has two,
+// southbound on the left and northbound on the right. Every lane runs out through the countryside to the map's
+// faded border, so a cab arrives from beyond the edge and drives off beyond it.
+export function streetLanes(world) {
+  const M = MAP_MARGIN * TILE, x0 = -M, x1 = world.width * TILE + M;
+  return world.streets.map((s) => ({ y0: s.y * TILE + 17, y1: s.y * TILE + 33, x0: s.x0 === 0 ? x0 : s.x0 * TILE, x1: s.x1 === world.width ? x1 : s.x1 * TILE }));
+}
+export function avenueLanes(world) {
+  return throughRoads(world).map((r) => ({ x0: r.x * TILE + 18, x1: r.x * TILE + 30, y0: r.y0 * TILE, y1: r.y1 * TILE }));
+}
+// Every crossing of a street and a through road (a T where the avenue starts is not one). The ones nearest HQ get
+// lights, a couple of the outer ones are roundabouts, the rest are plain crossings where the street gives way to
+// the avenue: lights at some junctions, never all, and two or three roundabouts at most.
+export function junctions(world) {
+  const roads = throughRoads(world), list = [];
+  world.streets.forEach((s, street) => roads.forEach((r, road) => {
+    if (r.y0 > s.y - 1 || r.y1 < s.y + STREET + 1) return;
+    list.push({ id: `j${street}-${road}`, street, road, cx: (r.x + STREET / 2) * TILE, cy: (s.y + STREET / 2) * TILE });
+  }));
+  const hx = (world.hq.x + world.hq.w / 2) * TILE, hy = (world.hq.y + world.hq.h) * TILE;
+  const byNear = [...list].sort((a, b) => Math.hypot(a.cx - hx, a.cy - hy) - Math.hypot(b.cx - hx, b.cy - hy) || a.id.localeCompare(b.id));
+  const n = list.length, rounds = n >= 7 ? 3 : n >= 4 ? 2 : n >= 2 ? 1 : 0, lights = Math.min(n - rounds, Math.max(1, Math.round((n - rounds) / 2)));
+  byNear.forEach((j, i) => { j.kind = i < lights ? "light" : i >= n - rounds ? "roundabout" : "giveway"; });
+  for (const j of list) if (j.kind === "light") j.offset = hashOf(j.id) % SIGNAL_CYCLE_MS;
+  return list;
+}
+
+// A lane: travel coordinate `d` from 0 at the lane's start to `span` at its end.
+const posOf = (lane, d) => (lane.dir > 0 ? lane.from + d : lane.to - d);
+const dOf = (lane, p) => (lane.dir > 0 ? p - lane.from : lane.to - p);
+const lanePoint = (lane, d) => (lane.axis === "x" ? { x: posOf(lane, d), y: lane.at } : { x: lane.at, y: posOf(lane, d) });
+const reach = (vEnd, dist) => Math.sqrt(Math.max(0, vEnd) ** 2 + 2 * BRAKE_PX_S2 * Math.max(0, dist)); // the fastest one can go and still slow to vEnd in dist
+const ringArc = (from, to) => (((from - to) % TAU) + TAU) % TAU * RING_R; // along the ring (angle decreasing: anticlockwise on screen)
+
+export function createTraffic(world, seed = "traffic") {
+  const M = MAP_MARGIN * TILE, W = world.width * TILE, H = world.height * TILE, lanes = [];
   streetLanes(world).forEach((l, i) => {
-    lane(`e${i}`, l.x0, l.x1, (d) => ({ x: l.x0 + d, y: l.y1, east: true, vertical: false }));
-    lane(`w${i}`, l.x0, l.x1, (d) => ({ x: l.x1 - d, y: l.y0, east: false, vertical: false }));
+    lanes.push({ id: `e${i}`, axis: "x", dir: 1, at: l.y1, from: l.x0, to: l.x1, street: i });
+    lanes.push({ id: `w${i}`, axis: "x", dir: -1, at: l.y0, from: l.x0, to: l.x1, street: i });
   });
   avenueLanes(world).forEach((l, i) => {
-    lane(`s${i}`, l.y0, l.y1, (d) => ({ x: l.x0, y: l.y0 + d, east: false, vertical: true }));
-    lane(`n${i}`, l.y0, l.y1, (d) => ({ x: l.x1, y: l.y1 - d, east: true, vertical: true }));
+    lanes.push({ id: `s${i}`, axis: "y", dir: 1, at: l.x0, from: l.y0, to: l.y1, road: i });
+    lanes.push({ id: `n${i}`, axis: "y", dir: -1, at: l.x1, from: l.y0, to: l.y1, road: i });
   });
-  return out;
+  const js = junctions(world);
+  for (const lane of lanes) {
+    lane.span = lane.to - lane.from; lane.len = CAR_LEN[lane.axis];
+    const [lo, hi] = lane.axis === "x" ? [0, W] : [0, H], a = dOf(lane, lo), b = dOf(lane, hi);
+    lane.townFrom = Math.min(a, b); lane.townTo = Math.max(a, b);
+    lane.controls = [];
+    for (const j of js) {
+      if (lane.axis === "x" ? lane.street !== j.street : lane.road !== j.road) continue;
+      const dc = dOf(lane, lane.axis === "x" ? j.cx : j.cy), off = lane.at - (lane.axis === "x" ? j.cy : j.cx), half = Math.sqrt(RING_R ** 2 - off ** 2);
+      const c = { j, dc, entryD: dc - half, exitD: dc + half };
+      const ang = (d) => { const p = lanePoint(lane, d); return Math.atan2(p.y - j.cy, p.x - j.cx); };
+      c.entryAng = ang(c.entryD); c.exitAng = ang(c.exitD);
+      lane.controls.push(c);
+    }
+    lane.controls.sort((p, q) => p.dc - q.dc);
+  }
+  const cars = [];
+  for (const lane of lanes) {
+    const n = Math.max(1, Math.round(lane.span / CAB_GAP_PX));
+    for (let k = 0; k < n; k++) {
+      const id = `${lane.id}:${k}`;
+      let d = (k * lane.span) / n + (hashOf(id) % Math.max(1, Math.round(lane.span / n / 2)));
+      if (lane.controls.some((c) => Math.abs(d - c.dc) < 70)) d += 140; // never start inside a junction
+      d %= lane.span;
+      const f = 0.88 + (hashOf(`pace:${id}`) % 25) / 100;
+      cars.push({ id, lane, d, v: (d >= lane.townFrom && d <= lane.townTo ? TOWN_PX_S : HIGHWAY_PX_S) * f, f, lap: 0, rare: rareCab(`${id}:0`), commit: null, stopFor: null, ring: null, braking: false });
+    }
+  }
+  return { world, lanes, junctions: js, cars, t: 0, rand: rngOf(seed), margin: M };
+}
+const rngOf = (seed) => { let x = hashOf(seed) || 1; return () => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return (x >>> 0) / 4294967296; }; };
+
+// Advances the traffic by dtMs (in steps of at most 50 ms; a long pause, a hidden tab, is cut to a second).
+export function stepTraffic(sim, dtMs) {
+  let left = Math.min(Math.max(0, dtMs), 1000);
+  while (left > 0) { const h = Math.min(50, left); tick(sim, h / 1000); sim.t += h; left -= h; }
+}
+
+function tick(sim, dt) {
+  const byLane = new Map(sim.lanes.map((l) => [l, []])), byRing = new Map();
+  for (const c of sim.cars) {
+    if (c.ring) { if (!byRing.has(c.ring.j)) byRing.set(c.ring.j, []); byRing.get(c.ring.j).push(c); }
+    else byLane.get(c.lane).push(c);
+  }
+  for (const list of byLane.values()) list.sort((a, b) => a.d - b.d);
+  // A roundabout takes three cars at a time, counting the ones already let on.
+  const load = new Map();
+  for (const c of sim.cars) { const j = c.ring?.j ?? (c.commit && sim.junctions.find((k) => k.id === c.commit && k.kind === "roundabout")); if (j) load.set(j, (load.get(j) ?? 0) + 1); }
+  // Who is inside a junction's box right now, and on which axis.
+  const inBox = (j, axis) => sim.lanes.some((l) => l.axis === axis && l.controls.some((c) => c.j === j && byLane.get(l).some((o) => Math.abs(o.d - c.dc) < JUNCTION_HALF + l.len / 2)));
+  const plans = [];
+  for (const lane of sim.lanes) {
+    const list = byLane.get(lane);
+    list.forEach((car, i) => {
+      const L = lane.len, d = car.d;
+      const base = (d >= lane.townFrom && d <= lane.townTo ? TOWN_PX_S : HIGHWAY_PX_S) * car.f;
+      let cap = base, hold = Infinity;
+      if (d < lane.townFrom) cap = Math.min(cap, reach(TOWN_PX_S * car.f, lane.townFrom - d)); // easing off the highway into town
+      const lead = list[i + 1] ?? (list.length > 1 ? list[0] : null), leadD = !lead ? Infinity : list[i + 1] ? lead.d : lead.d + lane.span;
+      if (lead) { const gap = leadD - lead.lane.len / 2 - d - L / 2 - CAR_GAP_PX; cap = Math.min(cap, reach(lead.v, gap)); hold = Math.min(hold, d + Math.max(0, gap)); }
+      const ctl = lane.controls.find((c) => (c.j.kind === "roundabout" ? c.entryD > d : c.dc + JUNCTION_HALF + L / 2 > d));
+      if (ctl && ctl.dc - d < LOOKAHEAD) {
+        const j = ctl.j, stopD = ctl.dc - STOP_AT - L / 2, toStop = stopD - d, committed = car.commit === j.id || toStop < -0.5;
+        const blockedBeyond = lead && leadD > ctl.dc && leadD - lead.lane.len / 2 < ctl.dc + JUNCTION_HALF + L + CAR_GAP_PX && lead.v < 8;
+        const cross = lane.axis === "x" ? "y" : "x";
+        const stop = () => { cap = Math.min(cap, toStop < 0.5 ? 0 : reach(0, toStop)); hold = Math.min(hold, stopD); };
+        if (j.kind === "light" && !committed) {
+          const sig = signalAt(j, sim.t)[lane.axis];
+          if (car.rare) { if (inBox(j, cross)) stop(); } // the owner's car runs the lights, but never into anyone
+          else if (sig === "red") stop();
+          else if (sig === "amber") { if (car.stopFor === j.id || car.v < 10 || toStop >= (car.v * car.v) / (2 * BRAKE_PX_S2 * 1.6)) { car.stopFor = j.id; stop(); } else car.commit = j.id; } // too close to stop: go
+          else if (blockedBeyond || inBox(j, cross)) { car.stopFor = null; stop(); }
+          else { car.stopFor = null; if (toStop < 2) car.commit = j.id; }
+        } else if (j.kind === "giveway" && !committed) {
+          if (lane.axis === "x") {
+            // The street gives way: slow to a crawl at the line, go when nothing on the avenue is near.
+            const near = sim.lanes.some((l) => l.axis === "y" && l.controls.some((c) => c.j === j && byLane.get(l).some((o) => o.d > c.dc - JUNCTION_HALF - l.len / 2 - Math.max(20, o.v * 2) && o.d < c.dc + JUNCTION_HALF + l.len / 2)));
+            if (near || blockedBeyond) stop();
+            else if (toStop < 6) car.commit = j.id;
+            else cap = Math.min(cap, reach(12, toStop));
+          } else if (inBox(j, "x") || blockedBeyond) stop();
+        } else if (j.kind === "roundabout") {
+          const yieldD = ctl.entryD - L / 2 - 2, toYield = yieldD - d;
+          if (car.commit !== j.id) {
+            cap = Math.min(cap, reach(RING_PX_S, toYield));
+            if (toYield < 24) {
+              const ring = byRing.get(j) ?? [];
+              const busy = ring.some((o) => {
+                const toEntry = ringArc(o.ring.ang, ctl.entryAng), toExit = ringArc(o.ring.ang, o.ring.exitAng);
+                return (toEntry < 50 && toExit > toEntry) || TAU * RING_R - toEntry < RING_LEN + CAR_GAP_PX;
+              });
+              const letOn = sim.cars.some((o) => o !== car && !o.ring && o.commit === j.id && o.lane.controls.some((k) => k.j === j && ringArc(k.entryAng, ctl.entryAng) < 50));
+              if (busy || letOn || (load.get(j) ?? 0) >= 3) { cap = Math.min(cap, toYield < 0.5 ? 0 : reach(0, toYield)); hold = Math.min(hold, Math.max(d, yieldD)); }
+              else { car.commit = j.id; load.set(j, (load.get(j) ?? 0) + 1); }
+            }
+          }
+          if (car.commit === j.id) { cap = Math.min(cap, RING_PX_S * 1.1); plans.push({ car, cap, hold, enter: ctl }); return; }
+        }
+      }
+      plans.push({ car, cap, hold });
+    });
+  }
+  for (const [j, ring] of byRing) {
+    for (const car of ring) {
+      let cap = RING_PX_S * car.f, ahead = Infinity;
+      for (const o of ring) if (o !== car) { const a = ringArc(car.ring.ang, o.ring.ang); if (a > 0 && a < ahead) ahead = a; }
+      if (ahead < Infinity) cap = Math.min(cap, reach(0, ahead - RING_LEN - CAR_GAP_PX));
+      const toExit = ringArc(car.ring.ang, car.ring.exitAng), out = byLane.get(car.ring.toLane) ?? [];
+      if (out.some((o) => Math.abs(o.d - car.ring.toD) < car.ring.toLane.len + CAR_GAP_PX)) cap = Math.min(cap, reach(0, toExit - 1));
+      plans.push({ car, cap, ringAhead: ahead, j });
+    }
+  }
+  for (const p of plans) {
+    const { car } = p;
+    const v = p.cap < car.v ? Math.max(0, p.cap) : Math.min(p.cap, car.v + ACCEL_PX_S2 * dt);
+    car.braking = v < car.v - 0.2 || (v < 0.5 && car.v < 0.5);
+    car.v = v;
+    let step = v * dt;
+    if (car.ring) {
+      if (p.ringAhead < Infinity) step = Math.min(step, Math.max(0, p.ringAhead - RING_LEN - CAR_GAP_PX));
+      const toExit = ringArc(car.ring.ang, car.ring.exitAng);
+      if (step >= toExit) { const { toLane, toD } = car.ring; car.ring = null; car.lane = toLane; car.d = toD + (step - toExit); car.commit = null; }
+      else car.ring.ang -= step / RING_R;
+      continue;
+    }
+    car.d = Math.min(car.d + step, Math.max(car.d, p.hold));
+    if (p.enter && car.d >= p.enter.entryD) enterRing(sim, car, p.enter);
+    else if (car.d > car.lane.span) { car.d -= car.lane.span; car.lap += 1; car.rare = rareCab(`${car.id}:${car.lap}`); car.commit = null; car.v = Math.min(car.v, (car.d >= car.lane.townFrom && car.d <= car.lane.townTo ? TOWN_PX_S : HIGHWAY_PX_S) * car.f); }
+  }
+}
+// Onto the roundabout: straight on half the time, otherwise left or right; never back the way it came.
+function enterRing(sim, car, ctl) {
+  const j = ctl.j, from = car.lane, options = [];
+  for (const l of sim.lanes) {
+    if (l !== from && (l.axis === from.axis && (l.axis === "x" ? l.street === from.street : l.road === from.road))) continue; // a U-turn
+    const c = l.controls.find((k) => k.j === j);
+    if (c && c.exitD > 0 && c.exitD < l.span) options.push({ l, c, w: l === from ? 2 : 1 });
+  }
+  const total = options.reduce((s, o) => s + o.w, 0);
+  let r = sim.rand() * total, pick = options[0];
+  for (const o of options) { r -= o.w; if (r < 0) { pick = o; break; } }
+  car.ring = { j, ang: ctl.entryAng, exitAng: pick.c.exitAng, toLane: pick.l, toD: pick.c.exitD };
+  car.lane = null;
+}
+// Where every cab is, for drawing: side on along a street, nose or tail on along a through road; on a roundabout,
+// whichever way it is heading.
+export function trafficCars(sim) {
+  return sim.cars.map((c) => {
+    if (c.ring) {
+      const { j, ang } = c.ring, tx = Math.sin(ang), ty = -Math.cos(ang), vertical = Math.abs(ty) > Math.abs(tx);
+      return { id: c.id, x: j.cx + RING_R * Math.cos(ang), y: j.cy + RING_R * Math.sin(ang), vertical, east: vertical ? ty < 0 : tx > 0, alpha: 1, rare: c.rare, braking: c.braking, v: c.v, ring: j.id };
+    }
+    const l = c.lane, p = lanePoint(l, c.d);
+    return { id: c.id, x: p.x, y: p.y, vertical: l.axis === "y", east: l.axis === "x" ? l.dir > 0 : l.dir < 0, alpha: edgeAlpha(c.d, 0, l.span), rare: c.rare, braking: c.braking, v: c.v, lane: l.id };
+  });
 }
 // A commute by cab: which legs of a route are ridden. A leg is ridden when it runs along a street or the avenue,
 // from the first kerb a cab can reach to the kerb in front of the tower; the path between the houses (grass, no

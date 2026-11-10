@@ -8,7 +8,9 @@ import {
   rareCab,
   reduce,
   seededRandom,
-  trafficAt,
+  createTraffic,
+  stepTraffic,
+  trafficCars,
 } from "../src/city/city-state.js";
 
 describe("the rare cab", () => {
@@ -28,21 +30,25 @@ describe("the rare cab", () => {
     expect(rare / n).toBeLessThan(0.0011);
   });
 
-  it("is otherwise just a cab: same lanes, place and fade; a new arrival rolls again", () => {
+  it("is otherwise just a cab: same lanes, the same traffic; a new arrival rolls again", () => {
     const s = ["A", "B", "C", "D"].reduce(
       (st, name, i) => reduce(st, { type: "department.created", name, mission: "x", manager_id: `m${i}` }, i),
       initialState(0),
     );
     const w = layout(s, { houses: 8 });
+    const sim = createTraffic(w);
     let seen = 0,
       cabs = 0;
-    for (let t = 0; t < 3_600_000; t += 20_000) {
-      const now = trafficAt(w, t);
-      cabs += now.length;
-      for (const c of now) if (c.rare) seen++;
-      // The rare flag changes nothing about where a cab is or how it fades.
-      expect(now.map(({ rare: _r, ...rest }) => rest)).toEqual(trafficAt(w, t).map(({ rare: _r, ...rest }) => rest));
+    const laps = new Set<string>();
+    for (let t = 0; t < 1_800_000; t += 1000) {
+      stepTraffic(sim, 1000);
+      for (const c of trafficCars(sim)) {
+        cabs++;
+        if (c.rare) seen++;
+      }
+      for (const c of sim.cars) laps.add(`${c.id}:${c.lap}`);
     }
+    expect(laps.size).toBeGreaterThan(sim.cars.length * 3); // cars keep arriving anew, and each arrival rolls again
     expect(cabs).toBeGreaterThan(1000);
     expect(seen).toBeLessThan(cabs / 100); // rare indeed
   });

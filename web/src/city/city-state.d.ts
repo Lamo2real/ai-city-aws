@@ -256,10 +256,30 @@ export const CAB_FADE_PX: number;
 export const MAP_MARGIN: number;
 export function edgeAlpha(pos: number, from: number, to: number): number;
 export function avenueLanes(world: CityWorld): Array<{ x0: number; x1: number; y0: number; y1: number }>;
-export function trafficAt(
-  world: CityWorld,
-  now: number,
-): Array<{ x: number; y: number; east: boolean; vertical: boolean; alpha: number; id: string; rare: boolean }>;
+export type CityJunction = { id: string; street: number; road: number; cx: number; cy: number; kind: "light" | "roundabout" | "giveway"; offset?: number };
+export type CityLane = { id: string; axis: "x" | "y"; dir: 1 | -1; at: number; from: number; to: number; span: number; len: number; townFrom: number; townTo: number; controls: Array<{ j: CityJunction; dc: number; entryD: number; exitD: number; entryAng: number; exitAng: number }> };
+export type CityCar = { id: string; lane: CityLane | null; d: number; v: number; f: number; lap: number; rare: boolean; commit: string | null; stopFor: string | null; braking: boolean; ring: { j: CityJunction; ang: number; exitAng: number; toLane: CityLane; toD: number } | null };
+export type CityTraffic = { world: CityWorld; lanes: CityLane[]; junctions: CityJunction[]; cars: CityCar[]; t: number; rand: () => number; margin: number };
+export type CityTrafficCar = { id: string; x: number; y: number; east: boolean; vertical: boolean; alpha: number; rare: boolean; braking: boolean; v: number; lane?: string; ring?: string };
+export const TOWN_PX_S: number;
+export const HIGHWAY_PX_S: number;
+export const RING_PX_S: number;
+export const ACCEL_PX_S2: number;
+export const BRAKE_PX_S2: number;
+export const CAR_GAP_PX: number;
+export const JUNCTION_HALF: number;
+export const STOP_AT: number;
+export const RING_R: number;
+export const SIGNAL_MS: { green: number; amber: number; allRed: number };
+export const SIGNAL_CYCLE_MS: number;
+export const RED_MS: number;
+export type SignalColour = "green" | "amber" | "red";
+export function signalAt(junction: { offset?: number }, t: number): { x: SignalColour; y: SignalColour };
+export function throughRoads(world: CityWorld): Array<{ x: number; y0: number; y1: number }>;
+export function junctions(world: CityWorld): CityJunction[];
+export function createTraffic(world: CityWorld, seed?: string): CityTraffic;
+export function stepTraffic(sim: CityTraffic, dtMs: number): void;
+export function trafficCars(sim: CityTraffic): CityTrafficCar[];
 export const RARE_CAB_ODDS: number;
 export function seededRandom(seed: string): number;
 export function rareCab(seed: string): boolean;

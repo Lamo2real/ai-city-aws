@@ -4,7 +4,7 @@
 // Reviewer; each department's manager stands at its door; panels are React (see CityView.tsx).
 // The City View: a small game world of the agents, drawn pixel by pixel on a canvas from city-state.js.
 // All of the art is drawn here in code. Every person on screen is a real agent; only the scenery moves on its own.
-import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, standFraction, mailFor, enqueueMail, bikeSpeed, trafficAt, rideLegs, rareCab } from "./city-state.js";
+import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, rareCab } from "./city-state.js";
 
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const INK = "#1d1c36";
@@ -338,6 +338,34 @@ function avenue(g, x, y0, y1, seed) { // tiles
   for (let dy = 4; dy < H; dy += 20) R(g, X + W / 2 - 1, Y + dy, 2, 10, "#b9a45a");
 }
 
+// A junction's paint (decision 173): a stop line on each approach where there are lights, give-way teeth on the
+// street where it gives way to the avenue, and a roundabout: a ring of road round a little planted island.
+function junctionMarks(g, j) {
+  const { cx, cy } = j, s = STOP_AT, LINE = "#e8e6f0";
+  const teeth = (x, y, w, h) => { for (let k = 0; k < Math.max(w, h); k += 4) R(g, x + (w > h ? k : 0), y + (w > h ? 0 : k), w > h ? 2 : w, w > h ? h : 2, LINE); };
+  if (j.kind === "light") {
+    R(g, cx - s - 2, cy, 2, 16, LINE); R(g, cx + s, cy - 16, 2, 16, LINE); // eastbound, westbound
+    R(g, cx - 16, cy - s - 2, 16, 2, LINE); R(g, cx, cy + s, 16, 2, LINE); // southbound, northbound
+  } else if (j.kind === "giveway") {
+    teeth(cx - s - 2, cy, 2, 16); teeth(cx + s, cy - 16, 2, 16);
+  } else if (j.kind === "roundabout") {
+    oval(g, cx, cy, 30, 30, "#65617c"); oval(g, cx, cy, 28, 28, "#3f4168");
+    R(g, cx - 32, cy - 16, 64, 32, "#3f4168"); R(g, cx - 16, cy - 32, 32, 64, "#3f4168");
+    for (let a = 0; a < 24; a++) { const t = (a / 24) * Math.PI * 2; if (a % 2) R(g, cx + Math.cos(t) * 27 - 1, cy + Math.sin(t) * 27 - 1, 2, 2, "#56587e"); }
+    teeth(cx - 30, cy, 2, 16); teeth(cx + 28, cy - 16, 2, 16); teeth(cx - 16, cy - 30, 16, 2); teeth(cx, cy + 28, 16, 2);
+    oval(g, cx, cy, 12, 12, "#cfcfd6"); oval(g, cx, cy, 10, 10, "#387a5c");
+    for (const [dx, dy, c] of [[-5, 2, "#f4c63c"], [4, 4, "#e0625a"], [-2, 6, "#fff6e0"], [6, -1, "#f4c63c"]]) R(g, cx + dx, cy + dy, 2, 2, c);
+    R(g, cx - 1, cy - 4, 2, 5, "#6b4226"); oval(g, cx, cy - 7, 5, 4, "#2f7a52"); oval(g, cx - 1, cy - 8, 3, 2, "#4f9a6a");
+  }
+}
+// A traffic light on its pole at the kerb, facing the traffic it holds: red, amber and green, one of them lit.
+function signalHead(g, x, y, state) {
+  R(g, x, y - 12, 2, 13, "#2a2d4a"); R(g, x - 1, y, 4, 1, "rgba(20,18,40,.4)");
+  R(g, x - 2, y - 25, 6, 14, INK); R(g, x - 1, y - 24, 4, 12, "#24263f");
+  const lamp = (dy, on, lit, off) => { R(g, x - 1 + 1, y - 24 + dy, 2, 2, on ? lit : off); if (on) { R(g, x - 1, y - 24 + dy, 4, 4, "rgba(255,255,255,.12)"); R(g, x, y - 23 + dy, 2, 2, lit); } };
+  lamp(1, state === "red", "#ff4a3d", "#5a2430"); lamp(5, state === "amber", "#ffc23c", "#5a4a24"); lamp(9, state === "green", "#3ee08a", "#1f4a36");
+}
+
 // ---------- Scenery. It never pretends to be anyone ----------
 function glow(g, cx, cy, big = 1) {
   oval(g, cx, cy, 28 * big, 13 * big, "rgba(255,206,130,.11)");
@@ -578,7 +606,9 @@ function bake(world, skip = new Map()) {
   for (const v of verticals) avenue(g, v.x, v.y0, v.y1, `ave${v.x},${v.y0}`);
   const roads = world.streets.map((s) => ({ ...s, x0: s.x0 === 0 ? -MARGIN : s.x0, x1: s.x1 === world.width ? world.width + MARGIN : s.x1 }));
   const through = verticals.filter((v) => v.y0 <= top).map((v) => v.x);
-  for (const s of roads) street(g, s.x0, s.x1, s.y, `st${s.y}`, through);
+  const js = junctions(world), round = new Set(js.filter((j) => j.kind === "roundabout").map((j) => `${j.cx},${j.cy}`));
+  for (const s of roads) street(g, s.x0, s.x1, s.y, `st${s.y}`, through.filter((a) => !round.has(`${(a + 1.5) * TILE},${(s.y + 1.5) * TILE}`)));
+  for (const j of js) junctionMarks(g, j);
   // Trees wherever nothing else stands, far to near.
   const taken = [world.hq, ...world.buildings, ...world.lots, world.homes, ...roads.map((s) => ({ x: s.x0, y: s.y, w: s.x1 - s.x0, h: 3 })), ...verticals.map((v) => ({ x: v.x, y: v.y0, w: 3, h: v.y1 - v.y0 }))];
   const clear = (x, y) => taken.every((t) => x < (t.x * TILE) - 12 || x > (t.x + t.w) * TILE + 12 || y < t.y * TILE - 2 || y > (t.y + t.h) * TILE + 34);
@@ -646,6 +676,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   const mail = { queue: [], rider: null, out: 0, back: 0 }; // the one mailman and the letters waiting for him
   let entered = false; // the towers' entrance has played (or there was nothing to show)
   let leaving = []; // cabs driving off after dropping someone at a door or a house
+  let traffic = null, trafficSig = "", trafficAt = 0; // the cruising cabs, their lights and roundabouts (decision 173)
   root._anims = anims; // read-only test hooks (e2e/departments.spec.ts)
   root._mail = mail;
   const walked = new Set(); // ids that already walked home for good
@@ -695,7 +726,17 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     const next = layout(state, { portrait, seats: seatCount, houses });
     const sig = JSON.stringify(next);
     const rebaked = sig !== worldSig;
-    if (rebaked) { world = next; worldSig = sig; ground = bake(world, animSkip()); fitView(); }
+    if (rebaked) {
+      world = next; worldSig = sig; ground = bake(world, animSkip()); fitView();
+      const roads = JSON.stringify([world.streets, world.lanes, world.avenue, world.width, world.height, world.portrait]);
+      if (roads !== trafficSig) {
+        // The roads changed: traffic starts afresh on them, the lights keep their clock.
+        const t = traffic?.t ?? 0; traffic = createTraffic(world); traffic.t = t; trafficSig = roads; root._traffic = traffic;
+        root.dataset.signals = String(traffic.junctions.filter((j) => j.kind === "light").length);
+        root.dataset.roundabouts = String(traffic.junctions.filter((j) => j.kind === "roundabout").length);
+        root._signals = () => traffic.junctions.filter((j) => j.kind === "light").map((j) => ({ id: j.id, ...signalAt(j, traffic.t) })); // for tests
+      }
+    }
     const wanted = new Set([...list.filter((a) => a.kind === "core" || CORE.has(a.id)).map((a) => a.id), ...shown.ids]);
     for (const id of people.keys()) if (!wanted.has(id)) { people.delete(id); if (selected === id) selected = null; if (hover === id) hover = null; }
     const still = instant || reduced() || !visible();
@@ -1308,20 +1349,35 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     for (const b of world.buildings) if (!b.archived && !anims.has(b.dept)) drawTowerLive(b, now, ox, oy);
     for (const [d, a] of anims) drawAnim(d, a, now, ox, oy);
     // Yellow cabs cruising the streets (parked where they are with reduced motion), and the ones driving off.
-    const traffic = trafficAt(world, reduced() ? 0 : now);
-    if (root.dataset.cabs !== String(traffic.length)) root.dataset.cabs = String(traffic.length); // for tests
+    if (!reduced() && trafficAt) stepTraffic(traffic, now - trafficAt);
+    trafficAt = now;
+    const cars = trafficCars(traffic);
+    if (root.dataset.cabs !== String(cars.length)) root.dataset.cabs = String(cars.length); // for tests
     const allRare = root.dataset.rareCabs === "all"; // a test hook: every cab is the rare one, for its screenshot
     let rareShown = 0;
-    for (const c of traffic) {
+    for (const c of cars) {
       const x = Math.round(c.x) - 12 - ox, y = Math.round(c.y) - 12 - oy;
       if (c.alpha <= 0 || x < -30 || x > w + 30 || y < -20 || y > h + 20) continue;
       ctx.globalAlpha = c.alpha; // fading in from beyond the map's edge, or out past it
-      const rare = c.rare || allRare, img = cabImg(rare, c.vertical ? (c.east ? "rear" : "front") : "side");
-      if (c.vertical) { R(ctx, x + 3, y + 14, 14, 2, "rgba(20,18,40,.3)"); ctx.drawImage(img, x + 3, y - 3); }
-      else { R(ctx, x + 3, y + 12, 18, 2, "rgba(20,18,40,.3)"); if (c.east) ctx.drawImage(img, x, y); else { ctx.save(); ctx.scale(-1, 1); ctx.drawImage(img, -x - 24, y); ctx.restore(); } }
+      const rare = c.rare || allRare, img = cabImg(rare, c.vertical ? (c.east ? "rear" : "front") : "side"), brake = c.braking && !rare ? "#ff3a2a" : null;
+      if (c.vertical) { R(ctx, x + 4, y + 18, 14, 2, "rgba(20,18,40,.3)"); ctx.drawImage(img, x + 3, y + 3); if (brake && c.east) { R(ctx, x + 6, y + 13, 3, 2, brake); R(ctx, x + 15, y + 13, 3, 2, brake); } }
+      else {
+        R(ctx, x + 3, y + 12, 18, 2, "rgba(20,18,40,.3)");
+        if (c.east) ctx.drawImage(img, x, y); else { ctx.save(); ctx.scale(-1, 1); ctx.drawImage(img, -x - 24, y); ctx.restore(); }
+        if (brake) R(ctx, c.east ? x + 1 : x + 21, y + 6, 2, 2, brake); // brake lights
+      }
       if (rare) rareShown += 1;
     }
     ctx.globalAlpha = 1;
+    // The traffic lights, one at the kerb before the stop line on each approach.
+    for (const j of traffic.junctions) {
+      if (j.kind !== "light") continue;
+      const sig = signalAt(j, traffic.t), s = STOP_AT, k = JUNCTION_HALF - 3;
+      for (const [dx, dy, axis] of [[-s + 2, k, "x"], [s - 2, -k + 4, "x"], [-k, -s + 2, "y"], [k, s + 4, "y"]]) {
+        const x = j.cx + dx - ox, y = j.cy + dy - oy;
+        if (x > -10 && x < w + 10 && y > -30 && y < h + 10) signalHead(ctx, x, y, sig[axis]);
+      }
+    }
     if (root.dataset.rareShown !== String(rareShown)) root.dataset.rareShown = String(rareShown); // for tests
     for (const c of leaving) { const x = Math.round(c.x) - 12 - ox, y = Math.round(c.y) - 12 - oy, img = cabImg(c.rare || allRare, "side"); ctx.globalAlpha = Math.max(0, 1 - c.t / 1.4); if (c.east) ctx.drawImage(img, x, y); else { ctx.save(); ctx.scale(-1, 1); ctx.drawImage(img, -x - 24, y); ctx.restore(); } ctx.globalAlpha = 1; }
     // The apps' cabinets stand in front of the Apps building; the people walk in front of them.

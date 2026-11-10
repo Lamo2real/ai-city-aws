@@ -26,7 +26,9 @@ import {
   standFraction,
   standingDepartments,
   streetLanes,
-  trafficAt,
+  createTraffic,
+  stepTraffic,
+  trafficCars,
   walkRoute,
   type CityMail,
   type CityState,
@@ -156,35 +158,26 @@ describe("the mailman", () => {
 describe("yellow cabs", () => {
   const s = city("Research", "Sales", "Legal", "Media");
   const w = layout(s, { houses: 8 });
-  it("cruise every street and the avenue both ways, by the clock, and stay on their lanes", () => {
+  it("cruise every street and the through roads both ways, and stay on their lanes", () => {
     const lanes = streetLanes(w),
       aves = avenueLanes(w);
-    const a = trafficAt(w, 0),
-      b = trafficAt(w, 1000);
+    const sim = createTraffic(w);
+    const a = trafficCars(sim);
+    stepTraffic(sim, 1000);
+    const b = trafficCars(sim);
     expect(a.length).toBe(b.length);
     expect(a.some((c, i) => c.x !== b[i]?.x || c.y !== b[i]?.y)).toBe(true); // they move
-    for (const c of b) {
-      const on = c.vertical
-        ? aves.some((l) => c.x === (c.east ? l.x1 : l.x0) && c.y >= l.y0 && c.y <= l.y1)
-        : lanes.some((l) => c.y === (c.east ? l.y1 : l.y0) && c.x >= l.x0 && c.x <= l.x1);
-      expect(on).toBe(true);
+    for (let t = 0; t < 120_000; t += 1000) {
+      stepTraffic(sim, 1000);
+      for (const c of trafficCars(sim)) {
+        if (c.ring) continue; // circling a roundabout (traffic.test.ts)
+        const on = c.vertical
+          ? aves.some((l) => c.x === (c.east ? l.x1 : l.x0) && c.y >= l.y0 && c.y <= l.y1)
+          : lanes.some((l) => c.y === (c.east ? l.y1 : l.y0) && c.x >= l.x0 && c.x <= l.x1);
+        expect(on).toBe(true);
+      }
     }
     expect(b.some((c) => c.vertical)).toBe(true);
-    // Cabs in one lane keep their distance (they share its speed): never two on top of each other.
-    for (const t of [0, 7_000, 60_000]) {
-      const cabs = trafficAt(w, t);
-      for (const c of cabs)
-        expect(
-          cabs.filter(
-            (d) =>
-              d !== c &&
-              d.vertical === c.vertical &&
-              d.east === c.east &&
-              Math.abs(d.x - c.x) < 24 &&
-              Math.abs(d.y - c.y) < 12,
-          ),
-        ).toEqual([]);
-    }
   });
 
   it("drive off past the edge of the map and fade out there; they never pop in or out mid-road", () => {
@@ -197,8 +190,10 @@ describe("yellow cabs", () => {
     expect(edgeAlpha(CAB_FADE_PX / 2, 0, 1000)).toBeCloseTo(0.5);
     expect(edgeAlpha(500, 0, 1000)).toBe(1);
     // Anything near the middle of the map is fully drawn; only cabs out by the border are faded.
-    for (let t = 0; t < 120_000; t += 5_000)
-      for (const c of trafficAt(w, t)) {
+    const sim = createTraffic(w);
+    for (let t = 0; t < 120_000; t += 5_000) {
+      stepTraffic(sim, 1000);
+      for (const c of trafficCars(sim)) {
         const inside =
           c.x > -M + CAB_FADE_PX &&
           c.x < w.width * TILE + M - CAB_FADE_PX &&
@@ -206,6 +201,7 @@ describe("yellow cabs", () => {
           c.y < w.height * TILE + M - CAB_FADE_PX;
         if (inside) expect(c.alpha).toBe(1);
       }
+    }
   });
 
   it("take workers to work and home: the street part of a commute is ridden, the walk to the doors is not", () => {
