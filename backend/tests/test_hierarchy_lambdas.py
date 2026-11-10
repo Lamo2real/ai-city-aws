@@ -1,3 +1,4 @@
+import asyncio
 import json
 from typing import Any
 
@@ -50,6 +51,36 @@ async def test_reports_only_failed_records_for_retry_and_skips_unparseable_ones(
         D(),
     )
     assert r["batchItemFailures"] == [{"itemIdentifier": "c"}]
+
+
+async def test_a_batch_starts_its_messages_side_by_side() -> None:
+    """One slow hand-off never holds up the other messages in its batch (decision 178)."""
+    started: list[str] = []
+    gate = asyncio.Event()
+
+    class D:
+        async def handle(self, m: Any) -> str:
+            started.append(m["id"])
+            if m["id"] == "slow":
+                await gate.wait()
+            return "started"
+
+    run = asyncio.create_task(
+        process_batch(
+            {
+                "Records": [
+                    {"messageId": "a", "body": json.dumps(msg(id="slow"))},
+                    {"messageId": "b", "body": json.dumps(msg(id="quick"))},
+                ]
+            },
+            D(),
+        )
+    )
+    for _ in range(5):
+        await asyncio.sleep(0)
+    assert started == ["slow", "quick"]  # the quick one began while the slow one was still running
+    gate.set()
+    assert (await run)["batchItemFailures"] == []
 
 
 async def test_invokes_the_roles_agentcore_runtime_with_the_session_id_and_json_payload() -> None:

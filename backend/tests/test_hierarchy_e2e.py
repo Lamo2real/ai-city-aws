@@ -175,7 +175,8 @@ async def test_walks_one_prompt_from_the_owner_to_aces_report() -> None:
     assert any(s.startswith(f"orch-{task['id']}") for s in sessions)
     assert any(s.startswith(f"mgr-builders-{task['id']}") for s in sessions)
     assert any(s.startswith("wkr-builders-wkr-builders-") for s in sessions)
-    assert all(i["async"] for i in city.invocations if i["role"] == "worker")
+    # Everyone but VAIC is handed off as an async job; only VAIC's call waits for its reply (decision 178)
+    assert all(i["async"] == (i["role"] != "ace") for i in city.invocations)
 
 
 async def test_a_crash_mid_turn_resumes_from_the_ledger_without_duplicate_hires() -> None:

@@ -21,7 +21,9 @@ DEFER_SECONDS = {"cap": 900, "ceiling": 15, "rate": 1}
 
 class AgentInvoker(Protocol):
     async def invoke(self, inv: dict[str, Any]) -> None:
-        """``inv`` is the WorkMessage plus ``sessionId`` and ``async`` (workers run as AgentCore async jobs)."""
+        """``inv`` is the WorkMessage plus ``sessionId`` and ``async``: every role but VAIC runs as an AgentCore
+        async job (the runtime accepts it at once and runs the turn in the background), so the dispatcher never
+        waits on a planning turn (decision 178)."""
         ...
 
 
@@ -109,7 +111,11 @@ class Dispatcher:
             await release()
             return "duplicate"
         try:
-            await self.d.invoker.invoke({**m, "sessionId": self.d.session_id_for(m), "async": is_worker})
+            # Not VAIC: its reply streams to the HUD from the call itself and is quick. Everyone else is handed
+            # off and left to run: an Orchestrator or Manager turn can take minutes, longer than this Lambda may
+            # wait (120 s); a wait cut short put the message, and the rest of its batch, back on the queue for
+            # 16 minutes, so the owner saw jobs open with nobody working (decision 178).
+            await self.d.invoker.invoke({**m, "sessionId": self.d.session_id_for(m), "async": m["role"] != "ace"})
         except Exception:
             # The runtime never started the turn: give the slot back and let SQS deliver it again.
             await release()

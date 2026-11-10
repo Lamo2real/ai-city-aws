@@ -73,13 +73,16 @@ class _Handles(Protocol):
 
 
 async def process_batch(event: dict[str, Any], dispatcher: _Handles) -> dict[str, list[dict[str, str]]]:
-    failures: list[dict[str, str]] = []
-    for r in event.get("Records", []):
+    """The batch's messages start side by side, not one after another: a task never waits for another task's
+    hand-off (decision 178)."""
+
+    async def one(r: dict[str, Any]) -> str | None:
+        """The message id when it has to be retried, else None."""
         try:
             m: WorkMessage = json.loads(r["body"])
         except ValueError:
             log("error", "dispatch.bad_message", messageId=r.get("messageId"))
-            continue  # unparseable: nothing to retry; it is visible in the logs
+            return None  # unparseable: nothing to retry; it is visible in the logs
         try:
             outcome = await dispatcher.handle(m)
             log(
@@ -90,6 +93,7 @@ async def process_batch(event: dict[str, Any], dispatcher: _Handles) -> dict[str
                 ticket=m.get("ticketId"),
                 outcome=outcome,
             )
+            return None
         except Exception as e:
             log(
                 "error",
@@ -99,8 +103,10 @@ async def process_batch(event: dict[str, Any], dispatcher: _Handles) -> dict[str
                 ticket=m.get("ticketId"),
                 error=type(e).__name__,
             )
-            failures.append({"itemIdentifier": r["messageId"]})
-    return {"batchItemFailures": failures}
+            return str(r["messageId"])
+
+    failed = await asyncio.gather(*(one(r) for r in event.get("Records", [])))
+    return {"batchItemFailures": [{"itemIdentifier": f} for f in failed if f]}
 
 
 _cached: Dispatcher | None = None
