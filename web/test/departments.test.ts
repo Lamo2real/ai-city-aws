@@ -73,8 +73,8 @@ describe("building and demolishing", () => {
     }
     // Twice is once; built again, it goes back up on its own lot.
     expect(reduce(gone, { type: "department.demolished", name: "Sales" }, 6000)).toBe(gone);
-    const again = reduce(gone, created("Sales", { worker_model: "fable-5-2" }), 7000);
-    expect(again.departments.Sales).toMatchObject({ state: "active", worker_model: "fable-5-2" });
+    const again = reduce(gone, created("Sales", { worker_model: "fable-5-1" }), 7000);
+    expect(again.departments.Sales).toMatchObject({ state: "active", worker_model: "fable-5-1" });
     expect(layout(again).buildings.find((b) => b.dept === "Sales")).toMatchObject({ x: was.x, y: was.y });
     expect(standingDepartments(again)).toEqual(["Research", "Sales", "Legal"]);
   });

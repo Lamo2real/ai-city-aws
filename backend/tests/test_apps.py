@@ -506,7 +506,7 @@ async def test_the_resume_step_wakes_the_orchestrator_only_when_the_owner_refuse
     s3 = FakeS3()
     d = api(s3)
     await d.ledger.put_agent({"id": "orchestrator", "kind": "core", "role": "Orchestrator", "department": None,
-                              "model": "fable-5-2", "parent": "vaic", "state": "active"})  # fmt: skip
+                              "model": "fable-5-1", "parent": "vaic", "state": "active"})  # fmt: skip
     a = await staged(d, s3)
     await on_approval_step({"step": "resume", "approvalId": a["id"], "approved": True}, d.ledger, d.queue)
     assert d.queue.sent == []  # type: ignore[attr-defined]

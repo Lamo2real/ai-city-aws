@@ -19,7 +19,7 @@ aws sso login --profile vaic
 
 ## B. Bedrock model access (~15 min, approval can take longer)
 7. Switch the console to **Europe (Stockholm) eu-north-1**.
-8. Amazon Bedrock → Model catalog → for each of **Claude Sonnet 5.5, Claude Opus 5.5, Claude Fable 5.2, Claude Haiku 5.5**: open it → Request access / Enable (submit Anthropic's **use-case form** the first time; it may also subscribe through AWS Marketplace).
+8. Amazon Bedrock → Model catalog → for each of **Claude Sonnet 5.5, Claude Opus 5.5, Claude Fable 5.1, Claude Haiku 5.5**: open it → Request access / Enable (submit Anthropic's **use-case form** the first time; it may also subscribe through AWS Marketplace).
 9. Check each model card lists **global cross-region inference** from eu-north-1. Note any model that says "not available for this account" — AWS gates some newest models; open a support case if needed.
 10. Optional quick check from your terminal (one tiny paid call per model, a fraction of a cent):
 ```bash
@@ -27,7 +27,7 @@ aws bedrock list-inference-profiles --region eu-north-1 --profile vaic --query "
 ```
 
 ## C. Quotas (~10 min to request)
-11. Service Quotas → Amazon Bedrock → search each model ("Claude Opus 5.5", "Claude Fable 5.2", …) → check **tokens per minute** and **requests per minute** for **global cross-region** inference. Request more if they look small (see `docs/SCALING.md`).
+11. Service Quotas → Amazon Bedrock → search each model ("Claude Opus 5.5", "Claude Fable 5.1", …) → check **tokens per minute** and **requests per minute** for **global cross-region** inference. Request more if they look small (see `docs/SCALING.md`).
 12. Service Quotas → Amazon Bedrock AgentCore → check "Active session workloads per account" (2,500 in Stockholm) and "New Runtime session creation rate" (25/s). Defaults are fine to start.
 
 ## D. GitHub (~10 min)

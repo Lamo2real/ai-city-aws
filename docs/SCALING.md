@@ -21,7 +21,7 @@ Workers are unlimited by design. What actually limits how many run **at once**:
 The City view gives each department a building whose terrace grows a row of desks for every four workers, with a count badge on the roof; released workers go home, and only the latest 24 stand in the neighbourhood (the rest are listed in Workforce). Rendering is a single canvas with the static town baked once per layout.
 
 ## Service Quotas to request before heavy use
-1. **Bedrock** in the chosen region, for each model you'll use heavily (Opus 5.5 for workers, Fable 5.2 for coordinators): "tokens per minute" and "requests per minute" for the **global cross-region** profile. The defaults for new accounts can be low; ask for what a busy day needs (rough guide: 50 concurrent Opus workers ≈ several million tokens per minute with caching).
+1. **Bedrock** in the chosen region, for each model you'll use heavily (Opus 5.5 for workers, Fable 5.1 for coordinators): "tokens per minute" and "requests per minute" for the **global cross-region** profile. The defaults for new accounts can be low; ask for what a busy day needs (rough guide: 50 concurrent Opus workers ≈ several million tokens per minute with caching).
 2. **AgentCore Runtime**: "Active session workloads per account" if you set `max_concurrent_workers_global` above 2,450; "New session creation rate" above 25/s.
 3. **Lambda** concurrent executions if you raise the dispatcher's reserved concurrency or the worker queue's maximum concurrency much.
 Then raise the city ceilings in Settings to match.

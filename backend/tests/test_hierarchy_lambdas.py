@@ -183,7 +183,7 @@ async def test_retire_idle_puts_managers_without_open_work_to_sleep_and_improve_
             "kind": "manager",
             "role": "A",
             "department": "A",
-            "model": "fable-5-2",
+            "model": "fable-5-1",
             "parent": "orchestrator",
             "state": "active",
             "total_cost_usd": 0,

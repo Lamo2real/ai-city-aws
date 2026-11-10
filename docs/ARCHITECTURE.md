@@ -30,8 +30,8 @@ flowchart LR
   end
   subgraph agentcore[Bedrock AgentCore]
     rA[Runtime: VAIC / Sonnet 5.5]
-    rO[Runtime: Orchestrator / Fable 5.2]
-    rM[Runtime: Manager / Fable 5.2]
+    rO[Runtime: Orchestrator / Fable 5.1]
+    rM[Runtime: Manager / Fable 5.1]
     rW[Runtime: Worker / Opus 5.5]
     mem[(AgentCore Memory)]
     ci[Code Interpreter + Browser]
@@ -96,8 +96,8 @@ flowchart LR
 | Agent | Where it runs | Session ID | Model | Tools |
 |---|---|---|---|---|
 | VAIC | runtime `vaic_prod_vaic` | `vaic-<owner>-<conversation>` | Sonnet 5.5 | `delegate_to_orchestrator`, `get_status`, `answer_question`, `instruct_agent`, notes, reminders, `pause_city`, `resume_city` |
-| Orchestrator | runtime `vaic_prod_orchestrator` | `orch-<task>` | Fable 5.2 → Opus 5.5 | `create_department`, `assign_to_department`, `get_reports`, `sign_off`, `ask_owner`, `report_to_vaic` |
-| Manager (one per department) | runtime `vaic_prod_manager` | `mgr-<department>-<task>` | Fable 5.2 → Opus 5.5 | `hire_worker`, `assign`, `answer_worker`, `review`, `release_worker`, `save_specialist`, `ask_owner`, `report_to_orchestrator` |
+| Orchestrator | runtime `vaic_prod_orchestrator` | `orch-<task>` | Fable 5.1 → Opus 5.5 | `create_department`, `assign_to_department`, `get_reports`, `sign_off`, `ask_owner`, `report_to_vaic` |
+| Manager (one per department) | runtime `vaic_prod_manager` | `mgr-<department>-<task>` | Fable 5.1 → Opus 5.5 | `hire_worker`, `assign`, `answer_worker`, `review`, `release_worker`, `save_specialist`, `ask_owner`, `report_to_orchestrator` |
 | Worker (any number) | runtime `vaic_prod_worker` (async job ≤ 8 h) | `wkr-<department>-<hireId>` | Opus 5.5 | granted built-ins (shell, files, git, web, Code Interpreter, Browser) + `ask_manager`, `report_to_manager` |
 
 Departments and workers are data and sessions, never new runtimes, so the account stays far below AgentCore's runtime quota while hiring is unlimited.

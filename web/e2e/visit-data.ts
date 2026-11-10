@@ -21,7 +21,7 @@ export function visitSnapshot() {
       kind: "manager",
       role: `${n} Manager`,
       department: n,
-      model: "fable-5-2",
+      model: "fable-5-1",
       parent: "orchestrator",
       state: "active",
     });

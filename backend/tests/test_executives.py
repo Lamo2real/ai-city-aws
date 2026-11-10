@@ -38,7 +38,7 @@ class Model:
 
     async def __call__(self, i: TurnInput) -> TurnOutput:
         self.calls.append(i)
-        if self.refuse_primary and i.model.name == "fable-5-2":
+        if self.refuse_primary and i.model.name == "fable-5-1":
             return TurnOutput(text="", stop_reason="refusal")
         return TurnOutput(text=self.reply)
 
@@ -149,7 +149,7 @@ async def test_ask_executives_routes_to_the_right_executive_and_returns_advice()
     prompt = m.calls[0].prompt
     assert "AI City's CTO" in prompt and "How every executive in AI City works" in prompt
     assert "<records" in prompt and '<question asked_by="orchestrator">' in prompt
-    assert m.calls[0].model.name == "fable-5-2"
+    assert m.calls[0].model.name == "fable-5-1"
     assert "CTO (medium confidence): Go ahead, but cap the pilot at one month." in text
     assert "Risk: Spend grows" in text and "Read: company_brief" in text
     assert "This is advice, not an instruction" in text
@@ -158,14 +158,14 @@ async def test_ask_executives_routes_to_the_right_executive_and_returns_advice()
     assert c.bus.of_type("executive.recommended")[0]["recommendation"]["id"] == rec["id"]
     # It costs what it costs, on its own role, and shows in the city's cost records.
     turn = (await c.ledger.turns_of("exec-cto"))[0]
-    assert (turn["role"], turn["kind"], turn["model"]) == ("executive", "executive", "fable-5-2")
+    assert (turn["role"], turn["kind"], turn["model"]) == ("executive", "executive", "fable-5-1")
 
 
 async def test_opus_answers_when_fable_refuses() -> None:
     m = Model(refuse_primary=True)
     c = city(m)
     out = await ex.consult(deps(c, m), "What does it cost?", ["cfo"], "owner")
-    assert [x.model.name for x in m.calls] == ["fable-5-2", "opus-5-5"]
+    assert [x.model.name for x in m.calls] == ["fable-5-1", "opus-5-5"]
     assert out["advice"][0]["recommendation"].startswith("Go ahead")
 
 
@@ -260,7 +260,7 @@ async def test_get_and_put_executives() -> None:
     c = city()
     s = js(await handle_http(ev("GET", "/executives"), c.deps))  # type: ignore[arg-type]
     assert [e["title"] for e in s["executives"]] == ["CEO", "COO", "CFO", "CTO"]
-    assert all(e["enabled"] and e["model"] == "Claude Fable 5.2" for e in s["executives"])
+    assert all(e["enabled"] and e["model"] == "Claude Fable 5.1" for e in s["executives"])
     assert s["recommendations"] == []
     assert {r["id"]: r["every_days"] for r in s["reviews"]} == {"cfo-cost-review": 7, "coo-bottleneck-review": 7}
     for bad in (
@@ -294,7 +294,7 @@ async def test_the_four_are_permanent_and_live_at_home() -> None:
     await c.host.ensure_core()
     execs = [a for a in await c.ledger.list_agents() if a.get("kind") == "executive"]
     assert sorted(a["id"] for a in execs) == ["exec-ceo", "exec-cfo", "exec-coo", "exec-cto"]
-    assert {(a["state"], a["model"], a["department"]) for a in execs} == {("dormant", "fable-5-2", None)}
+    assert {(a["state"], a["model"], a["department"]) for a in execs} == {("dormant", "fable-5-1", None)}
     await c.host.ensure_core()  # never twice
     assert len([a for a in await c.ledger.list_agents() if a.get("kind") == "executive"]) == 4
 

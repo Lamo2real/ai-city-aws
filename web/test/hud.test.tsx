@@ -44,7 +44,7 @@ describe("the ported City state", () => {
         kind: "manager",
         role: "Engineering Manager",
         department: "Engineering",
-        model: "fable-5-2",
+        model: "fable-5-1",
         parent: "orchestrator",
         state: "dormant",
       },

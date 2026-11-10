@@ -39,9 +39,10 @@ class RoleModels:
     """True when the configured model is not reachable with this prefix and the fallback became primary."""
 
 
-LEGACY_MODELS = {"fable-5-1": "fable-5-2"}
-"""Names that agents and departments may still carry on their ledger records from before an upgrade (the owner moved
-every Fable agent to Fable 5.2 on 2026-11-09, decision 154): they resolve to the model that replaced them."""
+LEGACY_MODELS = {"fable-5-2": "fable-5-1"}
+"""Names that agents and departments may still carry on their ledger records from another Fable version: they resolve
+to the Fable this city runs. The owner moved every Fable agent to Fable 5.2 on 2026-11-09 (decision 154) and back to
+Fable 5.1 on 2026-11-10 (decision 182), because the account cannot subscribe to Fable 5.2 in AWS Marketplace."""
 
 
 def current_name(name: str) -> str:
@@ -59,8 +60,8 @@ def _resolve_name(name: str, prefix: str, cfg: Mapping[str, Any], app_arn: str |
     return ResolvedModel(name=name, label=m["label"], profile_id=profile_id, invoke_id=app_arn or profile_id)
 
 
-WORKER_MODELS = ("opus-5-5", "fable-5-2")
-"""What the owner may pick for a department's workers (decision 134): Opus 5.5 unless they say Fable 5.2."""
+WORKER_MODELS = ("opus-5-5", "fable-5-1")
+"""What the owner may pick for a department's workers (decision 134): Opus 5.5 unless they say Fable 5.1."""
 
 
 def department_override(

@@ -50,7 +50,7 @@ async def city_with_job() -> tuple[City, dict[str, Any], dict[str, Any]]:
     await c.ledger.create_department("Writing", "Writing work.", "mgr-writing")
     await c.ledger.put_agent(
         {"id": "mgr-writing", "kind": "manager", "role": "Writing Manager", "department": "Writing",
-         "model": "fable-5-2", "parent": "orchestrator", "state": "active", "total_cost_usd": 0}
+         "model": "fable-5-1", "parent": "orchestrator", "state": "active", "total_cost_usd": 0}
     )  # fmt: skip
     task = await c.ledger.create_ticket(
         {"goal": "A snake game", "from": "vaic", "to": "orchestrator", "department": None, "parent_id": None,

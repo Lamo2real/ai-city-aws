@@ -207,7 +207,7 @@ edge("rt", "gw", "tools")
 edge("gw", "ident")
 edge("ecr", "rt_mcp", "", True)
 
-described("bedrock", "Amazon Bedrock - Claude", "Fable 5.2: Orchestrator, every manager, Chief of Staff, Media/Research/Legal workers<br>Opus 5.5: all other workers · Haiku 5.5: VAIC and utility calls<br>an application inference profile per role (cost split by AgentRole tag)", "machine_learning", "ml", 2620, 110, 78, 360)
+described("bedrock", "Amazon Bedrock - Claude", "Fable 5.1: Orchestrator, every manager, Chief of Staff, Media/Research/Legal workers<br>Opus 5.5: all other workers · Haiku 5.5: VAIC and utility calls<br>an application inference profile per role (cost split by AgentRole tag)", "machine_learning", "ml", 2620, 110, 78, 360)
 described("sonic", "Amazon Bedrock - Nova 2.5 Sonic", "VAIC's backup real-time voice, relayed by the VAIC runtime", "machine_learning", "ml", 2620, 330)
 described("kb", "Bedrock Knowledge Base", "the owner's documents; Titan Text Embeddings V2", "machine_learning", "ml", 2620, 490)
 named("aoss", "OpenSearch Serverless (vectors)", "elasticsearch_service", "analytics", 2630, 700, 50, 200)
@@ -333,8 +333,8 @@ steps = [
     "<b>1. The owner talks or types to VAIC</b> in the HUD or the iPhone app, signed in with the Cognito owner pool (MFA).",
     "<b>2. The api Lambda records the message</b> in the ledger and puts it on the <code>vaic</code> queue.",
     "<b>3. The dispatcher invokes VAIC's runtime.</b> VAIC (Haiku 5.5) answers simple things itself, or delegates.",
-    "<b>4. The Orchestrator (Fable 5.2) plans</b> and sends each part to a department's manager through its queue.",
-    "<b>5. The manager (Fable 5.2) hires workers</b> (factory Lambda), exactly as many as the owner asked for.",
+    "<b>4. The Orchestrator (Fable 5.1) plans</b> and sends each part to a department's manager through its queue.",
+    "<b>5. The manager (Fable 5.1) hires workers</b> (factory Lambda), exactly as many as the owner asked for.",
     "<b>6. Workers do the job</b> with their granted tools and connectors; every tool call passes the policy gate.",
     "<b>7. The manager reviews every deliverable</b> (PASS / FAIL) and reports up; VAIC tells the owner.",
     "<b>8. Every step is an event</b> on the city bus: the ledger-writer stores it and ws-broadcast shows it live.",

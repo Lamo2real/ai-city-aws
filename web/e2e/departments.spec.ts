@@ -45,7 +45,7 @@ test("build a department from the City: the tower goes up; demolish it: it comes
   const form = page.getByRole("form", { name: "Build a department" });
   await form.getByLabel("Name").fill("Customer Success");
   await form.getByLabel(/What it does/).fill("Keeps customers happy and renewing");
-  await expect(form.getByText("Its manager runs on Fable 5.2")).toBeVisible();
+  await expect(form.getByText("Its manager runs on Fable 5.1")).toBeVisible();
   await form.getByRole("button", { name: "Build it" }).click();
   expect(m.calls.find((c) => c.method === "POST" && c.path === "/departments")?.body).toEqual({
     name: "Customer Success",

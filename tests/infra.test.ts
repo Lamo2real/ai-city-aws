@@ -72,7 +72,7 @@ describe("IAM", () => {
         .filter((s) => actions([s]).includes("bedrock:InvokeModel"))
         .flatMap((s) => s.Resource)
         .join(" ");
-    expect(models("orchestrator")).toMatch(/fable-5-2/);
+    expect(models("orchestrator")).toMatch(/fable-5-1/);
     expect(models("orchestrator")).toMatch(/opus-5-5/);
     expect(models("vaic")).toMatch(/haiku-5-5/);
     expect(models("vaic")).not.toMatch(/sonnet|opus|fable/);
@@ -940,14 +940,14 @@ describe("the Chief of Staff (decision 124)", () => {
   const prod = readFileSync("infra/envs/prod/main.tf", "utf8");
   const models = JSON.parse(readFileSync("config/models.json", "utf8"));
   const routes = api.slice(api.indexOf("routes = ["), api.indexOf("]", api.indexOf("routes = [")));
-  it("is Fable 5.2 with Opus 5.5 behind it, with its own tagged application inference profile", () => {
-    expect(models.roles.chief_of_staff).toMatchObject({ model: "fable-5-2", fallback: "opus-5-5" });
+  it("is Fable 5.1 with Opus 5.5 behind it, with its own tagged application inference profile", () => {
+    expect(models.roles.chief_of_staff).toMatchObject({ model: "fable-5-1", fallback: "opus-5-5" });
     // Decision 129: every manager on Fable; workers may call the departments' model too.
-    expect(models.roles.manager).toMatchObject({ model: "fable-5-2", fallback: "opus-5-5" });
+    expect(models.roles.manager).toMatchObject({ model: "fable-5-1", fallback: "opus-5-5" });
     expect(models.departmentModels).toMatchObject({
       roles: ["worker"],
       departments: ["Media", "Research", "Legal"],
-      model: "fable-5-2",
+      model: "fable-5-1",
     });
     expect(agents).toMatch(/contains\(local\.dept_roles, r\) \? local\.dept_models : \[\]/);
     expect(agents).toMatch(/all_roles = concat\(local\.roles, \["utility", "chief_of_staff", "executive"\]\)/);
@@ -984,8 +984,8 @@ describe("the executives (decision 140)", () => {
   const prod = readFileSync("infra/envs/prod/main.tf", "utf8");
   const models = JSON.parse(readFileSync("config/models.json", "utf8"));
   const routes = api.slice(api.indexOf("routes = ["), api.indexOf("]", api.indexOf("routes = [")));
-  it("are Fable 5.2 with Opus 5.5 behind it, with their own tagged application inference profile", () => {
-    expect(models.roles.executive).toMatchObject({ model: "fable-5-2", fallback: "opus-5-5" });
+  it("are Fable 5.1 with Opus 5.5 behind it, with their own tagged application inference profile", () => {
+    expect(models.roles.executive).toMatchObject({ model: "fable-5-1", fallback: "opus-5-5" });
     expect(agents).toMatch(/all_roles = concat\(local\.roles, \["utility", "chief_of_staff", "executive"\]\)/);
     expect(prod).toMatch(/executive_profile_arn = module\.agents\.executive_profile_arn/);
     expect(prod).toMatch(/executive_invoke_arns = module\.agents\.executive_invoke_arns/);

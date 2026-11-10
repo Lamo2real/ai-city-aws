@@ -27,7 +27,7 @@ async def department(c: City, name: str = "Writing") -> str:
             "kind": "manager",
             "role": f"{name} Manager",
             "department": name,
-            "model": "fable-5-2",
+            "model": "fable-5-1",
             "parent": "orchestrator",
             "state": "active",
             "total_cost_usd": 0,

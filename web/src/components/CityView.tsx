@@ -661,9 +661,9 @@ function DeptPanel({
           ? "VAIC and the team lead work here."
           : `${workers.length ? `${workers.length} workers at their desks.` : "Nobody hired right now."} ${d?.mission ?? ""}`}
       </p>
-      {name !== "HQ" ? <Row k="Manager" v={d?.manager_id ? `${d.manager_id} · Fable 5.2` : "—"} /> : null}
+      {name !== "HQ" ? <Row k="Manager" v={d?.manager_id ? `${d.manager_id} · Fable 5.1` : "—"} /> : null}
       {name !== "HQ" ? (
-        <Row k="Workers run on" v={d?.worker_model === "fable-5-2" ? "Fable 5.2" : workerModel(name)} />
+        <Row k="Workers run on" v={d?.worker_model === "fable-5-1" ? "Fable 5.1" : workerModel(name)} />
       ) : null}
       <h4>{`Work in progress (${open.length})`}</h4>
       <ul className="recent">
@@ -681,9 +681,9 @@ function DeptPanel({
     </div>
   );
 }
-// The presets whose workers run on Fable 5.2 (decision 129, `departmentModels` in config/models.json).
+// The presets whose workers run on Fable 5.1 (decision 129, `departmentModels` in config/models.json).
 const FABLE_WORKERS = new Set(["media", "research", "legal"]);
-const workerModel = (name: string) => (FABLE_WORKERS.has(name.trim().toLowerCase()) ? "Fable 5.2" : "Opus 5.5");
+const workerModel = (name: string) => (FABLE_WORKERS.has(name.trim().toLowerCase()) ? "Fable 5.1" : "Opus 5.5");
 
 // The Apps building's own part of its panel: what waits for the owner, and every app it built (the
 // same as the cabinets on the map, for keyboards and screen readers).

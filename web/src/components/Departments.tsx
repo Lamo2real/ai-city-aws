@@ -28,7 +28,7 @@ export const departmentKey = (name: string) =>
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 
-/** Name, what it does, and one plain choice: its workers on Opus 5.5 (the rule) or Fable 5.2 (only when asked). */
+/** Name, what it does, and one plain choice: its workers on Opus 5.5 (the rule) or Fable 5.1 (only when asked). */
 export function BuildDepartment({ onDone, compact = false }: { onDone?: (name: string) => void; compact?: boolean }) {
   const [name, setName] = useState("");
   const [mission, setMission] = useState("");
@@ -45,10 +45,10 @@ export function BuildDepartment({ onDone, compact = false }: { onDone?: (name: s
       const r = await buildDepartment({
         name: name.trim(),
         ...(mission.trim() ? { mission: mission.trim() } : {}),
-        ...(fable ? { worker_model: "fable-5-2" } : {}),
+        ...(fable ? { worker_model: "fable-5-1" } : {}),
       });
       toast({
-        text: `${r.department.name} is going up in the City. Its manager runs on Fable 5.2, its workers on ${fable ? "Fable 5.2" : "Opus 5.5"}.`,
+        text: `${r.department.name} is going up in the City. Its manager runs on Fable 5.1, its workers on ${fable ? "Fable 5.1" : "Opus 5.5"}.`,
         tone: "good",
       });
       setName("");
@@ -84,9 +84,9 @@ export function BuildDepartment({ onDone, compact = false }: { onDone?: (name: s
       </label>
       <label className="checkrow">
         <input type="checkbox" checked={fable} onChange={(e) => setFable(e.target.checked)} />
-        <span>Workers on Fable 5.2 instead of Opus 5.5 (more capable, costs more)</span>
+        <span>Workers on Fable 5.1 instead of Opus 5.5 (more capable, costs more)</span>
       </label>
-      <p className="mute">Its manager runs on Fable 5.2, like every manager. It stands empty until work arrives.</p>
+      <p className="mute">Its manager runs on Fable 5.1, like every manager. It stands empty until work arrives.</p>
       {error ? (
         <p className="field-error" role="alert">
           {error}
@@ -177,7 +177,7 @@ export function YourDepartments() {
                 aria-expanded={open === n}
               >
                 {n}
-                {city.departments[n]?.worker_model === "fable-5-2" ? " · Fable workers" : ""}
+                {city.departments[n]?.worker_model === "fable-5-1" ? " · Fable workers" : ""}
               </button>
               {open === n ? <DemolishDepartment name={n} city={city} onDone={() => setOpen(null)} /> : null}
             </li>

@@ -359,7 +359,7 @@ async def _office(d: Any) -> tuple[str, list[str]]:
     """A job with two live workers on it, straight into the ledger (as the hierarchy would leave it)."""
     await d.ledger.create_department("Writing", "Writing work.", "mgr-writing")
     await d.ledger.put_agent({"id": "mgr-writing", "kind": "manager", "role": "Writing Manager", "department": "Writing",
-                              "model": "fable-5-2", "parent": "orchestrator", "state": "active", "total_cost_usd": 0})  # fmt: skip
+                              "model": "fable-5-1", "parent": "orchestrator", "state": "active", "total_cost_usd": 0})  # fmt: skip
     task = await d.ledger.create_ticket({"goal": "50 sentences on engines", "from": "vaic", "to": "orchestrator", "department": None,
                                          "parent_id": None, "kind": "task", "owner_words": "the Porsche sentences", "status": "in_progress"})  # fmt: skip
     goal = await d.ledger.create_ticket({"goal": "50 sentences", "from": "orchestrator", "to": "mgr-writing", "department": "Writing",

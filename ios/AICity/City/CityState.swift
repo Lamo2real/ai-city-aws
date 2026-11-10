@@ -188,7 +188,7 @@ enum City {
     static let core: Set<String> = ["vaic", "orchestrator"]
     static let feedMax = 40
     static let costNote = "Estimate from token counts at list prices. The AWS bill is the truth."
-    static let modelName = ["haiku-5-5": "Haiku 5.5", "opus-5-5": "Opus 5.5", "sonnet-5-5": "Sonnet 5.5", "fable-5-2": "Fable 5.2"]
+    static let modelName = ["haiku-5-5": "Haiku 5.5", "opus-5-5": "Opus 5.5", "sonnet-5-5": "Sonnet 5.5", "fable-5-1": "Fable 5.1"]
     static let recentMs: [String: Double] = ["done": 6000, "review_fail": 20000, "hired": 4000, "retired": 4000]
 
     static func deptOf(_ a: Agent) -> String { core.contains(a.id) ? "HQ" : (a.department ?? "other") }
