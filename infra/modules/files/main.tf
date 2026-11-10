@@ -240,7 +240,7 @@ resource "aws_dynamodb_table" "this" {
 # ---------- MediaConvert: the knowledge base's role also reads files/ and writes work/ here ----------
 resource "aws_iam_role_policy" "mediaconvert" {
   name = "files-in-work-out"
-  role = var.mediaconvert_role_name
+  role = reverse(split("/", var.mediaconvert_role_arn))[0] # from the ARN, so this waits for the role
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [

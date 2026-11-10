@@ -355,6 +355,11 @@ resource "aws_bedrockagent_data_source" "normalized" {
   server_side_encryption_configuration {
     kms_key_arn = var.kms_key_arn
   }
+  # A data source belongs to one knowledge base: a new knowledge base (the AIC → VAIC rename) needs a new one, but
+  # the provider would update the old one in place under the new base and fail with "not found".
+  lifecycle {
+    replace_triggered_by = [aws_bedrockagent_knowledge_base.this.id]
+  }
 }
 
 # ---------- the graph: Neptune Analytics (in-memory, openCypher; ~$424/month) ----------

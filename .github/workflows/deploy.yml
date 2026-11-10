@@ -163,9 +163,7 @@ jobs:
             -backend-config="use_lockfile=true"
           extra=()
           [ -z "$MAIL_PROVIDERS" ] || extra+=(-var "mail_providers=${MAIL_PROVIDERS}")
-          # -refresh=false only for the AIC → VAIC rename (docs/RENAME_PLAN.md): the knowledge index's provider points at
-          # a collection the rename replaces, so the old index can't be read. Removed again once the rename has landed.
-          terraform plan -input=false -out=prod.tfplan -refresh=false \
+          terraform plan -input=false -out=prod.tfplan \
             -var "region=${AWS_REGION}" \
             -var "owner_email=${OWNER_EMAIL}" \
             -var "agent_image_tag=${IMAGE_TAG}" \
