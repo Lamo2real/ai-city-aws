@@ -1348,7 +1348,6 @@ test("Settings is a menu of pages, each with its own address and a way back; App
     /^General/,
     /^Departments & tools/,
     /^Connectors/,
-    /^GitHub/,
     /^VAIC's voice/,
     /^Apps/,
     /^Limits & spending/,

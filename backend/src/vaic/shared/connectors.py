@@ -158,7 +158,7 @@ def github_page_hint(url: str) -> str | None:
     if host in _GITHUB_PAGE_HOSTS or p.path.lower().endswith(".git"):
         return (
             f"That is a code repository page, not a server. GitHub's MCP server is {GITHUB_MCP_URL} "
-            "(it signs in with the owner's GitHub account, or uses the GitHub token saved in Settings → GitHub)."
+            "(it signs in with the owner's GitHub account, or uses the GitHub token saved in Settings → Connectors → GitHub)."
         )
     return None
 

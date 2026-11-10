@@ -699,7 +699,7 @@
     "github": {
       "label": "GitHub",
       "url": "https://api.githubcopilot.com/mcp/",
-      "what": "Repositories, issues, pull requests, Actions, secrets (uses the GitHub token from Settings when it is saved)",
+      "what": "Repositories, issues, pull requests, Actions, secrets. One token for the whole city, pasted here",
       "signup": "https://github.com/signup",
       "setup": "own_app"
     },

@@ -1,5 +1,5 @@
-// Settings → GitHub and the GitHub connector, the way the owner meets them (docs/GITHUB_ACCESS.md). The backend
-// is mocked (mock.ts).
+// The GitHub token and the GitHub connector, the way the owner meets them (docs/GITHUB_ACCESS.md). One place for
+// the token since decision 194: the GitHub row and card in Settings → Connectors. The backend is mocked (mock.ts).
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { mockBackend } from "./mock.ts";
@@ -12,12 +12,37 @@ async function noSeriousA11y(page: Page, label: string) {
   expect(bad.map((v) => `${label}: ${v.id} — ${v.nodes.map((n) => n.target.join(" ")).join(" | ")}`)).toEqual([]);
 }
 
-test("Settings → GitHub: a token is saved once, says Connected as, is never shown back, and can be removed", async ({
+test("GitHub has one place: Settings has no GitHub page, and its old address opens the GitHub row in Connectors", async ({
+  page,
+}) => {
+  await mockBackend(page);
+  await page.goto("/#/settings");
+  await expect(page.getByRole("link", { name: /^Connectors/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^GitHub/ })).toHaveCount(0);
+  await page.goto("/#/settings/github");
+  await expect(page.getByRole("heading", { name: "Connectors", level: 1 })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add a GitHub token" })).toBeVisible();
+});
+
+test("the GitHub card in Browse takes the one token, and saving it connects GitHub's tools", async ({ page }) => {
+  const m = await mockBackend(page);
+  await page.goto("/#/settings/connectors");
+  await page.getByRole("button", { name: "Browse", exact: true }).first().click();
+  const card = page.getByRole("listitem", { name: "GitHub" }).first();
+  await expect(card.getByRole("button", { name: /^Connect/ })).toHaveCount(0); // no second key or sign-in
+  await card.getByRole("button", { name: "Add a GitHub token" }).click();
+  await card.getByLabel("GitHub token", { exact: true }).fill(TOKEN);
+  await card.getByRole("button", { name: "Save the GitHub token" }).click();
+  await expect(card.getByText(/^Connected as lamo2real/)).toBeVisible();
+  await expect.poll(() => m.calls.some((c) => c.path === "/connectors" && c.method === "POST")).toBe(true);
+});
+
+test("Connectors → GitHub: a token is saved once, says Connected as, is never shown back, and can be removed", async ({
   page,
 }) => {
   const m = await mockBackend(page);
   await page.goto("/#/settings/github");
-  await expect(page.getByRole("heading", { name: "GitHub", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Connectors", level: 1 })).toBeVisible();
   await expect(page.getByText(/No token yet/)).toBeVisible();
   await expect(page.getByRole("heading", { name: "Integrations" })).toHaveCount(0); // the dead switches are gone
   await page.getByRole("button", { name: "Add a GitHub token" }).click();

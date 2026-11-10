@@ -11,9 +11,16 @@ export function ConnectorsSettings(p: {
   part: "departments" | "connectors";
   mailAccess?: Record<string, string>;
   onMailAccess?: (a: Record<string, string>) => void;
+  openRow?: string;
 }) {
   if (p.part === "connectors")
-    return <ConnectorsHub mailAccess={p.mailAccess ?? {}} onMailAccess={p.onMailAccess ?? (() => undefined)} />;
+    return (
+      <ConnectorsHub
+        mailAccess={p.mailAccess ?? {}}
+        onMailAccess={p.onMailAccess ?? (() => undefined)}
+        openRow={p.openRow}
+      />
+    );
   return <Departments />;
 }
 

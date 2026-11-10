@@ -44,7 +44,7 @@ import {
   type Skill,
 } from "../lib/connect.ts";
 import { KeyCard, SignInCard } from "./ConnectCard.tsx";
-import { loadGitHub, type GitHubStatus } from "./GitHubSettings.tsx";
+import { GitHubSettings, loadGitHub, type GitHubStatus } from "./GitHubSettings.tsx";
 import { AddMailAccount, MailAccountCard, MailSettings } from "./MailAccounts.tsx";
 import { AddSkill, RolePicker, WriteSkill } from "./SkillsScreen.tsx";
 import { Banner, Button, Confirm, errorText, LiveDot, PlusIcon, toast } from "./ui.tsx";
@@ -171,13 +171,15 @@ function Table(p: { rows: Row[]; label: string; open: string | null; onOpen: (k:
 export function ConnectorsHub(p: {
   mailAccess: Record<string, string>;
   onMailAccess: (a: Record<string, string>) => void;
+  /** A row to open on arrival: the old Settings → GitHub address opens the GitHub row (decision 194). */
+  openRow?: string;
 }) {
   const [view, setView] = useState<View>("connected");
   const [dept, setDept] = useState(ALL);
   const [q, setQ] = useState("");
   const [adding, setAdding] = useState<Adding | null>(null);
   const [replacing, setReplacing] = useState<string | null>(null);
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(p.openRow ?? null);
   const [removing, setRemoving] = useState<Connector | null>(null);
   const [deleting, setDeleting] = useState<Skill | null>(null);
 
@@ -337,12 +339,7 @@ export function ConnectorsHub(p: {
             status: github.configured
               ? { text: github.error ? "Check the token" : "Connected", tone: "warn", ok: !github.error }
               : { text: "Add a token", tone: "warn", ok: false },
-            detail: (
-              <p>
-                One token for the whole city, kept in AWS. Change it in{" "}
-                <a href="#/settings/github">Settings → GitHub</a>.
-              </p>
-            ),
+            detail: <GitHubSettings onSaved={() => void loadGitHub().then(setGithub, () => undefined)} />,
           },
         ]
       : []),
@@ -566,6 +563,7 @@ export function ConnectorsHub(p: {
                     on={connectedAs(c, connectors)}
                     onConnect={connect}
                     reload={loadConnectors}
+                    onGitHubSaved={() => void loadGitHub().then(setGithub, () => undefined)}
                   />
                 ))}
               </ul>
@@ -897,8 +895,12 @@ function CatalogCard(p: {
   on: Connector | undefined;
   onConnect: (c: PresetConnector, answer?: string) => Promise<void>;
   reload: () => Promise<unknown>;
+  onGitHubSaved?: () => void;
 }) {
   const { c, on } = p;
+  // GitHub has one place for its token: this card (decision 194). Saving it also connects GitHub's own tools,
+  // which then use that token, so there is no second key or sign-in to give.
+  const isGitHub = c.id === "github";
   const [answer, setAnswer] = useState("");
   const answerOk = !c.ask || new RegExp(c.ask.pattern).test(answer.trim().toLowerCase());
   const st = on ? rowStatus(on) : null;
@@ -906,7 +908,7 @@ function CatalogCard(p: {
   const needsKey = on?.status === "needs_key";
   // A card with a form open takes the whole row, so the form has room and its neighbours keep their height.
   return (
-    <li className={signIn || needsKey ? "hub-card hub-card-form" : "hub-card"} aria-label={c.label}>
+    <li className={signIn || needsKey || isGitHub ? "hub-card hub-card-form" : "hub-card"} aria-label={c.label}>
       <div className="hub-card-head">
         <Logo id={c.id} label={c.label} />
         <div>
@@ -915,7 +917,16 @@ function CatalogCard(p: {
           <p className="mute hub-what">{c.what}</p>
         </div>
       </div>
-      {!on && c.setup === "own_app" ? (
+      {isGitHub ? (
+        <GitHubSettings
+          onSaved={() => {
+            p.onGitHubSaved?.();
+            if (!on) void p.onConnect(c);
+            else void p.reload();
+          }}
+        />
+      ) : null}
+      {!on && c.setup === "own_app" && !isGitHub ? (
         <p className="mute hub-setup">
           A few extra steps: it asks for an app you create on its site, or an access token. The card walks you through.
         </p>
@@ -950,14 +961,16 @@ function CatalogCard(p: {
             ) : (
               <span />
             )}
-            <Button
-              variant="secondary"
-              label={`Connect ${c.label}`}
-              disabled={!answerOk}
-              onClick={() => p.onConnect(c, answer)}
-            >
-              Connect
-            </Button>
+            {isGitHub ? null : (
+              <Button
+                variant="secondary"
+                label={`Connect ${c.label}`}
+                disabled={!answerOk}
+                onClick={() => p.onConnect(c, answer)}
+              >
+                Connect
+              </Button>
+            )}
           </>
         )}
       </div>
@@ -973,7 +986,7 @@ function CatalogCard(p: {
           signup={c.signup}
         />
       ) : null}
-      {on && needsKey ? (
+      {on && needsKey && !isGitHub ? (
         <KeyCard
           targetId={on.id}
           title={`Add the key for ${on.label ?? c.label}`}

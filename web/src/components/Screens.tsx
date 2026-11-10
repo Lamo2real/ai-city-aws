@@ -7,7 +7,6 @@ import { ConnectorsSettings } from "./ConnectorsSettings.tsx";
 import { Inbox } from "./Inbox.tsx";
 import { SupportBoard } from "./SupportBoard.tsx";
 import { PipelineBoard } from "./PipelineBoard.tsx";
-import { GitHubSettings } from "./GitHubSettings.tsx";
 import { useEffect, useState } from "react";
 import { COST_NOTE, plainText, ticketWords } from "../city/city-state.js";
 import { saveSettings } from "../lib/actions.ts";
@@ -392,9 +391,8 @@ export const SETTINGS_PAGES = [
   {
     id: "connectors",
     title: "Connectors",
-    about: "Every connected service, who may use it, mail and calendars, add by link",
+    about: "Every connected service (GitHub and its token too), who may use it, mail and calendars, add by link",
   },
-  { id: "github", title: "GitHub", about: "Your GitHub token for repositories, pushes and secrets" },
   { id: "voice", title: "VAIC's voice", about: "The voice VAIC speaks with, and the OpenAI key" },
   { id: "apps", title: "Apps", about: "The apps the city built: pinned, removed, what they may read" },
   { id: "limits", title: "Limits & spending", about: "Optional spend caps and how many workers at once" },
@@ -405,9 +403,18 @@ type SettingsPage = (typeof SETTINGS_PAGES)[number]["id"];
 export function SettingsScreen({ page, reopenGuide }: { page: string | null; reopenGuide: () => void }) {
   // What was in the old Needs you list stays reachable here until it is empty, so nothing is lost.
   if (page === "open-items") return <Inbox />;
-  const current = SETTINGS_PAGES.find((x) => x.id === page);
+  // GitHub's token lives on its card in Connectors (decision 194); the old address opens that row.
+  const current = SETTINGS_PAGES.find((x) => x.id === (page === "github" ? "connectors" : page));
   if (!current) return <SettingsMenu />;
-  return <SettingsPageView key={current.id} page={current.id} title={current.title} reopenGuide={reopenGuide} />;
+  return (
+    <SettingsPageView
+      key={current.id}
+      page={current.id}
+      title={current.title}
+      reopenGuide={reopenGuide}
+      openRow={page === "github" ? "github-token" : undefined}
+    />
+  );
 }
 
 function SettingsMenu() {
@@ -502,10 +509,12 @@ function SettingsPageView({
   page,
   title,
   reopenGuide,
+  openRow,
 }: {
   page: SettingsPage;
   title: string;
   reopenGuide: () => void;
+  openRow?: string;
 }) {
   const { data, error, retry } = useApi<{ settings: S }>("/settings");
   const [form, setForm] = useState<S | null>(null);
@@ -623,9 +632,9 @@ function SettingsPageView({
           part="connectors"
           mailAccess={(form as unknown as { mail_access?: Record<string, string> }).mail_access ?? {}}
           onMailAccess={(mail_access) => setForm({ ...form, mail_access } as S)}
+          openRow={openRow}
         />
       ) : null}
-      {page === "github" ? <GitHubSettings /> : null}
       {page === "voice" ? <VoiceSettings /> : null}
       {page === "apps" ? <SettingsApps /> : null}
       {page === "limits" ? (

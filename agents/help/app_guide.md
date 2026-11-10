@@ -67,7 +67,7 @@ Links like `#/settings/connectors` open that page in the app.
   each department may use.
 - **Connectors** `#/settings/connectors`: every connected service grouped by department, with search, browsing and
   **+ Add**. Mail and calendars are here too.
-- **GitHub** `#/settings/github`: your GitHub token, so the city can use your repositories.
+- **GitHub** (`#/settings/github` opens it): on the GitHub card in Connectors, your one GitHub token, so the city can use your repositories.
 - **VAIC's voice** `#/settings/voice`: the voice VAIC speaks with, and the optional OpenAI key.
 - **Apps**: the apps the city built (pin, remove, what they may read).
 - **Limits & spending**: optional spend caps and how many workers may work at once.

@@ -102,8 +102,8 @@ function SetupGuide(p: { groups: Group[]; ready: (c: PresetConnector) => boolean
           </ul>
         </li>
         <li>
-          <b>Give IT your GitHub.</b> In Settings → <a href="#/settings/github">GitHub</a>, paste a classic token so the
-          city can create repositories, push code and manage secrets.
+          <b>Give IT your GitHub.</b> In Settings → Connectors → <a href="#/settings/github">GitHub</a>, paste a classic
+          token so the city can create repositories, push code and manage secrets.
         </li>
         <li>
           <b>Optional: VAIC’s voice.</b> In Settings → <a href="#/settings/voice">VAIC’s voice</a>, paste an OpenAI key

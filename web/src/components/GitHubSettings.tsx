@@ -1,5 +1,6 @@
-// Settings → GitHub (docs/GITHUB_ACCESS.md): one token for the whole city, pasted once into a secure field. The
-// token goes straight to AWS and is never shown again; the section only says who it belongs to.
+// The GitHub token (docs/GITHUB_ACCESS.md): one token for the whole city, pasted once into a secure field. It lives
+// on the GitHub card in Settings → Connectors, the one place for it (decision 194). The token goes straight to AWS
+// and is never shown again; the card only says who it belongs to.
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError } from "../lib/api.ts";
 import { ago } from "../lib/format.ts";
@@ -26,7 +27,7 @@ export function githubWords(st: GitHubStatus): { text: string; tone: "good" | "w
   return { text: "A token is saved; GitHub hasn't said whose it is yet.", tone: "info" };
 }
 
-export function GitHubSettings() {
+export function GitHubSettings(p: { onSaved?: () => void } = {}) {
   const [st, setSt] = useState<GitHubStatus | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -55,6 +56,7 @@ export function GitHubSettings() {
         setToken("");
         setOpen(false);
         await load();
+        p.onSaved?.();
         toast({
           tone: "good",
           text: r.login
@@ -68,11 +70,10 @@ export function GitHubSettings() {
   const words = st ? githubWords(st) : null;
   return (
     <>
-      <h2>GitHub</h2>
       <p className="mute">
         One token for the whole city: your agents clone, push, open pull requests, create repositories and call the
-        GitHub API as you. Make a classic token with every scope ticked (see docs/GITHUB_ACCESS.md); it goes straight to
-        AWS and is never shown again.
+        GitHub API as you, and this connector uses it too. Make a classic token with every scope ticked (see
+        docs/GITHUB_ACCESS.md); it goes straight to AWS and is never shown again.
       </p>
       {loadError ? <Banner tone="info">{`GitHub: ${loadError}`}</Banner> : null}
       {words ? (
@@ -136,6 +137,7 @@ export function GitHubSettings() {
               await api("/github/token", { method: "DELETE" });
               setRemoving(false);
               await load();
+              p.onSaved?.();
               toast({ text: "GitHub token removed.", tone: "good" });
             } catch (e) {
               setRemoving(false);

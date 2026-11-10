@@ -5,7 +5,7 @@ create any new repository, any new organization, whatever; VAIC needs terminal a
 git add in a shell; it all runs inside AgentCore; and I need internet access to browse other stuff as well."
 
 So the city uses **one GitHub token, the owner's**, for everything: workers' `git push` and `gh`, VAIC's own
-terminal, and the GitHub connector. It is pasted once in **Settings → GitHub** and lives in Secrets Manager
+terminal, and the GitHub connector. It is pasted once on the **GitHub card in Settings → Connectors** (the one place for it, decision 194) and lives in Secrets Manager
 (`vaic/prod/github`). Nothing in this file is a guardrail on the owner's GitHub; the only refusals left are the
 city's own survival (its AWS account, deploys, credential files, the sandbox root; decision 100).
 
@@ -19,7 +19,7 @@ city's own survival (its AWS account, deploys, credential files, the sandbox roo
 3. Tick **every scope**: `repo`, `workflow`, `admin:org`, `admin:public_key`, `admin:repo_hook`, `admin:org_hook`,
    `gist`, `notifications`, `user`, `delete_repo`, `write:packages` (and `read:packages`, `delete:packages`),
    `write:discussion`, `project`, `codespace`, `audit_log`, `copilot` and `admin:enterprise` if GitHub shows them.
-4. Generate, copy it once (it starts with `ghp_`), and paste it into **Settings → GitHub → Add a GitHub token** in
+4. Generate, copy it once (it starts with `ghp_`), and paste it into **Settings → Connectors → GitHub → Add a GitHub token** in
    AI City. The section then says **Connected as <your login>**. A wrong or revoked token says so in plain words and
    is not stored.
 
@@ -80,7 +80,7 @@ server. GitHub's MCP server is https://api.githubcopilot.com/mcp/".
 |---|---|
 | Secret and IAM (api store/read, every runtime role read) | `infra/modules/github/main.tf`, wired in `infra/envs/prod/main.tf` (a `moved` block carries the old empty container over from the storage module) |
 | Routes `GET /github`, `PUT /github/token`, `DELETE /github/token` | `backend/src/vaic/lambdas/api.py`, `backend/src/vaic/shared/github.py` |
-| Settings → GitHub | `web/src/components/GitHubSettings.tsx` |
+| Settings → Connectors → GitHub (row and Browse card) | `web/src/components/GitHubSettings.tsx`, `ConnectorsHub.tsx` |
 | git and gh sign-in at session start | `backend/src/vaic/runtime/github_auth.py`, called from `runtime/host.py` and at start in `runtime/server.py` |
 | VAIC's `run_command` | `backend/src/vaic/runtime/tools.py` (`_run_command_tool`), prompt in `agents/vaic.md` |
 | Connector hints and token path | `backend/src/vaic/shared/connectors.py`, `runtime/connector_tool.py`, `lambdas/connectors_api.py` |
