@@ -6561,6 +6561,29 @@ a.btn-primary.chat-file-dl,
   padding: 0 14px;
   flex: none;
 }
+.visitsteps {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+.visitsteps button {
+  min-width: var(--tap);
+  min-height: var(--tap);
+  border-radius: var(--btn-radius);
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--text);
+  border: 1px solid rgba(90, 50, 25, 0.25);
+  font: inherit;
+  cursor: pointer;
+}
+.visitsteps button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.visithint {
+  margin: 8px 0 0;
+  font-size: 12px;
+}
 .visitpick {
   right: 12px;
   top: 84px;

@@ -115,6 +115,59 @@ test("a department with no projects says so; Go inside works from the keyboard",
   await expect(visit).toHaveCount(0);
 });
 
+test("a floor seats eight: a bigger project goes on up as 1a, 1b; arrows, scroll and the buttons go floor to floor", async ({
+  page,
+}) => {
+  const snap = visitSnapshot();
+  // Seven more on the booking page: eleven people, so two floors (8 and 3). The login bug moves up to floor 4.
+  for (let i = 0; i < 7; i++)
+    snap.agents.push({
+      id: `wkr-app-x${i}`,
+      kind: "worker",
+      role: `Developer ${i + 1}`,
+      department: "Application",
+      model: "opus-5-5",
+      parent: "mgr-application",
+      state: "active",
+      worker_state: "working",
+      ticket_id: "t-1",
+    });
+  await mockBackend(page, { snapshot: snap });
+  await page.goto("/#/city/visit/Application");
+  const visit = page.getByRole("region", { name: "Application building" });
+  const title = visit.getByRole("heading", { level: 2 });
+  const desks = visit.getByRole("list", { name: /Who works on/ }).getByRole("button");
+  // Outside, the choices are projects; picking one goes to its top floor.
+  const picker = page.getByRole("navigation", { name: "Projects in Application" });
+  await expect(picker.getByRole("button")).toHaveCount(2);
+  await expect(picker.getByRole("button", { name: /booking page/ })).toContainText("11 agents · 2 floors");
+  await picker.getByRole("button", { name: /booking page/ }).click();
+  await expect(title).toContainText("Floor 3 · Build the booking page for the dentist · 1b");
+  await expect(desks).toHaveCount(3);
+  // Down a floor with the arrow key: the same project's first floor, full.
+  await page.keyboard.press("ArrowDown");
+  await expect(title).toContainText("Floor 2 · Build the booking page for the dentist · 1a");
+  await expect(desks).toHaveCount(8);
+  await expect(visit.getByRole("button", { name: "Floor below" })).toBeDisabled();
+  await page.waitForTimeout(900); // the move has settled
+  await page.screenshot({ path: `${SHOTS}/city-visit-floors.png` });
+  // Up with the wheel, twice: 1b, then the other project's own floor.
+  const box = (await visit.locator(".visitstage").boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.35, box.y + box.height * 0.6);
+  await page.mouse.wheel(0, -120);
+  await expect(title).toContainText("· 1b");
+  await page.waitForTimeout(500);
+  await page.mouse.wheel(0, -120);
+  await expect(title).toContainText("Floor 4 · Fix the login bug in the customer portal");
+  await expect(desks).toHaveCount(2);
+  await expect(visit.getByRole("button", { name: "Floor above" })).toBeDisabled();
+  await visit.getByRole("button", { name: "Floor below" }).click();
+  await expect(title).toContainText("· 1b");
+  // Going from floor to floor is not a step for Back: one Back is out of the floors.
+  await page.goBack();
+  await expect(visit).toHaveAttribute("data-phase", "building");
+});
+
 test.describe("reduced motion", () => {
   test.use({ reducedMotion: "reduce" });
   test("no animation: picking a project cuts straight to its floor", async ({ page }) => {

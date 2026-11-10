@@ -26,7 +26,7 @@ import { FlatWave, speakerOf } from "./VoiceVisualizer.tsx";
 import { Banner, Button, Loading } from "./ui.tsx";
 import { BuildDepartment, DemolishDepartment } from "./Departments.tsx";
 import { CityVisit } from "./CityVisit.tsx";
-import { visitHash } from "../lib/visit.ts";
+import { visitHash, type Visit } from "../lib/visit.ts";
 
 const REGION_CITY: Record<string, string> = {
   "eu-north-1": "Stockholm",
@@ -63,7 +63,7 @@ export function CityView({
 }: {
   go: (view: string) => void;
   /** Inside a department's building (decision 166): on its street, or on one project's floor. */
-  visit?: { dept: string; project: string | null } | null;
+  visit?: Visit | null;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -134,7 +134,7 @@ export function CityView({
   useEffect(() => {
     if (open && "agent" in open && !visit?.project) setOpen(null); // left the floor: its agent's card goes too
     if (open && "dept" in open && visit) setOpen(null);
-  }, [visit?.dept, visit?.project]);
+  }, [visit?.dept, visit?.project, visit?.part]);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000);
@@ -395,10 +395,16 @@ export function CityView({
           key={visit.dept}
           dept={visit.dept}
           project={visit.project}
+          part={visit.part}
           city={city}
           slot={scene.current?.building(visit.dept)?.slot ?? names.indexOf(visit.dept)}
           turned={open && "agent" in open ? open.agent : null}
-          onPick={(p) => go(visitHash(visit.dept, p).slice(1))}
+          onPick={(p, part) => {
+            // Into a project is a step Back undoes; from floor to floor inside the building is not.
+            const to = visitHash(visit.dept, p, part);
+            if (visit.project) location.replace(`#${to}`);
+            else go(to.slice(1));
+          }}
           onBack={() => outTo(depth - 1)}
           onExit={() => outTo(0)}
           onAgent={(id) => setOpen({ agent: id })}

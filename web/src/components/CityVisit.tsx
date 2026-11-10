@@ -15,13 +15,12 @@ import {
   personSprite,
   type FloorPlan,
 } from "../lib/officeArt.ts";
-import { deptProjects, type VisitProject } from "../lib/visit.ts";
-
-const SEATS_MAX = 12; // on a wide screen; a phone's room holds eight
+import { FLOOR_SEATS, deptProjects, type VisitFloor, type VisitProject } from "../lib/visit.ts";
 
 export function CityVisit({
   dept,
   project,
+  part,
   city,
   slot,
   turned,
@@ -32,12 +31,15 @@ export function CityVisit({
 }: {
   dept: string;
   project: string | null;
+  /** Which of the project's floors ("a", "b"…); none is its top floor. */
+  part: string | null;
   city: CityState;
   /** The tower's slot on the map, so the colours match. */
   slot: number;
   /** The agent whose card is open: their chair is turned to you. */
   turned: string | null;
-  onPick: (project: string) => void;
+  /** Go to a project (its top floor), or to one of its floors. */
+  onPick: (project: string, part?: string) => void;
   /** One step out: from a floor to the whole building, from the building to the map. */
   onBack: () => void;
   /** All the way out to the map. */
@@ -48,6 +50,25 @@ export function CityVisit({
   const chosen = project ? (projects.find((p) => p.id === project) ?? null) : null;
   const look = towerLook(dept, slot);
   const phase = chosen ? "floor" : "building";
+  // Every floor with a project on it, lowest first; the one in focus is the picked project's top floor unless
+  // the address names another.
+  const levels = useMemo(() => projects.flatMap((p) => p.parts.map((f) => ({ p, f }))), [projects]);
+  const here = chosen ? (chosen.parts.find((f) => f.part === part) ?? chosen.parts.at(-1)!) : null;
+  const at = levels.findIndex((l) => l.f === here);
+  // Up and down through the floors that have people on them (scroll, the arrow keys, the two buttons).
+  const step = (dir: 1 | -1) => {
+    const manned = levels.map((l, i) => ({ l, i })).filter((x) => x.l.f.agents.length || x.i === at);
+    if (!manned.length) return null;
+    if (at < 0) return dir > 0 ? manned[0]!.l : manned.at(-1)!.l;
+    return manned[manned.findIndex((x) => x.i === at) + dir]?.l ?? null;
+  };
+  const up = step(1),
+    down = step(-1);
+  const move = useRef<(dir: 1 | -1) => void>(() => {});
+  move.current = (dir) => {
+    const to = dir > 0 ? up : down;
+    if (to) onPick(to.p.id, to.f.part);
+  };
 
   // Esc goes one step out, like Back; not while an agent's card is open (Esc closes the card first).
   const back = useRef(onBack);
@@ -56,7 +77,14 @@ export function CityVisit({
   card.current = turned;
   useEffect(() => {
     const esc = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || card.current || e.defaultPrevented) return;
+      if (e.defaultPrevented || card.current) return;
+      const typing = (e.target as HTMLElement | null)?.closest?.("input, textarea, select, [contenteditable]");
+      if ((e.key === "ArrowUp" || e.key === "ArrowDown") && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        move.current(e.key === "ArrowUp" ? 1 : -1);
+        return;
+      }
+      if (e.key !== "Escape") return;
       e.preventDefault();
       back.current();
     };
@@ -79,30 +107,44 @@ export function CityVisit({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+  // The wheel (or two fingers on a trackpad) over the building goes a floor at a time, not faster than the move.
+  useEffect(() => {
+    const el = stage.current;
+    if (!el) return;
+    let sum = 0,
+      last = 0;
+    const wheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const now = performance.now();
+      if (now - last < 450) return;
+      sum += e.deltaY;
+      if (Math.abs(sum) < 40) return;
+      move.current(sum < 0 ? 1 : -1);
+      sum = 0;
+      last = now;
+    };
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => el.removeEventListener("wheel", wheel);
+  }, []);
   const wide = size.w >= 800;
   const cols = wide ? 4 : 2;
-  const most = Math.min(wide ? SEATS_MAX : 8, Math.max(1, ...projects.map((p) => p.agents.length)));
-  const plan = useMemo(() => floorPlan(cols, Math.max(2, Math.ceil(most / cols))), [cols, most]);
+  const plan = useMemo(() => floorPlan(cols, FLOOR_SEATS / cols), [cols]); // eight desks, on any screen
   // The room's free space: beside the project list on a wide screen, above it on a phone.
   const area = wide
     ? { x: 12, y: 78, w: size.w - 376, h: size.h - 90 }
     : { x: 8, y: 140, w: size.w - 16, h: (phase === "floor" ? size.h - 12 : size.h * 0.56) - 140 };
   const scale = Math.max(0.5, Math.min(3, Math.floor(Math.min(area.w / plan.W, area.h / plan.H) * 20) / 20));
-  // The whole tower: the lobby, a floor per project, two storeys above. Only project floors can be in focus; the
-  // rest is the building's shell, always faint.
-  const floors: Array<VisitProject | "shell" | null> = [
-    "shell",
-    ...(projects.length ? projects : [null]),
-    "shell",
-    "shell",
-  ];
+  // The whole tower: the lobby, the projects' floors, two storeys above. Only a project's floor can be in focus;
+  // the rest is the building's shell, always faint.
+  type Level = { p: VisitProject; f: VisitFloor } | "shell" | null;
+  const floors: Level[] = ["shell", ...(levels.length ? levels : [null]), "shell", "shell"];
   const top = (i: number) => (floors.length - 1 - i) * FLOOR_PITCH * scale; // the lobby at the bottom
-  const focus = chosen ? floors.indexOf(chosen) : -1;
+  const focus = at < 0 ? -1 : at + 1;
   const stackH = top(0) + plan.H * scale;
   // With no floor in focus the whole stack is in view, smaller if it has to be.
   const zoom = focus >= 0 ? 1 : Math.min(1, area.h / stackH);
   const centre = focus >= 0 ? top(focus) + (plan.H * scale) / 2 : stackH / 2;
-  const move = {
+  const shift = {
     x: Math.round(area.x + (area.w - plan.W * scale * zoom) / 2),
     y: Math.round(area.y + area.h / 2 - centre * zoom),
   };
@@ -116,20 +158,21 @@ export function CityVisit({
     >
       <div className="visitstage" ref={stage}>
         {size.w ? (
-          <div className="floorstack" style={{ transform: `translate(${move.x}px, ${move.y}px) scale(${zoom})` }}>
+          <div className="floorstack" style={{ transform: `translate(${shift.x}px, ${shift.y}px) scale(${zoom})` }}>
             {floors.map((f, i) => {
-              const p = f === "shell" ? null : f;
+              const l = f === "shell" ? null : f;
               return (
                 <Floor
-                  key={p?.id ?? `shell${i}`}
+                  key={l ? `${l.p.id}:${l.f.part}` : `shell${i}`}
                   plan={plan}
                   scale={scale}
                   top={top(i)}
-                  project={p}
+                  project={l?.p ?? null}
+                  level={l?.f ?? null}
                   dept={dept}
                   city={city}
                   look={look}
-                  state={f === "shell" ? "faded" : !p ? "empty" : focus < 0 ? "open" : focus === i ? "focus" : "faded"}
+                  state={f === "shell" ? "faded" : !l ? "empty" : focus < 0 ? "open" : focus === i ? "focus" : "faded"}
                   turned={turned}
                   onPick={onPick}
                   onAgent={onAgent}
@@ -145,12 +188,22 @@ export function CityVisit({
         </button>
         <h2 ref={heading} tabIndex={-1} className="pixel">
           {dept}
-          <small>{chosen ? `Floor ${chosen.floor} · ${chosen.title}` : "All floors"}</small>
+          <small>{here ? `Floor ${here.floor} · ${here.label}` : "All floors"}</small>
         </h2>
         {chosen ? (
-          <button type="button" className="visitback" onClick={onBack}>
-            All floors
-          </button>
+          <>
+            <span className="visitsteps">
+              <button type="button" aria-label="Floor above" disabled={!up} onClick={() => move.current(1)}>
+                ▲
+              </button>
+              <button type="button" aria-label="Floor below" disabled={!down} onClick={() => move.current(-1)}>
+                ▼
+              </button>
+            </span>
+            <button type="button" className="visitback" onClick={onBack}>
+              All floors
+            </button>
+          </>
         ) : null}
       </header>
       <nav className="visitpick cityui" aria-label={`Projects in ${dept}`}>
@@ -169,7 +222,7 @@ export function CityVisit({
                   <span className="floorno pixel">{`${p.floor}F`}</span>
                   <span className="what">
                     <b>{p.title}</b>
-                    <small>{`${p.status} · ${p.agents.length === 1 ? "1 agent" : `${p.agents.length} agents`}`}</small>
+                    <small>{`${p.status} · ${p.agents.length === 1 ? "1 agent" : `${p.agents.length} agents`}${p.parts.length > 1 ? ` · ${p.parts.length} floors` : ""}`}</small>
                   </span>
                 </button>
               </li>
@@ -178,6 +231,7 @@ export function CityVisit({
         ) : (
           <p className="mute">{`Nobody in ${dept} is working on a project right now. Ask VAIC for something and it shows up here.`}</p>
         )}
+        {levels.length > 1 ? <p className="mute visithint">Scroll or press ↑ ↓ to go from floor to floor.</p> : null}
       </nav>
     </section>
   );
@@ -189,6 +243,7 @@ function Floor({
   scale,
   top,
   project,
+  level,
   dept,
   city,
   look,
@@ -201,32 +256,33 @@ function Floor({
   scale: number;
   top: number;
   project: VisitProject | null;
+  /** Which of the project's floors this is, and who sits on it. */
+  level: VisitFloor | null;
   dept: string;
   city: CityState;
   look: { wall: string; shade: string };
   /** In focus, faded behind the floor in focus, one of all the floors (none picked), or an empty building. */
   state: "focus" | "faded" | "open" | "empty";
   turned: string | null;
-  onPick: (project: string) => void;
+  onPick: (project: string, part?: string) => void;
   onAgent: (id: string) => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const shown = useMemo(
-    () => (project?.agents ?? []).slice(0, plan.seats.length).filter((id) => city.agents[id]),
-    [project, plan, city.agents],
+    () => (level?.agents ?? []).slice(0, plan.seats.length).filter((id) => city.agents[id]),
+    [level, plan, city.agents],
   );
-  const seed = `${dept}:${project?.id ?? top}`;
+  const seed = `${dept}:${project ? `${project.id}:${level?.part}` : top}`;
   useEffect(() => {
     const g = canvas.current?.getContext("2d");
     if (g) paintFloor(g, plan, { seed, people: shown.length, wall: look.wall, wall2: look.shade });
   }, [plan, seed, shown.length, look.wall, look.shade]);
-  const more = (project?.agents.length ?? 0) - shown.length;
   return (
     // A floor that is not in focus is a picture you can click to pick it; the project list does the same by keyboard.
     <div
       className={`floor floor-${state}`}
       style={{ top, width: plan.W * scale, height: plan.H * scale }}
-      onClick={state === "open" && project ? () => onPick(project.id) : undefined}
+      onClick={state === "open" && project ? () => onPick(project.id, level?.part) : undefined}
       aria-hidden={state === "focus" ? undefined : true}
     >
       <canvas ref={canvas} width={plan.W} height={plan.H} aria-hidden="true" />
@@ -235,13 +291,9 @@ function Floor({
           className="floortag pixel"
           aria-hidden="true"
           style={{ left: plan.corner.x * scale, top: plan.corner.y * scale }}
-        >{`${project.floor}F`}</span>
+        >{`${level?.floor ?? project.floor}F`}</span>
       ) : null}
-      <ul
-        className="desks"
-        aria-label={project ? `Who works on ${project.title}` : undefined}
-        inert={state !== "focus"}
-      >
+      <ul className="desks" aria-label={level ? `Who works on ${level.label}` : undefined} inert={state !== "focus"}>
         {shown.map((id, i) => {
           const a = city.agents[id]!,
             seat = plan.seats[i]!;
@@ -276,7 +328,6 @@ function Floor({
           );
         })}
       </ul>
-      {state === "focus" && more > 0 ? <p className="officemore pixel">{`+${more} more on this floor`}</p> : null}
       {state === "focus" && !shown.length ? (
         <p className="officemore">Nobody is at a desk on this floor right now.</p>
       ) : null}

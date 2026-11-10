@@ -59,6 +59,30 @@ describe("a department's projects", () => {
     expect(p[0]!.agents).toEqual(["mgr-app", "w1", "w2"]); // the retired worker is gone
     expect(p[1]!.agents).toEqual(["mgr-app", "w4"]);
   });
+  it("a floor seats eight and belongs to one project: a bigger team goes on up as 1a, 1b, 1c", () => {
+    const big = applySnapshot(initialState(0), {
+      departments: [{ name: "App", manager_id: "mgr-app", state: "active" }],
+      agents: [
+        agent("mgr-app", "manager", "App"),
+        ...Array.from({ length: 17 }, (_, i) => agent(`w${i}`, "worker", "App", { ticket_id: "t1" })),
+        agent("x1", "worker", "App", { ticket_id: "t2" }),
+      ],
+      tickets: [ticket("t1", "mgr-app", null), ticket("t2", "mgr-app", null, "App", "2026-11-10T09:00:00Z")],
+    });
+    const [one, two] = deptProjects(big, "App");
+    // 18 people on the first project: three floors (8, 8, 2), and it is picked at its top floor.
+    expect(one!.parts.map((f) => [f.part, f.floor, f.agents.length])).toEqual([
+      ["a", 2, 8],
+      ["b", 3, 8],
+      ["c", 4, 2],
+    ]);
+    expect(one!.parts.map((f) => f.label)).toEqual(["Goal t1 · 1a", "Goal t1 · 1b", "Goal t1 · 1c"]);
+    expect(one!.floor).toBe(4);
+    // The next project starts on a floor of its own, though the floor below has six free seats.
+    expect(two!.parts.map((f) => [f.part, f.floor, f.label, f.agents])).toEqual([
+      ["a", 5, "Goal t2", ["mgr-app", "x1"]],
+    ]);
+  });
   it("is empty for a department with nothing open", () => {
     expect(deptProjects(city, "Legal")).toEqual([]);
   });
@@ -69,7 +93,12 @@ describe("routes", () => {
     expect(route("", ["ace", "city"], "city")).toEqual({ view: "city", slug: null });
     expect(route("#/nowhere", ["ace", "city"], "city").view).toBe("city");
     const r = route(`#${visitHash("Data & AI", "t-123")}`, ["ace", "city"], "city");
-    expect(visitOf(r.slug)).toEqual({ dept: "Data & AI", project: "t-123" });
+    expect(visitOf(r.slug)).toEqual({ dept: "Data & AI", project: "t-123", part: null });
+    expect(visitOf(route(`#${visitHash("App", "t-1", "b")}`, ["ace", "city"], "city").slug)).toEqual({
+      dept: "App",
+      project: "t-1",
+      part: "b",
+    });
     expect(visitOf("features/calendar")).toBeNull();
   });
 });
