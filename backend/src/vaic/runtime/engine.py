@@ -81,7 +81,8 @@ _SECRET = re.compile(
 )
 
 
-def _clean(text: Any, n: int = 160) -> str:
+def clean_text(text: Any, n: int = 160) -> str:
+    """One line, secret-shaped text blanked, at most ``n`` characters."""
     one = " ".join(str(text or "").split())
     one = _SECRET.sub("•••", one)
     return one if len(one) <= n else one[: n - 1] + "…"
@@ -92,7 +93,7 @@ def _base(path: Any) -> str:
     for root in ("/tmp/work/", "/tmp/"):  # noqa: S108 (a label, not a file the runtime opens)
         if root in p:
             p = p.split(root, 1)[1].split("/", 1)[-1]
-    return _clean(p, 120)
+    return clean_text(p, 120)
 
 
 def step_detail(tool: str, args: dict[str, Any] | None) -> str | None:
@@ -101,7 +102,7 @@ def step_detail(tool: str, args: dict[str, Any] | None) -> str | None:
     a = args or {}
     name = tool.removeprefix("mcp__city__")
     if tool == "Bash" or name == "run_command":
-        cmd = _clean(a.get("command") or a.get("cmd"), 200)
+        cmd = clean_text(a.get("command") or a.get("cmd"), 200)
         if re.search(r"\bgit\s+push\b", cmd):
             return f"Pushed the code to GitHub: {cmd}"
         if re.search(r"\bgit\s+(clone|commit|checkout|pull)\b|\bgh\s", cmd):
@@ -118,20 +119,20 @@ def step_detail(tool: str, args: dict[str, Any] | None) -> str | None:
     if tool == "Read":
         return f"Read {_base(a.get('file_path'))}"
     if tool == "Glob":
-        return f"Looked for files: {_clean(a.get('pattern'), 80)}"
+        return f"Looked for files: {clean_text(a.get('pattern'), 80)}"
     if tool == "Grep":
-        return f"Searched the code for {_clean(a.get('pattern'), 80)}"
+        return f"Searched the code for {clean_text(a.get('pattern'), 80)}"
     if tool == "WebSearch":
-        return f"Searched the web: {_clean(a.get('query'), 120)}"
+        return f"Searched the web: {clean_text(a.get('query'), 120)}"
     if tool == "WebFetch":
-        return f"Read a web page: {_clean(a.get('url'), 140)}"
+        return f"Read a web page: {clean_text(a.get('url'), 140)}"
     if "browser" in tool:
         url = a.get("url") or a.get("start_url")
-        return f"Browsed {_clean(url, 140)}" if url else "Used the browser"
+        return f"Browsed {clean_text(url, 140)}" if url else "Used the browser"
     if "code_interpreter" in tool:
         return "Ran code in the sandbox"
     if name == "search_knowledge":
-        return f"Searched your knowledge: {_clean(a.get('query') or a.get('text'), 120)}"
+        return f"Searched your knowledge: {clean_text(a.get('query') or a.get('text'), 120)}"
     if name == "list_knowledge":
         return "Looked through your knowledge"
     if name == "add_to_knowledge":
@@ -139,7 +140,7 @@ def step_detail(tool: str, args: dict[str, Any] | None) -> str | None:
     if name in ("submit_app", "load_app"):
         return "Handed in the app for checks" if name == "submit_app" else "Opened the app's current version"
     if name == "hire_worker":
-        return f"Hired a {_clean(a.get('role') or 'worker', 60)}"
+        return f"Hired a {clean_text(a.get('role') or 'worker', 60)}"
     if name.startswith("report_to"):
         return "Reported back"
     if name in {"file_handoff", "artifacts"}:

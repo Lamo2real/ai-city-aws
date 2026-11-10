@@ -41,7 +41,7 @@ async function axe(page: Page) {
 test("click a tower → its floors → pick a project → that floor in focus, the rest faded → an agent turns to you → out", async ({
   page,
 }) => {
-  await mockBackend(page, { snapshot: visitSnapshot() });
+  const m = await mockBackend(page, { snapshot: visitSnapshot() });
   await page.goto("/");
   // The City is where the HUD opens.
   await expect(page.locator("section.city")).toHaveAttribute("data-city-ready", "1");
@@ -83,6 +83,11 @@ test("click a tower → its floors → pick a project → that floor in focus, t
   await expect(page.getByRole("navigation", { name: "Projects in Application" })).toBeHidden();
   await expect(designer).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("dialog", { name: "Designer" })).toBeVisible();
+  // A turn that fails says so on the card at once, with the reason in full (decision 205).
+  const designerId = "wkr-app-b";
+  m.send({ type: "activity", id: designerId, activity: "failed", detail: "Its last try failed: RuntimeError: boom" });
+  await expect(page.getByRole("dialog", { name: "Designer" })).toContainText("Failed. Its last try failed: RuntimeError: boom");
+  m.send({ type: "activity", id: designerId, activity: "coding" });
   await page.waitForTimeout(700);
   await page.screenshot({ path: `${SHOTS}/city-visit-agent.png` });
   // Esc closes the card first (the chair turns back), then goes one step out: to all the floors.

@@ -616,7 +616,12 @@ function AgentPanel({ id, city }: { id: string; city: CityState }) {
   return (
     <div>
       <p className="doing">
-        <b>{doing.label}.</b> {a.kind === "specialist" ? "A saved specialist, at home until hired again." : doing.words}
+        <b>{doing.label}.</b>{" "}
+        {a.kind === "specialist"
+          ? "A saved specialist, at home until hired again."
+          : city.activities[id]?.activity === "failed" && city.activities[id]?.detail
+            ? city.activities[id]!.detail // the reason in full (decision 205)
+            : doing.words}
       </p>
       {/* Only what the owner reads when checking on someone: who they are, what they're on, what they just did
           (the owner, 2026-11-10). Who they report to is the department's manager, so it is not repeated. */}

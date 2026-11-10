@@ -6,8 +6,11 @@ rejects one (FAIL) → the worker fixes it → manager PASS → Orchestrator sig
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
+import shutil
+from pathlib import Path
 from typing import Any, cast
 
 from city_support import Call, City, Script, make_city, scripted_engine, session_id_for
@@ -322,6 +325,23 @@ async def test_a_long_worker_turn_is_not_sent_again_while_it_is_still_running() 
     assert await resume_stale(city.ledger, city.queue) == 1
 
 
+async def test_a_worker_starts_in_its_own_folder_which_exists_before_claude_does() -> None:
+    # Claude refuses a working directory that doesn't exist: every worker turn failed on it (decision 205).
+    seen: list[str | None] = []
+
+    async def looks(req: EngineRequest, _: Call) -> str:
+        seen.append(req.cwd)
+        assert req.cwd and await asyncio.to_thread(Path(req.cwd).is_dir)
+        return "ok"
+
+    city = make_city(scripted_engine({"worker": looks}))
+    msg, _ = await _lost_worker_message(city)
+    shutil.rmtree(f"/tmp/work/{msg['agentId']}", ignore_errors=True)
+    assert await _async_dispatcher(city).handle(msg) == "started"
+    await city.host.run_turn({**msg, "sessionId": "s-1", "async": True})
+    assert seen == [f"/tmp/work/{msg['agentId']}"]
+
+
 async def test_a_worker_turn_that_fails_gives_its_slot_back_once_and_is_sent_again_soon() -> None:
     async def boom(req: EngineRequest, call: Call) -> str:
         raise RuntimeError("the model call failed")
@@ -336,6 +356,10 @@ async def test_a_worker_turn_that_fails_gives_its_slot_back_once_and_is_sent_aga
     else:
         raise AssertionError("the turn should have failed")
     assert await city.ledger.active_workers() == 0
+    # The city shows it failed, with the reason, instead of the "understanding" the turn started with.
+    last = [e for e in city.bus.of_type("activity") if e["id"] == msg["agentId"]][-1]
+    assert last["activity"] == "failed"
+    assert last["detail"] == "Its last try failed: RuntimeError: the model call failed"
     assert await resume_stale(city.ledger, city.queue) == 1  # at once, not after the long lease
     assert await city.ledger.active_workers() == 0  # and the slot is not given back a second time
 

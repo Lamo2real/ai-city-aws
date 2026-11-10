@@ -89,6 +89,8 @@ export function stories(feed: FeedLine[], limit?: number): Array<{ at: number; t
 export function plainWho(state: CityState, id: string): string;
 export interface CityState {
   agents: Record<string, CityAgent>;
+  /** What each agent did last ("understanding", "coding", "failed"…), with its line in words when there is one. */
+  activities: Record<string, { activity: string; detail?: string | null; at?: string }>;
   tickets: Record<string, CityTicket>;
   parked: Record<string, CityTicket>;
   questions: Record<string, CityQuestion>;

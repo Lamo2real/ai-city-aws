@@ -7,9 +7,11 @@ others).
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from vaic.mail.service import MailService
@@ -32,7 +34,7 @@ from vaic.shared.turn import BackoffOptions, GateDeps, GatedTurn, TurnInput, Tur
 
 from .brand_context import BrandContext, BrandLoader, brands_from_items, is_bare_link
 from .connector_tool import add_connector_tool
-from .engine import AgentEngine, EngineRequest
+from .engine import AgentEngine, EngineRequest, clean_text
 from .gateway import GatewayClient, turn_connector_tools
 from .github_auth import GitAuth
 from .live import LiveReply, Send
@@ -273,6 +275,13 @@ class AgentHost:
                         conversation, "vaic", action_line(tool, args, out, error, now_iso())
                     )
 
+            # A worker's own folder. It must exist before Claude starts there: the SDK refuses a missing working
+            # directory, and every worker turn failed on it while its card said "Understanding" (decision 205).
+            workdir = None
+            if agent.get("kind") == "worker":
+                workdir = f"/tmp/work/{agent['id']}"  # noqa: S108
+                await asyncio.to_thread(Path(workdir).mkdir, parents=True, exist_ok=True)
+
             async def runner(turn: TurnInput) -> TurnOutput:
                 return await self.o.engine(
                     EngineRequest(
@@ -282,7 +291,7 @@ class AgentHost:
                         builtins=builtins,
                         ctx=ctx,
                         ledger=ledger,
-                        cwd=f"/tmp/work/{agent['id']}" if agent.get("kind") == "worker" else None,  # noqa: S108
+                        cwd=workdir,
                         on_needs_approval=on_needs_approval,
                         on_activity=on_activity,
                         on_tool_done=on_tool_done,
@@ -342,8 +351,22 @@ class AgentHost:
             await bus.put({"type": "activity", "id": agent["id"], "activity": "idle"})
             await ledger.finish_work(inv["id"])
             return result.output.text
-        except BaseException:
+        except BaseException as e:
             failed = True
+            if isinstance(e, Exception):
+                # The city shows a failed turn at once, with the reason, instead of the "Understanding" it started
+                # with (the owner's rule: errors in full). The crash sweep may still try it again.
+                try:
+                    await bus.put(
+                        {
+                            "type": "activity",
+                            "id": inv["agentId"],
+                            "activity": "failed",
+                            "detail": f"Its last try failed: {clean_text(f'{type(e).__name__}: {e}', 400)}",
+                        }
+                    )
+                except Exception as put_error:  # the failure itself must still reach the log and the retry
+                    log("warn", "turn.failed_event", error=type(put_error).__name__)
             if inv["role"] == "vaic" and not acted:
                 # Nothing was done yet: a retry of this message may run (a model error, a throttle).
                 await ledger.unclaim(f"vaic-turn:{inv['id']}")
