@@ -248,13 +248,79 @@ textarea {
   border-radius: 999px;
   border: 1px solid transparent;
 }
-.top nav a[aria-current="page"] {
-  background: var(--glass-3);
-  border-color: var(--edge-2);
-  box-shadow: var(--glow);
-}
 .top nav a:hover {
   background: var(--glass-2);
+}
+/* The menu is a glass track, and the open tab has a glass pill that slides from the tab you left to the one you
+   opened, like "City | Features" (the owner, 2026-11-10). App.tsx measures the open tab into --thumb-*. */
+.top nav.tabs {
+  position: relative;
+  isolation: isolate;
+  flex: 0 1 auto;
+  align-self: center;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--glass);
+  border: 1px solid var(--edge);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.top nav.tabs > a {
+  position: relative;
+  z-index: 1;
+  transition:
+    color var(--dur-m) var(--ease-out),
+    background-color 0.15s ease;
+}
+.top nav.tabs > a[aria-current="page"],
+.top nav.tabs > a[aria-current="page"]:hover {
+  background: none;
+  font-weight: 600;
+}
+.navthumb {
+  position: absolute;
+  z-index: 0;
+  left: 0;
+  top: 0;
+  width: var(--thumb-w, 0);
+  height: var(--thumb-h, 0);
+  transform: translate(var(--thumb-x, 0), var(--thumb-y, 0));
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.04)), var(--glass-3);
+  border: 1px solid var(--edge-2);
+  -webkit-backdrop-filter: blur(10px) saturate(1.6);
+  backdrop-filter: blur(10px) saturate(1.6);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 4px 14px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  opacity: 0;
+}
+.top nav.tabs[data-thumb="on"] .navthumb {
+  opacity: 1;
+}
+.top nav.tabs[data-ready] .navthumb {
+  transition:
+    transform var(--dur-m) var(--ease-out),
+    width var(--dur-m) var(--ease-out),
+    opacity 0.2s ease;
+}
+:root[data-theme="light"] .navthumb {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.55));
+  box-shadow:
+    inset 0 1px 0 #fff,
+    inset 0 -1px 0 rgba(29, 28, 54, 0.06),
+    0 4px 14px rgba(29, 28, 54, 0.14);
+}
+@media (max-width: 799px) {
+  .top nav.tabs {
+    flex: 0 0 100%; /* the phone's menu row: full width, scrolls sideways (the highlight scrolls with it) */
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .top nav.tabs[data-ready] .navthumb,
+  .top nav.tabs > a {
+    transition: none;
+  }
 }
 .badge {
   background: var(--amber);

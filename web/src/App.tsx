@@ -1,5 +1,5 @@
 // The HUD shell: sign-in, the live connection, navigation and the always-visible spend pill.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushOutbox, loadCity, saveSettings } from "./lib/actions.ts";
 import { api } from "./lib/api.ts";
 import { bootAuth } from "./lib/auth.ts";
@@ -60,6 +60,7 @@ export function App() {
   // The top bar's height, as `--top-h`: on the VAIC screen the chat runs up behind the bar (decision 108).
   const top = useRef<HTMLElement>(null);
   const [topH, setTopH] = useState(64);
+  const nav = useRef<HTMLElement>(null);
   useEffect(() => {
     const el = top.current;
     if (!el || typeof ResizeObserver === "undefined") return;
@@ -133,6 +134,27 @@ export function App() {
     void start();
   }, [start]);
 
+  // The menu's glass highlight sits under the open tab and slides to the next one (the owner, 2026-11-10).
+  useLayoutEffect(() => {
+    const el = nav.current;
+    if (!el) return;
+    const place = () => {
+      const a = el.querySelector<HTMLElement>('a[aria-current="page"]');
+      el.dataset.thumb = a ? "on" : "off";
+      if (!a) return;
+      el.style.setProperty("--thumb-x", `${a.offsetLeft}px`);
+      el.style.setProperty("--thumb-y", `${a.offsetTop}px`);
+      el.style.setProperty("--thumb-w", `${a.offsetWidth}px`);
+      el.style.setProperty("--thumb-h", `${a.offsetHeight}px`);
+      // the first placement jumps into place; every move after that slides
+      if (!el.dataset.ready) requestAnimationFrame(() => (el.dataset.ready = "1"));
+    };
+    place();
+    const ro = new ResizeObserver(place);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [view, boot]);
+
   const finishGuide = () => {
     setGuide(false);
     try {
@@ -179,7 +201,8 @@ export function App() {
         >
           <Wordmark />
         </a>
-        <nav aria-label="Screens">
+        <nav aria-label="Screens" className="tabs" ref={nav}>
+          <span className="navthumb" aria-hidden="true" />
           {VIEWS.filter((v) => v !== "city").map((v) => (
             <a key={v} href={`#/${v}`} aria-current={view === v ? "page" : undefined}>
               {LABEL[v]}

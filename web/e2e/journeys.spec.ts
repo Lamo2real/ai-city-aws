@@ -1497,3 +1497,25 @@ test("the logo is the owner's eye with no background, in the top bar and the bro
   expect(svg).not.toMatch(/<rect|<circle/);
   expect((await page.request.get("/eye.svg")).ok()).toBe(true);
 });
+
+test("the top menu's glass highlight sits under the open tab and follows the next one", async ({ page }) => {
+  await mockBackend(page);
+  await page.goto("/#/vaic");
+  const nav = page.getByRole("navigation", { name: "Screens" });
+  const thumb = nav.locator(".navthumb");
+  const under = async (name: string) => {
+    const tab = nav.getByRole("link", { name, exact: true });
+    await expect(tab).toHaveAttribute("aria-current", "page");
+    await expect
+      .poll(async () => {
+        const [a, b] = await Promise.all([tab.boundingBox(), thumb.boundingBox()]);
+        return a && b ? Math.round(Math.abs(a.x - b.x) + Math.abs(a.width - b.width)) : 999;
+      })
+      .toBeLessThanOrEqual(1);
+  };
+  await under("Chat");
+  await nav.getByRole("link", { name: "Skills", exact: true }).click();
+  await under("Skills");
+  await page.locator(".brand").click(); // the City has no tab: the highlight fades away
+  await expect(thumb).toHaveCSS("opacity", "0");
+});
