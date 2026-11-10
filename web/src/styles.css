@@ -6892,6 +6892,11 @@ a.btn-primary.chat-file-dl,
   padding: 12px;
   z-index: 2;
 }
+.visitpick.behind {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
 .visitpick ul {
   list-style: none;
   margin: 0;

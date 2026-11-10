@@ -79,6 +79,8 @@ test("click a tower → its floors → pick a project → that floor in focus, t
   // An agent turns their chair to you, and their card opens.
   const designer = desks.filter({ hasText: "Designer" });
   await designer.click();
+  // The project list in the same corner hides while the card is open, so nothing shows through it.
+  await expect(page.getByRole("navigation", { name: "Projects in Application" })).toBeHidden();
   await expect(designer).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("dialog", { name: "Designer" })).toBeVisible();
   await page.waitForTimeout(700);

@@ -206,7 +206,13 @@ export function CityVisit({
           </>
         ) : null}
       </header>
-      <nav className="visitpick cityui" aria-label={`Projects in ${dept}`}>
+      {/* Hidden while an agent's card is open: the card sits in the same corner, and the list showed through it. */}
+      <nav
+        className={`visitpick cityui${turned ? " behind" : ""}`}
+        aria-label={`Projects in ${dept}`}
+        aria-hidden={turned ? true : undefined}
+        inert={turned ? true : undefined}
+      >
         <h3 className="pixel">{chosen ? "Projects" : "Pick a project"}</h3>
         {project && !chosen ? <p className="mute">That project is finished or no longer here.</p> : null}
         {projects.length ? (

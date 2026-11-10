@@ -618,16 +618,16 @@ function AgentPanel({ id, city }: { id: string; city: CityState }) {
       <p className="doing">
         <b>{doing.label}.</b> {a.kind === "specialist" ? "A saved specialist, at home until hired again." : doing.words}
       </p>
-      <Row k="Department" v={a.department ?? "Headquarters"} />
-      <Row k="Model" v={MODEL_NAME[a.model] ?? a.model} />
-      <Row k="Reports to" v={a.parent ?? "the owner"} />
+      {/* Only what the owner reads when checking on someone: who they are, what they're on, what they just did
+          (the owner, 2026-11-10). Who they report to is the department's manager, so it is not repeated. */}
+      <p className="mute who">{`${a.department ?? "Headquarters"} · ${MODEL_NAME[a.model] ?? a.model}`}</p>
       <h4>Working on</h4>
-      <p>{ticket ? `${ticketWords(ticket.status)}: ${plainText(ticket.goal).short}` : "Nothing right now."}</p>
+      <p>{ticket ? plainText(ticket.goal).short : "Nothing right now."}</p>
       {live?.recent.length ? (
         <>
-          <h4>Recent activity</h4>
+          <h4>Just did</h4>
           <ul className="recent">
-            {live.recent.slice(-6).map((r, i) => (
+            {live.recent.slice(-3).map((r, i) => (
               <li
                 key={i}
               >{`${new Date(r.at).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })} ${r.tool.replace(/^mcp__city__/, "").replace(/_/g, " ")}${r.decision === "deny" ? " (blocked by policy)" : ""}`}</li>
