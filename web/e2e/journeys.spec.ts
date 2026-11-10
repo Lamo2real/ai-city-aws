@@ -206,13 +206,14 @@ test("lands on VAIC with the input focused; asking something shows VAIC's stream
   expect(mine.x).toBeGreaterThan(theirs.x + 100);
   await expect(page.getByText(/Not sent yet/)).toHaveCount(0); // delivered, so nothing waits in the outbox
   // The chat panel runs up behind the top bar (no "Chat with VAIC" header); the first message starts below the
-  // bar; the brand is the wordmark alone, no eye.
+  // bar; the brand is the owner's eye logo and "VAIC" (decision 169), not the animated VAIC-screen eye.
   const bar = (await page.locator("header.top").boundingBox())!;
   const talkBox = (await page.locator(".talk").boundingBox())!;
   expect(talkBox.y).toBeLessThanOrEqual(bar.y + 1);
   expect((await log.locator(".msg").first().boundingBox())!.y).toBeGreaterThanOrEqual(bar.y + bar.height);
   await expect(page.locator(".talk-head")).toHaveCount(0);
   await expect(page.locator(".brand .eyes")).toHaveCount(0);
+  await expect(page.locator(".brand .wm-eye")).toBeVisible();
   await expect(page.getByRole("button", { name: "Clear conversation on this device" })).toBeVisible();
   await shot(page, "ace");
   await noSeriousA11y(page, "VAIC");
@@ -1443,4 +1444,40 @@ test("dictation: stop keeps the words still being heard, to edit, send with Ente
   await expect
     .poll(() => m.calls.filter((c) => c.path === "/messages").at(-1)?.body)
     .toMatchObject({ text: "make this into a solution, please and test it" });
+});
+
+test("the logo is the owner's eye with no background, in the top bar and the browser tab, in both themes", async ({
+  page,
+}) => {
+  await mockBackend(page);
+  await page.goto("/");
+  const brand = page.getByRole("button", { name: "VAIC — talk to VAIC" });
+  await expect(brand).toBeVisible();
+  await expect(brand.locator(".wm-word")).toHaveText("VAIC");
+  const look = () =>
+    brand.locator(".wm-eye").evaluate((el) => {
+      const s = getComputedStyle(el);
+      return {
+        fill: s.backgroundColor,
+        text: getComputedStyle(document.body).color,
+        mask: s.maskImage || s.webkitMaskImage,
+      };
+    });
+  const dark = await look();
+  expect(dark.mask).toContain("/eye.svg");
+  // the eye takes the HUD's text colour: light on the dark theme, dark on the light one
+  const lum = (c: string) =>
+    c
+      .match(/\d+/g)!
+      .slice(0, 3)
+      .reduce((a, n) => a + Number(n), 0);
+  expect(lum(dark.fill)).toBeGreaterThan(600);
+  await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
+  expect(lum((await look()).fill)).toBeLessThan(200);
+  // the tab icon: one SVG with no background shape that switches colour with the browser's theme
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "/favicon.svg");
+  const svg = await (await page.request.get("/favicon.svg")).text();
+  expect(svg).toContain("prefers-color-scheme:dark");
+  expect(svg).not.toMatch(/<rect|<circle/);
+  expect((await page.request.get("/eye.svg")).ok()).toBe(true);
 });
