@@ -35,6 +35,44 @@ const group = (g: Group) => ({
 });
 const PRESETS = { shared: group(PRESETS_FILE.shared), departments: PRESETS_FILE.departments.map(group) };
 
+// Skills → Discover (decision 188): the real catalog files, shaped as GET /skills/catalog answers them.
+const CATALOG_DIR = `${import.meta.dirname}/../../agents/skill-catalog`;
+const CATALOG_INDEX = JSON.parse(readFileSync(`${CATALOG_DIR}/catalog.json`, "utf8")) as {
+  featured: string;
+  skills: Array<{ name: string; title: string; departments: string[] }>;
+};
+const descriptionIn = (dir: string, name: string) =>
+  /description: "(.*)"/.exec(readFileSync(`${dir}/${name}/SKILL.md`, "utf8"))?.[1] ?? "";
+const usedBy = new Map<string, string[]>();
+for (const s of PRESETS_FILE.shared.skills) usedBy.set(s, ["Every department"]);
+for (const d of PRESETS_FILE.departments) for (const s of d.skills) usedBy.set(s, [...(usedBy.get(s) ?? []), d.name]);
+export const SKILL_CATALOG = [
+  ...CATALOG_INDEX.skills.map((e) => ({
+    ...e,
+    description: descriptionIn(CATALOG_DIR, e.name),
+    source: "AI City catalog",
+    builtin: false,
+    featured: e.name === CATALOG_INDEX.featured,
+    files: 1,
+  })),
+  ...[...usedBy]
+    .filter(([n]) => readdirSync(SKILLS_DIR).includes(n))
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, departments]) => ({
+      name,
+      title: name.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase()),
+      description: descriptionIn(SKILLS_DIR, name),
+      departments,
+      source: departments.includes("Every department")
+        ? "Built into every department"
+        : `Built into ${departments.join(", ")}`,
+      builtin: true,
+      featured: false,
+      files: 1,
+    })),
+];
+const catalogDir = (builtin: boolean) => (builtin ? SKILLS_DIR : CATALOG_DIR);
+
 export const CONFIG = {
   region: "eu-north-1",
   apiUrl: "https://api.vaic.test",
@@ -1107,12 +1145,46 @@ export async function mockBackend(
       m.skills = [skill];
       return ok({ skill, removed_frontmatter: ["allowed-tools"] }, 201);
     }
+    if (path.split("?")[0] === "/skills/catalog" && method === "GET")
+      return ok({
+        skills: SKILL_CATALOG.map((c) => ({ ...c, added: m.skills.some((x) => x.name === c.name) })),
+        departments: PRESETS_FILE.departments
+          .map((d) => d.name)
+          .filter((d) => SKILL_CATALOG.some((c) => c.departments.includes(d))),
+      });
+    if (/^\/skills\/catalog\/[\w-]+$/.test(path)) {
+      const c = SKILL_CATALOG.find((x) => x.name === path.split("/")[3]);
+      if (!c) return ok({ error: "That skill is not in the catalog." }, 404);
+      if (method === "GET")
+        return ok({
+          ...c,
+          added: m.skills.some((x) => x.name === c.name),
+          skill_md: readFileSync(`${catalogDir(c.builtin)}/${c.name}/SKILL.md`, "utf8"),
+        });
+      if (m.skills.some((x) => x.name === c.name))
+        return ok({ error: `You already have the skill ${c.name}.`, fix: "Remove it under Yours first." }, 409);
+      const b = (body ?? {}) as { roles?: string[] };
+      const skill = {
+        name: c.name,
+        description: c.description,
+        roles: b.roles ?? ["vaic", "orchestrator", "manager", "worker"],
+        enabled: true,
+        version: "v1",
+        files: [{ path: "SKILL.md", size: 10 }],
+        size_bytes: 10,
+        source: "catalog",
+        updated_at: at(),
+      };
+      m.skills = [...m.skills, skill];
+      return ok({ skill, removed_frontmatter: [] }, 201);
+    }
     if (/^\/skills\/[\w-]+$/.test(path) && method === "PUT") {
-      Object.assign(m.skills[0]!, body);
-      return ok({ skill: m.skills[0] });
+      const sk = m.skills.find((x) => x.name === path.split("/")[2])!;
+      Object.assign(sk, body);
+      return ok({ skill: sk });
     }
     if (/^\/skills\/[\w-]+$/.test(path) && method === "DELETE") {
-      m.skills = [];
+      m.skills = m.skills.filter((x) => x.name !== path.split("/")[2]);
       return ok({ ok: true });
     }
     if (path === "/features") return ok({ features: m.features });

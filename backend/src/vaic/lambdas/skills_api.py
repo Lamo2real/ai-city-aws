@@ -16,6 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from vaic.shared import skills_catalog
 from vaic.shared.events import now_iso
 from vaic.shared.ledger import Ledger
 from vaic.shared.log import log
@@ -37,6 +38,7 @@ from vaic.shared.skills import (
 from vaic.shared.table import UpdateOptions
 
 Answer = tuple[int, Any]
+RESERVED = "catalog"  # /skills/catalog is Discover (decision 188)
 
 
 @dataclass
@@ -100,6 +102,8 @@ def prepare(b: dict[str, Any]) -> tuple[str, str, dict[str, bytes], list[str]]:
     name = kept.get("name") or (given if isinstance(given, str) else "")
     if not NAME_RE.match(name or ""):
         raise SkillInvalid("The name must be lower-case letters, digits and dashes (at most 64).")
+    if name == RESERVED:
+        raise SkillInvalid(f"{RESERVED} is the name of Discover's catalog; pick another name.")
     if isinstance(given, str) and given and given != name:
         raise SkillInvalid(f"The name {given[:64]} doesn't match the SKILL.md name {name}.")
     description = kept.get("description", "").strip()
@@ -134,13 +138,59 @@ async def _delete_objects(s: SkillsApi, row: dict[str, Any]) -> None:
         log("warn", "skills.delete_failed", skill=row["name"], error=type(e).__name__)
 
 
-async def route(s: SkillsApi, method: str, seg: list[str], body: Callable[[], dict[str, Any]]) -> Answer | None:
-    if not seg or seg[0] != "skills" or len(seg) > 2:
+async def route(
+    s: SkillsApi,
+    method: str,
+    seg: list[str],
+    body: Callable[[], dict[str, Any]],
+    query: dict[str, str] | None = None,
+) -> Answer | None:
+    if not seg or seg[0] != "skills" or len(seg) > 3:
         return None
     try:
+        if len(seg) >= 2 and seg[1] == RESERVED:
+            return await _catalog(s, method, seg[2:], body, query or {})
+        if len(seg) > 2:
+            return None
         return await _route(s, method, seg, body)
     except SkillInvalid as e:
         return _err(400, str(e))
+
+
+async def _catalog(
+    s: SkillsApi, method: str, rest: list[str], body: Callable[[], dict[str, Any]], query: dict[str, str]
+) -> Answer | None:
+    """Discover (decision 188): ``GET /skills/catalog[?q=&department=]``, ``GET /skills/catalog/<name>`` (with its
+    SKILL.md) and ``POST /skills/catalog/<name>`` (add it: the same path as an upload)."""
+    table = s.ledger.table
+    if not rest and method == "GET":
+        have = {r["name"] for r in await table.query(PK, "SKILL#")}
+        found = skills_catalog.search(str(query.get("q") or ""), str(query.get("department") or ""))
+        return 200, {
+            "skills": [{**e, "added": e["name"] in have} for e in found],
+            "departments": skills_catalog.departments(),
+        }
+    if len(rest) != 1:
+        return None
+    e = skills_catalog.find(rest[0])
+    if not e:
+        return _err(404, "That skill is not in the catalog.", "GET /skills/catalog?q=<words> lists what is.")
+    mine = await table.get(PK, sk(e["name"]))
+    if method == "GET":
+        return 200, {**e, "added": mine is not None, "skill_md": skills_catalog.skill_md(e)}
+    if method != "POST":
+        return None
+    if mine:
+        return _err(
+            409,
+            f"You already have the skill {e['name']}.",
+            "It is under Yours. Remove it there first to add the catalog's version.",
+        )
+    if s.s3 is None or not s.bucket:
+        return _err(503, "Skills can't be stored yet.", "The owner deploys the skills bucket first.")
+    b = body() or {}
+    files = [{"path": p, "content_base64": base64.b64encode(v).decode()} for p, v in skills_catalog.files(e).items()]
+    return await _upload(s, {"files": files, "roles": b.get("roles")}, source="catalog")
 
 
 async def _route(s: SkillsApi, method: str, seg: list[str], body: Callable[[], dict[str, Any]]) -> Answer | None:
@@ -188,7 +238,7 @@ async def _route(s: SkillsApi, method: str, seg: list[str], body: Callable[[], d
     return None
 
 
-async def _upload(s: SkillsApi, b: dict[str, Any]) -> Answer:
+async def _upload(s: SkillsApi, b: dict[str, Any], source: str = "upload") -> Answer:
     name, description, files, removed = prepare(b)
     table = s.ledger.table
     old = await table.get(PK, sk(name))
@@ -205,6 +255,7 @@ async def _upload(s: SkillsApi, b: dict[str, Any]) -> Answer:
             {"path": p, "size": len(v), "sha256": hashlib.sha256(v).hexdigest()} for p, v in sorted(files.items())
         ],
         "size_bytes": sum(len(v) for v in files.values()),
+        "source": source,
         "updated_at": at,
     }
     await _put_objects(s, name, version, files)
@@ -217,5 +268,5 @@ async def _upload(s: SkillsApi, b: dict[str, Any]) -> Answer:
         row = {"pk": PK, "sk": sk(name), "created_at": at, **fields}
         if not await table.put(row, if_not_exists=True):
             return _err(409, "Someone added this skill at the same moment.", "Try again.")
-    log("info", "skills.saved", skill=name, files=len(files), removed=len(removed))
+    log("info", "skills.saved", skill=name, files=len(files), removed=len(removed), source=source)
     return 201, {"skill": public(row), "removed_frontmatter": removed}

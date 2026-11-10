@@ -6849,3 +6849,77 @@ a.btn-primary.chat-file-dl,
     transition: none;
   }
 }
+
+/* ---------- Skills: Yours | Discover (decision 188), built from Settings → Connectors' pieces ---------- */
+.skills-screen .hub-top {
+  margin-top: var(--s4);
+}
+.skill-name {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--gtext);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  min-height: 24px;
+}
+.skill-name:hover {
+  text-decoration: underline;
+}
+.skill-from {
+  margin: 0;
+  font-size: var(--fs-xs);
+}
+.skill-icon .hub-mono {
+  font-size: 1.1em;
+}
+.skill-feature {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+  margin-bottom: var(--s4);
+  padding: var(--s5);
+  border: 1px solid var(--edge-2);
+  border-radius: var(--rg);
+  background: var(--glass-3);
+  box-shadow: var(--glow);
+}
+.skill-feature h2 {
+  margin: 0 0 var(--s2);
+}
+.skill-feature p {
+  margin: 0 0 var(--s3);
+  max-width: var(--measure);
+}
+.skill-feature .skill-feature-kicker {
+  margin: 0 0 var(--s1);
+  font-size: var(--fs-xs);
+  color: var(--gmute);
+}
+.skill-feature .row {
+  align-items: center;
+}
+.skill-detail {
+  width: min(640px, 100%);
+}
+.skill-detail h3 {
+  margin: var(--s4) 0 var(--s2);
+}
+.skill-detail .skill-preview {
+  max-height: 22rem;
+}
+.skill-detail .row-end {
+  align-items: center;
+  flex-wrap: wrap;
+}
+@media (max-width: 599px) {
+  .skill-feature {
+    padding: var(--s4);
+  }
+  .skill-feature > .skill-icon {
+    display: none;
+  }
+}

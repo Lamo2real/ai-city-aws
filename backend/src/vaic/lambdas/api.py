@@ -155,6 +155,9 @@ ROUTES: list[tuple[str, str]] = [
     ("GET", "/skills/pdf-report"),
     ("PUT", "/skills/pdf-report"),
     ("DELETE", "/skills/pdf-report"),
+    ("GET", "/skills/catalog"),
+    ("GET", "/skills/catalog/nda-triage"),
+    ("POST", "/skills/catalog/nda-triage"),
     ("GET", "/mail/accounts"),
     ("POST", "/mail/accounts"),
     ("PUT", "/mail/accounts/ma-0000aaaa"),
@@ -1085,7 +1088,9 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         if found:
             return reply(*found)
     if seg and seg[0] == "skills":
-        found = await skills_route(d.skills or SkillsApi(d.ledger), method, seg, lambda: _body(event))
+        found = await skills_route(
+            d.skills or SkillsApi(d.ledger), method, seg, lambda: _body(event), event.get("queryStringParameters") or {}
+        )
         if found:
             return reply(*found)
     if path == "/knowledge" or path.startswith("/knowledge/"):

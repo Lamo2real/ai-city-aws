@@ -27,10 +27,12 @@ test("adding a skill: pick a SKILL.md, see what's dropped, choose who may use it
 }) => {
   const m = await mockBackend(page);
   await page.goto("/#/skills");
-  await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Skills", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Yours", exact: true }).click();
   await expect(page.getByText("No skills yet.")).toBeVisible();
   expect(await primaries(page)).toBeLessThanOrEqual(1);
-  await page.getByRole("button", { name: "Add skill" }).click();
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByRole("menuitem", { name: /Upload a skill/ }).click();
   await page
     .getByLabel("Choose a SKILL.md")
     .setInputFiles({ name: "SKILL.md", mimeType: "text/markdown", buffer: Buffer.from(SKILL) });
@@ -52,8 +54,8 @@ test("adding a skill: pick a SKILL.md, see what's dropped, choose who may use it
   await expect
     .poll(() => m.calls.find((c) => c.path === "/skills/pdf-report" && c.method === "PUT")?.body)
     .toEqual({ roles: ["vaic", "manager"] });
-  await card.getByRole("button", { name: "Delete…" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Delete skill" }).click();
+  await card.getByRole("button", { name: "Remove…" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Remove skill" }).click();
   await expect.poll(() => m.calls.some((c) => c.path === "/skills/pdf-report" && c.method === "DELETE")).toBe(true);
   await expect(page.getByText("No skills yet.")).toBeVisible();
 });

@@ -241,6 +241,8 @@ export interface Skill {
   files: Array<{ path: string; size: number }>;
   size_bytes: number;
   updated_at: string;
+  /** "catalog" when it was added from Discover (decision 188); uploads and older skills say "upload" or nothing. */
+  source?: "upload" | "catalog";
 }
 export const SKILL_LIMITS = { files: 100, bytes: 4 * 1024 * 1024, description: 1024, path: 200 };
 const NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -325,6 +327,44 @@ export const uploadSkill = (files: SkillFile[], roles: Role[], name?: string) =>
 export const editSkill = (name: string, patch: { roles?: Role[]; enabled?: boolean }) =>
   api<{ skill: Skill }>(`/skills/${name}`, { method: "PUT", body: patch });
 export const removeSkill = (name: string) => api(`/skills/${name}`, { method: "DELETE" });
+
+// ---------- Skills → Discover (decision 188) ----------
+/** A skill the owner can add in one tap: the AI City catalog, or a department's built-in skill. */
+export interface CatalogSkill {
+  name: string;
+  title: string;
+  description: string;
+  /** Who it is for (catalog) or who already uses it (built-in): the City's department names. */
+  departments: string[];
+  source: string;
+  builtin: boolean;
+  featured: boolean;
+  files: number;
+  added: boolean;
+}
+export const listSkillCatalog = () => api<{ skills: CatalogSkill[]; departments: string[] }>("/skills/catalog");
+export const getCatalogSkill = (name: string) => api<CatalogSkill & { skill_md: string }>(`/skills/catalog/${name}`);
+/** Adds it exactly as an upload would (same checks and storage); every role may use it unless roles say otherwise. */
+export const addCatalogSkill = (name: string, roles?: Role[]) =>
+  api<{ skill: Skill; removed_frontmatter: string[] }>(`/skills/catalog/${name}`, {
+    method: "POST",
+    body: roles ? { roles } : {},
+  });
+const EVERY = "Every department";
+/** Discover's search and department filter: every word must match; "Every department" skills match any department. */
+export function filterCatalog(list: CatalogSkill[], q: string, department: string | null): CatalogSkill[] {
+  const fold = (s: string) =>
+    s
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+  const words = fold(q).split(/\s+/).filter(Boolean);
+  return list.filter((s) => {
+    if (department && !s.departments.includes(department) && !s.departments.includes(EVERY)) return false;
+    const hay = fold([s.name, s.title, s.description, s.source, ...s.departments].join(" "));
+    return words.every((w) => hay.includes(w));
+  });
+}
 
 /** Files picked from a folder (webkitdirectory) or one SKILL.md, with the top folder name removed. */
 export async function filesFromPicker(list: FileList | File[]): Promise<SkillFile[]> {

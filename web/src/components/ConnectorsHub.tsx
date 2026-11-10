@@ -17,13 +17,11 @@ import {
   matches,
   rowStatus,
   settling,
-  skillMarkdown,
   type CatalogItem,
   type Kit,
 } from "../lib/catalog.ts";
 import {
   addConnectorByUrl,
-  checkSkill,
   editConnector,
   editSkill,
   fillUrl,
@@ -38,7 +36,6 @@ import {
   removeSkill,
   ROLE_LABEL,
   ROLES,
-  uploadSkill,
   type Connector,
   type MailAccount,
   type PresetConnector,
@@ -49,7 +46,7 @@ import {
 import { KeyCard, SignInCard } from "./ConnectCard.tsx";
 import { loadGitHub, type GitHubStatus } from "./GitHubSettings.tsx";
 import { AddMailAccount, MailAccountCard, MailSettings } from "./MailAccounts.tsx";
-import { AddSkill, RolePicker } from "./SkillsScreen.tsx";
+import { AddSkill, RolePicker, WriteSkill } from "./SkillsScreen.tsx";
 import { Banner, Button, Confirm, errorText, LiveDot, PlusIcon, toast } from "./ui.tsx";
 import { Select } from "./Select.tsx";
 
@@ -760,72 +757,6 @@ function AddByLink(p: { onDone: () => void; reload: () => Promise<unknown> }) {
         </Button>
       </div>
     </div>
-  );
-}
-
-function WriteSkill(p: { onAdded: () => void; onCancel: () => void }) {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [body, setBody] = useState("");
-  const [roles, setRoles] = useState<Role[]>([...ROLES]);
-  const [problem, setProblem] = useState<string | null>(null);
-  const bytes = new TextEncoder().encode(skillMarkdown(name, description, body));
-  const touched = !!(name || description || body);
-  const problems = touched ? checkSkill([{ path: "SKILL.md", bytes }]) : [];
-  if (touched && !body.trim()) problems.push("Write the instructions the agents should follow.");
-  if (touched && !roles.length) problems.push("Pick at least one role that may use it.");
-  return (
-    <article className="card" aria-labelledby="write-skill">
-      <h3 id="write-skill">Write a skill</h3>
-      <label className="field">
-        Name (lowercase, dashes)
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value.trim().toLowerCase())}
-          placeholder="weekly-report"
-        />
-      </label>
-      <label className="field">
-        When to use it (one sentence)
-        <input
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Use when writing the Friday report for the team"
-        />
-      </label>
-      <label className="field">
-        Instructions
-        <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={8} placeholder="1. Start with…" />
-      </label>
-      <RolePicker value={roles} onChange={setRoles} legend="Who may use it" />
-      {problems.map((x) => (
-        <p key={x} className="field-error" role="alert">
-          {x}
-        </p>
-      ))}
-      {problem ? <Banner tone="bad">{problem}</Banner> : null}
-      <div className="row-end">
-        <Button variant="quiet" onClick={p.onCancel}>
-          Cancel
-        </Button>
-        <Button
-          variant="secondary"
-          disabled={!touched || problems.length > 0}
-          onClick={async () => {
-            setProblem(null);
-            try {
-              const r = await uploadSkill([{ path: "SKILL.md", bytes }], roles);
-              toast({ text: `Skill ${r.skill.name} saved. Agents can use it from their next turn.`, tone: "good" });
-              p.onAdded();
-            } catch (e) {
-              setProblem(errorText(e, "Not saved. Try again."));
-            }
-          }}
-        >
-          Save skill
-        </Button>
-      </div>
-    </article>
   );
 }
 

@@ -1,0 +1,47 @@
+{
+  "$comment": "Skills -> Discover (decision 188): the curated catalog the owner browses and adds in one tap. Each entry is agents/skill-catalog/<name>/SKILL.md, written for AI City; departments are the City's own names (config/departments.json) and say who it is for. Adding one installs it exactly as an uploaded skill (same checks, roles and storage). The City's built-in department skills (agents/skills) are listed next to these by the API. 'featured' is the banner.",
+  "featured": "weekly-status-report",
+  "skills": [
+    { "name": "cash-flow-runway", "title": "Cash flow and runway", "departments": ["Finance"] },
+    { "name": "unit-economics", "title": "Unit economics", "departments": ["Finance", "Product"] },
+    { "name": "board-financial-update", "title": "Monthly financial update", "departments": ["Finance"] },
+    { "name": "release-notes", "title": "Release notes", "departments": ["Product", "Application"] },
+    {
+      "name": "pricing-and-packaging",
+      "title": "Pricing and packaging",
+      "departments": ["Product", "Sales", "Finance"]
+    },
+    { "name": "spec-review", "title": "Spec review", "departments": ["Product", "Application"] },
+    { "name": "weekly-status-report", "title": "Weekly status report", "departments": ["Operations"] },
+    { "name": "meeting-actions", "title": "Meeting notes to actions", "departments": ["Operations"] },
+    {
+      "name": "onboarding-checklist",
+      "title": "Onboarding checklist",
+      "departments": ["Operations", "Customer Support"]
+    },
+    { "name": "press-release", "title": "Press release", "departments": ["Marketing"] },
+    { "name": "landing-page-copy", "title": "Landing page copy", "departments": ["Marketing"] },
+    { "name": "brand-voice-check", "title": "Brand voice check", "departments": ["Marketing", "Media"] },
+    { "name": "discovery-call-prep", "title": "Discovery call prep", "departments": ["Sales"] },
+    { "name": "win-loss-review", "title": "Win/loss review", "departments": ["Sales"] },
+    { "name": "competitor-teardown", "title": "Competitor teardown", "departments": ["Research", "Marketing"] },
+    { "name": "source-check", "title": "Source check", "departments": ["Research"] },
+    { "name": "nda-triage", "title": "NDA triage", "departments": ["Legal"] },
+    { "name": "name-and-trademark-check", "title": "Name and trademark screen", "departments": ["Legal"] },
+    { "name": "sql-review", "title": "SQL review", "departments": ["Data & AI"] },
+    { "name": "data-quality-check", "title": "Data quality check", "departments": ["Data & AI"] },
+    { "name": "kpi-definitions", "title": "KPI definitions", "departments": ["Data & AI", "Operations"] },
+    { "name": "ux-copy-review", "title": "UX copy review", "departments": ["Media", "Product"] },
+    { "name": "accessibility-audit", "title": "Accessibility audit", "departments": ["Media", "Application"] },
+    { "name": "design-critique", "title": "Design critique", "departments": ["Media", "Product"] },
+    { "name": "code-review-checklist", "title": "Code review", "departments": ["Application"] },
+    { "name": "postmortem-writeup", "title": "Postmortem", "departments": ["IT Infrastructure", "Application"] },
+    { "name": "api-design-review", "title": "API design review", "departments": ["Application"] },
+    {
+      "name": "dependency-upgrades",
+      "title": "Dependency upgrades",
+      "departments": ["Application", "IT Infrastructure"]
+    },
+    { "name": "escalation-summary", "title": "Escalation summary", "departments": ["Customer Support"] }
+  ]
+}

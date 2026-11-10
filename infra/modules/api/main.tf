@@ -256,6 +256,8 @@ locals {
     "GET /connectors", "POST /connectors", "PUT /connectors/{id}", "DELETE /connectors/{id}", "POST /connectors/{id}/login",
     "POST /connectors/{id}/login/complete", "PUT /connectors/{id}/key", "POST /connectors/{id}/refresh",
     "GET /skills", "POST /skills", "GET /skills/{name}", "PUT /skills/{name}", "DELETE /skills/{name}",
+    # Skills → Discover (decision 188): the bundled catalog, one skill with its SKILL.md, and adding one.
+    "GET /skills/catalog", "GET /skills/catalog/{name}", "POST /skills/catalog/{name}",
     "GET /mail/accounts", "POST /mail/accounts", "PUT /mail/accounts/{id}", "DELETE /mail/accounts/{id}",
     "POST /mail/accounts/{id}/signin", "POST /mail/accounts/{id}/complete", "POST /mail/accounts/{id}/imap",
     "GET /mail/rules", "POST /mail/rules", "DELETE /mail/rules/{id}",
