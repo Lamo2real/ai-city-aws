@@ -15,11 +15,11 @@ describe("when VAIC speaks its reply", () => {
     expect(shouldSpeak("never", true)).toBe(false);
   });
   it("an owner who had muted replies before stays muted; the old 'on' becomes the new default", () => {
-    localStorage.setItem("aic.sound", "off");
+    localStorage.setItem("vaic.sound", "off");
     expect(readSpeakMode()).toBe("never");
-    localStorage.setItem("aic.sound", "on");
+    localStorage.setItem("vaic.sound", "on");
     expect(readSpeakMode()).toBe("auto");
-    localStorage.setItem("aic.speak", "always");
+    localStorage.setItem("vaic.speak", "always");
     expect(readSpeakMode()).toBe("auto"); // "always" is gone with the voice button (decision 112): typed is text
   });
 });

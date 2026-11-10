@@ -30,7 +30,7 @@ const ticket = (extra: Partial<SupportTicket> = {}): SupportTicket => ({
 
 let answer: () => Response = () => new Response(JSON.stringify({ board: "AI City tickets", tickets: [] }));
 const fetchMock = vi.fn(async (url: string) => {
-  if (url === "/config.json") return new Response(JSON.stringify({ apiUrl: "https://api.aic.test" }));
+  if (url === "/config.json") return new Response(JSON.stringify({ apiUrl: "https://api.vaic.test" }));
   if (url.endsWith("/support-tickets")) return answer();
   return new Response("{}", { status: 404 });
 });
@@ -38,7 +38,7 @@ const fetchMock = vi.fn(async (url: string) => {
 beforeAll(async () => {
   vi.stubGlobal("fetch", fetchMock);
   await loadConfig();
-  (window as unknown as { __aicAuth: unknown }).__aicAuth = { idToken: async () => "header.payload.sig" };
+  (window as unknown as { __vaicAuth: unknown }).__vaicAuth = { idToken: async () => "header.payload.sig" };
 });
 beforeEach(() => {
   support.state = { tickets: {}, loaded: false, error: false };

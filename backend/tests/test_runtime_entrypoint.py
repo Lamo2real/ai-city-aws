@@ -1,4 +1,4 @@
-"""The runtime container starts with ``python -m aic.runtime.server``. A definition placed after the
+"""The runtime container starts with ``python -m vaic.runtime.server``. A definition placed after the
 ``__main__`` guard, or anything else that only breaks when the module runs as a script, crashes every
 AgentCore runtime at deploy time while the import-based tests stay green. So: run it the real way."""
 
@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-SERVER = ROOT / "backend" / "src" / "aic" / "runtime" / "server.py"
+SERVER = ROOT / "backend" / "src" / "vaic" / "runtime" / "server.py"
 
 
 def test_the_main_guard_is_the_last_statement_of_the_server_module() -> None:
@@ -31,7 +31,7 @@ def _free_port() -> int:
         return int(s.getsockname()[1])
 
 
-@pytest.mark.parametrize("role", ["ace", "worker"])
+@pytest.mark.parametrize("role", ["vaic", "worker"])
 def test_the_runtime_starts_as_a_script_and_answers_ping(role: str) -> None:
     pytest.importorskip("uvicorn")
     pytest.importorskip("starlette")
@@ -42,20 +42,20 @@ def test_the_runtime_starts_as_a_script_and_answers_ping(role: str) -> None:
         "PYTHONPATH": str(ROOT / "backend" / "src"),
         "PYTHONUNBUFFERED": "1",
         "PORT": str(port),
-        "AIC_ROLE": role,
-        "AIC_REGION": "eu-north-1",
-        "AIC_LEDGER_TABLE": "t",
-        "AIC_EVENT_BUS": "b",
-        "AIC_QUEUE_ACE": "q",
-        "AIC_QUEUE_ORCHESTRATOR": "q",
-        "AIC_QUEUE_MANAGER": "q",
-        "AIC_QUEUE_WORKER": "q",
-        "AIC_FACTORY_FUNCTION": "f",
-        "AIC_WORKSPACES_BUCKET": "w",
-        "AIC_WORKSPACE_ROLE_ARN": "arn:aws:iam::111122223333:role/w",
-        "AIC_PROFILE_PREFIX": "global",
-        "AIC_CONFIG_DIR": str(ROOT / "config"),
-        "AIC_AGENTS_DIR": str(ROOT / "agents"),
+        "VAIC_ROLE": role,
+        "VAIC_REGION": "eu-north-1",
+        "VAIC_LEDGER_TABLE": "t",
+        "VAIC_EVENT_BUS": "b",
+        "VAIC_QUEUE_VAIC": "q",
+        "VAIC_QUEUE_ORCHESTRATOR": "q",
+        "VAIC_QUEUE_MANAGER": "q",
+        "VAIC_QUEUE_WORKER": "q",
+        "VAIC_FACTORY_FUNCTION": "f",
+        "VAIC_WORKSPACES_BUCKET": "w",
+        "VAIC_WORKSPACE_ROLE_ARN": "arn:aws:iam::111122223333:role/w",
+        "VAIC_PROFILE_PREFIX": "global",
+        "VAIC_CONFIG_DIR": str(ROOT / "config"),
+        "VAIC_AGENTS_DIR": str(ROOT / "agents"),
         "CLAUDE_CODE_USE_BEDROCK": "1",
         "CLAUDE_CODE_DISABLE_1M_CONTEXT": "1",
         "AWS_ACCESS_KEY_ID": "AKIAFAKE",
@@ -64,7 +64,7 @@ def test_the_runtime_starts_as_a_script_and_answers_ping(role: str) -> None:
     if role == "worker":
         env["CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"] = "1"
     p = subprocess.Popen(
-        [sys.executable, "-m", "aic.runtime.server"],
+        [sys.executable, "-m", "vaic.runtime.server"],
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,

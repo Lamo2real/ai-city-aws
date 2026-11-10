@@ -15,7 +15,7 @@ Links like `#/settings/connectors` open that page in the app.
   task. "Run my business" and standing orders are switches you turn on yourself.
 
 ## Getting around (the top bar)
-- **VAIC** `#/ace`: talk to VAIC by typing or by voice.
+- **VAIC** `#/vaic`: talk to VAIC by typing or by voice.
 - **City** `#/city`: the city map. Watch your agents work, see each department's tower, and open Features.
 - **Work** `#/tickets`: every job. The tabs are Working now, Finished, Decided for you, Tickets (customer support)
   and Sales pipeline.

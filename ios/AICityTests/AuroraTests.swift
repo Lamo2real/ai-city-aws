@@ -5,7 +5,7 @@ import XCTest
 final class AuroraTests: XCTestCase {
     func testTheLightIsForWhoeverTalksAndNothingShowsWhenNobodyDoes() {
         XCTAssertEqual(Aurora.speaker(listening: true, speaking: true, presence: .thinking, askedByVoice: false), .you, "the owner talking wins")
-        XCTAssertEqual(Aurora.speaker(listening: false, speaking: true, presence: .speaking, askedByVoice: true), .aic)
+        XCTAssertEqual(Aurora.speaker(listening: false, speaking: true, presence: .speaking, askedByVoice: true), .vaic)
         XCTAssertEqual(Aurora.speaker(listening: false, speaking: false, presence: .thinking, askedByVoice: true), .thinking)
         XCTAssertEqual(Aurora.speaker(listening: false, speaking: false, presence: .thinking, askedByVoice: false), .idle, "a typed message stays quiet")
         XCTAssertEqual(Aurora.speaker(listening: false, speaking: false, presence: .idle, askedByVoice: true), .idle)
@@ -13,14 +13,14 @@ final class AuroraTests: XCTestCase {
 
     func testVoiceOverHearsWhoIsTalkingOnTheVoiceButton() {
         XCTAssertEqual(Aurora.words(.you), "You’re talking")
-        XCTAssertEqual(Aurora.words(.aic), "VAIC is talking")
+        XCTAssertEqual(Aurora.words(.vaic), "VAIC is talking")
         XCTAssertEqual(Aurora.words(.thinking), "VAIC is thinking")
         XCTAssertEqual(Aurora.words(.idle), "")
     }
 
     func testTheLevelFollowsTheRightVoice() {
         XCTAssertEqual(Aurora.target(.you, input: 0.5, output: 0.9, t: 0), 0.65, accuracy: 0.0001)
-        XCTAssertEqual(Aurora.target(.aic, input: 0.5, output: 0.2, t: 0), 0.26, accuracy: 0.0001)
+        XCTAssertEqual(Aurora.target(.vaic, input: 0.5, output: 0.2, t: 0), 0.26, accuracy: 0.0001)
         XCTAssertEqual(Aurora.target(.you, input: 1, output: 0, t: 0), 1, "never above 1")
         XCTAssertEqual(Aurora.target(.idle, input: 1, output: 1, t: 0), 0)
         let breath = (0..<40).map { Aurora.target(.thinking, input: 0, output: 0, t: Double($0) * 0.1) }
@@ -62,19 +62,19 @@ final class AuroraTests: XCTestCase {
             }
             return (["accepted": true], 202)
         }
-        let model = AppModel(configStore: ConfigStore(defaults: UserDefaults(suiteName: "aic.tests.\(UUID().uuidString)")!, http: http, bundleHost: "site.example.test"),
+        let model = AppModel(configStore: ConfigStore(defaults: UserDefaults(suiteName: "vaic.tests.\(UUID().uuidString)")!, http: http, bundleHost: "site.example.test"),
                              hud: HudStore(archive: NoChatArchive()), http: http, makeAuth: { _ in FakeAuth() }, connectLive: false)
         await model.start()
         model.voice.volume = 0
         await model.send("typed")
         XCTAssertFalse(model.lastAskedByVoice)
-        model.hud.event(["type": "ace.reply", "conversation": "main", "text": "Text only.", "done": true])
+        model.hud.event(["type": "vaic.reply", "conversation": "main", "text": "Text only.", "done": true])
         XCTAssertFalse(model.voice.speaking)
         XCTAssertEqual(model.hud.presence, .idle)
         await model.send("spoken", byVoice: true)
         XCTAssertTrue(model.lastAskedByVoice)
         XCTAssertEqual(Aurora.speaker(listening: false, speaking: false, presence: model.hud.presence, askedByVoice: model.lastAskedByVoice), .thinking)
-        model.hud.event(["type": "ace.reply", "conversation": "main", "text": "Out loud.", "done": true])
+        model.hud.event(["type": "vaic.reply", "conversation": "main", "text": "Out loud.", "done": true])
         XCTAssertTrue(model.voice.speaking)
         XCTAssertGreaterThan(model.voice.outputLevel(), 0)
         model.voice.stopSpeaking()

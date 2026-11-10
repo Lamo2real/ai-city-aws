@@ -4,17 +4,17 @@ import json
 from datetime import timedelta
 from typing import Any
 
-from aic.lambdas.api import decide_approval, handle_http
-from aic.lambdas.approvals import on_approval_step
-from aic.lambdas.notifier import finished_job
-from aic.lambdas.scheduler import run_job
-from aic.runtime.tools import TurnCtx
-from aic.shared import standing_orders as so
-from aic.shared.chief_of_staff import LOOP_LIMIT, MAX_TRIES, review
-from aic.shared.table import UpdateOptions
 from test_api import Clock, FakeSfn, ev, js, make
 from test_apps import city_deps, tool
 from test_chief_of_staff import Model, _stuck_research, chief
+from vaic.lambdas.api import decide_approval, handle_http
+from vaic.lambdas.approvals import on_approval_step
+from vaic.lambdas.notifier import finished_job
+from vaic.lambdas.scheduler import run_job
+from vaic.runtime.tools import TurnCtx
+from vaic.shared import standing_orders as so
+from vaic.shared.chief_of_staff import LOOP_LIMIT, MAX_TRIES, review
+from vaic.shared.table import UpdateOptions
 
 
 async def _again(d: Any, model: Model, id: str) -> dict[str, Any]:
@@ -205,16 +205,16 @@ async def test_standing_order_routes_add_list_change_and_remove() -> None:
     assert (await handle_http(ev("DELETE", f"/standing-orders/{o['id']}"), d))["statusCode"] == 404
 
 
-async def test_aic_sets_up_lists_and_stops_a_standing_order() -> None:
+async def test_vaic_sets_up_lists_and_stops_a_standing_order() -> None:
     d = city_deps()
-    ace = TurnCtx(agent_id="ace", role="ace", department=None, ticket_id="", task_id="", from_owner=True)
-    out = await tool(d, ace, "add_standing_order")(
+    vaic = TurnCtx(agent_id="vaic", role="vaic", department=None, ticket_id="", task_id="", from_owner=True)
+    out = await tool(d, vaic, "add_standing_order")(
         {"source": "Slack #support", "instructions": "Reply to new support messages."}
     )
     assert "every 15 minutes the Customer Support department checks Slack #support" in out
     (o,) = await so.list_orders(d.ledger)
-    assert o["id"] in await tool(d, ace, "list_standing_orders")({})
-    assert "is off" in await tool(d, ace, "stop_standing_order")({"id": o["id"]})
+    assert o["id"] in await tool(d, vaic, "list_standing_orders")({})
+    assert "is off" in await tool(d, vaic, "stop_standing_order")({"id": o["id"]})
     assert (await so.get_order(d.ledger, o["id"]))["enabled"] is False  # type: ignore[index]
 
 
@@ -244,7 +244,7 @@ async def test_the_scheduler_runs_a_due_order_once_at_a_time_and_nothing_is_hand
 
 
 def test_a_standing_order_round_finishing_sends_no_push() -> None:
-    t = {"id": "t1", "goal": "g", "from": "ace", "to": "orchestrator", "status": "done", "department": None,
+    t = {"id": "t1", "goal": "g", "from": "vaic", "to": "orchestrator", "status": "done", "department": None,
          "parent_id": None, "kind": "task", "standing_order": "so-1", "created_at": "x", "updated_at": "x"}  # fmt: skip
     assert finished_job({"type": "ticket.status", "ticket": t, "previous": "in_progress", "at": "x"}) is None
     assert finished_job({"type": "ticket.status", "ticket": {**t, "standing_order": None}, "previous": "in_progress",
@@ -256,7 +256,7 @@ async def test_away_summary_says_what_finished_what_runs_what_was_decided_and_ha
     d = make()
     task, _ = await _stuck_research(d)
     await review(chief(d, Model({"decision": "answer", "answer": "Wait", "reason": "r"})))
-    done = await d.ledger.create_ticket({"goal": "Write the launch post", "from": "ace", "to": "orchestrator",
+    done = await d.ledger.create_ticket({"goal": "Write the launch post", "from": "vaic", "to": "orchestrator",
                                          "department": None, "parent_id": None, "kind": "task", "status": "done"})  # fmt: skip
     o = await so.add_order(d.ledger, {"source": "Jira SUP", "instructions": "Answer."})
     await so.record_handled(d.ledger, o["id"], "SUP-1", "Answered.", None)

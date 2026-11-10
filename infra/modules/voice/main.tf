@@ -1,4 +1,4 @@
-# AIC's voice through OpenAI text-to-speech (docs/VOICE.md, decision 96): the owner's OpenAI API key as a secret
+# VAIC's voice through OpenAI text-to-speech (docs/VOICE.md, decision 96): the owner's OpenAI API key as a secret
 # the api function may read (to call the speech API) and write (the owner pastes it in Settings → Voice).
 # Created empty by Terraform; every deploy applies without it, and /speech answers 503 until it is filled.
 # A voice service only: the agents stay on Anthropic models through Bedrock.
@@ -9,13 +9,13 @@ variable "api_role_name" { type = string }
 
 locals {
   tags        = { Component = "voice" }
-  secret_name = "aic/prod/openai"
+  secret_name = "vaic/prod/openai"
 }
 
 resource "aws_secretsmanager_secret" "openai" {
   #checkov:skip=CKV2_AWS_57:The owner issues and rotates the key in the OpenAI dashboard; there is no rotation Lambda to run.
   name                    = local.secret_name
-  description             = "OpenAI API key for AIC's spoken replies (text-to-speech only); pasted by the owner in Settings → Voice"
+  description             = "OpenAI API key for VAIC's spoken replies (text-to-speech only); pasted by the owner in Settings → Voice"
   kms_key_id              = var.kms_key_arn
   recovery_window_in_days = 7
   tags                    = local.tags

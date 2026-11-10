@@ -1,18 +1,18 @@
 // AI City iOS build settings. Public values only; no secrets ever go here (or anywhere in the app).
 //
-// AIC_SITE_HOST: the host of this AI City's web site (Terraform's `hud_url` output, the CloudFront address the
+// VAIC_SITE_HOST: the host of this AI City's web site (Terraform's `hud_url` output, the CloudFront address the
 // web HUD opens on). The app reads config.json from it, like the web HUD, so installing the app and signing in
 // is all there is: nobody types an address (decision 111). A build without it cannot start and says so.
-AIC_SITE_HOST = d2lcjbjaz1khxz.cloudfront.net
+VAIC_SITE_HOST = d2lcjbjaz1khxz.cloudfront.net
 
 // Signing: set your Apple team ID (Xcode → Settings → Accounts) and a bundle ID prefix that is yours.
 // A free personal team needs a bundle ID nobody else uses.
-AIC_TEAM_ID =
-AIC_BUNDLE_PREFIX = com.lamo2real
+VAIC_TEAM_ID =
+VAIC_BUNDLE_PREFIX = com.lamo2real
 
 // Notifications (a push when a large feature is done) need the Push Notifications capability, which only the
 // Apple Developer Program has; a free Personal Team refuses to sign an app that asks for it. With a program
-// team, set AIC_ENTITLEMENTS = Config/AICity-Push.entitlements (Xcode switches it to production for
+// team, set VAIC_ENTITLEMENTS = Config/AICity-Push.entitlements (Xcode switches it to production for
 // TestFlight). The simulator always has it.
-AIC_ENTITLEMENTS =
-AIC_ENTITLEMENTS[sdk=iphonesimulator*] = Config/AICity-Push.entitlements
+VAIC_ENTITLEMENTS =
+VAIC_ENTITLEMENTS[sdk=iphonesimulator*] = Config/AICity-Push.entitlements

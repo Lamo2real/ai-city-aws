@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from aic.shared.utility import wake_match
+from vaic.shared.utility import wake_match
 
 FIXTURE = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "wake-cases.json"
 

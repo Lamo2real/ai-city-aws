@@ -66,7 +66,7 @@ const fake: Voice = {
 let store: typeof import("../src/lib/store.ts").store;
 let useVoice: typeof import("../src/voice/useVoice.ts").useVoice;
 beforeAll(async () => {
-  window.__aicVoice = fake;
+  window.__vaicVoice = fake;
   ({ store } = await import("../src/lib/store.ts"));
   ({ useVoice } = await import("../src/voice/useVoice.ts"));
 });
@@ -81,7 +81,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 const reply = (text: string, done = true) =>
-  act(() => store.event({ type: "ace.reply", conversation: "main", text, done }));
+  act(() => store.event({ type: "vaic.reply", conversation: "main", text, done }));
 const hear = (text: string, startedAt?: number) => act(() => mic.onText?.(text, { startedAt }));
 /** Finishes the sentence playing now (the speaker reached its end). */
 const finishClip = () =>

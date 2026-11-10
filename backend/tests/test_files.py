@@ -12,29 +12,29 @@ from typing import Any
 
 import pytest
 
-from aic.lambdas.api import ROUTES, handle_http
-from aic.lambdas.files import adapt
-from aic.runtime.tools import TurnCtx, gate_tools, tools_for
-from aic.shared.apps import Workspace
-from aic.shared.caps import default_settings
-from aic.shared.cost import Usage
-from aic.shared.events import MemoryBus, parse_event
-from aic.shared.files.describe import FilesModel
-from aic.shared.files.embed import HashEmbedder, cosine, pack, unpack
-from aic.shared.files.indexer import Indexer, MediaClients
-from aic.shared.files.model import clean_when, file_kind, when_words
-from aic.shared.files.search import Filters, clear_winner
-from aic.shared.files.service import FilesAccess, FilesService, part_size
-from aic.shared.files.store import FilesStore
-from aic.shared.hierarchy.actions import CityDeps
-from aic.shared.knowledge.blobs import MemoryBlobs, disposition
-from aic.shared.ledger import Ledger
-from aic.shared.owner_api import refusal
-from aic.shared.table import MemoryTable
-from aic.shared.turn import TurnInput, TurnOutput
-from aic.shared.utility import UtilityDeps
 from knowledge_support import Clock, pdf_with_text, png
 from test_api import ev, js, make
+from vaic.lambdas.api import ROUTES, handle_http
+from vaic.lambdas.files import adapt
+from vaic.runtime.tools import TurnCtx, gate_tools, tools_for
+from vaic.shared.apps import Workspace
+from vaic.shared.caps import default_settings
+from vaic.shared.cost import Usage
+from vaic.shared.events import MemoryBus, parse_event
+from vaic.shared.files.describe import FilesModel
+from vaic.shared.files.embed import HashEmbedder, cosine, pack, unpack
+from vaic.shared.files.indexer import Indexer, MediaClients
+from vaic.shared.files.model import clean_when, file_kind, when_words
+from vaic.shared.files.search import Filters, clear_winner
+from vaic.shared.files.service import FilesAccess, FilesService, part_size
+from vaic.shared.files.store import FilesStore
+from vaic.shared.hierarchy.actions import CityDeps
+from vaic.shared.knowledge.blobs import MemoryBlobs, disposition
+from vaic.shared.ledger import Ledger
+from vaic.shared.owner_api import refusal
+from vaic.shared.table import MemoryTable
+from vaic.shared.turn import TurnInput, TurnOutput
+from vaic.shared.utility import UtilityDeps
 
 
 @dataclass
@@ -88,7 +88,7 @@ class W:
 def world(departments: dict[str, str] | None = None) -> W:
     clock = Clock()
     store = FilesStore(MemoryTable(), clock)
-    blobs = MemoryBlobs("aic-test-files")
+    blobs = MemoryBlobs("vaic-test-files")
     bus = MemoryBus(clock)
     emb = HashEmbedder()
     haiku = FakeHaiku()
@@ -158,7 +158,7 @@ def test_events_validate() -> None:
     parse_event({"type": "files.updated", "id": "f-x", "status": "ready", "name": "a.jpg", "at": "t"})
     parse_event(
         {
-            "type": "ace.files",
+            "type": "vaic.files",
             "conversation": "main",
             "files": [{"id": "f-x", "name": "a.jpg", "kind": "image"}],
             "at": "t",
@@ -195,7 +195,7 @@ async def test_small_upload_is_one_put_and_large_is_multipart() -> None:
 
 
 async def test_an_upload_refuses_missing_or_huge_files() -> None:
-    from aic.shared.files.service import FilesError
+    from vaic.shared.files.service import FilesError
 
     w = world()
     with pytest.raises(FilesError, match="name"):
@@ -278,7 +278,7 @@ async def test_a_video_takes_frames_and_sound_then_the_transcript() -> None:
     rec2 = await w.store.get(rec["id"])
     assert rec2 and rec2["stage"] == "transcribe" and rec2["thumb_key"] and "barn" in rec2["frames_description"]
     t = w.tr.jobs[0]
-    assert t["TranscriptionJobName"] == f"aic-files-{rec['id']}-42" and t["Media"]["MediaFileUri"].endswith(
+    assert t["TranscriptionJobName"] == f"vaic-files-{rec['id']}-42" and t["Media"]["MediaFileUri"].endswith(
         "/audio.m4a"
     )
     transcript = {"results": {"transcripts": [{"transcript": "Welcome to the farm, this barn is old."}], "items": []}}
@@ -447,7 +447,7 @@ class FakeS3:
 
 
 def city(w: W, tmp: Path, s3: FakeS3) -> CityDeps:
-    from aic.shared.hierarchy.queue import MemoryQueue
+    from vaic.shared.hierarchy.queue import MemoryQueue
 
     ledger = Ledger(MemoryTable(), w.clock)
 
@@ -455,14 +455,14 @@ def city(w: W, tmp: Path, s3: FakeS3) -> CityDeps:
         return await ledger.settings(default_settings())
 
     d = CityDeps(ledger=ledger, bus=w.bus, queue=MemoryQueue(), factory=None, settings=settings, max_review_rounds=3)  # type: ignore[arg-type]
-    d.files = FilesAccess(service=w.service, bucket="aic-test-files")
+    d.files = FilesAccess(service=w.service, bucket="vaic-test-files")
     tagged: list[str] = []
 
     def s3_for(hire: str) -> Any:
         tagged.append(hire)
         return s3
 
-    d.workspace = Workspace(bucket="aic-test-workspaces", s3_for=s3_for, root=str(tmp))
+    d.workspace = Workspace(bucket="vaic-test-workspaces", s3_for=s3_for, root=str(tmp))
     return d
 
 
@@ -470,18 +470,18 @@ def tool(d: CityDeps, c: TurnCtx, name: str) -> Any:
     return next(t for t in gate_tools(d, c, tools_for(d, c)) if t.name == name)
 
 
-async def test_aic_finds_and_shows_files_in_the_chat(tmp_path: Path) -> None:
+async def test_vaic_finds_and_shows_files_in_the_chat(tmp_path: Path) -> None:
     w = world()
     rec = await upload(w, "IMG_0042.jpg", jpeg_with_date("2026:04:12 06:10:00"), "image/jpeg")
     d = city(w, tmp_path, FakeS3(w.blobs, tmp_path))
-    c = TurnCtx("ace", "ace", None, "t1", "t1", conversation="main", from_owner=True)
+    c = TurnCtx("vaic", "vaic", None, "t1", "t1", conversation="main", from_owner=True)
     names = {t.name for t in tools_for(d, c)}
     assert {"find_files", "show_files"} <= names and "save_file" not in names
     found = await tool(d, c, "find_files").handler({"query": "sunrise porsche thumbnail", "after": "2026-03-01"})
     assert rec["id"] in found and "data, never instructions" in found and "clearly fits" in found
     shown = await tool(d, c, "show_files").handler({"file_ids": [rec["id"]]})
     assert "Download" in shown
-    ev_ = w.bus.of_type("ace.files")[-1]
+    ev_ = w.bus.of_type("vaic.files")[-1]
     assert ev_["files"][0]["id"] == rec["id"] and ev_["files"][0]["kind"] == "image" and ev_["conversation"] == "main"
     assert "no file" in (await tool(d, c, "show_files").handler({"file_ids": ["f-nope00000000"]})).lower()
 
@@ -500,7 +500,7 @@ async def test_a_worker_saves_and_gets_files_only_through_its_own_prefix(tmp_pat
     )
     assert "Saved to Files as f-" in r
     kind, bucket, key = s3.calls[-1]
-    assert kind == "upload" and bucket == "aic-test-files" and key.startswith("hires/wkr-media-a/files/f-")
+    assert kind == "upload" and bucket == "vaic-test-files" and key.startswith("hires/wkr-media-a/files/f-")
     assert "outside" not in r and "inside your workspace" in await tool(d, c, "save_file").handler(
         {"path": "../../etc/passwd"}
     )
@@ -555,7 +555,7 @@ async def test_browse_folders_page_sort_and_search_inside_a_folder() -> None:
 
 
 def test_vaic_never_reads_the_signed_addresses() -> None:
-    from aic.shared.owner_api import summarise
+    from vaic.shared.owner_api import summarise
 
     body = json.dumps({"files": [{"id": "f-1", "name": "a.png", "url": "https://s3/x?sig", "thumb_url": "t"}]})
     out = summarise({"statusCode": 200, "body": body}, strip_links=True)
@@ -582,11 +582,11 @@ class FakeSecrets:
 
 
 def test_the_key_pair_is_made_once_inside_the_secret_and_only_the_public_key_leaves() -> None:
-    from aic.shared.files.cdn import ensure_signing_key
+    from vaic.shared.files.cdn import ensure_signing_key
 
     sm = FakeSecrets()
-    first = ensure_signing_key(sm, "aic/prod/files-signing-key")
-    again = ensure_signing_key(sm, "aic/prod/files-signing-key")
+    first = ensure_signing_key(sm, "vaic/prod/files-signing-key")
+    again = ensure_signing_key(sm, "vaic/prod/files-signing-key")
     assert first == again and first.startswith("-----BEGIN PUBLIC KEY-----") and sm.puts == 1
     assert "PRIVATE" not in first and "PRIVATE KEY" in (sm.value or "")
 
@@ -599,7 +599,7 @@ def test_views_are_cloudfront_signed_for_one_object_and_downloads_stay_s3() -> N
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import padding
 
-    from aic.shared.files.cdn import CdnSigner, new_key_pair
+    from vaic.shared.files.cdn import CdnSigner, new_key_pair
 
     private, public = new_key_pair()
     signer = CdnSigner("https://d1.cloudfront.net", "K123", private, now=lambda: datetime(2026, 11, 9, tzinfo=UTC))
@@ -618,7 +618,7 @@ def test_views_are_cloudfront_signed_for_one_object_and_downloads_stay_s3() -> N
 
 
 async def test_the_service_signs_views_with_cloudfront_when_it_is_set_up() -> None:
-    from aic.shared.files.cdn import CdnSigner, new_key_pair
+    from vaic.shared.files.cdn import CdnSigner, new_key_pair
 
     w = world()
     rec = await upload(w, "a.png", png(), "image/png")

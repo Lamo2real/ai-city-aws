@@ -1,4 +1,4 @@
-// The owner-only HTTP API (backend/src/aic/lambdas/api.py) with the owner's ID token as a Bearer token.
+// The owner-only HTTP API (backend/src/vaic/lambdas/api.py) with the owner's ID token as a Bearer token.
 // Errors become plain sentences with a hint, never codes — like web/src/lib/api.ts.
 import Foundation
 

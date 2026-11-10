@@ -4,7 +4,7 @@ import XCTest
 
 final class TapFeedbackTests: XCTestCase {
     func testTheSettingIsOnUntilTheOwnerTurnsItOffAndIsKept() {
-        let suite = "aic.tests.tap.\(UUID().uuidString)"
+        let suite = "vaic.tests.tap.\(UUID().uuidString)"
         let d = UserDefaults(suiteName: suite)!
         XCTAssertTrue(TapSignal.isOn(d), "on by default")
         d.set(false, forKey: TapSignal.key)
@@ -13,7 +13,7 @@ final class TapFeedbackTests: XCTestCase {
         d.set(true, forKey: TapSignal.key)
         XCTAssertTrue(TapSignal.isOn(d))
         d.removePersistentDomain(forName: suite)
-        XCTAssertEqual(TapSignal.key, "aic.tapFeedback", "the Settings switch and the signal read the same key")
+        XCTAssertEqual(TapSignal.key, "vaic.tapFeedback", "the Settings switch and the signal read the same key")
     }
 
     func testOffMeansNothingAndReduceMotionOnlyHidesTheRings() {

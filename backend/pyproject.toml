@@ -1,7 +1,7 @@
 [project]
-name = "aic"
+name = "vaic"
 version = "0.2.0"
-description = "AI City (AIC) backend: shared core, Lambdas and the AgentCore runtime, in Python."
+description = "AI City (VAIC) backend: shared core, Lambdas and the AgentCore runtime, in Python."
 requires-python = ">=3.13"
 dependencies = [
   "boto3>=1.40",
@@ -17,14 +17,14 @@ dependencies = [
 [project.optional-dependencies]
 # Only the AgentCore runtime image needs these; Lambdas ship without them.
 runtime = [
-  "aws-sdk-bedrock-runtime>=0.12",  # Nova 2 Sonic's bidirectional stream: AIC's real-time voice (decision 120)
+  "aws-sdk-bedrock-runtime>=0.12",  # Nova 2 Sonic's bidirectional stream: VAIC's real-time voice (decision 120)
   # The duplex HTTP/2 transport Nova Sonic's bidirectional stream needs: the SDK's default (aiohttp) cannot stream
   # both ways ("UnsupportedTransportError ... does not support duplex", the owner's voice, 2026-11-09).
   "smithy-http[awscrt]>=0.3",
   "claude-agent-sdk>=0.1",
   "starlette>=0.47",
   "uvicorn>=0.35",
-  # uvicorn needs a WebSocket library to accept /ws (AIC's real-time voice): without one it treats the upgrade as a
+  # uvicorn needs a WebSocket library to accept /ws (VAIC's real-time voice): without one it treats the upgrade as a
   # plain request, Starlette answers 404 and AgentCore reports 424 (the owner's voice never connected, 2026-11-09).
   "websockets>=15.0",
 ]
@@ -42,7 +42,7 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/aic"]
+packages = ["src/vaic"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -72,7 +72,7 @@ ignore = [
 
 [tool.mypy]
 python_version = "3.13"
-packages = ["aic"]
+packages = ["vaic"]
 mypy_path = "src"
 strict = false
 check_untyped_defs = true

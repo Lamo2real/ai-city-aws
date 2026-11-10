@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run by deploy.yml (never from an agent session). Makes sure the Terraform state bucket exists, so the
 # owner only has to provide the OIDC deploy role.
-#   STATE_BUCKET  bucket name (deploy.yml: AIC_STATE_BUCKET, default lamo-labs-state-bucket)
+#   STATE_BUCKET  bucket name (deploy.yml: VAIC_STATE_BUCKET, default lamo-labs-state-bucket)
 #   AWS_REGION    region to create it in if it does not exist yet
 # An existing bucket is used as it is (its settings are not touched) and its own region is reported,
 # because the S3 backend must use the bucket's region. A missing bucket is created private, versioned,
@@ -36,7 +36,7 @@ elif printf '%s' "$err" | grep -q '404\|Not Found'; then
   aws s3api put-bucket-lifecycle-configuration --bucket "$BUCKET" --lifecycle-configuration \
     '{"Rules":[{"ID":"old-state-versions","Status":"Enabled","Filter":{},"NoncurrentVersionExpiration":{"NoncurrentDays":90},"AbortIncompleteMultipartUpload":{"DaysAfterInitiation":7}}]}'
   aws s3api put-bucket-tagging --bucket "$BUCKET" --tagging \
-    'TagSet=[{Key=Project,Value=ai-city},{Key=App,Value=aic},{Key=Environment,Value=prod},{Key=ManagedBy,Value=deploy.yml},{Key=CostCenter,Value=ai-city},{Key=Component,Value=terraform-state}]'
+    'TagSet=[{Key=Project,Value=ai-city},{Key=App,Value=vaic},{Key=Environment,Value=prod},{Key=ManagedBy,Value=deploy.yml},{Key=CostCenter,Value=ai-city},{Key=Component,Value=terraform-state}]'
   echo "Created ${BUCKET}."
 else
   echo "::error::State bucket ${BUCKET} exists but this role cannot use it (owned by another account, or missing s3 permissions): ${err}"

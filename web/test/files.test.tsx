@@ -1,5 +1,5 @@
 // Files (docs/FILES.md): the screen's reducer, uploads straight to S3 (single and multipart), the chat's file
-// cards (preview + Download, fresh addresses) and VAIC's `ace.files` event landing on its reply.
+// cards (preview + Download, fresh addresses) and VAIC's `vaic.files` event landing on its reply.
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as filesLib from "../src/lib/files.ts";
@@ -199,21 +199,21 @@ describe("files in the chat", () => {
     expect(screen.getByText(/no preview, download it to open/)).toBeTruthy();
   });
 
-  it("VAIC's ace.files lands on its reply, even when it comes before the first words", () => {
+  it("VAIC's vaic.files lands on its reply, even when it comes before the first words", () => {
     store.set({ chat: [], turn: null });
     store.beginTurn();
     store.event({
-      type: "ace.files",
+      type: "vaic.files",
       conversation: "main",
       files: [{ id: "f-aaaaaaaaaaaa", name: "a.jpg", kind: "image" }],
     });
-    store.event({ type: "ace.reply", conversation: "main", text: "Here it is, Sir.", done: true });
+    store.event({ type: "vaic.reply", conversation: "main", text: "Here it is, Sir.", done: true });
     const line = store.get().chat.at(-1)!;
     expect(line.text).toBe("Here it is, Sir.");
     expect(line.files?.map((f) => f.id)).toEqual(["f-aaaaaaaaaaaa"]);
     // A project's own chat is not the main chat.
     store.event({
-      type: "ace.files",
+      type: "vaic.files",
       conversation: "app-x",
       files: [{ id: "f-bbbbbbbbbbbb", name: "b", kind: "other" }],
     });
@@ -225,7 +225,7 @@ describe("references for a build (decision 154)", () => {
   it("the project chat shows the files a build uses, under their heading", async () => {
     const { projects } = await import("../src/lib/projects.ts");
     projects.event({
-      type: "ace.files",
+      type: "vaic.files",
       conversation: "app-habits",
       label: "References for this build",
       files: [{ id: "f-aaaaaaaaaaaa", name: "sunset.png", kind: "image" }],
@@ -238,7 +238,7 @@ describe("references for a build (decision 154)", () => {
   it("in the main chat a labelled set is its own line", () => {
     store.set({ chat: [], turn: null });
     store.event({
-      type: "ace.files",
+      type: "vaic.files",
       conversation: "main",
       label: "References for this build",
       files: [{ id: "f-aaaaaaaaaaaa", name: "a.png", kind: "image" }],

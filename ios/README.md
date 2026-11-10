@@ -24,10 +24,10 @@ Requires Xcode 26 or later; runs on iOS 17 or later.
 
 1. Open `ios/AICity.xcodeproj` in Xcode.
 2. Pick the **AICity** scheme and an iPhone simulator, then **Run** (⌘R).
-3. The app opens on the sign-in screen. Its AI City web address is built in (`AIC_SITE_HOST` in `Config/AICity.xcconfig`, the HUD's CloudFront host from Terraform's `hud_url` output); it reads `config.json` from there, like the web HUD. Nobody types an address (decision 111). A build with that setting empty cannot start and says so in one sentence.
+3. The app opens on the sign-in screen. Its AI City web address is built in (`VAIC_SITE_HOST` in `Config/AICity.xcconfig`, the HUD's CloudFront host from Terraform's `hud_url` output); it reads `config.json` from there, like the web HUD. Nobody types an address (decision 111). A build with that setting empty cannot start and says so in one sentence.
 4. Sign in with your email, password and 6-digit code, exactly as on the web. The first time, use the temporary password from the "Welcome to AI City" email.
 
-**Demo mode (Debug builds only):** in Xcode, *Product → Scheme → Edit Scheme → Run → Arguments*, add `-demo` to see the app with a made-up city and no AWS at all (`-demo -demo-voice you` or `-demo -demo-voice aic` shows the voice's light without a microphone; `-demo -signedout` shows the sign-in screens; the demo password `first` walks the first-login steps and the code is `123456`). `-demo -demo-cognito` uses the real sign-in code against a fake Cognito (any password, code `123456`, ID tokens that last 2 minutes) so you can quit and relaunch and see that you stay signed in; add `-reset` to start over. Release builds don't contain the demo.
+**Demo mode (Debug builds only):** in Xcode, *Product → Scheme → Edit Scheme → Run → Arguments*, add `-demo` to see the app with a made-up city and no AWS at all (`-demo -demo-voice you` or `-demo -demo-voice vaic` shows the voice's light without a microphone; `-demo -signedout` shows the sign-in screens; the demo password `first` walks the first-login steps and the code is `123456`). `-demo -demo-cognito` uses the real sign-in code against a fake Cognito (any password, code `123456`, ID tokens that last 2 minutes) so you can quit and relaunch and see that you stay signed in; add `-reset` to start over. Release builds don't contain the demo.
 
 Tests: *Product → Test* (⌘U), or
 
@@ -37,12 +37,12 @@ cd ios && xcodebuild test -project AICity.xcodeproj -scheme AICity -destination 
 
 ## Install it on your iPhone
 
-Installing is all there is: the app knows its AI City, so the first screen is sign-in (or the first-login steps). If the deployment ever moves to another address, change `AIC_SITE_HOST` and install again.
+Installing is all there is: the app knows its AI City, so the first screen is sign-in (or the first-login steps). If the deployment ever moves to another address, change `VAIC_SITE_HOST` and install again.
 
 ### Option A: free, with your Apple Account (no developer program)
 
 1. Xcode → **Settings → Accounts** → add your Apple Account. A "Personal Team" appears.
-2. In `Config/AICity.xcconfig` set `AIC_TEAM_ID` to that team's ID (Xcode shows it under the account; or pick the team in the target's *Signing & Capabilities* tab instead) and set `AIC_BUNDLE_PREFIX` to something only you use, for example `com.yourname`.
+2. In `Config/AICity.xcconfig` set `VAIC_TEAM_ID` to that team's ID (Xcode shows it under the account; or pick the team in the target's *Signing & Capabilities* tab instead) and set `VAIC_BUNDLE_PREFIX` to something only you use, for example `com.yourname`.
 3. Plug in the iPhone (or pair it over Wi-Fi), unlock it, and trust the Mac.
 4. On the iPhone: **Settings → Privacy & Security → Developer Mode → On** (it restarts).
 5. In Xcode pick your iPhone as the run destination and press **Run**.
@@ -55,7 +55,7 @@ With a free team the app stops opening after **7 days**; run it from Xcode again
 **Automatic:** follow `docs/IOS_TESTFLIGHT.md` once; then every change to `ios/` on `main` is built, tested and uploaded to TestFlight by `.github/workflows/ios-testflight.yml`, and the iPhone updates by itself. The manual way:
 
 
-1. Enroll at developer.apple.com, then set `AIC_TEAM_ID` to the program team and `AIC_BUNDLE_PREFIX` to your own reverse domain.
+1. Enroll at developer.apple.com, then set `VAIC_TEAM_ID` to the program team and `VAIC_BUNDLE_PREFIX` to your own reverse domain.
 2. In App Store Connect create an app with the bundle ID `<prefix>.aicity` (internal testing only is fine; it never needs to be public).
 3. In Xcode choose **Any iOS Device**, then **Product → Archive** → **Distribute App → TestFlight & App Store** → Upload.
 4. In App Store Connect → TestFlight, add yourself as an internal tester; install from the TestFlight app on the iPhone. Builds last 90 days.
@@ -75,7 +75,7 @@ The app declares `ITSAppUsesNonExemptEncryption = false` (it uses only Apple's H
 
 After the first sign-in the app asks, in one sentence, whether this iPhone should get a notification when the city finishes a **large feature** (never small steps). Allow it and the app registers with Apple's push service on every launch and sends the token to the backend (`POST /devices`); the push itself is sent by the backend through SNS → APNs when a top-level job finishes, with the job, outcome and cost in the text. Tapping it opens VAIC. Sign-out removes this iPhone from the backend; so does turning notifications off in iOS Settings. "Not now" is never asked again — Settings → Notifications offers it later.
 
-Real pushes need the **Push Notifications capability**, which only Apple Developer Program teams have (option B above): set `AIC_ENTITLEMENTS = Config/AICity-Push.entitlements` in `Config/AICity.xcconfig`. With a free personal team the app still builds and runs; Settings → Notifications explains that this build can't receive them. The simulator always has the entitlement and `xcrun simctl push booted <bundle-id> payload.json` shows a notification end to end, but a push from the real backend needs a real iPhone.
+Real pushes need the **Push Notifications capability**, which only Apple Developer Program teams have (option B above): set `VAIC_ENTITLEMENTS = Config/AICity-Push.entitlements` in `Config/AICity.xcconfig`. With a free personal team the app still builds and runs; Settings → Notifications explains that this build can't receive them. The simulator always has the entitlement and `xcrun simctl push booted <bundle-id> payload.json` shows a notification end to end, but a push from the real backend needs a real iPhone.
 
 ## Voice
 
@@ -90,7 +90,7 @@ The + button beside the message box opens the same menu as the web HUD: **Add fi
 The map is the web HUD's own code (`web/src/city/scene.js` and `city-state.js`), built into one small page and bundled in the app, so the phone and the browser always draw the same town. After changing anything in `web/src/city/`, rebuild it and commit the result:
 
 ```bash
-npm run build:city-embed -w @aic/web
+npm run build:city-embed -w @vaic/web
 ```
 
 `npm test` fails if you forget. The page runs in a web view that can load only those bundled files, has no network access and never sees your tokens: the app hands it the city snapshot and live events, and the page tells the app only what you tapped.

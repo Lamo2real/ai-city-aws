@@ -443,8 +443,8 @@ function ProjectChat({ project }: { project: Project }) {
         ) : null}
         {chat.map((l) => (
           <article key={l.id} className={`pj-msg pj-${l.who}`} aria-busy={l.state === "streaming" || undefined}>
-            <span className="sr">{l.who === "ace" ? "VAIC:" : "You:"}</span>
-            {l.who === "ace" ? l.text ? <Markdown text={l.text} /> : null : <p>{l.text}</p>}
+            <span className="sr">{l.who === "vaic" ? "VAIC:" : "You:"}</span>
+            {l.who === "vaic" ? l.text ? <Markdown text={l.text} /> : null : <p>{l.text}</p>}
             {l.files?.length ? <FileCards files={l.files} label={l.filesLabel} /> : null}
             {l.state === "failed" ? (
               <span className="pj-note">
@@ -456,8 +456,8 @@ function ProjectChat({ project }: { project: Project }) {
             ) : null}
           </article>
         ))}
-        {thinking && chat.at(-1)?.who !== "ace" ? (
-          <article className="pj-msg pj-ace pj-thinking" aria-label="VAIC is thinking">
+        {thinking && chat.at(-1)?.who !== "vaic" ? (
+          <article className="pj-msg pj-vaic pj-thinking" aria-label="VAIC is thinking">
             <span className="dots" aria-hidden="true">
               <i />
               <i />
@@ -523,8 +523,8 @@ function Timeline({ project }: { project: Project }) {
       if (l.state !== "streaming")
         out.push({
           at: new Date(l.at).toISOString(),
-          who: l.who === "ace" ? "VAIC" : "You",
-          text: l.who === "ace" ? `VAIC answered: ${capped(l.text, 90)}` : `You asked: ${capped(l.text, 90)}`,
+          who: l.who === "vaic" ? "VAIC" : "You",
+          text: l.who === "vaic" ? `VAIC answered: ${capped(l.text, 90)}` : `You asked: ${capped(l.text, 90)}`,
         });
     const app = project.app;
     if (app?.published_at)
@@ -543,7 +543,7 @@ function Timeline({ project }: { project: Project }) {
         <ol className="timeline">
           {items.slice(0, 30).map((i, n) => (
             <li key={`${i.at}-${n}`}>
-              <span className={`tl-who tl-${i.who === "You" ? "you" : i.who === "VAIC" ? "aic" : "builder"}`}>
+              <span className={`tl-who tl-${i.who === "You" ? "you" : i.who === "VAIC" ? "vaic" : "builder"}`}>
                 {i.who}
               </span>
               <span className="tl-text">{i.text}</span>

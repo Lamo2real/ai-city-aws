@@ -1,6 +1,6 @@
 import pytest
 
-from aic.shared.guard import FORBIDDEN_ENV, StartupRefused, bedrock_env, startup_guard
+from vaic.shared.guard import FORBIDDEN_ENV, StartupRefused, bedrock_env, startup_guard
 
 OK = {"CLAUDE_CODE_USE_BEDROCK": "1", "AWS_REGION": "eu-north-1"}
 
@@ -30,15 +30,15 @@ def test_names_the_variable_but_never_prints_its_value() -> None:
 
 def test_a_worker_refuses_to_start_without_shell_env_scrubbing() -> None:
     with pytest.raises(StartupRefused, match="SCRUB"):
-        startup_guard({**OK, "AIC_ROLE": "worker", "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "0"})
+        startup_guard({**OK, "VAIC_ROLE": "worker", "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "0"})
     with pytest.raises(StartupRefused, match="SCRUB"):
-        startup_guard({**OK, "AIC_ROLE": "worker"})
-    startup_guard({**OK, "AIC_ROLE": "worker", "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1"})
+        startup_guard({**OK, "VAIC_ROLE": "worker"})
+    startup_guard({**OK, "VAIC_ROLE": "worker", "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1"})
 
 
 def test_roles_without_a_shell_start_without_scrubbing() -> None:
-    for role in ("ace", "orchestrator", "manager"):
-        startup_guard({**OK, "AIC_ROLE": role})
+    for role in ("vaic", "orchestrator", "manager"):
+        startup_guard({**OK, "VAIC_ROLE": role})
 
 
 def test_the_env_it_hands_agents_keeps_bedrock_on_and_1m_off() -> None:

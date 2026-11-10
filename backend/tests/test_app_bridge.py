@@ -6,10 +6,11 @@ from typing import Any
 
 import pytest
 
-from aic.lambdas.api import ROUTES, handle_http
-from aic.lambdas.apps import on_submitted
-from aic.shared.app_bridge import BridgeDeps, fit, serve_bridge
-from aic.shared.app_caps import (
+from test_apps import GAME, FakeS3, api, draft, ev, js, origin, staged, submitted, upload
+from vaic.lambdas.api import ROUTES, handle_http
+from vaic.lambdas.apps import on_submitted
+from vaic.shared.app_bridge import BridgeDeps, fit, serve_bridge
+from vaic.shared.app_caps import (
     CATALOGUE,
     Invalid,
     LoginExpired,
@@ -25,12 +26,11 @@ from aic.shared.app_caps import (
     no_app_call,
     proposals_from_env,
 )
-from aic.shared.apps import BRIDGE_JS, get_app, list_apps, publish_draft, request_publish_approvals, update_draft
-from aic.shared.events import MemoryBus, parse_event
-from aic.shared.ledger import Ledger
-from aic.shared.policy import action_hash, decide
-from aic.shared.table import MemoryTable
-from test_apps import GAME, FakeS3, api, draft, ev, js, origin, staged, submitted, upload
+from vaic.shared.apps import BRIDGE_JS, get_app, list_apps, publish_draft, request_publish_approvals, update_draft
+from vaic.shared.events import MemoryBus, parse_event
+from vaic.shared.ledger import Ledger
+from vaic.shared.policy import action_hash, decide
+from vaic.shared.table import MemoryTable
 
 CAL = {"id": "calendar.read"}
 WEATHER = {"id": "connector.read", "connector": "weather", "tool": "forecast"}
@@ -105,7 +105,7 @@ class FakeAppCall:
 
 
 class FakeProposals:
-    """``aic.mail.approvals.file`` / ``execute`` with the service bound."""
+    """``vaic.mail.approvals.file`` / ``execute`` with the service bound."""
 
     def __init__(self, ledger: Ledger) -> None:
         self.ledger = ledger
@@ -148,7 +148,7 @@ async def published(
     draft_id = f"drf-p{_n[0]}"
     await draft(d.ledger, draft_id, "t-task", "awaiting_owner", f"App {_n[0]}")
     for p, b in GAME.items():
-        s3.put("aic-prod-apps", f"drafts/{draft_id}/{p}", b)
+        s3.put("vaic-prod-apps", f"drafts/{draft_id}/{p}", b)
     await update_draft(d.ledger, draft_id, {"capabilities": caps, "pin": pin})
     return await publish_draft(d.ledger, d.bus, origin(s3), draft_id, grants)
 
@@ -242,7 +242,7 @@ async def test_staging_stores_the_capabilities_and_always_ships_the_citys_bridge
     ledger, bus, s3 = Ledger(MemoryTable()), MemoryBus(), FakeS3()
     await connectors(ledger)
     manifest = {"capabilities": [CAL, WEATHER], "pin": True}
-    upload(s3, {**GAME, "aic-app.json": json.dumps(manifest).encode(), "aic-bridge.js": b"steal()"})
+    upload(s3, {**GAME, "vaic-app.json": json.dumps(manifest).encode(), "vaic-bridge.js": b"steal()"})
     dr = await on_submitted(submitted(), ledger, bus, origin(s3), s3, "ws")
     assert dr is not None and dr["status"] == "ready", dr
     assert dr["capabilities"] == [
@@ -250,29 +250,29 @@ async def test_staging_stores_the_capabilities_and_always_ships_the_citys_bridge
         {**WEATHER, "label": "Read from Weather: forecast"},
     ]
     assert dr["pin"] is True
-    shipped = s3.objects["aic-prod-apps"][f"drafts/{dr['draft_id']}/aic-bridge.js"]
+    shipped = s3.objects["vaic-prod-apps"][f"drafts/{dr['draft_id']}/vaic-bridge.js"]
     assert shipped["Body"] == BRIDGE_JS and shipped["ContentType"].startswith("text/javascript")
-    assert [f["path"] for f in dr["files"]].count("aic-bridge.js") == 1
+    assert [f["path"] for f in dr["files"]].count("vaic-bridge.js") == 1
     plain = await on_submitted(submitted(hire_id="wkr-apps-other"), ledger, bus, origin(s3), s3, "ws")
     assert plain is not None and plain["status"] == "rejected"  # nothing uploaded for that hire
     upload(s3, GAME, "wkr-apps-other")
     plain = await on_submitted(submitted(hire_id="wkr-apps-other"), ledger, bus, origin(s3), s3, "ws")
     assert plain is not None and plain["capabilities"] == [] and plain["pin"] is False
-    assert f"drafts/{plain['draft_id']}/aic-bridge.js" in s3.objects["aic-prod-apps"]
+    assert f"drafts/{plain['draft_id']}/vaic-bridge.js" in s3.objects["vaic-prod-apps"]
 
 
 async def test_a_bad_manifest_rejects_the_draft_with_the_reason() -> None:
     ledger, bus, s3 = Ledger(MemoryTable()), MemoryBus(), FakeS3()
-    upload(s3, {**GAME, "aic-app.json": json.dumps({"capabilities": [{"id": "mail.send"}]}).encode()})
+    upload(s3, {**GAME, "vaic-app.json": json.dumps({"capabilities": [{"id": "mail.send"}]}).encode()})
     dr = await on_submitted(submitted(), ledger, bus, origin(s3), s3, "ws")
     assert dr is not None and dr["status"] == "rejected" and "mail.send" in dr["reason"]
-    assert "aic-prod-apps" not in s3.objects
+    assert "vaic-prod-apps" not in s3.objects
 
 
 def test_the_bridge_script_sends_only_the_wire_format_and_trusts_only_the_parent() -> None:
     js_src = BRIDGE_JS.decode()
     assert "e.source !== window.parent" in js_src
-    assert "{ aic: 1, id: id, cap: String(cap), params: params || {} }" in js_src
+    assert "{ vaic: 1, id: id, cap: String(cap), params: params || {} }" in js_src
     assert 'var EVENTS = { "calendar.changed": [] };' in js_src  # the only event an app can hear
     for banned in ("fetch(", "XMLHttpRequest", "localStorage", "document.cookie", "eval(", "innerHTML"):
         assert banned not in js_src
@@ -309,7 +309,7 @@ async def test_grants_default_to_everything_asked_and_pins_stop_at_six() -> None
     for i in range(7):
         await draft(d.ledger, f"drf-{i}", "t", "awaiting_owner", f"App {i}")
         for p, b in GAME.items():
-            s3.put("aic-prod-apps", f"drafts/drf-{i}/{p}", b)
+            s3.put("vaic-prod-apps", f"drafts/drf-{i}/{p}", b)
             await update_draft(d.ledger, f"drf-{i}", {"capabilities": [CAL], "pin": True})
         app = await publish_draft(d.ledger, d.bus, origin(s3), f"drf-{i}")
         assert app["grants"] == [CAL]
@@ -449,10 +449,10 @@ async def test_reads_answer_unavailable_until_the_bridge_and_the_mail_module_exi
 
 
 def test_the_env_readers_find_the_mail_and_connector_modules_but_stay_unavailable_without_config() -> None:
-    from aic.shared.connector_calls import app_call
+    from vaic.shared.connector_calls import app_call
 
     ledger = Ledger(MemoryTable())
-    assert isinstance(mail_from_env(ledger), NoMail)  # no AIC_MAIL_* in this environment
+    assert isinstance(mail_from_env(ledger), NoMail)  # no VAIC_MAIL_* in this environment
     assert app_call_from_env() is app_call  # the connectors module is in the package now
     assert app_call_from_env() is not no_app_call
     assert isinstance(proposals_from_env(ledger), NoProposals)  # follows mail
@@ -604,8 +604,8 @@ def test_app_updated_and_publish_capabilities_validate() -> None:
 
 
 async def test_a_mail_problem_reaches_the_app_as_unavailable_not_a_crash() -> None:
-    from aic.mail.service import MailError
-    from aic.shared.app_caps import Unavailable, _BoundProposals
+    from vaic.mail.service import MailError
+    from vaic.shared.app_caps import Unavailable, _BoundProposals
 
     class Approvals:
         async def file(self, *a: object, **k: object) -> dict[str, object]:

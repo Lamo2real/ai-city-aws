@@ -50,7 +50,7 @@ variable "log_retention_days" {
 }
 
 locals {
-  signing_secret = "aic/prod/files-signing-key"
+  signing_secret = "vaic/prod/files-signing-key"
   tags           = { Component = "files" }
   base           = "${var.name}-files"
   function_name  = local.base
@@ -281,7 +281,7 @@ resource "aws_iam_role_policy" "fn" {
       { Sid = "Objects", Effect = "Allow", Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], Resource = ["${aws_s3_bucket.this.arn}/*"] },
       { Sid = "ListWork", Effect = "Allow", Action = ["s3:ListBucket"], Resource = [aws_s3_bucket.this.arn], Condition = { StringLike = { "s3:prefix" = ["work/*"] } } },
       { Sid = "Records", Effect = "Allow", Action = local.table_rw, Resource = [aws_dynamodb_table.this.arn, "${aws_dynamodb_table.this.arn}/index/*"] },
-      { Sid = "Transcribe", Effect = "Allow", Action = ["transcribe:StartTranscriptionJob", "transcribe:GetTranscriptionJob"], Resource = ["arn:aws:transcribe:${var.region}:${var.account_id}:transcription-job/aic-files-*"] },
+      { Sid = "Transcribe", Effect = "Allow", Action = ["transcribe:StartTranscriptionJob", "transcribe:GetTranscriptionJob"], Resource = ["arn:aws:transcribe:${var.region}:${var.account_id}:transcription-job/vaic-files-*"] },
       { Sid = "MediaConvert", Effect = "Allow", Action = ["mediaconvert:CreateJob", "mediaconvert:GetJob"], Resource = ["arn:aws:mediaconvert:${var.region}:${var.account_id}:queues/Default", "arn:aws:mediaconvert:${var.region}:${var.account_id}:jobs/*"] },
       { Sid = "PassMediaConvertRole", Effect = "Allow", Action = ["iam:PassRole"], Resource = [var.mediaconvert_role_arn], Condition = { StringEquals = { "iam:PassedToService" = "mediaconvert.amazonaws.com" } } },
       # Converse is authorized as bedrock:InvokeModel: Haiku 5.5 (utility) for descriptions, Titan V2 for vectors.
@@ -302,7 +302,7 @@ resource "aws_lambda_function" "fn" {
   role                           = aws_iam_role.fn.arn
   runtime                        = "python3.13"
   architectures                  = ["arm64"]
-  handler                        = "aic.lambdas.files.handler"
+  handler                        = "vaic.lambdas.files.handler"
   filename                       = var.lambda_zip_path
   source_code_hash               = var.lambda_zip_hash
   timeout                        = 900
@@ -321,14 +321,14 @@ resource "aws_lambda_function" "fn" {
   }
   environment {
     variables = {
-      AIC_REGION              = var.region
-      AIC_EVENT_BUS           = var.bus_name
-      AIC_LEDGER_TABLE        = var.ledger_table
-      AIC_PROFILE_PREFIX      = var.profile_prefix
-      AIC_APP_PROFILE_UTILITY = var.utility_profile_arn
-      FILES_TABLE             = aws_dynamodb_table.this.name
-      FILES_BUCKET            = aws_s3_bucket.this.bucket
-      MEDIACONVERT_ROLE_ARN   = var.mediaconvert_role_arn
+      VAIC_REGION              = var.region
+      VAIC_EVENT_BUS           = var.bus_name
+      VAIC_LEDGER_TABLE        = var.ledger_table
+      VAIC_PROFILE_PREFIX      = var.profile_prefix
+      VAIC_APP_PROFILE_UTILITY = var.utility_profile_arn
+      FILES_TABLE              = aws_dynamodb_table.this.name
+      FILES_BUCKET             = aws_s3_bucket.this.bucket
+      MEDIACONVERT_ROLE_ARN    = var.mediaconvert_role_arn
     }
   }
   tags = local.tags
@@ -372,7 +372,7 @@ locals {
       pattern = {
         source        = ["aws.transcribe"]
         "detail-type" = ["Transcribe Job State Change"]
-        detail        = { TranscriptionJobStatus = ["COMPLETED", "FAILED"], TranscriptionJobName = [{ prefix = "aic-files-" }] }
+        detail        = { TranscriptionJobStatus = ["COMPLETED", "FAILED"], TranscriptionJobName = [{ prefix = "vaic-files-" }] }
       }
       input_paths    = { detail = "$.detail" }
       input_template = "{\"action\": \"transcribe_done\", \"detail\": <detail>}"
@@ -471,14 +471,14 @@ resource "aws_iam_policy" "agents" {
 }
 
 resource "aws_iam_role_policy_attachment" "agents" {
-  for_each   = { for r, n in var.agent_role_names : r => n if contains(["ace", "manager", "worker"], r) }
+  for_each   = { for r, n in var.agent_role_names : r => n if contains(["vaic", "manager", "worker"], r) }
   role       = each.value
   policy_arn = aws_iam_policy.agents.arn
 }
 
 # VAIC signs the short-lived preview and download addresses of the files it shows in the chat (read only).
-resource "aws_iam_policy" "aic" {
-  name = "${var.name}-aic-files"
+resource "aws_iam_policy" "vaic" {
+  name = "${var.name}-vaic-files"
   tags = local.tags
   policy = jsonencode({
     Version = "2012-10-17"
@@ -488,9 +488,9 @@ resource "aws_iam_policy" "aic" {
   })
 }
 
-resource "aws_iam_role_policy_attachment" "aic" {
-  role       = var.agent_role_names["ace"]
-  policy_arn = aws_iam_policy.aic.arn
+resource "aws_iam_role_policy_attachment" "vaic" {
+  role       = var.agent_role_names["vaic"]
+  policy_arn = aws_iam_policy.vaic.arn
 }
 
 # Managers assume the session-tagged workspace role (tag mgr-…) to save into Files.
@@ -579,7 +579,7 @@ resource "aws_lambda_function" "signing" {
   role             = aws_iam_role.signing.arn
   runtime          = "python3.13"
   architectures    = ["arm64"]
-  handler          = "aic.lambdas.files.signing_key_handler"
+  handler          = "vaic.lambdas.files.signing_key_handler"
   filename         = var.lambda_zip_path
   source_code_hash = var.lambda_zip_hash
   timeout          = 30

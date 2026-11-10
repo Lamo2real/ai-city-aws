@@ -11,19 +11,19 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from aic.runtime.engine import AgentEngine, EngineRequest
-from aic.runtime.host import AgentHost, HostOptions
-from aic.shared.caps import settings_with
-from aic.shared.cost import Usage
-from aic.shared.events import MemoryBus
-from aic.shared.hierarchy.actions import CityDeps
-from aic.shared.hierarchy.dispatch import Dispatcher, DispatcherDeps
-from aic.shared.hierarchy.factory import Factory
-from aic.shared.hierarchy.queue import MemoryQueue, WorkMessage
-from aic.shared.ids import session_ids
-from aic.shared.ledger import Ledger
-from aic.shared.table import MemoryTable
-from aic.shared.turn import BackoffOptions, TurnOutput
+from vaic.runtime.engine import AgentEngine, EngineRequest
+from vaic.runtime.host import AgentHost, HostOptions
+from vaic.shared.caps import settings_with
+from vaic.shared.cost import Usage
+from vaic.shared.events import MemoryBus
+from vaic.shared.hierarchy.actions import CityDeps
+from vaic.shared.hierarchy.dispatch import Dispatcher, DispatcherDeps
+from vaic.shared.hierarchy.factory import Factory
+from vaic.shared.hierarchy.queue import MemoryQueue, WorkMessage
+from vaic.shared.ids import session_ids
+from vaic.shared.ledger import Ledger
+from vaic.shared.table import MemoryTable
+from vaic.shared.turn import BackoffOptions, TurnOutput
 
 USAGE = Usage(input=400, output=200, cache_read=3000, cache_write_5m=100, cache_write_1h=0)
 
@@ -52,8 +52,8 @@ def scripted_engine(scripts: dict[str, Script]) -> AgentEngine:
 
 def session_id_for(m: WorkMessage) -> str:
     role = m["role"]
-    if role == "ace":
-        return session_ids.ace("owner", m.get("conversation") or "default")
+    if role == "vaic":
+        return session_ids.vaic("owner", m.get("conversation") or "default")
     if role == "orchestrator":
         return session_ids.orchestrator(m["taskId"])
     if role == "manager":
@@ -107,8 +107,8 @@ class City:
                 WorkMessage,
                 {
                     "id": f"owner-{len(text)}-{conversation}",
-                    "role": "ace",
-                    "agentId": "ace",
+                    "role": "vaic",
+                    "agentId": "vaic",
                     "department": None,
                     "ticketId": f"conv-{conversation}",
                     "taskId": f"conv-{conversation}",

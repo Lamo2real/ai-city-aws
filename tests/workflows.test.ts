@@ -74,7 +74,7 @@ describe("GitHub workflows", () => {
     const secrets = new Set([...text.matchAll(/secrets\.([A-Z0-9_]+)/g)].map((m) => m[1]));
     expect([...secrets].sort()).toEqual(["AIC_OWNER_EMAIL", "VAIC_OWNER_EMAIL"]);
     expect(text).toMatch(/scripts\/ensure-state-bucket\.sh/); // the state bucket is created on the first run
-    expect(text).toMatch(/AIC_STATE_BUCKET \|\| 'lamo-labs-state-bucket'/);
+    expect(text).toMatch(/STATE_BUCKET \|\| 'lamo-labs-state-bucket'/);
     expect(text).not.toMatch(/infra\/envs\/prod\/plan\.txt/); // the full plan stays in the masked log, not in an artifact
   });
   it("the deploy role trust allows only this repo's main branch and production environment", () => {

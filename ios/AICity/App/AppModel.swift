@@ -16,17 +16,17 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
     // Tabs, in order: four areas and "More". Everything else lives in the More list, so new areas (apps,
     // knowledge, connectors, mail) are one case here, one row in `underMore` and one view in MainTabs.
     // Autopilot: there is no Needs you tab; what was open before it is "Open items" under More → While I'm away.
-    case aic, city, tickets, files, more
+    case vaic, city, tickets, files, more
     // Under More:
     case away, costs, settings, inbox
 
-    static let tabs: [AppSection] = [.aic, .city, .tickets, .files, .more]
+    static let tabs: [AppSection] = [.vaic, .city, .tickets, .files, .more]
     static let underMore: [AppSection] = [.away, .costs, .settings]
 
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .aic: return "VAIC"
+        case .vaic: return "VAIC"
         case .city: return "City"
         case .inbox: return "Open items"
         case .away: return "While I'm away"
@@ -39,7 +39,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
     }
     var symbol: String {
         switch self {
-        case .aic: return "bubble.left.and.text.bubble.right"
+        case .vaic: return "bubble.left.and.text.bubble.right"
         case .city: return "building.2"
         case .inbox: return "tray.full"
         case .away: return "airplane"
@@ -58,10 +58,10 @@ final class AppModel {
     enum Boot: Equatable { case starting, signedOut, ready, failed(String) }
 
     var boot: Boot = .starting
-    var section: AppSection = .aic
-    /// The appearance for the parts that follow one (the City tab), kept on this iPhone. AIC can set it (decision 143).
+    var section: AppSection = .vaic
+    /// The appearance for the parts that follow one (the City tab), kept on this iPhone. VAIC can set it (decision 143).
     var appearance: Appearance {
-        didSet { defaults.set(appearance.rawValue, forKey: "aic.appearance") }
+        didSet { defaults.set(appearance.rawValue, forKey: "vaic.appearance") }
     }
     /// What is open under the More tab.
     var morePath: [AppSection] = []
@@ -76,7 +76,7 @@ final class AppModel {
     var skills: [Skill] = []
     var connectors: [Connector] = []
     @ObservationIgnored private var listsLoadedAt: Double = 0
-    /// Whether the owner's last message came by voice: AIC answers that one aloud, and the aurora shows it thinking.
+    /// Whether the owner's last message came by voice: VAIC answers that one aloud, and the aurora shows it thinking.
     private(set) var lastAskedByVoice = false
     /// Notifications when a large feature is done.
     let push: PushController
@@ -119,7 +119,7 @@ final class AppModel {
          push: PushController? = nil, defaults: UserDefaults = .standard) {
         self.configStore = configStore
         self.defaults = defaults
-        appearance = defaults.string(forKey: "aic.appearance").flatMap(Appearance.init(rawValue:)) ?? .system
+        appearance = defaults.string(forKey: "vaic.appearance").flatMap(Appearance.init(rawValue:)) ?? .system
         self.push = push ?? PushController()
         self.hud = hud ?? HudStore()
         self.http = http
@@ -181,17 +181,17 @@ final class AppModel {
         }
         await push.refresh()
         await push.sync()  // a token that came before the sign-in
-        if let s = try? await api?.settings(), s["first_run_done"].bool != true, !UserDefaults.standard.bool(forKey: "aic.guide.done") {
+        if let s = try? await api?.settings(), s["first_run_done"].bool != true, !UserDefaults.standard.bool(forKey: "vaic.guide.done") {
             showGuide = true
         } else {
             await push.offerIfNeeded()
         }
     }
 
-    /// The owner tapped a notification: AIC has the news.
+    /// The owner tapped a notification: VAIC has the news.
     func openFromNotification() {
         morePath = []
-        open(.aic)
+        open(.vaic)
     }
 
     func signedIn() async { await start() }
@@ -221,7 +221,7 @@ final class AppModel {
         boot = .signedOut
     }
 
-    /// What AIC asked this device to do (decision 143): the theme, or bringing a screen up.
+    /// What VAIC asked this device to do (decision 143): the theme, or bringing a screen up.
     func perform(_ action: HudAction) {
         switch action {
         case .theme(let a): appearance = a
@@ -267,11 +267,11 @@ final class AppModel {
             return nil
         }
     }
-    /// "Add a standing order": AIC's chat opens with the words started.
+    /// "Add a standing order": VAIC's chat opens with the words started.
     func startStandingOrder() {
-        UserDefaults.standard.set(Away.addPrompt, forKey: "aic.draft")
+        UserDefaults.standard.set(Away.addPrompt, forKey: "vaic.draft")
         morePath = []
-        section = .aic
+        section = .vaic
     }
     /// The web HUD's page for something only a browser can finish (a provider's sign-in, a key).
     var siteURL: URL? { ConfigStore.hostFromBundle().flatMap { URL(string: "https://\($0)/") } }
@@ -289,7 +289,7 @@ final class AppModel {
 
     func finishGuide() {
         showGuide = false
-        UserDefaults.standard.set(true, forKey: "aic.guide.done")
+        UserDefaults.standard.set(true, forKey: "vaic.guide.done")
         Task { _ = try? await api?.saveSettings(["first_run_done": true]) }
         Task { await push.offerIfNeeded() }
     }

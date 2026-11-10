@@ -17,21 +17,21 @@ test("phone: VAIC and the City work at 412px wide", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/");
   await expect(page.locator("section.city")).toHaveAttribute("data-city-ready", "1"); // the City opens first
-  await page.goto("/#/ace");
+  await page.goto("/#/vaic");
   await expect(page.getByRole("textbox", { name: "Message to VAIC" })).toBeVisible();
   await expect(page.getByText(/Today: \$/)).toHaveCount(0); // costs live on the Costs screen only
   const mic = page.getByRole("button", { name: "Talk to VAIC", exact: true });
   const box = (await mic.boundingBox())!;
   expect(box.height).toBeGreaterThanOrEqual(44);
-  await expect(page.locator(".ace-stage")).toHaveCount(0); // only the chat, no voice column
+  await expect(page.locator(".vaic-stage")).toHaveCount(0); // only the chat, no voice column
   await expect(page.getByRole("button", { name: "Send to VAIC" })).toBeInViewport({ ratio: 1 }); // wholly on screen
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await page.screenshot({ path: `${SHOTS}/phone-ace.png` });
+  await page.screenshot({ path: `${SHOTS}/phone-vaic.png` });
   await noSeriousA11y(page, "VAIC at 412px");
   await page.getByRole("textbox", { name: "Message to VAIC" }).fill("what's going on in the city today?");
   await page.getByRole("button", { name: "Send to VAIC" }).click();
   m.send({
-    type: "ace.reply",
+    type: "vaic.reply",
     conversation: "main",
     text: "## Today\n- **Research**: 3 workers on the market scan\n- Engineering: idle\n\n| Department | Workers | Spend |\n|---|---|---|\n| Research | 3 | $0.30 |\n| Engineering | 0 | $0.00 |",
     done: true,
@@ -79,7 +79,7 @@ test("phone: Apps, an app page and a publish preview fit at 412px wide", async (
           agent: "orchestrator",
           kind: "app.publish",
           draft_id: "drf-0000000000bb",
-          preview_url: "https://apps.aic.test/drafts/drf-0000000000bb/index.html",
+          preview_url: "https://apps.vaic.test/drafts/drf-0000000000bb/index.html",
           title: "Pixel Pond",
           description: "Feed the pixel fish.",
         },
@@ -111,7 +111,7 @@ test("phone: pinned apps move into the nav row", async ({ page }) => {
   await mockBackend(page, {
     apps: [appRecord("app-cal000000001", "star-calendar", "Star Calendar", { pinned: true, grants: [] })],
   });
-  await page.goto("/#/ace");
+  await page.goto("/#/vaic");
   await expect(page.getByRole("navigation", { name: "Pinned apps" })).toBeHidden();
   const pin = page.getByRole("navigation", { name: "Screens" }).getByRole("link", { name: "Star Calendar" });
   await pin.scrollIntoViewIfNeeded();
@@ -153,7 +153,7 @@ test("phone: Needs you and Work read well at 412px, with big answer buttons", as
 
 test("phone: the + menu opens upwards inside the screen and its rows are easy to tap", async ({ page }) => {
   await mockBackend(page);
-  await page.goto("/#/ace");
+  await page.goto("/#/vaic");
   const plus = page.getByRole("button", { name: "Add to your message" });
   await plus.click();
   const menu = page.getByRole("menu", { name: "Add to your message" });

@@ -5,10 +5,10 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from aic.shared.events import MemoryBus, parse_event
-from aic.shared.ids import session_ids
-from aic.shared.ledger import Ledger
-from aic.shared.table import AddLimit, DynamoTable, MemoryTable, UpdateOptions
+from vaic.shared.events import MemoryBus, parse_event
+from vaic.shared.ids import session_ids
+from vaic.shared.ledger import Ledger
+from vaic.shared.table import AddLimit, DynamoTable, MemoryTable, UpdateOptions
 
 
 class Clock:
@@ -32,7 +32,7 @@ def ledger(clock: Clock) -> Ledger:
 def _task(**kw: Any) -> dict[str, Any]:
     return {
         "goal": "add power()",
-        "from": "ace",
+        "from": "vaic",
         "to": "orchestrator",
         "department": None,
         "parent_id": None,
@@ -144,12 +144,12 @@ async def test_claims_an_idempotency_key_once(ledger: Ledger) -> None:
 
 def test_session_ids_follow_the_agreed_shapes_and_meet_agentcores_33_char_minimum() -> None:
     ids = [
-        session_ids.ace("owner", "c1"),
+        session_ids.vaic("owner", "c1"),
         session_ids.orchestrator("t-1"),
         session_ids.manager("Engineering", "t-1"),
         session_ids.worker("Engineering", "h-1"),
     ]
-    assert ids[0].startswith("ace-owner-c1")
+    assert ids[0].startswith("vaic-owner-c1")
     assert ids[1].startswith("orch-t-1")
     assert ids[2].startswith("mgr-engineering-t-1")
     assert ids[3].startswith("wkr-engineering-h-1")
@@ -289,10 +289,10 @@ async def test_reset_city_stops_at_its_time_budget_and_says_it_is_not_done() -> 
 async def test_reset_city_removes_the_work_and_keeps_what_the_owner_set_up() -> None:
     table = MemoryTable()
     led = Ledger(table)
-    await led.put_agent({"id": "ace", "kind": "core", "role": "VAIC", "department": None, "model": "haiku-5-5",
+    await led.put_agent({"id": "vaic", "kind": "core", "role": "VAIC", "department": None, "model": "haiku-5-5",
                          "parent": None, "state": "active", "total_cost_usd": 0})  # fmt: skip
     await led.create_department("Writing", "Writing work.", "mgr-writing")
-    t = await led.create_ticket({"goal": "g", "from": "ace", "to": "orchestrator", "department": None, "parent_id": None,
+    t = await led.create_ticket({"goal": "g", "from": "vaic", "to": "orchestrator", "department": None, "parent_id": None,
                                  "kind": "task", "status": "in_progress"})  # fmt: skip
     await led.ask_question(
         {"asked_by": "x", "path": "x", "ticket_id": t["id"], "text": "?", "options": [], "default_answer": "ok"}
@@ -306,7 +306,7 @@ async def test_reset_city_removes_the_work_and_keeps_what_the_owner_set_up() -> 
         await table.put(keep)
     for gone in ({"pk": "SLOTS", "sk": "GLOBAL", "active": 3}, {"pk": "RATE", "sk": "1", "n": 1}, {"pk": "IDEMP#k", "sk": "META"},
                  {"pk": "WORK#w", "sk": "META"}, {"pk": "TURN#t", "sk": "META"}, {"pk": "TOOL#c", "sk": "META"},
-                 {"pk": "CONV#ace", "sk": "1"}, {"pk": "APPROVAL#a", "sk": "META"}, {"pk": "APPDRAFTS", "sk": "DRAFT#d"}):  # fmt: skip
+                 {"pk": "CONV#vaic", "sk": "1"}, {"pk": "APPROVAL#a", "sk": "META"}, {"pk": "APPDRAFTS", "sk": "DRAFT#d"}):  # fmt: skip
         await table.put(gone)
 
     r = await led.reset_city()

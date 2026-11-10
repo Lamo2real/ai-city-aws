@@ -1,5 +1,5 @@
 {
-  "$comment": "AI workflows (decision 126): known processes as data. Read by backend/src/aic/shared/workflows.py. A workflow is recognised in the owner's words (match.subjects; with match.actions it starts straight away, without them AIC asks 'Is this what you mean'; match.not_when words mean it is something else, like a report). inputs are asked one at a time, in this order, only when missing; types: text, choice (options with words that mean them), money (an amount per day), date (start), end (a date, a number of days, or open), url. steps are the pages of the walkthrough: 'guide' is what the owner does by hand, 'do' is how the team does it through the connector; {key} is replaced with the owner's answer. spend names the inputs that make the money shown before anything is created. connector is a key of config/departments.json connectors; department is the preset that does the work. Add a workflow by adding an entry here; no code. Also: modes (default both), away_by_default (the owner is away unless they say they are here: inputs with a default are assumed, not asked, and become taste questions; nothing paid starts without a question), match.direct_only (only with an action word), input default and from_words (the owner's sentence is the answer), connector null (nothing outside the city), taste_topics (what the team asks the owner along the way with ask_taste, never waiting; decision 127).",
+  "$comment": "AI workflows (decision 126): known processes as data. Read by backend/src/vaic/shared/workflows.py. A workflow is recognised in the owner's words (match.subjects; with match.actions it starts straight away, without them VAIC asks 'Is this what you mean'; match.not_when words mean it is something else, like a report). inputs are asked one at a time, in this order, only when missing; types: text, choice (options with words that mean them), money (an amount per day), date (start), end (a date, a number of days, or open), url. steps are the pages of the walkthrough: 'guide' is what the owner does by hand, 'do' is how the team does it through the connector; {key} is replaced with the owner's answer. spend names the inputs that make the money shown before anything is created. connector is a key of config/departments.json connectors; department is the preset that does the work. Add a workflow by adding an entry here; no code. Also: modes (default both), away_by_default (the owner is away unless they say they are here: inputs with a default are assumed, not asked, and become taste questions; nothing paid starts without a question), match.direct_only (only with an action word), input default and from_words (the owner's sentence is the answer), connector null (nothing outside the city), taste_topics (what the team asks the owner along the way with ask_taste, never waiting; decision 127).",
   "workflows": [
     {
       "id": "meta-ads-campaign",
@@ -476,7 +476,7 @@
           "existing",
           "iphone app",
           "ai city",
-          "aic",
+          "vaic",
           "hud",
           "how",
           "what",
@@ -577,7 +577,7 @@
           "id": "plan",
           "title": "Plan",
           "inputs": ["idea", "users", "must_have"],
-          "guide": "AIC sums up what will be built: {idea}, for {users}, with {must_have}.",
+          "guide": "VAIC sums up what will be built: {idea}, for {users}, with {must_have}.",
           "do": "Turn the idea into a short plan: {idea}, for {users}, must have {must_have}. Keep to what was asked; choose sensible simple defaults for anything unclear and note them."
         },
         {
@@ -620,9 +620,59 @@
       "away_by_default": true,
       "match": {
         "direct_only": true,
-        "subjects": ["content", "post", "posts", "reel", "reels", "shorts", "tiktok", "tiktoks", "youtube video", "youtube short", "instagram post", "social post", "social posts", "social media post", "video for social", "organic content", "content for social", "carousel"],
-        "actions": ["create", "make", "post", "publish", "film", "produce", "put out", "lets", "let us", "i want", "i need", "we need"],
-        "not_when": ["ads", "ad", "campaign", "boost", "sponsored", "paid", "budget", "report", "analytics", "stats", "how", "what", "why", "delete", "remove", "app", "website"]
+        "subjects": [
+          "content",
+          "post",
+          "posts",
+          "reel",
+          "reels",
+          "shorts",
+          "tiktok",
+          "tiktoks",
+          "youtube video",
+          "youtube short",
+          "instagram post",
+          "social post",
+          "social posts",
+          "social media post",
+          "video for social",
+          "organic content",
+          "content for social",
+          "carousel"
+        ],
+        "actions": [
+          "create",
+          "make",
+          "post",
+          "publish",
+          "film",
+          "produce",
+          "put out",
+          "lets",
+          "let us",
+          "i want",
+          "i need",
+          "we need"
+        ],
+        "not_when": [
+          "ads",
+          "ad",
+          "campaign",
+          "boost",
+          "sponsored",
+          "paid",
+          "budget",
+          "report",
+          "analytics",
+          "stats",
+          "how",
+          "what",
+          "why",
+          "delete",
+          "remove",
+          "app",
+          "website"
+        ]
       },
       "inputs": [
         {
@@ -730,7 +780,12 @@
           "do": "Publish it to {platforms} now, as organic posts (the owner's request is the go-ahead; no money is spent): through the platform's own connector when the owner added it (YouTube, TikTok or Instagram official API), otherwise the publishing tool that is on (Metricool, Buffer, Ayrshare or Blotato). Never boost, promote or spend: paid ads are a separate workflow with the owner's budget. If no publishing account is connected, save the finished files and captions to the knowledge base and say in one line which account to connect. Report the links."
         }
       ],
-      "taste_topics": ["the hook and the first seconds", "the thumbnail or cover image", "the caption and call to action", "the music or voice"]
+      "taste_topics": [
+        "the hook and the first seconds",
+        "the thumbnail or cover image",
+        "the caption and call to action",
+        "the music or voice"
+      ]
     }
   ]
 }

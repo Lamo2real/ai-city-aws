@@ -7,7 +7,7 @@ import { loadConfig } from "../src/lib/config.ts";
 import { eventWords, fitScale, projectList, projects, clampSize } from "../src/lib/projects.ts";
 import { store } from "../src/lib/store.ts";
 
-const APPS = "https://apps.aic.test";
+const APPS = "https://apps.vaic.test";
 const snake = (extra: Record<string, unknown> = {}) => ({
   app_id: "app-snake",
   slug: "snake",
@@ -20,7 +20,7 @@ const snake = (extra: Record<string, unknown> = {}) => ({
 const calls: Array<{ url: string; method: string; body: unknown }> = [];
 let activity: Response | null = null;
 const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-  if (url === "/config.json") return new Response(JSON.stringify({ apiUrl: "https://api.aic.test", appsUrl: APPS }));
+  if (url === "/config.json") return new Response(JSON.stringify({ apiUrl: "https://api.vaic.test", appsUrl: APPS }));
   calls.push({ url, method: init?.method ?? "GET", body: init?.body ? JSON.parse(String(init.body)) : null });
   if (url.endsWith("/activity")) return activity ?? new Response(JSON.stringify({ error: "nope" }), { status: 404 });
   if (url.endsWith("/rollback")) {
@@ -35,7 +35,7 @@ const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
 beforeAll(async () => {
   vi.stubGlobal("fetch", fetchMock);
   await loadConfig();
-  (window as unknown as { __aicAuth: unknown }).__aicAuth = { idToken: async () => "header.payload.sig" };
+  (window as unknown as { __vaicAuth: unknown }).__vaicAuth = { idToken: async () => "header.payload.sig" };
 });
 beforeEach(() => {
   localStorage.clear();
@@ -50,7 +50,7 @@ afterEach(() => {
 
 describe("project chats", () => {
   it("replies with an app- conversation go to the project, not VAIC's main chat", () => {
-    const e = { type: "ace.reply", conversation: "app-app-snake", text: "Which colour?", done: true };
+    const e = { type: "vaic.reply", conversation: "app-app-snake", text: "Which colour?", done: true };
     store.event(e);
     projects.event(e);
     expect(store.get().chat).toEqual([]);
@@ -59,7 +59,7 @@ describe("project chats", () => {
     projects.event(e);
     expect(projects.get().chats["app-app-snake"]).toHaveLength(1);
     // The main conversation still reaches the main chat.
-    store.event({ type: "ace.reply", conversation: "main", text: "Hi", done: true });
+    store.event({ type: "vaic.reply", conversation: "main", text: "Hi", done: true });
     expect(store.get().chat.map((l) => l.text)).toEqual(["Hi"]);
   });
 
@@ -68,7 +68,7 @@ describe("project chats", () => {
     render(<ProjectPage slug="snake" go={() => undefined} />);
     act(() =>
       projects.event({
-        type: "ace.question",
+        type: "vaic.question",
         conversation: "app-app-snake",
         question: "How fast should the snake be?",
         options: ["Slow", "Medium", "Fast"],
@@ -101,7 +101,7 @@ describe("project chats", () => {
   it("an app built from a new project's chat takes its lines and leaves the drafts", async () => {
     const p = await projects.start("A quiz about world capitals");
     const from = `app-${p.key}`;
-    projects.event({ type: "ace.reply", conversation: from, text: "Shall I build it?", done: true });
+    projects.event({ type: "vaic.reply", conversation: from, text: "Shall I build it?", done: true });
     projects.event({ type: "app.published", app_id: "app-quiz", conversation: from, title: "Capital Quiz" });
     expect(projects.get().drafts).toEqual([]);
     expect(projects.get().chats[from]).toBeUndefined();

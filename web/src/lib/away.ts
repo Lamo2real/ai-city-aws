@@ -8,7 +8,7 @@ import { api, ApiError } from "./api.ts";
 
 /** Long enough away that VAIC's screen opens with "While you were away". */
 export const AWAY_MS = 12 * 3600_000;
-const SEEN = "aic.lastSeen";
+const SEEN = "vaic.lastSeen";
 
 export interface WhenBack {
   id: string;
@@ -82,7 +82,9 @@ export function trackSeen() {
 /** null: the backend has no away summary yet (404). */
 export async function loadSummary(since: number): Promise<AwaySummary | null> {
   try {
-    const r = await api<Partial<AwaySummary>>(`/away-summary?since=${encodeURIComponent(new Date(since).toISOString())}`);
+    const r = await api<Partial<AwaySummary>>(
+      `/away-summary?since=${encodeURIComponent(new Date(since).toISOString())}`,
+    );
     return {
       since: r.since ?? new Date(since).toISOString(),
       jobs_finished: r.jobs_finished ?? [],
@@ -102,7 +104,8 @@ export function label(x: unknown): string {
   if (typeof x === "string") return x;
   if (x && typeof x === "object") {
     const o = x as Record<string, unknown>;
-    for (const k of ["words", "summary", "name", "title", "what", "goal"]) if (typeof o[k] === "string" && o[k]) return o[k] as string;
+    for (const k of ["words", "summary", "name", "title", "what", "goal"])
+      if (typeof o[k] === "string" && o[k]) return o[k] as string;
   }
   return "";
 }
@@ -160,9 +163,9 @@ export const deleteOrder = (id: string) => api(`/standing-orders/${encodeURIComp
 export const ADD_PROMPT = "While I'm away, ";
 export function startOrderInChat() {
   try {
-    localStorage.setItem("aic.draft", ADD_PROMPT);
+    localStorage.setItem("vaic.draft", ADD_PROMPT);
   } catch {
     /* no storage: the chat opens empty */
   }
-  location.hash = "/ace";
+  location.hash = "/vaic";
 }

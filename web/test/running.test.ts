@@ -3,13 +3,13 @@ import { stepsRunning } from "../src/lib/steps.ts";
 import { store } from "../src/lib/store.ts";
 
 afterEach(() => store.set({ chat: [], turn: null, presence: "idle" }));
-const ticket = (id: string, status: string, previous: string | null, from = "ace") =>
+const ticket = (id: string, status: string, previous: string | null, from = "vaic") =>
   store.event({ type: "ticket.status", previous, ticket: { id, from, to: "orchestrator", status, goal: "build it" } });
 const delegatedReply = () => {
   store.beginTurn();
-  store.event({ type: "activity", id: "ace", activity: "delegating", detail: "delegate_to_orchestrator" });
+  store.event({ type: "activity", id: "vaic", activity: "delegating", detail: "delegate_to_orchestrator" });
   ticket("t-1", "open", null); // VAIC hands the work on before its reply starts
-  store.event({ type: "ace.reply", conversation: "main", text: "On it.", done: true });
+  store.event({ type: "vaic.reply", conversation: "main", text: "On it.", done: true });
   return () => store.get().chat.at(-1)!;
 };
 
@@ -31,7 +31,7 @@ describe("the steps under VAIC's reply: running vs settled", () => {
   });
   it("a ticket opened after the reply is written attaches to that reply", () => {
     store.beginTurn();
-    store.event({ type: "ace.reply", conversation: "main", text: "Handing it on.", done: true });
+    store.event({ type: "vaic.reply", conversation: "main", text: "Handing it on.", done: true });
     ticket("t-9", "open", null);
     expect(store.get().chat.at(-1)!.tasks).toEqual([{ id: "t-9", done: false }]);
   });

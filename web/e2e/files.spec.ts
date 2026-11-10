@@ -86,13 +86,13 @@ test("VAIC shows a file it found in the chat, with a preview and Download; sever
       created_at: "2026-05-02T08:00:00Z",
     },
   );
-  await page.goto("/#/ace");
+  await page.goto("/#/vaic");
   await page
     .getByRole("textbox", { name: /message/i })
     .fill("find the sunrise photo with the porsche from last spring");
   await page.getByRole("textbox", { name: /message/i }).press("Enter");
   m.send({
-    type: "ace.files",
+    type: "vaic.files",
     conversation: "main",
     files: [
       {
@@ -105,7 +105,7 @@ test("VAIC shows a file it found in the chat, with a preview and Download; sever
     ],
   });
   m.send({
-    type: "ace.reply",
+    type: "vaic.reply",
     conversation: "main",
     text: "Here it is, Sir: the sunrise with the black 911, from April.",
     done: true,
@@ -120,7 +120,7 @@ test("VAIC shows a file it found in the chat, with a preview and Download; sever
   await page.getByRole("textbox", { name: /message/i }).fill("show me the thumbnails");
   await page.getByRole("textbox", { name: /message/i }).press("Enter");
   m.send({
-    type: "ace.files",
+    type: "vaic.files",
     conversation: "main",
     ask: true,
     files: [
@@ -128,7 +128,7 @@ test("VAIC shows a file it found in the chat, with a preview and Download; sever
       { id: "f-bbbbbbbbbbbb", name: "Launch thumbnail.png", kind: "image", department: "Media" },
     ],
   });
-  m.send({ type: "ace.reply", conversation: "main", text: "Two fit, Sir. The first or the second?", done: true });
+  m.send({ type: "vaic.reply", conversation: "main", text: "Two fit, Sir. The first or the second?", done: true });
   const many = chat.getByRole("list", { name: "Files VAIC found" }).last();
   await expect(many.getByRole("link", { name: "Download" })).toHaveCount(2);
   await expect(many).toContainText("Media");

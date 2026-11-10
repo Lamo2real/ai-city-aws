@@ -101,7 +101,7 @@ resource "aws_s3_bucket_policy" "workspaces" {
 resource "aws_secretsmanager_secret" "this" {
   #checkov:skip=CKV2_AWS_57:These hold OAuth tokens the owner issues and rotates in the provider's console; there is no rotation Lambda to run.
   for_each                = local.secrets
-  name                    = "aic/prod/${each.key}"
+  name                    = "vaic/prod/${each.key}"
   description             = each.value
   kms_key_id              = var.kms_key_arn
   recovery_window_in_days = 7

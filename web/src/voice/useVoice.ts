@@ -14,7 +14,7 @@ import { store, useHud } from "../lib/store.ts";
 import { readSpeakMode, saveSpeakMode, shouldSpeak, type SpeakMode } from "./modes.ts";
 import { browserSpeak, browserStopSpeaking, browserVoiceAvailable, usingBrowserVoice } from "./browserSpeech.ts";
 import { isReplyTail, isStopPhrase, loopNext } from "./convo.ts";
-import { duringAic, isOwnerSpeech, stripEcho, type Span } from "./heard.ts";
+import { duringVaic, isOwnerSpeech, stripEcho, type Span } from "./heard.ts";
 import { SpeechQueue } from "./speech.ts";
 import { loadOpenAi, onVoiceNote, withOpenAi } from "./openai.ts";
 import { toast } from "../components/ui.tsx";
@@ -78,10 +78,10 @@ function sayCue(text: string) {
   cue.last = text;
   cue.at = Date.now();
   const v = getVoice();
-  const begin = () => aicSpeaks();
+  const begin = () => vaicSpeaks();
   // The cue is over; unless a reply is playing by now (it shares the same open span), VAIC is quiet again.
   const done = (p: Promise<unknown>) =>
-    void p.catch(() => undefined).finally(() => store.get().presence !== "speaking" && aicQuiet());
+    void p.catch(() => undefined).finally(() => store.get().presence !== "speaking" && vaicQuiet());
   if (usingBrowserVoice() && browserVoiceAvailable()) return done(browserSpeak(text, begin));
   if (v.synth && v.play) {
     const synth = withOpenAi(v.synth.bind(v));
@@ -105,22 +105,22 @@ function stopBargeIn() {
 /** Cuts VAIC off: drops the reply's queue, stops the clip playing now and any browser voice. */
 // When VAIC's voice was audible, so its echo from the speakers is never taken for the owner (heard.ts).
 const spans: Span[] = [];
-function aicSpeaks() {
+function vaicSpeaks() {
   if (spans.at(-1)?.end === Infinity) return;
   spans.push({ start: Date.now(), end: Infinity });
   while (spans.length > 8) spans.shift();
 }
-function aicQuiet() {
+function vaicQuiet() {
   const s = spans.at(-1);
   if (s && s.end === Infinity) s.end = Date.now();
 }
 /** What VAIC last said (its reply, or a thinking cue), for telling its echo from the owner's words. */
-function aicWords(): string {
-  return `${store.get().chat.findLast((l) => l.who === "ace")?.text ?? ""} ${cue.last ?? ""}`;
+function vaicWords(): string {
+  return `${store.get().chat.findLast((l) => l.who === "vaic")?.text ?? ""} ${cue.last ?? ""}`;
 }
 
 function stopTalking() {
-  aicQuiet();
+  vaicQuiet();
   stopBargeIn();
   const t = talk.current;
   if (t) {
@@ -134,7 +134,7 @@ function stopTalking() {
 
 /** GPT-Live's requests (live.ts): sent to VAIC as a spoken chat message; resolves with VAIC's answer when it is
  *  done, or a short note when it fails or takes longer than two minutes (the answer still lands in the chat). */
-function askAic(text: string): Promise<string> {
+function askVaic(text: string): Promise<string> {
   const before = store.get().chat.length;
   void sendMessage(text, { voice: true });
   return new Promise((resolve) => {
@@ -150,7 +150,7 @@ function askAic(text: string): Promise<string> {
     );
     const check = () => {
       const fresh = store.get().chat.slice(before);
-      const answer = fresh.find((l) => l.who === "ace" && l.state === "done");
+      const answer = fresh.find((l) => l.who === "vaic" && l.state === "done");
       if (answer) return settle(answer.text);
       if (fresh.some((l) => l.who === "owner" && l.state === "failed"))
         settle("The message didn't reach VAIC. Check the connection.");
@@ -208,7 +208,7 @@ export function useVoice(dictation?: DictationTarget) {
       stopTalking();
       return;
     }
-    if (!last || last.who !== "ace" || spoken.current === last.id) return;
+    if (!last || last.who !== "vaic" || spoken.current === last.id) return;
     // In a real-time call Sonic already says the answer: nothing is read aloud a second time.
     if (sonic.current) {
       if (last.state === "done") spoken.current = last.id;
@@ -229,7 +229,7 @@ export function useVoice(dictation?: DictationTarget) {
     // Done talking: with the hands-free loop on after a spoken reply, the mic reopens for the owner's next
     // sentence; otherwise back to idle. In the voice conversation the mic stays open throughout.
     const finish = (t: Talk, spokenAloud: boolean, askedVoice: boolean) => {
-      aicQuiet();
+      vaicQuiet();
       if (t.cancelled || talk.current !== t) return; // cut off: whoever cut it off decides what's next
       stopBargeIn();
       const next = loopNext(loop.current, spokenAloud && askedVoice ? "reply_spoken" : "reply_silent");
@@ -277,7 +277,7 @@ export function useVoice(dictation?: DictationTarget) {
           () => {
             if (t.cancelled) return;
             t.started = true;
-            aicSpeaks();
+            vaicSpeaks();
             store.set({ presence: "speaking" });
           },
           (e) => {
@@ -328,7 +328,7 @@ export function useVoice(dictation?: DictationTarget) {
               () => {
                 if (t.cancelled) return;
                 t.started = true;
-                aicSpeaks();
+                vaicSpeaks();
                 store.set({ presence: "speaking" });
               },
             );
@@ -413,7 +413,7 @@ export function useVoice(dictation?: DictationTarget) {
             // (A check here against VAIC's last reply, even after it had finished, once dropped answers like
             // "yes, send the email to John" for repeating VAIC's words.)
             const now = store.get().chat.at(-1);
-            if (now?.who === "ace") cut.text = now.state === "streaming" ? now.text : "";
+            if (now?.who === "vaic") cut.text = now.state === "streaming" ? now.text : "";
             stopTalking();
             return void sendMessage(text, { voice: true });
           }
@@ -436,11 +436,12 @@ export function useVoice(dictation?: DictationTarget) {
             if (!convo.current) return said(text);
             // VAIC's own voice coming back from the speakers is not the owner (the owner, 2026-11-09).
             const startedAt = heard?.startedAt ?? null;
-            const aic = aicWords();
-            if (!isOwnerSpeech(text, aic, startedAt, spans, { bargedAt: barge.at })) return;
+            const vaic = vaicWords();
+            if (!isOwnerSpeech(text, vaic, startedAt, spans, { bargedAt: barge.at })) return;
             // Said over VAIC: VAIC's last words that Transcribe joined to the front of the owner's are cut off.
-            const overlapped = startedAt === null ? spans.some((s) => s.end === Infinity) : duringAic(startedAt, spans);
-            if (overlapped) text = stripEcho(text, aic);
+            const overlapped =
+              startedAt === null ? spans.some((s) => s.end === Infinity) : duringVaic(startedAt, spans);
+            if (overlapped) text = stripEcho(text, vaic);
             if (!text) return;
             if (isStopPhrase(cleanSpeech(text))) {
               thought.parts = []; // "stop listening" acts at once, never joined to what follows
@@ -460,7 +461,7 @@ export function useVoice(dictation?: DictationTarget) {
                   t &&
                   t.started &&
                   !t.cancelled &&
-                  isOwnerSpeech(text, aicWords(), null, spans, { partial: true })
+                  isOwnerSpeech(text, vaicWords(), null, spans, { partial: true })
                 ) {
                   barge.at = Date.now();
                   stopTalking();
@@ -497,7 +498,7 @@ export function useVoice(dictation?: DictationTarget) {
     stopTalking();
     end();
     store.set({ presence: "thinking" });
-    const add = (who: "owner" | "ace", text: string) => {
+    const add = (who: "owner" | "vaic", text: string) => {
       const line = { id: lineId(), who, text, at: Date.now(), state: who === "owner" ? "sent" : "done" } as const;
       store.set({ chat: [...store.get().chat, who === "owner" ? { ...line, voice: true } : line] });
       if (who === "owner") store.beginTurn();
@@ -517,7 +518,7 @@ export function useVoice(dictation?: DictationTarget) {
           store.set({ presence: "idle" });
         },
         // VAIC's own answer reaches the chat from VAIC; only Sonic's small talk (a greeting, "sure") is added here.
-        onAssistantText: (text, aic) => !aic && add("ace", text),
+        onAssistantText: (text, vaic) => !vaic && add("vaic", text),
         onThinking: (on) => presence(on ? "thinking" : "listening"),
         onSpeaking: (on) => presence(on ? "speaking" : "listening"),
         onEnd: (e) => {
@@ -556,7 +557,7 @@ export function useVoice(dictation?: DictationTarget) {
         call = await startGptLive({
           ask: (raw) => {
             const text = cleanSpeech(raw) || raw.trim();
-            if (!isStopPhrase(text)) return askAic(text);
+            if (!isStopPhrase(text)) return askVaic(text);
             quiet();
             return Promise.resolve("");
           },

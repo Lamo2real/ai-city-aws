@@ -31,7 +31,7 @@ enum Fmt {
     }
 }
 
-/// AIC's visible steps while it works: plain phrases from its `activity` events (never model reasoning).
+/// VAIC's visible steps while it works: plain phrases from its `activity` events (never model reasoning).
 enum Steps {
     static let byTool = [
         "get_status": "Checking the ledger", "list_notes": "Reading your notes", "add_note": "Saving a note",

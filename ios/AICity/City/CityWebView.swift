@@ -1,7 +1,7 @@
 // The City scene is the web HUD's own (web/src/city/scene.js + city-state.js), bundled into the app as
-// CityWeb/city-embed.html + city-embed.js (built by `npm run build:city-embed -w @aic/web`). It runs in a
+// CityWeb/city-embed.html + city-embed.js (built by `npm run build:city-embed -w @vaic/web`). It runs in a
 // WKWebView that is locked down:
-// - pages come only from the app bundle through the private `aic-city://` scheme, and only the two files of
+// - pages come only from the app bundle through the private `vaic-city://` scheme, and only the two files of
 //   the City page are served; every other navigation is refused (no web origin, so no cookies or tokens);
 // - the page has no network (its CSP sets connect-src 'none') and never receives a token: the app hands it
 //   the /city snapshot and each WebSocket event as JSON values;
@@ -11,9 +11,9 @@ import SwiftUI
 import WebKit
 
 enum CityWeb {
-    static let scheme = "aic-city"
+    static let scheme = "vaic-city"
     static let host = "city"
-    static let page = URL(string: "aic-city://city/city-embed.html")!
+    static let page = URL(string: "vaic-city://city/city-embed.html")!
     /// The only files the page may load, with their types.
     static let files: [String: String] = ["city-embed.html": "text/html", "city-embed.js": "text/javascript"]
 
@@ -115,13 +115,13 @@ final class CityWebController: NSObject, WKScriptMessageHandler, WKNavigationDel
 
     // MARK: Data in
 
-    func load(snapshot: JSONValue) { call("aicCity.load(x)", snapshot) }
-    func event(_ e: JSONValue) { call("aicCity.event(x)", e) }
-    func zoomIn() { run("aicCity.zoomIn()") }
-    func zoomOut() { run("aicCity.zoomOut()") }
-    func fit() { run("aicCity.fit()") }
-    func resume() { run("aicCity.resume()") }
-    func select(_ id: String?) { call("aicCity.select(x)", id.map { .string($0) } ?? .null) }
+    func load(snapshot: JSONValue) { call("vaicCity.load(x)", snapshot) }
+    func event(_ e: JSONValue) { call("vaicCity.event(x)", e) }
+    func zoomIn() { run("vaicCity.zoomIn()") }
+    func zoomOut() { run("vaicCity.zoomOut()") }
+    func fit() { run("vaicCity.fit()") }
+    func resume() { run("vaicCity.resume()") }
+    func select(_ id: String?) { call("vaicCity.select(x)", id.map { .string($0) } ?? .null) }
 
     /// Values go in as arguments, never pasted into the script text.
     private func call(_ js: String, _ value: JSONValue) {

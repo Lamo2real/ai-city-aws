@@ -5,10 +5,10 @@ from typing import Any
 
 import pytest
 
-from aic.shared.knowledge.fetch import Fetched, LinkRefused
-from aic.shared.knowledge.kb import FakeKnowledgeBase, ThrottlingException
-from aic.shared.knowledge.pipeline import ACTIONS, IngestFailed, MediaClients, MediaJobFailed, Pipeline, plain_error
 from knowledge_support import World, pdf_with_text, png, world
+from vaic.shared.knowledge.fetch import Fetched, LinkRefused
+from vaic.shared.knowledge.kb import FakeKnowledgeBase, ThrottlingException
+from vaic.shared.knowledge.pipeline import ACTIONS, IngestFailed, MediaClients, MediaJobFailed, Pipeline, plain_error
 
 
 class FakeMediaConvert:
@@ -187,7 +187,7 @@ async def test_a_video_goes_through_mediaconvert_and_transcribe() -> None:
     t = tr.jobs[0]
     assert t["Media"]["MediaFileUri"] == f"s3://{w.blobs.bucket}/work/{i}/audio.m4a"
     assert t["MediaFormat"] == "m4a" and t["IdentifyLanguage"] is True
-    assert t["OutputKey"] == f"work/{i}/transcript.json" and t["TranscriptionJobName"] == f"aic-{i}-1700"
+    assert t["OutputKey"] == f"work/{i}/transcript.json" and t["TranscriptionJobName"] == f"vaic-{i}-1700"
     assert (await step(p, "check_transcribe", i))["done"] is False
     tr.status = "COMPLETED"
     assert (await step(p, "check_transcribe", i))["done"] is True
@@ -406,7 +406,7 @@ async def test_unknown_actions_and_items_are_refused() -> None:
 def test_the_lambda_handler_dispatches_every_action_name_and_refuses_others(monkeypatch: pytest.MonkeyPatch) -> None:
     import asyncio
 
-    from aic.lambdas import knowledge as lam
+    from vaic.lambdas import knowledge as lam
 
     w = world()
     p, _, _ = pipeline(w)
@@ -435,10 +435,10 @@ class FakeSfn:
 
 
 def test_start_names_the_run_after_the_item_once_and_ignores_other_keys() -> None:
-    from aic.lambdas.knowledge import start_run
+    from vaic.lambdas.knowledge import start_run
 
     sfn = FakeSfn()
-    ev = {"action": "start", "bucket": "aic-prod-knowledge", "key": "raw/k-abcDEF123_-x/My video.mov"}
+    ev = {"action": "start", "bucket": "vaic-prod-knowledge", "key": "raw/k-abcDEF123_-x/My video.mov"}
     assert start_run(ev, sfn, "arn:sm") == {"item_id": "k-abcDEF123_-x", "started": True}
     assert sfn.runs["k-abcDEF123_-x"]["stateMachineArn"] == "arn:sm"
     assert json.loads(sfn.runs["k-abcDEF123_-x"]["input"]) == {"item_id": "k-abcDEF123_-x"}
@@ -449,7 +449,7 @@ def test_start_names_the_run_after_the_item_once_and_ignores_other_keys() -> Non
 
 
 def test_start_lets_other_errors_through() -> None:
-    from aic.lambdas.knowledge import start_run
+    from vaic.lambdas.knowledge import start_run
 
     class Broken:
         def start_execution(self, **kw: Any) -> None:

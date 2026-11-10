@@ -24,7 +24,7 @@ const REC = {
   assumptions: ["The deals close at their listed value"],
   confidence: "medium",
   sources: ["company_brief", "costs", "deals"],
-  to: "ace",
+  to: "vaic",
   at: "2026-11-09T10:00:00Z",
 };
 const REVIEWS = [
@@ -36,7 +36,7 @@ const STATE = { executives: EXECS, recommendations: [REC], reviews: REVIEWS };
 const calls: Array<{ url: string; method: string; body: unknown }> = [];
 let get: () => Response = () => new Response(JSON.stringify(STATE));
 const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-  if (url === "/config.json") return new Response(JSON.stringify({ apiUrl: "https://api.aic.test" }));
+  if (url === "/config.json") return new Response(JSON.stringify({ apiUrl: "https://api.vaic.test" }));
   const method = init?.method ?? "GET";
   const body = init?.body ? JSON.parse(String(init.body)) : null;
   calls.push({ url, method, body });
@@ -59,7 +59,7 @@ const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
 beforeAll(async () => {
   vi.stubGlobal("fetch", fetchMock);
   await loadConfig();
-  (window as unknown as { __aicAuth: unknown }).__aicAuth = { idToken: async () => "header.payload.sig" };
+  (window as unknown as { __vaicAuth: unknown }).__vaicAuth = { idToken: async () => "header.payload.sig" };
 });
 afterEach(() => {
   cleanup();
@@ -111,7 +111,7 @@ describe("Settings → Executives", () => {
     fireEvent.click(await screen.findByRole("switch", { name: "CFO on or off" }));
     await waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true));
     expect(calls.find((c) => c.method === "PUT")).toMatchObject({
-      url: "https://api.aic.test/executives",
+      url: "https://api.vaic.test/executives",
       body: { enabled: { cfo: false } },
     });
     await waitFor(() =>

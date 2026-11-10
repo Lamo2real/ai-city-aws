@@ -6,8 +6,9 @@ from typing import Any
 import httpx
 import pytest
 
-from aic.lambdas.api import handle_http
-from aic.shared.speech import (
+from test_api import ev, js, make
+from vaic.lambdas.api import handle_http
+from vaic.shared.speech import (
     DEFAULT_VOICE,
     INSTRUCTIONS,
     MAX_CHARS,
@@ -16,7 +17,6 @@ from aic.shared.speech import (
     openai_key_secret,
     synthesize,
 )
-from test_api import ev, js, make
 
 KEY = "sk-" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6"
 MP3 = b"ID3\x03\x00\x00\x00fake-mp3-bytes"
@@ -24,7 +24,7 @@ MP3 = b"ID3\x03\x00\x00\x00fake-mp3-bytes"
 
 class FakeSecrets:
     def __init__(self, value: str | None = None) -> None:
-        self.values: dict[str, str] = {} if value is None else {"aic/prod/openai": value}
+        self.values: dict[str, str] = {} if value is None else {"vaic/prod/openai": value}
         self.reads = 0
 
     def get_secret_value(self, SecretId: str) -> dict[str, Any]:
@@ -173,7 +173,7 @@ async def test_the_owner_pastes_the_key_once_it_is_stored_as_a_secret_and_never_
     good = await handle_http(ev("PUT", "/voice/openai-key", {"key": f"  {KEY}  "}), api)
     assert good["statusCode"] == 200 and js(good)["ok"] is True and js(good)["saved_at"]
     assert KEY not in good["body"]
-    assert secrets.values["aic/prod/openai"] == KEY
+    assert secrets.values["vaic/prod/openai"] == KEY
     after = js(await handle_http(ev("GET", "/voice/openai"), api))
     assert after["configured"] is True and after["key_saved_at"] == js(good)["saved_at"]
     # The pasted key is used at once (no stale "not configured" from the cache).

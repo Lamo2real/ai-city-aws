@@ -24,7 +24,7 @@ const words = (t: string) =>
 const TAIL_MS = 600;
 
 /** Whether a phrase that started at `startedAt` overlapped VAIC's audible speech. */
-export function duringAic(startedAt: number, spans: Span[]): boolean {
+export function duringVaic(startedAt: number, spans: Span[]): boolean {
   return spans.some((s) => startedAt >= s.start - 200 && startedAt <= s.end + TAIL_MS);
 }
 
@@ -87,7 +87,7 @@ export function isOwnerSpeech(
 ): boolean {
   const all = words(heard);
   if (!all.length) return false;
-  const overlapped = startedAt === null ? spans.some((s) => s.end === Infinity) : duringAic(startedAt, spans);
+  const overlapped = startedAt === null ? spans.some((s) => s.end === Infinity) : duringVaic(startedAt, spans);
   if (!overlapped) return true;
   const r = new Set(words(reply));
   const own = all.filter((w) => !r.has(w));

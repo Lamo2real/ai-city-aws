@@ -4,25 +4,25 @@ in plain words. Fakes only: no AWS, no Bedrock."""
 
 import re
 
-from aic.lambdas.api import ROUTES, handle_http
-from aic.runtime.prompts import load_prompt
-from aic.runtime.tools import TurnCtx, app_of_conversation, task_brief
-from aic.shared.app_activity import MAX_ITEMS, plain
-from aic.shared.apps import get_app, publish_draft
-from aic.shared.events import parse_event
 from test_apps import GAME, FakeS3, api, city_deps, draft, ev, js, origin, tool
 from test_apps_v3 import an_app
+from vaic.lambdas.api import ROUTES, handle_http
+from vaic.runtime.prompts import load_prompt
+from vaic.runtime.tools import TurnCtx, app_of_conversation, task_brief
+from vaic.shared.app_activity import MAX_ITEMS, plain
+from vaic.shared.apps import get_app, publish_draft
+from vaic.shared.events import parse_event
 
 BRIEF = "For the owner's family. Screens: a shopping list and a done list. Tap an item to tick it. Calm green look."
 
 
-def ace(conversation: str) -> TurnCtx:
-    return TurnCtx(agent_id="ace", role="ace", department=None, ticket_id="", task_id="", conversation=conversation)
+def vaic(conversation: str) -> TurnCtx:
+    return TurnCtx(agent_id="vaic", role="vaic", department=None, ticket_id="", task_id="", conversation=conversation)
 
 
 # ---------- VAIC asks before it builds ----------
 def test_aics_prompt_asks_unclear_requests_first_and_builds_clear_ones_straight_away() -> None:
-    p = load_prompt("ace.md")
+    p = load_prompt("vaic.md")
     assert "offer_choices" in p.tools
     for words in (
         "Shall I build it?",
@@ -48,7 +48,7 @@ def test_project_conversations_name_their_app() -> None:
 
 async def test_the_agreed_brief_travels_with_the_build() -> None:
     d = city_deps()
-    out = await tool(d, ace("app-new-1"), "delegate_to_orchestrator")(
+    out = await tool(d, vaic("app-new-1"), "delegate_to_orchestrator")(
         {
             "goal": "Build a family shopping list app",
             "owner_words": "make us a shopping list",
@@ -73,7 +73,7 @@ async def test_the_agreed_brief_travels_with_the_build() -> None:
 async def test_in_an_apps_own_chat_a_change_goes_to_that_app() -> None:
     d = city_deps()
     await an_app(d)
-    await tool(d, ace("app-app-snake"), "delegate_to_orchestrator")(
+    await tool(d, vaic("app-app-snake"), "delegate_to_orchestrator")(
         {"goal": "make snake harder", "owner_words": "harder please", "confirm": True}
     )
     (t,) = [t for t in await d.ledger.list_tickets(("open",)) if t.get("kind") == "task"]
@@ -82,27 +82,27 @@ async def test_in_an_apps_own_chat_a_change_goes_to_that_app() -> None:
 
 async def test_offer_choices_puts_tappable_options_on_the_bus() -> None:
     d = city_deps()
-    offer = tool(d, ace("app-new-1"), "offer_choices")
+    offer = tool(d, vaic("app-new-1"), "offer_choices")
     out = await offer({"question": "Who will use it?", "options": ["Just me", " My family ", "My customers"]})
     assert "Ask the question" in out
-    (e,) = d.bus.of_type("ace.question")  # type: ignore[attr-defined]
+    (e,) = d.bus.of_type("vaic.question")  # type: ignore[attr-defined]
     assert e["conversation"] == "app-new-1" and e["question"] == "Who will use it?"
     assert e["options"] == ["Just me", "My family", "My customers"]
     assert "at least" in await offer({"question": "Who?", "options": ["Only one"]})
-    assert len(d.bus.of_type("ace.question")) == 1  # type: ignore[attr-defined]
-    assert parse_event({"type": "ace.question", "at": "x", "conversation": "c", "question": "q", "options": ["a"]})
+    assert len(d.bus.of_type("vaic.question")) == 1  # type: ignore[attr-defined]
+    assert parse_event({"type": "vaic.question", "at": "x", "conversation": "c", "question": "q", "options": ["a"]})
 
 
 # ---------- a new project's chat goes on as the app's chat ----------
 async def test_an_app_built_from_a_new_project_chat_is_linked_to_it() -> None:
     s3 = FakeS3()
     d = api(s3)
-    await d.ledger.create_ticket({"id": "t-task", "goal": "shopping list", "from": "ace", "to": "orchestrator",
+    await d.ledger.create_ticket({"id": "t-task", "goal": "shopping list", "from": "vaic", "to": "orchestrator",
                                   "department": None, "parent_id": None, "conversation": "app-new-1",
                                   "brief": BRIEF})  # fmt: skip
     await draft(d.ledger, "drf-1", "t-task", "awaiting_owner")
     for p, b in GAME.items():
-        s3.put("aic-prod-apps", f"drafts/drf-1/{p}", b)
+        s3.put("vaic-prod-apps", f"drafts/drf-1/{p}", b)
     app = await publish_draft(d.ledger, d.bus, origin(s3), "drf-1")
     assert app["conversation"] == "app-new-1" and app["brief"] == BRIEF
     (e,) = d.bus.of_type("app.published")  # type: ignore[attr-defined]
@@ -113,30 +113,30 @@ async def test_an_app_built_from_a_new_project_chat_is_linked_to_it() -> None:
 async def test_an_app_from_an_ordinary_chat_has_no_project_link() -> None:
     s3 = FakeS3()
     d = api(s3)
-    await d.ledger.create_ticket({"id": "t-task", "goal": "g", "from": "ace", "to": "orchestrator",
+    await d.ledger.create_ticket({"id": "t-task", "goal": "g", "from": "vaic", "to": "orchestrator",
                                   "department": None, "parent_id": None, "conversation": "main"})  # fmt: skip
     await draft(d.ledger, "drf-1", "t-task", "awaiting_owner")
     for p, b in GAME.items():
-        s3.put("aic-prod-apps", f"drafts/drf-1/{p}", b)
+        s3.put("vaic-prod-apps", f"drafts/drf-1/{p}", b)
     app = await publish_draft(d.ledger, d.bus, origin(s3), "drf-1")
     assert "conversation" not in app
     assert "conversation" not in d.bus.of_type("app.published")[0]  # type: ignore[attr-defined]
 
 
-async def test_aic_in_an_apps_chat_knows_the_app_and_what_was_said_before_it_existed() -> None:
+async def test_vaic_in_an_apps_chat_knows_the_app_and_what_was_said_before_it_existed() -> None:
     from city_support import make_city, scripted_engine
 
     city = make_city(scripted_engine({}))
     await an_app(city.deps)
-    from aic.shared.table import UpdateOptions
+    from vaic.shared.table import UpdateOptions
 
     await city.ledger.table.update(
         "APPS", "APP#app-snake", UpdateOptions(set={"conversation": "app-new-1", "brief": "Snake for the kids."})
     )
     await city.ledger.add_conversation_line("app-new-1", "owner", "make a snake game for the kids")
-    await city.ledger.add_conversation_line("app-new-1", "ace", "Shall I build it?")
-    me = {"id": "ace", "kind": "ace", "role": "ace"}
-    inv = {"role": "ace", "kind": "task", "from": "owner", "body": "make it harder", "ticketId": "c", "taskId": "c",
+    await city.ledger.add_conversation_line("app-new-1", "vaic", "Shall I build it?")
+    me = {"id": "vaic", "kind": "vaic", "role": "vaic"}
+    inv = {"role": "vaic", "kind": "task", "from": "owner", "body": "make it harder", "ticketId": "c", "taskId": "c",
            "conversation": "app-app-snake"}  # fmt: skip
     text = await city.host._prompt(me, inv)
     assert "app “Snake” (app_id app-snake, version 1)" in text
@@ -157,7 +157,7 @@ async def test_the_activity_tells_an_apps_story_in_plain_words_newest_last() -> 
     s3 = FakeS3()
     d = api(s3)
     led = d.ledger
-    await led.create_ticket({"id": "t-task", "goal": "Build the shopping list (app-x)", "from": "ace",
+    await led.create_ticket({"id": "t-task", "goal": "Build the shopping list (app-x)", "from": "vaic",
                              "to": "orchestrator", "department": None, "parent_id": None,
                              "conversation": "app-new-1"})  # fmt: skip
     await led.create_ticket({"id": "t-dept", "goal": "Shopping list app", "from": "orchestrator",
@@ -166,7 +166,7 @@ async def test_the_activity_tells_an_apps_story_in_plain_words_newest_last() -> 
     await led.create_ticket({"id": "t-wkr", "goal": "Build `app/index.html`", "from": "mgr-apps",
                              "to": "wkr-apps-1", "department": "Apps", "parent_id": "t-dept",
                              "kind": "assignment"})  # fmt: skip
-    await led.create_ticket({"id": "t-other", "goal": "Unrelated research", "from": "ace", "to": "orchestrator",
+    await led.create_ticket({"id": "t-other", "goal": "Unrelated research", "from": "vaic", "to": "orchestrator",
                              "department": None, "parent_id": None})  # fmt: skip
     await led.set_ticket_status("t-wkr", "in_progress")
     await led.set_ticket_status("t-wkr", "in_review")
@@ -175,7 +175,7 @@ async def test_the_activity_tells_an_apps_story_in_plain_words_newest_last() -> 
                                      "summary": "The tick button does nothing on t-wkr", "at": "2026-11-08T23:59:00.000Z"})  # fmt: skip
     await draft(led, "drf-1", "t-task", "awaiting_owner", "Shopping List")
     for p, b in GAME.items():
-        s3.put("aic-prod-apps", f"drafts/drf-1/{p}", b)
+        s3.put("vaic-prod-apps", f"drafts/drf-1/{p}", b)
     await led.request_approval({"agent": "orchestrator", "ticket_id": "t-task", "tool": "app.publish",
                                 "action": "Publish the app “Shopping List” under Apps", "hash": "h",
                                 "reason": "r", "kind": "app.publish", "draft_id": "drf-1"})  # fmt: skip
@@ -209,10 +209,10 @@ async def test_the_activity_tells_an_apps_story_in_plain_words_newest_last() -> 
 async def test_the_activity_keeps_the_newest_hundred_and_404s_an_unknown_app() -> None:
     d = api(FakeS3())
     await an_app(d)
-    from aic.shared.table import UpdateOptions
+    from vaic.shared.table import UpdateOptions
 
     await d.ledger.table.update("APPS", "APP#app-snake", UpdateOptions(set={"task_id": "t-task"}))
-    await d.ledger.create_ticket({"id": "t-task", "goal": "g", "from": "ace", "to": "orchestrator",
+    await d.ledger.create_ticket({"id": "t-task", "goal": "g", "from": "vaic", "to": "orchestrator",
                                   "department": None, "parent_id": None})  # fmt: skip
     for i in range(MAX_ITEMS + 20):
         await d.ledger.append_event("t-task", {"type": "instruction", "text": f"note {i}", "ticket_id": "t-task",

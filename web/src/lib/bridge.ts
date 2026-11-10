@@ -15,8 +15,8 @@ export interface AppCapability {
 }
 export type BridgeError = "not_granted" | "preview" | "invalid" | "rate_limited" | "unavailable" | "login_expired";
 export type BridgeReply =
-  | { aic: 1; id: string; ok: true; data?: unknown; status?: string }
-  | { aic: 1; id: string; ok: false; error: BridgeError; message: string };
+  | { vaic: 1; id: string; ok: true; data?: unknown; status?: string }
+  | { vaic: 1; id: string; ok: false; error: BridgeError; message: string };
 
 export const PROPOSE_KINDS = ["calendar.respond", "calendar.create", "mail.draft"] as const;
 export const LIMITS = { inFlight: 4, perMinute: 30, idLen: 40, capLen: 40, paramsBytes: 8 * 1024 } as const;
@@ -99,11 +99,11 @@ export async function onMessage(ev: MessageEvent): Promise<void> {
   if (!frame) return;
   const target = frame.el.contentWindow!;
   const reply = (r: BridgeReply) => target.postMessage(r, "*"); // "*": the frame's origin is opaque; the target is that exact window
-  const fail = (id: string, error: BridgeError) => reply({ aic: 1, id, ok: false, error, message: MESSAGES[error] });
+  const fail = (id: string, error: BridgeError) => reply({ vaic: 1, id, ok: false, error, message: MESSAGES[error] });
 
   // 2. The shape. Without a usable id there is nobody to answer: drop it.
   const m = ev.data as unknown;
-  if (!isPlain(m) || m.aic !== 1 || typeof m.id !== "string" || !m.id || m.id.length > LIMITS.idLen) return;
+  if (!isPlain(m) || m.vaic !== 1 || typeof m.id !== "string" || !m.id || m.id.length > LIMITS.idLen) return;
   const id = m.id;
   if (typeof m.cap !== "string" || !m.cap || m.cap.length > LIMITS.capLen) return fail(id, "invalid");
   const params = m.params ?? {};
@@ -131,13 +131,13 @@ export async function onMessage(ev: MessageEvent): Promise<void> {
         method: "POST",
         body: { kind: params.kind, params: isPlain(params.params) ? params.params : {} },
       });
-      if (frames.has(frame)) reply({ aic: 1, id, ok: true, status: "waiting_for_you" });
+      if (frames.has(frame)) reply({ vaic: 1, id, ok: true, status: "waiting_for_you" });
     } else {
       const r = await api<Record<string, unknown>>(`/apps/${encodeURIComponent(appId)}/bridge`, {
         method: "POST",
         body: { cap: m.cap, params },
       });
-      if (frames.has(frame)) reply({ aic: 1, id, ok: true, data: r && "data" in r ? r.data : r });
+      if (frames.has(frame)) reply({ vaic: 1, id, ok: true, data: r && "data" in r ? r.data : r });
     }
   } catch (e) {
     if (frames.has(frame)) fail(id, bridgeError(e));
@@ -163,7 +163,7 @@ export function forwardEvent(e: { type?: unknown; [k: string]: unknown }) {
   for (const f of frames) {
     if (f.appId === null || !f.el.contentWindow) continue;
     const grants = (apps[f.appId]?.grants ?? []) as AppCapability[];
-    if (grants.some((g) => needs.includes(g.id))) f.el.contentWindow.postMessage({ aic: 1, event: e.type }, "*");
+    if (grants.some((g) => needs.includes(g.id))) f.el.contentWindow.postMessage({ vaic: 1, event: e.type }, "*");
   }
 }
 

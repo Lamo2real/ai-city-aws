@@ -9,19 +9,19 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from aic.shared.caps import default_settings
-from aic.shared.cost import Usage
-from aic.shared.events import MemoryBus
-from aic.shared.knowledge.blobs import MemoryBlobs
-from aic.shared.knowledge.extract import Entity, Extraction, Relationship
-from aic.shared.knowledge.graph import MemoryGraph
-from aic.shared.knowledge.haiku import KnowledgeModel
-from aic.shared.knowledge.kb import FakeKnowledgeBase
-from aic.shared.knowledge.service import KnowledgeService
-from aic.shared.knowledge.store import KnowledgeStore
-from aic.shared.ledger import Ledger
-from aic.shared.table import MemoryTable
-from aic.shared.turn import TurnInput, TurnOutput
+from vaic.shared.caps import default_settings
+from vaic.shared.cost import Usage
+from vaic.shared.events import MemoryBus
+from vaic.shared.knowledge.blobs import MemoryBlobs
+from vaic.shared.knowledge.extract import Entity, Extraction, Relationship
+from vaic.shared.knowledge.graph import MemoryGraph
+from vaic.shared.knowledge.haiku import KnowledgeModel
+from vaic.shared.knowledge.kb import FakeKnowledgeBase
+from vaic.shared.knowledge.service import KnowledgeService
+from vaic.shared.knowledge.store import KnowledgeStore
+from vaic.shared.ledger import Ledger
+from vaic.shared.table import MemoryTable
+from vaic.shared.turn import TurnInput, TurnOutput
 
 
 class Clock:
@@ -98,7 +98,7 @@ class World:
 
 
 def world() -> World:
-    from aic.shared.utility import UtilityDeps
+    from vaic.shared.utility import UtilityDeps
 
     clock = Clock()
     table = MemoryTable()

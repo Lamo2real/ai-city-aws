@@ -10,7 +10,7 @@ variable "agent_role_names" { type = map(string) }
 
 locals {
   tags        = { Component = "github" }
-  secret_name = "aic/prod/github"
+  secret_name = "vaic/prod/github"
 }
 
 resource "aws_secretsmanager_secret" "github" {

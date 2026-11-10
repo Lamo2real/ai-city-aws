@@ -3,10 +3,10 @@ hands it to the department, and the manager hires exactly that many, beyond the 
 
 from dataclasses import replace
 
-from aic.runtime.tools import TurnCtx
-from aic.shared.hierarchy.factory import Factory
 from test_apps import city_deps as apps_city_deps
 from test_apps import tool
+from vaic.runtime.tools import TurnCtx
+from vaic.shared.hierarchy.factory import Factory
 
 
 def city_deps():  # type: ignore[no-untyped-def]
@@ -14,13 +14,13 @@ def city_deps():  # type: ignore[no-untyped-def]
     return replace(d, factory=Factory(d.ledger, d.bus, d.settings))
 
 
-ACE = TurnCtx(agent_id="ace", role="ace", department=None, ticket_id="", task_id="")
+VAIC = TurnCtx(agent_id="vaic", role="vaic", department=None, ticket_id="", task_id="")
 SPEC = {"specialty": "Researcher", "instructions": "Research one competitor.", "tools": ["WebSearch"]}
 
 
 async def test_the_owners_exact_worker_count_reaches_the_manager_and_is_hired_exactly() -> None:
     d = city_deps()
-    delegate = tool(d, ACE, "delegate_to_orchestrator")
+    delegate = tool(d, VAIC, "delegate_to_orchestrator")
     ask = await delegate({"goal": "Research five competitors in depth", "owner_words": "use 5 agents", "workers": 5})
     assert "with 5 agents working at once" in ask
     out = await delegate(
@@ -57,7 +57,7 @@ async def test_the_owners_exact_worker_count_reaches_the_manager_and_is_hired_ex
 
 async def test_without_a_number_the_usual_cap_applies() -> None:
     d = city_deps()
-    await d.ledger.create_ticket({"id": "t-task", "goal": "g", "from": "ace", "to": "orchestrator",
+    await d.ledger.create_ticket({"id": "t-task", "goal": "g", "from": "vaic", "to": "orchestrator",
                                   "department": None, "parent_id": None})  # fmt: skip
     orch = TurnCtx(agent_id="orchestrator", role="orchestrator", department=None, ticket_id="t-task", task_id="t-task")
     await tool(d, orch, "create_department")({"name": "Writing", "mission": "Writes research reports."})
@@ -78,7 +78,7 @@ async def test_assignments_of_released_workers_never_block_the_goal() -> None:
     # The stuck Research goal (2026-11-08): assignments held by released workers stayed open forever, so the
     # manager could never report the goal and kept asking the owner to "purge orphan tickets".
     d = city_deps()
-    await d.ledger.create_ticket({"id": "t-task", "goal": "g", "from": "ace", "to": "orchestrator",
+    await d.ledger.create_ticket({"id": "t-task", "goal": "g", "from": "vaic", "to": "orchestrator",
                                   "department": None, "parent_id": None})  # fmt: skip
     orch = TurnCtx(agent_id="orchestrator", role="orchestrator", department=None, ticket_id="t-task", task_id="t-task")
     await tool(d, orch, "create_department")({"name": "Writing", "mission": "Writes research reports."})

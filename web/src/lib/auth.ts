@@ -4,7 +4,7 @@
 // sessionStorage, so they are gone when the tab closes.
 //
 // Everything goes through the small AuthClient interface below. Tests (and the Playwright journeys) put a
-// fake on window.__aicAuth; production uses Amplify.
+// fake on window.__vaicAuth; production uses Amplify.
 import { config } from "./config.ts";
 
 /** What the owner has to do next. */
@@ -186,16 +186,16 @@ export async function bootAuth(
 export async function signOutHere() {
   await auth().signOut();
   try {
-    for (const k of ["aic.chat", "aic.draft"]) localStorage.removeItem(k);
+    for (const k of ["vaic.chat", "vaic.draft"]) localStorage.removeItem(k);
   } catch {
     /* no storage */
   }
 }
 
 let client: AuthClient | null = null;
-/** The auth client: a test fake on window.__aicAuth when present, else Amplify. */
+/** The auth client: a test fake on window.__vaicAuth when present, else Amplify. */
 export function auth(): AuthClient {
-  const fake = (window as unknown as { __aicAuth?: AuthClient }).__aicAuth;
+  const fake = (window as unknown as { __vaicAuth?: AuthClient }).__vaicAuth;
   if (fake) return fake;
   return (client ??= amplifyClient());
 }

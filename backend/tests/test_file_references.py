@@ -10,21 +10,21 @@ import re
 from pathlib import Path
 from typing import Any
 
-from aic.runtime.engine import EngineRequest, user_content
-from aic.runtime.references import RULE
-from aic.shared.apps import Workspace
-from aic.shared.files.service import FilesAccess
-from aic.shared.knowledge.blobs import MemoryBlobs
 from city_support import Call, make_city, scripted_engine
 from knowledge_support import pdf_with_text, png
 from test_files import FakeS3, upload, world
 from test_hierarchy_e2e import ALL_STATUSES  # type: ignore[attr-defined]
+from vaic.runtime.engine import EngineRequest, user_content
+from vaic.runtime.references import RULE
+from vaic.shared.apps import Workspace
+from vaic.shared.files.service import FilesAccess
+from vaic.shared.knowledge.blobs import MemoryBlobs
 
 GOAL = "Build a habit tracker app"
 SEEN: dict[str, Any] = {}
 
 
-async def ace(req: EngineRequest, call: Call) -> str:
+async def vaic(req: EngineRequest, call: Call) -> str:
     if "(task) from owner" not in req.turn.prompt:
         return "Done."
     img = json.loads(
@@ -51,7 +51,7 @@ async def ace(req: EngineRequest, call: Call) -> str:
 
 
 async def orchestrator(req: EngineRequest, call: Call) -> str:
-    if "(task) from ace" in req.turn.prompt:
+    if "(task) from vaic" in req.turn.prompt:
         SEEN["orchestrator"] = req.turn.prompt
         await call("create_department", {"name": "Builders", "mission": "Build the owner's apps."})
         await call("assign_to_department", {"department": "Builders", "goal": GOAL, "acceptance": "it works"})
@@ -90,18 +90,20 @@ async def test_the_owners_files_reach_the_builder_as_an_image_and_as_text(tmp_pa
     await upload(
         w, "React best practices.pdf", pdf_with_text(["Use function components and hooks. " * 20]), "application/pdf"
     )
-    city = make_city(scripted_engine({"ace": ace, "orchestrator": orchestrator, "manager": manager, "worker": worker}))
+    city = make_city(
+        scripted_engine({"vaic": vaic, "orchestrator": orchestrator, "manager": manager, "worker": worker})
+    )
     d = city.host.d
     d.files = FilesAccess(service=w.service, bucket=w.blobs.bucket)
     s3 = FakeS3(w.blobs, tmp_path)
-    d.workspace = Workspace(bucket="aic-test-workspaces", s3_for=lambda hire: s3, root=str(tmp_path))
+    d.workspace = Workspace(bucket="vaic-test-workspaces", s3_for=lambda hire: s3, root=str(tmp_path))
     d.bus.on(w.bus.events.append)
 
     await city.owner_says("build a habit tracker following my React guide, UI like the sunset Porsche image")
     await city.run()
 
     assert "Handed to the Orchestrator" in SEEN["delegate"]
-    task = next(t for t in await city.ledger.list_tickets(ALL_STATUSES) if t["from"] == "ace")
+    task = next(t for t in await city.ledger.list_tickets(ALL_STATUSES) if t["from"] == "vaic")
     assert [(r["name"], r["use"]) for r in task["references"]] == [
         ("React best practices.pdf", "follow"),
         ("sunset.png", "inspiration"),
@@ -110,7 +112,7 @@ async def test_the_owners_files_reach_the_builder_as_an_image_and_as_text(tmp_pa
     for role in ("orchestrator", "manager"):
         assert "sunset.png" in SEEN[role] and "React best practices.pdf" in SEEN[role] and RULE in SEEN[role]
     # The project chat shows the references.
-    shown = city.bus.of_type("ace.files")
+    shown = city.bus.of_type("vaic.files")
     assert shown and shown[-1]["label"] == "References for this build"
     # The worker's assignment turn: the document's text as data, the image attached as an image.
     req: EngineRequest = SEEN["worker"]
@@ -128,9 +130,9 @@ async def test_an_unknown_file_starts_nothing() -> None:
     city = make_city(scripted_engine({}))
     d = city.host.d
     d.files = FilesAccess(service=w.service, bucket=MemoryBlobs().bucket)
-    from aic.runtime.tools import TurnCtx, gate_tools, tools_for
+    from vaic.runtime.tools import TurnCtx, gate_tools, tools_for
 
-    c = TurnCtx("ace", "ace", None, "t1", "t1", conversation="main", from_owner=True)
+    c = TurnCtx("vaic", "vaic", None, "t1", "t1", conversation="main", from_owner=True)
     t = next(x for x in gate_tools(d, c, tools_for(d, c)) if x.name == "delegate_to_orchestrator")
     r = await t.handler(
         {
@@ -141,4 +143,4 @@ async def test_an_unknown_file_starts_nothing() -> None:
         }
     )
     assert r.startswith("Not started") and "find_files" in r
-    assert not [x for x in await city.ledger.list_tickets(ALL_STATUSES) if x["from"] == "ace"]
+    assert not [x for x in await city.ledger.list_tickets(ALL_STATUSES) if x["from"] == "vaic"]

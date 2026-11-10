@@ -9,14 +9,14 @@ from pathlib import Path
 
 import pytest
 
-from aic.runtime.engine import EngineRequest
-from aic.shared.knowledge.service import KnowledgeAccess, KnowledgeError
-from aic.shared.leads import csv_blocks, save_lead_csvs
-from aic.shared.ledger import ALL_STATUSES
-from aic.shared.presets import catalog, ensure_presets, preset_for
-from aic.shared.skills_bundled import bundled_skill, department_skills
 from city_support import Call, make_city, scripted_engine
 from knowledge_support import world
+from vaic.runtime.engine import EngineRequest
+from vaic.shared.knowledge.service import KnowledgeAccess, KnowledgeError
+from vaic.shared.leads import csv_blocks, save_lead_csvs
+from vaic.shared.ledger import ALL_STATUSES
+from vaic.shared.presets import catalog, ensure_presets, preset_for
+from vaic.shared.skills_bundled import bundled_skill, department_skills
 
 ASK = "find me 2 leads: Swedish fintechs hiring engineers"
 TABLE = (
@@ -63,23 +63,23 @@ def test_csv_blocks_are_read_from_a_report() -> None:
 async def test_find_me_two_leads_walks_to_sales_and_comes_back_as_a_table_and_a_csv() -> None:
     seen: dict[str, str] = {}
 
-    async def ace(req: EngineRequest, call: Call) -> str:
+    async def vaic(req: EngineRequest, call: Call) -> str:
         if "(task) from owner" in req.turn.prompt:
             await call("delegate_to_orchestrator", {"goal": "Sales: lead research. " + ASK, "owner_words": ASK,
                                                     "confirm": True})  # fmt: skip
             return "On it."
-        seen["ace"] = req.turn.prompt
+        seen["vaic"] = req.turn.prompt
         return "Here are your two leads."
 
     async def orchestrator(req: EngineRequest, call: Call) -> str:
-        if "(task) from ace" in req.turn.prompt:
+        if "(task) from vaic" in req.turn.prompt:
             await call("assign_to_department", {"department": "Business Development", "goal": ASK,
                                                 "acceptance": "2 leads with every field or 'not found publicly'"})  # fmt: skip
             return "Sent."
         reports = json.loads(await call("get_reports", {}))
         if reports and all(r["status"] == "in_review" for r in reports):
             await call("sign_off", {"verdict": "PASS", "reasons": "Two leads, every field sourced."})
-            await call("report_to_ace", {"summary": f"Two leads found.\n\n{TABLE}"})
+            await call("report_to_vaic", {"summary": f"Two leads found.\n\n{TABLE}"})
         return "ok"
 
     async def manager(req: EngineRequest, call: Call) -> str:
@@ -103,14 +103,16 @@ async def test_find_me_two_leads_walks_to_sales_and_comes_back_as_a_table_and_a_
         return "Reported."
 
     w = world()
-    city = make_city(scripted_engine({"ace": ace, "orchestrator": orchestrator, "manager": manager, "worker": worker}))
+    city = make_city(
+        scripted_engine({"vaic": vaic, "orchestrator": orchestrator, "manager": manager, "worker": worker})
+    )
     city.deps.knowledge = KnowledgeAccess(store=w.store, kb=w.kb, service=w.service)
     await ensure_presets(city.ledger)  # the preset departments stand from the start
     await city.owner_says(ASK)
     await city.run()
 
     every = await city.ledger.list_tickets(ALL_STATUSES)
-    task = next(t for t in every if t["from"] == "ace")  # the job the Work screen shows
+    task = next(t for t in every if t["from"] == "vaic")  # the job the Work screen shows
     assert task["status"] == "done"
     dept = next(t for t in every if t["from"] == "orchestrator")
     assert dept["department"] == "Sales"
@@ -122,8 +124,8 @@ async def test_find_me_two_leads_walks_to_sales_and_comes_back_as_a_table_and_a_
     assert body == CSV.encode() and content_type.startswith("text/csv")
     item = await w.store.get_item(key.split("/")[1])
     assert item and item["kind"] == "document" and item["title"].startswith("Leads: Sales: lead research")
-    assert "| Ada Berg | CTO | Kassa AB" in seen["ace"]  # the table reaches VAIC for the chat
-    assert "Saved to the owner's knowledge base as a CSV: “Leads:" in seen["ace"]
+    assert "| Ada Berg | CTO | Kassa AB" in seen["vaic"]  # the table reaches VAIC for the chat
+    assert "Saved to the owner's knowledge base as a CSV: “Leads:" in seen["vaic"]
 
     assert await save_lead_csvs(city.ledger, w.service, task["id"]) == []  # a re-delivered report saves nothing
     assert await save_lead_csvs(city.ledger, None, task["id"]) == []

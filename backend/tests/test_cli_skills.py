@@ -1,4 +1,4 @@
-"""Opt-in (``AIC_CLI_CHECK=1``): starts the Claude Code CLI bundled with the Agent SDK, with the city's options,
+"""Opt-in (``VAIC_CLI_CHECK=1``): starts the Claude Code CLI bundled with the Agent SDK, with the city's options,
 and reads the skills its init message lists. The model endpoint is a dead localhost port, so no model is
 called and nothing leaves the machine; the turn then fails, which is expected.
 
@@ -16,7 +16,7 @@ from typing import Any
 
 import pytest
 
-pytestmark = pytest.mark.skipif(os.environ.get("AIC_CLI_CHECK") != "1", reason="starts the real CLI; opt in")
+pytestmark = pytest.mark.skipif(os.environ.get("VAIC_CLI_CHECK") != "1", reason="starts the real CLI; opt in")
 
 
 def _skill(root: Path, name: str) -> None:
@@ -30,7 +30,7 @@ async def test_the_cli_loads_only_the_city_plugin_skills(tmp_path: Path) -> None
 
     plugin = tmp_path / "plugin"
     (plugin / ".claude-plugin").mkdir(parents=True)
-    (plugin / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name": "aic-skills", "version": "1"}))
+    (plugin / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name": "vaic-skills", "version": "1"}))
     _skill(plugin / "skills", "city-skill")
     home = tmp_path / "home"
     _skill(home / ".claude" / "skills", "home-decoy")
@@ -74,6 +74,6 @@ async def test_the_cli_loads_only_the_city_plugin_skills(tmp_path: Path) -> None
     except Exception as e:  # the dead endpoint ends the turn
         print("turn ended as expected:", type(e).__name__)
     skills = init.get("skills") or []
-    assert "aic-skills:city-skill" in skills
+    assert "vaic-skills:city-skill" in skills
     assert not [s for s in skills if "decoy" in s]
-    assert set(skills) <= {"aic-skills:city-skill", "doctor", "plugin-authoring"}
+    assert set(skills) <= {"vaic-skills:city-skill", "doctor", "plugin-authoring"}

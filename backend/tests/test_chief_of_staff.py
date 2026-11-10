@@ -3,11 +3,11 @@
 import json
 from typing import Any
 
-from aic.lambdas.api import handle_http, steward_apply
-from aic.lambdas.chief_of_staff import handle, item_id
-from aic.shared.chief_of_staff import ChiefDeps, digest, parse_decision, review
-from aic.shared.turn import TurnInput, TurnOutput
 from test_api import FakeSfn, ev, js, make
+from vaic.lambdas.api import handle_http, steward_apply
+from vaic.lambdas.chief_of_staff import handle, item_id
+from vaic.shared.chief_of_staff import ChiefDeps, digest, parse_decision, review
+from vaic.shared.turn import TurnInput, TurnOutput
 
 
 class Model:
@@ -36,7 +36,7 @@ async def _stuck_research(d: Any) -> tuple[dict[str, Any], dict[str, Any]]:
     """The Research manager stuck on a goal, asking the owner to clear phantom workers (t-c32ca08b9bdf)."""
     await d.ledger.put_agent({"id": "mgr-research", "kind": "manager", "role": "Research Manager", "department": "Research",
                               "model": "fable-5-2", "parent": "orchestrator", "state": "active", "total_cost_usd": 0})  # fmt: skip
-    task = await d.ledger.create_ticket({"goal": "Find 20 leads", "from": "ace", "to": "orchestrator", "department": None,
+    task = await d.ledger.create_ticket({"goal": "Find 20 leads", "from": "vaic", "to": "orchestrator", "department": None,
                                          "parent_id": None, "kind": "task", "owner_words": "find me leads", "status": "in_progress"})  # fmt: skip
     goal = await d.ledger.create_ticket({"goal": "Research leads", "from": "orchestrator", "to": "mgr-research", "department": "Research",
                                          "parent_id": task["id"], "kind": "assignment", "status": "waiting_on_owner"})  # fmt: skip
@@ -219,5 +219,5 @@ async def test_daily_digest_is_one_paragraph_in_aics_conversation_once() -> None
     assert (await digest(d.ledger, d.bus))["digest"] == "sent"
     assert (await digest(d.ledger, d.bus))["digest"] == "already sent"
     line = (await d.ledger.recent_conversation("main"))[-1]
-    assert line["who"] == "ace" and "decided 1 item" in line["text"]
-    assert d.bus.of_type("ace.reply")[0]["done"] is True
+    assert line["who"] == "vaic" and "decided 1 item" in line["text"]
+    assert d.bus.of_type("vaic.reply")[0]["done"] is True

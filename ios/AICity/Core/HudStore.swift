@@ -1,11 +1,11 @@
-// One store for the whole app, like web/src/lib/store.ts: the city (via the ported reducer), AIC's chat,
+// One store for the whole app, like web/src/lib/store.ts: the city (via the ported reducer), VAIC's chat,
 // the connection status and the owner's outbox. Every screen reads from here; the WebSocket and API write.
 import Foundation
 import Observation
 
 struct ChatLine: Codable, Equatable, Identifiable, Sendable {
-    enum Who: String, Codable { case owner, ace }
-    /// Owner lines: queued (not sent yet), sent, or failed. AIC lines: streaming until done.
+    enum Who: String, Codable { case owner, vaic }
+    /// Owner lines: queued (not sent yet), sent, or failed. VAIC lines: streaming until done.
     enum State: String, Codable { case queued, sent, failed, streaming, done }
     var id: String
     var who: Who
@@ -20,7 +20,7 @@ struct ChatLine: Codable, Equatable, Identifiable, Sendable {
     var filesLabel: String?
 }
 
-struct AceTurn: Equatable, Sendable {
+struct VaicTurn: Equatable, Sendable {
     var started: Double
     var steps: [String]
     /// Files VAIC showed in this turn before its reply line existed.
@@ -65,7 +65,7 @@ final class HudStore {
     var chat: [ChatLine] { didSet { archive.save(chat) } }
     var live: LiveStatus = .connecting
     var presence: Presence = .idle
-    var turn: AceTurn?
+    var turn: VaicTurn?
     /// The Chief of Staff on Needs you (Core/ChiefOfStaff.swift).
     var chief = ChiefState()
 
@@ -78,9 +78,9 @@ final class HudStore {
     @ObservationIgnored var onSceneSnapshot: (JSONValue, [JSONValue]) -> Void = { _, _ in }
     @ObservationIgnored var onSceneEvent: (JSONValue) -> Void = { _ in }
     @ObservationIgnored private(set) var lastSnapshot: JSONValue?
-    /// Called once with AIC's whole reply when it is done (to read it aloud).
+    /// Called once with VAIC's whole reply when it is done (to read it aloud).
     @ObservationIgnored var onReplyDone: (String) -> Void = { _ in }
-    /// `hud.action` events: AIC changing the theme or the open page on the owner's devices (decision 143).
+    /// `hud.action` events: VAIC changing the theme or the open page on the owner's devices (decision 143).
     @ObservationIgnored var onHudAction: (JSONValue) -> Void = { _ in }
     /// `knowledge.updated` events, for the files attached to the message being written.
     @ObservationIgnored var onKnowledgeUpdated: (JSONValue) -> Void = { _ in }
@@ -166,19 +166,19 @@ final class HudStore {
     func event(_ e: JSONValue) {
         let type = e["type"].string ?? ""
         // A project's chat ("app-…") is not VAIC's main chat (the web HUD filters the same way).
-        if type == "ace.reply" || type == "ace.question", (e["conversation"].string ?? "").hasPrefix("app-") { return }
-        if type == "ace.reply" { return aceReply(text: e["text"].string ?? "", done: e["done"].bool ?? false) }
+        if type == "vaic.reply" || type == "vaic.question", (e["conversation"].string ?? "").hasPrefix("app-") { return }
+        if type == "vaic.reply" { return vaicReply(text: e["text"].string ?? "", done: e["done"].bool ?? false) }
         if type == "knowledge.updated" { return onKnowledgeUpdated(e) }
         if type == "hud.action" { return onHudAction(e) }
-        if type == "ace.files" {
+        if type == "vaic.files" {
             guard (e["conversation"].string ?? "main") == "main" else { return }
             let cards = e["files"].array.compactMap(ChatFile.init(json:))
             if let label = e["label"].string, !label.isEmpty, !cards.isEmpty {  // the references a build uses: own line
-                chat.append(ChatLine(id: "a-files-\(Int(clock()))-\(chat.count)", who: .ace, text: "", state: .done, at: clock(),
+                chat.append(ChatLine(id: "a-files-\(Int(clock()))-\(chat.count)", who: .vaic, text: "", state: .done, at: clock(),
                                      files: cards, filesLabel: label))
                 return
             }
-            return aceFiles(cards)
+            return vaicFiles(cards)
         }
         if type == "steward.decided" { return stewardDecided(e) }
         // The backend answers first, then says `steward.decided`: remember what a closing item was about.
@@ -187,16 +187,16 @@ final class HudStore {
             if recentlyClosed.count >= 50 { recentlyClosed.removeAll() }
             recentlyClosed[id] = d
         }
-        if type == "activity", e["id"].string == "ace" { aceStep(e["activity"].string ?? "", e["detail"].string) }
+        if type == "activity", e["id"].string == "vaic" { vaicStep(e["activity"].string ?? "", e["detail"].string) }
         during?.append(e)
         city = City.reduce(city, e, now: clock())
         if during == nil { onSceneEvent(e) }
     }
 
-    /// Starts AIC's turn: the status row shows from now until its first words.
-    func beginTurn() { turn = AceTurn(started: clock(), steps: [Steps.first]) }
+    /// Starts VAIC's turn: the status row shows from now until its first words.
+    func beginTurn() { turn = VaicTurn(started: clock(), steps: [Steps.first]) }
 
-    private func aceStep(_ activity: String, _ detail: String?) {
+    private func vaicStep(_ activity: String, _ detail: String?) {
         guard let words = Steps.words(activity: activity, detail: detail), var t = turn, t.steps.last != words else { return }
         t.steps.append(words)
         turn = t
@@ -204,10 +204,10 @@ final class HudStore {
 
     /// Files VAIC shows (show_files, docs/FILES.md §8): on its reply to this turn, or held for that reply until its
     /// first words; with no turn on this phone (asked on another device), as VAIC's own line.
-    private func aceFiles(_ cards: [ChatFile]) {
+    private func vaicFiles(_ cards: [ChatFile]) {
         guard !cards.isEmpty else { return }
         func merge(_ have: [ChatFile]) -> [ChatFile] { have + cards.filter { c in !have.contains { $0.id == c.id } } }
-        let i = chat.lastIndex { $0.who == .ace }
+        let i = chat.lastIndex { $0.who == .vaic }
         if var t = turn {
             if let i, chat[i].at >= t.started {
                 chat[i].files = merge(chat[i].files ?? [])
@@ -217,22 +217,22 @@ final class HudStore {
             }
             return
         }
-        chat.append(ChatLine(id: "a-files-\(Int(clock()))-\(chat.count)", who: .ace, text: "", state: .done, at: clock(), files: cards))
+        chat.append(ChatLine(id: "a-files-\(Int(clock()))-\(chat.count)", who: .vaic, text: "", state: .done, at: clock(), files: cards))
     }
 
-    private func aceReply(text: String, done: Bool) {
+    private func vaicReply(text: String, done: Bool) {
         var c = chat
         let last = c.last
-        // The final reply arrives twice (straight from AIC, and through the event bus as a safety net).
-        if done, let last, last.who == .ace, last.state == .done, last.text == text { return }
-        if let last, last.who == .ace, last.state == .streaming {
+        // The final reply arrives twice (straight from VAIC, and through the event bus as a safety net).
+        if done, let last, last.who == .vaic, last.state == .done, last.text == text { return }
+        if let last, last.who == .vaic, last.state == .streaming {
             var l = last
             l.text = done ? text : last.text + text
             l.state = done ? .done : .streaming
             l.steps = turn?.steps ?? last.steps
             c[c.count - 1] = l
         } else {
-            c.append(ChatLine(id: "a-\(Int(clock()))-\(c.count)", who: .ace, text: text, state: done ? .done : .streaming, at: clock(),
+            c.append(ChatLine(id: "a-\(Int(clock()))-\(c.count)", who: .vaic, text: text, state: done ? .done : .streaming, at: clock(),
                               steps: turn?.steps, tookMs: turn.map { clock() - $0.started },
                               files: (turn?.files.isEmpty ?? true) ? nil : turn?.files))
         }
@@ -251,8 +251,8 @@ final class HudStore {
 
     var unsent: [ChatLine] { chat.filter { $0.who == .owner && ($0.state == .queued || $0.state == .failed) } }
 
-    /// Right after the owner sends, AIC's status row shows until its first words.
-    var waitingForAic: Bool {
+    /// Right after the owner sends, VAIC's status row shows until its first words.
+    var waitingForVaic: Bool {
         guard presence == .thinking, let l = chat.last else { return false }
         return l.who == .owner && l.state != .failed
     }

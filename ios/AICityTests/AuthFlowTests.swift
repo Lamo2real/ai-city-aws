@@ -195,7 +195,7 @@ final class AuthFlowTests: XCTestCase {
     }
 
     func testKeychainStoreRoundTrip() {
-        let k = KeychainTokenStore(service: "city.ai.aic.tests.\(UUID().uuidString)")
+        let k = KeychainTokenStore(service: "city.ai.vaic.tests.\(UUID().uuidString)")
         let t = Tokens(idToken: "i", accessToken: "a", refreshToken: "r", expiresAt: fixedNow)
         k.save(t)
         XCTAssertEqual(k.load(), t)

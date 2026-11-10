@@ -22,7 +22,7 @@ protocol TokenStore: Sendable {
 /// They are readable after the phone's first unlock since it started (so a launch iOS prepares ahead of time,
 /// or one right after unlocking, still finds them) and never leave this device (no iCloud Keychain, no backups).
 struct KeychainTokenStore: TokenStore {
-    var service = "city.ai.aic.tokens"
+    var service = "city.ai.vaic.tokens"
     var account = "owner"
     static let accessible = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
 

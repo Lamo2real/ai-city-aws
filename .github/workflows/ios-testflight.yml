@@ -3,7 +3,7 @@
 # TestFlight then updates the app on the owner's iPhone by itself. Nothing in AWS is touched.
 #
 # Needs (docs/IOS_TESTFLIGHT.md): the Apple Developer Program, an app record in App Store Connect for
-# <AIC_BUNDLE_PREFIX>.aicity, and these repository settings:
+# <VAIC_BUNDLE_PREFIX>.aicity, and these repository settings:
 #   secrets   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 (the App Store Connect API key, the .p8 file's text)
 #   variables APPLE_TEAM_ID (the program team's ID; not a secret)
 # Until they exist the job says so and stops, green, without building.
@@ -80,7 +80,7 @@ jobs:
             -allowProvisioningUpdates \
             -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey.p8" \
             -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
-            AIC_TEAM_ID="$TEAM_ID" AIC_ENTITLEMENTS=Config/AICity-Push.entitlements \
+            VAIC_TEAM_ID="$TEAM_ID" VAIC_ENTITLEMENTS=Config/AICity-Push.entitlements \
             CURRENT_PROJECT_VERSION="${{ github.run_number }}" -quiet
 
       - name: Upload to TestFlight

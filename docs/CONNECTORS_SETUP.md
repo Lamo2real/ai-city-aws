@@ -12,17 +12,17 @@ in the chat; AI City always shows a secure field for them. Background: `docs/CON
 - [ ] Open the HUD. There's a new **Skills** item in the menu, and **Settings → Connectors** shows "No connectors yet"
       and a "Mail & calendar" part.
 
-## 1. Your first connector, by asking AIC (5 minutes)
+## 1. Your first connector, by asking VAIC (5 minutes)
 Web search is a good first one. It needs a free Tavily account.
 - [ ] Make an account at tavily.com and copy your API key (it starts with `tvly-`). Don't paste it in the chat.
-- [ ] Say to AIC: **"add Tavily web search as an MCP"**. AIC finds it in the MCP Registry and puts a card under its
+- [ ] Say to VAIC: **"add Tavily web search as an MCP"**. VAIC finds it in the MCP Registry and puts a card under its
       reply: *"Add the Tavily MCP server at … Used by: …? "*. Read the address, then tap **Approve**.
 - [ ] A card **"Add the key for Tavily"** appears. Paste the key into that field (it's hidden) and tap **Save securely**.
 - [ ] Within a minute, Settings → Connectors shows Tavily as **"On · N tools"**.
-- [ ] Ask AIC something that needs the web ("what's the weather in Stockholm today?"). It should answer using
+- [ ] Ask VAIC something that needs the web ("what's the weather in Stockholm today?"). It should answer using
       `tavily___…` tools.
 
-If AIC can't find a server by name, give it the server's https link instead.
+If VAIC can't find a server by name, give it the server's https link instead.
 
 ## 2. Mail and calendar from Google or Microsoft (20–30 minutes, once)
 These need your own OAuth app at Google or Microsoft (free). IMAP accounts (iCloud, Fastmail, Yahoo…) need
@@ -44,10 +44,10 @@ none of this: skip to step 3.
       `Mail.ReadWrite`, `Mail.Send`, `Calendars.ReadWrite`. A work tenant may need its admin to consent once.
 
 **Hand them to AWS**
-- [ ] AWS console → Secrets Manager (eu-north-1) → `aic/prod/oauth-google` → **Retrieve secret value → Edit** (or
-      "Set secret value") → plain text `{"client_secret": "…"}` → Save. Do the same for `aic/prod/oauth-microsoft`.
+- [ ] AWS console → Secrets Manager (eu-north-1) → `vaic/prod/oauth-google` → **Retrieve secret value → Edit** (or
+      "Set secret value") → plain text `{"client_secret": "…"}` → Save. Do the same for `vaic/prod/oauth-microsoft`.
       Terraform created both containers; it never writes a value.
-- [ ] GitHub → Settings → Secrets and variables → Actions → **Variables** → `AIC_MAIL_PROVIDERS`, for example:
+- [ ] GitHub → Settings → Secrets and variables → Actions → **Variables** → `VAIC_MAIL_PROVIDERS`, for example:
       `{"google":{"enabled":true,"client_id":"…apps.googleusercontent.com"},"microsoft":{"enabled":true,"client_id":"…","tenant_id":"common"}}`.
       Client IDs aren't secret. Leave out a provider you don't use, or set `"enabled": false`.
 - [ ] Run the deploy (**Actions → deploy → Run workflow**).
@@ -56,18 +56,18 @@ none of this: skip to step 3.
       The sign-in only works after this.
 
 **Connect the accounts**
-- [ ] Say to AIC: **"connect my work Outlook and my personal Gmail"**. Two cards appear: **"Sign in to Microsoft
+- [ ] Say to VAIC: **"connect my work Outlook and my personal Gmail"**. Two cards appear: **"Sign in to Microsoft
       (Work)"** and **"Sign in to Google (Personal)"**.
 - [ ] Tap each one, sign in on the provider's page (a new tab) and allow access. You come back to AI City and see
       **"Signed in. It's connected."** The card turns into "connected ✓".
-- [ ] Settings → Connectors → Mail & calendar lists both accounts with their addresses. Untick any calendar AIC
+- [ ] Settings → Connectors → Mail & calendar lists both accounts with their addresses. Untick any calendar VAIC
       shouldn't see.
 - [ ] Try it: "what's on my calendar tomorrow?", or "draft a reply to the last email from …". Sending, deleting and
       answering invitations always wait for you in **Needs you**, with the whole email or event shown.
 
 ## 3. A mailbox with an app password (IMAP: iCloud, Fastmail, Yahoo, …)
 - [ ] Make an **app password** at your provider (not your normal password).
-- [ ] Say to AIC: **"connect my Fastmail"** (or the provider's name). A card **"Add the app password for …"** appears.
+- [ ] Say to VAIC: **"connect my Fastmail"** (or the provider's name). A card **"Add the app password for …"** appears.
 - [ ] Pick your provider in the card (it fills in the servers), type your address and the app password, then tap
       **Connect securely**. If the server refuses it, the card says so and nothing is stored.
 
@@ -77,11 +77,11 @@ none of this: skip to step 3.
       approve. A service that wants a key shows a key field instead. Switching it off asks first, then removes it.
 
 ## 4. GitHub, Slack and other services that need a sign-in
-- [ ] **GitHub, the short way:** paste your token in **Settings → GitHub** first (`docs/GITHUB_ACCESS.md`). Then ask AIC
+- [ ] **GitHub, the short way:** paste your token in **Settings → GitHub** first (`docs/GITHUB_ACCESS.md`). Then ask VAIC
       **"add GitHub as an MCP"** (or Settings → Connectors → Add by link with `https://api.githubcopilot.com/mcp/`) and
       approve the card: the connector uses that token as its bearer key and is **On** without any sign-in.
-      A github.com page or a `.git` link is not a server: AIC says so and offers the real address.
-- [ ] Ask AIC: **"add GitHub as an MCP"** (or Slack, Notion, Linear, Higgsfield…), then approve the card.
+      A github.com page or a `.git` link is not a server: VAIC says so and offers the real address.
+- [ ] Ask VAIC: **"add GitHub as an MCP"** (or Slack, Notion, Linear, Higgsfield…), then approve the card.
 - [ ] If the service supports automatic app registration, you get **"Sign in to …"** right away. Tap it and approve.
 - [ ] If it doesn't (GitHub usually doesn't), the card asks for a **client id and client secret**, and shows a
       **callback URL**. Create an OAuth app at the service (GitHub: Settings → Developer settings → OAuth Apps → New)
@@ -92,13 +92,13 @@ none of this: skip to step 3.
       approval setting asks you before anything destructive.
 
 ## 5. A server that runs as a package (npm or PyPI)
-- [ ] Ask AIC to add one by name, or exactly, for example **"add npm:@scope/server@1.2.3"**. The card names the
+- [ ] Ask VAIC to add one by name, or exactly, for example **"add npm:@scope/server@1.2.3"**. The card names the
       package, the exact version, the publisher and the source link. Approve it only if you trust that publisher:
       it's someone else's code, run in its own isolated sandbox with only its own key.
 - [ ] If it needs keys, a card asks for each one by name.
 
 ## 6. A service without an MCP server (OpenAPI)
-- [ ] Ask AIC: **"connect the Acme API, here's its OpenAPI link: https://…/openapi.json"**. The card says how many
+- [ ] Ask VAIC: **"connect the Acme API, here's its OpenAPI link: https://…/openapi.json"**. The card says how many
       actions it has and how many are read-only or delete. Then add a key or sign in, as the card asks.
 
 ## 7. Your first skill
@@ -110,12 +110,12 @@ none of this: skip to step 3.
 | Check | How you'll notice |
 |---|---|
 | Sign-in return through AgentCore Identity | After signing in you see "Signed in. It's connected." Instead "The sign-in didn't finish…" means it failed: note the message. |
-| AWS-side access rules (Cedar) | A connector shows "On", but AIC says a tool was "not allowed": the policy didn't match the roles. |
+| AWS-side access rules (Cedar) | A connector shows "On", but VAIC says a tool was "not allowed": the policy didn't match the roles. |
 | Tools appearing at the Gateway | "On · 0 tools", or tools missing that the service has. |
 | Package servers starting | A package connector stuck on "Setting up…", or an error naming the install. |
 | Real mail and calendar calls | Searches or calendar reads show "Couldn't reach <label>: …" for one account. |
 | Costs | Cost Explorer after a few days: Secrets Manager is about $0.40 per key-based connector or IMAP account each month. Gateway, Policy, Lambda and the MCP host are billed per use. Tavily is free up to 1,000 searches a month. |
 
-Logs, if something is stuck: CloudWatch `/aws/lambda/aic-prod-connectors`, `/aws/lambda/aic-prod-connector-bridge`,
-`/aws/lambda/aic-prod-api`, and `/aws/bedrock-agentcore/runtimes/aic_prod_mcp_host-*`. A connector stuck in an
-error: **Settings → Connectors → Refresh tools**. If it stays, remove it and ask AIC again.
+Logs, if something is stuck: CloudWatch `/aws/lambda/vaic-prod-connectors`, `/aws/lambda/vaic-prod-connector-bridge`,
+`/aws/lambda/vaic-prod-api`, and `/aws/bedrock-agentcore/runtimes/vaic_prod_mcp_host-*`. A connector stuck in an
+error: **Settings → Connectors → Refresh tools**. If it stays, remove it and ask VAIC again.

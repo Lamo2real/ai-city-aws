@@ -1,4 +1,4 @@
-// Files (docs/FILES.md, decision 147) on the iPhone: what a chat line keeps of a file VAIC showed (`ace.files`),
+// Files (docs/FILES.md, decision 147) on the iPhone: what a chat line keeps of a file VAIC showed (`vaic.files`),
 // and its short-lived addresses from `GET /files/<id>` (fetched when the card is drawn; they last 15 minutes).
 import Foundation
 

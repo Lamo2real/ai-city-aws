@@ -1,5 +1,5 @@
 // VAIC's visible steps while it works ("chain of thought" in the owner's words): plain phrases made from the
-// activity events the runtime sends for agent "ace". The detail is the tool VAIC called (see runtime/direct.py).
+// activity events the runtime sends for agent "vaic". The detail is the tool VAIC called (see runtime/direct.py).
 // Never model reasoning: only what VAIC does.
 const BY_TOOL: Record<string, string> = {
   get_status: "Checking how things are going",

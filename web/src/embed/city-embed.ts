@@ -30,5 +30,5 @@ const api = {
   /** The tab came back into view. */
   resume: () => scene.resume(),
 };
-Object.defineProperty(window, "aicCity", { value: Object.freeze(api) });
+Object.defineProperty(window, "vaicCity", { value: Object.freeze(api) });
 tell("ready");

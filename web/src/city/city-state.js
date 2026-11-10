@@ -7,7 +7,7 @@
 export const MODEL_COLOR = { "haiku-5-5": "#ffd21e", "opus-5-5": "#3b82ff", "sonnet-5-5": "#2fd36b", "fable-5-2": "#a86bff" };
 export const MODEL_NAME = { "haiku-5-5": "Haiku 5.5", "opus-5-5": "Opus 5.5", "sonnet-5-5": "Sonnet 5.5", "fable-5-2": "Fable 5.2" };
 export const DEPT_COLOR = { HQ: "#3b82ff", IT: "#4cc9f0", App: "#ff7a45", Cloud: "#8ecae6", Marketing: "#f72585", Video: "#b5179e", Travel: "#06d6a0", other: "#9aa0a6" };
-export const CORE = new Set(["ace", "orchestrator"]);
+export const CORE = new Set(["vaic", "orchestrator"]);
 export const TOOL_PROP = [["ios|swift|app", "laptop"], ["video|film|camera", "camera"], ["market|ads|growth", "chart"], ["cloud|infra|terraform|devops", "wrench"], ["travel|flight|hotel", "ticket"], ["qa|test", "clipboard"], [".", "laptop"]];
 export const FEED_MAX = 120;
 // Every dollar figure in the HUD is this: a value at list prices, not money that moved.
@@ -103,7 +103,7 @@ const shortGoal = (text) => plainText(text, 60).short;
 
 /** Who someone is, in words the owner knows: never an id. */
 export function plainWho(state, id) {
-  if (id === "ace") return "VAIC";
+  if (id === "vaic") return "VAIC";
   if (id === "orchestrator") return "The planner";
   const a = state.agents?.[id];
   if (!a) return "Someone on the team";
@@ -134,7 +134,7 @@ function storyOf(event, s) {
     }
     case "ticket.status": {
       const t = event.ticket, d = t.department || "The team";
-      const job = t.kind === "task" || (!t.parent_id && t.from === "ace");
+      const job = t.kind === "task" || (!t.parent_id && t.from === "vaic");
       if (event.previous === null || event.previous === undefined)
         return job ? { key: `job:${t.id}`, one: `New job: ${shortGoal(t.goal)}` } : { key: `start:${d}`, one: `${d} started a part`, many: `${d} started {n} parts` };
       if (t.status === "done") return job ? { key: `fin:${t.id}`, one: `Job finished: ${shortGoal(t.goal)}` } : { key: `done:${d}`, one: `${d} finished a part`, many: `${d} finished {n} parts` };
@@ -321,7 +321,7 @@ function reduceEvent(state, event, now) {
       if (!a) return state;
       return { ...state, now, agents: { ...state.agents, [a.id]: { ...a, awaiting_merge: null } }, feed: feed(state, `${event.branch} is settled; ${a.id} can leave its desk`, "done", now) };
     }
-    case "ace.visit":
+    case "vaic.visit":
       return { ...state, now, feed: feed(state, `VAIC ${event.kind === "ask" ? "asks" : "checks in with"} ${event.to}`, "worker", now) };
     case "colleague.ask":
       return { ...state, now, feed: feed(state, event.refused ? `${event.from} and ${event.to} have asked each other too much; ${event.from} was told to stop` : `${event.from} asks ${event.to}: ${event.question.slice(0, 60)}`, event.refused ? "fail" : "worker", now) };
@@ -697,7 +697,7 @@ export function cityMessage(state) {
 }
 
 // VAIC's status call can fire many times in a row; only the first of a burst is a visit.
-export const visitAllowed = (lastAt, now, to) => to !== "ace" && now - lastAt >= 1000;
+export const visitAllowed = (lastAt, now, to) => to !== "vaic" && now - lastAt >= 1000;
 
 export const currentTicket = (state, id) => Object.values(state.tickets).filter((t) => t.to === id).sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""))[0] ?? null;
 

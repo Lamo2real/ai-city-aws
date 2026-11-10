@@ -15,19 +15,19 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from aic.lambdas.api import handle_http
-from aic.runtime.engine import EngineRequest
-from aic.runtime.tools import TurnCtx
-from aic.shared import company
-from aic.shared import sales_pipeline as deals
-from aic.shared import standing_orders as so
-from aic.shared import support_desk as desk
-from aic.shared.connectors import ConnectorStore
-from aic.shared.hierarchy.actions import FINAL
-from aic.shared.ledger import ALL_STATUSES
 from city_support import Call, make_city, scripted_engine
 from test_api import ev, js, make
 from test_apps import city_deps, tool
+from vaic.lambdas.api import handle_http
+from vaic.runtime.engine import EngineRequest
+from vaic.runtime.tools import TurnCtx
+from vaic.shared import company
+from vaic.shared import sales_pipeline as deals
+from vaic.shared import standing_orders as so
+from vaic.shared import support_desk as desk
+from vaic.shared.connectors import ConnectorStore
+from vaic.shared.hierarchy.actions import FINAL
+from vaic.shared.ledger import ALL_STATUSES
 
 SLACK: list[dict[str, str]] = []
 JIRA: dict[str, dict[str, Any]] = {}
@@ -43,18 +43,18 @@ async def _goal(req: EngineRequest) -> str:
     return str((t or {}).get("goal") or "")
 
 
-async def ace(req: EngineRequest, call: Call) -> str:
+async def vaic(req: EngineRequest, call: Call) -> str:
     return "Noted."
 
 
 async def orchestrator(req: EngineRequest, call: Call) -> str:
-    if "(task) from ace" in req.turn.prompt:
+    if "(task) from vaic" in req.turn.prompt:
         dept = re.search(r"Send it to the (.+?) department", req.turn.prompt).group(1)  # type: ignore[union-attr]
         await call("create_department", {"name": dept, "mission": f"The {dept} team."})
         await call("assign_to_department", {"department": dept, "goal": await _goal(req), "acceptance": "done"})
         return "Sent."
     await call("sign_off", {"verdict": "PASS", "reasons": "Done."})
-    await call("report_to_ace", {"summary": "Finished."})
+    await call("report_to_vaic", {"summary": "Finished."})
     return "PASS"
 
 
@@ -129,7 +129,7 @@ async def worker(req: EngineRequest, call: Call) -> str:
 
 async def test_zalando_runs_itself_support_to_application_and_back_and_a_lead_from_marketing_to_sales() -> None:
     SLACK.clear(), JIRA.clear(), SALESFORCE.clear()
-    city = make_city(scripted_engine({"ace": ace, "orchestrator": orchestrator, "manager": manager,
+    city = make_city(scripted_engine({"vaic": vaic, "orchestrator": orchestrator, "manager": manager,
                                       "worker": worker}))  # fmt: skip
     await city.host.ensure_core()
     d = city.deps
@@ -142,10 +142,10 @@ async def test_zalando_runs_itself_support_to_application_and_back_and_a_lead_fr
     await ConnectorStore(city.ledger.table).create(jira)
     await deals.add_deal(city.ledger, {"name": "Lena Shop", "contact": "Lena", "stage": "nurturing"}, "Marketing")
     # The owner, once:
-    ace_ctx = TurnCtx(
-        agent_id="ace", role="ace", department=None, ticket_id="conv-main", task_id="conv-main", from_owner=True
+    vaic_ctx = TurnCtx(
+        agent_id="vaic", role="vaic", department=None, ticket_id="conv-main", task_id="conv-main", from_owner=True
     )
-    said = await tool(d, ace_ctx, "set_company_brief")(
+    said = await tool(d, vaic_ctx, "set_company_brief")(
         {"text": ZALANDO, "support_source": "Slack #support", "running": True}
     )
     assert "runs on its own" in said
@@ -179,7 +179,7 @@ async def test_zalando_runs_itself_support_to_application_and_back_and_a_lead_fr
     assert SALESFORCE[lead["id"]] == {"type": "Opportunity", "stage": "Needs Analysis", "owner": "Sales"}
     # Nothing waited on the owner, and every job ended.
     assert await city.ledger.open_questions() == []
-    jobs = [j for j in await city.ledger.list_tickets(ALL_STATUSES) if j["from"] == "ace"]
+    jobs = [j for j in await city.ledger.list_tickets(ALL_STATUSES) if j["from"] == "vaic"]
     assert jobs and all(j["status"] in FINAL for j in jobs)
     # Every team knows the business and who it hands work to.
     mgr = await city.ledger.get_agent("mgr-customer-support")
@@ -191,7 +191,7 @@ async def test_handoffs_are_managers_only_and_never_loop() -> None:
     d = city_deps()
     mk = TurnCtx(agent_id="mgr-marketing", role="manager", department="Marketing", ticket_id="t1", task_id="t1")
     wk = TurnCtx(agent_id="wkr-1", role="worker", department="Marketing", ticket_id="t1", task_id="t1")
-    with_tools = {t.name for t in __import__("aic.runtime.tools", fromlist=["tools_for"]).tools_for(d, wk)}
+    with_tools = {t.name for t in __import__("vaic.runtime.tools", fromlist=["tools_for"]).tools_for(d, wk)}
     assert "file_handoff" not in with_tools  # workers don't file between departments
     file = tool(d, mk, "file_handoff")
     assert "your own department" in await file({"to_department": "marketing", "title": "x y z"})

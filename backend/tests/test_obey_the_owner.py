@@ -3,12 +3,12 @@ never a default VAIC fills in; hard ceilings stop runaway hiring, jobs and depar
 
 from typing import Any
 
-from aic.runtime.tools import TurnCtx, tools_for
-from aic.shared.utility import about_ai_city
-from test_task_control import SPEC, ace_tools, city, department, job
+from test_task_control import SPEC, city, department, job, vaic_tools
+from vaic.runtime.tools import TurnCtx, tools_for
+from vaic.shared.utility import about_ai_city
 
 
-async def test_aic_cannot_answer_a_question_with_words_the_owner_did_not_say() -> None:
+async def test_vaic_cannot_answer_a_question_with_words_the_owner_did_not_say() -> None:
     c = await city()
     task = await job(c, "Build a snake game", "snake game", department_name="Apps", workers=1)
     q = await c.ledger.ask_question(
@@ -16,7 +16,7 @@ async def test_aic_cannot_answer_a_question_with_words_the_owner_did_not_say() -
          "options": ["Dark", "Light"], "default_answer": "Dark"}
     )  # fmt: skip
     ctx = TurnCtx(
-        agent_id="ace", role="ace", department=None, ticket_id="conv-main", task_id="conv-main", conversation="main"
+        agent_id="vaic", role="vaic", department=None, ticket_id="conv-main", task_id="conv-main", conversation="main"
     )
     tools = {t.name: t for t in tools_for(c.host.d, ctx)}
     # The default, invented: refused, the question stays open, nothing is sent to the manager.
@@ -71,7 +71,7 @@ def test_what_counts_as_about_ai_city() -> None:
         assert not about_ai_city(text), text
 
 
-async def test_ace_tools_list_has_the_gate(ace_tools_fn: Any = ace_tools) -> None:
+async def test_vaic_tools_list_has_the_gate(vaic_tools_fn: Any = vaic_tools) -> None:
     c = await city()
-    spec = ace_tools_fn(c)["delegate_to_orchestrator"]
+    spec = vaic_tools_fn(c)["delegate_to_orchestrator"]
     assert "confirm" in spec.schema["properties"] and "confirm" in spec.description

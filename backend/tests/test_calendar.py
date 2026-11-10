@@ -10,22 +10,22 @@ from typing import Any
 
 import pytest
 
-from aic.features import FeatureStore
-from aic.features import invites as inv
-from aic.features.calendar import CalendarStore, dedupe, from_provider, import_calendar, title_key, utc_key
-from aic.lambdas.api import handle_http
-from aic.lambdas.calendar_api import CalendarApi
-from aic.lambdas.scheduler import calendar_import, run_job
-from aic.mail.accounts import AccountStore
-from aic.mail.joinlinks import classify, find_join
-from aic.mail.providers.imap import Imap
-from aic.runtime.tools import TurnCtx, gate_tools, tools_for
-from aic.shared.events import MemoryBus
-from aic.shared.hierarchy.queue import MemoryQueue
-from aic.shared.ledger import Ledger
-from aic.shared.table import MemoryTable
 from city_support import make_city
 from test_api import Clock, ev, js, make
+from vaic.features import FeatureStore
+from vaic.features import invites as inv
+from vaic.features.calendar import CalendarStore, dedupe, from_provider, import_calendar, title_key, utc_key
+from vaic.lambdas.api import handle_http
+from vaic.lambdas.calendar_api import CalendarApi
+from vaic.lambdas.scheduler import calendar_import, run_job
+from vaic.mail.accounts import AccountStore
+from vaic.mail.joinlinks import classify, find_join
+from vaic.mail.providers.imap import Imap
+from vaic.runtime.tools import TurnCtx, gate_tools, tools_for
+from vaic.shared.events import MemoryBus
+from vaic.shared.hierarchy.queue import MemoryQueue
+from vaic.shared.ledger import Ledger
+from vaic.shared.table import MemoryTable
 
 TEAMS = "https://teams.microsoft.com/l/meetup-join/19%3ameeting_NjQ5%40thread.v2/0?context=%7b%22Tid%22%3a%22x%22%7d"
 ZOOM = "https://acme.zoom.us/j/81234567890?pwd=AbCdEf123"
@@ -447,7 +447,7 @@ async def test_the_scheduled_import_is_skipped_when_the_feature_is_off_or_mail_i
         "skipped": "mail and calendar aren't set up here"
     }
     await FeatureStore(ledger.table, ledger.now).set_enabled("calendar", False)
-    assert (await calendar_import(ledger, bus, {"AIC_MAIL_WORKLOAD": "aic-prod-mail"}))["skipped"].startswith(
+    assert (await calendar_import(ledger, bus, {"VAIC_MAIL_WORKLOAD": "vaic-prod-mail"}))["skipped"].startswith(
         "the Calendar"
     )
 
@@ -506,7 +506,7 @@ async def test_refresh_now_starts_one_import_per_double_tap() -> None:
 
 
 # ---------- VAIC's read tool ----------
-async def test_aic_answers_whats_on_tomorrow_from_the_merged_calendar_through_the_gate() -> None:
+async def test_vaic_answers_whats_on_tomorrow_from_the_merged_calendar_through_the_gate() -> None:
     city = make_city(lambda req: None)  # type: ignore[arg-type,return-value]
     ledger = city.deps.ledger
     store = CalendarStore(ledger.table, ledger.now)
@@ -525,7 +525,7 @@ async def test_aic_answers_whats_on_tomorrow_from_the_merged_calendar_through_th
     }
     await import_calendar(store, svc)
     await store.set_time_zone("Europe/Stockholm")
-    ctx = TurnCtx("ace", "ace", None, "conv-c1", "conv-c1", "c1", message_id="owner-m1", from_owner=True)
+    ctx = TurnCtx("vaic", "vaic", None, "conv-c1", "conv-c1", "c1", message_id="owner-m1", from_owner=True)
     tools = {t.name: t for t in gate_tools(city.deps, ctx, tools_for(city.deps, ctx))}
     assert "calendar_agenda" in tools
     worker = TurnCtx("wkr-1", "worker", "it", "t-1", "t-1", None)
@@ -535,7 +535,7 @@ async def test_aic_answers_whats_on_tomorrow_from_the_merged_calendar_through_th
     data = json.loads(out.split("<calendar-content>", 1)[1].rsplit("</calendar-content>", 1)[0])
     (m,) = data["meetings"]
     assert m["start"] == "2026-11-07T10:00+01:00" and m["join"] == "meet" and m["accounts"] == ["Personal"]
-    audit = await ledger.table.query("TOOL#ace")
+    audit = await ledger.table.query("TOOL#vaic")
     assert any(x.get("tool") == "mcp__city__calendar_agenda" and x.get("decision") == "allow" for x in audit)
     assert "1 to 62 days" in await tools["calendar_agenda"].handler({"from": "2026-11-07", "to": "2027-03-01"})
     await FeatureStore(ledger.table, ledger.now).set_enabled("calendar", False)

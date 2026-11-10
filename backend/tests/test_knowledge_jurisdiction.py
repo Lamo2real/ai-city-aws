@@ -7,7 +7,9 @@ from typing import Any
 
 import pytest
 
-from aic.shared.knowledge.jurisdiction import (
+from knowledge_support import World, ready_item, world
+from test_knowledge_pipeline import pipeline, step, upload
+from vaic.shared.knowledge.jurisdiction import (
     clean_detected,
     clean_metadata,
     hints_from_name,
@@ -20,12 +22,10 @@ from aic.shared.knowledge.jurisdiction import (
     parents,
     superseded_map,
 )
-from aic.shared.knowledge.kb import Hit, ingest_document, retrieval_config
-from aic.shared.knowledge.model import item_metadata, metadata_doc
-from aic.shared.knowledge.search import search_markets
-from aic.shared.knowledge.service import KnowledgeError
-from knowledge_support import World, ready_item, world
-from test_knowledge_pipeline import pipeline, step, upload
+from vaic.shared.knowledge.kb import Hit, ingest_document, retrieval_config
+from vaic.shared.knowledge.model import item_metadata, metadata_doc
+from vaic.shared.knowledge.search import search_markets
+from vaic.shared.knowledge.service import KnowledgeError
 
 
 # ---------- the region map ----------
@@ -329,8 +329,8 @@ async def test_a_market_with_nothing_stored_says_so() -> None:
 
 # ---------- the agents' tool ----------
 async def test_search_tool_takes_jurisdictions_and_year() -> None:
-    from aic.runtime.tools import gate_tools, tools_for
     from test_knowledge_api_tools import city, ctx
+    from vaic.runtime.tools import gate_tools, tools_for
 
     w, it = await _launch_world()
     d = city(w)
@@ -348,8 +348,8 @@ async def test_search_tool_takes_jurisdictions_and_year() -> None:
 
 
 def test_the_huds_place_names_match_the_config() -> None:
-    from aic.shared.config import repo_root
-    from aic.shared.knowledge.jurisdiction import jurisdictions_config
+    from vaic.shared.config import repo_root
+    from vaic.shared.knowledge.jurisdiction import jurisdictions_config
 
     root = repo_root()
     assert root is not None

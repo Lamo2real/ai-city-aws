@@ -345,7 +345,7 @@ export function CityView({
           className={`actions dockbar${voice.listening || speaker !== "idle" ? " live" : ""}`}
           data-speaker={speaker}
         >
-          <button type="button" className="dockbtn" onClick={() => go("ace")} aria-label="Chat with VAIC">
+          <button type="button" className="dockbtn" onClick={() => go("vaic")} aria-label="Chat with VAIC">
             <Glyph d="M4 5h16v10H9l-5 4z" />
           </button>
           <button type="button" className="dockbtn" onClick={() => go("tickets")} aria-label="Tickets">
@@ -366,7 +366,7 @@ export function CityView({
               <span className="dockwho" aria-hidden="true">
                 {speaker === "you"
                   ? "You"
-                  : speaker === "aic"
+                  : speaker === "vaic"
                     ? "VAIC"
                     : speaker === "thinking"
                       ? "Thinking"

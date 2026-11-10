@@ -78,7 +78,7 @@ replacement matches `aic`/`AIC`/`Aic` as a word or camelCase part only, and `ace
 ### Left behind (made at runtime by the code, not by Terraform)
 
 Connector and mail secrets `aic/prod/connectors/*` and `aic/prod/oauth-*`, AgentCore credential providers
-`aic-conn-*`, and Gateway targets. They are cleaned up if the owner removes each connector and mail account in the
+`aic-conn-*`, and the old connectors policy engine. They are cleaned up if the owner removes each connector and mail account in the
 HUD before the cut-over (step B). Anything missed keeps costing about $0.40 a month per secret until the owner
 deletes it in the console.
 
@@ -93,7 +93,8 @@ deletes it in the console.
 | WAF web ACL replaced while CloudFront uses it | Terraform deletes the old ACL first: `WAFAssociatedItemException` | `lifecycle { create_before_destroy = true }` on the ACL (step A, so it is in state) |
 | CloudFront public key replaced while the key group uses it | `PublicKeyInUse` | `create_before_destroy` on the public key (step A) |
 | New, empty ECR repositories | the images are pushed only when their tag changes | the rename changes both tags (sources change); also add the repository URL to both `terraform_data` triggers in step C so a new repository always gets its image |
-| AgentCore Gateway with targets | targets were added at runtime; deleting the gateway may be refused | owner removes the connectors first (step B); if it still fails, the deploy log names the target and the owner deletes it in the console |
+| AgentCore Gateway with targets | targets were added at runtime | none needed: the AWS provider deletes a gateway's targets before the gateway |
+| Connectors' policy engine | holds the Cedar policies the connectors Lambda wrote; AWS may refuse to delete it | step C forgets it (`removed`, no destroy) and makes a new one under a new address; the old one (`aic_prod_connectors`) is left behind for the owner to delete in the console |
 | Secrets Manager | old secrets go into a 7-day recovery window; the new names don't clash | nothing; it only matters for a rollback (section 5) |
 | Terraform state key and backend | `ai-city-aws/prod/terraform.tfstate` in `lamo-labs-state-bucket` has no AIC in it | unchanged |
 | **The GitHub OIDC deploy role** | made by the owner outside Terraform, AdministratorAccess, trust bound to the repository's immutable ids, not to any `aic` name | **no lockout**: nothing in the rename touches it. Only the GitHub variable that holds its ARN is renamed, read as `vars.VAIC_DEPLOY_ROLE_ARN \|\| vars.AIC_DEPLOY_ROLE_ARN` so the pipeline works before and after the owner renames it |

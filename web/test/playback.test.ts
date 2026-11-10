@@ -53,7 +53,7 @@ beforeEach(() => {
   decodeFails = false;
   sources = [];
   vi.stubGlobal("AudioContext", FakeCtx);
-  delete (window as unknown as { __aicVoice?: unknown }).__aicVoice; // the real AwsVoice, not the test fake
+  delete (window as unknown as { __vaicVoice?: unknown }).__vaicVoice; // the real AwsVoice, not the test fake
 });
 afterEach(() => vi.unstubAllGlobals());
 

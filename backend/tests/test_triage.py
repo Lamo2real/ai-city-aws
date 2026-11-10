@@ -3,13 +3,13 @@
 import json
 from typing import Any
 
-from aic.runtime.tools import TurnCtx, tools_for
-from aic.shared import utility
-from aic.shared.cost import Usage
-from aic.shared.ledger import ALL_STATUSES
-from aic.shared.turn import TurnInput, TurnOutput
-from aic.shared.utility import TRIAGE_WHEN_UNSURE, Triage, UtilityDeps, parse_triage, triage
 from city_support import make_city, scripted_engine
+from vaic.runtime.tools import TurnCtx, tools_for
+from vaic.shared import utility
+from vaic.shared.cost import Usage
+from vaic.shared.ledger import ALL_STATUSES
+from vaic.shared.turn import TurnInput, TurnOutput
+from vaic.shared.utility import TRIAGE_WHEN_UNSURE, Triage, UtilityDeps, parse_triage, triage
 
 
 def runner_saying(text: str) -> Any:
@@ -59,7 +59,7 @@ async def test_a_broken_answer_routes_to_the_orchestrator() -> None:
 
 def ctx() -> TurnCtx:
     return TurnCtx(
-        agent_id="ace", role="ace", department=None, ticket_id="conv-main", task_id="conv-main", conversation="main"
+        agent_id="vaic", role="vaic", department=None, ticket_id="conv-main", task_id="conv-main", conversation="main"
     )
 
 
@@ -77,7 +77,7 @@ async def delegate_with(
     return out, city
 
 
-async def test_self_means_no_task_and_aic_answers_in_the_same_turn() -> None:
+async def test_self_means_no_task_and_vaic_answers_in_the_same_turn() -> None:
     out, city = await delegate_with('{"route": "self", "department": null, "reason": "a list"}', confirm=False)
     assert out.startswith("Triage: answer this yourself now")
     assert city.queue.pending == []

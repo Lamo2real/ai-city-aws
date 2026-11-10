@@ -43,7 +43,7 @@ test("adding a skill: pick a SKILL.md, see what's dropped, choose who may use it
     roles: string[];
     files: Array<{ path: string; content_base64: string }>;
   };
-  expect(post.roles).toEqual(["ace", "orchestrator", "manager"]);
+  expect(post.roles).toEqual(["vaic", "orchestrator", "manager"]);
   expect(post.files.map((f) => f.path)).toEqual(["SKILL.md"]);
   expect(Buffer.from(post.files[0]!.content_base64, "base64").toString()).toBe(SKILL);
   const card = page.getByRole("article", { name: "Skill pdf-report" });
@@ -51,7 +51,7 @@ test("adding a skill: pick a SKILL.md, see what's dropped, choose who may use it
   await card.getByLabel("Orchestrator").uncheck();
   await expect
     .poll(() => m.calls.find((c) => c.path === "/skills/pdf-report" && c.method === "PUT")?.body)
-    .toEqual({ roles: ["ace", "manager"] });
+    .toEqual({ roles: ["vaic", "manager"] });
   await card.getByRole("button", { name: "Delete…" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Delete skill" }).click();
   await expect.poll(() => m.calls.some((c) => c.path === "/skills/pdf-report" && c.method === "DELETE")).toBe(true);
@@ -63,11 +63,11 @@ test("adding an MCP server by asking VAIC: approve the card, sign in, come back 
   context,
 }) => {
   const m = await mockBackend(page);
-  await page.goto("/#/ace");
+  await page.goto("/#/vaic");
   m.send({
     type: "approval.requested",
     id: "ap-9",
-    agent: "ace",
+    agent: "vaic",
     kind: "connector.add",
     connector_id: "higgsfield",
     action:
@@ -86,7 +86,7 @@ test("adding an MCP server by asking VAIC: approve the card, sign in, come back 
   const popup = await tab;
   await expect.poll(() => popup.url()).toContain("auth.provider.test");
   expect(m.calls.some((c) => c.path === "/connectors/higgsfield/login")).toBe(true);
-  expect(JSON.parse((await page.evaluate(() => sessionStorage.getItem("aic.connect")))!)).toEqual({
+  expect(JSON.parse((await page.evaluate(() => sessionStorage.getItem("vaic.connect")))!)).toEqual({
     kind: "connector",
     id: "higgsfield",
     state: "st-1",
@@ -94,7 +94,7 @@ test("adding an MCP server by asking VAIC: approve the card, sign in, come back 
   });
   await popup.close();
   // AgentCore Identity sends the owner back to the HUD.
-  await page.goto("/?connect=return&session_uri=urn%3Asess%3A1#/ace");
+  await page.goto("/?connect=return&session_uri=urn%3Asess%3A1#/vaic");
   await expect
     .poll(() => m.calls.find((c) => c.path === "/connectors/higgsfield/login/complete")?.body)
     .toEqual({ state: "st-1", session_uri: "urn:sess:1" });
@@ -104,7 +104,7 @@ test("adding an MCP server by asking VAIC: approve the card, sign in, come back 
 
 test("a plain request offers the service it needs, and VAIC carries on once it is connected", async ({ page }) => {
   const m = await mockBackend(page);
-  await page.goto("/#/ace");
+  await page.goto("/#/vaic");
   await page.getByLabel("Message to VAIC").fill("find designer jobs in Stockholm on Indeed");
   await page.keyboard.press("Enter");
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
@@ -112,7 +112,7 @@ test("a plain request offers the service it needs, and VAIC carries on once it i
   m.send({
     type: "approval.requested",
     id: "ap-3",
-    agent: "ace",
+    agent: "vaic",
     kind: "connector.add",
     connector_id: "indeed",
     action:
@@ -141,7 +141,7 @@ test("a connect card waiting in the chat doesn't stop the conversation: later tu
   page,
 }) => {
   const m = await mockBackend(page);
-  await page.goto("/#/ace");
+  await page.goto("/#/vaic");
   const box = page.getByLabel("Message to VAIC");
   const say = async (text: string) => {
     await box.fill(text);
@@ -153,7 +153,7 @@ test("a connect card waiting in the chat doesn't stop the conversation: later tu
   await say("add the Tavily MCP");
   m.send({ type: "connector.updated", id: "tavily", label: "Tavily", status: "needs_key", auth: "api_key" });
   m.send({
-    type: "ace.reply",
+    type: "vaic.reply",
     conversation: "main",
     text: "Tavily needs its key, Sir: the safe field is in the chat.",
     done: true,
@@ -163,7 +163,7 @@ test("a connect card waiting in the chat doesn't stop the conversation: later tu
   // The owner carries on talking while the card waits: the box still sends, and VAIC still answers.
   await expect(box).toBeEnabled();
   await say("what's on today?");
-  m.send({ type: "ace.reply", conversation: "main", text: "Two meetings today, Sir.", done: true });
+  m.send({ type: "vaic.reply", conversation: "main", text: "Two meetings today, Sir.", done: true });
   const later = page.getByText("Two meetings today, Sir.");
   await expect(later).toBeVisible();
   // In order: the first reply, then the card, then the new message and its reply, below the card.
@@ -189,7 +189,7 @@ test("Higgsfield end to end: no account yet, sign up on its own site, come back,
   await context.route("https://higgsfield.ai/**", (r) =>
     r.fulfill({ contentType: "text/html", body: "<title>Create your Higgsfield account</title>" }),
   );
-  await page.goto("/#/ace");
+  await page.goto("/#/vaic");
   m.send({ type: "connector.updated", id: "higgsfield", label: "Higgsfield", status: "needs_login", auth: "oauth" });
   const card = page.getByRole("group", { name: "Sign in to Higgsfield" });
   // No account: the service's own, checked sign-up page, in a new tab.
@@ -228,7 +228,7 @@ test("Higgsfield end to end: no account yet, sign up on its own site, come back,
 
 test("a failed connection shows its reason in full, in the chat and in Settings", async ({ page }) => {
   const m = await mockBackend(page);
-  await page.goto("/#/ace");
+  await page.goto("/#/vaic");
   m.send({ type: "connector.updated", id: "acme", label: "Acme", status: "needs_login", auth: "oauth" });
   const why = "Acme's sign-in page answered 400: redirect_uri is not registered for this client.";
   m.send({ type: "connector.updated", id: "acme", label: "Acme", status: "error", error: why });
@@ -242,7 +242,7 @@ test("a failed connection shows its reason in full, in the chat and in Settings"
 
 test("an API key goes into a secure field, never the chat", async ({ page }) => {
   const m = await mockBackend(page);
-  await page.goto("/#/ace");
+  await page.goto("/#/vaic");
   await page.getByLabel("Message to VAIC").fill("my tavily key is tvly-AbCdEf1234567890");
   await page.keyboard.press("Enter");
   await expect(page.getByText(/looks like a key or password, so it wasn't sent/)).toBeVisible();
@@ -263,7 +263,7 @@ test("an API key goes into a secure field, never the chat", async ({ page }) => 
 
 test("connecting an IMAP mailbox: the app password is checked, then forgotten by the page", async ({ page }) => {
   const m = await mockBackend(page);
-  await page.goto("/#/ace");
+  await page.goto("/#/vaic");
   m.send({ type: "connect.signin", account_id: "ma-1", provider: "imap", label: "Fastmail" });
   const form = page.getByRole("form", { name: "Add the app password for Fastmail" });
   await form.getByRole("combobox", { name: "Fill in the servers for" }).click();
@@ -297,7 +297,7 @@ test("Settings lists connectors and mail accounts; roles can be changed", async 
       url: "https://api.githubcopilot.com/mcp/",
       status: "ready",
       auth: "oauth",
-      roles: { ace: "read", worker: "all" },
+      roles: { vaic: "read", worker: "all" },
       approval: "destructive",
       tools: [{ name: "list_issues" }],
     },
@@ -325,7 +325,7 @@ test("Settings lists connectors and mail accounts; roles can be changed", async 
   await page.getByRole("option", { name: "Read only" }).click();
   await expect
     .poll(() => m.calls.find((c) => c.path === "/connectors/github" && c.method === "PUT")?.body)
-    .toEqual({ roles: { ace: "read", worker: "all", manager: "read" } });
+    .toEqual({ roles: { vaic: "read", worker: "all", manager: "read" } });
   await table.getByRole("button", { name: /^Personal/ }).click();
   await expect(page.getByRole("article", { name: "Personal account" })).toContainText("me@gmail.test");
   await expect(page.getByRole("heading", { name: "Who may read mail" })).toBeVisible();
@@ -446,7 +446,7 @@ test("Settings → Connectors: + Add a tool by link, write a skill", async ({ pa
     roles: string[];
     files: Array<{ path: string; content_base64: string }>;
   };
-  expect(post.roles).toEqual(["ace", "orchestrator", "manager", "worker"]);
+  expect(post.roles).toEqual(["vaic", "orchestrator", "manager", "worker"]);
   expect(Buffer.from(post.files[0]!.content_base64, "base64").toString()).toBe(
     "---\nname: weekly-report\ndescription: Use when writing the Friday report\n---\n\n1. List what shipped.\n2. Keep it short.\n",
   );
@@ -477,7 +477,7 @@ test("an email waiting for approval is shown in full before it's sent", async ({
   m.send({
     type: "approval.requested",
     id: "ap-2",
-    agent: "ace",
+    agent: "vaic",
     action: "mcp__city__mail_send account_id, to, subject, body",
     reason: "Sending an email speaks for the owner.",
     preview: {

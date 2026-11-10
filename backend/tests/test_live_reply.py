@@ -3,8 +3,8 @@
 import json
 from typing import Any
 
-from aic.lambdas.dispatcher import AgentCoreInvoker
-from aic.runtime.live import LiveReply
+from vaic.lambdas.dispatcher import AgentCoreInvoker
+from vaic.runtime.live import LiveReply
 
 
 class Clock:
@@ -32,7 +32,7 @@ async def test_batches_pieces_and_ends_with_the_whole_reply() -> None:
     assert [e["text"] for e in sent] == ["Hel", "lo, owner", "Hello, owner."]
     assert [e["done"] for e in sent] == [False, False, True]
     assert {e["conversation"] for e in sent} == {"main"}
-    assert {e["type"] for e in sent} == {"ace.reply"}
+    assert {e["type"] for e in sent} == {"vaic.reply"}
 
 
 class FakeAgentCore:
@@ -44,25 +44,25 @@ class FakeAgentCore:
         return {"statusCode": 200}
 
 
-async def test_only_aic_is_told_where_the_websocket_is() -> None:
+async def test_only_vaic_is_told_where_the_websocket_is() -> None:
     client = FakeAgentCore()
     live = {"wsEndpoint": "https://ws.example/prod", "connectionsTable": "conns"}
-    inv = AgentCoreInvoker(client, {"ace": "arn:ace", "worker": "arn:worker"}, live)
-    await inv.invoke({"role": "ace", "sessionId": "s" * 33})
+    inv = AgentCoreInvoker(client, {"vaic": "arn:vaic", "worker": "arn:worker"}, live)
+    await inv.invoke({"role": "vaic", "sessionId": "s" * 33})
     await inv.invoke({"role": "worker", "sessionId": "w" * 33})
     assert client.payloads[0]["wsEndpoint"] == "https://ws.example/prod"
     assert client.payloads[0]["connectionsTable"] == "conns"
     assert "wsEndpoint" not in client.payloads[1]
-    bare = AgentCoreInvoker(client, {"ace": "arn:ace"}, {"wsEndpoint": "", "connectionsTable": ""})
-    await bare.invoke({"role": "ace", "sessionId": "s" * 33})
+    bare = AgentCoreInvoker(client, {"vaic": "arn:vaic"}, {"wsEndpoint": "", "connectionsTable": ""})
+    await bare.invoke({"role": "vaic", "sessionId": "s" * 33})
     assert "wsEndpoint" not in client.payloads[2]
 
 
 async def test_aics_reply_goes_straight_to_the_hud_when_the_runtime_knows_the_websocket() -> None:
-    from aic.runtime.engine import EngineRequest
-    from aic.shared.cost import Usage
-    from aic.shared.turn import TurnOutput
     from city_support import make_city
+    from vaic.runtime.engine import EngineRequest
+    from vaic.shared.cost import Usage
+    from vaic.shared.turn import TurnOutput
 
     async def engine(req: EngineRequest) -> TurnOutput:
         if req.on_text:
@@ -85,8 +85,8 @@ async def test_aics_reply_goes_straight_to_the_hud_when_the_runtime_knows_the_we
     city.host.o.live_sender = live_sender
     await city.owner_says("what's 9 + 9?")
     await city.run()
-    assert direct[0] == {"type": "ace.reply", "conversation": "c1", "text": "Eight", "done": False}
+    assert direct[0] == {"type": "vaic.reply", "conversation": "c1", "text": "Eight", "done": False}
     assert direct[-1]["done"] and direct[-1]["text"] == "Eighteen."
     # Pieces only went the fast way; the final reply also went through the bus as a safety net.
-    assert [(e["done"], e["text"]) for e in city.bus.of_type("ace.reply")] == [(True, "Eighteen.")]
-    assert seen and seen[0]["role"] == "ace"
+    assert [(e["done"], e["text"]) for e in city.bus.of_type("vaic.reply")] == [(True, "Eighteen.")]
+    assert seen and seen[0]["role"] == "vaic"

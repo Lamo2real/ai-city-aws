@@ -6,8 +6,8 @@ from typing import Any
 
 import httpx
 
-from aic.runtime.server import create_app
-from aic.runtime.warm import AceWarmer
+from vaic.runtime.server import create_app
+from vaic.runtime.warm import VaicWarmer
 
 
 class FakeBedrock:
@@ -22,14 +22,14 @@ class FakeBedrock:
         return {"output": {"message": {"content": [{"text": "ok"}]}}}
 
 
-def make(bedrock: FakeBedrock, ledger_calls: list[str], senders: list[tuple[str, str]]) -> AceWarmer:
+def make(bedrock: FakeBedrock, ledger_calls: list[str], senders: list[tuple[str, str]]) -> VaicWarmer:
     async def ledger_read() -> Any:
         ledger_calls.append("get")
         return None
 
-    return AceWarmer(
+    return VaicWarmer(
         bedrock=lambda: bedrock,
-        model_id="arn:profile/aic-ace",
+        model_id="arn:profile/vaic-vaic",
         ledger_read=ledger_read,
         sender=lambda endpoint, table: senders.append((endpoint, table)),
     )
@@ -40,7 +40,7 @@ async def test_a_warm_pass_readies_the_sender_reads_the_ledger_and_asks_the_mode
     out = await make(b, ledger, senders).warm({"wsEndpoint": "https://ws.example/prod", "connectionsTable": "conns"})
     assert senders == [("https://ws.example/prod", "conns")]
     assert ledger == ["get"]
-    assert b.calls[0]["modelId"] == "arn:profile/aic-ace"
+    assert b.calls[0]["modelId"] == "arn:profile/vaic-vaic"
     assert b.calls[0]["inferenceConfig"] == {"maxTokens": 1}
     assert "toolConfig" not in b.calls[0]
     assert out["sender"] == "ready" and "model_ms" in out and "ledger_ms" in out and "total_ms" in out
@@ -63,13 +63,13 @@ def test_prepare_creates_the_client_and_never_fails_startup() -> None:
     async def ledger_read() -> Any:
         return None
 
-    AceWarmer(bedrock, "m", ledger_read).prepare()
+    VaicWarmer(bedrock, "m", ledger_read).prepare()
     assert made == [1]
 
     def broken() -> Any:
         raise RuntimeError("no credentials")
 
-    AceWarmer(broken, "m", ledger_read).prepare()  # logged, not raised
+    VaicWarmer(broken, "m", ledger_read).prepare()  # logged, not raised
 
 
 class NoTurns:

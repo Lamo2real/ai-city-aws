@@ -10,12 +10,12 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from aic.lambdas.api import ApiDeps, handle_http
-from aic.lambdas.approvals import on_approval_step
-from aic.lambdas.apps import on_submitted
-from aic.lambdas.ledger_writer import ticket_of
-from aic.runtime.tools import TurnCtx, gate_tools, tools_for
-from aic.shared.apps import (
+from vaic.lambdas.api import ApiDeps, handle_http
+from vaic.lambdas.approvals import on_approval_step
+from vaic.lambdas.apps import on_submitted
+from vaic.lambdas.ledger_writer import ticket_of
+from vaic.runtime.tools import TurnCtx, gate_tools, tools_for
+from vaic.shared.apps import (
     AppsOrigin,
     Workspace,
     content_type,
@@ -27,12 +27,12 @@ from aic.shared.apps import (
     update_draft,
     validate_files,
 )
-from aic.shared.caps import default_settings
-from aic.shared.events import MemoryBus, parse_event
-from aic.shared.hierarchy.actions import CityDeps
-from aic.shared.hierarchy.queue import MemoryQueue
-from aic.shared.ledger import Ledger
-from aic.shared.table import MemoryTable
+from vaic.shared.caps import default_settings
+from vaic.shared.events import MemoryBus, parse_event
+from vaic.shared.hierarchy.actions import CityDeps
+from vaic.shared.hierarchy.queue import MemoryQueue
+from vaic.shared.ledger import Ledger
+from vaic.shared.table import MemoryTable
 
 HIRE = "wkr-apps-0123456789ab"
 URL = "https://apps.example.cloudfront.net"
@@ -94,7 +94,7 @@ class FakeCloudFront:
 
 
 def origin(s3: FakeS3, cf: FakeCloudFront | None = None) -> AppsOrigin:
-    return AppsOrigin(s3=s3, bucket="aic-prod-apps", url=URL, cloudfront=cf, distribution_id="E123")
+    return AppsOrigin(s3=s3, bucket="vaic-prod-apps", url=URL, cloudfront=cf, distribution_id="E123")
 
 
 def submitted(**over: Any) -> dict[str, Any]:
@@ -201,8 +201,8 @@ async def test_the_lambda_stages_a_valid_submission_as_a_ready_draft_with_the_ci
     dr = await on_submitted(submitted(files=[{"path": "fake.exe", "size": 1}]), ledger, bus, origin(s3), s3, "ws")
     assert dr is not None and dr["status"] == "ready", dr
     assert dr["preview_url"] == f"{URL}/drafts/{dr['draft_id']}/index.html"
-    assert {f["path"] for f in dr["files"]} == {"index.html", "game.js", "icon.svg", "lvl/one.json", "aic-bridge.js"}
-    staged = s3.objects["aic-prod-apps"]
+    assert {f["path"] for f in dr["files"]} == {"index.html", "game.js", "icon.svg", "lvl/one.json", "vaic-bridge.js"}
+    staged = s3.objects["vaic-prod-apps"]
     html = staged[f"drafts/{dr['draft_id']}/index.html"]
     assert (html["ContentType"], html["CacheControl"]) == ("text/html; charset=utf-8", "no-cache")
     assert staged[f"drafts/{dr['draft_id']}/game.js"]["CacheControl"] == "max-age=300"
@@ -216,7 +216,7 @@ async def test_the_lambda_rejects_what_fails_a_check_with_the_reason() -> None:
     upload(s3, {"game.js": b"x"})
     dr = await on_submitted(submitted(icon=None), ledger, bus, origin(s3), s3, "ws")
     assert dr is not None and dr["status"] == "rejected" and "index.html" in dr["reason"]
-    assert "aic-prod-apps" not in s3.objects
+    assert "vaic-prod-apps" not in s3.objects
     assert bus.of_type("app.draft")[0]["reason"] == dr["reason"]
     bad = await on_submitted(submitted(hire_id="mgr-apps"), ledger, bus, origin(s3), s3, "ws")
     assert bad is not None and bad["status"] == "rejected" and "worker" in bad["reason"]
@@ -328,7 +328,7 @@ async def test_submit_app_refuses_early_on_the_same_checks(tmp_path: Path) -> No
 
 def test_submit_app_is_a_worker_tool_only() -> None:
     d = city_deps()
-    for role in ("ace", "orchestrator", "manager"):
+    for role in ("vaic", "orchestrator", "manager"):
         ctx = TurnCtx(agent_id="x", role=role, department="Apps", ticket_id="t", task_id="t")
         assert "submit_app" not in {t.name for t in tools_for(d, ctx)}
 
@@ -360,7 +360,7 @@ async def draft(d: CityDeps | Ledger, draft_id: str, task_id: str, status: str, 
 
 async def test_a_pass_sign_off_asks_the_owner_to_publish_each_ready_draft_of_that_task_once() -> None:
     d = city_deps()
-    task = await d.ledger.create_ticket({"id": "t-task", "goal": "a game", "from": "ace", "to": "orchestrator",
+    task = await d.ledger.create_ticket({"id": "t-task", "goal": "a game", "from": "vaic", "to": "orchestrator",
                                          "department": None, "parent_id": None})  # fmt: skip
     await d.ledger.create_ticket({"id": "t-apps", "goal": "build it", "from": "orchestrator", "to": "mgr-apps",
                                   "department": "Apps", "parent_id": task["id"], "kind": "assignment",
@@ -422,7 +422,7 @@ def js(r: dict[str, Any]) -> Any:
 async def staged(d: ApiDeps, s3: FakeS3, draft_id: str = "drf-1") -> dict[str, Any]:
     await draft(d.ledger, draft_id, "t-task", "awaiting_owner")
     for p, b in GAME.items():
-        s3.put("aic-prod-apps", f"drafts/{draft_id}/{p}", b, ContentType=content_type(p))
+        s3.put("vaic-prod-apps", f"drafts/{draft_id}/{p}", b, ContentType=content_type(p))
     a = await d.ledger.request_approval(
         {"agent": "orchestrator", "ticket_id": "t-task", "tool": "app.publish", "action": "Publish", "hash": "h",
          "reason": "r", "kind": "app.publish", "draft_id": draft_id, "preview_url": "p", "title": "Comet Hopper"}
@@ -440,8 +440,8 @@ async def test_approving_publishes_the_draft_to_live_and_lists_it() -> None:
     assert app["slug"] == "comet-hopper" and app["app_id"].startswith("app-")
     assert app["url"] == f"{URL}/live/{app['app_id']}/index.html"
     assert app["icon_url"] == f"{URL}/live/{app['app_id']}/icon.svg"
-    assert s3.keys("aic-prod-apps", f"live/{app['app_id']}/") == sorted(f"live/{app['app_id']}/{p}" for p in GAME)
-    live_html = s3.objects["aic-prod-apps"][f"live/{app['app_id']}/index.html"]
+    assert s3.keys("vaic-prod-apps", f"live/{app['app_id']}/") == sorted(f"live/{app['app_id']}/{p}" for p in GAME)
+    live_html = s3.objects["vaic-prod-apps"][f"live/{app['app_id']}/index.html"]
     assert (live_html["ContentType"], live_html["CacheControl"]) == ("text/html; charset=utf-8", "no-cache")
     assert (await get_draft(d.ledger, "drf-1") or {})["status"] == "published"
     assert [e["type"] for e in d.bus.events] == ["app.published", "approval.decided"]  # type: ignore[attr-defined]
@@ -473,7 +473,7 @@ async def test_refusing_marks_the_draft_refused_and_publishes_nothing() -> None:
     r = await handle_http(ev("POST", f"/approvals/{a['id']}", {"approved": False}), d)
     assert r["statusCode"] == 200 and "app" not in js(r)
     assert (await get_draft(d.ledger, "drf-1") or {})["status"] == "refused"
-    assert s3.keys("aic-prod-apps", "live/") == [] and await list_apps(d.ledger) == []
+    assert s3.keys("vaic-prod-apps", "live/") == [] and await list_apps(d.ledger) == []
 
 
 async def test_publishing_without_the_apps_origin_leaves_the_approval_pending() -> None:
@@ -492,8 +492,8 @@ async def test_removing_an_app_deletes_its_files_invalidates_the_cdn_and_forgets
     app = await publish_draft(d.ledger, d.bus, origin(s3, cf), "drf-1")
     r = await handle_http(ev("DELETE", f"/apps/{app['app_id']}"), d)
     assert (r["statusCode"], js(r)) == (200, {"removed": app["app_id"]})
-    assert s3.keys("aic-prod-apps", "live/") == []
-    assert s3.keys("aic-prod-apps", "drafts/")  # drafts expire by lifecycle, not here
+    assert s3.keys("vaic-prod-apps", "live/") == []
+    assert s3.keys("vaic-prod-apps", "drafts/")  # drafts expire by lifecycle, not here
     assert cf.invalidations[0]["Paths"]["Items"] == [f"/live/{app['app_id']}/*"]
     assert await list_apps(d.ledger) == []
     assert d.bus.of_type("app.removed")[-1] == {  # type: ignore[attr-defined]
@@ -506,7 +506,7 @@ async def test_the_resume_step_wakes_the_orchestrator_only_when_the_owner_refuse
     s3 = FakeS3()
     d = api(s3)
     await d.ledger.put_agent({"id": "orchestrator", "kind": "core", "role": "Orchestrator", "department": None,
-                              "model": "fable-5-2", "parent": "ace", "state": "active"})  # fmt: skip
+                              "model": "fable-5-2", "parent": "vaic", "state": "active"})  # fmt: skip
     a = await staged(d, s3)
     await on_approval_step({"step": "resume", "approvalId": a["id"], "approved": True}, d.ledger, d.queue)
     assert d.queue.sent == []  # type: ignore[attr-defined]
@@ -540,13 +540,13 @@ async def test_the_worker_and_its_manager_see_the_citys_verdict_on_the_draft() -
     assert "- app draft drf-1 [rejected]: index.html is missing" in text
 
 
-async def test_aic_is_told_when_the_owner_spoke_so_it_answers_short_and_spoken() -> None:
+async def test_vaic_is_told_when_the_owner_spoke_so_it_answers_short_and_spoken() -> None:
     from city_support import make_city, scripted_engine
 
     city = make_city(scripted_engine({}))
-    ace = {"id": "ace", "kind": "ace", "role": "ace"}
-    inv = {"role": "ace", "kind": "task", "from": "owner", "body": "how is it going?", "ticketId": "c", "taskId": "c"}
-    assert "said this out loud" not in await city.host._prompt(ace, inv)
-    spoken = await city.host._prompt(ace, {**inv, "voice": True})
+    vaic = {"id": "vaic", "kind": "vaic", "role": "vaic"}
+    inv = {"role": "vaic", "kind": "task", "from": "owner", "body": "how is it going?", "ticketId": "c", "taskId": "c"}
+    assert "said this out loud" not in await city.host._prompt(vaic, inv)
+    spoken = await city.host._prompt(vaic, {**inv, "voice": True})
     assert "said this out loud" in spoken and "one to three short" in spoken
     assert spoken.index("how is it going?") < spoken.index("said this out loud") < spoken.index("Current state")

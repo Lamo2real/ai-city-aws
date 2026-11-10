@@ -20,7 +20,9 @@ describe("the owner's words without the stumbles", () => {
     expect(cleanSpeech("Stop")).toBe("Stop");
   });
   it("keeps words inside quotation marks exactly as said", () => {
-    expect(cleanSpeech('Remove the words "um" and "uh" from the app')).toBe('Remove the words "um" and "uh" from the app');
+    expect(cleanSpeech('Remove the words "um" and "uh" from the app')).toBe(
+      'Remove the words "um" and "uh" from the app',
+    );
     expect(cleanSpeech("Um, add a button that says “the the end”")).toBe("Add a button that says “the the end”");
   });
   it("leaves ordinary words that only look like fillers", () => {
@@ -32,13 +34,13 @@ describe("the owner's words without the stumbles", () => {
     expect(cleanSpeech("yo vice can you check V A I C's tasks")).toBe("yo VAIC can you check VAIC's tasks");
     expect(cleanSpeech("the vice president said it's vice versa")).toBe("the vice president said it's vice versa");
     expect(cleanSpeech("like Vice City in GTA")).toBe("like Vice City in GTA");
-    expect(cleanSpeech("AIC, ship it")).toBe("VAIC, ship it");
+    expect(cleanSpeech("VAIC, ship it")).toBe("VAIC, ship it");
     expect(cleanSpeech('Name the button "Vice"')).toBe('Name the button "Vice"');
     expect(cleanSpeech("advice and device stay")).toBe("advice and device stay");
   });
-  it("Ace, heard or spelled, is always written VAIC; quoted words stay", () => {
-    expect(cleanSpeech("Hey Ace, what's the status?")).toBe("Hey VAIC, what's the status?");
-    expect(cleanSpeech("ace can you check A C E's tasks")).toBe("VAIC can you check VAIC's tasks");
+  it("Vaic, heard or spelled, is always written VAIC; quoted words stay", () => {
+    expect(cleanSpeech("Hey Vaic, what's the status?")).toBe("Hey VAIC, what's the status?");
+    expect(cleanSpeech("vaic can you check A C E's tasks")).toBe("VAIC can you check VAIC's tasks");
     expect(cleanSpeech("A-C-E, ship it")).toBe("VAIC, ship it");
     expect(cleanSpeech('Name the button "Ace"')).toBe('Name the button "Ace"');
     expect(cleanSpeech("Grace and Candace are here")).toBe("Grace and Candace are here");

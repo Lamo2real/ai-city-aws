@@ -14,18 +14,18 @@ from typing import Any
 
 import pytest
 
-from aic.lambdas.api import handle_http
-from aic.lambdas.connectors_api import ConnectorsApi
-from aic.runtime.connector_tool import add_connector_tool
-from aic.runtime.github_auth import HELPER, GitAuth
-from aic.runtime.prompts import load_prompt
-from aic.runtime.tools import TurnCtx, cap_output, tools_for
-from aic.shared.connectors import GITHUB_MCP_URL, ConnectorStore, event, github_page_hint, is_github_query
-from aic.shared.github import GitHubDeps, github_token_secret, noreply_email, redact, token_from_secret
 from city_support import make_city
 from connector_fakes import FakeNet, Recorder, control, resolver
 from test_api import ev, js, make
 from test_speech import FakeSecrets
+from vaic.lambdas.api import handle_http
+from vaic.lambdas.connectors_api import ConnectorsApi
+from vaic.runtime.connector_tool import add_connector_tool
+from vaic.runtime.github_auth import HELPER, GitAuth
+from vaic.runtime.prompts import load_prompt
+from vaic.runtime.tools import TurnCtx, cap_output, tools_for
+from vaic.shared.connectors import GITHUB_MCP_URL, ConnectorStore, event, github_page_hint, is_github_query
+from vaic.shared.github import GitHubDeps, github_token_secret, noreply_email, redact, token_from_secret
 
 TOKEN = "ghp_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"
 PAT = "github_pat_" + "11ABCDEFG0123456789_abcdefghijklmnopqrstuvwxyz0123456789"
@@ -49,7 +49,7 @@ class FakeGitHub:
 
 def secrets_with(value: str | None = None) -> FakeSecrets:
     s = FakeSecrets()
-    s.values = {} if value is None else {"aic/prod/github": value}
+    s.values = {} if value is None else {"vaic/prod/github": value}
     return s
 
 
@@ -93,7 +93,7 @@ async def test_the_token_is_stored_checked_with_github_and_never_echoed(capsys: 
     assert js(before) == {"configured": False, "login": None, "error": None, "saved_at": None}
     r = await handle_http(ev("PUT", "/github/token", {"token": TOKEN}), api)
     assert r["statusCode"] == 200 and js(r)["login"] == "lamo2real" and js(r)["saved_at"]
-    assert json.loads(secrets.values["aic/prod/github"]) == {"token": TOKEN}
+    assert json.loads(secrets.values["vaic/prod/github"]) == {"token": TOKEN}
     assert gh.calls[0]["url"] == "https://api.github.com/user"
     assert gh.calls[0]["headers"]["Authorization"] == f"Bearer {TOKEN}"
     after = js(await handle_http(ev("GET", "/github"), api))
@@ -112,7 +112,7 @@ async def test_a_rejected_token_is_refused_in_plain_words_and_not_stored() -> No
     r = await handle_http(ev("PUT", "/github/token", {"token": TOKEN}), api)
     assert r["statusCode"] == 400 and js(r)["error"] == "bad_token"
     assert "GitHub rejected the token" in js(r)["message"]
-    assert "aic/prod/github" not in secrets.values
+    assert "vaic/prod/github" not in secrets.values
     bad = await handle_http(ev("PUT", "/github/token", {"token": "nope"}), api)
     assert bad["statusCode"] == 400 and "ghp_ or github_pat_" in js(bad)["message"]
     none = await handle_http(ev("PUT", "/github/token", {"token": TOKEN}), make())
@@ -126,7 +126,7 @@ async def test_status_says_so_when_a_stored_token_stopped_working_and_remove_cle
     assert st["configured"] is True and st["login"] is None and "GitHub rejected the token" in st["error"]
     r = await handle_http(ev("DELETE", "/github/token"), api)
     assert js(r) == {"ok": True}
-    assert token_from_secret(secrets.values["aic/prod/github"]) is None  # the container stays, empty
+    assert token_from_secret(secrets.values["vaic/prod/github"]) is None  # the container stays, empty
     assert js(await handle_http(ev("GET", "/github"), api))["configured"] is False
 
 
@@ -135,7 +135,7 @@ async def test_github_unreachable_keeps_the_token_and_the_status_says_who_later(
     api = make(github=d)
     r = await handle_http(ev("PUT", "/github/token", {"token": TOKEN}), api)
     assert r["statusCode"] == 200 and js(r)["login"] is None
-    assert json.loads(secrets.values["aic/prod/github"]) == {"token": TOKEN}
+    assert json.loads(secrets.values["vaic/prod/github"]) == {"token": TOKEN}
     assert js(await handle_http(ev("GET", "/github"), api))["login"] == "lamo2real"
 
 
@@ -172,7 +172,7 @@ async def test_the_runtime_signs_git_and_gh_in_from_the_environment_and_writes_n
     # The same token again: nothing to redo. A removed token: everything comes out again.
     n = len(run.calls)
     assert await auth.ensure() is True and len(run.calls) == n
-    secrets.values["aic/prod/github"] = "{}"
+    secrets.values["vaic/prod/github"] = "{}"
     d.forget()
     assert await auth.ensure() is False
     assert "GH_TOKEN" not in env and "GITHUB_TOKEN" not in env and "GIT_CONFIG_GLOBAL" not in env
@@ -217,12 +217,12 @@ def test_real_git_answers_the_token_for_github_through_the_helper_only(tmp_path:
 
 # ---------- VAIC's terminal ----------
 async def _run_command(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[Any, Any]:
-    monkeypatch.setenv("AIC_ACE_WORKSPACE", str(tmp_path / "workspace"))
+    monkeypatch.setenv("VAIC_VAIC_WORKSPACE", str(tmp_path / "workspace"))
     monkeypatch.setenv("GH_TOKEN", TOKEN)
     city = make_city(lambda req: None)  # type: ignore[arg-type,return-value]
     await city.host.ensure_core()
-    ctx = TurnCtx("ace", "ace", None, "conv-c1", "conv-c1", "c1", from_owner=True)
-    from aic.runtime.tools import gate_tools
+    ctx = TurnCtx("vaic", "vaic", None, "conv-c1", "conv-c1", "c1", from_owner=True)
+    from vaic.runtime.tools import gate_tools
 
     tools = {t.name: t for t in gate_tools(city.deps, ctx, tools_for(city.deps, ctx))}
     return tools["run_command"], city
@@ -254,7 +254,7 @@ async def test_run_command_is_denied_by_the_same_rules_as_a_workers_bash(
         assert out.startswith("Denied by policy:"), cmd
     allowed = await tool.handler({"command": "echo git push -f origin main"})
     assert allowed.startswith("exit 0")
-    audits = [t for t in await city.ledger.tool_calls("ace") if t.get("decision") == "deny"]
+    audits = [t for t in await city.ledger.tool_calls("vaic") if t.get("decision") == "deny"]
     assert len(audits) == 4 and all(a.get("tool") == "Bash" for a in audits)
 
 
@@ -272,9 +272,9 @@ async def test_run_command_stops_at_the_timeout_and_caps_long_output(
     assert cap_output("short") == "short"
 
 
-def test_aic_has_the_terminal_and_the_prompts_say_git_and_gh_work() -> None:
-    ace = load_prompt("ace.md")
-    assert "run_command" in ace.tools and "run_command" in ace.body and "/workspace" in ace.body
+def test_vaic_has_the_terminal_and_the_prompts_say_git_and_gh_work() -> None:
+    vaic = load_prompt("vaic.md")
+    assert "run_command" in vaic.tools and "run_command" in vaic.body and "/workspace" in vaic.body
     for f in ("worker.md", "manager.md"):
         body = load_prompt(f, {"department": "Eng"}).body
         assert "gh repo create" in body and "git push" in body
@@ -308,7 +308,7 @@ def test_github_by_name_means_githubs_own_server() -> None:
 
 
 def _ctx() -> TurnCtx:
-    return TurnCtx("ace", "ace", None, "conv-c1", "conv-c1", "c1", message_id="owner-m1", from_owner=True)
+    return TurnCtx("vaic", "vaic", None, "conv-c1", "conv-c1", "c1", message_id="owner-m1", from_owner=True)
 
 
 async def test_add_connector_points_a_github_page_to_the_real_server_and_resolves_github_by_name() -> None:
@@ -351,7 +351,7 @@ async def test_githubs_server_uses_the_saved_city_token_without_asking_again(
         return TOKEN
 
     secrets = Recorder(
-        {"create_secret": {"ARN": "arn:aws:secretsmanager:eu-north-1:1:secret:aic/prod/connectors/github-AbC"}}
+        {"create_secret": {"ARN": "arn:aws:secretsmanager:eu-north-1:1:secret:vaic/prod/connectors/github-AbC"}}
     )
     ctl = control()
     d, invoked, _c = _api(secrets=secrets, control=ctl, github_token=token)
@@ -361,12 +361,12 @@ async def test_githubs_server_uses_the_saved_city_token_without_asking_again(
     assert rec["auth"] == "api_key" and rec["status"] == "syncing" and rec["key_header"] == "Authorization"
     assert rec["key_prefix"] == "Bearer "
     assert json.loads(secrets.calls[0][1]["SecretString"]) == {"api_key": TOKEN}
-    assert dict(ctl.calls)["create_api_key_credential_provider"]["name"] == f"aic-conn-{rec['id']}"
+    assert dict(ctl.calls)["create_api_key_credential_provider"]["name"] == f"vaic-conn-{rec['id']}"
     assert invoked == [{"action": "sync", "id": rec["id"]}]
     assert TOKEN not in r["body"] + json.dumps(d.bus.events) + capsys.readouterr().err
     # Without a saved token the usual probe runs (OAuth, or the key card).
     d2, invoked2, _c2 = _api(secrets=secrets, control=ctl)
-    r2 = await handle_http(ev("POST", "/connectors", {"url": GITHUB_MCP_URL, "roles": {"ace": "all"}}), d2)
+    r2 = await handle_http(ev("POST", "/connectors", {"url": GITHUB_MCP_URL, "roles": {"vaic": "all"}}), d2)
     assert js(r2)["connector"]["status"] == "provisioning" and invoked2[0]["action"] == "provision"
 
 
@@ -380,9 +380,9 @@ async def test_i_have_a_token_instead_turns_a_github_sign_in_into_a_bearer_key()
         "url": GITHUB_MCP_URL,
         "status": "needs_login",
         "auth": "oauth",
-        "provider_name": "aic-conn-github",
+        "provider_name": "vaic-conn-github",
         "oauth": {"authorization_server": "https://github.com", "scopes": [], "metadata": {}},
-        "roles": {"ace": "all"},
+        "roles": {"vaic": "all"},
     }
     await c.store.create(rec)
     e = event(rec)
@@ -390,7 +390,7 @@ async def test_i_have_a_token_instead_turns_a_github_sign_in_into_a_bearer_key()
     r = await handle_http(ev("PUT", "/connectors/github/key", {"api_key": TOKEN}), d)
     assert js(r) == {"ok": True}
     after = await c.store.get("github")
-    assert after and after["auth"] == "api_key" and after["provider_name"] == "aic-conn-github-key"
+    assert after and after["auth"] == "api_key" and after["provider_name"] == "vaic-conn-github-key"
     assert after["key_header"] == "Authorization" and after["key_prefix"] == "Bearer " and after["oauth"] is None
     names = ctl.names()
     assert "create_api_key_credential_provider" in names and "delete_oauth2_credential_provider" in names

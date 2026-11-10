@@ -29,7 +29,7 @@ const question = (id: string, text: string, extra: Record<string, unknown> = {})
 });
 /** The owner was last here `hours` ago on this device. */
 const awayFor = (page: Page, hours: number) =>
-  page.addInitScript((h) => localStorage.setItem("aic.lastSeen", String(Date.now() - h * 3600_000)), hours);
+  page.addInitScript((h) => localStorage.setItem("vaic.lastSeen", String(Date.now() - h * 3600_000)), hours);
 
 async function setup(page: Page): Promise<Mock> {
   const m = await mockBackend(page, {
@@ -68,7 +68,10 @@ async function setup(page: Page): Promise<Mock> {
   };
   m.away = {
     since: ago(60),
-    jobs_finished: [{ id: "j1", name: "Build the landing page" }, { id: "j2", name: "Fix the login bug" }],
+    jobs_finished: [
+      { id: "j1", name: "Build the landing page" },
+      { id: "j2", name: "Fix the login bug" },
+    ],
     jobs_running: [{ id: "j3", name: "Write the launch post" }],
     decided: 14,
     handled_by_standing_orders: [
@@ -105,7 +108,7 @@ test("back after two days: VAIC opens with While you were away, calm, with one b
 }) => {
   const m = await setup(page);
   await awayFor(page, 48);
-  await page.goto("/#/ace");
+  await page.goto("/#/vaic");
   const panel = page.getByRole("region", { name: "While you were away" });
   await expect(panel).toBeVisible();
   await expect(panel).toContainText("Build the landing page");
@@ -114,7 +117,9 @@ test("back after two days: VAIC opens with While you were away, calm, with one b
   await expect(panel).toContainText("Customer Support answered 6 new Jira tickets");
   await expect(panel.getByText("Slack needs you to sign in again.")).toBeVisible();
   // No tab, no badge, no counts that nag.
-  await expect(page.getByRole("navigation", { name: "Screens" }).getByRole("link", { name: /Needs you/ })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "Screens" }).getByRole("link", { name: /Needs you/ })).toHaveCount(
+    0,
+  );
   await expect(page.locator(".badge")).toHaveCount(0);
   await expect(page.getByText(/things? needs? you/)).toHaveCount(0);
   await noSeriousA11y(page, "While you were away");
@@ -126,7 +131,10 @@ test("back after two days: VAIC opens with While you were away, calm, with one b
   await panel.getByRole("button", { name: "Sign in to Slack" }).click();
   await (await popup).close();
   await expect.poll(() => m.calls.some((c) => c.method === "POST" && c.path === "/connectors/slack/login")).toBe(true);
-  await expect(panel.getByRole("link", { name: "Add the key for Heygen" })).toHaveAttribute("href", "#/settings/connectors");
+  await expect(panel.getByRole("link", { name: "Add the key for Heygen" })).toHaveAttribute(
+    "href",
+    "#/settings/connectors",
+  );
 
   // The decisions are under Work.
   await panel.getByRole("link", { name: "See what it decided" }).click();
@@ -137,7 +145,7 @@ test("back after two days: VAIC opens with While you were away, calm, with one b
 test("here an hour ago: no panel by itself, but the clock opens it; Close hides it", async ({ page }) => {
   await setup(page);
   await awayFor(page, 1);
-  await page.goto("/#/ace");
+  await page.goto("/#/vaic");
   await expect(page.getByRole("heading", { name: "Talk to VAIC" })).toBeAttached();
   await expect(page.getByRole("region", { name: "While you were away" })).toHaveCount(0);
   await page.getByRole("button", { name: "While you were away" }).click();
@@ -211,7 +219,7 @@ test("on a phone the panel and the standing orders fit the screen", async ({ pag
   await page.setViewportSize({ width: 390, height: 844 });
   await setup(page);
   await awayFor(page, 48);
-  await page.goto("/#/ace");
+  await page.goto("/#/vaic");
   await expect(page.getByRole("region", { name: "While you were away" })).toBeVisible();
   const wide = () => page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   expect(await wide()).toBe(false);
@@ -223,10 +231,10 @@ test("on a phone the panel and the standing orders fit the screen", async ({ pag
 });
 
 test("light appearance reads well", async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem("aic.theme", "light"));
+  await page.addInitScript(() => localStorage.setItem("vaic.theme", "light"));
   await setup(page);
   await awayFor(page, 48);
-  await page.goto("/#/ace");
+  await page.goto("/#/vaic");
   await expect(page.getByRole("region", { name: "While you were away" })).toBeVisible();
   await noSeriousA11y(page, "While you were away in light appearance");
   await shot(page, "away-panel-light");
@@ -235,7 +243,7 @@ test("light appearance reads well", async ({ page }) => {
 test("without these routes on the backend (404) nothing about them shows and nothing breaks", async ({ page }) => {
   await mockBackend(page);
   await awayFor(page, 48);
-  await page.goto("/#/ace");
+  await page.goto("/#/vaic");
   await expect(page.getByRole("heading", { name: "Talk to VAIC" })).toBeAttached();
   await expect(page.getByRole("button", { name: "While you were away" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "While you were away" })).toHaveCount(0);

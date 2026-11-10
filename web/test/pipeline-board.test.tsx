@@ -27,7 +27,7 @@ const deal = (extra: Partial<Deal> = {}): Deal => ({
 let answer: () => Response = () => new Response(JSON.stringify({ stale_days: 7, deals: [] }));
 const calls: string[] = [];
 const fetchMock = vi.fn(async (url: string) => {
-  if (url === "/config.json") return new Response(JSON.stringify({ apiUrl: "https://api.aic.test" }));
+  if (url === "/config.json") return new Response(JSON.stringify({ apiUrl: "https://api.vaic.test" }));
   calls.push(url);
   if (url.endsWith("/deals")) return answer();
   return new Response("{}", { status: 404 });
@@ -36,7 +36,7 @@ const fetchMock = vi.fn(async (url: string) => {
 beforeAll(async () => {
   vi.stubGlobal("fetch", fetchMock);
   await loadConfig();
-  (window as unknown as { __aicAuth: unknown }).__aicAuth = { idToken: async () => "header.payload.sig" };
+  (window as unknown as { __vaicAuth: unknown }).__vaicAuth = { idToken: async () => "header.payload.sig" };
 });
 afterEach(() => {
   cleanup();
@@ -66,7 +66,7 @@ describe("sales pipeline", () => {
     answer = list([]);
     render(<PipelineBoard />);
     expect(await screen.findByText(EMPTY)).toBeTruthy();
-    expect(calls).toEqual(["https://api.aic.test/deals"]);
+    expect(calls).toEqual(["https://api.vaic.test/deals"]);
   });
 
   it("a 404 before the backend is deployed shows the empty state quietly", async () => {

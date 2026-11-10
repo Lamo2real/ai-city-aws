@@ -3,8 +3,8 @@
 from types import SimpleNamespace
 from typing import Any
 
-from aic.runtime.direct import direct_engine
-from aic.runtime.tools import ToolSpec
+from vaic.runtime.direct import direct_engine
+from vaic.runtime.tools import ToolSpec
 
 
 def text_round(*pieces: str, stop: str = "end_turn") -> list[dict[str, Any]]:
@@ -55,12 +55,12 @@ def request(tools: list[ToolSpec], texts: list[str]) -> Any:
         texts.append(t)
 
     return SimpleNamespace(
-        turn=SimpleNamespace(prompt="what's the status?", model=SimpleNamespace(invoke_id="arn:profile/aic-ace")),
+        turn=SimpleNamespace(prompt="what's the status?", model=SimpleNamespace(invoke_id="arn:profile/vaic-vaic")),
         system="You are VAIC.",
         tools=tools,
         builtins=[],
         on_text=on_text,
-        ctx=SimpleNamespace(role="ace", agent_id="ace"),
+        ctx=SimpleNamespace(role="vaic", agent_id="vaic"),
         ledger=Ledger(),
         on_needs_approval=None,
         on_activity=None,
@@ -77,7 +77,7 @@ async def test_streams_text_as_it_arrives_and_returns_the_whole_reply() -> None:
     assert texts == ["Eigh", "teen."]
     assert out.text == "Eighteen." and out.stop_reason == "end_turn"
     assert out.usage.input == 100 and out.usage.output == 10
-    assert fake.calls[0]["modelId"] == "arn:profile/aic-ace"
+    assert fake.calls[0]["modelId"] == "arn:profile/vaic-vaic"
     assert fake.calls[0]["system"] == [{"text": "You are VAIC."}]
     assert "toolConfig" not in fake.calls[0]
 
@@ -118,7 +118,7 @@ async def test_an_unknown_tool_gets_an_error_result_not_a_crash() -> None:
 
 
 def test_the_sdk_path_pre_approves_nothing_so_every_tool_call_hits_the_policy_gate() -> None:
-    from aic.runtime.engine import _Binding, _options
+    from vaic.runtime.engine import _Binding, _options
 
     async def noop(_: dict[str, Any]) -> str:
         return ""
@@ -152,7 +152,7 @@ async def test_a_self_gated_tool_is_not_gated_twice_its_handler_decides() -> Non
 def test_the_sdk_path_lets_a_self_gated_tool_through_to_its_handler() -> None:
     import asyncio
 
-    from aic.runtime.engine import _Binding, _options
+    from vaic.runtime.engine import _Binding, _options
 
     async def noop(_: dict[str, Any]) -> str:
         return ""
@@ -169,8 +169,8 @@ def test_the_sdk_path_lets_a_self_gated_tool_through_to_its_handler() -> None:
     assert req.ledger.audit == []
 
 
-async def test_after_a_triage_says_answer_yourself_aic_answers_in_the_same_turn() -> None:
-    from aic.runtime.direct import MAX_TOKENS
+async def test_after_a_triage_says_answer_yourself_vaic_answers_in_the_same_turn() -> None:
+    from vaic.runtime.direct import MAX_TOKENS
 
     async def delegate(_: dict[str, Any]) -> str:
         return "Triage: answer this yourself now, in full. No task was created."

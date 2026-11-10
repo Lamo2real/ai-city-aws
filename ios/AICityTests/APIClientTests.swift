@@ -82,7 +82,7 @@ final class APIClientTests: XCTestCase {
     }
 
     func testConfigLoadsValidatesAndCaches() async throws {
-        let defaults = UserDefaults(suiteName: "aic.tests.\(UUID().uuidString)")!
+        let defaults = UserDefaults(suiteName: "vaic.tests.\(UUID().uuidString)")!
         var online = true
         let http = FakeHTTP { s in
             if !online { throw URLError(.notConnectedToInternet) }
@@ -91,7 +91,7 @@ final class APIClientTests: XCTestCase {
                      "cognitoDomain": "x", "clientId": "c", "userPoolId": "eu-north-1_P", "identityPoolId": "i", "redirectUri": "r",
                      "pollyVoice": "Matthew", "transcribeVocabulary": "v"], 200)
         }
-        let store = ConfigStore(defaults: defaults, http: http, bundleHost: "d123.cloudfront.net")  // the built-in AIC_SITE_HOST
+        let store = ConfigStore(defaults: defaults, http: http, bundleHost: "d123.cloudfront.net")  // the built-in VAIC_SITE_HOST
         let c = try await store.load()
         XCTAssertEqual(c.apiUrl, "https://abc.execute-api.eu-north-1.amazonaws.com")
         XCTAssertEqual(c.poolName, "P")

@@ -17,16 +17,16 @@ final class HudStoreTests: XCTestCase {
         h.chat = [ChatLine(id: "o1", who: .owner, text: "status?", state: .sent, at: 0)]
         h.presence = .thinking
         h.beginTurn()
-        XCTAssertTrue(h.waitingForAic)
-        h.event(["type": "activity", "id": "ace", "activity": "reading", "detail": "mcp__city__get_status"])
-        h.event(["type": "activity", "id": "ace", "activity": "reading", "detail": "mcp__city__get_status"])  // same step once
+        XCTAssertTrue(h.waitingForVaic)
+        h.event(["type": "activity", "id": "vaic", "activity": "reading", "detail": "mcp__city__get_status"])
+        h.event(["type": "activity", "id": "vaic", "activity": "reading", "detail": "mcp__city__get_status"])  // same step once
         XCTAssertEqual(h.turn?.steps, ["Understanding your message", "Checking the ledger"])
-        h.event(["type": "ace.reply", "conversation": "main", "text": "All ", "done": false])
-        h.event(["type": "ace.reply", "conversation": "main", "text": "good.", "done": false])
+        h.event(["type": "vaic.reply", "conversation": "main", "text": "All ", "done": false])
+        h.event(["type": "vaic.reply", "conversation": "main", "text": "good.", "done": false])
         XCTAssertEqual(h.chat.last?.text, "All good.")
         XCTAssertEqual(h.chat.last?.state, .streaming)
-        XCTAssertFalse(h.waitingForAic)
-        h.event(["type": "ace.reply", "conversation": "main", "text": "All good.", "done": true])
+        XCTAssertFalse(h.waitingForVaic)
+        h.event(["type": "vaic.reply", "conversation": "main", "text": "All good.", "done": true])
         XCTAssertEqual(h.chat.count, 2)
         XCTAssertEqual(h.chat.last?.state, .done)
         XCTAssertEqual(h.chat.last?.steps?.count, 2)
@@ -34,7 +34,7 @@ final class HudStoreTests: XCTestCase {
         XCTAssertNil(h.turn)
         XCTAssertEqual(h.presence, .speaking)
         // The event bus repeats the final reply: ignored.
-        h.event(["type": "ace.reply", "conversation": "main", "text": "All good.", "done": true])
+        h.event(["type": "vaic.reply", "conversation": "main", "text": "All good.", "done": true])
         XCTAssertEqual(h.chat.count, 2)
         XCTAssertEqual(spoken, ["All good."])
     }
@@ -75,7 +75,7 @@ final class HudStoreTests: XCTestCase {
             if !online { throw URLError(.notConnectedToInternet) }
             return (["accepted": true], 202)
         }
-        let defaults = UserDefaults(suiteName: "aic.tests.\(UUID().uuidString)")!
+        let defaults = UserDefaults(suiteName: "vaic.tests.\(UUID().uuidString)")!
         let cfg = ConfigStore(defaults: defaults, http: http, bundleHost: "site.example.test")
         let auth = FakeAuth()
         let model = AppModel(configStore: cfg, hud: HudStore(archive: NoChatArchive()), http: http, makeAuth: { _ in auth }, connectLive: false)
@@ -94,7 +94,7 @@ final class HudStoreTests: XCTestCase {
 
     func testSignedOutBootShowsSignIn() async {
         let http = FakeHTTP { _ in (["region": "eu-north-1", "apiUrl": "https://api.example.test", "wsUrl": "wss://ws.example.test", "clientId": "c", "userPoolId": "eu-north-1_P"], 200) }
-        let cfg = ConfigStore(defaults: UserDefaults(suiteName: "aic.tests.\(UUID().uuidString)")!, http: http, bundleHost: "site.example.test")
+        let cfg = ConfigStore(defaults: UserDefaults(suiteName: "vaic.tests.\(UUID().uuidString)")!, http: http, bundleHost: "site.example.test")
         let auth = FakeAuth()
         auth.token = nil
         let model = AppModel(configStore: cfg, hud: HudStore(archive: NoChatArchive()), http: http, makeAuth: { _ in auth }, connectLive: false)
@@ -102,14 +102,14 @@ final class HudStoreTests: XCTestCase {
         XCTAssertEqual(model.boot, .signedOut)
     }
 
-    /// The address is built in (AIC_SITE_HOST → AICSiteHost): a build without it fails with a plain sentence, never a
+    /// The address is built in (VAIC_SITE_HOST → VAICSiteHost): a build without it fails with a plain sentence, never a
     /// form asking for a web address (decision 111).
     func testNoBuiltInAddressFailsPlainly() async {
         let http = FakeHTTP { _ in XCTFail("nothing is fetched without an address"); return (.null, 500) }
-        let cfg = ConfigStore(defaults: UserDefaults(suiteName: "aic.tests.\(UUID().uuidString)")!, http: http, bundleHost: nil)
+        let cfg = ConfigStore(defaults: UserDefaults(suiteName: "vaic.tests.\(UUID().uuidString)")!, http: http, bundleHost: nil)
         let model = AppModel(configStore: cfg, hud: HudStore(archive: NoChatArchive()), http: http, makeAuth: { _ in FakeAuth() }, connectLive: false)
         await model.start()
-        XCTAssertEqual(model.boot, .failed("This build has no AI City address; set AIC_SITE_HOST in ios/Config/AICity.xcconfig"))
+        XCTAssertEqual(model.boot, .failed("This build has no AI City address; set VAIC_SITE_HOST in ios/Config/AICity.xcconfig"))
         XCTAssertTrue(http.seen.isEmpty)
     }
 
@@ -120,7 +120,7 @@ final class HudStoreTests: XCTestCase {
             XCTAssertEqual(s.url, "https://d2lcjbjaz1khxz.cloudfront.net/config.json")
             return (["region": "eu-north-1", "apiUrl": "https://api.example.test", "wsUrl": "wss://ws.example.test", "clientId": "c", "userPoolId": "eu-north-1_P"], 200)
         }
-        let cfg = ConfigStore(defaults: UserDefaults(suiteName: "aic.tests.\(UUID().uuidString)")!, http: http, bundleHost: "d2lcjbjaz1khxz.cloudfront.net")
+        let cfg = ConfigStore(defaults: UserDefaults(suiteName: "vaic.tests.\(UUID().uuidString)")!, http: http, bundleHost: "d2lcjbjaz1khxz.cloudfront.net")
         let auth = FakeAuth()
         auth.token = nil
         let model = AppModel(configStore: cfg, hud: HudStore(archive: NoChatArchive()), http: http, makeAuth: { _ in auth }, connectLive: false)

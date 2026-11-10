@@ -36,7 +36,7 @@ let get: () => Response = () => new Response(JSON.stringify({ brief: null, order
 let put: (body: Record<string, unknown>) => Response = (b) =>
   new Response(JSON.stringify({ brief: { ...BRIEF, ...b }, orders: ORDERS }));
 const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-  if (url === "/config.json") return new Response(JSON.stringify({ apiUrl: "https://api.aic.test" }));
+  if (url === "/config.json") return new Response(JSON.stringify({ apiUrl: "https://api.vaic.test" }));
   const method = init?.method ?? "GET";
   const body = init?.body ? JSON.parse(String(init.body)) : null;
   calls.push({ url, method, body });
@@ -51,7 +51,7 @@ const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
 beforeAll(async () => {
   vi.stubGlobal("fetch", fetchMock);
   await loadConfig();
-  (window as unknown as { __aicAuth: unknown }).__aicAuth = { idToken: async () => "header.payload.sig" };
+  (window as unknown as { __vaicAuth: unknown }).__vaicAuth = { idToken: async () => "header.payload.sig" };
 });
 afterEach(() => {
   cleanup();
@@ -122,7 +122,7 @@ describe("Settings → Company", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true));
     expect(calls.find((c) => c.method === "PUT")).toMatchObject({
-      url: "https://api.aic.test/company",
+      url: "https://api.vaic.test/company",
       body: { text: "We sell shoes online.", running: true, support_source: "support@shoes.test" },
     });
     await waitFor(() => expect(document.querySelector(".order")?.textContent).toMatch(/^Customer Support watches/));

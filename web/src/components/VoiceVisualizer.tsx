@@ -1,6 +1,6 @@
 // The voice strip under VAIC's eye: who is talking, shown by shape, words and colour together (never colour alone).
 //   you      → upright bars that follow the owner's microphone level, blue, "You're talking" / "Listening to you"
-//   aic      → a smooth flowing wave that follows VAIC's spoken reply (Polly), wood brown, "VAIC is talking"
+//   vaic      → a smooth flowing wave that follows VAIC's spoken reply (Polly), wood brown, "VAIC is talking"
 //   thinking → three dots travelling along the line, "VAIC is thinking"
 //   idle     → a flat, quiet line, "Tap the mic or type"
 // Levels come from getVoice().levels() (Web Audio analysers on the mic and on the reply). With
@@ -11,12 +11,12 @@ import { getVoice } from "../voice/voice.ts";
 import { sonicLevels } from "../voice/useVoice.ts";
 import { MicIcon } from "./ui.tsx";
 
-export type Speaker = "you" | "aic" | "thinking" | "idle";
+export type Speaker = "you" | "vaic" | "thinking" | "idle";
 export const speakerOf = (p: Presence): Speaker =>
-  p === "listening" ? "you" : p === "speaking" ? "aic" : p === "thinking" ? "thinking" : "idle";
+  p === "listening" ? "you" : p === "speaking" ? "vaic" : p === "thinking" ? "thinking" : "idle";
 
 const BARS = 36;
-const COLOR = { you: "#2a56a8", aic: "#7a4a2a", aicSoft: "#c98f55", thinking: "#5f4636", idle: "#8a7458" };
+const COLOR = { you: "#2a56a8", vaic: "#7a4a2a", vaicSoft: "#c98f55", thinking: "#5f4636", idle: "#8a7458" };
 const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 
 export function VoiceVisualizer(p: {
@@ -54,7 +54,7 @@ export function VoiceVisualizer(p: {
       const lv = still
         ? { input: 0.5, output: 0.5 }
         : (sonicLevels() ?? getVoice().levels?.() ?? { input: 0, output: 0 });
-      const level = speaker === "you" ? lv.input : speaker === "aic" ? lv.output : 0;
+      const level = speaker === "you" ? lv.input : speaker === "vaic" ? lv.output : 0;
       smooth += (level - smooth) * 0.25;
       wrap.current?.style.setProperty("--lvl", still ? "0" : smooth.toFixed(3));
 
@@ -75,12 +75,12 @@ export function VoiceVisualizer(p: {
         }
         const now = smooth > 0.12 ? true : smooth < 0.06 ? false : loud;
         if (now !== loud) setTalking((loud = now));
-      } else if (speaker === "aic") {
+      } else if (speaker === "vaic") {
         const amp = (still ? 0.6 : 0.12 + smooth) * (h / 2 - 6);
         const waves: Array<[string, number, number, number]> = [
-          [COLOR.aicSoft, 0.55, 1.6, 2],
-          [COLOR.aicSoft, 0.8, 2.3, 2],
-          [COLOR.aic, 1, 1.1, 4],
+          [COLOR.vaicSoft, 0.55, 1.6, 2],
+          [COLOR.vaicSoft, 0.8, 2.3, 2],
+          [COLOR.vaic, 1, 1.1, 4],
         ];
         for (const [color, scale, freq, width] of waves) {
           g.strokeStyle = color;
@@ -127,7 +127,7 @@ export function VoiceVisualizer(p: {
       ? talking
         ? "You’re talking"
         : "Listening to you…"
-      : speaker === "aic"
+      : speaker === "vaic"
         ? "VAIC is talking"
         : speaker === "thinking"
           ? "VAIC is thinking…"
@@ -160,7 +160,7 @@ export function VoiceVisualizer(p: {
           </span>
         ) : null}
         <p className="voice-label">
-          {speaker === "you" || speaker === "aic" ? (
+          {speaker === "you" || speaker === "vaic" ? (
             <span className="voice-who" aria-hidden="true">
               {speaker === "you" ? "You" : "VAIC"}
             </span>
@@ -252,12 +252,12 @@ export function FlatWave({ speaker }: { speaker: Speaker }) {
       const lv = still
         ? { input: 0.4, output: 0.4 }
         : (sonicLevels() ?? getVoice().levels?.() ?? { input: 0, output: 0 });
-      const level = speaker === "you" ? lv.input : speaker === "aic" ? lv.output : 0;
+      const level = speaker === "you" ? lv.input : speaker === "vaic" ? lv.output : 0;
       smooth += (level - smooth) * 0.3;
-      const amp = speaker === "you" || speaker === "aic" ? Math.min(1, 0.08 + smooth * 1.4) * (mid - 2) : 0;
+      const amp = speaker === "you" || speaker === "vaic" ? Math.min(1, 0.08 + smooth * 1.4) * (mid - 2) : 0;
       const freq = speaker === "you" ? 3.2 : 1.8;
       const speed = speaker === "you" ? 90 : 160;
-      g.strokeStyle = speaker === "you" ? COLOR.you : speaker === "aic" ? COLOR.aic : COLOR.idle;
+      g.strokeStyle = speaker === "you" ? COLOR.you : speaker === "vaic" ? COLOR.vaic : COLOR.idle;
       g.lineWidth = 2;
       g.lineCap = "round";
       g.beginPath();
@@ -290,7 +290,7 @@ export function FlatWave({ speaker }: { speaker: Speaker }) {
  *  nobody does. With reduced motion: one still glow per state. */
 const AURORA = {
   you: ["79,143,214", "138,180,255"],
-  aic: ["232,163,61", "249,201,118"],
+  vaic: ["232,163,61", "249,201,118"],
   thinking: ["150,120,200", "200,170,240"],
   idle: ["200,170,120", "230,210,170"],
 } as const;
@@ -320,7 +320,7 @@ export function Aurora({ speaker }: { speaker: Speaker }) {
       const raw =
         speaker === "you"
           ? lv.input
-          : speaker === "aic"
+          : speaker === "vaic"
             ? lv.output
             : speaker === "thinking"
               ? 0.18 + 0.1 * Math.sin(t / 600)

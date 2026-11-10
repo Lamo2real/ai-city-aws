@@ -8,10 +8,10 @@ One step at a time. Nothing here was done by the build; every step is yours. Tim
 3. **Root MFA**: sign in as root → top-right account menu → Security credentials → Multi-factor authentication → Assign MFA device (passkey or authenticator app). Then stop using root.
 4. **Admin login without access keys**: IAM Identity Center → Enable → Users → Add user (you) → Permission sets → Create `AdministratorAccess` → AWS accounts → assign you with that permission set. On your machine:
 ```bash
-aws configure sso --profile aic
+aws configure sso --profile vaic
 ```
 ```bash
-aws sso login --profile aic
+aws sso login --profile vaic
 ```
    Never create IAM access keys.
 5. **Cost Explorer**: Billing → Cost Explorer → Enable Cost Explorer (data appears within 24 h).
@@ -23,7 +23,7 @@ aws sso login --profile aic
 9. Check each model card lists **global cross-region inference** from eu-north-1. Note any model that says "not available for this account" — AWS gates some newest models; open a support case if needed.
 10. Optional quick check from your terminal (one tiny paid call per model, a fraction of a cent):
 ```bash
-aws bedrock list-inference-profiles --region eu-north-1 --profile aic --query "inferenceProfileSummaries[?contains(inferenceProfileId,'global.anthropic')].inferenceProfileId"
+aws bedrock list-inference-profiles --region eu-north-1 --profile vaic --query "inferenceProfileSummaries[?contains(inferenceProfileId,'global.anthropic')].inferenceProfileId"
 ```
 
 ## C. Quotas (~10 min to request)
@@ -43,9 +43,9 @@ aws bedrock list-inference-profiles --region eu-north-1 --profile aic --query "i
 
 ## F. One variable and one secret (~2 min)
 20. GitHub → Settings → Secrets and variables → Actions:
-   - **Variable** `AIC_DEPLOY_ROLE_ARN` = the role ARN from step 19.
-   - **Secret** `AIC_OWNER_EMAIL` = the only account that can sign in (Cognito creates just this user; nobody can sign up) and where alerts go. A secret, so it is masked in this public repository's logs.
-   - Optional variables: `AIC_REGION` (default `eu-north-1`), `AIC_MONTHLY_BUDGET_USD` (alert amount, default `10000`), `AIC_STATE_BUCKET` (default `lamo-labs-state-bucket`; the state lives under `ai-city-aws/prod/terraform.tfstate`).
+   - **Variable** `VAIC_DEPLOY_ROLE_ARN` = the role ARN from step 19.
+   - **Secret** `VAIC_OWNER_EMAIL` = the only account that can sign in (Cognito creates just this user; nobody can sign up) and where alerts go. A secret, so it is masked in this public repository's logs.
+   - Optional variables: `VAIC_REGION` (default `eu-north-1`), `VAIC_MONTHLY_BUDGET_USD` (alert amount, default `10000`), `VAIC_STATE_BUCKET` (default `lamo-labs-state-bucket`; the state lives under `ai-city-aws/prod/terraform.tfstate`).
 
 ## G. First deploy (~45 min, one run)
 21. Push to `main` (or Actions → **deploy** → Run workflow). Before the role variable is set, a run stops at its first step with a clear message.
@@ -56,19 +56,19 @@ aws bedrock list-inference-profiles --region eu-north-1 --profile aic --query "i
 25. Every later deploy: push to `main`. If a plan ever shows something being destroyed that you didn't intend, revert the commit and push again.
 
 ## H. After the first apply (~20 min)
-27. **Notifications**: the city sends no email. For one iPhone message per finished job, follow `docs/NOTIFICATIONS.md` (paste the Apple push key in Settings → Notifications, set the GitHub variable `AIC_APNS_ENABLED` to `true`, deploy once, allow notifications in the app). The AWS Budgets alert email is separate and unchanged.
-28. **First sign-in** (all on AI City's own screens): open `hud_url`. The email **“Welcome to AI City: your first sign-in”** (from `no-reply@verificationemail.com`; check spam) has your user name and a **temporary password** (valid 7 days). Sign in with it → **choose your own password** (the rules are shown and ticked off as you type) → **connect an authenticator app** (scan the QR code, or type the key) → type the 6-digit code. You land on AIC. No email, or it expired? Choose **“First time here, or the temporary password expired?”** on the sign-in screen for a new one (owner's email only, once per 10 minutes). Forgot your own password later? **“Forgot your password?”**.
-29. **Secrets** (only when you need them): Secrets Manager → `aic/prod/github` → Retrieve secret value → **Set secret value** → paste a fine-grained GitHub token scoped to the repos workers may touch (contents read/write, pull requests read/write). Google and Spotify stay empty while their integrations are off.
+27. **Notifications**: the city sends no email. For one iPhone message per finished job, follow `docs/NOTIFICATIONS.md` (paste the Apple push key in Settings → Notifications, set the GitHub variable `VAIC_APNS_ENABLED` to `true`, deploy once, allow notifications in the app). The AWS Budgets alert email is separate and unchanged.
+28. **First sign-in** (all on AI City's own screens): open `hud_url`. The email **“Welcome to AI City: your first sign-in”** (from `no-reply@verificationemail.com`; check spam) has your user name and a **temporary password** (valid 7 days). Sign in with it → **choose your own password** (the rules are shown and ticked off as you type) → **connect an authenticator app** (scan the QR code, or type the key) → type the 6-digit code. You land on VAIC. No email, or it expired? Choose **“First time here, or the temporary password expired?”** on the sign-in screen for a new one (owner's email only, once per 10 minutes). Forgot your own password later? **“Forgot your password?”**.
+29. **Secrets** (only when you need them): Secrets Manager → `vaic/prod/github` → Retrieve secret value → **Set secret value** → paste a fine-grained GitHub token scoped to the repos workers may touch (contents read/write, pull requests read/write). Google and Spotify stay empty while their integrations are off.
 30. **Activate cost allocation tags** (takes up to 24 h to appear): Billing → Cost allocation tags → User-defined → select `Project`, `App`, `Environment`, `Owner`, `ManagedBy`, `CostCenter`, `Component`, `AgentRole` → **Activate**.
-31. Scheduled jobs (EventBridge rules): the crash sweep, idle-agent retirement, reminders and the AIC warm ping are enabled by Terraform; only `aic-prod-improve` is disabled, and stays so.
+31. Scheduled jobs (EventBridge rules): the crash sweep, idle-agent retirement, reminders and the VAIC warm ping are enabled by Terraform; only `vaic-prod-improve` is disabled, and stays so.
 
 ## I. First live smoke test, under a $1 cap (~10 min)
 32. In the HUD: **Settings → Daily cap, all departments = 1**, **per department = 1** → Save. (Caps are off by default; this one is just for the smoke test.)
-33. Say or type: **"yo AIC, what's 9 + 9?"** → AIC answers "Eighteen." (one Sonnet turn, about a cent).
+33. Say or type: **"yo VAIC, what's 9 + 9?"** → VAIC answers "Eighteen." (one Sonnet turn, about a cent).
 34. One turn per model:
    - Haiku: turn on **Hands-free** and say something unclear that mentions AIC (e.g. "I told AIC about it") → the wake check asks Haiku.
-   - Fable + Opus: ask "AIC, create a Research department and have it find today's date in Stockholm from one official source." → watch the City: a building goes up, the manager hires one worker, the worker reports, the manager reviews, the Orchestrator signs off, AIC tells you.
-35. Check **Costs (estimates)** shows a few cents by role and model, and the CloudWatch dashboard `aic-prod` shows turns.
+   - Fable + Opus: ask "VAIC, create a Research department and have it find today's date in Stockholm from one official source." → watch the City: a building goes up, the manager hires one worker, the worker reports, the manager reviews, the Orchestrator signs off, VAIC tells you.
+35. Check **Costs (estimates)** shows a few cents by role and model, and the CloudWatch dashboard `vaic-prod` shows turns.
 36. Empty the cap fields again and Save for no limit (or keep any cap you want).
 
 If something fails, `docs/RUNBOOK.md` → "Something is stuck".

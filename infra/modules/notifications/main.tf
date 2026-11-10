@@ -3,7 +3,7 @@
 # notifier (one push per finished job) functions need. No email anywhere: the owner asked for one notification
 # per finished job, on the phone, and nothing else.
 #
-# Until the owner pastes the key in Settings and turns `apns_enabled` on (GitHub variable AIC_APNS_ENABLED),
+# Until the owner pastes the key in Settings and turns `apns_enabled` on (GitHub variable VAIC_APNS_ENABLED),
 # the secret exists empty, no platform application is created, and every deploy still applies.
 
 variable "name" { type = string }
@@ -13,14 +13,14 @@ variable "kms_key_arn" { type = string }
 variable "apns_enabled" {
   type        = bool
   default     = false
-  description = "Create the APNs platform applications from the key in aic/prod/apns (the owner pastes it first)."
+  description = "Create the APNs platform applications from the key in vaic/prod/apns (the owner pastes it first)."
 }
 variable "api_role_name" { type = string }
 variable "notifier_role_name" { type = string }
 
 locals {
   tags        = { Component = "notifications" }
-  secret_name = "aic/prod/apns"
+  secret_name = "vaic/prod/apns"
   # Deterministic names, so the api and notifier functions can be given their ARNs before the applications exist.
   app_names = { APNS = "${var.name}-apns", APNS_SANDBOX = "${var.name}-apns-sandbox" }
   app_arns  = { for k, n in local.app_names : k => "arn:aws:sns:${var.region}:${var.account_id}:app/${k}/${n}" }

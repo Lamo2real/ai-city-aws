@@ -1,6 +1,6 @@
-// Push-to-talk to AIC with Apple's own speech APIs: the Speech framework turns the owner's words into text
+// Push-to-talk to VAIC with Apple's own speech APIs: the Speech framework turns the owner's words into text
 // (on the device when the phone supports it, so audio stays on the phone) and AVSpeechSynthesizer reads
-// AIC's replies aloud. The web HUD uses Amazon Transcribe and Polly through the identity pool; the app does
+// VAIC's replies aloud. The web HUD uses Amazon Transcribe and Polly through the identity pool; the app does
 // not need AWS credentials for voice (docs/DECISIONS.md).
 import AVFoundation
 import Foundation
@@ -16,10 +16,10 @@ final class VoiceController {
     /// Loudness right now, 0…1, for the voice line.
     var inputLevel: Double = 0
     var speaking = false
-    /// When AIC's voice last started a word, and how strongly (longer words lift the aurora more).
+    /// When VAIC's voice last started a word, and how strongly (longer words lift the aurora more).
     @ObservationIgnored private var pulse: (at: Date, strength: Double) = (.distantPast, 0)
 
-    /// AIC's voice right now, 0…1, for the aurora: the system voice reports word boundaries, not loudness, so
+    /// VAIC's voice right now, 0…1, for the aurora: the system voice reports word boundaries, not loudness, so
     /// each word lifts the level and it settles until the next.
     func outputLevel(at now: Date = Date()) -> Double {
         speaking ? Aurora.spokenLevel(strength: pulse.strength, since: now.timeIntervalSince(pulse.at)) : 0

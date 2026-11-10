@@ -55,16 +55,16 @@ describe("IAM", () => {
     const w = rolePolicies("worker") as Stmt[];
     expect(actions(w).some((a) => a.startsWith("iam:"))).toBe(false);
     const invoke = w.filter((s) => actions([s]).some((a) => a.startsWith("bedrock:Invoke"))).flatMap((s) => s.Resource);
-    expect(invoke.every((r) => /opus-5-5|aic-worker/.test(r))).toBe(true);
+    expect(invoke.every((r) => /opus-5-5|vaic-worker/.test(r))).toBe(true);
   });
   it("only the manager can call the Agent Factory, and only coordinators can send to every queue", () => {
     const can = (role: string, a: string) => actions(rolePolicies(role) as Stmt[]).includes(a);
     expect(can("manager", "lambda:InvokeFunction")).toBe(true);
-    for (const r of ["ace", "orchestrator", "worker"]) expect(can(r, "lambda:InvokeFunction")).toBe(false);
+    for (const r of ["vaic", "orchestrator", "worker"]) expect(can(r, "lambda:InvokeFunction")).toBe(false);
     const workerQueues = (rolePolicies("worker") as Stmt[])
       .filter((s) => actions([s]).includes("sqs:SendMessage"))
       .flatMap((s) => s.Resource);
-    expect(workerQueues).toEqual([expect.stringMatching(/aic-prod-manager$/)]);
+    expect(workerQueues).toEqual([expect.stringMatching(/vaic-prod-manager$/)]);
   });
   it("Fable roles may invoke their Opus fallback; VAIC only its own model (Haiku)", () => {
     const models = (role: string) =>
@@ -74,8 +74,8 @@ describe("IAM", () => {
         .join(" ");
     expect(models("orchestrator")).toMatch(/fable-5-2/);
     expect(models("orchestrator")).toMatch(/opus-5-5/);
-    expect(models("ace")).toMatch(/haiku-5-5/);
-    expect(models("ace")).not.toMatch(/sonnet|opus|fable/);
+    expect(models("vaic")).toMatch(/haiku-5-5/);
+    expect(models("vaic")).not.toMatch(/sonnet|opus|fable/);
   });
   it("every role Terraform creates has a permission boundary", () => {
     expect(checkBoundaries()).toEqual([]);
@@ -103,7 +103,7 @@ describe("IAM: connectors, mail and skills (inline Terraform policies)", () => {
       m === "mail"
         ? moduleText(m).replace(
             'Action = ["kms:Decrypt"], Resource = var.kms_key_arn }',
-            'Action = ["secretsmanager:GetSecretValue"], Resource = ["arn:aws:secretsmanager:r:1:secret:aic/prod/connectors/*"] }',
+            'Action = ["secretsmanager:GetSecretValue"], Resource = ["arn:aws:secretsmanager:r:1:secret:vaic/prod/connectors/*"] }',
           )
         : moduleText(m);
     expect(checkInline({ read, modules: ["connectors", "mail"] })).toContain(
@@ -129,7 +129,7 @@ describe("IAM: connectors, mail and skills (inline Terraform policies)", () => {
     const f = join(mkdtempSync(join(tmpdir(), "tagcond-")), "main.tf");
     writeFileSync(
       f,
-      `resource "aws_iam_role_policy" "p" {\n  policy = jsonencode({ Statement = [{ Effect = "Allow", Action = ["secretsmanager:CreateSecret"], Resource = ["arn:aws:secretsmanager:r:1:secret:aic/prod/connectors/*"] }] })\n}\n`,
+      `resource "aws_iam_role_policy" "p" {\n  policy = jsonencode({ Statement = [{ Effect = "Allow", Action = ["secretsmanager:CreateSecret"], Resource = ["arn:aws:secretsmanager:r:1:secret:vaic/prod/connectors/*"] }] })\n}\n`,
     );
     expect(checkRuntimeTagConditions([f])).toHaveLength(2);
   });
@@ -161,7 +161,7 @@ describe("knowledge base (docs/KNOWLEDGE.md)", () => {
   };
   const asl = JSON.parse(
     readFileSync("infra/modules/knowledge/pipeline.asl.json.tftpl", "utf8")
-      .replaceAll("${function_arn}", "arn:aws:lambda:eu-north-1:1:function:aic-prod-knowledge")
+      .replaceAll("${function_arn}", "arn:aws:lambda:eu-north-1:1:function:vaic-prod-knowledge")
       .replaceAll("${lambda_errors}", JSON.stringify(["Lambda.ServiceException"])),
   ) as { StartAt: string; States: Record<string, State> };
   // Every state, including those inside Parallel branches, with the scope (state names) it may jump to.
@@ -171,7 +171,7 @@ describe("knowledge base (docs/KNOWLEDGE.md)", () => {
 
   it("IAM: no IAM beyond passing the MediaConvert role, Bedrock only on Titan/Haiku, only VAIC adds knowledge", () => {
     expect(checkKnowledge()).toEqual([]);
-    for (const r of ["ace", "orchestrator", "manager", "worker"])
+    for (const r of ["vaic", "orchestrator", "manager", "worker"])
       expect(actions(rolePolicies(r) as Stmt[])).toContain("bedrock:Retrieve");
     expect(actions(rolePolicies("worker") as Stmt[])).not.toContain("s3:PutObject");
   });
@@ -224,9 +224,9 @@ describe("knowledge base (docs/KNOWLEDGE.md)", () => {
       expect(mapping).toContain(want);
     expect(tf).toMatch(/index_knn_algo_param_ef_search = "512"/);
     expect(tf).toMatch(/type = "OPENSEARCH_SERVERLESS"/);
-    expect(tf).toMatch(/vector_index_name = opensearch_index\.items\.name/);
+    expect(tf).toMatch(/vector_index_name = opensearch_index\.knowledge\.name/);
     // The KB waits for the index, and a minute more: a fresh index isn't visible to Bedrock at once.
-    expect(tf).toMatch(/depends_on = \[aws_iam_role_policy\.kb, opensearch_index\.items, time_sleep\.index\]/);
+    expect(tf).toMatch(/depends_on = \[aws_iam_role_policy\.kb, opensearch_index\.knowledge, time_sleep\.index\]/);
     expect(tf).toMatch(/resource "time_sleep" "index"[\s\S]*?create_duration = "60s"/);
     expect(tf).toMatch(/inclusion_prefixes\s+= \["normalized\/"\]/);
     expect(prod).toMatch(/aws_signature_service = "aoss"/);
@@ -243,11 +243,11 @@ describe("knowledge base (docs/KNOWLEDGE.md)", () => {
     expect(g).toMatch(/kms_key_identifier\s+= var\.kms_key_arn/);
     expect(g).toMatch(/deletion_protection = var\.deletion_protection/);
     expect(g).not.toMatch(/vector_search_configuration/);
-    for (const r of ["ace", "orchestrator", "manager", "worker"])
+    for (const r of ["vaic", "orchestrator", "manager", "worker"])
       expect(actions(rolePolicies(r) as Stmt[])).toContain("neptune-graph:ReadDataViaQuery");
   });
   it("lambdas: api 1024 MB with SnapStart behind the live alias; knowledge 2048 MB, reserved 50", () => {
-    expect(api).toMatch(/handler = "aic\.lambdas\.api\.handler", timeout = 30, memory = 1024/);
+    expect(api).toMatch(/handler = "vaic\.lambdas\.api\.handler", timeout = 30, memory = 1024/);
     expect(api).toMatch(/publish = contains\(\["api", "dispatcher", "ws-broadcast"\], each\.key\)/);
     expect(api).toMatch(/apply_on = "PublishedVersions"/);
     expect(api).toMatch(/resource "aws_lambda_alias" "api_live" \{\s*name\s+= "live"/);
@@ -314,13 +314,13 @@ describe("knowledge base (docs/KNOWLEDGE.md)", () => {
     expect(tf).toMatch(/templatefile\("\$\{path\.module\}\/pipeline\.asl\.json\.tftpl"/);
     expect(tf).toMatch(/type\s+= "STANDARD"/);
     expect(asl.States.AfterLink?.Choices?.[0]?.Next).toBe("EnrichAndIngest");
-    expect(tf).toMatch(/AIC_LEDGER_TABLE\s+= var\.ledger_table/);
+    expect(tf).toMatch(/VAIC_LEDGER_TABLE\s+= var\.ledger_table/);
   });
   it("start: raw/ object-created rule invokes the knowledge Lambda's start action (it names the run after the item)", () => {
     expect(tf).toMatch(/object = \{ key = \[\{ prefix = "raw\/" \}\] \}/);
     expect(tf).toMatch(/"detail-type" = \["Object Created"\]/);
     expect(tf).toContain('\\"action\\": \\"start\\"');
-    expect(tf).toMatch(/handler\s+= "aic\.lambdas\.knowledge\.handler"/);
+    expect(tf).toMatch(/handler\s+= "vaic\.lambdas\.knowledge\.handler"/);
     expect(tf).toMatch(/states:StartExecution"\], Resource = \[local\.state_machine_arn\]/);
   });
   it("environment variables from section 8 reach the api, the knowledge Lambda and the runtimes", () => {
@@ -344,7 +344,7 @@ describe("knowledge base (docs/KNOWLEDGE.md)", () => {
       expect(api).toContain(`${v} = var.`);
     for (const v of ["KNOWLEDGE_TABLE", "KNOWLEDGE_BASE_ID", "KNOWLEDGE_DATA_SOURCE_ID", "KNOWLEDGE_GRAPH_ID"])
       expect(agents).toMatch(new RegExp(`${v}\\s+= var\\.`));
-    expect(agents).toContain('each.key == "ace" ? { KNOWLEDGE_BUCKET = var.knowledge_bucket } : {}');
+    expect(agents).toContain('each.key == "vaic" ? { KNOWLEDGE_BUCKET = var.knowledge_bucket } : {}');
     expect(prod).toMatch(/module "knowledge" \{/);
   });
   it("the HTTP API has every knowledge route behind the owner's JWT, and CORS allows DELETE", () => {
@@ -385,8 +385,8 @@ describe("files (docs/FILES.md, decision 147)", () => {
   it("events: object created under files/ and hires/, our MediaConvert and Transcribe jobs, with a DLQ", () => {
     expect(tf).toContain('object = { key = [{ prefix = "files/" }, { prefix = "hires/" }] }');
     expect(tf).toContain('userMetadata = { component = ["files"] }');
-    expect(tf).toContain('TranscriptionJobName = [{ prefix = "aic-files-" }]');
-    expect(tf).toMatch(/handler\s+= "aic\.lambdas\.files\.handler"/);
+    expect(tf).toContain('TranscriptionJobName = [{ prefix = "vaic-files-" }]');
+    expect(tf).toMatch(/handler\s+= "vaic\.lambdas\.files\.handler"/);
     expect(prod).toContain("files-events = module.files.dlq_name");
   });
   it("the api, the runtimes and the HUD's CSP know the bucket; every route is behind the owner's JWT", () => {
@@ -497,9 +497,9 @@ describe("apps origin (docs/APPS.md)", () => {
   });
 
   it("no worker or Orchestrator policy names the apps bucket", async () => {
-    for (const role of ["worker", "orchestrator", "manager", "ace"]) {
+    for (const role of ["worker", "orchestrator", "manager", "vaic"]) {
       const text = JSON.stringify(rolePolicies(role));
-      expect(text).not.toMatch(/aic-prod-apps|apps_bucket|live\//);
+      expect(text).not.toMatch(/vaic-prod-apps|apps_bucket|live\//);
     }
     expect(JSON.stringify(workspacePolicy())).not.toMatch(/apps/);
     const { readdirSync } = await import("node:fs");
@@ -510,7 +510,7 @@ describe("apps origin (docs/APPS.md)", () => {
 
   it("the apps Lambda: EventBridge on app.submitted, drafts/ only, APPDRAFTS only; only the API writes live/", async () => {
     const api = await read("infra/modules/api/main.tf");
-    expect(api).toMatch(/apps\s+= \{ bundle = "app", handler = "aic\.lambdas\.apps\.handler"/);
+    expect(api).toMatch(/apps\s+= \{ bundle = "app", handler = "vaic\.lambdas\.apps\.handler"/);
     expect(api).toMatch(/"detail-type" = \["app\.submitted"\]/);
     const appsPerms = api.slice(api.indexOf("    apps = ["), api.indexOf("    ]", api.indexOf("    apps = [")));
     expect(appsPerms).toContain('"${var.apps_bucket_arn}/drafts/*"');
@@ -541,9 +541,9 @@ describe("apps API routes", () => {
 });
 
 describe("apps v3: workers read an app's current version from the public apps origin", () => {
-  it("only the worker runtime gets AIC_APPS_URL, and no runtime role names the apps bucket", () => {
+  it("only the worker runtime gets VAIC_APPS_URL, and no runtime role names the apps bucket", () => {
     const agents = readFileSync("infra/modules/agents/main.tf", "utf8");
-    expect(agents).toMatch(/each\.key == "worker" && var\.apps_url != "" \? \{ AIC_APPS_URL = var\.apps_url \}/);
+    expect(agents).toMatch(/each\.key == "worker" && var\.apps_url != "" \? \{ VAIC_APPS_URL = var\.apps_url \}/);
     expect(readFileSync("infra/envs/prod/main.tf", "utf8")).toMatch(/apps_url\s+= module\.apps\.url/);
   });
 });
@@ -557,7 +557,7 @@ describe("app-bridge Lambda (docs/APPS.md v2)", () => {
       .filter((l) => !l.trim().startsWith("#"))
       .join("\n");
   it("runs the shared zip with its own handler", () => {
-    expect(api()).toMatch(/app-bridge\s+= \{ bundle = "app", handler = "aic\.lambdas\.app_bridge\.handler"/);
+    expect(api()).toMatch(/app-bridge\s+= \{ bundle = "app", handler = "vaic\.lambdas\.app_bridge\.handler"/);
     expect(api()).toMatch(/app_bridge_name = "\$\{var\.name\}-app-bridge"/);
   });
   it("only the api role may invoke it, and the api role has no Gateway access", () => {
@@ -571,7 +571,7 @@ describe("app-bridge Lambda (docs/APPS.md v2)", () => {
     const invokes = [...tf.matchAll(/app_bridge_name\}"\]/g)].length;
     expect(invokes).toBe(1);
     expect(tf).not.toMatch(/aws_lambda_permission"[^{]*\{[^}]*app-bridge/);
-    for (const role of ["worker", "orchestrator", "manager", "ace"])
+    for (const role of ["worker", "orchestrator", "manager", "vaic"])
       expect(JSON.stringify(rolePolicies(role))).not.toMatch(/app-bridge/);
   });
   it("reads only APPS, CONNECTORS and MAIL; writes only rate counters and app audit rows; no Gateway yet", () => {
@@ -594,7 +594,7 @@ describe("app-bridge Lambda (docs/APPS.md v2)", () => {
     );
     expect(mail).toMatch(/Statement = local\.read_path \}\)\n\}/);
     expect(mail).toMatch(/workload_arn\s+= "\$\{local\.directory\}\/workload-identity\/\$\{local\.workload\}"/);
-    expect(mail).toMatch(/app_passwords\s+= "\$\{local\.sm\}:aic\/prod\/mail\/\*"/);
+    expect(mail).toMatch(/app_passwords\s+= "\$\{local\.sm\}:vaic\/prod\/mail\/\*"/);
     expect(block(tf, "    api = [").replace(/bedrock-agentcore:InvokeAgentRuntimeWithWebSocketStream/, "")).not.toMatch(
       /bedrock-agentcore/,
     );
@@ -652,7 +652,7 @@ describe("VAIC's ears (Transcribe streaming in Frankfurt)", () => {
     const auth = readFileSync("infra/modules/auth/main.tf", "utf8");
     expect(auth).toMatch(/resource "aws_transcribe_vocabulary" "speech_names" \{\s+provider\s+= aws\.speech/);
     // The owner's rule (2026-11-09): Transcribe writes "Ace" as VAIC, through a table vocabulary in the speech region.
-    expect(auth).toMatch(/"Ace\\t\\t\\tVAIC"/);
+    expect(auth).toMatch(/"Vaic\\t\\t\\tVAIC"/);
     expect(auth).toMatch(/vocabulary_file_uri = "s3:\/\/\$\{aws_s3_bucket\.speech\.id\}/);
     expect(auth).toMatch(/resource "aws_s3_bucket" "speech" \{[\s\S]*?provider = aws\.speech/);
     expect(auth).toMatch(/tags\s+= local\.tags/);
@@ -669,17 +669,17 @@ describe("VAIC warm-keeper (the owner's under-3-seconds target)", () => {
   const deploy = readFileSync(".github/workflows/deploy.yml", "utf8");
   it("the scheduler pings VAIC's runtime every 2 minutes, enabled from the start, and may invoke only that runtime", () => {
     expect(api).toMatch(
-      /warm-ace\s*=\s*\{ schedule = "rate\(2 minutes\)", fn = "scheduler", input = \{ job = "warm_ace" \}, state = "ENABLED" \}/,
+      /warm-vaic\s*=\s*\{ schedule = "rate\(2 minutes\)", fn = "scheduler", input = \{ job = "warm_vaic" \}, state = "ENABLED" \}/,
     );
     expect(api).toMatch(/state\s*=\s*lookup\(each\.value, "state", "DISABLED"\)/);
     const scheduler = api.slice(
       api.indexOf("    scheduler = ["),
       api.indexOf("    ]", api.indexOf("    scheduler = [")),
     );
-    expect(scheduler).toMatch(/bedrock-agentcore:InvokeAgentRuntime.*var\.runtime_arns\["ace"\]/);
+    expect(scheduler).toMatch(/bedrock-agentcore:InvokeAgentRuntime.*var\.runtime_arns\["vaic"\]/);
     expect(scheduler).not.toMatch(/values\(var\.runtime_arns\)/);
     expect(api).toMatch(
-      /scheduler.*env = merge\(\{ AIC_RUNTIME_ARN_ACE = var\.runtime_arns\["ace"\], AIC_RUNTIME_VERSION = var\.runtime_version, AIC_WS_ENDPOINT = "https:\/\/\$\{aws_apigatewayv2_api\.ws\.id\}\.execute-api\.\$\{var\.region\}\.amazonaws\.com\/prod", AIC_CONNECTIONS_TABLE = var\.connections_table \}, local\.scheduler_mail_env\)/,
+      /scheduler.*env = merge\(\{ VAIC_RUNTIME_ARN_VAIC = var\.runtime_arns\["vaic"\], VAIC_RUNTIME_VERSION = var\.runtime_version, VAIC_WS_ENDPOINT = "https:\/\/\$\{aws_apigatewayv2_api\.ws\.id\}\.execute-api\.\$\{var\.region\}\.amazonaws\.com\/prod", VAIC_CONNECTIONS_TABLE = var\.connections_table \}, local\.scheduler_mail_env\)/,
     );
   });
   it("every scheduled job is an EventBridge rule with a resource-policy permission, not an EventBridge Scheduler schedule", () => {
@@ -713,14 +713,14 @@ describe("VAIC warm-keeper (the owner's under-3-seconds target)", () => {
     expect(api).toMatch(/for_each = each\.key == "api" \? \[1\] : \[\]/);
   });
   it("VAIC's session lives all day with a 30-minute idle window; the other coordinators keep an hour", () => {
-    expect(agents).toMatch(/idle_runtime_session_timeout = each\.key == "ace" \? 1800 : 900/);
-    expect(agents).toMatch(/max_lifetime\s*=\s*contains\(\["ace", "worker"\], each\.key\) \? 28800 : 3600/);
+    expect(agents).toMatch(/idle_runtime_session_timeout = each\.key == "vaic" \? 1800 : 900/);
+    expect(agents).toMatch(/max_lifetime\s*=\s*contains\(\["vaic", "worker"\], each\.key\) \? 28800 : 3600/);
   });
   it("the deploy warms VAIC right after apply, and a miss never fails the deploy", () => {
     const i = deploy.indexOf("terraform apply -input=false prod.tfplan");
     const after = deploy.slice(i, i + 900);
     expect(after).toMatch(/warm VAIC's runtime/);
-    expect(after).toMatch(/aws lambda invoke --function-name "\$fn" --payload '\{"job":"warm_ace"\}'/);
+    expect(after).toMatch(/aws lambda invoke --function-name "\$fn" --payload '\{"job":"warm_vaic"\}'/);
     expect(after).toMatch(/\|\| echo "warm-up skipped"/);
   });
 });
@@ -738,7 +738,7 @@ describe("the owner's calendar (City → Features, docs/MAIL_CALENDAR.md §12)",
     expect(api).toMatch(
       /calendar-import = \{ schedule = "rate\(15 minutes\)", fn = "scheduler", input = \{ job = "calendar_import" \}, state = "ENABLED" \}/,
     );
-    expect(api).toMatch(/scheduler_mail_env = \{ for k in \["AIC_MAIL_WORKLOAD", "AIC_MAIL_PROVIDERS"\]/);
+    expect(api).toMatch(/scheduler_mail_env = \{ for k in \["VAIC_MAIL_WORKLOAD", "VAIC_MAIL_PROVIDERS"\]/);
     const block = mail.slice(mail.indexOf('resource "aws_iam_role_policy" "scheduler"'));
     expect(block.slice(0, block.indexOf("\n}\n"))).toMatch(
       /role\s+= var\.scheduler_role_name\n\s+policy = jsonencode\(\{ Version = "2012-10-17", Statement = local\.read_path \}\)/,
@@ -749,7 +749,7 @@ describe("the owner's calendar (City → Features, docs/MAIL_CALENDAR.md §12)",
     expect(mail).toMatch(
       /Sid = "StartCalendarImport", Effect = "Allow", Action = \["lambda:InvokeFunction"\], Resource = \["arn:aws:lambda:\$\{var\.region\}:\$\{var\.account_id\}:function:\$\{var\.name\}-scheduler"\]/,
     );
-    expect(api).toMatch(/AIC_SCHEDULER_FUNCTION = local\.scheduler_name/);
+    expect(api).toMatch(/VAIC_SCHEDULER_FUNCTION = local\.scheduler_name/);
   });
 });
 
@@ -762,7 +762,7 @@ describe("notifications: no email, one iPhone push per finished job (decision 90
     expect(bus).not.toMatch(/aws_sns_topic_subscription/);
     expect(bus).not.toMatch(/protocol\s*=\s*"email"/);
     expect(api).not.toMatch(/job = "nudge"/);
-    expect(api).not.toMatch(/AIC_NOTIFY_TOPIC_ARN|notify_topic_arn/);
+    expect(api).not.toMatch(/VAIC_NOTIFY_TOPIC_ARN|notify_topic_arn/);
   });
   it("the notifier is woken only for top-level jobs reaching their end", () => {
     expect(api).toMatch(
@@ -771,7 +771,7 @@ describe("notifications: no email, one iPhone push per finished job (decision 90
   });
   it("the Apple key is a secret the owner fills; platform applications and their rights exist only when apns_enabled", () => {
     expect(notifications).toMatch(/name\s*=\s*local\.secret_name/);
-    expect(notifications).toMatch(/secret_name = "aic\/prod\/apns"/);
+    expect(notifications).toMatch(/secret_name = "vaic\/prod\/apns"/);
     expect(notifications).toMatch(/for_each\s*=\s*var\.apns_enabled \? local\.app_names : \{\}/);
     expect(notifications).toMatch(/count\s*=\s*var\.apns_enabled \? 1 : 0/);
     expect(notifications).toMatch(/apple_platform_team_id/);
@@ -783,7 +783,7 @@ describe("notifications: no email, one iPhone push per finished job (decision 90
     expect(prod).toMatch(/module "notifications"/);
     expect(prod).toMatch(/apns_enabled\s*=\s*var\.apns_enabled/);
     expect(api).toMatch(
-      /AIC_APNS_ARN\s*=\s*var\.apns_enabled \? "arn:aws:sns:\$\{var\.region\}:\$\{var\.account_id\}:app\/APNS\/\$\{var\.name\}-apns" : ""/,
+      /VAIC_APNS_ARN\s*=\s*var\.apns_enabled \? "arn:aws:sns:\$\{var\.region\}:\$\{var\.account_id\}:app\/APNS\/\$\{var\.name\}-apns" : ""/,
     );
     for (const r of [
       "GET /devices",
@@ -801,14 +801,14 @@ describe("voice: OpenAI text-to-speech (decision 96)", () => {
   const prodTf = readFileSync("infra/envs/prod/main.tf", "utf8");
   const apiTf = readFileSync("infra/modules/api/main.tf", "utf8");
   it("the OpenAI key is a secret only the api function may read or store", () => {
-    expect(voice).toMatch(/secret_name = "aic\/prod\/openai"/);
+    expect(voice).toMatch(/secret_name = "vaic\/prod\/openai"/);
     expect(voice).toMatch(/kms_key_id\s*=\s*var\.kms_key_arn/);
     expect(voice).toMatch(
       /Action = \["secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue", "secretsmanager:DescribeSecret"\], Resource = \[aws_secretsmanager_secret\.openai\.arn\]/,
     );
     expect(voice).toMatch(/role\s*=\s*var\.api_role_name/);
     expect(prodTf).toMatch(/module "voice"/);
-    expect(prodTf).toMatch(/AIC_OPENAI_SECRET\s*=\s*"aic\/prod\/openai"/);
+    expect(prodTf).toMatch(/VAIC_OPENAI_SECRET\s*=\s*"vaic\/prod\/openai"/);
   });
   it("the speech and key routes exist", () => {
     for (const r of ["POST /speech", "GET /voice/openai", "PUT /voice/openai-key"]) expect(apiTf).toContain(`"${r}"`);
@@ -823,7 +823,7 @@ describe("GitHub access (decision 110)", () => {
   const agents = readFileSync("infra/modules/agents/main.tf", "utf8");
   const worker = readFileSync("infra/modules/agents/policies/worker.json.tftpl", "utf8");
   it("the token is one secret: the api stores and reads it, every runtime role reads it", () => {
-    expect(github).toMatch(/secret_name = "aic\/prod\/github"/);
+    expect(github).toMatch(/secret_name = "vaic\/prod\/github"/);
     expect(github).toMatch(/kms_key_id\s*=\s*var\.kms_key_arn/);
     expect(github).toMatch(
       /Action = \["secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue", "secretsmanager:DescribeSecret"\], Resource = \[aws_secretsmanager_secret\.github\.arn\]/,
@@ -834,7 +834,7 @@ describe("GitHub access (decision 110)", () => {
     expect(github).toMatch(/for_each\s*=\s*var\.agent_role_names/);
     expect(prodTf).toMatch(/module "github"/);
     expect(prodTf).toMatch(/agent_role_names = module\.agents\.role_names/);
-    expect(prodTf).toMatch(/AIC_GITHUB_SECRET\s*=\s*"aic\/prod\/github"/);
+    expect(prodTf).toMatch(/VAIC_GITHUB_SECRET\s*=\s*"vaic\/prod\/github"/);
   });
   it("the old empty container moves over instead of being destroyed, and nothing else grants the read", () => {
     expect(prodTf).toMatch(/from = module\.storage\.aws_secretsmanager_secret\.this\["github"\]/);
@@ -862,7 +862,7 @@ describe("the city is always on", () => {
 });
 
 describe("the owner's queue switch", () => {
-  it("every SQS trigger follows queues_enabled, passed from the deploy variable AIC_QUEUES_ENABLED", async () => {
+  it("every SQS trigger follows queues_enabled, passed from the deploy variable VAIC_QUEUES_ENABLED", async () => {
     const { readFileSync } = await import("node:fs");
     const api = readFileSync("infra/modules/api/main.tf", "utf8");
     expect(api).toMatch(/resource "aws_lambda_event_source_mapping" "queue" \{[^}]*enabled\s*=\s*var\.queues_enabled/s);
@@ -902,7 +902,7 @@ describe("pre-configured departments (decision 113)", () => {
   it("the Lambda package carries the bundled skills", () => {
     // Every prompt is bundled, the departments' skills included.
     expect(readFileSync("backend/scripts/build_lambdas.py", "utf8")).toContain(
-      'shutil.copytree(ROOT / "agents", OUT / "aic" / "_agents")',
+      'shutil.copytree(ROOT / "agents", OUT / "vaic" / "_agents")',
     );
   });
 });
@@ -915,7 +915,7 @@ describe("VAIC's real-time voice (Nova Sonic, decision 120)", () => {
   it("only VAIC's role opens the two-way audio stream, on the voice models in config/models.json", () => {
     expect(boundary).toContain('"bedrock:InvokeModelWithBidirectionalStream"');
     const voice = agentsTf.slice(agentsTf.indexOf('resource "aws_iam_role_policy" "voice"'));
-    expect(voice).toMatch(/role = aws_iam_role\.agent\["ace"\]\.id/);
+    expect(voice).toMatch(/role = aws_iam_role\.agent\["vaic"\]\.id/);
     expect(voice).toContain("local.models.voice.speech");
     expect(agentsTf.match(/InvokeModelWithBidirectionalStream/g)).toHaveLength(1);
   });
@@ -924,10 +924,10 @@ describe("VAIC's real-time voice (Nova Sonic, decision 120)", () => {
     expect(apiTf).toContain('"POST /voice/live"');
     expect(apiTf).toContain('"POST /voice/check"');
     expect(apiTf).toMatch(
-      /"bedrock-agentcore:InvokeAgentRuntimeWithWebSocketStream"\], Resource = \[var\.runtime_arns\["ace"\], "\$\{var\.runtime_arns\["ace"\]\}\/\*"\]/,
+      /"bedrock-agentcore:InvokeAgentRuntimeWithWebSocketStream"\], Resource = \[var\.runtime_arns\["vaic"\], "\$\{var\.runtime_arns\["vaic"\]\}\/\*"\]/,
     );
     expect(apiTf).toMatch(
-      /AIC_RUNTIME_ARN_ACE = var\.runtime_arns\["ace"\], AIC_RUNTIME_VERSION = var\.runtime_version \}/,
+      /VAIC_RUNTIME_ARN_VAIC = var\.runtime_arns\["vaic"\], VAIC_RUNTIME_VERSION = var\.runtime_version \}/,
     );
     const connect = fe.split("\n").find((l) => l.includes('"connect-src')) ?? "";
     expect(connect).toContain("wss://bedrock-agentcore.${var.region}.amazonaws.com");
@@ -991,9 +991,9 @@ describe("the executives (decision 140)", () => {
     expect(prod).toMatch(/executive_invoke_arns = module\.agents\.executive_invoke_arns/);
   });
   it("only VAIC's and the Orchestrator's runtimes may call them, through the executives' profile", () => {
-    expect(agents).toMatch(/consults = \["ace", "orchestrator"\]/);
+    expect(agents).toMatch(/consults = \["vaic", "orchestrator"\]/);
     expect(agents).toMatch(/contains\(local\.consults, each\.key\) \? local\.invoke_arns\["executive"\] : \[\]/);
-    expect(agents).toMatch(/AIC_APP_PROFILE_EXECUTIVE = aws_bedrock_inference_profile\.role\["executive"\]\.arn/);
+    expect(agents).toMatch(/VAIC_APP_PROFILE_EXECUTIVE = aws_bedrock_inference_profile\.role\["executive"\]\.arn/);
   });
   it("GET and PUT /executives sit behind the JWT authorizer", () => {
     expect(routes).toContain('"GET /executives"');
@@ -1004,7 +1004,7 @@ describe("the executives (decision 140)", () => {
       /executive-reviews\s+= \{ schedule = "rate\(1 hour\)", fn = "executives", input = \{ job = "reviews" \}, state = "ENABLED" \}/,
     );
     expect(api).toMatch(
-      /executives\s+= \{ bundle = "app", handler = "aic\.lambdas\.executives\.handler".*AIC_APP_PROFILE_EXECUTIVE = var\.executive_profile_arn/,
+      /executives\s+= \{ bundle = "app", handler = "vaic\.lambdas\.executives\.handler".*VAIC_APP_PROFILE_EXECUTIVE = var\.executive_profile_arn/,
     );
     const block = api.slice(api.indexOf("    executives = ["), api.indexOf("    ]", api.indexOf("    executives = [")));
     expect(block).toMatch(/bedrock:InvokeModel"\], Resource = var\.executive_invoke_arns/);

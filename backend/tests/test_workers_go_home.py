@@ -3,9 +3,9 @@ sweep after sitting idle. The City scene walks a released worker home."""
 
 from typing import Any
 
-from aic.lambdas.scheduler import run_job
-from aic.runtime.tools import TurnCtx, tools_for
 from city_support import City, make_city, scripted_engine
+from vaic.lambdas.scheduler import run_job
+from vaic.runtime.tools import TurnCtx, tools_for
 
 SPEC = {"specialty": "Writer", "instructions": "Write the piece.", "tools": ["Read"], "budget_hint_usd": 1}
 MIN = 60_000
@@ -82,7 +82,7 @@ async def test_a_worker_with_another_open_assignment_stays_until_that_passes_too
 
 
 async def test_a_cancelled_assignment_sends_its_worker_home_once() -> None:
-    from aic.shared.hierarchy.actions import move
+    from vaic.shared.hierarchy.actions import move
 
     city = make_city(scripted_engine({}))
     mgr = await manager(city)

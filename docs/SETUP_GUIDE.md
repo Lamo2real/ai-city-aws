@@ -38,10 +38,10 @@ Special cases:
 ## 4. Give IT your GitHub
 Make a classic GitHub token with every scope and paste it in **Settings → GitHub** (see `docs/GITHUB_ACCESS.md`). The city can then create repositories, push code, open pull requests and set repository secrets and variables.
 
-## 5. Optional: AIC's voice
-Paste an OpenAI key in **Settings → AIC's voice** (see `docs/VOICE.md`).
+## 5. Optional: VAIC's voice
+Paste an OpenAI key in **Settings → VAIC's voice** (see `docs/VOICE.md`).
 
-## 6. Ask AIC for work
+## 6. Ask VAIC for work
 "Make a launch campaign for my new product", "build a landing page that sells it with Stripe", "reply to today's support tickets", "prepare this month's VAT figures". The Orchestrator sends it to the right department.
 
 ## What the city never does on its own

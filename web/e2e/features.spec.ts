@@ -96,7 +96,7 @@ test("the City tab has City | Features; Features lists Calendar and adds a featu
   // The logo is the way to the City (no City tab); Features lives under City, not beside it.
   const top = page.getByRole("navigation", { name: "Screens" });
   await expect(top.getByRole("link", { name: "City" })).toHaveCount(0);
-  await expect(top.getByRole("link", { name: "Chat" })).toHaveAttribute("href", "#/ace");
+  await expect(top.getByRole("link", { name: "Chat" })).toHaveAttribute("href", "#/vaic");
   await expect(top.getByRole("link", { name: "Features" })).toHaveCount(0);
   await tabs.getByRole("link", { name: "Features" }).click();
   await expect(page).toHaveURL(/#\/city\/features$/);
@@ -110,7 +110,7 @@ test("the City tab has City | Features; Features lists Calendar and adds a featu
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 
   await page.getByRole("button", { name: /Add a feature/ }).click();
-  await expect(page).toHaveURL(/#\/ace$/);
+  await expect(page).toHaveURL(/#\/vaic$/);
   await expect(page.getByRole("textbox").first()).toHaveValue("I'd like a feature that ");
 });
 
@@ -198,7 +198,7 @@ test("the Calendar switched off says so and turns back on in one tap", async ({ 
 
 test("light theme: the gallery and a meeting stay readable (axe)", async ({ page }) => {
   await withCalendar(page);
-  await page.addInitScript(() => localStorage.setItem("aic.theme", "light"));
+  await page.addInitScript(() => localStorage.setItem("vaic.theme", "light"));
   await page.goto("/#/city/features/calendar");
   await expect(page.locator(".daylist")).toContainText("Design review");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);

@@ -7,20 +7,20 @@ from typing import Any
 
 import pytest
 
-from aic.lambdas.api import aic_call, handle_http, handler
-from aic.runtime.tools import TurnCtx, tools_for
-from aic.shared import owner_api
-from aic.shared.events import MemoryBus
 from city_support import City, make_city, scripted_engine
 from test_api import ev, js, make
+from vaic.lambdas.api import handle_http, handler, vaic_call
+from vaic.runtime.tools import TurnCtx, tools_for
+from vaic.shared import owner_api
+from vaic.shared.events import MemoryBus
 
 
-def wired(from_owner: bool = True, role: str = "ace") -> tuple[City, Any, dict[str, Any]]:
+def wired(from_owner: bool = True, role: str = "vaic") -> tuple[City, Any, dict[str, Any]]:
     c = make_city(scripted_engine({}))
     api = make()
 
     async def call(x: dict[str, Any]) -> dict[str, Any]:
-        return await aic_call(x, api)
+        return await vaic_call(x, api)
 
     c.deps.owner_api = call
     ctx = TurnCtx(agent_id=role, role=role, department=None, ticket_id="t-1", task_id="t-1", from_owner=from_owner)
@@ -31,7 +31,7 @@ def status(text: str) -> int:
     return int(text.split(" ", 1)[0])
 
 
-async def test_aic_reads_and_changes_a_setting_like_the_hud() -> None:
+async def test_vaic_reads_and_changes_a_setting_like_the_hud() -> None:
     _, api, t = wired()
     out = await t["city_api"].handler({"method": "PUT", "path": "/settings", "body": {"autopilot": False}})
     assert status(out) == 200
@@ -55,7 +55,7 @@ async def test_only_the_owners_own_message_can_use_it() -> None:
 
 
 @pytest.mark.parametrize("role", ["orchestrator", "manager", "worker"])
-def test_no_one_but_aic_has_it(role: str) -> None:
+def test_no_one_but_vaic_has_it(role: str) -> None:
     _, _, t = wired(role=role)
     assert "city_api" not in t and "hud_action" not in t
 
@@ -80,7 +80,7 @@ async def test_secrets_and_aics_own_routes_are_refused_twice(method: str, path: 
     out = await t["city_api"].handler({"method": "GET" if method == "PATCH" else method, "path": path})
     if method != "PATCH":
         assert "secret" in out or "HUD's own" in out or "not one of" in out
-    r = await aic_call({"method": method, "path": path, "body": {"token": "x"}}, make())
+    r = await vaic_call({"method": method, "path": path, "body": {"token": "x"}}, make())
     assert r["statusCode"] == 403
 
 
@@ -98,10 +98,10 @@ async def test_a_query_string_reaches_the_route() -> None:
     assert e["queryStringParameters"] == {"since": "2026-11-01T00:00:00Z"}
 
 
-async def test_an_http_request_can_never_take_the_aic_path() -> None:
+async def test_an_http_request_can_never_take_the_vaic_path() -> None:
     # The key exists only on a direct Lambda invoke (IAM: VAIC's role). Over HTTP the authorizer still decides.
     e = ev("PUT", "/settings", {"autopilot": False}, groups=None)
-    e["aic_call"] = {"method": "PUT", "path": "/settings", "body": {"autopilot": False}}
+    e["vaic_call"] = {"method": "PUT", "path": "/settings", "body": {"autopilot": False}}
     assert (await handle_http(e, make()))["statusCode"] == 403
     assert callable(handler)
 

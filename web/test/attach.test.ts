@@ -16,7 +16,7 @@ import {
 const skill = (name: string, enabled = true): Skill => ({
   name,
   description: `The ${name} skill`,
-  roles: ["ace"],
+  roles: ["vaic"],
   enabled,
   version: "v1",
   files: [],

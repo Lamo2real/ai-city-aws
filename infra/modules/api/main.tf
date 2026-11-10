@@ -43,14 +43,14 @@ variable "queues_enabled" {
   default     = true
   description = "Whether the four SQS triggers run. false = the city is switched off until the owner turns it on."
 }
-variable "ace_role_name" {
+variable "vaic_role_name" {
   type        = string
-  description = "AIC's runtime role: it streams its reply straight to the HUD's WebSocket connections."
+  description = "VAIC's runtime role: it streams its reply straight to the HUD's WebSocket connections."
 }
 variable "runtime_version" {
   type        = string
   default     = ""
-  description = "The agent image tag. Part of AIC's session id, so a deploy reaches AIC on its next message."
+  description = "The agent image tag. Part of VAIC's session id, so a deploy reaches VAIC on its next message."
 }
 variable "utility_invoke_arns" { type = list(string) }
 variable "utility_profile_arn" { type = string }
@@ -80,7 +80,7 @@ variable "api_env" {
 variable "app_bridge_env" {
   type        = map(string)
   default     = {}
-  description = "Extra environment for the app-bridge Lambda: AIC_GATEWAY_URL from the connectors module, so apps' granted connector reads reach the Gateway."
+  description = "Extra environment for the app-bridge Lambda: VAIC_GATEWAY_URL from the connectors module, so apps' granted connector reads reach the Gateway."
 }
 variable "workspaces_bucket" { type = string }
 variable "workspaces_arn" { type = string }
@@ -97,33 +97,33 @@ variable "worker_queue_concurrency" {
 locals {
   tags = { Component = "api" }
   common_env = {
-    AIC_REGION             = var.region
-    AIC_LEDGER_TABLE       = var.ledger_table
-    AIC_EVENT_BUS          = var.bus_name
-    AIC_QUEUE_ACE          = var.queue_urls["ace"]
-    AIC_QUEUE_ORCHESTRATOR = var.queue_urls["orchestrator"]
-    AIC_QUEUE_MANAGER      = var.queue_urls["manager"]
-    AIC_QUEUE_WORKER       = var.queue_urls["worker"]
-    AIC_PROFILE_PREFIX     = var.profile_prefix
+    VAIC_REGION             = var.region
+    VAIC_LEDGER_TABLE       = var.ledger_table
+    VAIC_EVENT_BUS          = var.bus_name
+    VAIC_QUEUE_VAIC         = var.queue_urls["vaic"]
+    VAIC_QUEUE_ORCHESTRATOR = var.queue_urls["orchestrator"]
+    VAIC_QUEUE_MANAGER      = var.queue_urls["manager"]
+    VAIC_QUEUE_WORKER       = var.queue_urls["worker"]
+    VAIC_PROFILE_PREFIX     = var.profile_prefix
   }
   # name => bundle, handler, timeout, memory, extra env
   functions = {
-    api           = { bundle = "app", handler = "aic.lambdas.api.handler", timeout = 30, memory = 1024, env = merge(local.apns_env, { AIC_APP_PROFILE_UTILITY = var.utility_profile_arn, AIC_USER_POOL_ID = var.user_pool_id, AIC_OWNER_EMAIL = var.owner_email, KNOWLEDGE_TABLE = var.knowledge_table, KNOWLEDGE_BUCKET = var.knowledge_bucket, KNOWLEDGE_BASE_ID = var.knowledge_base_id, KNOWLEDGE_DATA_SOURCE_ID = var.knowledge_data_source_id, KNOWLEDGE_GRAPH_ID = var.knowledge_graph_id, AIC_APPS_BUCKET = var.apps_bucket, AIC_APPS_URL = var.apps_url, AIC_APPS_DISTRIBUTION_ID = var.apps_distribution_id, AIC_APP_BRIDGE_FUNCTION = local.app_bridge_name, AIC_SCHEDULER_FUNCTION = local.scheduler_name, AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_VERSION = var.runtime_version }, var.api_env) }
-    dispatcher    = { bundle = "app", handler = "aic.lambdas.dispatcher.handler", timeout = 120, memory = 1024, env = { AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_ARN_ORCHESTRATOR = var.runtime_arns["orchestrator"], AIC_RUNTIME_ARN_MANAGER = var.runtime_arns["manager"], AIC_RUNTIME_ARN_WORKER = var.runtime_arns["worker"], AIC_RUNTIME_VERSION = var.runtime_version, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod", AIC_CONNECTIONS_TABLE = var.connections_table } }
-    factory       = { bundle = "app", handler = "aic.lambdas.factory.handler", timeout = 30, memory = 256, env = {} }
-    ledger-writer = { bundle = "app", handler = "aic.lambdas.ledger_writer.handler", timeout = 30, memory = 256, env = {} }
-    scheduler     = { bundle = "app", handler = "aic.lambdas.scheduler.handler", timeout = 120, memory = 256, env = merge({ AIC_RUNTIME_ARN_ACE = var.runtime_arns["ace"], AIC_RUNTIME_VERSION = var.runtime_version, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod", AIC_CONNECTIONS_TABLE = var.connections_table }, local.scheduler_mail_env) }
-    notifier      = { bundle = "app", handler = "aic.lambdas.notifier.handler", timeout = 30, memory = 256, env = local.apns_env }
-    approvals     = { bundle = "app", handler = "aic.lambdas.approvals.handler", timeout = 30, memory = 256, env = {} }
+    api           = { bundle = "app", handler = "vaic.lambdas.api.handler", timeout = 30, memory = 1024, env = merge(local.apns_env, { VAIC_APP_PROFILE_UTILITY = var.utility_profile_arn, VAIC_USER_POOL_ID = var.user_pool_id, VAIC_OWNER_EMAIL = var.owner_email, KNOWLEDGE_TABLE = var.knowledge_table, KNOWLEDGE_BUCKET = var.knowledge_bucket, KNOWLEDGE_BASE_ID = var.knowledge_base_id, KNOWLEDGE_DATA_SOURCE_ID = var.knowledge_data_source_id, KNOWLEDGE_GRAPH_ID = var.knowledge_graph_id, VAIC_APPS_BUCKET = var.apps_bucket, VAIC_APPS_URL = var.apps_url, VAIC_APPS_DISTRIBUTION_ID = var.apps_distribution_id, VAIC_APP_BRIDGE_FUNCTION = local.app_bridge_name, VAIC_SCHEDULER_FUNCTION = local.scheduler_name, VAIC_RUNTIME_ARN_VAIC = var.runtime_arns["vaic"], VAIC_RUNTIME_VERSION = var.runtime_version }, var.api_env) }
+    dispatcher    = { bundle = "app", handler = "vaic.lambdas.dispatcher.handler", timeout = 120, memory = 1024, env = { VAIC_RUNTIME_ARN_VAIC = var.runtime_arns["vaic"], VAIC_RUNTIME_ARN_ORCHESTRATOR = var.runtime_arns["orchestrator"], VAIC_RUNTIME_ARN_MANAGER = var.runtime_arns["manager"], VAIC_RUNTIME_ARN_WORKER = var.runtime_arns["worker"], VAIC_RUNTIME_VERSION = var.runtime_version, VAIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod", VAIC_CONNECTIONS_TABLE = var.connections_table } }
+    factory       = { bundle = "app", handler = "vaic.lambdas.factory.handler", timeout = 30, memory = 256, env = {} }
+    ledger-writer = { bundle = "app", handler = "vaic.lambdas.ledger_writer.handler", timeout = 30, memory = 256, env = {} }
+    scheduler     = { bundle = "app", handler = "vaic.lambdas.scheduler.handler", timeout = 120, memory = 256, env = merge({ VAIC_RUNTIME_ARN_VAIC = var.runtime_arns["vaic"], VAIC_RUNTIME_VERSION = var.runtime_version, VAIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod", VAIC_CONNECTIONS_TABLE = var.connections_table }, local.scheduler_mail_env) }
+    notifier      = { bundle = "app", handler = "vaic.lambdas.notifier.handler", timeout = 30, memory = 256, env = local.apns_env }
+    approvals     = { bundle = "app", handler = "vaic.lambdas.approvals.handler", timeout = 30, memory = 256, env = {} }
     # The executives (decision 140): only the optional scheduled reviews the owner switched on (all off by default).
-    executives = { bundle = "app", handler = "aic.lambdas.executives.handler", timeout = 600, memory = 256, env = { AIC_APP_PROFILE_EXECUTIVE = var.executive_profile_arn } }
+    executives = { bundle = "app", handler = "vaic.lambdas.executives.handler", timeout = 600, memory = 256, env = { VAIC_APP_PROFILE_EXECUTIVE = var.executive_profile_arn } }
     # The Chief of Staff (decision 124): decides Needs you items; carries each out through the api (live alias).
-    chief-of-staff = { bundle = "app", handler = "aic.lambdas.chief_of_staff.handler", timeout = 300, memory = 256, env = { AIC_APP_PROFILE_CHIEF_OF_STAFF = var.chief_of_staff_profile_arn, AIC_API_FUNCTION = "${local.api_name}:live" } }
-    ws-authorizer  = { bundle = "app", handler = "aic.lambdas.ws.authorizer_handler", timeout = 10, memory = 256, env = { AIC_USER_POOL_ID = var.user_pool_id, AIC_USER_POOL_CLIENT_ID = var.client_id } }
-    ws-connection  = { bundle = "app", handler = "aic.lambdas.ws.connection_handler", timeout = 10, memory = 256, env = { AIC_CONNECTIONS_TABLE = var.connections_table } }
-    apps           = { bundle = "app", handler = "aic.lambdas.apps.handler", timeout = 120, memory = 512, env = { AIC_APPS_BUCKET = var.apps_bucket, AIC_APPS_URL = var.apps_url, AIC_WORKSPACES_BUCKET = var.workspaces_bucket } }
-    app-bridge     = { bundle = "app", handler = "aic.lambdas.app_bridge.handler", timeout = 25, memory = 512, env = var.app_bridge_env }
-    ws-broadcast   = { bundle = "app", handler = "aic.lambdas.ws.broadcast_handler", timeout = 30, memory = 256, env = { AIC_CONNECTIONS_TABLE = var.connections_table, AIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod" } }
+    chief-of-staff = { bundle = "app", handler = "vaic.lambdas.chief_of_staff.handler", timeout = 300, memory = 256, env = { VAIC_APP_PROFILE_CHIEF_OF_STAFF = var.chief_of_staff_profile_arn, VAIC_API_FUNCTION = "${local.api_name}:live" } }
+    ws-authorizer  = { bundle = "app", handler = "vaic.lambdas.ws.authorizer_handler", timeout = 10, memory = 256, env = { VAIC_USER_POOL_ID = var.user_pool_id, VAIC_USER_POOL_CLIENT_ID = var.client_id } }
+    ws-connection  = { bundle = "app", handler = "vaic.lambdas.ws.connection_handler", timeout = 10, memory = 256, env = { VAIC_CONNECTIONS_TABLE = var.connections_table } }
+    apps           = { bundle = "app", handler = "vaic.lambdas.apps.handler", timeout = 120, memory = 512, env = { VAIC_APPS_BUCKET = var.apps_bucket, VAIC_APPS_URL = var.apps_url, VAIC_WORKSPACES_BUCKET = var.workspaces_bucket } }
+    app-bridge     = { bundle = "app", handler = "vaic.lambdas.app_bridge.handler", timeout = 25, memory = 512, env = var.app_bridge_env }
+    ws-broadcast   = { bundle = "app", handler = "vaic.lambdas.ws.broadcast_handler", timeout = 30, memory = 256, env = { VAIC_CONNECTIONS_TABLE = var.connections_table, VAIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod" } }
   }
   # Named, not referenced: the api function's env and policy name it, and both live in the same for_each.
   app_bridge_name = "${var.name}-app-bridge"
@@ -131,7 +131,7 @@ locals {
   scheduler_name  = "${var.name}-scheduler"
   # The calendar import (job calendar_import) reads mail accounts the way the api does; its read path is attached
   # by the mail module (docs/MAIL_CALENDAR.md §12).
-  scheduler_mail_env = { for k in ["AIC_MAIL_WORKLOAD", "AIC_MAIL_PROVIDERS"] : k => var.api_env[k] if contains(keys(var.api_env), k) }
+  scheduler_mail_env = { for k in ["VAIC_MAIL_WORKLOAD", "VAIC_MAIL_PROVIDERS"] : k => var.api_env[k] if contains(keys(var.api_env), k) }
   apps_tagged        = ["apps", "app-bridge"]
   ledger_rw          = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:ConditionCheckItem"]
   # What each function may do, beyond logs, tracing and the KMS key.
@@ -145,8 +145,8 @@ locals {
       { Action = ["sqs:PurgeQueue"], Resource = values(var.queue_arns) },
       { Action = ["states:SendTaskSuccess", "states:SendTaskFailure"], Resource = [aws_sfn_state_machine.approval.arn] },
       { Action = ["bedrock:InvokeModel"], Resource = var.utility_invoke_arns },
-      # AIC's real-time voice (decision 120): signs the browser's WebSocket address to AIC's runtime only.
-      { Action = ["bedrock-agentcore:InvokeAgentRuntimeWithWebSocketStream"], Resource = [var.runtime_arns["ace"], "${var.runtime_arns["ace"]}/*"] },
+      # VAIC's real-time voice (decision 120): signs the browser's WebSocket address to VAIC's runtime only.
+      { Action = ["bedrock-agentcore:InvokeAgentRuntimeWithWebSocketStream"], Resource = [var.runtime_arns["vaic"], "${var.runtime_arns["vaic"]}/*"] },
       # "Send me a new first-login email": re-sends the owner's invitation, nothing else.
       { Action = ["cognito-idp:AdminCreateUser"], Resource = [var.user_pool_arn] },
       # The knowledge base (docs/KNOWLEDGE.md section 9): items, presigned uploads (single and multipart) under raw/,
@@ -198,8 +198,8 @@ locals {
       { Action = ["dynamodb:BatchWriteItem"], Resource = [var.ledger_arn] },
       { Action = ["events:PutEvents"], Resource = [var.bus_arn] },
       { Action = ["sqs:SendMessage"], Resource = values(var.queue_arns) },
-      # warm_ace: the "warm" ping to AIC's runtime only (never the other roles).
-      { Action = ["bedrock-agentcore:InvokeAgentRuntime"], Resource = [var.runtime_arns["ace"], "${var.runtime_arns["ace"]}/*"] },
+      # warm_vaic: the "warm" ping to VAIC's runtime only (never the other roles).
+      { Action = ["bedrock-agentcore:InvokeAgentRuntime"], Resource = [var.runtime_arns["vaic"], "${var.runtime_arns["vaic"]}/*"] },
     ]
     # Reads the inbox, the jobs and the owner's notes; writes only its own marks, turns and claims. Calls its model, and
     # the api's live alias, which carries each decision out exactly as the owner's click does.
@@ -209,7 +209,7 @@ locals {
       { Action = ["bedrock:InvokeModel"], Resource = var.chief_of_staff_invoke_arns },
       { Action = ["lambda:InvokeFunction"], Resource = ["arn:aws:lambda:${var.region}:${var.account_id}:function:${local.api_name}:live"] },
     ]
-    # Reads the city's records, writes its recommendations and AIC's chat line, calls its model. Starts no work: no
+    # Reads the city's records, writes its recommendations and VAIC's chat line, calls its model. Starts no work: no
     # queues, no runtimes, no other function.
     executives = [
       { Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] },
@@ -263,36 +263,36 @@ locals {
     "GET /features", "PUT /features/{id}", "GET /calendar/events", "POST /calendar/refresh",
     # iPhone notifications (docs/NOTIFICATIONS.md): the owner's phones and the Apple key.
     "GET /devices", "POST /devices", "DELETE /devices/{id}", "GET /notifications/apns", "PUT /notifications/apns",
-    # AIC's voice through OpenAI text-to-speech (docs/VOICE.md): the key the owner pastes, and the speech itself.
+    # VAIC's voice through OpenAI text-to-speech (docs/VOICE.md): the key the owner pastes, and the speech itself.
     "POST /speech", "GET /voice/openai", "PUT /voice/openai-key",
     # The owner's GitHub token (docs/GITHUB_ACCESS.md): who it belongs to, store it, remove it.
     "GET /github", "PUT /github/token", "DELETE /github/token",
-    # AIC's real-time voice (decision 120): a five-minute signed address to AIC's own runtime.
+    # VAIC's real-time voice (decision 120): a five-minute signed address to VAIC's own runtime.
     "POST /voice/session",
-    # AIC's real-time voice on OpenAI GPT-Live (decision 128): the browser's WebRTC offer in, the answer out.
+    # VAIC's real-time voice on OpenAI GPT-Live (decision 128): the browser's WebRTC offer in, the answer out.
     "POST /voice/live",
     # Why the browser's voice WebSocket was refused: the API repeats the handshake and reports AWS's answer.
     "POST /voice/check",
   ]
-  queue_batch = { ace = 1, orchestrator = 5, manager = 5, worker = 10 }
-  queue_conc  = { ace = 5, orchestrator = 10, manager = 20, worker = var.worker_queue_concurrency }
+  queue_batch = { vaic = 1, orchestrator = 5, manager = 5, worker = 10 }
+  queue_conc  = { vaic = 5, orchestrator = 10, manager = 20, worker = var.worker_queue_concurrency }
   # Enabled: the crash sweep, idle-agent retirement, reminders and nudges are part of the product (the owner
   # asked for everything to run). The weekly self-improvement job stays DISABLED by rule.
   # The APNs platform applications live in modules/notifications under names that follow from ours, so the
   # functions can be told their ARNs without a dependency cycle; empty until the owner's key is deployed.
   apns_env = {
-    AIC_APNS_ARN         = var.apns_enabled ? "arn:aws:sns:${var.region}:${var.account_id}:app/APNS/${var.name}-apns" : ""
-    AIC_APNS_SANDBOX_ARN = var.apns_enabled ? "arn:aws:sns:${var.region}:${var.account_id}:app/APNS_SANDBOX/${var.name}-apns-sandbox" : ""
-    AIC_APNS_SECRET      = "aic/prod/apns"
+    VAIC_APNS_ARN         = var.apns_enabled ? "arn:aws:sns:${var.region}:${var.account_id}:app/APNS/${var.name}-apns" : ""
+    VAIC_APNS_SANDBOX_ARN = var.apns_enabled ? "arn:aws:sns:${var.region}:${var.account_id}:app/APNS_SANDBOX/${var.name}-apns-sandbox" : ""
+    VAIC_APNS_SECRET      = "vaic/prod/apns"
   }
   jobs = {
     sweep       = { schedule = "rate(5 minutes)", fn = "scheduler", input = { job = "sweep" }, state = "ENABLED" }
     retire-idle = { schedule = "rate(1 hour)", fn = "scheduler", input = { job = "retire_idle" }, state = "ENABLED" }
     reminders   = { schedule = "rate(5 minutes)", fn = "scheduler", input = { job = "reminders" }, state = "ENABLED" }
     improve     = { schedule = "cron(0 3 ? * SUN *)", fn = "scheduler", input = { job = "improve" } }
-    # Enabled from the start: keeps AIC's container running so a message never waits for a cold start
+    # Enabled from the start: keeps VAIC's container running so a message never waits for a cold start
     # (AgentCore bills active processing only, so a warm idle container costs nothing). The owner's under-3-seconds target.
-    warm-ace = { schedule = "rate(2 minutes)", fn = "scheduler", input = { job = "warm_ace" }, state = "ENABLED" }
+    warm-vaic = { schedule = "rate(2 minutes)", fn = "scheduler", input = { job = "warm_vaic" }, state = "ENABLED" }
     # The owner's calendar: every connected account read every 15 minutes (skipped when the feature is off).
     calendar-import = { schedule = "rate(15 minutes)", fn = "scheduler", input = { job = "calendar_import" }, state = "ENABLED" }
     # The Chief of Staff (decision 124): a sweep for anything still undecided, and the daily digest (18:00 Stockholm, winter).
@@ -368,7 +368,7 @@ resource "aws_lambda_function" "fn" {
   # SnapStart (api only, docs/KNOWLEDGE.md section 14): each deploy publishes a version and snapshots its init;
   # API Gateway calls the `live` alias. Python 3.12+ SnapStart supports arm64.
   # The dispatcher and ws-broadcast are always on instead (provisioned concurrency on a `live` alias, below), so
-  # the owner's message never waits for a Lambda cold start on its way to AIC or back to the HUD.
+  # the owner's message never waits for a Lambda cold start on its way to VAIC or back to the HUD.
   publish = contains(["api", "dispatcher", "ws-broadcast"], each.key)
   dynamic "snap_start" {
     for_each = each.key == "api" ? [1] : []
@@ -496,7 +496,7 @@ resource "aws_lambda_alias" "api_live" {
   function_version = aws_lambda_function.fn["api"].version
 }
 
-# Always on (the owner's under-3-seconds target): one warm copy each of the dispatcher (SQS → AIC's runtime) and
+# Always on (the owner's under-3-seconds target): one warm copy each of the dispatcher (SQS → VAIC's runtime) and
 # ws-broadcast (events → the HUD). Each deploy publishes a version, the `live` alias moves to it, and provisioned
 # concurrency keeps one initialized environment ready. About $11/month for the dispatcher's 1 GB and $3/month
 # for ws-broadcast's 256 MB. SnapStart stays on the api function only; the two don't combine.
@@ -591,7 +591,7 @@ resource "aws_lambda_permission" "ws" {
 resource "aws_cloudwatch_event_rule" "all" {
   name           = "${var.name}-city-events"
   event_bus_name = var.bus_name
-  event_pattern  = jsonencode({ source = ["aic.city"] })
+  event_pattern  = jsonencode({ source = ["vaic.city"] })
   tags           = local.tags
 }
 
@@ -606,7 +606,7 @@ resource "aws_cloudwatch_event_target" "all" {
 resource "aws_cloudwatch_event_rule" "notify" {
   name           = "${var.name}-notify"
   event_bus_name = var.bus_name
-  event_pattern  = jsonencode({ source = ["aic.city"], "detail-type" = ["ticket.status"], detail = { ticket = { kind = ["task"], status = ["done", "failed", "cancelled"] } } })
+  event_pattern  = jsonencode({ source = ["vaic.city"], "detail-type" = ["ticket.status"], detail = { ticket = { kind = ["task"], status = ["done", "failed", "cancelled"] } } })
   tags           = local.tags
 }
 
@@ -621,7 +621,7 @@ resource "aws_cloudwatch_event_target" "notify" {
 resource "aws_cloudwatch_event_rule" "app_submitted" {
   name           = "${var.name}-app-submitted"
   event_bus_name = var.bus_name
-  event_pattern  = jsonencode({ source = ["aic.city"], "detail-type" = ["app.submitted"] })
+  event_pattern  = jsonencode({ source = ["vaic.city"], "detail-type" = ["app.submitted"] })
   tags           = { Component = "apps" }
 }
 
@@ -779,7 +779,7 @@ resource "aws_iam_role_policy" "events_sfn" {
 resource "aws_cloudwatch_event_rule" "approval" {
   name           = "${var.name}-approval-requested"
   event_bus_name = var.bus_name
-  event_pattern  = jsonencode({ source = ["aic.city"], "detail-type" = ["approval.requested"] })
+  event_pattern  = jsonencode({ source = ["vaic.city"], "detail-type" = ["approval.requested"] })
   tags           = local.tags
 }
 
@@ -798,7 +798,7 @@ resource "aws_cloudwatch_event_target" "approval" {
 resource "aws_cloudwatch_event_rule" "chief" {
   name           = "${var.name}-chief-of-staff"
   event_bus_name = var.bus_name
-  event_pattern  = jsonencode({ source = ["aic.city"], "detail-type" = ["question.asked", "approval.requested"] })
+  event_pattern  = jsonencode({ source = ["vaic.city"], "detail-type" = ["question.asked", "approval.requested"] })
   tags           = local.tags
 }
 
@@ -847,11 +847,11 @@ resource "aws_lambda_permission" "job" {
 output "lambda_zip_path" { value = data.archive_file.bundle["app"].output_path }
 output "lambda_zip_hash" { value = data.archive_file.bundle["app"].output_base64sha256 }
 
-# AIC streams its reply straight to the open HUDs (no EventBridge → Lambda hop per piece): it reads the
+# VAIC streams its reply straight to the open HUDs (no EventBridge → Lambda hop per piece): it reads the
 # connection list and posts to those connections, the same two things ws-broadcast may do.
-resource "aws_iam_role_policy" "ace_live_reply" {
+resource "aws_iam_role_policy" "vaic_live_reply" {
   name = "live-reply"
-  role = var.ace_role_name
+  role = var.vaic_role_name
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [

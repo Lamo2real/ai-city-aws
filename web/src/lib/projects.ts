@@ -1,7 +1,7 @@
 // Projects (docs/PRODUCT.md "Projects"): every app is a project with its own chat with VAIC, a timeline of what
 // is happening, and its versions. A project's chat is the conversation `app-<app_id>`; a project started from
-// "New project" is `app-new-<short id>` until its app is published. Replies come as `ace.reply` events with
-// that conversation, multiple-choice questions also as `ace.question` events. The timeline comes from
+// "New project" is `app-new-<short id>` until its app is published. Replies come as `vaic.reply` events with
+// that conversation, multiple-choice questions also as `vaic.question` events. The timeline comes from
 // `GET /apps/<id>/activity` when the server has it, and otherwise from the city events this page sees.
 import type { FileCardData } from "./files.ts";
 import { useSyncExternalStore } from "react";
@@ -12,7 +12,7 @@ import { looksLikeKey } from "./connect.ts";
 
 export interface ProjectLine {
   id: string;
-  who: "owner" | "ace";
+  who: "owner" | "vaic";
   text: string;
   state: "sending" | "sent" | "failed" | "streaming" | "done";
   at: number;
@@ -55,8 +55,8 @@ interface State {
   drafts: NewProject[];
 }
 
-const CHATS = "aic.projects.chats";
-const DRAFTS = "aic.projects.new";
+const CHATS = "vaic.projects.chats";
+const DRAFTS = "vaic.projects.new";
 const read = <T>(key: string, fallback: T): T => {
   try {
     return (JSON.parse(localStorage.getItem(key) ?? "null") as T) ?? fallback;
@@ -213,14 +213,14 @@ class Projects {
   /** City events: replies and questions for project conversations, and timeline lines about apps. */
   event(e: { type: string; [k: string]: unknown }) {
     const conv = typeof e.conversation === "string" ? e.conversation : "";
-    if (e.type === "ace.reply" && conv.startsWith("app-")) return this.reply(conv, String(e.text ?? ""), !!e.done);
-    if (e.type === "ace.files" && conv.startsWith("app-")) {
+    if (e.type === "vaic.reply" && conv.startsWith("app-")) return this.reply(conv, String(e.text ?? ""), !!e.done);
+    if (e.type === "vaic.files" && conv.startsWith("app-")) {
       const files = (Array.isArray(e.files) ? e.files : []) as FileCardData[];
       if (!files.length) return;
       const lines = [...this.lines(conv)];
       lines.push({
         id: `f${Date.now().toString(36)}${newId()}`,
-        who: "ace",
+        who: "vaic",
         text: "",
         state: "done",
         at: Date.now(),
@@ -229,7 +229,7 @@ class Projects {
       });
       return this.putLines(conv, lines);
     }
-    if (e.type === "ace.question" && conv.startsWith("app-")) {
+    if (e.type === "vaic.question" && conv.startsWith("app-")) {
       const options = (Array.isArray(e.options) ? e.options : [])
         .map((o) => capped(o, 80))
         .filter(Boolean)
@@ -246,13 +246,13 @@ class Projects {
     const lines = [...this.lines(conv)];
     const last = lines.at(-1);
     // The final reply arrives twice (straight from VAIC, and through the event bus).
-    if (done && last?.who === "ace" && last.state === "done" && last.text === text) return;
-    if (last?.who === "ace" && last.state === "streaming")
+    if (done && last?.who === "vaic" && last.state === "done" && last.text === text) return;
+    if (last?.who === "vaic" && last.state === "streaming")
       lines[lines.length - 1] = { ...last, text: done ? text : last.text + text, state: done ? "done" : "streaming" };
     else
       lines.push({
         id: `a${Date.now().toString(36)}${newId()}`,
-        who: "ace",
+        who: "vaic",
         text,
         state: done ? "done" : "streaming",
         at: Date.now(),

@@ -185,7 +185,7 @@ struct CityState: Equatable, Sendable {
 func nowMs() -> Double { Date().timeIntervalSince1970 * 1000 }
 
 enum City {
-    static let core: Set<String> = ["ace", "orchestrator"]
+    static let core: Set<String> = ["vaic", "orchestrator"]
     static let feedMax = 40
     static let costNote = "Estimate from token counts at list prices. The AWS bill is the truth."
     static let modelName = ["haiku-5-5": "Haiku 5.5", "opus-5-5": "Opus 5.5", "sonnet-5-5": "Sonnet 5.5", "fable-5-2": "Fable 5.2"]
@@ -199,7 +199,7 @@ enum City {
     static func decidedByChief(_ j: JSONValue) -> Bool {
         j["decided_by"].string == "chief_of_staff" && !(j["decision"].string ?? "").isEmpty
     }
-    static func displayName(_ id: String) -> String { id == "ace" ? "VAIC" : id }
+    static func displayName(_ id: String) -> String { id == "vaic" ? "VAIC" : id }
 
     private static func filed(_ departments: [String: Department], _ a: Agent) -> Agent {
         guard let dep = a.department, let d = departments.values.first(where: { keyOf($0.name) == keyOf(dep) }), d.name != dep else { return a }
@@ -505,7 +505,7 @@ enum City {
     struct TopBar: Equatable { var agentsTotal: Int; var agentsActive: Int; var ticketsRunning: Int; var questionsWaiting: Int; var parked: Int }
     static func topBar(_ s: CityState) -> TopBar {
         let agents = s.agents.values.filter { !core.contains($0.id) && $0.kind != "specialist" }
-        // "Agents working now": workers on a job right now, never managers, the Orchestrator or AIC (the owner, 2026-11-08).
+        // "Agents working now": workers on a job right now, never managers, the Orchestrator or VAIC (the owner, 2026-11-08).
         let busy: Set<String> = ["working", "reporting"] // running now: not waiting on an answer or in review (2026-11-09)
         let working = agents.filter { $0.kind == "worker" && $0.state != "retired" && busy.contains($0.workerState ?? "") }.count
         return TopBar(agentsTotal: agents.count, agentsActive: working,

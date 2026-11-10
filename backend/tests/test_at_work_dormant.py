@@ -3,9 +3,9 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from aic.shared.hierarchy.actions import CityDeps, workers_at_work
-from aic.shared.ledger import Ledger
-from aic.shared.table import MemoryTable
+from vaic.shared.hierarchy.actions import CityDeps, workers_at_work
+from vaic.shared.ledger import Ledger
+from vaic.shared.table import MemoryTable
 
 
 def agent(id: str, state: str, worker_state: str | None = None) -> dict[str, Any]:

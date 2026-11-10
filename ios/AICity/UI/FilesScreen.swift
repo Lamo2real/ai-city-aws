@@ -17,7 +17,7 @@ struct FilesScreen: View {
 struct FolderView: View {
     @Environment(AppModel.self) private var model
     let folder: String
-    @AppStorage("aic.files.list") private var asList = false
+    @AppStorage("vaic.files.list") private var asList = false
     @State private var search = ""
     @State private var onlyHere = false
     @State private var kind = ""

@@ -31,13 +31,13 @@ const SPEAKING_LEVEL = 0.04;
 const QUIET_MS = 450;
 
 /** Whether to try GPT-Live. Off by default (the owner, 2026-11-09: use AWS's own voice, Nova Sonic): only when
- *  chosen (localStorage "aic.voice.engine" = "gpt-live"), and tests opt in with window.__aicLive. */
+ *  chosen (localStorage "vaic.voice.engine" = "gpt-live"), and tests opt in with window.__vaicLive. */
 export function liveWanted(): boolean {
-  const w = window as unknown as { __aicVoice?: unknown; __aicLive?: boolean };
+  const w = window as unknown as { __vaicVoice?: unknown; __vaicLive?: boolean };
   if (typeof RTCPeerConnection === "undefined") return false;
-  if (w.__aicLive === true) return true;
+  if (w.__vaicLive === true) return true;
   try {
-    return !w.__aicVoice && localStorage.getItem("aic.voice.engine") === "gpt-live";
+    return !w.__vaicVoice && localStorage.getItem("vaic.voice.engine") === "gpt-live";
   } catch {
     return false;
   }

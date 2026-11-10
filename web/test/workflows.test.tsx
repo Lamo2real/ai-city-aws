@@ -42,7 +42,7 @@ const run = (extra: Partial<WorkflowRun> = {}): WorkflowRun => ({
 const calls: Array<{ url: string; method: string; body: unknown }> = [];
 let listAnswer: Response | null = null;
 const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-  if (url === "/config.json") return new Response(JSON.stringify({ apiUrl: "https://api.aic.test" }));
+  if (url === "/config.json") return new Response(JSON.stringify({ apiUrl: "https://api.vaic.test" }));
   const body = init?.body ? JSON.parse(String(init.body)) : null;
   calls.push({ url, method: init?.method ?? "GET", body });
   const now = workflows.get().runs["wf-1"] ?? run();
@@ -62,7 +62,7 @@ const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
 beforeAll(async () => {
   vi.stubGlobal("fetch", fetchMock);
   await loadConfig();
-  (window as unknown as { __aicAuth: unknown }).__aicAuth = { idToken: async () => "header.payload.sig" };
+  (window as unknown as { __vaicAuth: unknown }).__vaicAuth = { idToken: async () => "header.payload.sig" };
 });
 beforeEach(() => {
   localStorage.clear();
@@ -124,7 +124,7 @@ describe("workflow runs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() => expect(screen.getByText("Step 2 of 3")).toBeTruthy());
     expect(calls.at(-1)).toMatchObject({
-      url: "https://api.aic.test/workflows/runs/wf-1/step",
+      url: "https://api.vaic.test/workflows/runs/wf-1/step",
       method: "POST",
       body: { to: "next" },
     });
@@ -143,7 +143,7 @@ describe("workflow runs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Do it for me" }));
     await waitFor(() =>
       expect(calls.at(-1)).toMatchObject({
-        url: "https://api.aic.test/workflows/runs/wf-1/mode",
+        url: "https://api.vaic.test/workflows/runs/wf-1/mode",
         body: { mode: "do" },
       }),
     );
@@ -156,7 +156,7 @@ describe("workflow runs", () => {
     render(<WorkflowCard />);
     show(run());
     fireEvent.click(screen.getByRole("button", { name: "Stop" }));
-    await waitFor(() => expect(calls.at(-1)?.url).toBe("https://api.aic.test/workflows/runs/wf-1/cancel"));
+    await waitFor(() => expect(calls.at(-1)?.url).toBe("https://api.vaic.test/workflows/runs/wf-1/cancel"));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Stop" })).toBeNull());
   });
 
@@ -192,7 +192,7 @@ describe("workflow runs", () => {
     const sent = calls.filter((c) => c.method === "POST");
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({
-      url: "https://api.aic.test/messages",
+      url: "https://api.vaic.test/messages",
       body: { text: "Yes, create it", conversation: "main" },
     });
     expect(store.get().chat.at(-1)).toMatchObject({ who: "owner", text: "Yes, create it" });
@@ -238,7 +238,7 @@ describe("workflow runs", () => {
             default: "Clean and light",
             status: "open",
             answer: null,
-            asked_by: "ace",
+            asked_by: "vaic",
           },
           {
             id: "tq-2",

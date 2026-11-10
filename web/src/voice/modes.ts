@@ -6,8 +6,8 @@
 // box since the last send; any typing, before or after dictating, makes it a typed message.
 export type SpeakMode = "auto" | "always" | "never";
 
-const SPEAK_KEY = "aic.speak";
-const OLD_SOUND_KEY = "aic.sound"; // before 2026-11-07: "on"/"off", replies spoken by default
+const SPEAK_KEY = "vaic.speak";
+const OLD_SOUND_KEY = "vaic.sound"; // before 2026-11-07: "on"/"off", replies spoken by default
 
 const read = (k: string) => {
   try {
@@ -56,7 +56,7 @@ export const VOICES = [
   { id: "Brian", label: "Brian (British, male)" },
   { id: "Amy", label: "Amy (British, female)" },
 ] as const;
-const VOICE_KEY = "aic.voice";
+const VOICE_KEY = "vaic.voice";
 
 /** The voice chosen on this device, else the deploy's default, else Ruth. */
 export function readVoiceId(fallback?: string): string {

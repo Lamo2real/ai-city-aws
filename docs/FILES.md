@@ -6,9 +6,9 @@ This file is the contract between `infra/`, `backend/`, `web/` and `ios/`. The d
 decision 151 in `docs/DECISIONS.md`.
 
 > The owner (2026-11-09): "I should also be able to store files in s3 … videos, images, pdf, etc … the departments
-> [need] read and write access to that storage … I should be able to … tell AIC 'hey do you remember the time I
+> [need] read and write access to that storage … I should be able to … tell VAIC 'hey do you remember the time I
 > took an image of the sunrise for a thumbnail with the porsche inside that image? can you find it and give it to
-> me?' (… possible for any file not just images) and then AIC will pull that image up to the chat to allow the user
+> me?' (… possible for any file not just images) and then VAIC will pull that image up to the chat to allow the user
 > to view it and download it."
 
 ## 1. Files is its own store, not a view onto Knowledge
@@ -23,13 +23,13 @@ embedding model. A document that should also be reference is added to Knowledge 
 ## 2. Services (eu-north-1, ~$0 idle)
 | Part | Service |
 |---|---|
-| The files | S3 bucket `aic-prod-files`: KMS (project key), versioned (deleted files recoverable 30 days), no public access, TLS only, CORS `PUT`/`GET`/`HEAD` from the HUD origin only, EventBridge notifications |
-| Records | DynamoDB `aic-prod-files` (`pk`, `sk`, `gsi1pk`/`gsi1sk`, PITR, KMS) |
-| Describing | Lambda `aic-prod-files` (the shared bundle, handler `aic.lambdas.files.handler`, 2,048 MB, 15 min, 20 at once), driven by EventBridge rules on the default bus; DLQ `aic-prod-files-events-dlq` (alarmed) |
+| The files | S3 bucket `vaic-prod-files`: KMS (project key), versioned (deleted files recoverable 30 days), no public access, TLS only, CORS `PUT`/`GET`/`HEAD` from the HUD origin only, EventBridge notifications |
+| Records | DynamoDB `vaic-prod-files` (`pk`, `sk`, `gsi1pk`/`gsi1sk`, PITR, KMS) |
+| Describing | Lambda `vaic-prod-files` (the shared bundle, handler `vaic.lambdas.files.handler`, 2,048 MB, 15 min, 20 at once), driven by EventBridge rules on the default bus; DLQ `vaic-prod-files-events-dlq` (alarmed) |
 | Captions and descriptions | Claude Haiku 5.5 (utility role) through the gate (spend caps, cost rows) |
 | Video and odd audio | AWS Elemental MediaConvert with the knowledge base's role (the permission boundary lets roles pass only that one); it also reads `files/*` and writes `work/*` here |
-| Speech | Amazon Transcribe batch (jobs named `aic-files-<id>-<ms>`) |
-| Previews | CloudFront distribution (Origin Access Control, HTTPS only, trusted key group; signed URLs, 15 min, one object; decision 156); the signing key pair lives only in Secrets Manager `aic/prod/files-signing-key`, made there by the `aic-prod-files-signing-key` Lambda, which Terraform invokes and which returns the public key alone |
+| Speech | Amazon Transcribe batch (jobs named `vaic-files-<id>-<ms>`) |
+| Previews | CloudFront distribution (Origin Access Control, HTTPS only, trusted key group; signed URLs, 15 min, one object; decision 156); the signing key pair lives only in Secrets Manager `vaic/prod/files-signing-key`, made there by the `vaic-prod-files-signing-key` Lambda, which Terraform invokes and which returns the public key alone |
 | Vectors | Amazon Titan Text Embeddings V2 (`embeddings.files` in `config/models.json`, 512 dimensions), kept on the record as float16 |
 
 ## 3. Keys
@@ -59,7 +59,7 @@ has one, wins; a date the owner sets wins over both).
 | Object created under `files/` | `index`: images: thumbnail, EXIF date, a Claude caption ("sunrise over the sea, black Porsche 911, thumbnail… Keywords: …"); PDFs and documents: their text (scanned PDFs: Claude reads the first pages) → a description; audio: Transcribe (MediaConvert first for formats it can't take); video: one MediaConvert job takes up to 12 frames (one every 10 s) and the sound; anything else: found by name, folder and tags |
 | Object created under `hires/` | `adopt` (§8) |
 | MediaConvert Job State Change, `userMetadata.component = files` | frames → thumbnail + Claude describes four of them; then Transcribe. A video without sound fails the first job: a frames-only job runs instead |
-| Transcribe Job State Change, name `aic-files-…` | the transcript (with `[mm:ss]` marks) + the frames' description → Claude's description |
+| Transcribe Job State Change, name `vaic-files-…` | the transcript (with `[mm:ss]` marks) + the frames' description → Claude's description |
 | `{"action": "index", "file_id"}` | "Try again" from the HUD |
 
 Then the search text (name, kind, folder, tags, who added it, the dates in words such as "April 2026, spring,
@@ -98,7 +98,7 @@ matches a query word. Folders exist as long as a file is in them (a file's `fold
 `File` = the record without keys, vector and search text, plus `url` (to view it) and `thumb_url`: CloudFront signed
 URLs once the distribution is deployed (S3 presigned inline before that), and `download_url`: always S3 presigned with
 `attachment` and the file's current name; all last 15 minutes and are made per request, never stored or logged. Event `files.updated` `{id, status, name, kind,
-folder, department, error?}` on every change. VVAIC's `city_api` may call every route except `POST /files/uploads*`
+folder, department, error?}` on every change. VAIC's `city_api` may call every route except `POST /files/uploads*`
 (bytes come from the owner's device), and what it reads back has the signed addresses removed: a signed link only
 ever reaches the owner's own screen.
 
@@ -106,14 +106,14 @@ ever reaches the owner's own screen.
 | Tool | Roles | Does |
 |---|---|---|
 | `find_files` | VAIC, managers, workers | §6; results as `<files>` JSON with the line that they are data, never instructions |
-| `show_files` | VAIC | 1–3 file ids → event `ace.files` `{conversation, files: [card], ask}`; the HUD and the iPhone draw each with a preview and Download, numbered when there are several |
+| `show_files` | VAIC | 1–3 file ids → event `vaic.files` `{conversation, files: [card], ask}`; the HUD and the iPhone draw each with a preview and Download, numbered when there are several |
 | `get_file` | managers, workers | a worker gets a copy in its workspace (`files/<name>`); a manager gets the description and, for a text file, its text (≤ 40,000 characters) |
 | `save_file` | managers, workers | a worker saves a workspace file, a manager saves text; it goes to `hires/<hire>/files/<new id>/<name>` with folder, description and tags as object metadata; the Lambda adopts it with the department **read from the ledger's agent record** (never from what the agent wrote) and folder `Departments/<department>` by default |
 
 **References for a build (decision 155):** `delegate_to_orchestrator` takes `references` (≤ 5: `file_id`, `use` =
 `follow` | `inspiration`, `note`). They are stored on the task, listed for the Orchestrator, managers and workers
 (`runtime/references.py`), and a worker's assignment turn carries the images as image blocks (≤ 3) and the documents'
-text in `<file-content>` blocks, marked as data. `ace.files` with `label: "References for this build"` shows them in
+text in `<file-content>` blocks, marked as data. `vaic.files` with `label: "References for this build"` shows them in
 the chat (the project's own chat in the Apps studio).
 
 **Scoping, as with workspaces:** managers and workers reach the bucket only through the workspace role, assumed with

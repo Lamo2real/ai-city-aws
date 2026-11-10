@@ -82,7 +82,7 @@ describe("connector status in plain words", () => {
 });
 
 describe("the shared sign-in return", () => {
-  const loc = (search: string) => ({ search, pathname: "/", hash: "#/ace" });
+  const loc = (search: string) => ({ search, pathname: "/", hash: "#/vaic" });
   it("does nothing on a normal visit", async () => {
     expect(await connectReturn(loc(""), () => undefined)).toBeNull();
   });
@@ -98,7 +98,7 @@ describe("the shared sign-in return", () => {
       method: "POST",
       body: { state: "s1", session_uri: "urn:s" },
     });
-    expect(replace).toHaveBeenCalledWith("/#/ace");
+    expect(replace).toHaveBeenCalledWith("/#/vaic");
     expect(sessionStorage.getItem(CONNECT_KEY)).toBeNull();
   });
   it("refuses a return that this tab didn't start or whose state differs", async () => {

@@ -29,7 +29,7 @@ interface Rec {
 }
 type RecCtor = new () => Rec;
 
-const KEY = "aic.speech.engine";
+const KEY = "vaic.speech.engine";
 
 function ctor(): RecCtor | null {
   const w = window as unknown as { SpeechRecognition?: RecCtor; webkitSpeechRecognition?: RecCtor };
@@ -164,7 +164,7 @@ export function browserListen(
 }
 
 // ---------- the browser's own voice (speechSynthesis), when Polly or its playback refuses ----------
-const TTS_KEY = "aic.voice.tts";
+const TTS_KEY = "vaic.voice.tts";
 
 export const browserVoiceAvailable = (): boolean => "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
 

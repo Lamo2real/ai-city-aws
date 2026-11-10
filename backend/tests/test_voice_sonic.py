@@ -8,12 +8,12 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from starlette.testclient import TestClient
 
-from aic.lambdas.api import ROUTES, handle_http
-from aic.runtime import voice as V
-from aic.runtime.prompts import load_prompt
-from aic.runtime.server import create_app
-from aic.shared.voice_url import VoiceUrlDeps, presigned_voice_url
 from test_api import ev, js, make
+from vaic.lambdas.api import ROUTES, handle_http
+from vaic.runtime import voice as V
+from vaic.runtime.prompts import load_prompt
+from vaic.runtime.server import create_app
+from vaic.shared.voice_url import VoiceUrlDeps, presigned_voice_url
 
 
 class FakeStream:
@@ -70,7 +70,7 @@ class Rig:
 
         self.s = V.SonicSession(
             send_client=send,
-            ask_aic=ask,
+            ask_vaic=ask,
             open_stream=open_stream,
             system_prompt="You are the voice of VAIC.",
             candidates=[("nova-2", "eu-north-1"), ("nova-2", "us-east-1"), ("nova-1", "eu-north-1")],
@@ -103,12 +103,12 @@ def user_said(text: str) -> list[dict[str, Any]]:
 def tool_call(request: str, use_id: str = "tu-1") -> list[dict[str, Any]]:
     return [
         {"contentStart": {"role": "TOOL", "type": "TOOL"}},
-        {"toolUse": {"toolName": "ask_aic", "toolUseId": use_id, "content": json.dumps({"request": request})}},
+        {"toolUse": {"toolName": "ask_vaic", "toolUseId": use_id, "content": json.dumps({"request": request})}},
         {"contentEnd": {"type": "TOOL"}},
     ]
 
 
-async def test_it_opens_sonic_with_aic_as_its_only_tool_and_streams_the_mic_in() -> None:
+async def test_it_opens_sonic_with_vaic_as_its_only_tool_and_streams_the_mic_in() -> None:
     r = Rig()
     await r.s.start()
     assert r.opened == [("nova-2", "eu-north-1")]
@@ -117,7 +117,7 @@ async def test_it_opens_sonic_with_aic_as_its_only_tool_and_streams_the_mic_in()
     assert k[:2] == ["sessionStart", "promptStart"]
     start = r.stream.sent[1]["promptStart"]
     (tool,) = start["toolConfiguration"]["tools"]
-    assert tool["toolSpec"]["name"] == "ask_aic"
+    assert tool["toolSpec"]["name"] == "ask_vaic"
     assert start["audioOutputConfiguration"]["sampleRateHertz"] == 24000
     assert r.stream.sent[0]["sessionStart"]["turnDetectionConfiguration"]["endpointingSensitivity"] == "MEDIUM"
     system = next(e for e in r.stream.sent if "textInput" in e)["textInput"]["content"]
@@ -130,7 +130,7 @@ async def test_it_opens_sonic_with_aic_as_its_only_tool_and_streams_the_mic_in()
     await r.s.close()
 
 
-async def test_a_spoken_request_goes_to_aic_and_its_answer_comes_back_to_sonic() -> None:
+async def test_a_spoken_request_goes_to_vaic_and_its_answer_comes_back_to_sonic() -> None:
     r = Rig()
     await r.s.start()
     await say(r, *user_said("what's the status?"), *tool_call("what's the status of the city?"))
@@ -153,7 +153,7 @@ async def test_a_spoken_request_goes_to_aic_and_its_answer_comes_back_to_sonic()
         "type": "transcript",
         "role": "assistant",
         "text": "Two departments are busy right now.",
-        "aic": True,
+        "vaic": True,
     }
     await r.s.close()
 
@@ -207,9 +207,9 @@ async def test_before_bedrocks_8_minutes_it_moves_to_a_fresh_stream_and_replays_
     await r.s.close()
 
 
-def test_the_voice_prompt_keeps_aic_the_brain() -> None:
+def test_the_voice_prompt_keeps_vaic_the_brain() -> None:
     p = load_prompt("voice.md")
-    assert p.tools == ["ask_aic"]
+    assert p.tools == ["ask_vaic"]
     body = p.body
     assert "Never answer facts, status, plans, numbers or tasks from your own knowledge" in body
     assert "[status]" in body and "stop at once and listen" in body and '"Vice"' in body
@@ -258,16 +258,19 @@ async def test_the_api_hands_out_a_five_minute_signed_address_to_aics_own_runtim
         def get_credentials(self) -> Any:
             return Creds()
 
-    arn = "arn:aws:bedrock-agentcore:eu-north-1:111122223333:runtime/aic_prod_ace-abc"
-    deps = VoiceUrlDeps(session=Session(), region="eu-north-1", runtime_arn=arn, session_id=lambda: "ace-owner-main-v1")
+    arn = "arn:aws:bedrock-agentcore:eu-north-1:111122223333:runtime/vaic_prod_vaic-abc"
+    deps = VoiceUrlDeps(
+        session=Session(), region="eu-north-1", runtime_arn=arn, session_id=lambda: "vaic-owner-main-v1"
+    )
     url = presigned_voice_url(deps)
     u = urlparse(url)
     q = parse_qs(u.query)
     assert u.scheme == "wss" and u.netloc == "bedrock-agentcore.eu-north-1.amazonaws.com"
     assert (
-        u.path == "/runtimes/arn%3Aaws%3Abedrock-agentcore%3Aeu-north-1%3A111122223333%3Aruntime%2Faic_prod_ace-abc/ws"
+        u.path
+        == "/runtimes/arn%3Aaws%3Abedrock-agentcore%3Aeu-north-1%3A111122223333%3Aruntime%2Fvaic_prod_vaic-abc/ws"
     )
-    assert q["X-Amzn-Bedrock-AgentCore-Runtime-Session-Id"] == ["ace-owner-main-v1"]
+    assert q["X-Amzn-Bedrock-AgentCore-Runtime-Session-Id"] == ["vaic-owner-main-v1"]
     assert q["X-Amz-Expires"] == ["300"] and "X-Amz-Signature" in q
     r = js(await handle_http(ev("POST", "/voice/session"), make(voice=deps)))
     assert r["url"].startswith("wss://") and r["expires_in"] == 300
@@ -301,7 +304,7 @@ async def test_when_no_model_opens_the_reason_reaches_the_browser() -> None:
         return ""
 
     s = V.SonicSession(
-        send_client=send, ask_aic=ask, open_stream=refuse, system_prompt="x", candidates=[("nova-2", "eu-north-1")]
+        send_client=send, ask_vaic=ask, open_stream=refuse, system_prompt="x", candidates=[("nova-2", "eu-north-1")]
     )
     with pytest.raises(RuntimeError, match="nova-2 in eu-north-1: RuntimeError: ValidationException"):
         await s.start()
@@ -335,7 +338,7 @@ async def test_quick_answers_get_no_cue_and_a_cue_never_starts_while_the_owner_t
 
 
 async def test_the_api_says_why_aws_refused_the_voice_connection(monkeypatch: Any) -> None:
-    import aic.lambdas.api as api_mod
+    import vaic.lambdas.api as api_mod
 
     class Creds:
         def get_frozen_credentials(self) -> Any:
@@ -347,7 +350,7 @@ async def test_the_api_says_why_aws_refused_the_voice_connection(monkeypatch: An
         def get_credentials(self) -> Any:
             return Creds()
 
-    arn = "arn:aws:bedrock-agentcore:eu-north-1:111122223333:runtime/aic_prod_ace-abc"
+    arn = "arn:aws:bedrock-agentcore:eu-north-1:111122223333:runtime/vaic_prod_vaic-abc"
     deps = VoiceUrlDeps(session=Session(), region="eu-north-1", runtime_arn=arn, session_id=lambda: "s" * 40)
     seen: list[str] = []
 
@@ -420,7 +423,7 @@ async def test_nova_sonic_is_opened_on_the_duplex_crt_transport(monkeypatch: Any
     from aws_sdk_bedrock_runtime.config import AsyncBedrockRuntimeConfig
     from smithy_http.aio.crt import AWSCRTHTTPClient
 
-    from aic.runtime.voice import bedrock_opener
+    from vaic.runtime.voice import bedrock_opener
 
     seen: dict[str, Any] = {}
 

@@ -1,7 +1,7 @@
 ## Research playbook (a pre-configured department)
 Teams you staff from: **Paper scouting** (New papers and preprints, research labs' publications, open models and code), **Market & trends** (Demand, competitors, pricing, what already makes money), **Venture design** (Opportunity briefs: customer, product, business model, B2B or B2C, go-to-market), **Validation** (Cheap tests before building: landing page, waitlist, interviews (with Product, Application and Marketing)). Hire by team: the specialty names the team ("Paper scouting: …"), and the instructions name the skill(s) to follow.
 
-**Skills** (the `Skill` tool, plugin `aic-skills`): `research-papers`, `trend-scouting`, `market-opportunity`, `business-idea-brief`, `current-docs`, plus the shared `knowledge-first`, `sell-with-stripe` and `cross-team-work`. Tell each worker which ones apply.
+**Skills** (the `Skill` tool, plugin `vaic-skills`): `research-papers`, `trend-scouting`, `market-opportunity`, `business-idea-brief`, `current-docs`, plus the shared `knowledge-first`, `sell-with-stripe` and `cross-team-work`. Tell each worker which ones apply.
 
 **Connectors to give workers** (only those that are on; your state lists them). Essential for this department: Hugging Face, Exa, Consensus. Also: OpenAlex, Parallel, Tavily, Jina AI, Firecrawl, Crunchbase, Product Hunt. Shared by every department: Stripe, Jira & Confluence, Slack, Notion, Zapier, Box, Dropbox, Calendly, Miro, Granola. Workers also have web search, page fetching and a real browser built in, so a source with no connector can still be read. If a connector the work needs is off, say so in your report: the owner switches it on in Settings → Departments & tools.
 

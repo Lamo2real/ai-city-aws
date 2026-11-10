@@ -20,7 +20,7 @@ enum TapSignal {
     /// A finger that travelled further than this was scrolling or dragging, not tapping.
     static let slop: CGFloat = 12
     /// The setting's key on this iPhone (on unless the owner turned it off).
-    static let key = "aic.tapFeedback"
+    static let key = "vaic.tapFeedback"
 
     static func isOn(_ defaults: UserDefaults = .standard) -> Bool { defaults.object(forKey: key) as? Bool ?? true }
 

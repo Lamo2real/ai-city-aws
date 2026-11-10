@@ -104,7 +104,7 @@ describe("the voice picker", () => {
     expect(readVoiceId("NotAVoice")).toBe("Ruth"); // the most natural voice when nothing is set
     saveVoiceId("Ruth");
     expect(readVoiceId("Matthew")).toBe("Ruth");
-    localStorage.setItem("aic.voice", "Hacker");
+    localStorage.setItem("vaic.voice", "Hacker");
     expect(readVoiceId("Stephen")).toBe("Stephen");
     localStorage.clear();
   });

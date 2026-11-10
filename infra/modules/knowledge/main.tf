@@ -231,7 +231,16 @@ resource "time_sleep" "data_policy" {
 }
 
 # The index Bedrock writes into (docs/KNOWLEDGE.md section 14), created before the KB.
-resource "opensearch_index" "items" {
+# The AIC → VAIC rename (docs/RENAME_PLAN.md): the old collection takes its index with it, so Terraform only forgets
+# the old index (no call to the old collection's endpoint) and makes this one in the new collection.
+removed {
+  from = opensearch_index.items
+  lifecycle {
+    destroy = false
+  }
+}
+
+resource "opensearch_index" "knowledge" {
   name                           = "items"
   index_knn                      = true
   index_knn_algo_param_ef_search = "512"
@@ -262,7 +271,7 @@ resource "opensearch_index" "items" {
 # the first apply with "storage configuration is invalid".
 resource "time_sleep" "index" {
   create_duration = "60s"
-  triggers        = { index = opensearch_index.items.id }
+  triggers        = { index = opensearch_index.knowledge.id }
 }
 
 resource "aws_iam_role" "kb" {
@@ -318,7 +327,7 @@ resource "aws_bedrockagent_knowledge_base" "this" {
     type = "OPENSEARCH_SERVERLESS"
     opensearch_serverless_configuration {
       collection_arn    = aws_opensearchserverless_collection.this.arn
-      vector_index_name = opensearch_index.items.name
+      vector_index_name = opensearch_index.knowledge.name
       field_mapping {
         vector_field   = "embedding"
         text_field     = "text"
@@ -327,7 +336,7 @@ resource "aws_bedrockagent_knowledge_base" "this" {
     }
   }
   tags       = local.tags
-  depends_on = [aws_iam_role_policy.kb, opensearch_index.items, time_sleep.index]
+  depends_on = [aws_iam_role_policy.kb, opensearch_index.knowledge, time_sleep.index]
 }
 
 resource "aws_bedrockagent_data_source" "normalized" {
@@ -509,7 +518,7 @@ resource "aws_lambda_function" "fn" {
   role                           = aws_iam_role.fn.arn
   runtime                        = "python3.13"
   architectures                  = ["arm64"]
-  handler                        = "aic.lambdas.knowledge.handler"
+  handler                        = "vaic.lambdas.knowledge.handler"
   filename                       = var.lambda_zip_path
   source_code_hash               = var.lambda_zip_hash
   timeout                        = 900
@@ -528,11 +537,11 @@ resource "aws_lambda_function" "fn" {
   }
   environment {
     variables = {
-      AIC_REGION                  = var.region
-      AIC_EVENT_BUS               = var.bus_name
-      AIC_LEDGER_TABLE            = var.ledger_table
-      AIC_PROFILE_PREFIX          = var.profile_prefix
-      AIC_APP_PROFILE_UTILITY     = var.utility_profile_arn
+      VAIC_REGION                 = var.region
+      VAIC_EVENT_BUS              = var.bus_name
+      VAIC_LEDGER_TABLE           = var.ledger_table
+      VAIC_PROFILE_PREFIX         = var.profile_prefix
+      VAIC_APP_PROFILE_UTILITY    = var.utility_profile_arn
       KNOWLEDGE_TABLE             = aws_dynamodb_table.this.name
       KNOWLEDGE_BUCKET            = aws_s3_bucket.this.bucket
       KNOWLEDGE_BASE_ID           = aws_bedrockagent_knowledge_base.this.id

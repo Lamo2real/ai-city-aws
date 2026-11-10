@@ -37,7 +37,7 @@ const mount = (appId: string | null = APP) => {
 };
 const send = (data: unknown, over: { origin?: string; source?: unknown } = {}) =>
   onMessage({ origin: "null", source: frame.contentWindow, data, ...over } as unknown as MessageEvent);
-const req = (cap: string, params: unknown = {}, id = "r1") => ({ aic: 1, id, cap, params });
+const req = (cap: string, params: unknown = {}, id = "r1") => ({ vaic: 1, id, cap, params });
 const lastReply = () => post.mock.calls.at(-1)?.[0] as Record<string, unknown>;
 
 beforeEach(() => {
@@ -48,7 +48,7 @@ beforeEach(() => {
       app_id: APP,
       slug: "star-calendar",
       title: "Star Calendar",
-      url: "https://apps.aic.test/live/x/index.html",
+      url: "https://apps.vaic.test/live/x/index.html",
       grants,
     },
   ]);
@@ -67,11 +67,11 @@ describe("who may talk to the bridge", () => {
       method: "POST",
       body: { cap: "calendar.read", params: { from: "2026-11-01T00:00:00Z", to: "2026-12-01T00:00:00Z" } },
     });
-    expect(post).toHaveBeenCalledWith({ aic: 1, id: "r1", ok: true, data: { events: [{ title: "Dentist" }] } }, "*");
-    expect(Object.keys(lastReply()).sort()).toEqual(["aic", "data", "id", "ok"]); // no token, URL or config
+    expect(post).toHaveBeenCalledWith({ vaic: 1, id: "r1", ok: true, data: { events: [{ title: "Dentist" }] } }, "*");
+    expect(Object.keys(lastReply()).sort()).toEqual(["data", "id", "ok", "vaic"]); // no token, URL or config
   });
   it("drops a message whose origin is not the sandbox's opaque 'null'", async () => {
-    await send(req("calendar.read"), { origin: "https://apps.aic.test" });
+    await send(req("calendar.read"), { origin: "https://apps.vaic.test" });
     await send(req("calendar.read"), { origin: "http://localhost:4173" });
     expect(apiMock).not.toHaveBeenCalled();
     expect(post).not.toHaveBeenCalled();
@@ -102,19 +102,19 @@ describe("shape", () => {
   it.each([
     ["not an object", "calendar.read"],
     ["an array", [1]],
-    ["aic missing", { id: "r1", cap: "calendar.read" }],
-    ["aic 2", { aic: 2, id: "r1", cap: "calendar.read" }],
-    ["no id", { aic: 1, cap: "calendar.read" }],
-    ["empty id", { aic: 1, id: "", cap: "calendar.read" }],
-    ["numeric id", { aic: 1, id: 7, cap: "calendar.read" }],
-    ["id too long", { aic: 1, id: "x".repeat(LIMITS.idLen + 1), cap: "calendar.read" }],
+    ["vaic missing", { id: "r1", cap: "calendar.read" }],
+    ["vaic 2", { vaic: 2, id: "r1", cap: "calendar.read" }],
+    ["no id", { vaic: 1, cap: "calendar.read" }],
+    ["empty id", { vaic: 1, id: "", cap: "calendar.read" }],
+    ["numeric id", { vaic: 1, id: 7, cap: "calendar.read" }],
+    ["id too long", { vaic: 1, id: "x".repeat(LIMITS.idLen + 1), cap: "calendar.read" }],
   ])("drops %s without an answer", async (_n, data) => {
     await send(data);
     expect(post).not.toHaveBeenCalled();
     expect(apiMock).not.toHaveBeenCalled();
   });
   it.each([
-    ["no cap", { aic: 1, id: "r1" }],
+    ["no cap", { vaic: 1, id: "r1" }],
     ["cap too long", req("c".repeat(LIMITS.capLen + 1))],
     ["params an array", req("calendar.read", [1, 2])],
     ["params a string", req("calendar.read", "x")],
@@ -122,7 +122,7 @@ describe("shape", () => {
     ["params over 8 KB", req("calendar.read", { q: "x".repeat(LIMITS.paramsBytes) })],
   ])("answers invalid for %s", async (_n, data) => {
     await send(data);
-    expect(lastReply()).toMatchObject({ aic: 1, id: "r1", ok: false, error: "invalid" });
+    expect(lastReply()).toMatchObject({ vaic: 1, id: "r1", ok: false, error: "invalid" });
     expect(apiMock).not.toHaveBeenCalled();
   });
 });
@@ -167,7 +167,7 @@ describe("grants", () => {
       method: "POST",
       body: { kind: "calendar.respond", params: { event_id: "e1", response: "accepted" } },
     });
-    expect(lastReply()).toEqual({ aic: 1, id: "r1", ok: true, status: "waiting_for_you" });
+    expect(lastReply()).toEqual({ vaic: 1, id: "r1", ok: true, status: "waiting_for_you" });
   });
 });
 
@@ -210,7 +210,7 @@ describe("throttle", () => {
 });
 
 describe("events to apps", () => {
-  const CHANGED = { aic: 1, event: "calendar.changed" };
+  const CHANGED = { vaic: 1, event: "calendar.changed" };
   it("calendar.changed reaches an app granted calendar.read, as the event name only", () => {
     forwardEvent({ type: "calendar.changed", at: "x", account_id: "acc-1", secret: "s" });
     expect(post).toHaveBeenCalledWith(CHANGED, "*");
@@ -237,18 +237,24 @@ describe("events to apps", () => {
     forwardEvent({ type: "calendar.changed" });
     expect(post).not.toHaveBeenCalled();
   });
-  it.each(["app.updated", "approval.requested", "ace.reply", "mail.received", "activity", "toString", "__proto__", ""])(
-    "no other event reaches an app: %s",
-    (type) => {
-      forwardEvent({ type });
-      expect(post).not.toHaveBeenCalled();
-    },
-  );
+  it.each([
+    "app.updated",
+    "approval.requested",
+    "vaic.reply",
+    "mail.received",
+    "activity",
+    "toString",
+    "__proto__",
+    "",
+  ])("no other event reaches an app: %s", (type) => {
+    forwardEvent({ type });
+    expect(post).not.toHaveBeenCalled();
+  });
   it("only the apps granted it, when two are mounted", () => {
     const first = post;
     store.setApps([
-      { app_id: APP, slug: "a", title: "A", url: "https://apps.aic.test/a", grants: [{ id: "calendar.read" }] },
-      { app_id: "app-game", slug: "g", title: "G", url: "https://apps.aic.test/g", grants: [] },
+      { app_id: APP, slug: "a", title: "A", url: "https://apps.vaic.test/a", grants: [{ id: "calendar.read" }] },
+      { app_id: "app-game", slug: "g", title: "G", url: "https://apps.vaic.test/g", grants: [] },
     ]);
     mount("app-game");
     const second = post;
@@ -264,13 +270,13 @@ describe("errors from the API", () => {
     [new ApiError("Bad params.", 400), "invalid"],
     [new ApiError("Slow down.", 429), "rate_limited"],
     [new ApiError("login_expired", 409), "login_expired"],
-    [new ApiError("Boom at https://api.aic.test/secret", 500), "unavailable"],
+    [new ApiError("Boom at https://api.vaic.test/secret", 500), "unavailable"],
     [new Error("network"), "unavailable"],
   ])("%s → %s, with AI City's own words (never the server's)", async (err, code) => {
     apiMock.mockRejectedValue(err);
     await send(req("calendar.read"));
     const r = lastReply();
     expect(r).toMatchObject({ ok: false, error: code });
-    expect(String(r.message)).not.toContain("api.aic.test");
+    expect(String(r.message)).not.toContain("api.vaic.test");
   });
 });

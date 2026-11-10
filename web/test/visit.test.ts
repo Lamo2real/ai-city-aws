@@ -90,11 +90,11 @@ describe("a department's projects", () => {
 
 describe("routes", () => {
   it("opens the City by default and reads a visit", () => {
-    expect(route("", ["ace", "city"], "city")).toEqual({ view: "city", slug: null });
-    expect(route("#/nowhere", ["ace", "city"], "city").view).toBe("city");
-    const r = route(`#${visitHash("Data & AI", "t-123")}`, ["ace", "city"], "city");
+    expect(route("", ["vaic", "city"], "city")).toEqual({ view: "city", slug: null });
+    expect(route("#/nowhere", ["vaic", "city"], "city").view).toBe("city");
+    const r = route(`#${visitHash("Data & AI", "t-123")}`, ["vaic", "city"], "city");
     expect(visitOf(r.slug)).toEqual({ dept: "Data & AI", project: "t-123", part: null });
-    expect(visitOf(route(`#${visitHash("App", "t-1", "b")}`, ["ace", "city"], "city").slug)).toEqual({
+    expect(visitOf(route(`#${visitHash("App", "t-1", "b")}`, ["vaic", "city"], "city").slug)).toEqual({
       dept: "App",
       project: "t-1",
       part: "b",

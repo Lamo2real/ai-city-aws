@@ -50,7 +50,7 @@ const SORTS: Array<{ value: string; label: string; search?: boolean }> = [
   { value: "size:asc", label: "Smallest first" },
   { value: "type:asc", label: "Type" },
 ];
-const VIEW_KEY = "aic.files.view";
+const VIEW_KEY = "vaic.files.view";
 const readView = (): "grid" | "list" => {
   try {
     return localStorage.getItem(VIEW_KEY) === "list" ? "list" : "grid";

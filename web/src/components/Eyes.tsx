@@ -1,4 +1,4 @@
-// VAIC's eye: the owner's own eye drawing (public/ace-eye.png, white lines with a transparent background), one
+// VAIC's eye: the owner's own eye drawing (public/vaic-eye.png, white lines with a transparent background), one
 // eye, used as a mask so it takes the ink or paper colour of where it sits. It stays still and the same colour
 // in every state (the owner's choice); the state is in its accessible name, and on the VAIC screen the voice
 // line under it shows the state.

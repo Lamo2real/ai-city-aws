@@ -4,12 +4,12 @@ import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from aic.lambdas.api import ApiDeps, handle_http
-from aic.shared.caps import default_settings
-from aic.shared.events import MemoryBus
-from aic.shared.hierarchy.queue import MemoryQueue
-from aic.shared.ledger import Ledger
-from aic.shared.table import MemoryTable
+from vaic.lambdas.api import ApiDeps, handle_http
+from vaic.shared.caps import default_settings
+from vaic.shared.events import MemoryBus
+from vaic.shared.hierarchy.queue import MemoryQueue
+from vaic.shared.ledger import Ledger
+from vaic.shared.table import MemoryTable
 
 OWNER = "owner@example.com"
 

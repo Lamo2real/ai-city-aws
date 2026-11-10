@@ -9,14 +9,14 @@ from typing import Any
 
 import pytest
 
-from aic.lambdas.api import handle_http
-from aic.lambdas.executives import handle as lambda_handle
-from aic.runtime.tools import TurnCtx, tools_for
-from aic.shared import executives as ex
-from aic.shared.chief_of_staff import context as chief_context
-from aic.shared.turn import TurnInput, TurnOutput
 from city_support import City, Script, make_city, scripted_engine
 from test_api import ev, js
+from vaic.lambdas.api import handle_http
+from vaic.lambdas.executives import handle as lambda_handle
+from vaic.runtime.tools import TurnCtx, tools_for
+from vaic.shared import executives as ex
+from vaic.shared.chief_of_staff import context as chief_context
+from vaic.shared.turn import TurnInput, TurnOutput
 
 ADVICE = {
     "recommendation": "Go ahead, but cap the pilot at one month.",
@@ -191,30 +191,30 @@ async def test_an_executive_switched_off_is_not_asked() -> None:
 
 
 # ---------- nothing starts on its own ----------
-async def test_aic_asks_only_on_the_owners_own_message() -> None:
+async def test_vaic_asks_only_on_the_owners_own_message() -> None:
     m = Model()
     c = city(m)
-    refused = await tools(c, "ace", from_owner=False)["ask_executive"].handler({"question": "Does it pay off?"})
+    refused = await tools(c, "vaic", from_owner=False)["ask_executive"].handler({"question": "Does it pay off?"})
     assert "Only the owner's own message" in refused and m.calls == []
-    assert "ask_executive" in tools(c, "ace") and "ask_executives" not in tools(c, "ace")
+    assert "ask_executive" in tools(c, "vaic") and "ask_executives" not in tools(c, "vaic")
     for role in ("manager", "worker"):
         assert not {"ask_executive", "ask_executives"} & set(tools(c, role))
 
 
-async def test_the_owner_asks_aic_and_hears_the_cfo() -> None:
+async def test_the_owner_asks_vaic_and_hears_the_cfo() -> None:
     """End to end through the real host: the owner's message → VAIC → ask_executive → the CFO's advice → reply."""
     m = Model()
 
-    async def ace(req: Any, call: Any) -> str:
+    async def vaic(req: Any, call: Any) -> str:
         return await call("ask_executive", {"question": "Ask the CFO if hiring a video team pays off", "who": ["cfo"]})
 
-    c = city(m, {"ace": ace})
+    c = city(m, {"vaic": vaic})
     await c.host.ensure_core()  # VAIC and the Orchestrator exist before any message
     before = await snapshot(c)
     await c.owner_says("Ask the CFO if hiring a video team pays off")
     await c.run()
     assert m.who() == ["exec-cfo"]
-    reply = c.bus.of_type("ace.reply")[-1]["text"]
+    reply = c.bus.of_type("vaic.reply")[-1]["text"]
     assert reply.startswith("CFO (medium confidence): Go ahead")
     tickets, agents, _ = await snapshot(c)
     assert (tickets, agents) == before[:2]  # no job, no hire: only VAIC's own turn ran
@@ -222,7 +222,7 @@ async def test_the_owner_asks_aic_and_hears_the_cfo() -> None:
 
 async def test_without_a_model_runner_no_executive_tools_appear() -> None:
     c = make_city(scripted_engine({}))
-    assert "ask_executive" not in tools(c, "ace") and "ask_executives" not in tools(c, "orchestrator")
+    assert "ask_executive" not in tools(c, "vaic") and "ask_executives" not in tools(c, "orchestrator")
 
 
 async def test_reviews_are_off_by_default_and_the_hourly_run_does_nothing() -> None:
@@ -234,7 +234,7 @@ async def test_reviews_are_off_by_default_and_the_hourly_run_does_nothing() -> N
     before = await snapshot(c)
     assert await lambda_handle({"job": "reviews"}, deps(c, m)) == {"reviews": []}
     assert await lambda_handle({"job": "something else"}, deps(c, m)) == {"skipped": "not a review run"}
-    assert m.calls == [] and await snapshot(c) == before and c.bus.of_type("ace.reply") == []
+    assert m.calls == [] and await snapshot(c) == before and c.bus.of_type("vaic.reply") == []
 
 
 async def test_a_review_the_owner_switched_on_is_a_report_in_aics_chat_and_never_work() -> None:
@@ -245,7 +245,7 @@ async def test_a_review_the_owner_switched_on_is_a_report_in_aics_chat_and_never
     before = await snapshot(c)
     assert await lambda_handle({"job": "reviews"}, deps(c, m)) == {"reviews": ["cfo-cost-review"]}
     assert m.who() == ["exec-cfo"]
-    line = c.bus.of_type("ace.reply")[-1]
+    line = c.bus.of_type("vaic.reply")[-1]
     assert line["conversation"] == "main" and line["text"].startswith("CFO, cost review: Go ahead")
     assert "nothing was started" in line["text"]
     assert await snapshot(c) == before

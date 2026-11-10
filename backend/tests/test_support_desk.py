@@ -9,17 +9,17 @@ from __future__ import annotations
 import re
 from datetime import timedelta
 
-from aic.lambdas.api import handle_http
-from aic.lambdas.scheduler import run_job
-from aic.runtime.engine import EngineRequest
-from aic.runtime.tools import TurnCtx
-from aic.shared import standing_orders as so
-from aic.shared import support_desk as desk
-from aic.shared.hierarchy.actions import FINAL
-from aic.shared.ledger import ALL_STATUSES
 from city_support import Call, make_city, scripted_engine
 from test_api import Clock, ev, js, make
 from test_apps import city_deps, tool
+from vaic.lambdas.api import handle_http
+from vaic.lambdas.scheduler import run_job
+from vaic.runtime.engine import EngineRequest
+from vaic.runtime.tools import TurnCtx
+from vaic.shared import standing_orders as so
+from vaic.shared import support_desk as desk
+from vaic.shared.hierarchy.actions import FINAL
+from vaic.shared.ledger import ALL_STATUSES
 
 SLACK: list[dict[str, str]] = []
 """What the fake Slack received: {channel, thread, text}."""
@@ -33,18 +33,18 @@ async def _goal(req: EngineRequest) -> str:
     return str((t or {}).get("goal") or "")
 
 
-async def ace(req: EngineRequest, call: Call) -> str:
+async def vaic(req: EngineRequest, call: Call) -> str:
     return "Noted."
 
 
 async def orchestrator(req: EngineRequest, call: Call) -> str:
-    if "(task) from ace" in req.turn.prompt:
+    if "(task) from vaic" in req.turn.prompt:
         dept = re.search(r"Send it to the (.+?) department", req.turn.prompt).group(1)  # type: ignore[union-attr]
         await call("create_department", {"name": dept, "mission": f"The {dept} team."})
         await call("assign_to_department", {"department": dept, "goal": await _goal(req), "acceptance": "done"})
         return "Sent."
     await call("sign_off", {"verdict": "PASS", "reasons": "Done."})
-    await call("report_to_ace", {"summary": "Finished."})
+    await call("report_to_vaic", {"summary": "Finished."})
     return "PASS"
 
 
@@ -93,7 +93,7 @@ async def worker(req: EngineRequest, call: Call) -> str:
 
 async def test_a_slack_message_becomes_a_ticket_is_fixed_by_it_and_the_reporter_is_told_in_the_thread() -> None:
     SLACK.clear()
-    city = make_city(scripted_engine({"ace": ace, "orchestrator": orchestrator, "manager": manager,
+    city = make_city(scripted_engine({"vaic": vaic, "orchestrator": orchestrator, "manager": manager,
                                       "worker": worker}))  # fmt: skip
     await city.host.ensure_core()
     o = await so.add_order(city.ledger, {"source": "Slack #support", "instructions": "Answer new messages."})
@@ -121,7 +121,7 @@ async def test_a_slack_message_becomes_a_ticket_is_fixed_by_it_and_the_reporter_
     # Nothing is filed twice: the intake round skipped the handled message, and the job tree is finished.
     await beat()
     assert len(await desk.list_tickets(city.ledger)) == 1 and len(SLACK) == 2
-    jobs = [j for j in await city.ledger.list_tickets(ALL_STATUSES) if j["from"] == "ace"]
+    jobs = [j for j in await city.ledger.list_tickets(ALL_STATUSES) if j["from"] == "vaic"]
     assert all(j["status"] in FINAL for j in jobs), [(j["status"], j["goal"][:60]) for j in jobs]
     assert all(j.get("standing_order") == o["id"] for j in jobs)
     assert {j.get("support_ticket") for j in jobs} == {None, t["id"]}
@@ -188,7 +188,7 @@ def test_customer_support_orders_carry_the_desk_and_others_dont() -> None:
 
 
 async def test_a_standing_order_whose_job_cannot_be_sent_starts_again_on_the_next_beat_and_others_still_run() -> None:
-    city = make_city(scripted_engine({"ace": ace}))
+    city = make_city(scripted_engine({"vaic": vaic}))
     await city.host.ensure_core()
     first = await so.add_order(city.ledger, {"source": "Slack #support", "instructions": "Answer new messages."})
     second = await so.add_order(city.ledger, {"source": "Slack #sales", "instructions": "Answer new messages."})
@@ -211,7 +211,7 @@ async def test_a_standing_order_whose_job_cannot_be_sent_starts_again_on_the_nex
 
 
 async def test_one_ticket_that_cannot_move_does_not_hold_up_the_others() -> None:
-    city = make_city(scripted_engine({"ace": ace}))
+    city = make_city(scripted_engine({"vaic": vaic}))
     await city.host.ensure_core()
     d = city.deps
     for name in ("One", "Two"):

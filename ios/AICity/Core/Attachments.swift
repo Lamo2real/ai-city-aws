@@ -75,7 +75,7 @@ final class Attachments {
         if item.status != .uploading { entries[i].percent = nil }
     }
 
-    /// The owner changed their mind before AIC saw it: the chip goes, and so does the knowledge item.
+    /// The owner changed their mind before VAIC saw it: the chip goes, and so does the knowledge item.
     func remove(_ id: String, api: APIClient?) {
         entries.removeAll { $0.id == id }
         Task { try? await api?.removeKnowledge(id) }

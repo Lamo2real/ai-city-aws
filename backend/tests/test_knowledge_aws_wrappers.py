@@ -4,11 +4,11 @@ from typing import Any, ClassVar
 
 import pytest
 
-from aic.shared.knowledge.blobs import S3Blobs
-from aic.shared.knowledge.kb import BedrockKnowledgeBase, ThrottlingException
-from aic.shared.models import resolve_role
-from aic.shared.turn import TurnInput
-from aic.shared.utility import bedrock_converse_runner
+from vaic.shared.knowledge.blobs import S3Blobs
+from vaic.shared.knowledge.kb import BedrockKnowledgeBase, ThrottlingException
+from vaic.shared.models import resolve_role
+from vaic.shared.turn import TurnInput
+from vaic.shared.utility import bedrock_converse_runner
 
 
 class Recorder:
@@ -151,7 +151,7 @@ async def test_converse_runner_sends_attachments_before_the_prompt_and_reads_cit
 
 
 def test_every_client_shares_one_config_and_is_made_once() -> None:
-    from aic.shared.clients import CONFIG, client, config_for
+    from vaic.shared.clients import CONFIG, client, config_for
 
     made: list[tuple[str, Any]] = []
 
@@ -176,7 +176,7 @@ def test_the_api_lambda_does_not_import_pypdf_or_pillow() -> None:
     import sys
 
     code = (
-        "import sys, aic.lambdas.api, aic.runtime.tools, aic.shared.knowledge.search; "
+        "import sys, vaic.lambdas.api, vaic.runtime.tools, vaic.shared.knowledge.search; "
         "bad = [m for m in ('pypdf', 'PIL') if m in sys.modules]; "
         "sys.exit(1 if bad else 0)"
     )
@@ -185,7 +185,7 @@ def test_the_api_lambda_does_not_import_pypdf_or_pillow() -> None:
 
 
 async def test_dynamo_batch_get_reads_typed_answers_and_retries_unprocessed_keys() -> None:
-    from aic.shared.table import DynamoTable
+    from vaic.shared.table import DynamoTable
 
     answers = [
         {"Responses": {"t": [{"pk": {"S": "ITEM#a"}, "sk": {"S": "META"}, "n": {"N": "3"}}]},
@@ -216,7 +216,7 @@ async def test_dynamo_batch_get_reads_typed_answers_and_retries_unprocessed_keys
 
 
 def test_the_api_lambda_builds_its_clients_while_loading_inside_lambda(monkeypatch: pytest.MonkeyPatch) -> None:
-    from aic.lambdas import api
+    from vaic.lambdas import api
 
     built: list[int] = []
     monkeypatch.setattr(api, "build_deps", lambda: built.append(1) or "deps")
@@ -224,7 +224,7 @@ def test_the_api_lambda_builds_its_clients_while_loading_inside_lambda(monkeypat
     monkeypatch.delenv("AWS_LAMBDA_FUNCTION_NAME", raising=False)
     api._init_at_load()
     assert api._deps is None and built == []  # tests and scripts: nothing touches AWS
-    monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "aic-prod-api")
+    monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "vaic-prod-api")
     api._init_at_load()
     assert api._deps == "deps" and built == [1]  # in the snapshot
 

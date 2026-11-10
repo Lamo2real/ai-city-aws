@@ -4,17 +4,17 @@ from typing import Any
 
 import pytest
 
-from aic.lambdas.dispatcher import AgentCoreInvoker, process_batch, session_id_for
-from aic.lambdas.factory import handle_factory
-from aic.lambdas.improve import barred, improvement_allowed, review_changes
-from aic.lambdas.ledger_writer import write_event
-from aic.lambdas.scheduler import run_job
-from aic.shared.caps import settings_with
-from aic.shared.events import MemoryBus, now_iso
-from aic.shared.hierarchy.factory import Factory, HireRefused
-from aic.shared.hierarchy.queue import MemoryQueue
-from aic.shared.ledger import Ledger
-from aic.shared.table import MemoryTable
+from vaic.lambdas.dispatcher import AgentCoreInvoker, process_batch, session_id_for
+from vaic.lambdas.factory import handle_factory
+from vaic.lambdas.improve import barred, improvement_allowed, review_changes
+from vaic.lambdas.ledger_writer import write_event
+from vaic.lambdas.scheduler import run_job
+from vaic.shared.caps import settings_with
+from vaic.shared.events import MemoryBus, now_iso
+from vaic.shared.hierarchy.factory import Factory, HireRefused
+from vaic.shared.hierarchy.queue import MemoryQueue
+from vaic.shared.ledger import Ledger
+from vaic.shared.table import MemoryTable
 
 
 def msg(**over: Any) -> dict[str, Any]:
@@ -91,7 +91,9 @@ async def test_invokes_the_roles_agentcore_runtime_with_the_session_id_and_json_
             sent.append(kw)
             return {"statusCode": 200}
 
-    inv = AgentCoreInvoker(Client(), {"ace": "arn:ace", "orchestrator": "arn:o", "manager": "arn:m", "worker": "arn:w"})
+    inv = AgentCoreInvoker(
+        Client(), {"vaic": "arn:vaic", "orchestrator": "arn:o", "manager": "arn:m", "worker": "arn:w"}
+    )
     await inv.invoke({**msg(), "sessionId": session_id_for(msg()), "async": True})  # type: ignore[arg-type]
     assert sent[0]["agentRuntimeArn"] == "arn:w"
     assert sent[0]["runtimeSessionId"].startswith("wkr-eng-w1")
@@ -100,7 +102,7 @@ async def test_invokes_the_roles_agentcore_runtime_with_the_session_id_and_json_
 
 
 def test_session_ids_per_role() -> None:
-    assert session_id_for(msg(role="ace", conversation="c9"), "me").startswith("ace-me-c9")  # type: ignore[arg-type]
+    assert session_id_for(msg(role="vaic", conversation="c9"), "me").startswith("vaic-me-c9")  # type: ignore[arg-type]
     assert session_id_for(msg(role="orchestrator", taskId="t-7")).startswith("orch-t-7")  # type: ignore[arg-type]
     assert session_id_for(msg(role="manager", department="Research", taskId="t-7")).startswith("mgr-research-t-7")  # type: ignore[arg-type]
 
@@ -196,7 +198,7 @@ async def test_retire_idle_puts_managers_without_open_work_to_sleep_and_improve_
 # ---------- self-improvement fence ----------
 def test_self_improvement_is_off_unless_explicitly_enabled() -> None:
     assert improvement_allowed({})[0] is False
-    assert improvement_allowed({"AIC_SELF_IMPROVE": "on"})[0] is True
+    assert improvement_allowed({"VAIC_SELF_IMPROVE": "on"})[0] is True
 
 
 @pytest.mark.parametrize(
@@ -207,8 +209,8 @@ def test_self_improvement_is_off_unless_explicitly_enabled() -> None:
         "config/policy.json",
         "config/caps.json",
         "config/mail.json",
-        "backend/src/aic/shared/policy.py",
-        "backend/src/aic/shared/caps.py",
+        "backend/src/vaic/shared/policy.py",
+        "backend/src/vaic/shared/caps.py",
         ".github/workflows/deploy.yml",
         "infra/modules/security/iam.tf",
         "package.json",
@@ -230,12 +232,12 @@ def test_allows_prompt_and_code_changes_and_new_tests_but_not_edits_to_existing_
     assert refused == ["backend/tests/test_hierarchy_e2e.py"]
 
 
-def test_aic_gets_a_fresh_session_per_runtime_version_other_roles_keep_theirs() -> None:
-    from aic.lambdas.dispatcher import session_id_for
+def test_vaic_gets_a_fresh_session_per_runtime_version_other_roles_keep_theirs() -> None:
+    from vaic.lambdas.dispatcher import session_id_for
 
-    aic: Any = {"role": "ace", "conversation": "main"}
-    old, new = session_id_for(aic, "owner", "rt-aaaa"), session_id_for(aic, "owner", "rt-bbbb")
+    vaic: Any = {"role": "vaic", "conversation": "main"}
+    old, new = session_id_for(vaic, "owner", "rt-aaaa"), session_id_for(vaic, "owner", "rt-bbbb")
     assert old != new and len(old) >= 33
-    assert session_id_for(aic, "owner", "rt-aaaa") == old  # same version, same session
+    assert session_id_for(vaic, "owner", "rt-aaaa") == old  # same version, same session
     worker: Any = {"role": "worker", "department": "eng", "agentId": "w1"}
     assert session_id_for(worker, "owner", "rt-aaaa") == session_id_for(worker, "owner", "rt-bbbb")

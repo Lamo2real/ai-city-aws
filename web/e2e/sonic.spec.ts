@@ -19,7 +19,7 @@ const tone = () => {
 
 async function realtime(page: import("@playwright/test").Page) {
   await page.addInitScript(() => {
-    (window as unknown as { __aicSonic: boolean }).__aicSonic = true;
+    (window as unknown as { __vaicSonic: boolean }).__vaicSonic = true;
     // A silent microphone (headless Chromium has none).
     navigator.mediaDevices.getUserMedia = async () => new AudioContext().createMediaStreamDestination().stream;
   });
@@ -42,7 +42,7 @@ test("the voice button opens a real-time call: the owner's words reach the chat,
     ws.onMessage((raw) => fromBrowser.push(JSON.parse(String(raw))));
     say({ type: "ready", model: "amazon.nova-2-sonic-v1:0", region: "eu-north-1" });
   });
-  await page.goto("/#/ace");
+  await page.goto("/#/vaic");
   const strip = page.locator(".voice");
   await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   expect(sessions).toBe(1);
@@ -60,11 +60,11 @@ test("the voice button opens a real-time call: the owner's words reach the chat,
 
   // VAIC answers through the city's own channel, and Sonic says it.
   say({ type: "thinking", on: false });
-  m.send({ type: "ace.reply", conversation: "main", text: "All quiet. Nothing needs you.", done: true });
+  m.send({ type: "vaic.reply", conversation: "main", text: "All quiet. Nothing needs you.", done: true });
   say({ type: "audio", data: tone() });
-  await expect(strip).toHaveAttribute("data-speaker", "aic");
+  await expect(strip).toHaveAttribute("data-speaker", "vaic");
   await expect(chat.getByText("All quiet. Nothing needs you.")).toBeVisible();
-  say({ type: "transcript", role: "assistant", text: "All quiet, nothing needs you.", aic: true });
+  say({ type: "transcript", role: "assistant", text: "All quiet, nothing needs you.", vaic: true });
   // The owner talks over it: the two seconds of speech stop at once.
   say({ type: "interrupted" });
   await expect(strip).toHaveAttribute("data-speaker", "you", { timeout: 300 });
@@ -75,7 +75,7 @@ test("the voice button opens a real-time call: the owner's words reach the chat,
   await expect(chat.getByText("All quiet, nothing needs you.")).toHaveCount(0);
 
   // Small talk Sonic answers itself shows in the chat.
-  say({ type: "transcript", role: "assistant", text: "Sure, I'm here.", aic: false });
+  say({ type: "transcript", role: "assistant", text: "Sure, I'm here.", vaic: false });
   await expect(chat.getByText("Sure, I'm here.")).toBeVisible();
 
   // A tap ends the call: the runtime is told to stop.
@@ -91,7 +91,7 @@ test("when the real-time voice is not set up, the step-by-step voice takes over"
   await page.route(`${CONFIG.apiUrl}/voice/session`, (r) =>
     r.fulfill({ status: 503, json: { error: "not_configured", message: "Real-time voice is not set up." } }),
   );
-  await page.goto("/#/ace");
+  await page.goto("/#/vaic");
   await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
   expect(m.calls.find((c) => c.path === "/messages")?.body).toMatchObject({ text: "what's the status?", voice: true });
@@ -103,7 +103,7 @@ test("in the standard voice, the sound of the owner talking over VAIC silences i
     const w = window as unknown as { __heard: string; __speakMs: number; __loud: (on: boolean) => void };
     w.__heard = "what's the status?";
     w.__speakMs = 6000; // VAIC would talk for six seconds
-    (window as unknown as { __aicSonic: boolean }).__aicSonic = true;
+    (window as unknown as { __vaicSonic: boolean }).__vaicSonic = true;
     // A microphone the test can make loud: a tone behind a gain set to silence.
     let gain: GainNode | null = null;
     w.__loud = (on) => gain && (gain.gain.value = on ? 0.6 : 0);
@@ -121,14 +121,14 @@ test("in the standard voice, the sound of the owner talking over VAIC silences i
   await page.route(`${CONFIG.apiUrl}/voice/session`, (r) =>
     r.fulfill({ status: 503, json: { error: "not_configured", message: "Real-time voice is not set up." } }),
   );
-  await page.goto("/#/ace");
+  await page.goto("/#/vaic");
   const strip = page.locator(".voice");
   await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   // The reason the real-time voice is not in use is shown, in plain words.
   await expect(page.getByText(/Real-time voice didn't connect \(Real-time voice is not set up\)/)).toBeVisible();
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
-  m.send({ type: "ace.reply", conversation: "main", text: "All quiet. Nothing needs you at the moment.", done: true });
-  await expect(strip).toHaveAttribute("data-speaker", "aic");
+  m.send({ type: "vaic.reply", conversation: "main", text: "All quiet. Nothing needs you at the moment.", done: true });
+  await expect(strip).toHaveAttribute("data-speaker", "vaic");
   await page.waitForTimeout(500); // the listener learns the room's noise
   const cut = Date.now();
   await page.evaluate(() => (window as unknown as { __loud: (on: boolean) => void }).__loud(true));
@@ -145,13 +145,13 @@ test("the standard voice says a short thinking cue only when VAIC takes a moment
 }) => {
   const m = await mockBackend(page);
   await page.addInitScript(() => {
-    (window as unknown as { __aicSonic: boolean }).__aicSonic = true;
+    (window as unknown as { __vaicSonic: boolean }).__vaicSonic = true;
     (window as unknown as { __heard: string }).__heard = "what's the status?";
   });
   await page.route(`${CONFIG.apiUrl}/voice/session`, (r) =>
     r.fulfill({ status: 503, json: { error: "not_configured", message: "Real-time voice is not set up." } }),
   );
-  await page.goto("/#/ace");
+  await page.goto("/#/vaic");
   const spoken = () => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []);
   await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   await expect(page.getByText("Voice on · standard")).toBeVisible();
@@ -160,14 +160,14 @@ test("the standard voice says a short thinking cue only when VAIC takes a moment
   // VAIC takes a while: one short cue.
   await expect.poll(spoken, { timeout: 4000 }).toHaveLength(1);
   expect((await spoken())[0]).toMatch(/think|second|check|moment|look|see/i);
-  m.send({ type: "ace.reply", conversation: "main", text: "All quiet.", done: true });
+  m.send({ type: "vaic.reply", conversation: "main", text: "All quiet.", done: true });
   await expect.poll(spoken).toContain("All quiet.");
 
   // A quick answer: no cue at all.
   const before = (await spoken()).length;
   await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "and the costs?"));
   await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(2);
-  m.send({ type: "ace.reply", conversation: "main", text: "Two dollars.", done: true });
+  m.send({ type: "vaic.reply", conversation: "main", text: "Two dollars.", done: true });
   await expect.poll(spoken).toContain("Two dollars.");
   await page.waitForTimeout(1600);
   expect((await spoken()).slice(before)).toEqual(["Two dollars."]);
@@ -177,8 +177,10 @@ test("voice mode drops ums and stammers, sends nothing for filler-only sounds, a
   page,
 }) => {
   const m = await mockBackend(page);
-  await page.addInitScript(() => ((window as unknown as { __heard: string }).__heard = "Um, um, um, well, um, maybe, um."));
-  await page.goto("/#/ace");
+  await page.addInitScript(
+    () => ((window as unknown as { __heard: string }).__heard = "Um, um, um, well, um, maybe, um."),
+  );
+  await page.goto("/#/vaic");
   const said = (t: string) => page.evaluate((x) => ((window as unknown as { __heard: string }).__heard = x), t);
   const sent = () => m.calls.filter((c) => c.path === "/messages").map((c) => (c.body as { text: string }).text);
   await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();

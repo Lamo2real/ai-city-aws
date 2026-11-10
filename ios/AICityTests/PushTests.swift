@@ -3,7 +3,7 @@ import XCTest
 @testable import AICity
 
 /// Notifications: asked once after sign-in, the APNs token goes to `POST /devices` on every launch and when
-/// it changes, sign-out removes this iPhone, a tap opens AIC. A fake backend and a fake iOS; no APNs.
+/// it changes, sign-out removes this iPhone, a tap opens VAIC. A fake backend and a fake iOS; no APNs.
 @MainActor
 final class PushTests: XCTestCase {
     final class FakeSystem: PushSystem {
@@ -52,12 +52,12 @@ final class PushTests: XCTestCase {
     }
 
     private func app(_ b: Backend, _ sys: FakeSystem, defaults: UserDefaults, auth: FakeAuth = FakeAuth()) -> AppModel {
-        let cfg = ConfigStore(defaults: UserDefaults(suiteName: "aic.tests.\(UUID().uuidString)")!, http: b.http, bundleHost: "site.example.test")
+        let cfg = ConfigStore(defaults: UserDefaults(suiteName: "vaic.tests.\(UUID().uuidString)")!, http: b.http, bundleHost: "site.example.test")
         return AppModel(configStore: cfg, hud: HudStore(archive: NoChatArchive()), http: b.http, makeAuth: { _ in auth }, connectLive: false,
                         push: PushController(system: sys, defaults: defaults, sandbox: true))
     }
 
-    private func freshDefaults() -> UserDefaults { UserDefaults(suiteName: "aic.tests.push.\(UUID().uuidString)")! }
+    private func freshDefaults() -> UserDefaults { UserDefaults(suiteName: "vaic.tests.push.\(UUID().uuidString)")! }
     private let token1 = Data([0xab, 0xcd, 0x01])
     private let token2 = Data([0x02, 0x03])
 
@@ -107,7 +107,7 @@ final class PushTests: XCTestCase {
     func testTheQuestionWaitsForTheFirstRunGuide() async {
         let b = Backend(), sys = FakeSystem()
         b.firstRunDone = false
-        UserDefaults.standard.removeObject(forKey: "aic.guide.done")
+        UserDefaults.standard.removeObject(forKey: "vaic.guide.done")
         let model = app(b, sys, defaults: freshDefaults())
         await model.start()
         XCTAssertTrue(model.showGuide)
@@ -115,7 +115,7 @@ final class PushTests: XCTestCase {
         model.finishGuide()
         await model.push.offerIfNeeded()
         XCTAssertTrue(model.push.askNow)
-        UserDefaults.standard.removeObject(forKey: "aic.guide.done")
+        UserDefaults.standard.removeObject(forKey: "vaic.guide.done")
     }
 
     func testANewTokenReplacesTheOldDevice() async {
@@ -235,7 +235,7 @@ final class PushTests: XCTestCase {
         await model.start()
         model.open(.costs)
         model.openFromNotification()
-        XCTAssertEqual(model.section, .aic)
+        XCTAssertEqual(model.section, .vaic)
         XCTAssertTrue(model.morePath.isEmpty)
     }
 

@@ -1,4 +1,4 @@
-# Agents on Amazon Bedrock AgentCore: one image (ECR), four runtimes (ace, orchestrator, manager,
+# Agents on Amazon Bedrock AgentCore: one image (ECR), four runtimes (vaic, orchestrator, manager,
 # worker), one tagged application inference profile per role (plus the utility profile), AgentCore
 # Memory per role, and one least-privilege IAM role per runtime. Departments and workers are
 # sessions, not runtimes. Model IDs come from config/models.json and nowhere else.
@@ -25,7 +25,7 @@ variable "queue_arns" { type = map(string) }
 variable "queue_urls" { type = map(string) }
 variable "factory_function_arn" { type = string }
 variable "factory_function_name" { type = string }
-# AIC acts for the owner through the HUD's own API (decision 143): it invokes the API Lambda's live alias directly.
+# VAIC acts for the owner through the HUD's own API (decision 143): it invokes the API Lambda's live alias directly.
 variable "api_function_name" {
   type    = string
   default = ""
@@ -59,13 +59,13 @@ variable "apps_url" {
 locals {
   tags   = { Component = "agents" }
   models = jsondecode(file("${path.module}/../../../config/models.json"))
-  roles  = ["ace", "orchestrator", "manager", "worker"]
+  roles  = ["vaic", "orchestrator", "manager", "worker"]
   # utility, chief_of_staff and executive are calls without a runtime of their own: a profile each, so the bill
-  # splits by role. The executives (decision 140) are called from AIC's and the Orchestrator's runtimes and the
+  # splits by role. The executives (decision 140) are called from VAIC's and the Orchestrator's runtimes and the
   # executives Lambda.
   all_roles = concat(local.roles, ["utility", "chief_of_staff", "executive"])
   # The runtimes that consult the executives may call the executives' models through their profile.
-  consults = ["ace", "orchestrator"]
+  consults = ["vaic", "orchestrator"]
   # Plain model names each role may call: its own and its fallback, plus, for the roles named in departmentModels,
   # the model the owner's chosen departments run on (decision 129: Fable for the workers of Media, Research, Legal).
   dept_models = try(compact([local.models.departmentModels.model, local.models.departmentModels.fallback]), [])
@@ -119,7 +119,7 @@ resource "aws_ecr_lifecycle_policy" "runtime" {
 # bill splits model cost by role (AgentRole tag). Off: the runtimes call the global profiles.
 resource "aws_bedrock_inference_profile" "role" {
   for_each = var.use_application_inference_profiles ? toset(local.all_roles) : toset([])
-  name     = "aic-${each.key}"
+  name     = "vaic-${each.key}"
   # Bedrock allows only letters, digits, ":" and "." separated by single spaces, "_" or "-" here.
   description = "AI City ${each.key} ${local.models.roles[each.key].model}"
   model_source {
@@ -173,9 +173,9 @@ resource "aws_iam_role_policy" "common" {
   })
 }
 
-# AIC, the Orchestrator and managers coordinate: ledger and queues. Workers don't (see worker.json).
+# VAIC, the Orchestrator and managers coordinate: ledger and queues. Workers don't (see worker.json).
 resource "aws_iam_role_policy" "coordinator" {
-  for_each = toset(["ace", "orchestrator", "manager"])
+  for_each = toset(["vaic", "orchestrator", "manager"])
   name     = "coordinate"
   role     = aws_iam_role.agent[each.key].id
   policy = templatefile("${path.module}/policies/coordinator.json.tftpl", {
@@ -184,7 +184,7 @@ resource "aws_iam_role_policy" "coordinator" {
   })
 }
 
-# Every role searches the owner's knowledge base; only AIC (ace) may add to it (docs/KNOWLEDGE.md section 9).
+# Every role searches the owner's knowledge base; only VAIC (vaic) may add to it (docs/KNOWLEDGE.md section 9).
 resource "aws_iam_role_policy" "knowledge" {
   for_each = toset(local.roles)
   name     = "knowledge-read"
@@ -196,19 +196,19 @@ resource "aws_iam_role_policy" "knowledge" {
   })
 }
 
-resource "aws_iam_role_policy" "knowledge_aic" {
+resource "aws_iam_role_policy" "knowledge_vaic" {
   name = "knowledge-add"
-  role = aws_iam_role.agent["ace"].id
-  policy = templatefile("${path.module}/policies/knowledge-aic.json.tftpl", {
+  role = aws_iam_role.agent["vaic"].id
+  policy = templatefile("${path.module}/policies/knowledge-vaic.json.tftpl", {
     knowledge_table_arn  = var.knowledge_table_arn
     knowledge_bucket_arn = var.knowledge_bucket_arn
   })
 }
 
-# AIC's real-time voice (decision 120): only AIC's role may open Nova Sonic's two-way audio stream.
+# VAIC's real-time voice (decision 120): only VAIC's role may open Nova Sonic's two-way audio stream.
 resource "aws_iam_role_policy" "voice" {
   name = "voice"
-  role = aws_iam_role.agent["ace"].id
+  role = aws_iam_role.agent["vaic"].id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -220,11 +220,11 @@ resource "aws_iam_role_policy" "voice" {
   })
 }
 
-# Only AIC may run HUD routes as the owner (decision 143); the API refuses secret-taking routes on this path.
+# Only VAIC may run HUD routes as the owner (decision 143); the API refuses secret-taking routes on this path.
 resource "aws_iam_role_policy" "owner_api" {
   count = var.api_function_arn == "" ? 0 : 1
   name  = "owner-api"
-  role  = aws_iam_role.agent["ace"].id
+  role  = aws_iam_role.agent["vaic"].id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -289,7 +289,8 @@ resource "aws_iam_role_policy" "workspace" {
 # Built and pushed during `terraform apply` (deploy.yml, after the owner approves the plan), after the
 # repository exists and before the runtimes, so one reviewed plan deploys from nothing. A new tag rebuilds.
 resource "terraform_data" "image" {
-  triggers_replace = [var.image_tag]
+  # The repository's URL too: a new repository (the AIC → VAIC rename) gets its image even with an unchanged tag.
+  triggers_replace = [var.image_tag, aws_ecr_repository.runtime.repository_url]
   depends_on       = [aws_ecr_repository.runtime]
   provisioner "local-exec" {
     command = "bash ${abspath("${path.module}/../../../scripts/push-image.sh")}"
@@ -319,25 +320,25 @@ resource "aws_bedrockagentcore_agent_runtime" "role" {
     network_mode = "PUBLIC" # Bedrock, GitHub and the web; inbound only through AgentCore with IAM
   }
   lifecycle_configuration {
-    # AIC: a warm-kept session (the scheduler's warm_ace ping every 5 min) that lives the whole day, so the owner's
+    # VAIC: a warm-kept session (the scheduler's warm_vaic ping every 5 min) that lives the whole day, so the owner's
     # message never waits for a container start. Workers: long jobs. Others: an hour.
-    idle_runtime_session_timeout = each.key == "ace" ? 1800 : 900
-    max_lifetime                 = contains(["ace", "worker"], each.key) ? 28800 : 3600
+    idle_runtime_session_timeout = each.key == "vaic" ? 1800 : 900
+    max_lifetime                 = contains(["vaic", "worker"], each.key) ? 28800 : 3600
   }
   environment_variables = merge(
     {
-      AIC_ROLE                       = each.key
-      AIC_REGION                     = var.region
-      AIC_LEDGER_TABLE               = var.ledger_table
-      AIC_EVENT_BUS                  = var.bus_name
-      AIC_QUEUE_ACE                  = var.queue_urls["ace"]
-      AIC_QUEUE_ORCHESTRATOR         = var.queue_urls["orchestrator"]
-      AIC_QUEUE_MANAGER              = var.queue_urls["manager"]
-      AIC_QUEUE_WORKER               = var.queue_urls["worker"]
-      AIC_FACTORY_FUNCTION           = var.factory_function_name
-      AIC_WORKSPACES_BUCKET          = var.workspaces_bucket
-      AIC_WORKSPACE_ROLE_ARN         = aws_iam_role.workspace.arn
-      AIC_PROFILE_PREFIX             = var.profile_prefix
+      VAIC_ROLE                      = each.key
+      VAIC_REGION                    = var.region
+      VAIC_LEDGER_TABLE              = var.ledger_table
+      VAIC_EVENT_BUS                 = var.bus_name
+      VAIC_QUEUE_VAIC                = var.queue_urls["vaic"]
+      VAIC_QUEUE_ORCHESTRATOR        = var.queue_urls["orchestrator"]
+      VAIC_QUEUE_MANAGER             = var.queue_urls["manager"]
+      VAIC_QUEUE_WORKER              = var.queue_urls["worker"]
+      VAIC_FACTORY_FUNCTION          = var.factory_function_name
+      VAIC_WORKSPACES_BUCKET         = var.workspaces_bucket
+      VAIC_WORKSPACE_ROLE_ARN        = aws_iam_role.workspace.arn
+      VAIC_PROFILE_PREFIX            = var.profile_prefix
       KNOWLEDGE_TABLE                = var.knowledge_table
       KNOWLEDGE_BASE_ID              = var.knowledge_base_id
       KNOWLEDGE_DATA_SOURCE_ID       = var.knowledge_data_source_id
@@ -345,14 +346,14 @@ resource "aws_bedrockagentcore_agent_runtime" "role" {
       CLAUDE_CODE_USE_BEDROCK        = "1"
       CLAUDE_CODE_DISABLE_1M_CONTEXT = "1"
     },
-    each.key == "ace" ? { KNOWLEDGE_BUCKET = var.knowledge_bucket } : {},
-    each.key == "ace" && var.api_function_name != "" ? { AIC_API_FUNCTION = var.api_function_name } : {},
+    each.key == "vaic" ? { KNOWLEDGE_BUCKET = var.knowledge_bucket } : {},
+    each.key == "vaic" && var.api_function_name != "" ? { VAIC_API_FUNCTION = var.api_function_name } : {},
     # Only workers run shell commands, so only they scrub their environment (needs bubblewrap, in the image).
     # On the other roles Claude Code refuses to start with it set and nothing to sandbox.
     each.key == "worker" ? { CLAUDE_CODE_SUBPROCESS_ENV_SCRUB = "1" } : {},
-    each.key == "worker" && var.apps_url != "" ? { AIC_APPS_URL = var.apps_url } : {},
-    var.use_application_inference_profiles ? { "AIC_APP_PROFILE_${upper(each.key)}" = aws_bedrock_inference_profile.role[each.key].arn } : {},
-    var.use_application_inference_profiles && contains(local.consults, each.key) ? { AIC_APP_PROFILE_EXECUTIVE = aws_bedrock_inference_profile.role["executive"].arn } : {},
+    each.key == "worker" && var.apps_url != "" ? { VAIC_APPS_URL = var.apps_url } : {},
+    var.use_application_inference_profiles ? { "VAIC_APP_PROFILE_${upper(each.key)}" = aws_bedrock_inference_profile.role[each.key].arn } : {},
+    var.use_application_inference_profiles && contains(local.consults, each.key) ? { VAIC_APP_PROFILE_EXECUTIVE = aws_bedrock_inference_profile.role["executive"].arn } : {},
     lookup(var.runtime_env, each.key, {}),
   )
   tags = merge(local.tags, { AgentRole = each.key })

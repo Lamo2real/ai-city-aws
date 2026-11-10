@@ -11,7 +11,7 @@ const FILLER_WORD = new RegExp(`(^|[\\s,.;!?…-])${FILLER}(?=$|[\\s,.;!?…-])`
 /** "Vice" heard, "VAIC" spelled out, or the retired name ("AIC", "Ace"): always written VAIC (the owner's rule,
  * 2026-11-09; Transcribe does the same through its vocabulary, this covers Nova Sonic, the browser's recogniser and
  * the iPhone). Ordinary uses of the word stay: "vice president", "vice versa", "vice chair", "Vice City". */
-const ACE =
+const VAIC =
   /\b(?:vaic|v[-. ]a[-. ]i[-. ]c|vais|vice(?!\s+(?:president|presidents|versa|chair|chairman|principal|admiral|captain|squad|city|grip|presidency)\b)|aic|a[-. ]i[-. ]c|ace|a[-. ]c[-. ]e)\b/gi;
 const SOFT = new Set(["well", "so", "like", "maybe", "actually", "basically", "anyway", "and", "but", "i", "mean"]);
 
@@ -23,7 +23,7 @@ function outsideQuotes(text: string, fn: (s: string) => string): string {
 
 function scrub(s: string): string {
   // "we should, um, ship it" reads "we should ship it": a filler set off by commas takes them with it.
-  let t = s.replace(ACE, "VAIC").replace(BETWEEN_COMMAS, " ").replace(FILLER_WORD, "$1");
+  let t = s.replace(VAIC, "VAIC").replace(BETWEEN_COMMAS, " ").replace(FILLER_WORD, "$1");
   // Cut-off starts: "w- well", "I- I'm" (a fragment, a dash, then the word again).
   t = t.replace(/\b(\w{1,3})-\s+(?=\1)/gi, "");
   // Stammered repeats of the same word: "I I", "the the the", "to, to".

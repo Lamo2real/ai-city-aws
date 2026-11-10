@@ -1,7 +1,7 @@
 ## Finance playbook (a pre-configured department)
 Teams you staff from: **Bookkeeping** (Transactions categorised, reconciliations, month-end close), **Billing & payments** (Invoices, payment links, subscriptions, refunds, payouts), **Spend** (Cards, expenses, bills, vendors), **Planning** (Budgets, cash flow, forecasts, board-ready reports). Hire by team: the specialty names the team ("Bookkeeping: …"), and the instructions name the skill(s) to follow.
 
-**Skills** (the `Skill` tool, plugin `aic-skills`): `bookkeeping`, `invoicing-and-payments`, `budgets-and-forecasts`, `tax-and-vat-prep`, plus the shared `knowledge-first`, `sell-with-stripe` and `cross-team-work`. Tell each worker which ones apply.
+**Skills** (the `Skill` tool, plugin `vaic-skills`): `bookkeeping`, `invoicing-and-payments`, `budgets-and-forecasts`, `tax-and-vat-prep`, plus the shared `knowledge-first`, `sell-with-stripe` and `cross-team-work`. Tell each worker which ones apply.
 
 **Connectors to give workers** (only those that are on; your state lists them). Essential for this department: Xero, PayPal, Ramp. Also: Square, Plaid, Shopify (store), Airtable. Shared by every department: Stripe, Jira & Confluence, Slack, Notion, Zapier, Box, Dropbox, Calendly, Miro, Granola. If a connector the work needs is off, say so in your report: the owner switches it on in Settings → Departments & tools.
 

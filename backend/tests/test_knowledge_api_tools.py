@@ -5,15 +5,15 @@ from typing import Any
 
 import pytest
 
-from aic.lambdas.api import ROUTES, handle_http
-from aic.runtime.host import AgentHost, HostOptions
-from aic.runtime.tools import TurnCtx, gate_tools, mcp_name, tools_for
-from aic.shared.hierarchy.actions import CityDeps
-from aic.shared.knowledge.kb import Hit
-from aic.shared.knowledge.model import PART_SIZE_BYTES
-from aic.shared.knowledge.service import KnowledgeAccess
 from knowledge_support import World, ready_item, world
 from test_api import ev, js, make
+from vaic.lambdas.api import ROUTES, handle_http
+from vaic.runtime.host import AgentHost, HostOptions
+from vaic.runtime.tools import TurnCtx, gate_tools, mcp_name, tools_for
+from vaic.shared.hierarchy.actions import CityDeps
+from vaic.shared.knowledge.kb import Hit
+from vaic.shared.knowledge.model import PART_SIZE_BYTES
+from vaic.shared.knowledge.service import KnowledgeAccess
 
 
 def api(w: World | None = None) -> tuple[Any, World]:
@@ -166,15 +166,15 @@ async def test_list_get_scope_change_and_delete() -> None:
 
 
 async def _throttled(uris: list[str]) -> None:
-    from aic.shared.knowledge.kb import ThrottlingException
+    from vaic.shared.knowledge.kb import ThrottlingException
 
     raise ThrottlingException("busy")
 
 
 # ---------- tools ----------
 def city(w: World, kb: bool = True) -> CityDeps:
-    from aic.shared.caps import default_settings
-    from aic.shared.hierarchy.queue import MemoryQueue
+    from vaic.shared.caps import default_settings
+    from vaic.shared.hierarchy.queue import MemoryQueue
 
     async def settings() -> dict[str, Any]:
         return default_settings()
@@ -192,7 +192,7 @@ def city(w: World, kb: bool = True) -> CityDeps:
 
 def ctx(role: str) -> TurnCtx:
     return TurnCtx(
-        agent_id={"ace": "ace", "orchestrator": "orchestrator"}.get(role, f"{role}-1"),
+        agent_id={"vaic": "vaic", "orchestrator": "orchestrator"}.get(role, f"{role}-1"),
         role=role,
         department="Eng",
         ticket_id="t1",
@@ -200,12 +200,12 @@ def ctx(role: str) -> TurnCtx:
     )
 
 
-@pytest.mark.parametrize("role", ["ace", "orchestrator", "manager", "worker"])
-def test_every_role_can_search_and_only_ace_can_add_or_list(role: str) -> None:
+@pytest.mark.parametrize("role", ["vaic", "orchestrator", "manager", "worker"])
+def test_every_role_can_search_and_only_vaic_can_add_or_list(role: str) -> None:
     names = {t.name for t in tools_for(city(world()), ctx(role))}
     assert "search_knowledge" in names
-    assert ("add_to_knowledge" in names) == (role == "ace")
-    assert ("list_knowledge" in names) == (role == "ace")
+    assert ("add_to_knowledge" in names) == (role == "vaic")
+    assert ("list_knowledge" in names) == (role == "vaic")
 
 
 async def test_search_tool_passes_the_gate_and_returns_marked_data() -> None:
@@ -227,8 +227,8 @@ async def test_search_tool_passes_the_gate_and_returns_marked_data() -> None:
 
 
 async def test_the_gate_can_deny_a_knowledge_tool(monkeypatch: pytest.MonkeyPatch) -> None:
-    import aic.runtime.tools as tools_mod
-    from aic.shared.policy import gate as real_gate
+    import vaic.runtime.tools as tools_mod
+    from vaic.shared.policy import gate as real_gate
 
     w = world()
     d = city(w)
@@ -244,10 +244,10 @@ async def test_the_gate_can_deny_a_knowledge_tool(monkeypatch: pytest.MonkeyPatc
     assert (await w.ledger.tool_calls("worker-1"))[0]["decision"] == "deny"
 
 
-async def test_ace_adds_a_link_or_text_and_lists_items() -> None:
+async def test_vaic_adds_a_link_or_text_and_lists_items() -> None:
     w = world()
     d = city(w)
-    tools = {t.name: t for t in gate_tools(d, ctx("ace"), tools_for(d, ctx("ace")))}
+    tools = {t.name: t for t in gate_tools(d, ctx("vaic"), tools_for(d, ctx("vaic")))}
     out = await tools["add_to_knowledge"].handler({"url": "https://example.com/x", "title": "X", "scope": "always"})
     assert out.startswith("Stored as k-") and "(always)" in out
     assert "either a url or a text" in await tools["add_to_knowledge"].handler({"title": "nothing"})
@@ -256,7 +256,7 @@ async def test_ace_adds_a_link_or_text_and_lists_items() -> None:
     listed = json.loads(await tools["list_knowledge"].handler({}))
     assert [i["title"] for i in listed] == ["Door", "X"]
     assert listed[0]["status"] == "uploading" and listed[0]["kind"] == "text"
-    assert len(await w.ledger.tool_calls("ace")) == 5
+    assert len(await w.ledger.tool_calls("vaic")) == 5
 
 
 async def test_tools_say_plainly_when_the_knowledge_base_is_not_set_up() -> None:
@@ -279,21 +279,21 @@ async def test_the_host_adds_always_summaries_after_the_stable_system_prompt() -
     assert await host._owner_knowledge() == ""
 
 
-async def test_a_real_ace_turn_gets_the_block_and_can_search() -> None:
-    from aic.runtime.engine import EngineRequest
+async def test_a_real_vaic_turn_gets_the_block_and_can_search() -> None:
     from city_support import Call, make_city, scripted_engine
+    from vaic.runtime.engine import EngineRequest
 
     w = world()
     a = await ready_item(w, "Owner bio", "always", summary="The owner lives in Stockholm.")
     w.kb.hits = [Hit(a["id"], "Stockholm, Sweden", 0.9, "always")]
     seen: dict[str, str] = {}
 
-    async def ace(req: EngineRequest, call: Call) -> str:
+    async def vaic(req: EngineRequest, call: Call) -> str:
         seen["system"] = req.system
         seen["found"] = await call("search_knowledge", {"query": "where does the owner live"})
         return "Stockholm."
 
-    c = make_city(scripted_engine({"ace": ace}))
+    c = make_city(scripted_engine({"vaic": vaic}))
     c.deps.knowledge = KnowledgeAccess(store=w.store, kb=w.kb)
     await c.owner_says("VAIC, where do I live?")
     await c.run()
@@ -303,12 +303,12 @@ async def test_a_real_ace_turn_gets_the_block_and_can_search() -> None:
     assert "Stockholm, Sweden" in seen["found"]
 
 
-async def test_aic_direct_engine_searches_and_stores_through_the_gate() -> None:
+async def test_vaic_direct_engine_searches_and_stores_through_the_gate() -> None:
     """VAIC answers through ``runtime.direct`` (Bedrock ConverseStream), not the SDK: the knowledge tools must
     reach it too, gated and audited like every other tool."""
     from types import SimpleNamespace
 
-    from aic.runtime.direct import direct_engine
+    from vaic.runtime.direct import direct_engine
 
     def tool_round(tid: str, name: str, args: dict[str, Any]) -> list[dict[str, Any]]:
         start = {"toolUse": {"toolUseId": tid, "name": name}}
@@ -341,7 +341,7 @@ async def test_aic_direct_engine_searches_and_stores_through_the_gate() -> None:
     a = await ready_item(w, "Plan")
     w.kb.hits = [Hit(a["id"], "the plan", 0.9, "relevant")]
     d = city(w)
-    c = ctx("ace")
+    c = ctx("vaic")
     tools = gate_tools(d, c, tools_for(d, c))
     fake = FakeBedrock(
         [
@@ -364,7 +364,7 @@ async def test_aic_direct_engine_searches_and_stores_through_the_gate() -> None:
         tools=tools,
         builtins=[],
         on_text=on_text,
-        ctx=SimpleNamespace(role="ace", agent_id="ace"),
+        ctx=SimpleNamespace(role="vaic", agent_id="vaic"),
         ledger=w.ledger,
         on_needs_approval=None,
         on_activity=on_activity,
@@ -379,5 +379,5 @@ async def test_aic_direct_engine_searches_and_stores_through_the_gate() -> None:
     second = fake.calls[2]["messages"][4]["content"][0]["toolResult"]["content"][0]["text"]
     assert second.startswith("Stored as k-")
     assert steps == ["search_knowledge", "add_to_knowledge"]
-    audit = [(x["tool"], x["decision"]) for x in await w.ledger.tool_calls("ace")]
+    audit = [(x["tool"], x["decision"]) for x in await w.ledger.tool_calls("vaic")]
     assert (mcp_name("search_knowledge"), "allow") in audit and (mcp_name("add_to_knowledge"), "allow") in audit

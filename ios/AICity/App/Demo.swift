@@ -5,8 +5,8 @@ import Foundation
 
 enum Demo {
     @MainActor static func model() -> AppModel {
-        let defaults = UserDefaults(suiteName: "aic.demo")!
-        defaults.removePersistentDomain(forName: "aic.demo")
+        let defaults = UserDefaults(suiteName: "vaic.demo")!
+        defaults.removePersistentDomain(forName: "vaic.demo")
         let http = DemoTransport()
         let store = ConfigStore(defaults: defaults, http: http, bundleHost: "demo.ai-city.invalid")
         let args = ProcessInfo.processInfo.arguments
@@ -15,7 +15,7 @@ enum Demo {
         if args.contains("-demo-cognito") {
             // The real sign-in code (SRP, Keychain, refresh with rotation) against a fake Cognito, so quitting and
             // relaunching can be checked in the simulator. The tokens survive relaunches like real ones.
-            let keychain = KeychainTokenStore(service: "city.ai.aic.demo.tokens")
+            let keychain = KeychainTokenStore(service: "city.ai.vaic.demo.tokens")
             if args.contains("-reset") { keychain.clear(); DemoCognito.reset() }
             makeAuth = { CognitoAuth(config: $0, http: http, store: keychain) }
         } else {
@@ -25,19 +25,19 @@ enum Demo {
         let model = AppModel(configStore: store, hud: HudStore(archive: NoChatArchive()), http: http, makeAuth: makeAuth, connectLive: false)
         http.model = model
         if let i = args.firstIndex(of: "-demo-voice"), i + 1 < args.count { showVoice(args[i + 1], on: model) }
-        UserDefaults.standard.set(true, forKey: "aic.guide.done")
-        // `-away`: as if the owner was last here two days ago, so AIC opens with "While you were away".
+        UserDefaults.standard.set(true, forKey: "vaic.guide.done")
+        // `-away`: as if the owner was last here two days ago, so VAIC opens with "While you were away".
         if args.contains("-away") { UserDefaults.standard.set(nowMs() - 48 * 3_600_000, forKey: Away.seenKey) }
         return model
     }
 
     /// `-demo-voice you` holds the screen as if the owner were talking (a level that rises and falls);
-    /// `-demo-voice aic` sends one spoken-style message, so the made-up reply is thought about and then read out
+    /// `-demo-voice vaic` sends one spoken-style message, so the made-up reply is thought about and then read out
     /// by the system voice with its volume at zero. Both show the aurora without a microphone.
     @MainActor private static func showVoice(_ who: String, on model: AppModel) {
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(2.5))
-            if who == "aic" {
+            if who == "vaic" {
                 model.voice.volume = 0
                 await model.send("What's the status of the city?", byVoice: true)
             } else {
@@ -64,8 +64,8 @@ enum Demo {
     static var city: JSONValue {
         [
             "agents": [
-                ["id": "ace", "kind": "core", "role": "VAIC", "department": nil, "model": "haiku-5-5", "parent": nil, "state": "active"],
-                ["id": "orchestrator", "kind": "core", "role": "Orchestrator", "department": nil, "model": "fable-5-2", "parent": "ace", "state": "active"],
+                ["id": "vaic", "kind": "core", "role": "VAIC", "department": nil, "model": "haiku-5-5", "parent": nil, "state": "active"],
+                ["id": "orchestrator", "kind": "core", "role": "Orchestrator", "department": nil, "model": "fable-5-2", "parent": "vaic", "state": "active"],
                 ["id": "mgr-app", "kind": "manager", "role": "App manager", "department": "App", "model": "fable-5-2", "parent": "orchestrator", "state": "active"],
                 ["id": "wkr-ios-1", "kind": "worker", "role": "iOS developer", "department": "App", "model": "opus-5-5", "parent": "mgr-app", "state": "active", "worker_state": "working", "total_cost_usd": 1.42],
                 ["id": "wkr-qa-1", "kind": "worker", "role": "QA tester", "department": "App", "model": "opus-5-5", "parent": "mgr-app", "state": "active", "worker_state": "review"],
@@ -141,7 +141,7 @@ enum Demo {
         return [
             "today": s(3.2, 41), "month": s(48.6, 610),
             "by_department": ["App": s(30.1, 400), "Marketing": s(18.5, 210)],
-            "by_role": ["worker": s(31, 380), "manager": s(12, 150), "ace": s(5.6, 80)],
+            "by_role": ["worker": s(31, 380), "manager": s(12, 150), "vaic": s(5.6, 80)],
             "by_model": ["Opus 5.5": s(31, 380), "Fable 5.2": s(12, 150), "Haiku 5.5": s(5.6, 80)],
             "caps": ["daily_global_usd": 10, "monthly_budget_usd": nil, "daily_department_usd": nil],
             "cost_explorer_url": "https://console.aws.amazon.com/costmanagement/home#/cost-explorer",
@@ -231,25 +231,25 @@ final class DemoTransport: HTTPTransport, @unchecked Sendable {
     @MainActor private func streamReply() async {
         guard let hud = model?.hud else { return }
         try? await Task.sleep(for: .milliseconds(700))
-        hud.event(["type": "activity", "id": "ace", "activity": "reading", "detail": "mcp__city__get_status"])
+        hud.event(["type": "activity", "id": "vaic", "activity": "reading", "detail": "mcp__city__get_status"])
         try? await Task.sleep(for: .milliseconds(900))
         var sent = ""
         for word in Demo.reply.split(separator: " ", omittingEmptySubsequences: false) {
             let piece = (sent.isEmpty ? "" : " ") + word
             sent += piece
-            hud.event(["type": "ace.reply", "conversation": "main", "text": .string(piece), "done": false])
+            hud.event(["type": "vaic.reply", "conversation": "main", "text": .string(piece), "done": false])
             try? await Task.sleep(for: .milliseconds(40))
         }
-        hud.event(["type": "ace.reply", "conversation": "main", "text": .string(Demo.reply), "done": true])
+        hud.event(["type": "vaic.reply", "conversation": "main", "text": .string(Demo.reply), "done": true])
     }
 }
 
 /// A fake Cognito for `-demo-cognito`: accepts any password, the code 123456, issues ID tokens that last
 /// 2 minutes (so a relaunch after a minute or more goes through a refresh) and rotates the refresh token on every
-/// refresh, refusing an old one like Cognito does. Its state lives in UserDefaults "aic.demo.cognito".
+/// refresh, refusing an old one like Cognito does. Its state lives in UserDefaults "vaic.demo.cognito".
 enum DemoCognito {
-    static let defaults = UserDefaults(suiteName: "aic.demo.cognito")!
-    static func reset() { defaults.removePersistentDomain(forName: "aic.demo.cognito") }
+    static let defaults = UserDefaults(suiteName: "vaic.demo.cognito")!
+    static func reset() { defaults.removePersistentDomain(forName: "vaic.demo.cognito") }
 
     static func answer(_ request: URLRequest) throws -> (Data, Int) {
         let target = (request.value(forHTTPHeaderField: "X-Amz-Target") ?? "").replacingOccurrences(of: "AWSCognitoIdentityProviderService.", with: "")

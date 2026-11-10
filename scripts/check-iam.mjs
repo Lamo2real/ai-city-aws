@@ -8,7 +8,7 @@
 // writes logs (and pulls its image), only the bridge and the connectors Lambda read connector secrets, only
 // the gateway role invokes the bridge, and the mail read path is never given to the worker.
 // knowledge base's roles (infra/modules/knowledge): no IAM beyond passing the MediaConvert role to
-// MediaConvert, Bedrock only on Titan (KB role) or Haiku (knowledge Lambda), and only AIC may add knowledge.
+// MediaConvert, Bedrock only on Titan (KB role) or Haiku (knowledge Lambda), and only VAIC may add knowledge.
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,7 +21,7 @@ const ACCOUNT = "111122223333";
 const REGION = "eu-north-1";
 const profile = (m) => `arn:aws:bedrock:${REGION}:${ACCOUNT}:inference-profile/global.${models.models[m].modelId}`;
 const fm = (m) => `arn:aws:bedrock:*::foundation-model/${models.models[m].modelId}`;
-const app = (r) => `arn:aws:bedrock:${REGION}:${ACCOUNT}:application-inference-profile/aic-${r}`;
+const app = (r) => `arn:aws:bedrock:${REGION}:${ACCOUNT}:application-inference-profile/vaic-${r}`;
 const roleModels = (r) => [models.roles[r].model, models.roles[r].fallback].filter(Boolean);
 
 export function render(file, vars) {
@@ -38,29 +38,29 @@ export function rolePolicies(role) {
   const common = render("common.json.tftpl", {
     region: REGION,
     account_id: ACCOUNT,
-    ecr_repo_arn: `arn:aws:ecr:${REGION}:${ACCOUNT}:repository/aic-prod-agent-runtime`,
-    memory_arn: `arn:aws:bedrock-agentcore:${REGION}:${ACCOUNT}:memory/aic_prod_${role}_memory-abc`,
+    ecr_repo_arn: `arn:aws:ecr:${REGION}:${ACCOUNT}:repository/vaic-prod-agent-runtime`,
+    memory_arn: `arn:aws:bedrock-agentcore:${REGION}:${ACCOUNT}:memory/vaic_prod_${role}_memory-abc`,
     model_arns: JSON.stringify([app(role), ...roleModels(role).map(profile), ...roleModels(role).map(fm)]),
     profile_arns: JSON.stringify([app(role), ...roleModels(role).map(profile)]),
     kms_key_arn: `arn:aws:kms:${REGION}:${ACCOUNT}:key/k`,
-    bus_arn: `arn:aws:events:${REGION}:${ACCOUNT}:event-bus/aic-prod`,
+    bus_arn: `arn:aws:events:${REGION}:${ACCOUNT}:event-bus/vaic-prod`,
   });
-  const ledger = `arn:aws:dynamodb:${REGION}:${ACCOUNT}:table/aic-prod-ledger`;
-  const queues = ["ace", "orchestrator", "manager", "worker"].map(
-    (q) => `arn:aws:sqs:${REGION}:${ACCOUNT}:aic-prod-${q}`,
+  const ledger = `arn:aws:dynamodb:${REGION}:${ACCOUNT}:table/vaic-prod-ledger`;
+  const queues = ["vaic", "orchestrator", "manager", "worker"].map(
+    (q) => `arn:aws:sqs:${REGION}:${ACCOUNT}:vaic-prod-${q}`,
   );
   const kb = `arn:aws:bedrock:${REGION}:${ACCOUNT}:knowledge-base/KB1`;
-  const ktable = `arn:aws:dynamodb:${REGION}:${ACCOUNT}:table/aic-prod-knowledge`;
+  const ktable = `arn:aws:dynamodb:${REGION}:${ACCOUNT}:table/vaic-prod-knowledge`;
   const graph = `arn:aws:neptune-graph:${REGION}:${ACCOUNT}:graph/g-abc`;
   const docs = [
     common,
     render("knowledge.json.tftpl", { knowledge_base_arn: kb, knowledge_table_arn: ktable, knowledge_graph_arn: graph }),
   ];
-  if (role === "ace")
+  if (role === "vaic")
     docs.push(
-      render("knowledge-aic.json.tftpl", {
+      render("knowledge-vaic.json.tftpl", {
         knowledge_table_arn: ktable,
-        knowledge_bucket_arn: "arn:aws:s3:::aic-prod-knowledge",
+        knowledge_bucket_arn: "arn:aws:s3:::vaic-prod-knowledge",
       }),
     );
   if (role === "worker") {
@@ -69,21 +69,21 @@ export function rolePolicies(role) {
         region: REGION,
         ledger_arn: ledger,
         manager_queue_arn: queues[2],
-        workspace_role_arn: `arn:aws:iam::${ACCOUNT}:role/aic-prod-worker-workspace`,
+        workspace_role_arn: `arn:aws:iam::${ACCOUNT}:role/vaic-prod-worker-workspace`,
       }),
     );
   } else {
     docs.push(render("coordinator.json.tftpl", { ledger_arn: ledger, queue_arns: JSON.stringify(queues) }));
     if (role === "manager")
       docs.push(
-        render("factory.json.tftpl", { factory_arn: `arn:aws:lambda:${REGION}:${ACCOUNT}:function:aic-prod-factory` }),
+        render("factory.json.tftpl", { factory_arn: `arn:aws:lambda:${REGION}:${ACCOUNT}:function:vaic-prod-factory` }),
       );
   }
   return docs.flatMap((d) => d.Statement);
 }
 export const workspacePolicy = () =>
   render("workspace.json.tftpl", {
-    bucket_arn: "arn:aws:s3:::aic-prod-workspaces",
+    bucket_arn: "arn:aws:s3:::vaic-prod-workspaces",
     kms_key_arn: "arn:aws:kms:x:1:key/k",
   }).Statement;
 
@@ -120,7 +120,7 @@ export function checkWorker() {
       if (CREATES.test(a) && !DATA_PLANE.has(a)) problems.push(`worker has resource-changing action ${a}`);
       if (
         a === "secretsmanager:GetSecretValue" &&
-        list(s.Resource).some((r) => r.includes("*") || !r.includes(":secret:aic/prod/github"))
+        list(s.Resource).some((r) => r.includes("*") || !r.includes(":secret:vaic/prod/github"))
       )
         problems.push("worker can read secrets beyond the GitHub credential");
       if (/^bedrock:Invoke/.test(a)) {
@@ -278,7 +278,7 @@ export function checkInline({
       const res = resolveLocals(text, s.rest);
       const readsConnectorSecrets =
         s.actions.includes("secretsmanager:GetSecretValue") &&
-        /aic\/prod\/connectors|!default\/apikey\/aic-conn/.test(res);
+        /vaic\/prod\/connectors|!default\/apikey\/vaic-conn/.test(res);
       if (readsConnectorSecrets && !(m === "connectors" && allowed.some((r) => inRange(s, r))))
         problems.push(`${m}: a statement outside the bridge reads connector secrets`);
       const invokesBridge = s.actions.includes("lambda:InvokeFunction") && /connector-bridge|bridge_arn/.test(res);
@@ -314,7 +314,7 @@ export function checkInline({
         problems.push(`worker has Identity credential action ${a}`);
       else if (
         /GetWorkloadAccessToken/.test(a) &&
-        list(s.Resource).some((r) => /workload-identity\/(\*|aic-prod)/.test(r))
+        list(s.Resource).some((r) => /workload-identity\/(\*|vaic-prod)/.test(r))
       )
         problems.push("worker may mint workload tokens for the connectors or mail identities");
   return problems;
@@ -387,8 +387,8 @@ export function checkKnowledge({ statements = knowledgeStatements(), boundary, t
   if (!deployer) problems.push("knowledge: no data-access rule for the deploy role");
   if (/Document|DeleteIndex|\*/.test(deployer))
     problems.push(`the deploy role may do more than manage the index: ${deployer}`);
-  // Every runtime may search; only AIC (ace) may add items or files.
-  for (const role of ["ace", "orchestrator", "manager", "worker"]) {
+  // Every runtime may search; only VAIC (vaic) may add items or files.
+  for (const role of ["vaic", "orchestrator", "manager", "worker"]) {
     const stmts = rolePolicies(role);
     if (!stmts.some((s) => list(s.Action).includes("bedrock:Retrieve")))
       problems.push(`${role} cannot search knowledge`);
@@ -396,12 +396,12 @@ export function checkKnowledge({ statements = knowledgeStatements(), boundary, t
       problems.push(`${role} can change the knowledge graph`);
     const adds = stmts.filter(
       (s) =>
-        list(s.Resource).some((r) => /aic-prod-knowledge/.test(r)) &&
+        list(s.Resource).some((r) => /vaic-prod-knowledge/.test(r)) &&
         list(s.Action).some((a) => /^(dynamodb:(Put|Update|Delete|BatchWrite)|s3:(Put|Delete))/.test(a)),
     );
-    if (role !== "ace" && adds.length) problems.push(`${role} can write to the knowledge base`);
-    if (role === "ace" && !adds.every((s) => list(s.Resource).every((r) => /raw\/\*$/.test(r)) || s.Condition))
-      problems.push("AIC's knowledge writes are not limited to raw/ files and ITEM# records");
+    if (role !== "vaic" && adds.length) problems.push(`${role} can write to the knowledge base`);
+    if (role === "vaic" && !adds.every((s) => list(s.Resource).every((r) => /raw\/\*$/.test(r)) || s.Condition))
+      problems.push("VAIC's knowledge writes are not limited to raw/ files and ITEM# records");
   }
   return problems;
 }
@@ -454,7 +454,7 @@ export function checkFiles({ statements = filesStatements(), text } = {}) {
       if (s.policy === "workspace" && /^s3:Delete/.test(a)) problems.push(`${where}: hires may not delete files`);
       if (s.policy === "workspace" && a === "s3:GetObject" && !s.resource.endsWith('/files/*"]'))
         problems.push(`${where}: hires read only files/`);
-      if (s.policy === "aic" && a !== "s3:GetObject") problems.push(`${where}: VAIC only reads files to show them`);
+      if (s.policy === "vaic" && a !== "s3:GetObject") problems.push(`${where}: VAIC only reads files to show them`);
       if (s.policy === "mediaconvert" && /^s3:/.test(a) && !/\/(files|work)\/\*/.test(s.resource))
         problems.push(`${where}: MediaConvert may only read files/ and write work/`);
     }

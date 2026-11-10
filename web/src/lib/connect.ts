@@ -3,10 +3,10 @@
 // Contracts: docs/CONNECTORS_SKILLS.md (§1.7, §2.3, §2.4, §3) and docs/MAIL_CALENDAR.md (§4, §7).
 import { api } from "./api.ts";
 
-export const ROLES = ["ace", "orchestrator", "manager", "worker"] as const;
+export const ROLES = ["vaic", "orchestrator", "manager", "worker"] as const;
 export type Role = (typeof ROLES)[number];
 export const ROLE_LABEL: Record<Role, string> = {
-  ace: "VAIC",
+  vaic: "VAIC",
   orchestrator: "Orchestrator",
   manager: "Managers",
   worker: "Workers",

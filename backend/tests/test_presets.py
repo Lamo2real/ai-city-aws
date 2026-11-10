@@ -3,11 +3,13 @@
 from pathlib import Path
 from typing import Any
 
-from aic.lambdas.api import ROUTES, handle_http
-from aic.runtime.prompts import department_template
-from aic.runtime.skills import SkillStore
-from aic.runtime.tools import TurnCtx
-from aic.shared.presets import (
+from test_api import ev, js, make
+from test_apps import city_deps, tool
+from vaic.lambdas.api import ROUTES, handle_http
+from vaic.runtime.prompts import department_template
+from vaic.runtime.skills import SkillStore
+from vaic.runtime.tools import TurnCtx
+from vaic.shared.presets import (
     catalog,
     ensure_presets,
     orchestrator_note,
@@ -16,10 +18,8 @@ from aic.shared.presets import (
     public_presets,
     shared,
 )
-from aic.shared.skills_bundled import bundled_skill, department_skills
-from aic.shared.table import MemoryTable
-from test_api import ev, js, make
-from test_apps import city_deps, tool
+from vaic.shared.skills_bundled import bundled_skill, department_skills
+from vaic.shared.table import MemoryTable
 
 ORCH = TurnCtx(agent_id="orchestrator", role="orchestrator", department=None, ticket_id="t-task", task_id="t-task")
 
@@ -123,7 +123,7 @@ async def test_the_presets_route_lists_departments_teams_skills_and_connectors()
 
 async def test_work_sent_to_an_alias_reaches_the_preset() -> None:
     d = city_deps()
-    await d.ledger.create_ticket({"id": "t-task", "goal": "an API", "from": "ace", "to": "orchestrator",
+    await d.ledger.create_ticket({"id": "t-task", "goal": "an API", "from": "vaic", "to": "orchestrator",
                                   "department": None, "parent_id": None})  # fmt: skip
     await tool(d, ORCH, "create_department")({"name": "Application", "mission": "Build the owner's software."})
     out = await tool(d, ORCH, "assign_to_department")(
@@ -152,7 +152,7 @@ async def test_a_preset_gets_its_manager_with_its_first_goal_and_own_departments
     d = city_deps()
     await ensure_presets(d.ledger)
     assert await d.ledger.get_agent("mgr-marketing") is None
-    await d.ledger.create_ticket({"id": "t-task", "goal": "a launch", "from": "ace", "to": "orchestrator",
+    await d.ledger.create_ticket({"id": "t-task", "goal": "a launch", "from": "vaic", "to": "orchestrator",
                                   "department": None, "parent_id": None})  # fmt: skip
     await tool(d, ORCH, "assign_to_department")({"department": "Marketing", "goal": "a launch", "acceptance": "ready"})
     mgr = await d.ledger.get_agent("mgr-marketing")
@@ -171,7 +171,7 @@ def test_the_catalog_says_how_each_service_connects_and_where_to_sign_up() -> No
     """Decision 134: sign-up links are https on the service's own site (checked live by
     scripts/check-signup-links.mjs); 'own_app' marks sign-ins without self-registration; 'not_offered' points only
     to services in the catalog; a '{name}' in a link comes with its question."""
-    from aic.shared.presets import presets_config
+    from vaic.shared.presets import presets_config
 
     cat = catalog()
     for id, c in cat.items():

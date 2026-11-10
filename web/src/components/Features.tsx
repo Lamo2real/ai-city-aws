@@ -101,11 +101,11 @@ function FeatureGallery({ go }: { go: (v: string) => void }) {
   };
   const addFeature = () => {
     try {
-      localStorage.setItem("aic.draft", ADD_DRAFT);
+      localStorage.setItem("vaic.draft", ADD_DRAFT);
     } catch {
       /* VAIC still opens */
     }
-    go("ace");
+    go("vaic");
   };
   return (
     <section className="screen features" aria-labelledby="ft-title">
@@ -168,7 +168,7 @@ const VIEWS: Array<[View, string]> = [
   ["month", "Month"],
   ["agenda", "Agenda"],
 ];
-const VIEW_KEY = "aic.calendar.view";
+const VIEW_KEY = "vaic.calendar.view";
 
 function readView(): View {
   try {

@@ -1,5 +1,5 @@
 // The + menu's brains, the Swift port of web/src/lib/attach.ts (docs/PRODUCT.md, "The + menu"): slash
-// commands that become the plain sentences AIC already understands, the files picked from a folder, and the
+// commands that become the plain sentences VAIC already understands, the files picked from a folder, and the
 // line under a message that names what was attached. Pure functions, tested in AICityTests/AttachTests.swift;
 // the menu itself is UI/PlusMenu.swift and the uploads are Core/Upload.swift.
 import Foundation
@@ -25,7 +25,7 @@ struct Skill: Equatable, Sendable, Identifiable {
     }
 }
 
-/// An outside service AIC can use.
+/// An outside service VAIC can use.
 struct Connector: Equatable, Sendable, Identifiable {
     var id: String
     var label: String?
@@ -70,7 +70,7 @@ struct SlashCommand: Equatable, Sendable, Identifiable {
     var name: String
     /// What it does, in the menu.
     var hint: String
-    /// What AIC is sent; `$1` is the words typed after the command. Nil: handled by the app itself (/clear).
+    /// What VAIC is sent; `$1` is the words typed after the command. Nil: handled by the app itself (/clear).
     var says: String?
     /// Named when the command needs words after it ("service" for /connect).
     var arg: String?
@@ -199,10 +199,10 @@ enum Attach {
                           skipped: max(0, shown.count - maxFolderFiles))
     }
 
-    /// A message may go once every attachment has left the iPhone (processing can finish while AIC reads).
+    /// A message may go once every attachment has left the iPhone (processing can finish while VAIC reads).
     static func sendable(_ items: [KnowledgeItem]) -> Bool { items.allSatisfy { $0.status != .uploading } }
 
-    /// The line under a message that names what was attached, so AIC knows where to look.
+    /// The line under a message that names what was attached, so VAIC knows where to look.
     static func attachedLine(_ items: [KnowledgeItem]) -> String {
         let parts = items.map { i -> String in
             let state: String

@@ -3,13 +3,13 @@ from typing import Any
 
 import pytest
 
-from aic.shared.caps import DEFAULT_SETTINGS, SpendCapReached, check_caps, settings_with, validate_caps
-from aic.shared.cost import Usage, cache_savings_usd, estimate_usd
-from aic.shared.events import MemoryBus
-from aic.shared.ledger import TURN_KINDS, Ledger
-from aic.shared.models import resolve_role
-from aic.shared.table import MemoryTable, UpdateOptions
-from aic.shared.turn import (
+from vaic.shared.caps import DEFAULT_SETTINGS, SpendCapReached, check_caps, settings_with, validate_caps
+from vaic.shared.cost import Usage, cache_savings_usd, estimate_usd
+from vaic.shared.events import MemoryBus
+from vaic.shared.ledger import TURN_KINDS, Ledger
+from vaic.shared.models import resolve_role
+from vaic.shared.table import MemoryTable, UpdateOptions
+from vaic.shared.turn import (
     BackoffOptions,
     GateDeps,
     GatedTurn,

@@ -3,7 +3,8 @@ pipeline (the owner, 2026-11-09)."""
 
 import pytest
 
-from aic.shared.knowledge.builtin import (
+from knowledge_support import world
+from vaic.shared.knowledge.builtin import (
     GUIDE_ID,
     KEY,
     LEGACY_TITLE,
@@ -11,8 +12,7 @@ from aic.shared.knowledge.builtin import (
     remove_legacy_copies,
     render_pdf,
 )
-from aic.shared.knowledge.service import KnowledgeError
-from knowledge_support import world
+from vaic.shared.knowledge.service import KnowledgeError
 
 
 def test_the_guide_renders_as_a_pdf() -> None:

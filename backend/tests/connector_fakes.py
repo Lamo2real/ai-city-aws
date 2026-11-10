@@ -7,7 +7,7 @@ import json
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from aic.shared.mcp_http import HttpResponse
+from vaic.shared.mcp_http import HttpResponse
 
 PUBLIC_IP = "93.184.216.34"
 

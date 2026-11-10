@@ -69,7 +69,7 @@ variable "mail_providers" {
     google    = { enabled = false, client_id = "" }
     microsoft = { enabled = false, client_id = "", tenant_id = "common" }
   }
-  description = "Google and Microsoft OAuth clients for mail and calendar (client ids are not secret; the client secrets go into aic/prod/oauth-google / aic/prod/oauth-microsoft). IMAP needs no flag."
+  description = "Google and Microsoft OAuth clients for mail and calendar (client ids are not secret; the client secrets go into vaic/prod/oauth-google / vaic/prod/oauth-microsoft). IMAP needs no flag."
   validation {
     condition     = alltrue([for p in values(var.mail_providers) : !p.enabled || length(p.client_id) > 0])
     error_message = "An enabled mail provider needs its client_id."
@@ -77,7 +77,7 @@ variable "mail_providers" {
 }
 
 variable "polly_voice" {
-  description = "The default Polly generative voice for AIC (the owner can pick another per device in Settings)."
+  description = "The default Polly generative voice for VAIC (the owner can pick another per device in Settings)."
   type        = string
   default     = "Ruth"
 }
@@ -97,11 +97,11 @@ variable "polly_region" {
 variable "apns_enabled" {
   type        = bool
   default     = false
-  description = "Create the APNs platform applications for iPhone notifications from the key the owner pasted into aic/prod/apns (GitHub variable AIC_APNS_ENABLED)."
+  description = "Create the APNs platform applications for iPhone notifications from the key the owner pasted into vaic/prod/apns (GitHub variable VAIC_APNS_ENABLED)."
 }
 
 variable "queues_enabled" {
   type        = bool
   default     = true
-  description = "The owner's switch for the four queue triggers (GitHub variable AIC_QUEUES_ENABLED). false = the city is off."
+  description = "The owner's switch for the four queue triggers (GitHub variable VAIC_QUEUES_ENABLED). false = the city is off."
 }

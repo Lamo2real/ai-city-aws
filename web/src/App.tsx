@@ -13,7 +13,7 @@ import { visitOf } from "./lib/visit.ts";
 import { forwardEvent } from "./lib/bridge.ts";
 import { PinnedApps } from "./components/Apps.tsx";
 import { ProjectPage, ProjectsScreen } from "./components/Projects.tsx";
-import { AceScreen } from "./components/AceScreen.tsx";
+import { VaicScreen } from "./components/VaicScreen.tsx";
 import { CityView } from "./components/CityView.tsx";
 import { FeaturesScreen } from "./components/Features.tsx";
 import { FirstRun } from "./components/FirstRun.tsx";
@@ -31,10 +31,10 @@ import { Eyes } from "./components/Eyes.tsx";
 import { SignIn } from "./components/SignIn.tsx";
 import { Wordmark } from "./components/Wordmark.tsx";
 
-const VIEWS = ["ace", "city", "tickets", "apps", "files", "knowledge", "skills", "costs", "settings"] as const;
+const VIEWS = ["vaic", "city", "tickets", "apps", "files", "knowledge", "skills", "costs", "settings"] as const;
 type View = (typeof VIEWS)[number];
 const LABEL: Record<View, string> = {
-  ace: "Chat",
+  vaic: "Chat",
   city: "City",
   tickets: "Work",
   apps: "Projects",
@@ -44,7 +44,7 @@ const LABEL: Record<View, string> = {
   skills: "Skills",
   settings: "Settings",
 };
-const GUIDE = "aic.guide.done";
+const GUIDE = "vaic.guide.done";
 
 type Boot = "starting" | "signed_out" | "ready" | "failed";
 
@@ -190,7 +190,7 @@ export function App() {
         <PinnedApps />
       </header>
       <main id="main" tabIndex={-1}>
-        {view === "ace" ? <AceScreen go={go} /> : null}
+        {view === "vaic" ? <VaicScreen go={go} /> : null}
         {view === "city" && (!slug || visit) ? <CityView go={go} visit={visit} /> : null}
         {view === "city" && slug && !visit ? <FeaturesScreen page={slug} go={go} /> : null}
         {view === "tickets" ? <Tickets page={slug} /> : null}
@@ -204,9 +204,9 @@ export function App() {
       </main>
       {guide ? <FirstRun onDone={finishGuide} /> : null}
       <Toaster />
-      {view !== "ace" && !(view === "city" && (!slug || visit)) && !(view === "apps" && slug) ? (
+      {view !== "vaic" && !(view === "city" && (!slug || visit)) && !(view === "apps" && slug) ? (
         <div className="fab">
-          <Button variant="quiet" onClick={() => go("ace")} label="Talk to VAIC">
+          <Button variant="quiet" onClick={() => go("vaic")} label="Talk to VAIC">
             Talk to VAIC
           </Button>
         </div>

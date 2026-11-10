@@ -103,7 +103,7 @@ describe("coming back after signing up and in", () => {
     });
     await refreshFollowed();
     expect(store.get().cards).toMatchObject([{ kind: "signin", status: "connected" }]);
-    expect(store.get().chat.map((l) => [l.who, l.text])).toEqual([["ace", "Higgsfield is connected, Sir."]]);
+    expect(store.get().chat.map((l) => [l.who, l.text])).toEqual([["vaic", "Higgsfield is connected, Sir."]]);
     expect(store.following().connectors).toEqual([]);
     store.event({ type: "connector.updated", id: "higgsfield", label: "Higgsfield", status: "ready" });
     expect(store.get().chat).toHaveLength(1); // once
@@ -165,7 +165,7 @@ describe("after the owner approves a connector", () => {
     });
     store.dropCard("ap:ap-1"); // what the card does when the owner taps Connect
     const full =
-      "AgentCore Identity refused the sign-in setup. AccessDeniedException: User: arn:aws:sts::123456789012:assumed-role/aic-prod-fn-connectors/x is not authorized to perform: bedrock-agentcore:CreateTokenVault on resource: arn:aws:bedrock-agentcore:eu-north-1:123456789012:token-vault/default";
+      "AgentCore Identity refused the sign-in setup. AccessDeniedException: User: arn:aws:sts::123456789012:assumed-role/vaic-prod-fn-connectors/x is not authorized to perform: bedrock-agentcore:CreateTokenVault on resource: arn:aws:bedrock-agentcore:eu-north-1:123456789012:token-vault/default";
     store.event({ type: "connector.updated", id: "canva", label: "Canva", status: "provisioning" });
     store.event({ type: "connector.updated", id: "canva", label: "Canva", status: "error", error: full });
     render(<ChatCards cards={store.get().cards} />);
@@ -182,7 +182,7 @@ describe("where a connect card sits in the conversation (decision 164)", () => {
   const line = (id: string, who: string) => ({ id, who });
   const card = (id: string, after?: string) => ({ kind: "done" as const, id, targetId: id, title: id, after });
   it("after VAIC's reply in the turn it came in, before the owner's next message", () => {
-    const chat = [line("o1", "owner"), line("a1", "ace"), line("o2", "owner"), line("a2", "ace")];
+    const chat = [line("o1", "owner"), line("a1", "vaic"), line("o2", "owner"), line("a2", "vaic")];
     const { before, end } = placeCards(chat, [card("x", "o1"), card("y", "a2"), card("z", ""), card("w")]);
     expect(before.get(2)?.map((c) => c.id)).toEqual(["x"]);
     expect(before.get(0)?.map((c) => c.id)).toEqual(["z"]);

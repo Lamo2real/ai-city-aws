@@ -198,7 +198,7 @@ resource "aws_cognito_identity_pool_roles_attachment" "voice" {
 locals {
   vocabulary_table = join("\n", concat(["Phrase\tSoundsLike\tIPA\tDisplayAs"], [
     "V.A.I.C.\t\t\tVAIC",
-    "Ace\t\t\tVAIC",
+    "Vaic\t\t\tVAIC",
     "A.C.E.\t\t\tVAIC",
     "A.I.C.\t\t\tVAIC",
     "AI-City\t\t\tAI City",

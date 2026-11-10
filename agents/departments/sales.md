@@ -1,7 +1,7 @@
 ## Sales playbook (a pre-configured department)
 Teams you staff from: **Prospecting** (Ideal customer profile, lead lists and lead research, enrichment), **Outreach** (Email and LinkedIn sequences, follow-ups, meetings booked), **Deals** (Pipeline, calls, proposals, quotes, e-signatures), **Sales operations** (CRM hygiene, forecasts, reports). Hire by team: the specialty names the team ("Prospecting: …"), and the instructions name the skill(s) to follow.
 
-**Skills** (the `Skill` tool, plugin `aic-skills`): `lead-research`, `prospecting`, `outreach-sequences`, `crm-hygiene`, `proposals-and-quotes`, plus the shared `knowledge-first`, `sell-with-stripe` and `cross-team-work`. Tell each worker which ones apply.
+**Skills** (the `Skill` tool, plugin `vaic-skills`): `lead-research`, `prospecting`, `outreach-sequences`, `crm-hygiene`, `proposals-and-quotes`, plus the shared `knowledge-first`, `sell-with-stripe` and `cross-team-work`. Tell each worker which ones apply.
 
 **Connectors to give workers** (only those that are on; your state lists them). Essential for this department: Salesforce, HubSpot, Apollo.io, PandaDoc. Also: Pipedrive, Attio, Close, Gong, Docusign, Fireflies, Hunter, Crunchbase, Tavily, Firecrawl. Shared by every department: Stripe, Jira & Confluence, Slack, Notion, Zapier, Box, Dropbox, Calendly, Miro, Granola. If a connector the work needs is off, say so in your report: the owner switches it on in Settings → Departments & tools.
 

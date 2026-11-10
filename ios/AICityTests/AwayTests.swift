@@ -50,7 +50,7 @@ final class AwayTests: XCTestCase {
         let d = UserDefaults.standard
         let before = d.object(forKey: Away.seenKey)
         defer { d.set(before, forKey: Away.seenKey) }
-        let model = AppModel(configStore: ConfigStore(defaults: UserDefaults(suiteName: "aic.test.away")!, bundleHost: "x.invalid"),
+        let model = AppModel(configStore: ConfigStore(defaults: UserDefaults(suiteName: "vaic.test.away")!, bundleHost: "x.invalid"),
                              hud: HudStore(archive: NoChatArchive()), http: URLSessionTransport(), makeAuth: { _ in FakeAuthForAway() }, connectLive: false)
         let now = 1_000_000_000_000.0
         d.set(now - 3_600_000, forKey: Away.seenKey)

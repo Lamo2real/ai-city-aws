@@ -10,18 +10,18 @@ import json
 import re
 from typing import Any, cast
 
-from aic.runtime.engine import EngineRequest
-from aic.shared.hierarchy.actions import instruct_agent
-from aic.shared.hierarchy.dispatch import Dispatcher, DispatcherDeps, resume_stale
-from aic.shared.hierarchy.queue import WorkMessage
-from aic.shared.ledger import ALL_STATUSES
 from city_support import Call, City, Script, make_city, scripted_engine, session_id_for
+from vaic.runtime.engine import EngineRequest
+from vaic.shared.hierarchy.actions import instruct_agent
+from vaic.shared.hierarchy.dispatch import Dispatcher, DispatcherDeps, resume_stale
+from vaic.shared.hierarchy.queue import WorkMessage
+from vaic.shared.ledger import ALL_STATUSES
 
 GOAL = "Add a power(a, b) function to add.js with a matching test"
 PARTS = ["implement power", "write the test", "update the docs"]
 
 
-async def ace(req: EngineRequest, call: Call) -> str:
+async def vaic(req: EngineRequest, call: Call) -> str:
     if "(task) from owner" in req.turn.prompt:
         await call("delegate_to_orchestrator", {"goal": GOAL, "owner_words": GOAL, "confirm": True})
         return "On it — the team is starting."
@@ -29,7 +29,7 @@ async def ace(req: EngineRequest, call: Call) -> str:
 
 
 async def orchestrator(req: EngineRequest, call: Call) -> str:
-    if "(task) from ace" in req.turn.prompt:
+    if "(task) from vaic" in req.turn.prompt:
         await call("create_department", {"name": "Builders", "mission": "Build and test the owner's software."})
         await call(
             "assign_to_department",
@@ -44,7 +44,7 @@ async def orchestrator(req: EngineRequest, call: Call) -> str:
     if all(r["status"] == "in_review" for r in reports):
         await call("sign_off", {"verdict": "PASS", "reasons": "All acceptance criteria met, tests pass."})
         await call(
-            "report_to_ace",
+            "report_to_vaic",
             {"summary": "power(a, b) added to add.js with a test; three parts reviewed, one fixed after review."},
         )
         return "PASS"
@@ -86,7 +86,7 @@ def make_manager() -> Script:
             await call(
                 "report_to_orchestrator",
                 {
-                    "summary": "power(a, b) implemented, tested (incl. negative exponents) and documented on branch aic/power."
+                    "summary": "power(a, b) implemented, tested (incl. negative exponents) and documented on branch vaic/power."
                 },
             )
         return "Reviewed."
@@ -100,7 +100,7 @@ async def worker(req: EngineRequest, call: Call) -> str:
         "report_to_manager",
         {
             "summary": "Added negative exponent cases; all tests pass." if fixing else "Done.",
-            "artifacts": ["branch aic/power"],
+            "artifacts": ["branch vaic/power"],
             "checks": "npm test: pass",
         },
     )
@@ -109,14 +109,14 @@ async def worker(req: EngineRequest, call: Call) -> str:
 
 async def test_walks_one_prompt_from_the_owner_to_aces_report() -> None:
     city = make_city(
-        scripted_engine({"ace": ace, "orchestrator": orchestrator, "manager": make_manager(), "worker": worker})
+        scripted_engine({"vaic": vaic, "orchestrator": orchestrator, "manager": make_manager(), "worker": worker})
     )
     await city.owner_says(GOAL)
     await city.run()
 
     # Ledger tickets
     every = await city.ledger.list_tickets(ALL_STATUSES)
-    task = next(t for t in every if t["from"] == "ace")
+    task = next(t for t in every if t["from"] == "vaic")
     assert task["status"] == "done"
     assert "power" in task["result"]
     dept = next(t for t in every if t["from"] == "orchestrator")
@@ -146,12 +146,12 @@ async def test_walks_one_prompt_from_the_owner_to_aces_report() -> None:
     assert len(signoffs) == 1 and signoffs[0]["verdict"] == "PASS" and signoffs[0]["ticket_id"] == task["id"]
     assert len(city.bus.of_type("result")) == 1
     assert types.index("signoff.result") < types.index("result")
-    replies = [r for r in city.bus.of_type("ace.reply") if r["done"]]
+    replies = [r for r in city.bus.of_type("vaic.reply") if r["done"]]
     assert replies[-1]["text"].startswith("Done: power")
 
     # Costs recorded for every agent that took a turn
     workers = [a for a in await city.ledger.list_agents() if a["kind"] == "worker"]
-    for id in ["ace", "orchestrator", "mgr-builders", *[w["id"] for w in workers]]:
+    for id in ["vaic", "orchestrator", "mgr-builders", *[w["id"] for w in workers]]:
         turns = await city.ledger.turns_of(id)
         assert turns, id
         assert all(t["usd"] > 0 and t["input"] == 400 and t["cache_read"] == 3000 for t in turns)
@@ -171,12 +171,12 @@ async def test_walks_one_prompt_from_the_owner_to_aces_report() -> None:
 
     # Sessions follow the agreed shapes
     sessions = [i["sessionId"] for i in city.invocations]
-    assert any(s.startswith("ace-owner-c1") for s in sessions)
+    assert any(s.startswith("vaic-owner-c1") for s in sessions)
     assert any(s.startswith(f"orch-{task['id']}") for s in sessions)
     assert any(s.startswith(f"mgr-builders-{task['id']}") for s in sessions)
     assert any(s.startswith("wkr-builders-wkr-builders-") for s in sessions)
     # Everyone but VAIC is handed off as an async job; only VAIC's call waits for its reply (decision 178)
-    assert all(i["async"] == (i["role"] != "ace") for i in city.invocations)
+    assert all(i["async"] == (i["role"] != "vaic") for i in city.invocations)
 
 
 async def test_a_crash_mid_turn_resumes_from_the_ledger_without_duplicate_hires() -> None:
@@ -200,13 +200,15 @@ async def test_a_crash_mid_turn_resumes_from_the_ledger_without_duplicate_hires(
             raise RuntimeError("microVM lost mid-turn")
         return await manager(req, call)
 
-    city = make_city(scripted_engine({"ace": ace, "orchestrator": orchestrator, "manager": crashing, "worker": worker}))
+    city = make_city(
+        scripted_engine({"vaic": vaic, "orchestrator": orchestrator, "manager": crashing, "worker": worker})
+    )
     await city.owner_says(GOAL)
     await city.run()
     assert crashed
     workers = [a for a in await city.ledger.list_agents() if a["kind"] == "worker"]
     assert len(workers) == 3  # the re-run saw one hire in the ledger and added two
-    task = next(t for t in await city.ledger.list_tickets(["done"]) if t["from"] == "ace")
+    task = next(t for t in await city.ledger.list_tickets(["done"]) if t["from"] == "vaic")
     assert "power" in task["result"]
 
 
@@ -348,14 +350,14 @@ async def test_a_turn_for_a_stopped_job_is_finished_so_the_sweep_does_not_send_i
     assert await city.ledger.active_workers() == 0
 
 
-async def test_the_next_ace_turn_sees_the_earlier_exchange_typed_or_spoken() -> None:
+async def test_the_next_vaic_turn_sees_the_earlier_exchange_typed_or_spoken() -> None:
     prompts: list[str] = []
 
-    async def ace_chat(req: EngineRequest, _: Call) -> str:
+    async def vaic_chat(req: EngineRequest, _: Call) -> str:
         prompts.append(req.turn.prompt)
         return "Eighteen." if len(prompts) == 1 else "You asked about 9 + 9."
 
-    city = make_city(scripted_engine({"ace": ace_chat}))
+    city = make_city(scripted_engine({"vaic": vaic_chat}))
     await city.owner_says("yo VAIC, what's 9 + 9?")
     await city.run()
     await city.owner_says("what did I just ask?")
@@ -369,7 +371,7 @@ async def test_agent_instructions_reach_the_right_worker_with_its_manager_copied
         return "working on it"
 
     city = make_city(
-        scripted_engine({"ace": ace, "orchestrator": orchestrator, "manager": make_manager(), "worker": quiet_worker})
+        scripted_engine({"vaic": vaic, "orchestrator": orchestrator, "manager": make_manager(), "worker": quiet_worker})
     )
     await city.owner_says(GOAL)
     await city.run()
@@ -481,11 +483,11 @@ async def test_a_spoken_request_runs_as_a_turn_although_it_comes_with_no_session
     async def says(req: EngineRequest, call: Call) -> str:
         return "Good morning, Sir."
 
-    city = make_city(scripted_engine({"ace": says}))
+    city = make_city(scripted_engine({"vaic": says}))
     spoken = {
         "id": "voice-1",
-        "role": "ace",
-        "agentId": "ace",
+        "role": "vaic",
+        "agentId": "vaic",
         "department": None,
         "ticketId": "conv-main",
         "taskId": "conv-main",

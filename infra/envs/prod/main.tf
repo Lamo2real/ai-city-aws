@@ -12,11 +12,11 @@ terraform {
 }
 
 locals {
-  name  = "aic-prod"
-  roles = ["ace", "orchestrator", "manager", "worker"]
+  name  = "vaic-prod"
+  roles = ["vaic", "orchestrator", "manager", "worker"]
   base_tags = {
     Project     = "ai-city"
-    App         = "aic"
+    App         = "vaic"
     Environment = "prod"
     Owner       = var.owner_email
     ManagedBy   = "terraform"
@@ -145,7 +145,7 @@ module "agents" {
   # The Factory's name is fixed, so the agents module need not wait for the api module (no cycle).
   factory_function_name = "${local.name}-factory"
   factory_function_arn  = "arn:aws:lambda:${var.region}:${data.aws_caller_identity.me.account_id}:function:${local.name}-factory"
-  # AIC runs HUD routes as the owner (decision 143); the API's name is fixed too, so still no cycle.
+  # VAIC runs HUD routes as the owner (decision 143); the API's name is fixed too, so still no cycle.
   api_function_name = "${local.name}-api:live"
   api_function_arn  = "arn:aws:lambda:${var.region}:${data.aws_caller_identity.me.account_id}:function:${local.name}-api:live"
   workspaces_bucket = module.storage.workspaces_bucket
@@ -153,13 +153,13 @@ module "agents" {
   # Connectors, skills and mail are read at turn start, so new ones work without a redeploy.
   runtime_env = {
     for r in local.roles : r => merge(
-      { AIC_GATEWAY_URL = module.connectors.gateway_url, AIC_SKILLS_BUCKET = module.skills.bucket },
-      r == "worker" ? {} : { AIC_MAIL_WORKLOAD = module.mail.workload_name, AIC_MAIL_PROVIDERS = module.mail.providers, AIC_HUD_ORIGIN = module.frontend.url },
+      { VAIC_GATEWAY_URL = module.connectors.gateway_url, VAIC_SKILLS_BUCKET = module.skills.bucket },
+      r == "worker" ? {} : { VAIC_MAIL_WORKLOAD = module.mail.workload_name, VAIC_MAIL_PROVIDERS = module.mail.providers, VAIC_HUD_ORIGIN = module.frontend.url },
       # Files (docs/FILES.md): literal names (the files module needs the agents' role names, so no cycle).
-      contains(["ace", "manager", "worker"], r) ? { FILES_TABLE = "${local.name}-files", FILES_BUCKET = "${local.name}-files" } : {},
+      contains(["vaic", "manager", "worker"], r) ? { FILES_TABLE = "${local.name}-files", FILES_BUCKET = "${local.name}-files" } : {},
     )
   }
-  # The knowledge base: every runtime searches it; AIC (ace) may add to it.
+  # The knowledge base: every runtime searches it; VAIC (vaic) may add to it.
   knowledge_table          = module.knowledge.table
   knowledge_table_arn      = module.knowledge.table_arn
   knowledge_bucket         = module.knowledge.bucket
@@ -198,7 +198,7 @@ module "api" {
   runtime_arns          = module.agents.runtime_arns
   queues_enabled        = var.queues_enabled
   runtime_version       = var.agent_image_tag
-  ace_role_name         = module.agents.role_names["ace"]
+  vaic_role_name        = module.agents.role_names["vaic"]
   utility_invoke_arns   = module.agents.utility_invoke_arns
   utility_profile_arn   = module.agents.utility_profile_arn
   profile_prefix        = var.profile_prefix
@@ -221,16 +221,16 @@ module "api" {
   knowledge_graph_id       = module.knowledge.graph_id
   knowledge_graph_arn      = module.knowledge.graph_arn
   api_env = {
-    AIC_CONNECTORS_FUNCTION = "${local.name}-connectors"
-    AIC_CONNECTORS_WORKLOAD = "${local.name}-connectors"
-    AIC_HUD_ORIGIN          = module.frontend.url
-    AIC_KMS_KEY_ARN         = module.security.kms_key_arn
-    AIC_DEFAULT_TAGS        = jsonencode(local.base_tags) # the code adds Component (connectors or mail)
-    AIC_SKILLS_BUCKET       = "${local.name}-skills"
-    AIC_MAIL_WORKLOAD       = "${local.name}-mail"
-    AIC_MAIL_PROVIDERS      = join(",", [for k, p in var.mail_providers : k if p.enabled])
-    AIC_OPENAI_SECRET       = "aic/prod/openai" # module.voice creates it; a literal here avoids an api ↔ voice cycle
-    AIC_GITHUB_SECRET       = "aic/prod/github" # module.github creates it; a literal here avoids an api ↔ github cycle
+    VAIC_CONNECTORS_FUNCTION = "${local.name}-connectors"
+    VAIC_CONNECTORS_WORKLOAD = "${local.name}-connectors"
+    VAIC_HUD_ORIGIN          = module.frontend.url
+    VAIC_KMS_KEY_ARN         = module.security.kms_key_arn
+    VAIC_DEFAULT_TAGS        = jsonencode(local.base_tags) # the code adds Component (connectors or mail)
+    VAIC_SKILLS_BUCKET       = "${local.name}-skills"
+    VAIC_MAIL_WORKLOAD       = "${local.name}-mail"
+    VAIC_MAIL_PROVIDERS      = join(",", [for k, p in var.mail_providers : k if p.enabled])
+    VAIC_OPENAI_SECRET       = "vaic/prod/openai" # module.voice creates it; a literal here avoids an api ↔ voice cycle
+    VAIC_GITHUB_SECRET       = "vaic/prod/github" # module.github creates it; a literal here avoids an api ↔ github cycle
     # Files (docs/FILES.md): module.files names them so; literals avoid an api ↔ files cycle.
     FILES_TABLE    = "${local.name}-files"
     FILES_BUCKET   = "${local.name}-files"
@@ -238,10 +238,10 @@ module "api" {
     # Previews and thumbnails as CloudFront signed URLs (decision 156); the api alone reads the signing key.
     FILES_CDN_URL        = module.files.cdn_url
     FILES_CDN_KEY_ID     = module.files.cdn_key_id
-    FILES_SIGNING_SECRET = "aic/prod/files-signing-key"
+    FILES_SIGNING_SECRET = "vaic/prod/files-signing-key"
   }
   # Apps' granted connector reads run in the app-bridge Lambda, through the connectors Gateway (docs/APPS.md v2).
-  app_bridge_env = { AIC_GATEWAY_URL = module.connectors.gateway_url }
+  app_bridge_env = { VAIC_GATEWAY_URL = module.connectors.gateway_url }
 
   # The Chief of Staff (decision 124): Fable 5.2, Opus 5.5 behind it.
   chief_of_staff_invoke_arns = module.agents.chief_of_staff_invoke_arns
@@ -306,7 +306,7 @@ module "files" {
   log_retention_days     = var.log_retention_days
 }
 
-# Connectors: any MCP server, added at runtime by asking AIC (docs/CONNECTORS_SKILLS.md). Terraform names none.
+# Connectors: any MCP server, added at runtime by asking VAIC (docs/CONNECTORS_SKILLS.md). Terraform names none.
 module "connectors" {
   source               = "../../modules/connectors"
   name                 = local.name
@@ -358,7 +358,7 @@ module "notifications" {
   notifier_role_name = module.api.role_names["notifier"]
 }
 
-# AIC's voice through OpenAI text-to-speech (docs/VOICE.md): the owner's key as a secret only the api may use.
+# VAIC's voice through OpenAI text-to-speech (docs/VOICE.md): the owner's key as a secret only the api may use.
 module "voice" {
   source        = "../../modules/voice"
   name          = local.name
@@ -402,7 +402,7 @@ module "observability" {
   name             = local.name
   region           = var.region
   dlq_names        = merge(module.bus.dlq_names, { apps = module.api.apps_dlq_name, knowledge-start = module.knowledge.start_dlq_name, files-events = module.files.dlq_name })
-  queue_names      = [for k in ["ace", "orchestrator", "manager", "worker"] : "${local.name}-${k}"]
+  queue_names      = [for k in ["vaic", "orchestrator", "manager", "worker"] : "${local.name}-${k}"]
   function_names   = module.api.function_names
   notify_topic_arn = module.bus.notify_topic_arn
 }

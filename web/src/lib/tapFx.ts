@@ -2,7 +2,7 @@
 // point tapped, like a signal, with a soft click. One switch in Settings → General ("Tap sound and rings", on by
 // default, remembered per device). Reduced motion keeps the click and drops the rings. Nothing here ever blocks a
 // tap: the layer ignores pointers and the listener is passive.
-const KEY = "aic.tapfx";
+const KEY = "vaic.tapfx";
 export const RING_MS = 520;
 export const SECOND_RING_DELAY_MS = 90;
 

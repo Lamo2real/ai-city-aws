@@ -1,4 +1,4 @@
-// Autopilot on the iPhone, like web/src/components/Away.tsx: "While you were away" at the top of AIC's screen
+// Autopilot on the iPhone, like web/src/components/Away.tsx: "While you were away" at the top of VAIC's screen
 // (by itself after more than 12 hours away, and from the clock any time), and More → While I'm away (the Autopilot
 // switch, the standing orders, and the open items from before). Calm: no badges, no counts that nag.
 import SwiftUI

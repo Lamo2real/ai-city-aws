@@ -648,8 +648,8 @@ main {
   flex: 1;
   aspect-ratio: 600 / 324;
   background: var(--eye);
-  -webkit-mask: url("/ace-eye.png") center / contain no-repeat;
-  mask: url("/ace-eye.png") center / contain no-repeat;
+  -webkit-mask: url("/vaic-eye.png") center / contain no-repeat;
+  mask: url("/vaic-eye.png") center / contain no-repeat;
 }
 .eyes-word {
   margin: var(--s1) 0 0;
@@ -662,22 +662,22 @@ main {
 }
 /* The VAIC screen: the eye and the voice line on the lit night, the conversation in one glass sheet.
    Every text pair here passes WCAG AA (body ≥ 4.5:1, outlines and marks ≥ 3:1). */
-.view-ace main {
+.view-vaic main {
   background: transparent;
   color: var(--gtext);
 }
 /* On the VAIC screen the top bar floats over the page and the chat panel runs up behind it, its messages
    fading into the bar's glass (decision 108). `--top-h` is the bar's measured height (App.tsx). */
-.view-ace .top {
+.view-vaic .top {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
 }
-.view-ace .ace {
+.view-vaic .vaic {
   padding-top: 0;
 }
-.ace {
+.vaic {
   /* Only the chat (decision 112): one centred column the height of the screen, under the floating top bar. */
   max-width: 960px;
   margin: 0 auto;
@@ -689,7 +689,7 @@ main {
   grid-template-rows: minmax(0, 1fr);
   color: var(--gtext);
 }
-.ace ::selection {
+.vaic ::selection {
   background: #f4c63c;
   color: var(--text);
 }
@@ -736,7 +736,7 @@ main {
   background: rgba(79, 143, 214, 0.9);
   color: #fff;
 }
-.voice-aic .mic {
+.voice-vaic .mic {
   box-shadow:
     var(--glow),
     0 0 0 calc(6px + var(--lvl) * 18px) rgba(242, 179, 61, calc(0.14 + var(--lvl) * 0.3)),
@@ -761,7 +761,7 @@ main {
 .voice-you .voice-label {
   color: var(--you-l);
 }
-.voice-aic .voice-label {
+.voice-vaic .voice-label {
   color: var(--warn-l);
 }
 .voice-who {
@@ -773,7 +773,7 @@ main {
   color: #fff;
   background: var(--you);
 }
-.voice-aic .voice-who {
+.voice-vaic .voice-who {
   background: var(--wood);
 }
 .switch {
@@ -981,21 +981,21 @@ main {
   display: none;
 }
 /* The panel's top is under the bar; the first message and the banners start below it. */
-.view-ace .talk {
+.view-vaic .talk {
   border-top: 0;
   border-top-left-radius: 0;
   border-top-right-radius: 0;
 }
-.view-ace .chat {
+.view-vaic .chat {
   padding-top: calc(var(--top-h, 64px) + var(--tap) + var(--s3)); /* below the bar and the clear button */
 }
-.view-ace .talk-notes:not(:empty) {
+.view-vaic .talk-notes:not(:empty) {
   padding-top: calc(var(--top-h, 64px) + var(--s3));
 }
-.view-ace .talk-notes:not(:empty) + .chat {
+.view-vaic .talk-notes:not(:empty) + .chat {
   padding-top: var(--s5);
 }
-.view-ace .talk-clear {
+.view-vaic .talk-clear {
   top: calc(var(--top-h, 64px) + var(--s2));
 }
 .icon-btn {
@@ -1059,48 +1059,48 @@ main {
   overflow-wrap: anywhere;
   font-weight: 500;
 }
-.msg-ace .msg-body {
+.msg-vaic .msg-body {
   max-width: 72ch;
   font-weight: 500;
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
-.msg-ace .msg-body > :first-child {
+.msg-vaic .msg-body > :first-child {
   margin-top: 0;
 }
-.msg-ace .msg-body > :last-child {
+.msg-vaic .msg-body > :last-child {
   margin-bottom: 0;
 }
-.msg-ace p {
+.msg-vaic p {
   white-space: normal;
   margin: 0 0 var(--s3);
 }
-.msg-ace :is(h3, h4, h5, h6) {
+.msg-vaic :is(h3, h4, h5, h6) {
   margin: var(--s4) 0 var(--s2);
   line-height: 1.3;
   font-weight: 800;
 }
-.msg-ace h3 {
+.msg-vaic h3 {
   font-size: var(--fs-l);
 }
-.msg-ace h4 {
+.msg-vaic h4 {
   font-size: var(--fs-m);
 }
-.msg-ace :is(h5, h6) {
+.msg-vaic :is(h5, h6) {
   font-size: 16px;
 }
-.msg-ace :is(ul, ol) {
+.msg-vaic :is(ul, ol) {
   margin: 0 0 var(--s3);
   padding-left: 1.4em;
 }
-.msg-ace li + li {
+.msg-vaic li + li {
   margin-top: var(--s1);
 }
-.msg-ace a {
+.msg-vaic a {
   color: #ffd88a;
   text-underline-offset: 3px;
 }
-.msg-ace code {
+.msg-vaic code {
   font:
     500 0.92em ui-monospace,
     monospace;
@@ -1108,7 +1108,7 @@ main {
   border-radius: 4px;
   padding: 1px 5px;
 }
-.msg-ace pre {
+.msg-vaic pre {
   margin: 0 0 var(--s3);
   padding: var(--s3);
   overflow-x: auto;
@@ -1116,7 +1116,7 @@ main {
   border: 1px solid var(--edge);
   border-radius: 10px;
 }
-.msg-ace pre code {
+.msg-vaic pre code {
   background: none;
   padding: 0;
 }
@@ -1149,19 +1149,19 @@ main {
   min-height: 28px;
   justify-content: center;
 }
-.aic-status {
+.vaic-status {
   display: flex;
   align-items: center;
   gap: var(--s3);
   font-weight: 600;
 }
-.aic-status-eye {
+.vaic-status-eye {
   flex: none;
   width: 34px;
   aspect-ratio: 600 / 324;
   background: var(--paper3);
-  -webkit-mask: url("/ace-eye.png") center / contain no-repeat;
-  mask: url("/ace-eye.png") center / contain no-repeat;
+  -webkit-mask: url("/vaic-eye.png") center / contain no-repeat;
+  mask: url("/vaic-eye.png") center / contain no-repeat;
   animation: calm-blink 4.8s ease-in-out infinite;
 }
 @keyframes calm-blink {
@@ -1193,45 +1193,45 @@ main {
     background-position: 0% 0;
   }
 }
-.aic-status-time {
+.vaic-status-time {
   color: var(--gmute);
   font-size: 14px;
   font-variant-numeric: tabular-nums;
 }
-.aic-steps {
+.vaic-steps {
   margin-top: var(--s3);
   color: var(--gmute);
   font-size: 14px;
 }
-.aic-steps summary {
+.vaic-steps summary {
   width: fit-content;
   min-height: 32px;
   display: inline-flex;
   align-items: center;
   border-radius: 6px;
 }
-.aic-steps summary:hover {
+.vaic-steps summary:hover {
   color: var(--gtext);
 }
-.aic-steps ol {
+.vaic-steps ol {
   margin: var(--s1) 0 0;
   padding-left: 1.4em;
 }
-.aic-steps li + li {
+.vaic-steps li + li {
   margin-top: 2px;
 }
 /* Work VAIC handed on is still running: the summary shimmers like the live status row, the clock counts. */
-.aic-steps.is-running summary {
+.vaic-steps.is-running summary {
   gap: var(--s3);
   font-weight: 600;
 }
-.aic-steps li.current {
+.vaic-steps li.current {
   color: var(--gtext);
   font-weight: 700;
 }
 /* A thin caret at the end of the words while VAIC's reply is still coming in. */
-.msg-ace.is-streaming .msg-body > :is(p, h3, h4, h5, h6):last-child::after,
-.msg-ace.is-streaming .msg-body > :is(ul, ol):last-child > li:last-child::after {
+.msg-vaic.is-streaming .msg-body > :is(p, h3, h4, h5, h6):last-child::after,
+.msg-vaic.is-streaming .msg-body > :is(ul, ol):last-child > li:last-child::after {
   content: "";
   display: inline-block;
   width: 2px;
@@ -1256,7 +1256,7 @@ main {
   background: var(--glass);
 }
 .composer textarea {
-  /* One line to start; grows with the text (AceScreen sets the height) up to about eight lines. */
+  /* One line to start; grows with the text (VaicScreen sets the height) up to about eight lines. */
   min-height: 0;
   max-height: calc(8 * 1.45em + 2 * var(--s3) + 4px);
   overflow-y: hidden;
@@ -1700,12 +1700,12 @@ main {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .aic-status-eye,
+  .vaic-status-eye,
   .shimmer {
     animation: none;
   }
-  .msg-ace.is-streaming .msg-body > :is(p, h3, h4, h5, h6):last-child::after,
-  .msg-ace.is-streaming .msg-body > :is(ul, ol):last-child > li:last-child::after {
+  .msg-vaic.is-streaming .msg-body > :is(p, h3, h4, h5, h6):last-child::after,
+  .msg-vaic.is-streaming .msg-body > :is(ul, ol):last-child > li:last-child::after {
     animation: none;
   }
   .voice .mic {
@@ -1713,7 +1713,7 @@ main {
   }
 }
 @media (max-width: 899px) {
-  .ace {
+  .vaic {
     padding: var(--s3);
   }
   .voice-row {
@@ -1754,7 +1754,7 @@ main {
   padding: var(--s4) var(--s4) 96px;
 }
 .screen .mute,
-.ace .mute {
+.vaic .mute {
   color: var(--gmute);
 }
 .screen h1 {
@@ -2312,7 +2312,7 @@ table.costs tr:last-child td {
 .dockbar.live .dockvoice {
   background: color-mix(in srgb, var(--wood) 12%, transparent);
 }
-.dockbar[data-speaker="aic"] .dockmic.on {
+.dockbar[data-speaker="vaic"] .dockmic.on {
   background: #7a4a2a;
 }
 .flatwave {
@@ -4011,7 +4011,7 @@ summary,
   border: 1px solid var(--edge);
   border-bottom-right-radius: 4px;
 }
-.pj-ace {
+.pj-vaic {
   align-self: start;
   background: var(--glass-2);
   border: 1px solid var(--edge);
@@ -4150,7 +4150,7 @@ summary,
   background: var(--you-t);
   color: var(--you-l);
 }
-.tl-aic {
+.tl-vaic {
   background: var(--warn-t);
   color: var(--warn-l);
 }
@@ -5045,7 +5045,7 @@ summary,
   z-index: 2;
   color: var(--gmute);
 }
-.view-ace .talk-away {
+.view-vaic .talk-away {
   top: calc(var(--top-h, 64px) + var(--s2));
 }
 .card.away {
@@ -6273,7 +6273,7 @@ a.btn-primary.chat-file-dl,
 /* ---------- The message box, ChatGPT's way (the owner, 2026-11-09, decision 157) ----------
    One rounded field holds everything: +, the words, a plain mic (dictate), the voice button and Send, all
    borderless icons. The words fill the whole width first; once they need a second line they take the full top
-   row and the buttons sit underneath (AceScreen sets .is-tall), back to one row when the box is empty. */
+   row and the buttons sit underneath (VaicScreen sets .is-tall), back to one row when the box is empty. */
 .composer {
   display: flex;
   flex-direction: column;

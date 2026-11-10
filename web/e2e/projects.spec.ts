@@ -84,15 +84,15 @@ test("a new project: one sentence, VAIC asks with choice chips, the answer goes 
   await expect(page.getByText("Your app appears here as soon as its first version is ready.")).toBeVisible();
 
   // VAIC asks before it builds: words in the chat, and the choices as chips.
-  m.send({ type: "ace.reply", conversation: conv, text: "Happy to. How many people", done: false });
+  m.send({ type: "vaic.reply", conversation: conv, text: "Happy to. How many people", done: false });
   m.send({
-    type: "ace.reply",
+    type: "vaic.reply",
     conversation: conv,
     text: "Happy to. How many people split the bill, usually?",
     done: true,
   });
   m.send({
-    type: "ace.question",
+    type: "vaic.question",
     conversation: conv,
     question: "How many people?",
     options: ["2 to 4", "Up to 10", "Any number"],
@@ -106,7 +106,7 @@ test("a new project: one sentence, VAIC asks with choice chips, the answer goes 
   await expect.poll(() => messages(m).at(-1)).toMatchObject({ text: "Any number", conversation: conv });
 
   // None of it reached VAIC's main chat.
-  await page.goto("/#/ace");
+  await page.goto("/#/vaic");
   await expect(page.getByText("split the bill, usually?")).toHaveCount(0);
   // The project is on the list, being planned, and comes back after a reload with its chat.
   await page.goto("/#/apps");
@@ -167,7 +167,7 @@ test("open a project, send a change, switch device sizes, see what's happening",
       conversation: "app-app-0000000000aa",
     });
   m.send({
-    type: "ace.reply",
+    type: "vaic.reply",
     conversation: "app-app-0000000000aa",
     text: "On it. The builders will slow the stars down.",
     done: true,
@@ -244,7 +244,7 @@ test("versions: go back two versions with one confirm", async ({ page }) => {
 });
 
 test("light appearance: the studio reads well", async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem("aic.theme", "light"));
+  await page.addInitScript(() => localStorage.setItem("vaic.theme", "light"));
   await mockBackend(page, { apps: [appRecord("app-0000000000aa", "star-sweeper", "Star Sweeper")] });
   await page.goto("/#/apps/star-sweeper");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");

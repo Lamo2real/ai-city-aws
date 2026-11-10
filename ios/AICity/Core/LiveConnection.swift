@@ -1,4 +1,4 @@
-// The live connection (web/src/lib/ws.ts): city events and AIC's streamed replies over the API Gateway
+// The live connection (web/src/lib/ws.ts): city events and VAIC's streamed replies over the API Gateway
 // WebSocket. Reconnects on its own with jittered back-off, pings every 4 minutes so the connection stays
 // listed, and reports when it is up or down. The token goes in the query string, as the $connect authorizer
 // expects (wss only, so it is encrypted on the wire).

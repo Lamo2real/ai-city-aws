@@ -33,18 +33,18 @@ enum ConfigError: LocalizedError {
         switch self {
         case .invalid: return "AI City's settings don't look right. Install the app again."
         case .notReachable: return "AI City's settings could not be loaded. Check your connection."
-        case .noAddress: return "This build has no AI City address; set AIC_SITE_HOST in ios/Config/AICity.xcconfig"
+        case .noAddress: return "This build has no AI City address; set VAIC_SITE_HOST in ios/Config/AICity.xcconfig"
         }
     }
 }
 
-/// Loads and remembers the config. The site address is built in: the build setting AIC_SITE_HOST (Info.plist
-/// key AICSiteHost). Nobody types it (decision 111); a build without it cannot start and says so.
+/// Loads and remembers the config. The site address is built in: the build setting VAIC_SITE_HOST (Info.plist
+/// key VAICSiteHost). Nobody types it (decision 111); a build without it cannot start and says so.
 final class ConfigStore: @unchecked Sendable {
     private let defaults: UserDefaults
     private let http: HTTPTransport
     private let bundleHost: String?
-    private static let configKey = "aic.config"
+    private static let configKey = "vaic.config"
 
     init(defaults: UserDefaults = .standard, http: HTTPTransport = URLSessionTransport(), bundleHost: String? = ConfigStore.hostFromBundle()) {
         self.defaults = defaults
@@ -53,7 +53,7 @@ final class ConfigStore: @unchecked Sendable {
     }
 
     static func hostFromBundle() -> String? {
-        let h = (Bundle.main.object(forInfoDictionaryKey: "AICSiteHost") as? String)?.trimmingCharacters(in: .whitespaces) ?? ""
+        let h = (Bundle.main.object(forInfoDictionaryKey: "VAICSiteHost") as? String)?.trimmingCharacters(in: .whitespaces) ?? ""
         return h.isEmpty || h.contains("$(") ? nil : h
     }
 

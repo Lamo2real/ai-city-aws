@@ -1,31 +1,11 @@
 {
-  "$comment": "Pre-configured departments (decisions 113, 114). The Orchestrator uses these names when work fits; any other department is still created as data. Each department's manager prompt is agents/departments/<key>.md and its skills are agents/skills/<name>/SKILL.md. 'shared' tools and skills belong to every department. 'essential' marks the tools most businesses in that field use: Settings -> Departments and its setup guide put them first. Every url answered an MCP initialize on 2026-11-08 (401 with OAuth resource metadata, or 200). 'aka' lists other names the owner may use for a service. 'setup': 'own_app' marks servers whose sign-in has no self-registration (checked 2026-11-09, decision 141): the owner pastes their own app's id and secret, or an access token. 'not_offered' names services that can't be connected directly or safely, why in plain words, and the catalog services that do the job instead (decision 130). Read by backend/src/aic/shared/presets.py; served by GET /departments/presets.",
+  "$comment": "Pre-configured departments (decisions 113, 114). The Orchestrator uses these names when work fits; any other department is still created as data. Each department's manager prompt is agents/departments/<key>.md and its skills are agents/skills/<name>/SKILL.md. 'shared' tools and skills belong to every department. 'essential' marks the tools most businesses in that field use: Settings -> Departments and its setup guide put them first. Every url answered an MCP initialize on 2026-11-08 (401 with OAuth resource metadata, or 200). 'aka' lists other names the owner may use for a service. 'setup': 'own_app' marks servers whose sign-in has no self-registration (checked 2026-11-09, decision 141): the owner pastes their own app's id and secret, or an access token. 'not_offered' names services that can't be connected directly or safely, why in plain words, and the catalog services that do the job instead (decision 130). Read by backend/src/vaic/shared/presets.py; served by GET /departments/presets.",
   "shared": {
     "name": "Shared by every department",
     "mission": "Tools every team uses: one Stripe account for everything sold, one place for tickets, chat, docs, files and meetings.",
-    "skills": [
-      "knowledge-first",
-      "sell-with-stripe",
-      "cross-team-work"
-    ],
-    "essential": [
-      "stripe",
-      "atlassian",
-      "slack",
-      "notion"
-    ],
-    "connectors": [
-      "stripe",
-      "atlassian",
-      "slack",
-      "notion",
-      "zapier",
-      "box",
-      "dropbox",
-      "calendly",
-      "miro",
-      "granola"
-    ]
+    "skills": ["knowledge-first", "sell-with-stripe", "cross-team-work"],
+    "essential": ["stripe", "atlassian", "slack", "notion"],
+    "connectors": ["stripe", "atlassian", "slack", "notion", "zapier", "box", "dropbox", "calendly", "miro", "granola"]
   },
   "departments": [
     {
@@ -80,12 +60,7 @@
         "security-baseline",
         "current-docs"
       ],
-      "essential": [
-        "github",
-        "context7",
-        "sentry",
-        "vercel"
-      ],
+      "essential": ["github", "context7", "sentry", "vercel"],
       "connectors": [
         "github",
         "context7",
@@ -146,12 +121,7 @@
         "security-baseline",
         "current-docs"
       ],
-      "essential": [
-        "aws-knowledge",
-        "github",
-        "datadog",
-        "pagerduty"
-      ],
+      "essential": ["aws-knowledge", "github", "datadog", "pagerduty"],
       "connectors": [
         "aws-knowledge",
         "github",
@@ -206,18 +176,8 @@
           "does": "LLM features, retrieval, evaluations, open models from Hugging Face"
         }
       ],
-      "skills": [
-        "data-analysis",
-        "metrics-and-dashboards",
-        "experiments-ab",
-        "ai-features",
-        "current-docs"
-      ],
-      "essential": [
-        "google-analytics",
-        "bigquery",
-        "posthog"
-      ],
+      "skills": ["data-analysis", "metrics-and-dashboards", "experiments-ab", "ai-features", "current-docs"],
+      "essential": ["google-analytics", "bigquery", "posthog"],
       "connectors": [
         "google-analytics",
         "bigquery",
@@ -287,12 +247,7 @@
         "seo-content",
         "campaign-planning"
       ],
-      "essential": [
-        "canva",
-        "meta-ads",
-        "google-ads",
-        "google-analytics"
-      ],
+      "essential": ["canva", "meta-ads", "google-ads", "google-analytics"],
       "connectors": [
         "canva",
         "meta-ads",
@@ -356,19 +311,8 @@
           "does": "CRM hygiene, forecasts, reports"
         }
       ],
-      "skills": [
-        "lead-research",
-        "prospecting",
-        "outreach-sequences",
-        "crm-hygiene",
-        "proposals-and-quotes"
-      ],
-      "essential": [
-        "salesforce",
-        "hubspot",
-        "apollo",
-        "pandadoc"
-      ],
+      "skills": ["lead-research", "prospecting", "outreach-sequences", "crm-hygiene", "proposals-and-quotes"],
+      "essential": ["salesforce", "hubspot", "apollo", "pandadoc"],
       "connectors": [
         "salesforce",
         "hubspot",
@@ -418,17 +362,8 @@
           "does": "Satisfaction surveys, feedback themes for Product"
         }
       ],
-      "skills": [
-        "support-replies",
-        "refunds-and-orders",
-        "help-center-articles",
-        "feedback-to-product"
-      ],
-      "essential": [
-        "intercom",
-        "gorgias",
-        "help-scout"
-      ],
+      "skills": ["support-replies", "refunds-and-orders", "help-center-articles", "feedback-to-product"],
+      "essential": ["intercom", "gorgias", "help-scout"],
       "connectors": [
         "intercom",
         "gorgias",
@@ -443,16 +378,7 @@
     {
       "key": "finance",
       "name": "Finance",
-      "aliases": [
-        "accounting",
-        "bookkeeping",
-        "billing",
-        "payments",
-        "invoicing",
-        "treasury",
-        "fp&a",
-        "money"
-      ],
+      "aliases": ["accounting", "bookkeeping", "billing", "payments", "invoicing", "treasury", "fp&a", "money"],
       "mission": "Keep the money right: bookkeeping, invoices and bills, payments and payouts, expenses, budgets, cash-flow forecasts and reports, VAT and tax preparation.",
       "teams": [
         {
@@ -472,39 +398,14 @@
           "does": "Budgets, cash flow, forecasts, board-ready reports"
         }
       ],
-      "skills": [
-        "bookkeeping",
-        "invoicing-and-payments",
-        "budgets-and-forecasts",
-        "tax-and-vat-prep"
-      ],
-      "essential": [
-        "xero",
-        "paypal",
-        "ramp"
-      ],
-      "connectors": [
-        "xero",
-        "paypal",
-        "ramp",
-        "square",
-        "plaid",
-        "shopify-store",
-        "airtable"
-      ]
+      "skills": ["bookkeeping", "invoicing-and-payments", "budgets-and-forecasts", "tax-and-vat-prep"],
+      "essential": ["xero", "paypal", "ramp"],
+      "connectors": ["xero", "paypal", "ramp", "square", "plaid", "shopify-store", "airtable"]
     },
     {
       "key": "legal",
       "name": "Legal",
-      "aliases": [
-        "compliance",
-        "contracts",
-        "privacy",
-        "gdpr",
-        "risk",
-        "legal and compliance",
-        "policy"
-      ],
+      "aliases": ["compliance", "contracts", "privacy", "gdpr", "risk", "legal and compliance", "policy"],
       "mission": "Protect the owner: draft and review contracts, terms and privacy policies, track obligations and renewals, prepare GDPR and compliance work, and flag what needs a licensed lawyer.",
       "teams": [
         {
@@ -520,34 +421,14 @@
           "does": "Company documents, trademarks, policies"
         }
       ],
-      "skills": [
-        "contract-review",
-        "privacy-gdpr",
-        "policies-and-terms"
-      ],
-      "essential": [
-        "docusign",
-        "pandadoc",
-        "vanta"
-      ],
-      "connectors": [
-        "docusign",
-        "pandadoc",
-        "vanta"
-      ]
+      "skills": ["contract-review", "privacy-gdpr", "policies-and-terms"],
+      "essential": ["docusign", "pandadoc", "vanta"],
+      "connectors": ["docusign", "pandadoc", "vanta"]
     },
     {
       "key": "product",
       "name": "Product",
-      "aliases": [
-        "product management",
-        "pm",
-        "ux",
-        "ui",
-        "user research",
-        "roadmap",
-        "design research"
-      ],
+      "aliases": ["product management", "pm", "ux", "ui", "user research", "roadmap", "design research"],
       "mission": "Decide what to build and why: user research, specs and roadmaps, designs and prototypes, prioritisation, launches, and learning from usage.",
       "teams": [
         {
@@ -563,16 +444,8 @@
           "does": "Interviews, surveys, usability tests, insights"
         }
       ],
-      "skills": [
-        "product-specs",
-        "user-research",
-        "roadmap-and-prioritisation"
-      ],
-      "essential": [
-        "linear",
-        "figma",
-        "posthog"
-      ],
+      "skills": ["product-specs", "user-research", "roadmap-and-prioritisation"],
+      "essential": ["linear", "figma", "posthog"],
       "connectors": [
         "linear",
         "figma",
@@ -619,26 +492,9 @@
           "does": "Store orders, fulfilment, inventory"
         }
       ],
-      "skills": [
-        "sops-and-processes",
-        "project-management",
-        "automation-design",
-        "vendor-management"
-      ],
-      "essential": [
-        "asana",
-        "monday",
-        "airtable"
-      ],
-      "connectors": [
-        "asana",
-        "monday",
-        "airtable",
-        "clickup",
-        "shopify-store",
-        "typeform",
-        "drawio"
-      ]
+      "skills": ["sops-and-processes", "project-management", "automation-design", "vendor-management"],
+      "essential": ["asana", "monday", "airtable"],
+      "connectors": ["asana", "monday", "airtable", "clickup", "shopify-store", "typeform", "drawio"]
     },
     {
       "key": "research",
@@ -676,18 +532,8 @@
           "does": "Cheap tests before building: landing page, waitlist, interviews (with Product, Application and Marketing)"
         }
       ],
-      "skills": [
-        "research-papers",
-        "trend-scouting",
-        "market-opportunity",
-        "business-idea-brief",
-        "current-docs"
-      ],
-      "essential": [
-        "hugging-face",
-        "exa",
-        "consensus"
-      ],
+      "skills": ["research-papers", "trend-scouting", "market-opportunity", "business-idea-brief", "current-docs"],
+      "essential": ["hugging-face", "exa", "consensus"],
       "connectors": [
         "hugging-face",
         "exa",
@@ -756,12 +602,7 @@
         "brand-and-copy",
         "video-and-voice"
       ],
-      "essential": [
-        "metricool",
-        "higgsfield",
-        "elevenlabs",
-        "canva"
-      ],
+      "essential": ["metricool", "higgsfield", "elevenlabs", "canva"],
       "connectors": [
         "metricool",
         "higgsfield",

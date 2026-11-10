@@ -1,16 +1,16 @@
-// The landing screen (web AceScreen, decisions 106–108 and 112): there is no top bar and no title, so the
+// The landing screen (web VaicScreen, decisions 106–108 and 112): there is no top bar and no title, so the
 // conversation runs from the status bar (fading softly under the clock) down to the composer; the history and
 // clear buttons float as small glass circles in the top corners, and the composer holds the + menu, the box,
 // one voice button and Send. The voice has no row of its own: its light (UI/Aurora.swift) rises from the
-// message box behind the chat text, blue for the owner and amber for AIC, and is not there when nobody talks.
-// The owner's lines sit on the right in a filled bubble; AIC's on the left as plain full-width text with its
-// Markdown. While AIC works, its status row shows the current step and seconds.
+// message box behind the chat text, blue for the owner and amber for VAIC, and is not there when nobody talks.
+// The owner's lines sit on the right in a filled bubble; VAIC's on the left as plain full-width text with its
+// Markdown. While VAIC works, its status row shows the current step and seconds.
 import PhotosUI
 import SwiftUI
 
 struct ChatScreen: View {
     @Environment(AppModel.self) private var model
-    @AppStorage("aic.draft") private var draft = ""
+    @AppStorage("vaic.draft") private var draft = ""
     @FocusState private var focused: Bool
     @State private var confirmClear = false
     @State private var menuOpen = false
@@ -30,13 +30,13 @@ struct ChatScreen: View {
                                 .foregroundStyle(.secondary).padding(.top, 24).frame(maxWidth: .infinity)
                         }
                         ForEach(hud.chat) { line in MessageRow(line: line).id(line.id) }
-                        if hud.waitingForAic, let turn = hud.turn { AicStatusRow(turn: turn).id("status") }
+                        if hud.waitingForVaic, let turn = hud.turn { VaicStatusRow(turn: turn).id("status") }
                     }
                     .padding()
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .onChange(of: hud.chat.last?.text) { _, _ in withAnimation { proxy.scrollTo(hud.chat.last?.id, anchor: .bottom) } }
-                .onChange(of: hud.chat.count) { _, _ in withAnimation { proxy.scrollTo(hud.waitingForAic ? "status" : hud.chat.last?.id, anchor: .bottom) } }
+                .onChange(of: hud.chat.count) { _, _ in withAnimation { proxy.scrollTo(hud.waitingForVaic ? "status" : hud.chat.last?.id, anchor: .bottom) } }
                 .onAppear { proxy.scrollTo(hud.chat.last?.id, anchor: .bottom) }
             }
             .accessibilityLabel("Conversation with VAIC")
@@ -226,9 +226,9 @@ struct MessageRow: View {
     }
 }
 
-/// AIC at work, before its first words: a small amber light that breathes, the step with a soft shimmer, seconds.
-struct AicStatusRow: View {
-    var turn: AceTurn
+/// VAIC at work, before its first words: a small amber light that breathes, the step with a soft shimmer, seconds.
+struct VaicStatusRow: View {
+    var turn: VaicTurn
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {

@@ -3,7 +3,7 @@ import { stepWords } from "../src/lib/steps.ts";
 import { store } from "../src/lib/store.ts";
 
 afterEach(() => store.set({ chat: [], turn: null, presence: "idle" }));
-const ev = (activity: string, detail?: string) => store.event({ type: "activity", id: "ace", activity, detail });
+const ev = (activity: string, detail?: string) => store.event({ type: "activity", id: "vaic", activity, detail });
 
 describe("VAIC's steps in plain words", () => {
   it("names the tool VAIC used, else the activity, and skips idle", () => {
@@ -24,7 +24,7 @@ describe("VAIC's steps in plain words", () => {
     store.event({ type: "activity", id: "orchestrator", activity: "delegating" }); // not VAIC's step
     ev("idle");
     expect(store.get().turn?.steps).toEqual(["Understanding your message", "Checking how things are going"]);
-    store.event({ type: "ace.reply", conversation: "main", text: "All quiet.", done: true });
+    store.event({ type: "vaic.reply", conversation: "main", text: "All quiet.", done: true });
     const reply = store.get().chat.at(-1)!;
     expect(reply.steps).toEqual(["Understanding your message", "Checking how things are going"]);
     expect(reply.tookMs).toBeGreaterThanOrEqual(0);

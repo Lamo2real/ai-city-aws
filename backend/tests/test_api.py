@@ -5,18 +5,18 @@ from urllib.parse import parse_qsl
 
 import pytest
 
-from aic.lambdas.api import ROUTES, ApiDeps, handle_http, is_owner
-from aic.lambdas.approvals import on_approval_step
-from aic.lambdas.ws import authorize, broadcast, on_connection
-from aic.shared.caps import default_settings
-from aic.shared.cost import Usage
-from aic.shared.events import MemoryBus
-from aic.shared.hierarchy.queue import MemoryQueue
-from aic.shared.ledger import Ledger
-from aic.shared.presets import presets
-from aic.shared.table import MemoryTable, UpdateOptions
-from aic.shared.turn import TurnInput, TurnOutput
-from aic.shared.utility import wake_match
+from vaic.lambdas.api import ROUTES, ApiDeps, handle_http, is_owner
+from vaic.lambdas.approvals import on_approval_step
+from vaic.lambdas.ws import authorize, broadcast, on_connection
+from vaic.shared.caps import default_settings
+from vaic.shared.cost import Usage
+from vaic.shared.events import MemoryBus
+from vaic.shared.hierarchy.queue import MemoryQueue
+from vaic.shared.ledger import Ledger
+from vaic.shared.presets import presets
+from vaic.shared.table import MemoryTable, UpdateOptions
+from vaic.shared.turn import TurnInput, TurnOutput
+from vaic.shared.utility import wake_match
 
 
 class Clock:
@@ -74,14 +74,14 @@ def test_accepts_the_group_in_each_shape_api_gateway_can_send() -> None:
 
 
 # ---------- HTTP routes ----------
-async def test_post_messages_queues_the_owners_message_for_ace_keyed_by_the_client_id() -> None:
+async def test_post_messages_queues_the_owners_message_for_vaic_keyed_by_the_client_id() -> None:
     d = make()
     r = await handle_http(
         ev("POST", "/messages", {"text": "yo VAIC, what's 9 + 9?", "conversation": "c1", "client_id": "abcd1234"}), d
     )
     assert r["statusCode"] == 202
     m = d.queue.sent[0]
-    assert (m["id"], m["role"], m["conversation"], m["from"]) == ("owner-abcd1234", "ace", "c1", "owner")
+    assert (m["id"], m["role"], m["conversation"], m["from"]) == ("owner-abcd1234", "vaic", "c1", "owner")
     assert "voice" not in m
     await handle_http(ev("POST", "/messages", {"text": "status?", "voice": True}), d)
     assert d.queue.sent[1]["voice"] is True  # said out loud: VAIC is told to keep it short
@@ -232,8 +232,8 @@ async def test_wake_check_plain_matching_first_haiku_only_for_unclear_transcript
         ("what's the status of the product, VAIC?", "yes"),
         ("VAIC what time is it", "yes"),
         ("the race was fun", "no"),
-        ("I placed an ace in the deck", "unclear"),
-        ("yo Ace", "yes"),
+        ("I placed an vaic in the deck", "unclear"),
+        ("yo Vaic", "yes"),
         ("so I told VAIC about it", "unclear"),
         ("", "no"),
     ],
@@ -265,7 +265,7 @@ def test_the_connect_authorizer_allows_only_a_valid_owner_token() -> None:
     bad = {"methodArn": "arn:ws", "queryStringParameters": {"token": "bad.bad.bad"}}
     assert _effect(authorize(bad, Verifier(["owner"]))) == "Deny"
     assert _effect(authorize({"methodArn": "arn:ws"}, Verifier(["owner"]))) == "Deny"
-    proto = {"methodArn": "arn:ws", "headers": {"Sec-WebSocket-Protocol": "aic, a.b.c"}}
+    proto = {"methodArn": "arn:ws", "headers": {"Sec-WebSocket-Protocol": "vaic, a.b.c"}}
     assert _effect(authorize(proto, Verifier(["owner"]))) == "Allow"
 
 
@@ -360,7 +360,7 @@ async def _office(d: Any) -> tuple[str, list[str]]:
     await d.ledger.create_department("Writing", "Writing work.", "mgr-writing")
     await d.ledger.put_agent({"id": "mgr-writing", "kind": "manager", "role": "Writing Manager", "department": "Writing",
                               "model": "fable-5-2", "parent": "orchestrator", "state": "active", "total_cost_usd": 0})  # fmt: skip
-    task = await d.ledger.create_ticket({"goal": "50 sentences on engines", "from": "ace", "to": "orchestrator", "department": None,
+    task = await d.ledger.create_ticket({"goal": "50 sentences on engines", "from": "vaic", "to": "orchestrator", "department": None,
                                          "parent_id": None, "kind": "task", "owner_words": "the Porsche sentences", "status": "in_progress"})  # fmt: skip
     goal = await d.ledger.create_ticket({"goal": "50 sentences", "from": "orchestrator", "to": "mgr-writing", "department": "Writing",
                                          "parent_id": task["id"], "kind": "assignment", "status": "in_progress"})  # fmt: skip
@@ -407,7 +407,7 @@ async def test_post_tasks_cancel_stops_one_job_and_knows_a_wrong_or_finished_one
 
 
 def test_there_is_no_pause_route_the_city_is_always_on() -> None:
-    from aic.lambdas.api import ROUTES
+    from vaic.lambdas.api import ROUTES
 
     assert not any("/city/pause" in r[1] or "/city/resume" in r[1] for r in ROUTES)
 
@@ -415,7 +415,7 @@ def test_there_is_no_pause_route_the_city_is_always_on() -> None:
 async def test_the_city_snapshot_never_lists_questions_of_a_job_that_already_stopped() -> None:
     d = make()
     t = await d.ledger.create_ticket(
-        {"goal": "g", "from": "ace", "to": "orchestrator", "department": None, "parent_id": None, "kind": "task",
+        {"goal": "g", "from": "vaic", "to": "orchestrator", "department": None, "parent_id": None, "kind": "task",
          "status": "cancelled"}
     )  # fmt: skip
     await d.ledger.ask_question({"asked_by": "x", "path": "x", "ticket_id": t["id"], "text": "?", "options": [],

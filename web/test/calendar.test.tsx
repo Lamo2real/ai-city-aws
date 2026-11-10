@@ -99,7 +99,7 @@ describe("the Features gallery", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
-        if (url === "/config.json") return new Response(JSON.stringify({ apiUrl: "https://api.aic.test" }));
+        if (url === "/config.json") return new Response(JSON.stringify({ apiUrl: "https://api.vaic.test" }));
         calls.push({ url, method: init?.method ?? "GET", body: init?.body ? JSON.parse(String(init.body)) : null });
         if (url.endsWith("/features"))
           return new Response(
@@ -126,7 +126,7 @@ describe("the Features gallery", () => {
     );
     expect(calls.find((c) => c.method === "PUT")!.body).toEqual({ enabled: false });
     fireEvent.click(screen.getByRole("button", { name: /Add a feature/ }));
-    expect(localStorage.getItem("aic.draft")).toBe("I'd like a feature that ");
-    expect(go).toHaveBeenCalledWith("ace");
+    expect(localStorage.getItem("vaic.draft")).toBe("I'd like a feature that ");
+    expect(go).toHaveBeenCalledWith("vaic");
   });
 });

@@ -14,19 +14,19 @@ from typing import Any
 
 import pytest
 
-from aic.connectors import openapi, openapi_bridge
-from aic.connectors.openapi import ApiRequest, Credential, SpecError
-from aic.lambdas import connectors as lam
-from aic.lambdas.api import handle_http
-from aic.lambdas.connector_bridge import BridgeDeps
-from aic.lambdas.connector_bridge import call as bridge_call
-from aic.runtime.connector_tool import add_connector_tool
-from aic.shared.connectors import DEFAULT_ROLES, ConnectorStore, approval_hash
-from aic.shared.mcp_http import HttpResponse
-from aic.shared.table import MemoryTable
 from connector_fakes import FakeNet, Recorder, control, resolver
 from test_api import ev
 from test_connectors import _api, _ctx, _deps
+from vaic.connectors import openapi, openapi_bridge
+from vaic.connectors.openapi import ApiRequest, Credential, SpecError
+from vaic.lambdas import connectors as lam
+from vaic.lambdas.api import handle_http
+from vaic.lambdas.connector_bridge import BridgeDeps
+from vaic.lambdas.connector_bridge import call as bridge_call
+from vaic.runtime.connector_tool import add_connector_tool
+from vaic.shared.connectors import DEFAULT_ROLES, ConnectorStore, approval_hash
+from vaic.shared.mcp_http import HttpResponse
+from vaic.shared.table import MemoryTable
 
 SPEC_URL = "https://petstore.dev/openapi.json"
 BASE = "https://api.petstore.dev/v1"
@@ -359,7 +359,7 @@ class MemSpecs:
 
 
 def _lam(net: FakeNet, identity: Recorder | None = None) -> tuple[lam.ConnectorsDeps, Recorder]:
-    from aic.shared.events import MemoryBus
+    from vaic.shared.events import MemoryBus
 
     ctl = control()
     deps = lam.ConnectorsDeps(
@@ -370,8 +370,8 @@ def _lam(net: FakeNet, identity: Recorder | None = None) -> tuple[lam.Connectors
         Recorder(),
         "gw-1",
         "pe-1",
-        "arn:aws:lambda:eu-north-1:123456789012:function:aic-prod-connector-bridge",
-        "aic-prod-connectors",
+        "arn:aws:lambda:eu-north-1:123456789012:function:vaic-prod-connector-bridge",
+        "vaic-prod-connectors",
         transport=net,
         resolve=resolver,
     )
@@ -492,7 +492,7 @@ async def test_oauth_specs_get_a_custom_provider_and_wait_for_the_owners_client(
     created = dict(ctl.calls)["create_oauth2_credential_provider"]
     meta = created["oauth2ProviderConfigInput"]["customOauth2ProviderConfig"]["oauthDiscovery"]
     assert meta["authorizationServerMetadata"]["tokenEndpoint"] == "https://auth.petstore.dev/token"
-    assert created["name"] == "aic-conn-petstore" and created["tags"]["Component"] == "connectors"
+    assert created["name"] == "vaic-conn-petstore" and created["tags"]["Component"] == "connectors"
     # The owner enters the client in the secure field (api Lambda).
     d, invoked, c = _api(secrets=Recorder(), control=control())
     await c.store.create(rec)
@@ -644,7 +644,7 @@ async def test_each_key_scheme_places_the_credential_and_errors_cut_it_out(
     else:
         assert sent.headers["Authorization"] == f"Bearer {SECRET}"
     text = out["content"][0]["text"]
-    assert out["isError"] and out["aic_error"] == "http_error" and "HTTP 401" in text
+    assert out["isError"] and out["vaic_error"] == "http_error" and "HTTP 401" in text
     assert SECRET not in text and base64.b64encode(key.encode()).decode() not in text
     assert SECRET not in capsys.readouterr().err
 
@@ -673,9 +673,9 @@ async def test_calls_are_pinned_to_the_spec_host_with_no_off_host_redirects(spec
     )
     api = FakeApi(lambda r: next(hops))
     out = await openapi_bridge.call(rec, "show_pet_by_id", {"petId": "7"}, d, send=api)
-    assert out["aic_error"] == "redirected" and [r.url for r in api.requests] == [f"{BASE}/pets/7", f"{BASE}/pets/7/"]
+    assert out["vaic_error"] == "redirected" and [r.url for r in api.requests] == [f"{BASE}/pets/7", f"{BASE}/pets/7/"]
     api = FakeApi(lambda r: HttpResponse(307, {"location": "http://api.petstore.dev/v1/pets"}, b""))
-    assert (await openapi_bridge.call(rec, "list_pets", {}, d, send=api))["aic_error"] == "redirected"
+    assert (await openapi_bridge.call(rec, "list_pets", {}, d, send=api))["vaic_error"] == "redirected"
 
 
 async def test_the_api_host_is_checked_again_at_call_time_against_private_addresses(specs: MemSpecs) -> None:
@@ -689,7 +689,7 @@ async def test_the_api_host_is_checked_again_at_call_time_against_private_addres
     out = await openapi_bridge.call(
         rec, "list_pets", {}, BridgeDeps(store, _identity(), "wl"), send=api, resolve=rebound
     )
-    assert out["aic_error"] == "blocked" and "private" in out["content"][0]["text"] and api.requests == []
+    assert out["vaic_error"] == "blocked" and "private" in out["content"][0]["text"] and api.requests == []
 
 
 async def test_answers_must_be_json_or_text_under_5_mb_and_errors_are_cut_to_2000_characters(specs: MemSpecs) -> None:
@@ -697,17 +697,17 @@ async def test_answers_must_be_json_or_text_under_5_mb_and_errors_are_cut_to_200
     rec = await _ready(store, specs, _no_auth())
     d = BridgeDeps(store, _identity(), "wl")
     img = FakeApi(lambda r: HttpResponse(200, {"content-type": "image/png"}, b"\x89PNG"))
-    assert (await openapi_bridge.call(rec, "list_pets", {}, d, send=img))["aic_error"] == "unsupported"
+    assert (await openapi_bridge.call(rec, "list_pets", {}, d, send=img))["vaic_error"] == "unsupported"
 
     def big(req: ApiRequest, timeout: float, cap: int) -> HttpResponse:
         raise openapi_bridge.TooLarge
 
-    assert (await openapi_bridge.call(rec, "list_pets", {}, d, send=big))["aic_error"] == "too_large"
+    assert (await openapi_bridge.call(rec, "list_pets", {}, d, send=big))["vaic_error"] == "too_large"
     long = FakeApi(lambda r: HttpResponse(500, {"content-type": "text/plain"}, b"x" * 10_000))
     out = await openapi_bridge.call(rec, "list_pets", {}, d, send=long)
     assert out["isError"] and out["content"][0]["text"].count("x") == 2000
     unknown = await openapi_bridge.call(rec, "drop_tables", {}, d, send=long)
-    assert unknown["aic_error"] == "unknown_tool"
+    assert unknown["vaic_error"] == "unknown_tool"
 
 
 async def test_a_missing_key_marks_the_connector_and_tells_the_agent(specs: MemSpecs) -> None:
@@ -720,7 +720,7 @@ async def test_a_missing_key_marks_the_connector_and_tells_the_agent(specs: MemS
         }
     )
     out = await openapi_bridge.call(rec, "list_pets", {}, BridgeDeps(store, identity, "wl"), send=FakeApi())
-    assert out["aic_error"] == "login_expired" and "key" in out["content"][0]["text"]
+    assert out["vaic_error"] == "login_expired" and "key" in out["content"][0]["text"]
     assert (await store.get("petstore"))["status"] == "login_expired"  # type: ignore[index]
 
 

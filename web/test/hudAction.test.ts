@@ -5,12 +5,12 @@ import { hudAction } from "../src/lib/hudAction.ts";
 describe("hud.action from VAIC", () => {
   beforeEach(() => {
     localStorage.clear();
-    window.location.hash = "#/ace";
+    window.location.hash = "#/vaic";
   });
   it("switches the theme and remembers it", () => {
     hudAction({ action: "theme", value: "light" });
     expect(document.documentElement.dataset.theme).toBe("light");
-    expect(localStorage.getItem("aic.theme")).toBe("light");
+    expect(localStorage.getItem("vaic.theme")).toBe("light");
     hudAction({ action: "theme", value: "dark" });
     expect(document.documentElement.dataset.theme).toBe("dark");
   });
@@ -23,6 +23,6 @@ describe("hud.action from VAIC", () => {
   });
   it("ignores anything else", () => {
     hudAction({ action: "theme", value: "purple" });
-    expect(localStorage.getItem("aic.theme")).toBeNull();
+    expect(localStorage.getItem("vaic.theme")).toBeNull();
   });
 });

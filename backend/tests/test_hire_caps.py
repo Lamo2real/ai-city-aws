@@ -4,8 +4,8 @@ max_concurrent_workers_per_department live workers in the department (the owner'
 
 from typing import Any
 
-from aic.runtime.tools import TurnCtx, tools_for
 from city_support import City, make_city, scripted_engine
+from vaic.runtime.tools import TurnCtx, tools_for
 
 SPEC = {"specialty": "Writer", "instructions": "Write the piece.", "tools": ["Read"], "budget_hint_usd": 1}
 
@@ -111,6 +111,6 @@ def test_hire_worker_offers_only_real_tool_names() -> None:
     city = make_city(scripted_engine({}))
     ctx = TurnCtx(agent_id="mgr-x", role="manager", department="X", ticket_id="g", task_id="t", conversation=None)
     spec = next(t for t in tools_for(city.deps, ctx) if t.name == "hire_worker")
-    from aic.shared.hierarchy.factory import WORKER_TOOLS
+    from vaic.shared.hierarchy.factory import WORKER_TOOLS
 
     assert spec.schema["properties"]["tools"]["items"]["enum"] == list(WORKER_TOOLS)

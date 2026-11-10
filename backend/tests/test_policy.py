@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from aic.shared.policy import action_hash, decide, gate, load_policy, sorted_json
+from vaic.shared.policy import action_hash, decide, gate, load_policy, sorted_json
 
 POLICY = load_policy()
 CASES: list[tuple[str, dict[str, Any], str]] = [
@@ -37,7 +37,7 @@ CASES: list[tuple[str, dict[str, Any], str]] = [
     ("Bash", {"command": "docker build -t x ."}, "allow"),
     ("Bash", {"command": "aws s3 ls"}, "allow"),
     ("Bash", {"command": "aws ec2 describe-instances"}, "allow"),
-    ("Bash", {"command": "aws s3 cp out.txt s3://aic-prod-workspaces/hire-1/out.txt"}, "allow"),
+    ("Bash", {"command": "aws s3 cp out.txt s3://vaic-prod-workspaces/hire-1/out.txt"}, "allow"),
     ("exec", {"command": "ls -la"}, "allow"),
     ("Read", {"file_path": "/work/src/index.ts"}, "allow"),
     ("mcp__app__calendar.read", {"from": "x"}, "allow"),

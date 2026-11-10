@@ -1,5 +1,5 @@
 // Builds only the City page for the iPhone app (city-embed.html + one script) into ios/AICity/CityWeb.
-// Run: npm run build:city-embed -w @aic/web (then commit the output; a test checks it is up to date).
+// Run: npm run build:city-embed -w @vaic/web (then commit the output; a test checks it is up to date).
 import { defineConfig } from "vite";
 
 export default defineConfig({

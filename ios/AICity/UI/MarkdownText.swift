@@ -1,4 +1,4 @@
-// AIC's Markdown as native text (never a web view), and the streamed reveal of a reply.
+// VAIC's Markdown as native text (never a web view), and the streamed reveal of a reply.
 import SwiftUI
 
 struct MarkdownText: View {

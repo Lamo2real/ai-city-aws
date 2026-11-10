@@ -18,20 +18,20 @@ from typing import Any
 
 import pytest
 
-from aic.lambdas import connectors as lam
-from aic.lambdas.api import handle_http
-from aic.lambdas.connector_bridge import BridgeDeps, call
-from aic.runtime.connector_tool import add_connector_tool
-from aic.shared import connector_packages as cp
-from aic.shared.connectors import DEFAULT_ROLES, REGISTRY_URL, ConnectorStore, approval_hash
-from aic.shared.events import MemoryBus
-from aic.shared.table import MemoryTable
 from connector_fakes import FakeNet, Recorder, control
 from test_connectors import _api, _ctx, _deps
+from vaic.lambdas import connectors as lam
+from vaic.lambdas.api import handle_http
+from vaic.lambdas.connector_bridge import BridgeDeps, call
+from vaic.runtime.connector_tool import add_connector_tool
+from vaic.shared import connector_packages as cp
+from vaic.shared.connectors import DEFAULT_ROLES, REGISTRY_URL, ConnectorStore, approval_hash
+from vaic.shared.events import MemoryBus
+from vaic.shared.table import MemoryTable
 
 ROOT = Path(__file__).resolve().parents[2]
 FAKE = Path(__file__).with_name("fake_stdio_mcp.py")
-HOST_ARN = "arn:aws:bedrock-agentcore:eu-north-1:123456789012:runtime/aic_prod_mcp_host-abc"
+HOST_ARN = "arn:aws:bedrock-agentcore:eu-north-1:123456789012:runtime/vaic_prod_mcp_host-abc"
 SECRET = "tvly-test-DO-NOT-LEAK-0123456789"
 
 
@@ -297,7 +297,7 @@ def test_the_package_sees_only_path_home_and_its_own_variables(tmp_path: Path, m
         "AWS_SECRET_ACCESS_KEY": "fake",
         "AWS_SESSION_TOKEN": "fake",
         "AWS_CONTAINER_CREDENTIALS_FULL_URI": "http://169.254.170.23/v1/credentials",
-        "AIC_LEDGER_TABLE": "aic-prod-ledger",
+        "VAIC_LEDGER_TABLE": "vaic-prod-ledger",
     }.items():
         monkeypatch.setenv(k, v)
     host, _ = _host(tmp_path)
@@ -306,7 +306,7 @@ def test_the_package_sees_only_path_home_and_its_own_variables(tmp_path: Path, m
     env = seen["env"]
     assert set(env) - {"__CF_USER_TEXT_ENCODING", "LC_CTYPE"} == {"PATH", "HOME", "TAVILY_API_KEY"}
     assert env["HOME"] == "/tmp/home" and env["TAVILY_API_KEY"] == SECRET
-    assert not any(k.startswith(("AWS_", "AIC_")) for k in env)
+    assert not any(k.startswith(("AWS_", "VAIC_")) for k in env)
     assert seen["argv"] == ["--mode", "stdio", "--key", SECRET]  # the placeholder is filled in only here
 
 
@@ -454,8 +454,8 @@ def _lam(tmp_path: Path) -> tuple[lam.ConnectorsDeps, Any, FakeAgentCore]:
         _secrets(),
         "gw-1",
         "pe-1",
-        "arn:aws:lambda:eu-north-1:123456789012:function:aic-prod-connector-bridge",
-        "aic-prod-connectors",
+        "arn:aws:lambda:eu-north-1:123456789012:function:vaic-prod-connector-bridge",
+        "vaic-prod-connectors",
         transport=FakeNet(),
         mcp_host_arn=HOST_ARN,
     )
@@ -474,7 +474,7 @@ async def test_sync_lists_tools_through_the_host_and_remove_stops_the_session(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     deps, ctl, ac = _lam(tmp_path)
-    await deps.store.create(_rec(status="provisioning", secret_name="aic/prod/connectors/tavily"))
+    await deps.store.create(_rec(status="provisioning", secret_name="vaic/prod/connectors/tavily"))
     await lam.handle({"action": "provision", "id": "tavily"}, deps)
     rec = await deps.store.get("tavily")
     assert rec and rec["status"] == "ready" and [t["name"] for t in rec["tools"]] == ["env", "pid", "die", "crash"]
@@ -500,8 +500,8 @@ async def test_the_bridge_calls_the_host_with_the_env_and_never_logs_it(
         {"name": "env", "read_only": True, "destructive": False},
         {"name": "pid", "read_only": True, "destructive": False},
     ]
-    await store.create(_rec(status="ready", secret_name="aic/prod/connectors/tavily", tools=tools))
-    d = BridgeDeps(store, ac, "aic-prod-connectors", FakeNet(), secrets=_secrets(), mcp_host_arn=HOST_ARN)
+    await store.create(_rec(status="ready", secret_name="vaic/prod/connectors/tavily", tools=tools))
+    d = BridgeDeps(store, ac, "vaic-prod-connectors", FakeNet(), secrets=_secrets(), mcp_host_arn=HOST_ARN)
     out = await call({}, "tavily___env", d)
     assert not out["isError"]
     seen = json.loads(out["content"][0]["text"])["env"]
@@ -515,10 +515,10 @@ async def test_the_bridge_answers_needs_key_when_the_variables_are_gone(tmp_path
     store = ConnectorStore(MemoryTable())
     await store.create(_rec(status="ready", tools=[{"name": "env", "read_only": True, "destructive": False}]))
     d = BridgeDeps(
-        store, FakeAgentCore(tmp_path), "aic-prod-connectors", FakeNet(), secrets=_secrets(), mcp_host_arn=HOST_ARN
+        store, FakeAgentCore(tmp_path), "vaic-prod-connectors", FakeNet(), secrets=_secrets(), mcp_host_arn=HOST_ARN
     )
     out = await call({}, "tavily___env", d)
-    assert out["isError"] and out["aic_error"] == "needs_key"
+    assert out["isError"] and out["vaic_error"] == "needs_key"
 
 
 async def test_a_host_error_is_a_failed_call(tmp_path: Path) -> None:
@@ -527,15 +527,15 @@ async def test_a_host_error_is_a_failed_call(tmp_path: Path) -> None:
     await store.create(
         _rec(status="ready", package=bad, tools=[{"name": "env", "read_only": True, "destructive": False}])
     )
-    d = BridgeDeps(store, FakeAgentCore(tmp_path), "aic-prod-connectors", FakeNet(), mcp_host_arn=HOST_ARN)
+    d = BridgeDeps(store, FakeAgentCore(tmp_path), "vaic-prod-connectors", FakeNet(), mcp_host_arn=HOST_ARN)
     out = await call({}, "tavily___env", d)
-    assert out["isError"] and out["aic_error"] == "failed"
+    assert out["isError"] and out["vaic_error"] == "failed"
 
 
 # ---------- the api: PUT /connectors/<id>/key {env} ----------
 async def test_the_env_values_go_to_secrets_manager_as_env_and_nowhere_else(capsys: pytest.CaptureFixture[str]) -> None:
     secrets = Recorder(
-        {"create_secret": {"ARN": "arn:aws:secretsmanager:eu-north-1:1:secret:aic/prod/connectors/tavily-AbC"}}
+        {"create_secret": {"ARN": "arn:aws:secretsmanager:eu-north-1:1:secret:vaic/prod/connectors/tavily-AbC"}}
     )
     ctl = control()
     d, invoked, c = _api(secrets=secrets, control=ctl)
@@ -546,7 +546,7 @@ async def test_the_env_values_go_to_secrets_manager_as_env_and_nowhere_else(caps
     assert ctl.calls == []  # no Identity provider for package variables
     assert invoked == [{"action": "sync", "id": "tavily"}]
     rec = await c.store.get("tavily")
-    assert rec and rec["secret_name"] == "aic/prod/connectors/tavily" and rec["status"] == "syncing"
+    assert rec and rec["secret_name"] == "vaic/prod/connectors/tavily" and rec["status"] == "syncing"
     bad = await handle_http(_ev("PUT", "/connectors/tavily/key", {"env": {"OTHER": SECRET}}), d)
     assert bad["statusCode"] == 400 and SECRET not in bad["body"]
     everything = json.dumps(list(d.ledger.table.items.values()), default=str) + json.dumps(d.bus.events)

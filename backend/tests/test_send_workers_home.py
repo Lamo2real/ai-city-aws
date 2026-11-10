@@ -1,15 +1,15 @@
 """The owner's "send the workers home": every worker drops its work and walks home; nothing else changes."""
 
-from aic.runtime.prompts import load_prompt
-from aic.runtime.tools import TurnCtx, tools_for
-from test_task_control import SPEC, ace_tools, city, job
+from test_task_control import SPEC, city, job, vaic_tools
+from vaic.runtime.prompts import load_prompt
+from vaic.runtime.tools import TurnCtx, tools_for
 
 
 async def test_asks_first_then_stops_every_job_and_everyone_stays_home() -> None:
     c = await city()
     porsche = await job(c, "Write 50 sentences comparing the GT3 and GT3 RS engines", "porsche sentences", workers=2)
     game = await job(c, "Build a snake game", "snake game", department_name="Apps", workers=1)
-    tools = ace_tools(c)
+    tools = vaic_tools(c)
     before = await c.ledger.settings({})
 
     ask = await tools["send_workers_home"].handler({"confirm": False})
@@ -37,7 +37,7 @@ async def test_asks_first_then_stops_every_job_and_everyone_stays_home() -> None
     refused = await mgr_tools["hire_worker"].handler(SPEC)
     assert refused.startswith("Hire refused: The owner sent everyone home")
     new_task = await c.ledger.create_ticket(
-        {"goal": "Write a haiku", "from": "ace", "to": "orchestrator", "department": None, "parent_id": None,
+        {"goal": "Write a haiku", "from": "vaic", "to": "orchestrator", "department": None, "parent_id": None,
          "kind": "task", "owner_words": "write me a haiku", "status": "open"}
     )  # fmt: skip
     orch_ctx = TurnCtx(
@@ -56,24 +56,24 @@ async def test_asks_first_then_stops_every_job_and_everyone_stays_home() -> None
 
 
 def test_the_prompt_keeps_send_home_and_stop_apart_and_never_pauses() -> None:
-    body = load_prompt("ace.md").body
-    assert "send_workers_home" in load_prompt("ace.md").tools
+    body = load_prompt("vaic.md").body
+    assert "send_workers_home" in load_prompt("vaic.md").tools
     assert "The three controls" in body and "always on" in body and "stops every job" in body
     assert "never argue" in body and "builder session" in body and "Never answer for them" in body
     assert "confirm=false`, which gives you the one short question" in body
     assert "pause_city" not in body and "resume_city" not in body
-    assert "pause_city" not in load_prompt("ace.md").tools and "resume_city" not in load_prompt("ace.md").tools
+    assert "pause_city" not in load_prompt("vaic.md").tools and "resume_city" not in load_prompt("vaic.md").tools
     assert body.index("`send_workers_home` with `confirm=false`") < body.index("## The three controls")
 
 
-def test_aic_releases_workers_in_process_never_through_the_factory_lambda() -> None:
+def test_vaic_releases_workers_in_process_never_through_the_factory_lambda() -> None:
     """VAIC's role may not invoke the Agent Factory Lambda (only managers hire), so its send-home and cancel
-    must not depend on it: the ace runtime gets the in-process factory, the other roles the Lambda client."""
+    must not depend on it: the vaic runtime gets the in-process factory, the other roles the Lambda client."""
     from types import SimpleNamespace
 
-    from aic.runtime.server import factory_for
-    from aic.shared.aws import LambdaFactoryClient
-    from aic.shared.hierarchy.factory import Factory
+    from vaic.runtime.server import factory_for
+    from vaic.shared.aws import LambdaFactoryClient
+    from vaic.shared.hierarchy.factory import Factory
 
     class NeverCalled:
         def client(self, *_: object, **__: object) -> object:
@@ -83,21 +83,21 @@ def test_aic_releases_workers_in_process_never_through_the_factory_lambda() -> N
         return {}
 
     city = SimpleNamespace(ledger=object(), bus=object(), settings=settings, session=NeverCalled())
-    assert isinstance(factory_for("ace", city, {"AIC_FACTORY_FUNCTION": "aic-prod-factory"}), Factory)
+    assert isinstance(factory_for("vaic", city, {"VAIC_FACTORY_FUNCTION": "vaic-prod-factory"}), Factory)
 
     class Session:
         def client(self, name: str, **_: object) -> object:
             return SimpleNamespace(name=name)
 
     city.session = Session()
-    assert isinstance(factory_for("manager", city, {"AIC_FACTORY_FUNCTION": "aic-prod-factory"}), LambdaFactoryClient)
+    assert isinstance(factory_for("manager", city, {"VAIC_FACTORY_FUNCTION": "vaic-prod-factory"}), LambdaFactoryClient)
 
 
 async def test_send_home_sends_only_the_named_ones_and_leaves_jobs_and_managers_alone() -> None:
     c = await city()
     porsche = await job(c, "Write 50 sentences comparing the GT3 and GT3 RS engines", "porsche sentences", workers=2)
     await job(c, "Build a snake game", "snake game", department_name="Apps", workers=1)
-    tools = ace_tools(c)
+    tools = vaic_tools(c)
     before = [w["id"] for w in await c.ledger.list_agents() if w["kind"] == "worker" and w["state"] != "retired"]
     apps_worker = next(
         w["id"] for w in await c.ledger.list_agents() if w["kind"] == "worker" and w["department"] == "Apps"
@@ -133,7 +133,7 @@ async def test_send_home_sends_only_the_named_ones_and_leaves_jobs_and_managers_
 
 
 def test_pick_workers_understands_ids_departments_roles_numbers_and_everyone() -> None:
-    from aic.shared.hierarchy.actions import pick_workers
+    from vaic.shared.hierarchy.actions import pick_workers
 
     at_work = [
         {"id": "wkr-1", "role": "Writer", "department": "Research & Writing", "hired_at": "2026-11-08T00:01:00Z"},

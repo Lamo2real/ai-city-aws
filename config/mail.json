@@ -18,8 +18,8 @@
     ]
   },
   "providers": {
-    "google": "aic-prod-google",
-    "microsoft": "aic-prod-microsoft"
+    "google": "vaic-prod-google",
+    "microsoft": "vaic-prod-microsoft"
   },
   "access_defaults": { "orchestrator": "none", "manager": "none" },
   "palette": ["ink-blue", "moss", "brick", "plum", "ochre", "teal", "rose", "slate"]

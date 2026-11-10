@@ -1,7 +1,7 @@
 // Appearance (Settings → General): System, Light or Dark, remembered per device. Dark glass over a night sky is the
 // default look; Light is the same glass over a daytime sky with ink text. `data-theme` on <html> carries the result.
 export type Theme = "system" | "light" | "dark";
-const KEY = "aic.theme";
+const KEY = "vaic.theme";
 
 export function readTheme(): Theme {
   try {

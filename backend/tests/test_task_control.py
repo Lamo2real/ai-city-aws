@@ -4,10 +4,10 @@ stopping, and when stopping: cancel every open part, send the workers home, drop
 
 from typing import Any
 
-from aic.runtime.tools import TurnCtx, tools_for
-from aic.shared.hierarchy.actions import status_summary
-from aic.shared.hierarchy.tasks import cancel_preview, describe_task, find_task, which_one
 from city_support import City, make_city, scripted_engine
+from vaic.runtime.tools import TurnCtx, tools_for
+from vaic.shared.hierarchy.actions import status_summary
+from vaic.shared.hierarchy.tasks import cancel_preview, describe_task, find_task, which_one
 
 SPEC = {"specialty": "Writer", "instructions": "Write the piece well.", "tools": ["Read"], "budget_hint_usd": 1}
 
@@ -42,7 +42,7 @@ async def job(
     """A task from the owner → a department goal → `workers` assignments with live workers on them."""
     mgr = await department(c, department_name)
     task = await c.ledger.create_ticket(
-        {"goal": goal, "from": "ace", "to": "orchestrator", "department": None, "parent_id": None, "kind": "task",
+        {"goal": goal, "from": "vaic", "to": "orchestrator", "department": None, "parent_id": None, "kind": "task",
          "owner_words": owner_words, "status": "in_progress"}
     )  # fmt: skip
     goal_t = await c.ledger.create_ticket(
@@ -59,8 +59,8 @@ async def job(
     return task
 
 
-def ace_tools(c: City) -> dict[str, Any]:
-    ctx = TurnCtx(agent_id="ace", role="ace", department=None, ticket_id="conv-main", task_id="conv-main")
+def vaic_tools(c: City) -> dict[str, Any]:
+    ctx = TurnCtx(agent_id="vaic", role="vaic", department=None, ticket_id="conv-main", task_id="conv-main")
     return {t.name: t for t in tools_for(c.host.d, ctx)}
 
 
@@ -101,7 +101,7 @@ async def test_a_vague_question_asks_which_job_and_nothing_matching_says_so() ->
 async def test_cancelling_asks_first_then_stops_parts_sends_workers_home_and_tells_the_city() -> None:
     c = await city()
     task = await job(c, "Write 50 sentences comparing the GT3 and GT3 RS engines", "porsche sentences")
-    tools = ace_tools(c)
+    tools = vaic_tools(c)
     ask = await tools["cancel_task"].handler({"query": "the Porsche sentences", "confirm": False})
     assert ask.startswith("Stop the job “Write 50 sentences") and "2 workers on it, about $0.80 so far" in ask
     assert (await c.ledger.get_ticket(task["id"]))["status"] == "in_progress"  # nothing stopped yet
@@ -130,7 +130,7 @@ async def test_queued_work_for_a_cancelled_job_is_dropped_by_the_dispatcher() ->
         {"id": "m-late", "role": "manager", "agentId": goal["to"], "department": "Writing", "ticketId": goal["id"],
          "taskId": task["id"], "kind": "report", "from": "wkr-x", "body": "done"}  # type: ignore[arg-type]
     )  # fmt: skip
-    await ace_tools(c)["cancel_task"].handler({"query": "porsche", "confirm": True})
+    await vaic_tools(c)["cancel_task"].handler({"query": "porsche", "confirm": True})
     before = len(c.invocations)
     await c.run()
     assert len(c.invocations) == before  # the late message never reaches a runtime
@@ -155,7 +155,7 @@ async def test_a_quiet_job_is_called_stuck() -> None:
 
 
 async def test_stopping_a_job_withdraws_its_questions_and_approvals_and_a_sweep_clears_old_leftovers() -> None:
-    from aic.shared.hierarchy.actions import sweep_stale_asks
+    from vaic.shared.hierarchy.actions import sweep_stale_asks
 
     c = await city()
     task = await job(c, "Write 50 sentences comparing the GT3 and GT3 RS engines", "porsche sentences")
@@ -171,7 +171,7 @@ async def test_stopping_a_job_withdraws_its_questions_and_approvals_and_a_sweep_
     app_ap = await c.ledger.request_approval(  # an app's approval belongs to no job: it stays
         {"agent": "app", "tool": "calendar", "action": "accept", "hash": "h2", "reason": "r", "kind": "tool"}
     )
-    await ace_tools(c)["cancel_task"].handler({"query": "the Porsche sentences", "confirm": True})
+    await vaic_tools(c)["cancel_task"].handler({"query": "the Porsche sentences", "confirm": True})
     assert await c.ledger.open_questions() == []
     assert [a["id"] for a in await c.ledger.pending_approvals()] == [app_ap["id"]]
     assert (await c.ledger.get_question(q["id"]))["status"] == "withdrawn"
@@ -180,11 +180,11 @@ async def test_stopping_a_job_withdraws_its_questions_and_approvals_and_a_sweep_
 
     # Left behind before this fix: asks on a finished ticket and on one that no longer exists are swept.
     done = await c.ledger.create_ticket(
-        {"goal": "old", "from": "ace", "to": "orchestrator", "department": None, "parent_id": None, "kind": "task",
+        {"goal": "old", "from": "vaic", "to": "orchestrator", "department": None, "parent_id": None, "kind": "task",
          "status": "done"}
     )  # fmt: skip
     live = await c.ledger.create_ticket(
-        {"goal": "live", "from": "ace", "to": "orchestrator", "department": None, "parent_id": None, "kind": "task",
+        {"goal": "live", "from": "vaic", "to": "orchestrator", "department": None, "parent_id": None, "kind": "task",
          "status": "waiting_on_owner"}
     )  # fmt: skip
     for tid in (done["id"], "t-gone", live["id"]):
@@ -196,7 +196,7 @@ async def test_stopping_a_job_withdraws_its_questions_and_approvals_and_a_sweep_
 
 
 async def test_the_work_screen_lists_jobs_not_parts_in_plain_words_with_progress() -> None:
-    from aic.shared.hierarchy.tasks import job_rows
+    from vaic.shared.hierarchy.tasks import job_rows
 
     c = await city()
     task = await job(c, "Write 50 sentences comparing the GT3 and GT3 RS engines", "porsche sentences", workers=3)

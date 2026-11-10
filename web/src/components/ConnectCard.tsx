@@ -354,7 +354,7 @@ function ApproveCard(p: { approvalId: string; action: string; reason: string; id
   );
 }
 
-/** Every connect card, in the order they arrived. Rendered under the chat by AceScreen. */
+/** Every connect card, in the order they arrived. Rendered under the chat by VaicScreen. */
 export function ChatCards({ cards }: { cards: ConnectCardState[] }) {
   const cat = useCatalog();
   if (!cards.length) return null;

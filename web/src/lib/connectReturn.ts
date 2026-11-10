@@ -3,7 +3,7 @@
 // stored {kind, id, state, completePath} here; at boot we finish that sign-in and tidy the address bar.
 import { api } from "./api.ts";
 
-export const CONNECT_KEY = "aic.connect";
+export const CONNECT_KEY = "vaic.connect";
 export interface PendingConnect {
   kind: "mail" | "connector";
   id: string;
@@ -37,7 +37,7 @@ export async function connectReturn(
   } catch {
     /* fine */
   }
-  replace(loc.pathname + (loc.hash || "#/ace")); // the query string (session id, state) leaves the address bar
+  replace(loc.pathname + (loc.hash || "#/vaic")); // the query string (session id, state) leaves the address bar
   if (!pending)
     return { ok: false, message: "That sign-in was started in another tab or has expired. Tap Sign in again." };
   const session = q.get("session_uri") ?? q.get("sessionUri") ?? q.get("session_id") ?? undefined;

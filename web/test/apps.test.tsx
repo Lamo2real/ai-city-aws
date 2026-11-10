@@ -9,7 +9,7 @@ import { capped, onAppsOrigin, route } from "../src/lib/apps.ts";
 import { loadConfig } from "../src/lib/config.ts";
 import { store } from "../src/lib/store.ts";
 
-const APPS = "https://apps.aic.test";
+const APPS = "https://apps.vaic.test";
 const app = (n: number, extra: Record<string, unknown> = {}) => ({
   app_id: `app-00000000000${n}`,
   slug: `game-${n}`,
@@ -35,7 +35,7 @@ const publish = {
 beforeAll(async () => {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => new Response(JSON.stringify({ apiUrl: "https://api.aic.test", appsUrl: APPS }))),
+    vi.fn(async () => new Response(JSON.stringify({ apiUrl: "https://api.vaic.test", appsUrl: APPS }))),
   );
   await loadConfig();
   vi.unstubAllGlobals();
@@ -78,7 +78,7 @@ describe("apps in the city state", () => {
 });
 
 describe("routes", () => {
-  const V = ["ace", "city", "inbox", "tickets", "apps", "costs", "settings"] as const;
+  const V = ["vaic", "city", "inbox", "tickets", "apps", "costs", "settings"] as const;
   it.each([
     ["#/apps", "apps", null],
     ["#/apps/", "apps", null],
@@ -87,8 +87,8 @@ describe("routes", () => {
     ["#/apps/%E0%A4%A", "apps", "%E0%A4%A"],
     ["#/tickets", "tickets", null],
     ["#/tickets/decided", "tickets", "decided"],
-    ["#/nope", "ace", null],
-    ["", "ace", null],
+    ["#/nope", "vaic", null],
+    ["", "vaic", null],
   ])("%s → %s %s", (hash, view, slug) => {
     expect(route(hash, V)).toEqual({ view, slug });
   });
@@ -108,7 +108,7 @@ describe("the app frame", () => {
   it("never frames anything off the apps origin", () => {
     for (const src of [
       "https://evil.test/x.html",
-      "http://apps.aic.test/x",
+      "http://apps.vaic.test/x",
       "javascript:alert(1)",
       "/live/x",
       "",

@@ -33,7 +33,7 @@ variable "scheduler_role_name" {
 }
 variable "reader_role_names" {
   type        = map(string)
-  description = "Runtime roles on the mail read path: ace, orchestrator, manager (the runtime enforces mail_access). Never the worker."
+  description = "Runtime roles on the mail read path: vaic, orchestrator, manager (the runtime enforces mail_access). Never the worker."
   validation {
     condition     = !contains(keys(var.reader_role_names), "worker") && alltrue([for n in values(var.reader_role_names) : !endswith(n, "-agent-worker")])
     error_message = "The worker role gets no mail access (docs/MAIL_CALENDAR.md §8)."
@@ -52,8 +52,8 @@ locals {
   directory      = "${local.arn}:workload-identity-directory/default"
   workload_arn   = "${local.directory}/workload-identity/${local.workload}"
   provider_arns  = [for k in keys(local.vendors) : "${local.vault}/oauth2credentialprovider/${var.name}-${k}"]
-  client_secrets = [for k in keys(local.vendors) : "${local.sm}:aic/prod/oauth-${k}-*"]
-  app_passwords  = "${local.sm}:aic/prod/mail/*"
+  client_secrets = [for k in keys(local.vendors) : "${local.sm}:vaic/prod/oauth-${k}-*"]
+  app_passwords  = "${local.sm}:vaic/prod/mail/*"
   account_users  = { StringLike = { "bedrock-agentcore:userid" = "ma-*" } }
   read_path = [
     { Sid = "VaultUserPerAccount", Effect = "Allow", Action = ["bedrock-agentcore:GetWorkloadAccessTokenForUserId"], Resource = [local.directory, local.workload_arn], Condition = local.account_users },
@@ -74,7 +74,7 @@ resource "aws_bedrockagentcore_workload_identity" "mail" {
 resource "aws_secretsmanager_secret" "client" {
   #checkov:skip=CKV2_AWS_57:OAuth client secrets are issued and rotated in Google Cloud and Microsoft Entra; there is no rotation Lambda to run.
   for_each                = local.vendors
-  name                    = "aic/prod/oauth-${each.key}"
+  name                    = "vaic/prod/oauth-${each.key}"
   description             = "${title(each.key)} OAuth client secret for mail and calendar, as {\"client_secret\": \"...\"}"
   kms_key_id              = var.kms_key_arn
   recovery_window_in_days = 7

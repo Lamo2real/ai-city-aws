@@ -1,5 +1,5 @@
-// AIC changes what lives on the owner's device (decision 143; the web's lib/hudAction.ts): the theme, or which
-// page is open. The `hud.action` event comes over the WebSocket from AIC's `hud_action` tool, which only runs on
+// VAIC changes what lives on the owner's device (decision 143; the web's lib/hudAction.ts): the theme, or which
+// page is open. The `hud.action` event comes over the WebSocket from VAIC's `hud_action` tool, which only runs on
 // the owner's own message. Only the two actions below are understood; anything else, and any page this iPhone
 // has no screen for, is ignored.
 import Foundation
@@ -26,14 +26,14 @@ enum HudAction: Equatable, Sendable {
         }
     }
 
-    /// The screen a HUD page (`#/ace`, `#/settings/connectors`, …) is on this iPhone, nil when it has none
+    /// The screen a HUD page (`#/vaic`, `#/settings/connectors`, …) is on this iPhone, nil when it has none
     /// (Apps, Knowledge and Skills live on the web HUD only).
     static func section(forPage page: String) -> AppSection? {
         guard page.wholeMatch(of: /#\/[\w\/?=&.\-]{0,120}/) != nil else { return nil }
         let path = page.dropFirst(2).split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
         let parts = path.split(separator: "/").map(String.init)
         switch parts.first {
-        case "ace": return .aic
+        case "vaic": return .vaic
         case "city": return .city
         case "tickets": return .tickets
         case "files": return .files

@@ -4,10 +4,10 @@ import json
 
 import httpx
 
-from aic.lambdas.api import ROUTES, handle_http
-from aic.shared.speech import LIVE_URL
 from test_api import ev, js, make
 from test_speech import KEY, deps
+from vaic.lambdas.api import ROUTES, handle_http
+from vaic.shared.speech import LIVE_URL
 
 OFFER = "v=0\r\no=- 1 2 IN IP4 127.0.0.1\r\n"
 ANSWER = json.dumps({"session": {"id": "live_123"}, "transport": {"type": "webrtc", "sdp": "v=0 answer"}}).encode()

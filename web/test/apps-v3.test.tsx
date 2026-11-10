@@ -9,7 +9,7 @@ import { granted } from "../src/lib/bridge.ts";
 import { loadConfig } from "../src/lib/config.ts";
 import { store } from "../src/lib/store.ts";
 
-const APPS = "https://apps.aic.test";
+const APPS = "https://apps.vaic.test";
 const snake = (extra: Record<string, unknown> = {}) => ({
   app_id: "app-snake",
   slug: "snake",
@@ -20,7 +20,7 @@ const snake = (extra: Record<string, unknown> = {}) => ({
 });
 const calls: Array<{ url: string; method: string }> = [];
 const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-  if (url === "/config.json") return new Response(JSON.stringify({ apiUrl: "https://api.aic.test", appsUrl: APPS }));
+  if (url === "/config.json") return new Response(JSON.stringify({ apiUrl: "https://api.vaic.test", appsUrl: APPS }));
   calls.push({ url, method: init?.method ?? "GET" });
   if (url.endsWith("/rollback"))
     return new Response(
@@ -32,7 +32,7 @@ const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
 beforeAll(async () => {
   vi.stubGlobal("fetch", fetchMock);
   await loadConfig();
-  (window as unknown as { __aicAuth: unknown }).__aicAuth = { idToken: async () => "header.payload.sig" };
+  (window as unknown as { __vaicAuth: unknown }).__vaicAuth = { idToken: async () => "header.payload.sig" };
 });
 afterEach(() => {
   cleanup();
@@ -93,7 +93,7 @@ describe("new versions", () => {
     expect(screen.getByText(/Version 2 is deleted and Snake opens as it was before/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Go back" }));
     await waitFor(() =>
-      expect(calls).toEqual([{ url: "https://api.aic.test/apps/app-snake/rollback", method: "POST" }]),
+      expect(calls).toEqual([{ url: "https://api.vaic.test/apps/app-snake/rollback", method: "POST" }]),
     );
     await waitFor(() => expect(store.get().city.apps["app-snake"]?.version).toBe(1));
     expect(screen.queryByRole("button", { name: /Go back to version/ })).toBeNull();

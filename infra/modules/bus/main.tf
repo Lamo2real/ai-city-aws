@@ -16,7 +16,7 @@ variable "turn_timeout_seconds" {
 
 locals {
   tags   = { Component = "bus" }
-  queues = toset(["ace", "orchestrator", "manager", "worker"])
+  queues = toset(["vaic", "orchestrator", "manager", "worker"])
 }
 
 resource "aws_cloudwatch_event_bus" "this" {

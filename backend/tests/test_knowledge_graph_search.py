@@ -5,8 +5,9 @@ import json
 
 import pytest
 
-from aic.shared.knowledge.extract import parse_extraction
-from aic.shared.knowledge.graph import (
+from knowledge_support import ready_item, world
+from vaic.shared.knowledge.extract import parse_extraction
+from vaic.shared.knowledge.graph import (
     Q_DELETE_ITEM,
     Q_DELETE_ORPHANS,
     Q_DELETE_RELS,
@@ -18,10 +19,9 @@ from aic.shared.knowledge.graph import (
     QUERIES,
     NeptuneGraph,
 )
-from aic.shared.knowledge.kb import Hit
-from aic.shared.knowledge.model import ALWAYS_BUDGET_TOKENS, DATA_HEADER
-from aic.shared.knowledge.search import SearchCache, always_block, search
-from knowledge_support import ready_item, world
+from vaic.shared.knowledge.kb import Hit
+from vaic.shared.knowledge.model import ALWAYS_BUDGET_TOKENS, DATA_HEADER
+from vaic.shared.knowledge.search import SearchCache, always_block, search
 
 
 # ---------- entity JSON validation ----------
@@ -321,8 +321,8 @@ async def test_search_caches_hits_and_expansion_for_60_seconds_but_rereads_items
 
 
 def test_the_cache_keeps_the_256_most_recently_used() -> None:
-    from aic.shared.knowledge.graph import Expansion
-    from aic.shared.knowledge.search import _Cached
+    from vaic.shared.knowledge.graph import Expansion
+    from vaic.shared.knowledge.search import _Cached
 
     cache = SearchCache()
     v = _Cached(groups=[], expansion=Expansion())

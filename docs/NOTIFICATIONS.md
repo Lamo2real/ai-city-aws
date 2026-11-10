@@ -14,14 +14,14 @@ unchanged.)
    download it once). Note the **Key ID** on that page and your **Team ID** (top right of the developer portal). The
    **Bundle ID** is the iPhone app's (`ios/AICity`, Xcode → target → General).
 2. **Paste it in AI City.** Settings → Notifications → **Add the Apple key**: Key ID, Team ID, Bundle ID, and the
-   whole `.p8` file. It goes straight into Secrets Manager as `aic/prod/apns` (never through chat or the repo).
+   whole `.p8` file. It goes straight into Secrets Manager as `vaic/prod/apns` (never through chat or the repo).
 3. **Turn it on and deploy once.** In the GitHub repository: Settings → Secrets and variables → Actions → Variables →
-   `AIC_APNS_ENABLED` = `true`. Then push any commit to `main` (or run the deploy workflow by hand). The deploy creates
+   `VAIC_APNS_ENABLED` = `true`. Then push any commit to `main` (or run the deploy workflow by hand). The deploy creates
    the two SNS platform applications (App Store/TestFlight builds, and Xcode debug builds) from your key.
 4. **Build the app with the push entitlement.** In `ios/Config/AICity.xcconfig` set
-   `AIC_ENTITLEMENTS = Config/AICity-Push.entitlements`, then install the app on the iPhone from Xcode again. Signing
+   `VAIC_ENTITLEMENTS = Config/AICity-Push.entitlements`, then install the app on the iPhone from Xcode again. Signing
    that entitlement needs your **Apple Developer Program** team (the same account the key in step 1 came from) set as
-   `AIC_TEAM_ID`; a free personal team can't sign it, so a free-team build never receives pushes — the app still
+   `VAIC_TEAM_ID`; a free personal team can't sign it, so a free-team build never receives pushes — the app still
    builds and runs, and its Settings → Notifications says why. The simulator always has the entitlement without this
    line (`ios/README.md` § Notifications).
 5. **Allow notifications on the phone.** Open the AI City app; when iOS asks, allow notifications. The app registers
@@ -34,10 +34,10 @@ Replacing the key later: paste the new one the same way and deploy once.
 - `infra/modules/notifications`: the secret, the two `aws_sns_platform_application`s (only when `apns_enabled`), and the
   IAM the api and notifier functions need. Nothing is created from the key until the variable is on, so every deploy
   applies with the secret empty.
-- `aic.lambdas.notifier`: EventBridge sends it only `ticket.status` events for top-level jobs (`kind: task`) reaching
+- `vaic.lambdas.notifier`: EventBridge sends it only `ticket.status` events for top-level jobs (`kind: task`) reaching
   `done`, `failed` or `cancelled`; a ledger claim (`push:<job>`) makes each job notify once; it pushes to every
   registered phone and forgets phones whose endpoint APNs disabled.
-- `aic.shared.push`: the device store (`DEVICE#<id>` in the ledger), the APNs payload, the Apple key check.
+- `vaic.shared.push`: the device store (`DEVICE#<id>` in the ledger), the APNs payload, the Apple key check.
 
 ## The iPhone app's contract
 

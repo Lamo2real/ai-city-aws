@@ -20,7 +20,7 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
-      - run: npm run build -w @aic/web
+      - run: npm run build -w @vaic/web
       - uses: astral-sh/setup-uv@v6
         with:
           version: "0.13.6"

@@ -36,7 +36,7 @@ struct RootView: View {
 
     /// The glass screens are dark whatever the phone's appearance (decision 103), and so is everything the system
     /// presents over them (alerts, confirmation dialogs, menus, popovers), which follows the window's scheme. Only
-    /// the City tab keeps the phone's own appearance, or the one the owner chose (AIC can set it, decision 143).
+    /// the City tab keeps the phone's own appearance, or the one the owner chose (VAIC can set it, decision 143).
     private var scheme: ColorScheme? {
         guard case .ready = model.boot, model.section == .city else { return .dark }
         switch model.appearance {
@@ -115,7 +115,7 @@ struct MainTabs: View {
 
     @ViewBuilder private func screen(_ s: AppSection) -> some View {
         switch s {
-        case .aic: ChatScreen()
+        case .vaic: ChatScreen()
         case .city: CityScreen()
         case .inbox: InboxScreen()
         case .away: AwaySettingsScreen()

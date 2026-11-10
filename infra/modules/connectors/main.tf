@@ -30,7 +30,7 @@ variable "bundle_path" {
 variable "bundle_hash" { type = string }
 variable "agent_role_names" {
   type        = map(string)
-  description = "The four runtime roles (ace, orchestrator, manager, worker): they get InvokeGateway and nothing else here."
+  description = "The four runtime roles (vaic, orchestrator, manager, worker): they get InvokeGateway and nothing else here."
 }
 variable "api_role_name" { type = string }
 variable "utility_invoke_arns" {
@@ -40,7 +40,7 @@ variable "utility_invoke_arns" {
 variable "utility_profile_arn" { type = string }
 variable "app_bridge_role_name" {
   type        = string
-  default     = "aic-prod-fn-app-bridge"
+  default     = "vaic-prod-fn-app-bridge"
   description = "The apps feature's bridge role (docs/APPS.md): the Cedar principal for app reads, and the one Lambda role besides the runtimes that may invoke the Gateway."
 }
 variable "default_tags" {
@@ -64,12 +64,12 @@ locals {
   vault        = "${local.arn}:token-vault/default"
   directory    = "${local.arn}:workload-identity-directory/default"
   workload_arn = "${local.directory}/workload-identity/${local.workload}"
-  oauth_arns   = "${local.vault}/oauth2credentialprovider/aic-conn-*"
-  apikey_arns  = "${local.vault}/apikeycredentialprovider/aic-conn-*"
+  oauth_arns   = "${local.vault}/oauth2credentialprovider/vaic-conn-*"
+  apikey_arns  = "${local.vault}/apikeycredentialprovider/vaic-conn-*"
   # API keys and package env values (EXTERNAL providers), and the client secrets AgentCore keeps for OAuth providers (MANAGED).
-  conn_secrets    = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:aic/prod/connectors/*"
-  managed_oauth   = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:bedrock-agentcore-identity!default/oauth2/aic-conn-*"
-  managed_apikey  = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:bedrock-agentcore-identity!default/apikey/aic-conn-*"
+  conn_secrets    = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:vaic/prod/connectors/*"
+  managed_oauth   = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:bedrock-agentcore-identity!default/oauth2/vaic-conn-*"
+  managed_apikey  = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:bedrock-agentcore-identity!default/apikey/vaic-conn-*"
   owner_only      = { StringEquals = { "bedrock-agentcore:userid" = "owner" } }
   required_tags   = { "aws:RequestTag/Project" = var.default_tags["Project"], "aws:RequestTag/Component" = "connectors" }
   allowed_tagkeys = { "aws:TagKeys" = keys(local.runtime_tag) }
@@ -77,28 +77,28 @@ locals {
   # A new image only when the host's own sources change (the agent image's tag works the same way, in deploy.yml).
   host_tag = "mh-${substr(sha256(join("", [for f in sort(fileset(local.host_dir, "**")) : filesha256("${local.host_dir}/${f}")])), 0, 16)}"
   functions = {
-    connector-bridge = { handler = "aic.lambdas.connector_bridge.handler", timeout = 70, memory = 512 }
-    connectors       = { handler = "aic.lambdas.connectors.handler", timeout = 300, memory = 512 }
+    connector-bridge = { handler = "vaic.lambdas.connector_bridge.handler", timeout = 70, memory = 512 }
+    connectors       = { handler = "vaic.lambdas.connectors.handler", timeout = 300, memory = 512 }
   }
   common_env = {
-    AIC_REGION              = var.region
-    AIC_LEDGER_TABLE        = var.ledger_table
-    AIC_CONNECTORS_WORKLOAD = local.workload
-    AIC_CONNECTORS_BUCKET   = aws_s3_bucket.specs.bucket
-    AIC_MCP_HOST_ARN        = aws_bedrockagentcore_agent_runtime.mcp_host.agent_runtime_arn
+    VAIC_REGION              = var.region
+    VAIC_LEDGER_TABLE        = var.ledger_table
+    VAIC_CONNECTORS_WORKLOAD = local.workload
+    VAIC_CONNECTORS_BUCKET   = aws_s3_bucket.specs.bucket
+    VAIC_MCP_HOST_ARN        = aws_bedrockagentcore_agent_runtime.mcp_host.agent_runtime_arn
   }
   env = {
     connector-bridge = local.common_env
     connectors = merge(local.common_env, {
-      AIC_EVENT_BUS        = var.bus_name
-      AIC_GATEWAY_ID       = aws_bedrockagentcore_gateway.this.gateway_id
-      AIC_POLICY_ENGINE_ID = aws_bedrockagentcore_policy_engine.this.policy_engine_id
-      AIC_BRIDGE_ARN       = local.bridge_arn
-      AIC_APP_BRIDGE_ROLE  = var.app_bridge_role_name
-      AIC_KMS_KEY_ARN      = var.kms_key_arn
-      AIC_DEFAULT_TAGS     = jsonencode(local.runtime_tag)
+      VAIC_EVENT_BUS        = var.bus_name
+      VAIC_GATEWAY_ID       = aws_bedrockagentcore_gateway.this.gateway_id
+      VAIC_POLICY_ENGINE_ID = aws_bedrockagentcore_policy_engine.city.policy_engine_id
+      VAIC_BRIDGE_ARN       = local.bridge_arn
+      VAIC_APP_BRIDGE_ROLE  = var.app_bridge_role_name
+      VAIC_KMS_KEY_ARN      = var.kms_key_arn
+      VAIC_DEFAULT_TAGS     = jsonencode(local.runtime_tag)
       # Decision 173: a gated utility turn on every successful connection picks the departments that hang its sign.
-      AIC_APP_PROFILE_UTILITY = var.utility_profile_arn
+      VAIC_APP_PROFILE_UTILITY = var.utility_profile_arn
     })
   }
   ledger_read = ["dynamodb:GetItem", "dynamodb:Query"]
@@ -116,7 +116,7 @@ locals {
     ]
     connectors = [
       { Sid = "GatewayTargets", Action = ["bedrock-agentcore:GetGateway", "bedrock-agentcore:CreateGatewayTarget", "bedrock-agentcore:UpdateGatewayTarget", "bedrock-agentcore:DeleteGatewayTarget", "bedrock-agentcore:GetGatewayTarget", "bedrock-agentcore:ListGatewayTargets", "bedrock-agentcore:InvokeGateway", "bedrock-agentcore:ManageResourceScopedPolicy"], Resource = [aws_bedrockagentcore_gateway.this.gateway_arn] },
-      { Sid = "CedarPolicies", Action = ["bedrock-agentcore:CreatePolicy", "bedrock-agentcore:UpdatePolicy", "bedrock-agentcore:DeletePolicy", "bedrock-agentcore:GetPolicy", "bedrock-agentcore:ListPolicies"], Resource = [aws_bedrockagentcore_policy_engine.this.policy_engine_arn, "${aws_bedrockagentcore_policy_engine.this.policy_engine_arn}/policy/*"] },
+      { Sid = "CedarPolicies", Action = ["bedrock-agentcore:CreatePolicy", "bedrock-agentcore:UpdatePolicy", "bedrock-agentcore:DeletePolicy", "bedrock-agentcore:GetPolicy", "bedrock-agentcore:ListPolicies"], Resource = [aws_bedrockagentcore_policy_engine.city.policy_engine_arn, "${aws_bedrockagentcore_policy_engine.city.policy_engine_arn}/policy/*"] },
       { Sid = "CreateProvidersTagged", Action = ["bedrock-agentcore:CreateOauth2CredentialProvider", "bedrock-agentcore:CreateApiKeyCredentialProvider", "bedrock-agentcore:TagResource"], Resource = [local.vault, local.oauth_arns, local.apikey_arns], Condition = { StringEquals = local.required_tags, "ForAllValues:StringEquals" = local.allowed_tagkeys } },
       # Creating a provider at runtime also checks (and on first use creates) the default token vault (decision 163).
       { Sid = "TokenVault", Action = ["bedrock-agentcore:GetTokenVault", "bedrock-agentcore:CreateTokenVault"], Resource = [local.vault] },
@@ -146,7 +146,17 @@ locals {
 }
 
 # ---------- the Gateway, its role and the policy engine ----------
-resource "aws_bedrockagentcore_policy_engine" "this" {
+# The AIC → VAIC rename (docs/RENAME_PLAN.md): the old engine still holds the Cedar policies the connectors Lambda
+# wrote, and AWS may refuse to delete it while it does; Terraform only forgets it (the owner can delete it in the
+# console) and makes this one.
+removed {
+  from = aws_bedrockagentcore_policy_engine.this
+  lifecycle {
+    destroy = false
+  }
+}
+
+resource "aws_bedrockagentcore_policy_engine" "city" {
   # AgentCore's own encryption: a customer key would need forward-access grants for every caller, and Cedar holds no secret.
   name        = replace("${var.name}-connectors", "-", "_")
   description = "AI City connectors. Policies are city data, rewritten by the connectors Lambda (decision 76)."
@@ -178,8 +188,8 @@ resource "aws_iam_role_policy" "gateway" {
     Version = "2012-10-17"
     Statement = [
       { Sid = "InvokeBridgeOnly", Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = [local.bridge_arn] },
-      { Sid = "PolicyEngineConfiguration", Effect = "Allow", Action = ["bedrock-agentcore:GetPolicyEngine"], Resource = [aws_bedrockagentcore_policy_engine.this.policy_engine_arn] },
-      { Sid = "PolicyEngineAuthorization", Effect = "Allow", Action = ["bedrock-agentcore:AuthorizeAction", "bedrock-agentcore:PartiallyAuthorizeActions"], Resource = [aws_bedrockagentcore_policy_engine.this.policy_engine_arn, local.gateway_arns] },
+      { Sid = "PolicyEngineConfiguration", Effect = "Allow", Action = ["bedrock-agentcore:GetPolicyEngine"], Resource = [aws_bedrockagentcore_policy_engine.city.policy_engine_arn] },
+      { Sid = "PolicyEngineAuthorization", Effect = "Allow", Action = ["bedrock-agentcore:AuthorizeAction", "bedrock-agentcore:PartiallyAuthorizeActions"], Resource = [aws_bedrockagentcore_policy_engine.city.policy_engine_arn, local.gateway_arns] },
       { Sid = "UseTheDataKey", Effect = "Allow", Action = ["kms:Decrypt", "kms:GenerateDataKey"], Resource = var.kms_key_arn },
     ]
   })
@@ -195,7 +205,7 @@ resource "aws_bedrockagentcore_gateway" "this" {
   protocol_type   = "MCP"
   kms_key_arn     = var.kms_key_arn
   policy_engine_configuration {
-    arn  = aws_bedrockagentcore_policy_engine.this.policy_engine_arn
+    arn  = aws_bedrockagentcore_policy_engine.city.policy_engine_arn
     mode = "ENFORCE"
   }
   tags = local.tags
@@ -298,7 +308,8 @@ resource "aws_ecr_lifecycle_policy" "mcp_host" {
 # Built and pushed during `terraform apply` (deploy.yml), like the agent image. The context is services/mcp-host only:
 # the host carries no city code.
 resource "terraform_data" "mcp_host_image" {
-  triggers_replace = [local.host_tag]
+  # The repository's URL too: a new repository (the AIC → VAIC rename) gets its image even with an unchanged tag.
+  triggers_replace = [local.host_tag, aws_ecr_repository.mcp_host.repository_url]
   depends_on       = [aws_ecr_repository.mcp_host]
   provisioner "local-exec" {
     command = "bash ${abspath("${path.module}/../../../scripts/push-image.sh")}"
@@ -496,7 +507,7 @@ resource "aws_iam_role_policy_attachment" "api" {
 output "gateway_url" { value = aws_bedrockagentcore_gateway.this.gateway_url }
 output "gateway_arn" { value = aws_bedrockagentcore_gateway.this.gateway_arn }
 output "gateway_id" { value = aws_bedrockagentcore_gateway.this.gateway_id }
-output "policy_engine_id" { value = aws_bedrockagentcore_policy_engine.this.policy_engine_id }
+output "policy_engine_id" { value = aws_bedrockagentcore_policy_engine.city.policy_engine_id }
 output "workload_name" { value = aws_bedrockagentcore_workload_identity.this.name }
 output "connectors_function_name" { value = aws_lambda_function.fn["connectors"].function_name }
 output "bridge_arn" { value = aws_lambda_function.fn["connector-bridge"].arn }

@@ -149,7 +149,7 @@ struct CityPanel: View {
         let s = model.hud.city
         NavigationStack {
             List {
-                if let a = s.agents[id] ?? (id == "ace" ? Agent(id: "ace", kind: "core", role: "VAIC", department: nil, model: "", state: "active") : nil) {
+                if let a = s.agents[id] ?? (id == "vaic" ? Agent(id: "vaic", kind: "core", role: "VAIC", department: nil, model: "", state: "active") : nil) {
                     let v = City.visualState(s, id)
                     let detail = s.activities[id].flatMap { $0.activity == v ? $0.detail : nil }.map { City.plainText($0, max: 120).short }
                     Section {
@@ -159,7 +159,7 @@ struct CityPanel: View {
                         if !a.model.isEmpty { LabeledContent("Model", value: City.modelName[a.model] ?? a.model) }
                         if let t = City.currentTicket(s, id) { LabeledContent("Working on", value: t.goal) }
                     }
-                    if a.state != "retired" && id != "ace" {
+                    if a.state != "retired" && id != "vaic" {
                         Section {
                             if let problem { Banner(tone: .bad, text: problem) }
                             TextField("Tell \(a.role) something", text: $instruction, axis: .vertical).frame(minHeight: 44)
@@ -194,7 +194,7 @@ struct CityPanel: View {
                     }
                 }
             }
-            .navigationTitle(id == "ace" ? "VAIC" : id)
+            .navigationTitle(id == "vaic" ? "VAIC" : id)
             .navigationBarTitleDisplayMode(.inline)
         }
     }

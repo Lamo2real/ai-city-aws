@@ -1,12 +1,12 @@
-// Autopilot, like web/src/lib/away.ts: the owner can be gone for weeks. Nothing waits on them; AIC's screen opens
+// Autopilot, like web/src/lib/away.ts: the owner can be gone for weeks. Nothing waits on them; VAIC's screen opens
 // with "While you were away" after more than 12 hours, standing orders handle incoming work, and what only the
 // owner's hands can do waits on a short "When you're back" list. A 404 from these routes shows nothing about them.
 import Foundation
 
 enum Away {
-    /// Long enough away that AIC's screen opens with "While you were away".
+    /// Long enough away that VAIC's screen opens with "While you were away".
     static let awayMs: Double = 12 * 3_600_000
-    static let seenKey = "aic.lastSeen"
+    static let seenKey = "vaic.lastSeen"
     static let addPrompt = "While I'm away, "
 
     /// One plain line for a job or a handled item, whatever shape the server sends.

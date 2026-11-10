@@ -55,7 +55,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - run: npm run build -w @aic/web
+      - run: npm run build -w @vaic/web
       - uses: actions/upload-artifact@v4
         with:
           name: web-dist
@@ -163,7 +163,9 @@ jobs:
             -backend-config="use_lockfile=true"
           extra=()
           [ -z "$MAIL_PROVIDERS" ] || extra+=(-var "mail_providers=${MAIL_PROVIDERS}")
-          terraform plan -input=false -out=prod.tfplan \
+          # -refresh=false only for the AIC → VAIC rename (docs/RENAME_PLAN.md): the knowledge index's provider points at
+          # a collection the rename replaces, so the old index can't be read. Removed again once the rename has landed.
+          terraform plan -input=false -out=prod.tfplan -refresh=false \
             -var "region=${AWS_REGION}" \
             -var "owner_email=${OWNER_EMAIL}" \
             -var "agent_image_tag=${IMAGE_TAG}" \
@@ -238,8 +240,8 @@ jobs:
       - name: warm VAIC's runtime (the first message after a release should be fast too)
         working-directory: infra/envs/prod
         run: |
-          fn="$(terraform output -raw scheduler_function_name 2>/dev/null || echo aic-prod-scheduler)"
-          aws lambda invoke --function-name "$fn" --payload '{"job":"warm_ace"}' \
+          fn="$(terraform output -raw scheduler_function_name 2>/dev/null || echo vaic-prod-scheduler)"
+          aws lambda invoke --function-name "$fn" --payload '{"job":"warm_vaic"}' \
             --cli-binary-format raw-in-base64-out /dev/null || echo "warm-up skipped"
       - name: outputs for the HUD upload
         id: out

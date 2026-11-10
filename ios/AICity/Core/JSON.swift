@@ -1,4 +1,4 @@
-// Events and API replies are plain JSON whose shape varies by type (see backend/src/aic/shared/events.py).
+// Events and API replies are plain JSON whose shape varies by type (see backend/src/vaic/shared/events.py).
 // JSONValue holds any of it, so one decoder reads every event, and unknown keys never break the app.
 import Foundation
 

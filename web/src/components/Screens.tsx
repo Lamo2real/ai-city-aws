@@ -961,7 +961,7 @@ function ApnsCard() {
   const state = data.enabled
     ? "On: your phone gets a message when a job is finished."
     : data.key_saved_at || saved
-      ? "Key saved. One more step: turn on AIC_APNS_ENABLED in GitHub and deploy once."
+      ? "Key saved. One more step: turn on VAIC_APNS_ENABLED in GitHub and deploy once."
       : "Not set up yet: paste the Apple key from Apple Developer → Keys → Apple Push Notifications.";
   return (
     <article className="card" aria-label="iPhone notifications">
@@ -993,7 +993,7 @@ function ApnsCard() {
                 setSaved(r.saved_at);
                 setOpen(false);
                 setP8("");
-                toast({ tone: "good", text: "Apple key saved. Deploy once with AIC_APNS_ENABLED on." });
+                toast({ tone: "good", text: "Apple key saved. Deploy once with VAIC_APNS_ENABLED on." });
               })
               .catch((err: unknown) =>
                 setProblem(err instanceof ApiError ? err.message : "The key could not be saved."),

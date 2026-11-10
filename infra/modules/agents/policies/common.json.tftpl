@@ -30,13 +30,13 @@
       "Effect": "Allow",
       "Action": ["cloudwatch:PutMetricData"],
       "Resource": "*",
-      "Condition": { "StringEquals": { "cloudwatch:namespace": ["AIC", "bedrock-agentcore"] } }
+      "Condition": { "StringEquals": { "cloudwatch:namespace": ["VAIC", "bedrock-agentcore"] } }
     },
     {
       "Sid": "WorkloadIdentity",
       "Effect": "Allow",
       "Action": ["bedrock-agentcore:GetWorkloadAccessToken", "bedrock-agentcore:GetWorkloadAccessTokenForJWT", "bedrock-agentcore:GetWorkloadAccessTokenForUserId"],
-      "Resource": ["arn:aws:bedrock-agentcore:${region}:${account_id}:workload-identity-directory/default", "arn:aws:bedrock-agentcore:${region}:${account_id}:workload-identity-directory/default/workload-identity/aic_prod_*"]
+      "Resource": ["arn:aws:bedrock-agentcore:${region}:${account_id}:workload-identity-directory/default", "arn:aws:bedrock-agentcore:${region}:${account_id}:workload-identity-directory/default/workload-identity/vaic_prod_*"]
     },
     {
       "Sid": "Memory",

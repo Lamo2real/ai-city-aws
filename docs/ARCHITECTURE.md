@@ -24,12 +24,12 @@ flowchart LR
     wsl[ws Lambdas: connect, broadcast]
   end
   subgraph work[Work]
-    q[(SQS: ace, orchestrator, manager, worker + DLQs)]
+    q[(SQS: vaic, orchestrator, manager, worker + DLQs)]
     disp[dispatcher Lambda: pause, caps, ceilings, rate]
     fac[Agent Factory Lambda]
   end
   subgraph agentcore[Bedrock AgentCore]
-    rA[Runtime: AIC / Sonnet 5.5]
+    rA[Runtime: VAIC / Sonnet 5.5]
     rO[Runtime: Orchestrator / Fable 5.2]
     rM[Runtime: Manager / Fable 5.2]
     rW[Runtime: Worker / Opus 5.5]
@@ -39,21 +39,21 @@ flowchart LR
   br[Bedrock: application inference profiles per role -> global profiles]
   subgraph state[State and events]
     ddb[(DynamoDB ledger, PITR, KMS)]
-    eb{{EventBridge bus aic-prod}}
+    eb{{EventBridge bus vaic-prod}}
     sfn[Step Functions: approvals]
     sns[SNS email]
     sch[Scheduler jobs: DISABLED]
   end
   bud[AWS Budgets: email alerts only]
   subgraph knowledge[Knowledge base]
-    ks3[(S3 aic-prod-knowledge: raw/, work/, normalized/)]
+    ks3[(S3 vaic-prod-knowledge: raw/, work/, normalized/)]
     kfn[knowledge Lambda]
     ksfn[Step Functions: knowledge ingest]
     kmc[MediaConvert + Transcribe batch]
     kb[Bedrock Knowledge Base, Titan V2 embeddings, direct ingestion]
-    kvec[(OpenSearch Serverless aic-prod-knowledge: index items, hybrid)]
-    kddb[(DynamoDB aic-prod-knowledge: item records)]
-    kgr[(Neptune Analytics aic-prod-knowledge-graph: openCypher)]
+    kvec[(OpenSearch Serverless vaic-prod-knowledge: index items, hybrid)]
+    kddb[(DynamoDB vaic-prod-knowledge: item records)]
+    kgr[(Neptune Analytics vaic-prod-knowledge-graph: openCypher)]
   end
 
   owner --> cf --> s3h
@@ -95,26 +95,26 @@ flowchart LR
 
 | Agent | Where it runs | Session ID | Model | Tools |
 |---|---|---|---|---|
-| AIC | runtime `aic_prod_ace` | `ace-<owner>-<conversation>` | Sonnet 5.5 | `delegate_to_orchestrator`, `get_status`, `answer_question`, `instruct_agent`, notes, reminders, `pause_city`, `resume_city` |
-| Orchestrator | runtime `aic_prod_orchestrator` | `orch-<task>` | Fable 5.2 → Opus 5.5 | `create_department`, `assign_to_department`, `get_reports`, `sign_off`, `ask_owner`, `report_to_ace` |
-| Manager (one per department) | runtime `aic_prod_manager` | `mgr-<department>-<task>` | Fable 5.2 → Opus 5.5 | `hire_worker`, `assign`, `answer_worker`, `review`, `release_worker`, `save_specialist`, `ask_owner`, `report_to_orchestrator` |
-| Worker (any number) | runtime `aic_prod_worker` (async job ≤ 8 h) | `wkr-<department>-<hireId>` | Opus 5.5 | granted built-ins (shell, files, git, web, Code Interpreter, Browser) + `ask_manager`, `report_to_manager` |
+| VAIC | runtime `vaic_prod_vaic` | `vaic-<owner>-<conversation>` | Sonnet 5.5 | `delegate_to_orchestrator`, `get_status`, `answer_question`, `instruct_agent`, notes, reminders, `pause_city`, `resume_city` |
+| Orchestrator | runtime `vaic_prod_orchestrator` | `orch-<task>` | Fable 5.2 → Opus 5.5 | `create_department`, `assign_to_department`, `get_reports`, `sign_off`, `ask_owner`, `report_to_vaic` |
+| Manager (one per department) | runtime `vaic_prod_manager` | `mgr-<department>-<task>` | Fable 5.2 → Opus 5.5 | `hire_worker`, `assign`, `answer_worker`, `review`, `release_worker`, `save_specialist`, `ask_owner`, `report_to_orchestrator` |
+| Worker (any number) | runtime `vaic_prod_worker` (async job ≤ 8 h) | `wkr-<department>-<hireId>` | Opus 5.5 | granted built-ins (shell, files, git, web, Code Interpreter, Browser) + `ask_manager`, `report_to_manager` |
 
 Departments and workers are data and sessions, never new runtimes, so the account stays far below AgentCore's runtime quota while hiring is unlimited.
 
 ## A request, end to end
-1. The owner types or speaks. The HUD posts `/messages`; the API queues a message for AIC (`aic-prod-ace`).
+1. The owner types or speaks. The HUD posts `/messages`; the API queues a message for VAIC (`vaic-prod-vaic`).
 2. The **dispatcher** takes it: pause flag → spend caps (only if the owner set one; none by default) → for workers, concurrency ceilings and the new-session rate → a lease on the message (idempotency) → `InvokeAgentRuntime`.
 3. Inside the runtime, the **startup guard** has already refused to run without `CLAUDE_CODE_USE_BEDROCK=1` or with any other credential. The **host** reads the ledger, builds the prompt (stable system prompt first, for prompt caching), and runs one **gated turn**: caps again, throttling back-off, Fable → Opus fallback once, a cost row in the ledger and a `cost.update` event.
-4. Every tool call passes the **policy gate** (`backend/src/aic/shared/policy.py`): deny rules (cloud mutation, force-push, push to main, credential files, merging), ask rules (become an approval bound to the exact action, via Step Functions), and the call is audited in the ledger.
+4. Every tool call passes the **policy gate** (`backend/src/vaic/shared/policy.py`): deny rules (cloud mutation, force-push, push to main, credential files, merging), ask rules (become an approval bound to the exact action, via Step Functions), and the call is audited in the ledger.
 5. Tools change the ledger, put events on the bus and queue the next agent's message, then the turn ends. Nobody waits in a session: the next turn starts when a report arrives.
-6. Events fan out: to the WebSocket (City view, AIC's streamed reply), to the ledger (ticket trace) and to SNS (results, cap alerts, pause).
-7. The Orchestrator signs off (PASS/FAIL) before anything leaves the city; AIC tells the owner.
+6. Events fan out: to the WebSocket (City view, VAIC's streamed reply), to the ledger (ticket trace) and to SNS (results, cap alerts, pause).
+7. The Orchestrator signs off (PASS/FAIL) before anything leaves the city; VAIC tells the owner.
 
 ## Shared code
-- `backend/src/aic/shared` (Python): model map (`config/models.json` is the only place model IDs live), startup guard, policy gate, single-table ledger (one implementation over a `Table` interface with in-memory and DynamoDB backends), cost math (5-minute vs 1-hour cache writes, geo surcharge, Haiku long-context tier), spend caps, event schemas (Pydantic), the turn gate, the dispatcher's decisions, the Agent Factory, the actions shared by tools and API, utility (Haiku) calls and the wake word.
-- `backend/src/aic/runtime` (Python): the AgentCore container (Starlette on 8080, arm64; image built from `services/agent-runtime/Dockerfile`), role tools, the Claude Agent SDK engine.
-- `backend/src/aic/lambdas` (Python 3.13, one zip for all functions): api, dispatcher, factory, ledger writer, ws (authorizer, connections, broadcast), notifier, approvals, apps (stages a worker's `app.submitted` as a checked draft), app bridge (an app's granted read-only data reads, invoked by the api), scheduler (+ the fenced, disabled self-improvement check).
+- `backend/src/vaic/shared` (Python): model map (`config/models.json` is the only place model IDs live), startup guard, policy gate, single-table ledger (one implementation over a `Table` interface with in-memory and DynamoDB backends), cost math (5-minute vs 1-hour cache writes, geo surcharge, Haiku long-context tier), spend caps, event schemas (Pydantic), the turn gate, the dispatcher's decisions, the Agent Factory, the actions shared by tools and API, utility (Haiku) calls and the wake word.
+- `backend/src/vaic/runtime` (Python): the AgentCore container (Starlette on 8080, arm64; image built from `services/agent-runtime/Dockerfile`), role tools, the Claude Agent SDK engine.
+- `backend/src/vaic/lambdas` (Python 3.13, one zip for all functions): api, dispatcher, factory, ledger writer, ws (authorizer, connections, broadcast), notifier, approvals, apps (stages a worker's `app.submitted` as a checked draft), app bridge (an app's granted read-only data reads, invoked by the api), scheduler (+ the fenced, disabled self-improvement check).
 - `web`: React HUD; the City view is ported from the owner's Mac HUD (`web/src/city/`).
 
 ## Data model (DynamoDB, one table)
@@ -135,14 +135,14 @@ Departments and workers are data and sessions, never new runtimes, so the accoun
 | Event trace, tool audit, notes, reminders | `EVENT#ticket`, `TOOL#agent`, `NOTE#…`, `REMINDER#…` | gsi1 |
 
 ## Knowledge base (contract in `docs/KNOWLEDGE.md`, v2: decision 66)
-DynamoDB `aic-prod-knowledge` holds item records only:
+DynamoDB `vaic-prod-knowledge` holds item records only:
 | Item | pk / sk | Index |
 |---|---|---|
 | Knowledge item | `ITEM#<id>` / `META` | gsi1 `ITEM` / `<created_at>`; gsi2 `SCOPE#<scope>` / `<created_at>` |
 
-Neptune Analytics graph `aic-prod-knowledge-graph` (openCypher, parameterised queries only): `(:Item {id, scope, status})`, `(:Entity {key, name, type, description})`, `(:Item)-[:MENTIONS]->(:Entity)`, `(:Entity)-[:REL {relation, item_id}]->(:Entity)`. Public endpoint, IAM SigV4 only.
+Neptune Analytics graph `vaic-prod-knowledge-graph` (openCypher, parameterised queries only): `(:Item {id, scope, status})`, `(:Entity {key, name, type, description})`, `(:Item)-[:MENTIONS]->(:Entity)`, `(:Entity)-[:REL {relation, item_id}]->(:Entity)`. Public endpoint, IAM SigV4 only.
 
-OpenSearch Serverless collection `aic-prod-knowledge` (VECTORSEARCH, no standby, KMS), index `items`: `embedding` (knn_vector 1,024, faiss HNSW, inner product), `text` (BM25, hybrid search), `metadata` (not indexed), `item_id` / `scope` / `kind` (keyword filters). Created by Terraform (opensearch provider, SigV4) before the KB.
+OpenSearch Serverless collection `vaic-prod-knowledge` (VECTORSEARCH, no standby, KMS), index `items`: `embedding` (knn_vector 1,024, faiss HNSW, inner product), `text` (BM25, hybrid search), `metadata` (not indexed), `item_id` / `scope` / `kind` (keyword filters). Created by Terraform (opensearch provider, SigV4) before the KB.
 
 Files: `raw/<id>/…` (uploads; a new object starts the pipeline), `work/<id>/…` (MediaConvert and Transcribe output, 7 days), `normalized/<id>/…` + `.metadata.json` (the Knowledge Base data source; each item is sent by direct ingestion, no data-source syncs).
 

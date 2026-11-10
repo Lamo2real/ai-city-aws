@@ -1,4 +1,4 @@
-// A small Markdown reader for AIC's replies (same rules as web/src/lib/markdown.tsx): headings, paragraphs,
+// A small Markdown reader for VAIC's replies (same rules as web/src/lib/markdown.tsx): headings, paragraphs,
 // bullet and numbered lists, tables, code blocks, and inline **bold**, *italic*, `code` and
 // [links](https://…). It builds plain SwiftUI text runs, never web content, so a reply cannot inject markup
 // or scripts. Links open only for http(s) addresses; anything else stays plain text.

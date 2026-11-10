@@ -15,7 +15,7 @@ from xml.sax.saxutils import escape
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs" / "architecture" / "aws-architecture.drawio"
-N = "aic-prod"
+N = "vaic-prod"
 
 COL = {
     "compute": "#ED7100", "storage": "#7AA116", "db": "#C925D1", "integration": "#E7157B", "network": "#8C4FFF",
@@ -127,7 +127,7 @@ head = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture
 text(
     f"<b>Synced with the ai-city-aws repo, branch <code>main</code> ({date.today():%-d %b %Y}, HEAD <code>{head}</code>)"
     ", one AWS account (552687213402), one environment (<code>prod</code>), Terraform in <code>infra/</code>.</b><br>"
-    "16 Lambdas (Python 3.13, arm64, JSON logs, X-Ray) &#183; 5 AgentCore runtimes (AIC, Orchestrator, Manager, Worker, "
+    "16 Lambdas (Python 3.13, arm64, JSON logs, X-Ray) &#183; 5 AgentCore runtimes (VAIC, Orchestrator, Manager, Worker, "
     "MCP host) &#183; 3 DynamoDB tables (PITR + KMS) &#183; 7 S3 buckets &#183; 4 work queues + DLQs &#183; 2 Step "
     "Functions &#183; 9 EventBridge schedules &#183; 2 CloudFront distributions &#183; 1 Cognito user pool + 1 identity "
     "pool &#183; HTTP API + WebSocket API &#183; every push to <code>main</code> deploys through GitHub OIDC",
@@ -135,7 +135,7 @@ text(
 )  # fmt: skip
 
 # ======================================================================================== A. the city
-section("AI City core - the owner talks to AIC; work flows down the hierarchy and comes back as live events", 0, 0, 3300, 1250)
+section("AI City core - the owner talks to VAIC; work flows down the hierarchy and comes back as live events", 0, 0, 3300, 1250)
 
 person("owner", "Owner (you, &quot;Sir&quot;)", "user", 50, 120)
 person("hud", "Web HUD<br>(any browser)", "client", 50, 330, 64, 64)
@@ -181,11 +181,11 @@ edge("ws", "l_wsc")
 
 # queues and the city bus
 QX = 1760
-for i, q in enumerate(["ace", "orchestrator", "manager", "worker"]):
+for i, q in enumerate(["vaic", "orchestrator", "manager", "worker"]):
     named(f"q_{q}", f"{N}-{q}", "sqs", "integration", QX, 160 + i * 140)
 text("SQS work queues (one per role) + a DLQ each, replayed by the scheduler", QX - 40, 720, 200, 50, 10)
-edge("l_api", "q_ace", "messages")
-edge("q_ace", "l_disp")
+edge("l_api", "q_vaic", "messages")
+edge("q_vaic", "l_disp")
 described("eb", f"{N}-city (EventBridge bus)", "agent.hired, ticket.*, worker.state, chat.reply, approval.requested … every change in the city", "eventbridge", "integration", 1110, 830)
 described("sfn_appr", f"{N}-approval (Step Functions)", "waits for the owner's (or the Chief of Staff's) decision, then resumes the job", "step_functions", "integration", 1110, 990)
 named("sns", f"{N} push (SNS)", "sns", "integration", 1560, 1000)
@@ -196,7 +196,7 @@ edge("eb", "l_noti")
 edge("l_noti", "sns")
 
 # agents
-described("rt", "AgentCore Runtime x4", "aic_prod_ace · _orchestrator · _manager · _worker<br>one container image (ECR), one session per agent; the policy gate checks every tool call", "machine_learning", "ml", 2000, 110, 78)
+described("rt", "AgentCore Runtime x4", "vaic_prod_vaic · _orchestrator · _manager · _worker<br>one container image (ECR), one session per agent; the policy gate checks every tool call", "machine_learning", "ml", 2000, 110, 78)
 described("rt_mcp", "AgentCore Runtime - MCP host", "runs package MCP servers for connectors", "machine_learning", "ml", 2000, 280)
 described("gw", "AgentCore Gateway", "every connector (MCP servers, OpenAPI web APIs) behind one gateway; per-role grants", "machine_learning", "ml", 2000, 420)
 described("ident", "AgentCore Identity", "OAuth sign-in for connectors and mailboxes (token vault per account); keys in Secrets Manager", "machine_learning", "ml", 2000, 560)
@@ -207,8 +207,8 @@ edge("rt", "gw", "tools")
 edge("gw", "ident")
 edge("ecr", "rt_mcp", "", True)
 
-described("bedrock", "Amazon Bedrock - Claude", "Fable 5.2: Orchestrator, every manager, Chief of Staff, Media/Research/Legal workers<br>Opus 5.5: all other workers · Haiku 5.5: AIC and utility calls<br>an application inference profile per role (cost split by AgentRole tag)", "machine_learning", "ml", 2620, 110, 78, 360)
-described("sonic", "Amazon Bedrock - Nova 2.5 Sonic", "AIC's backup real-time voice, relayed by the AIC runtime", "machine_learning", "ml", 2620, 330)
+described("bedrock", "Amazon Bedrock - Claude", "Fable 5.2: Orchestrator, every manager, Chief of Staff, Media/Research/Legal workers<br>Opus 5.5: all other workers · Haiku 5.5: VAIC and utility calls<br>an application inference profile per role (cost split by AgentRole tag)", "machine_learning", "ml", 2620, 110, 78, 360)
+described("sonic", "Amazon Bedrock - Nova 2.5 Sonic", "VAIC's backup real-time voice, relayed by the VAIC runtime", "machine_learning", "ml", 2620, 330)
 described("kb", "Bedrock Knowledge Base", "the owner's documents; Titan Text Embeddings V2", "machine_learning", "ml", 2620, 490)
 named("aoss", "OpenSearch Serverless (vectors)", "elasticsearch_service", "analytics", 2630, 700, 50, 200)
 named("nep", "Neptune Analytics (graph)", "neptune", "db", 2880, 700, 50, 200)
@@ -233,7 +233,7 @@ BY = 1320
 section("Data - DynamoDB tables, S3 buckets and the knowledge pipeline", 0, BY, 3300, 660)
 for i, (k, nme) in enumerate([("t_ledger", "ledger"), ("t_conn", "connections"), ("t_kn", "knowledge")]):
     named(k, f"{N}-{nme}", "dynamodb", "db", 60 + i * 170, BY + 120, 78)
-text("DynamoDB - on demand, PITR, KMS; the ledger is the city's single source of truth (cards below). Written by aic-prod-api and aic-prod-ledger-writer; connections by aic-prod-ws-connection.", 40, BY + 230, 560, 50, 10)
+text("DynamoDB - on demand, PITR, KMS; the ledger is the city's single source of truth (cards below). Written by vaic-prod-api and vaic-prod-ledger-writer; connections by vaic-prod-ws-connection.", 40, BY + 230, 560, 50, 10)
 for i, nme in enumerate(["workspaces", "skills", "connectors", "speech"]):
     named(f"b_{nme}", f"{N}-{nme}", "s3", "storage", 660 + i * 170, BY + 120, 64)
 text("S3 - versioned, private, TLS only; workspaces hold each job's files, skills the owner's skills, connectors the OpenAPI specs, speech the Transcribe vocabulary (eu-central-1)", 640, BY + 230, 680, 40, 10)
@@ -257,10 +257,10 @@ CY = BY + 300
 ledger_rows = [
     ("TICKET#<id> / META", "a job or part: goal, status, department, assignee, workers asked"),
     ("TICKET#<id> / HIST#<at>", "status history"),
-    ("AGENT#<id> / META", "AIC, Orchestrator, managers, workers: role, model, state, cost"),
+    ("AGENT#<id> / META", "VAIC, Orchestrator, managers, workers: role, model, state, cost"),
     ("DEPT#<key> / …", "departments, their manager and caps"),
     ("APPROVAL#<id> / META", "approvals and the Chief of Staff's decisions"),
-    ("CONV#<id> / …", "conversations with AIC"),
+    ("CONV#<id> / …", "conversations with VAIC"),
     ("CONN#<id> / META", "connectors and their grants"),
     ("APP#<id> / …", "apps the city builds, versions"),
     ("gsi1 / gsi2", "by status, by department"),
@@ -286,11 +286,11 @@ section("Schedules - EventBridge rules (rate / cron) keep the city running while
 jobs = [
     ("sweep", "rate(5 min)", "stuck jobs, DLQ replay"), ("retire-idle", "rate(1 h)", "sends idle workers home"),
     ("reminders", "rate(5 min)", "the owner's reminders"), ("improve", "Sun 03:00", "self-improvement (off)"),
-    ("warm-ace", "rate(2 min)", "keeps AIC under 3 s"), ("calendar-import", "rate(15 min)", "meetings from every mailbox"),
+    ("warm-vaic", "rate(2 min)", "keeps VAIC under 3 s"), ("calendar-import", "rate(15 min)", "meetings from every mailbox"),
     ("chief-sweep", "rate(5 min)", "Autopilot decisions"), ("standing-orders", "rate(5 min)", "support desk, sales follow-ups"),
     ("chief-digest", "17:00 daily", "While you were away"),
 ]  # fmt: skip
-text("Each rule invokes <code>aic-prod-scheduler</code>, except chief-sweep and chief-digest, which invoke <code>aic-prod-chief-of-staff</code>.", 40, SY + 470, 1500, 30, 10)
+text("Each rule invokes <code>vaic-prod-scheduler</code>, except chief-sweep and chief-digest, which invoke <code>vaic-prod-chief-of-staff</code>.", 40, SY + 470, 1500, 30, 10)
 for i, (nme, when, what) in enumerate(jobs):
     x, y = 60 + (i % 5) * 300, SY + 110 + (i // 5) * 190
     described(f"j_{nme}", f"{N}-{nme}", f"{when}<br>{what}", "eventbridge", "integration", x, y, 56, 200)
@@ -300,17 +300,17 @@ VX = 1700
 section("Voice - GPT-Live first, Nova Sonic second, Transcribe / Polly in eu-central-1", VX, SY, 1600, 520)
 box("v_openai", "<b>OpenAI GPT-Live</b><br>gpt-live-1 · full duplex · client delegation", VX + 1180, SY + 90, 330, 60)
 described("v_api", "POST /voice/live", "the browser's WebRTC offer → the api Lambda opens the call with the OpenAI key from Secrets Manager → answer", "lambda", "compute", VX + 60, SY + 90, 56, 380)
-described("v_tr", "Transcribe streaming (eu-central-1)", "standard voice; table vocabulary: &quot;Ace&quot; is always written AIC", "transcribe", "ml", VX + 60, SY + 230, 56, 380)
+described("v_tr", "Transcribe streaming (eu-central-1)", "standard voice; table vocabulary: &quot;Vaic&quot; is always written VAIC", "transcribe", "ml", VX + 60, SY + 230, 56, 380)
 described("v_polly", "Polly (eu-central-1)", "standard voice when OpenAI TTS is off", "polly", "ml", VX + 60, SY + 370, 56, 380)
-described("v_sonic", "Nova 2.5 Sonic through the AIC runtime", "POST /voice/session → signed WSS to the runtime's /ws → Bedrock bidirectional stream", "machine_learning", "ml", VX + 760, SY + 230, 56, 380)
+described("v_sonic", "Nova 2.5 Sonic through the VAIC runtime", "POST /voice/session → signed WSS to the runtime's /ws → Bedrock bidirectional stream", "machine_learning", "ml", VX + 760, SY + 230, 56, 380)
 edge("v_api", "v_openai", "open call")
-text("Audio goes straight between the browser and OpenAI (WebRTC). Every request is AIC's: GPT-Live hands it over, AIC answers in the chat and GPT-Live says the answer.", VX + 760, SY + 380, 780, 60, 10)
+text("Audio goes straight between the browser and OpenAI (WebRTC). Every request is VAIC's: GPT-Live hands it over, VAIC answers in the chat and GPT-Live says the answer.", VX + 760, SY + 380, 780, 60, 10)
 
 # ======================================================================================== E. security, CI/CD
 EY = 2620
 section("Security, cost and CI/CD - GitHub OIDC (no long-lived AWS keys); one account, one environment", 0, EY, 3300, 560)
 described("kms", "KMS customer key", "DynamoDB, SQS, logs, Lambda env, buckets", "key_management_service", "security", 60, EY + 100)
-described("sm", "Secrets Manager", "aic/prod/openai · github · apns · oauth-google / microsoft · connectors/* · mail/*", "secrets_manager", "security", 60, EY + 230)
+described("sm", "Secrets Manager", "vaic/prod/openai · github · apns · oauth-google / microsoft · connectors/* · mail/*", "secrets_manager", "security", 60, EY + 230)
 described("iam", "IAM roles + permissions boundary", "one role per agent role and per Lambda; agents can never change infra, IAM or the policy", "identity_and_access_management", "security", 60, EY + 360)
 described("cw", "CloudWatch", "JSON logs, dashboard, alarms; X-Ray tracing", "cloudwatch_2", "mgmt", 560, EY + 100)
 described("budget", "AWS Budgets", "e-mail only; the owner's own spend caps are checked before every turn", "budgets", "cost", 560, EY + 230)
@@ -330,13 +330,13 @@ text(
 PX = 3450
 text("HOW A REQUEST FLOWS", PX, 0, 700, 80, 28, align="center", valign="middle")
 steps = [
-    "<b>1. The owner talks or types to AIC</b> in the HUD or the iPhone app, signed in with the Cognito owner pool (MFA).",
-    "<b>2. The api Lambda records the message</b> in the ledger and puts it on the <code>ace</code> queue.",
-    "<b>3. The dispatcher invokes AIC's runtime.</b> AIC (Haiku 5.5) answers simple things itself, or delegates.",
+    "<b>1. The owner talks or types to VAIC</b> in the HUD or the iPhone app, signed in with the Cognito owner pool (MFA).",
+    "<b>2. The api Lambda records the message</b> in the ledger and puts it on the <code>vaic</code> queue.",
+    "<b>3. The dispatcher invokes VAIC's runtime.</b> VAIC (Haiku 5.5) answers simple things itself, or delegates.",
     "<b>4. The Orchestrator (Fable 5.2) plans</b> and sends each part to a department's manager through its queue.",
     "<b>5. The manager (Fable 5.2) hires workers</b> (factory Lambda), exactly as many as the owner asked for.",
     "<b>6. Workers do the job</b> with their granted tools and connectors; every tool call passes the policy gate.",
-    "<b>7. The manager reviews every deliverable</b> (PASS / FAIL) and reports up; AIC tells the owner.",
+    "<b>7. The manager reviews every deliverable</b> (PASS / FAIL) and reports up; VAIC tells the owner.",
     "<b>8. Every step is an event</b> on the city bus: the ledger-writer stores it and ws-broadcast shows it live.",
     "<b>9. While the owner is away,</b> Autopilot's Chief of Staff decides questions and approvals, standing orders run "
     "the support desk and sales follow-ups, and the 17:00 digest says what happened.",
@@ -345,7 +345,7 @@ for i, s in enumerate(steps):
     text(s, PX, 100 + i * 70, 700, 60, 11)
 
 xml = (
-    '<mxfile host="drawio"><diagram id="aic" name="AI City on AWS"><mxGraphModel dx="4000" dy="3000" grid="1" '
+    '<mxfile host="drawio"><diagram id="vaic" name="AI City on AWS"><mxGraphModel dx="4000" dy="3000" grid="1" '
     'gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="1169" '
     'pageHeight="827" math="0" shadow="0"><root><mxCell id="0"/><mxCell id="1" parent="0"/>'
     + "".join(cells)

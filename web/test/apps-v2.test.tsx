@@ -8,7 +8,7 @@ import { capLabel, MAX_PINS, pinnedApps, updateApp } from "../src/lib/apps.ts";
 import { loadConfig } from "../src/lib/config.ts";
 import { store } from "../src/lib/store.ts";
 
-const APPS = "https://apps.aic.test";
+const APPS = "https://apps.vaic.test";
 const app = (n: number, extra: Record<string, unknown> = {}) => ({
   app_id: `app-00000000000${n}`,
   slug: `app-${n}`,
@@ -19,7 +19,7 @@ const app = (n: number, extra: Record<string, unknown> = {}) => ({
 });
 const calls: Array<{ url: string; body: unknown; method: string }> = [];
 const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-  if (url === "/config.json") return new Response(JSON.stringify({ apiUrl: "https://api.aic.test", appsUrl: APPS }));
+  if (url === "/config.json") return new Response(JSON.stringify({ apiUrl: "https://api.vaic.test", appsUrl: APPS }));
   const body = init?.body ? JSON.parse(String(init.body)) : null;
   calls.push({ url, body, method: init?.method ?? "GET" });
   if (url.includes("/approvals/")) return new Response(JSON.stringify({ approval: {}, app: app(7) }));
@@ -30,7 +30,7 @@ beforeAll(async () => {
   vi.stubGlobal("fetch", fetchMock);
   await loadConfig();
   // The API needs a token: the same fake auth hook the e2e mock uses.
-  (window as unknown as { __aicAuth: unknown }).__aicAuth = { idToken: async () => "header.payload.sig" };
+  (window as unknown as { __vaicAuth: unknown }).__vaicAuth = { idToken: async () => "header.payload.sig" };
 });
 afterEach(() => {
   cleanup();
@@ -77,7 +77,7 @@ describe("pins", () => {
     act(() => store.setApps([app(1, { pinned: true })]));
     await act(() => updateApp("app-000000000001", { pinned: false }));
     expect(calls).toEqual([
-      { url: "https://api.aic.test/apps/app-000000000001", body: { pinned: false }, method: "PUT" },
+      { url: "https://api.vaic.test/apps/app-000000000001", body: { pinned: false }, method: "PUT" },
     ]);
     expect(store.get().city.apps["app-000000000001"]?.pinned).toBe(false);
   });
@@ -115,10 +115,10 @@ describe("publish card", () => {
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
     await waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true));
     expect(calls[0]).toEqual({
-      url: "https://api.aic.test/approvals/apr-1",
+      url: "https://api.vaic.test/approvals/apr-1",
       body: { approved: true, grants: [{ id: "calendar.read" }] },
       method: "POST",
     });
-    expect(calls[1]).toMatchObject({ url: "https://api.aic.test/apps/app-000000000007", body: { pinned: true } });
+    expect(calls[1]).toMatchObject({ url: "https://api.vaic.test/apps/app-000000000007", body: { pinned: true } });
   });
 });

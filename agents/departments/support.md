@@ -1,7 +1,7 @@
 ## Customer Support playbook (a pre-configured department)
 Teams you staff from: **Frontline** (Tickets, chat and email replies, first-contact resolution), **Escalations** (Bugs to Application, refunds to Finance, angry customers), **Knowledge** (Help center articles, saved replies, FAQ), **Voice of the customer** (Satisfaction surveys, feedback themes for Product). Hire by team: the specialty names the team ("Frontline: …"), and the instructions name the skill(s) to follow.
 
-**Skills** (the `Skill` tool, plugin `aic-skills`): `support-replies`, `refunds-and-orders`, `help-center-articles`, `feedback-to-product`, plus the shared `knowledge-first`, `sell-with-stripe` and `cross-team-work`. Tell each worker which ones apply.
+**Skills** (the `Skill` tool, plugin `vaic-skills`): `support-replies`, `refunds-and-orders`, `help-center-articles`, `feedback-to-product`, plus the shared `knowledge-first`, `sell-with-stripe` and `cross-team-work`. Tell each worker which ones apply.
 
 **Connectors to give workers** (only those that are on; your state lists them). Essential for this department: Intercom, Gorgias, Help Scout. Also: Shopify (store), Typeform, SurveyMonkey, HubSpot. Shared by every department: Stripe, Jira & Confluence, Slack, Notion, Zapier, Box, Dropbox, Calendly, Miro, Granola. If a connector the work needs is off, say so in your report: the owner switches it on in Settings → Departments & tools.
 

@@ -23,11 +23,11 @@ describe("money", () => {
 
 describe("the ported City state", () => {
   it("has VAIC and the Orchestrator as the core, and no Secretary or Reviewer", () => {
-    expect([...CORE]).toEqual(["ace", "orchestrator"]);
+    expect([...CORE]).toEqual(["vaic", "orchestrator"]);
   });
   it("puts a hired worker at a desk in its department and sends a released one home", () => {
     let s = applySnapshot(initialState(), {
-      agents: [{ id: "ace", kind: "core", role: "VAIC", department: null, model: "sonnet-5-5", state: "active" }],
+      agents: [{ id: "vaic", kind: "core", role: "VAIC", department: null, model: "sonnet-5-5", state: "active" }],
       departments: [],
     });
     s = reduce(s, {
@@ -65,7 +65,7 @@ describe("the ported City state", () => {
       at,
     });
     expect(placement(s, "wkr-1")).toMatchObject({ place: "station", dept: "Engineering" });
-    expect(placement(s, "ace")).toMatchObject({ place: "hq" });
+    expect(placement(s, "vaic")).toMatchObject({ place: "hq" });
     // "Agents working now" counts only workers on a job: not the manager, not a worker just hired.
     expect(topBar(s)).toMatchObject({ agentsTotal: 2, agentsActive: 0 });
     s = reduce(s, { type: "worker.state", id: "wkr-1", state: "working", at });
@@ -126,10 +126,10 @@ describe("the ported City state", () => {
 describe("VAIC's chat streaming", () => {
   it("joins streamed chunks into one reply and marks it done", () => {
     store.set({ chat: [] });
-    store.event({ type: "ace.reply", conversation: "main", text: "Eigh", done: false });
-    store.event({ type: "ace.reply", conversation: "main", text: "teen", done: false });
-    expect(store.get().chat.at(-1)).toMatchObject({ who: "ace", text: "Eighteen", state: "streaming" });
-    store.event({ type: "ace.reply", conversation: "main", text: "Eighteen.", done: true });
+    store.event({ type: "vaic.reply", conversation: "main", text: "Eigh", done: false });
+    store.event({ type: "vaic.reply", conversation: "main", text: "teen", done: false });
+    expect(store.get().chat.at(-1)).toMatchObject({ who: "vaic", text: "Eighteen", state: "streaming" });
+    store.event({ type: "vaic.reply", conversation: "main", text: "Eighteen.", done: true });
     expect(store.get().chat).toHaveLength(1);
     expect(store.get().chat[0]).toMatchObject({ text: "Eighteen.", state: "done" });
   });

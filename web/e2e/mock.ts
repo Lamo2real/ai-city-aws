@@ -1,5 +1,5 @@
 // A mocked AI City backend for Playwright: config.json, the HTTP API, the WebSocket, and a fake sign-in
-// (window.__aicAuth, the same AuthClient interface the app uses for Cognito).
+// (window.__vaicAuth, the same AuthClient interface the app uses for Cognito).
 //   password "Temp-Password-1!"   → first login: choose own password → authenticator setup → code 123456
 //   password "Own-Password-12!"   → the 6-digit code (123456)
 //   anything else                   → "That email or password is not right"
@@ -37,9 +37,9 @@ const PRESETS = { shared: group(PRESETS_FILE.shared), departments: PRESETS_FILE.
 
 export const CONFIG = {
   region: "eu-north-1",
-  apiUrl: "https://api.aic.test",
-  wsUrl: "wss://ws.aic.test/prod",
-  cognitoDomain: "login.aic.test",
+  apiUrl: "https://api.vaic.test",
+  wsUrl: "wss://ws.vaic.test/prod",
+  cognitoDomain: "login.vaic.test",
   clientId: "client123",
   userPoolId: "eu-north-1_TEST",
   identityPoolId: "eu-north-1:00000000-0000-0000-0000-000000000000",
@@ -47,13 +47,13 @@ export const CONFIG = {
   pollyVoice: "Ruth",
   budgetAlertUsd: 10000,
   transcribeRegion: "eu-central-1",
-  transcribeVocabulary: "aic-names",
-  appsUrl: "https://apps.aic.test",
+  transcribeVocabulary: "vaic-names",
+  appsUrl: "https://apps.vaic.test",
 };
 // A tiny original game served by the fake apps origin: it proves scripts run in the sandbox and that the
 // frame has an opaque origin (no storage, no access to the HUD).
 // A tiny original calendar app that talks to the HUD the v2 way (docs/APPS.md "v2: data bridge"): it posts
-// {aic: 1, id, cap, params} to its parent and shows the reply. The fake apps origin serves it for app-cal….
+// {vaic: 1, id, cap, params} to its parent and shows the reply. The fake apps origin serves it for app-cal….
 export const CALENDAR_HTML = `<!doctype html><meta charset="utf-8"><title>Star Calendar</title>
 <body style="font-family:sans-serif;background:#fff;color:#111">
 <h1>Star Calendar</h1>
@@ -61,8 +61,8 @@ export const CALENDAR_HTML = `<!doctype html><meta charset="utf-8"><title>Star C
 <p id="out">Nothing loaded.</p>
 <script>
 const waiting = new Map(); let n = 0;
-addEventListener("message", (e) => { const m = e.data; if (e.source === parent && m && m.aic === 1 && waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); } });
-const ask = (cap, params) => new Promise((r) => { const id = "q" + (++n); waiting.set(id, r); parent.postMessage({ aic: 1, id, cap, params }, "*"); });
+addEventListener("message", (e) => { const m = e.data; if (e.source === parent && m && m.vaic === 1 && waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); } });
+const ask = (cap, params) => new Promise((r) => { const id = "q" + (++n); waiting.set(id, r); parent.postMessage({ vaic: 1, id, cap, params }, "*"); });
 const out = (t) => { document.getElementById("out").textContent = t; };
 document.getElementById("load").onclick = async () => {
   const r = await ask("calendar.read", { from: "2026-11-02T00:00:00Z", to: "2026-11-09T00:00:00Z" });
@@ -79,8 +79,8 @@ export const SCORE_HTML = `<!doctype html><meta charset="utf-8"><title>Pebble Ho
 <h1>Pebble Hop</h1><button id="hop">Hop</button> <output id="n">0 hops</output> <p id="best">Best: …</p>
 <script>
 const waiting = new Map(); let k = 0, n = 0, best = 0;
-addEventListener("message", (e) => { const m = e.data; if (e.source === parent && m && m.aic === 1 && waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); } });
-const ask = (cap, params) => new Promise((r) => { const id = "s" + (++k); waiting.set(id, r); parent.postMessage({ aic: 1, id, cap, params }, "*"); });
+addEventListener("message", (e) => { const m = e.data; if (e.source === parent && m && m.vaic === 1 && waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); } });
+const ask = (cap, params) => new Promise((r) => { const id = "s" + (++k); waiting.set(id, r); parent.postMessage({ vaic: 1, id, cap, params }, "*"); });
 const show = () => { document.getElementById("best").textContent = "Best: " + best; };
 ask("state.get", { key: "best" }).then((r) => { best = r.ok && typeof r.data.value === "number" ? r.data.value : 0; show(); });
 document.getElementById("hop").onclick = async () => {
@@ -162,8 +162,8 @@ export const appRecord = (id: string, slug: string, title: string, extra: Record
   ...extra,
 });
 
-export const S3_URL = "https://s3.aic.test";
-export const FILES_URL = "https://files.aic.test";
+export const S3_URL = "https://s3.vaic.test";
+export const FILES_URL = "https://files.vaic.test";
 /** A drawn sunrise with a black car: what the mock files bucket serves for any picture or thumbnail. */
 const SUNRISE_JPG = readFileSync(`${import.meta.dirname}/fixtures/sunrise.jpg`);
 /** A tiny amber PNG: what the mock files bucket serves for images and thumbnails. */
@@ -200,7 +200,7 @@ const KIND_BY_EXT: Record<string, string> = {
 export const baseSnapshot = () => ({
   agents: [
     {
-      id: "ace",
+      id: "vaic",
       kind: "core",
       role: "VAIC",
       department: null,
@@ -215,7 +215,7 @@ export const baseSnapshot = () => ({
       role: "Orchestrator",
       department: null,
       model: "fable-5-2",
-      parent: "ace",
+      parent: "vaic",
       state: "active",
       total_cost_usd: 0.05,
     },
@@ -406,9 +406,9 @@ export async function mockBackend(
     ({ signedIn, realVoice }) => {
       // Like Amplify now: the sign-in lives in localStorage, so it survives closing the tab. "revoked" keeps the
       // stored sign-in but refuses it, as Cognito does with an expired or revoked refresh token.
-      if (signedIn) localStorage.setItem("aic.fake.signedIn", "1");
+      if (signedIn) localStorage.setItem("vaic.fake.signedIn", "1");
       const fail = (name: string) => Object.assign(new Error(name), { name });
-      (window as unknown as { __aicAuth: unknown }).__aicAuth = {
+      (window as unknown as { __vaicAuth: unknown }).__vaicAuth = {
         async signIn(_email: string, password: string) {
           if (password === "Temp-Password-1!") return { kind: "new_password" };
           if (password === "Own-Password-12!") return { kind: "totp_code" };
@@ -423,7 +423,7 @@ export async function mockBackend(
         },
         async confirmCode(code: string) {
           if (code !== "123456") throw fail("CodeMismatchException");
-          localStorage.setItem("aic.fake.signedIn", "1");
+          localStorage.setItem("vaic.fake.signedIn", "1");
           return { kind: "done" };
         },
         async forgotPassword() {},
@@ -431,15 +431,15 @@ export async function mockBackend(
           if (code !== "654321") throw fail("CodeMismatchException");
         },
         hadSession() {
-          return localStorage.getItem("aic.fake.signedIn") !== null;
+          return localStorage.getItem("vaic.fake.signedIn") !== null;
         },
         async idToken() {
-          const v = localStorage.getItem("aic.fake.signedIn");
-          if (v === "revoked") localStorage.removeItem("aic.fake.signedIn"); // Amplify drops a rejected sign-in
+          const v = localStorage.getItem("vaic.fake.signedIn");
+          if (v === "revoked") localStorage.removeItem("vaic.fake.signedIn"); // Amplify drops a rejected sign-in
           return v === "1" ? "header.payload.sig" : null;
         },
         async signOut() {
-          localStorage.removeItem("aic.fake.signedIn");
+          localStorage.removeItem("vaic.fake.signedIn");
         },
       };
       // A fake voice: the mic "hears" whatever the test puts in window.__heard (or nothing when __micHold is set,
@@ -460,7 +460,7 @@ export async function mockBackend(
       let voiceUntil = 0;
       let talking = false;
       if (realVoice) return;
-      (window as unknown as { __aicVoice: unknown }).__aicVoice = {
+      (window as unknown as { __vaicVoice: unknown }).__vaicVoice = {
         async listen(heardText: (t: string) => void, onPartial?: (t: string) => void) {
           if (w.__micError) throw new DOMException("fake failure", w.__micError);
           hearing = true;
@@ -585,12 +585,12 @@ export async function mockBackend(
       return ok({ removed: id });
     }
     if (path === "/notifications/apns" && req.method() === "GET")
-      return ok({ key_saved_at: null, enabled: false, devices: [], secret_name: "aic/prod/apns" });
+      return ok({ key_saved_at: null, enabled: false, devices: [], secret_name: "vaic/prod/apns" });
     if (path === "/notifications/apns" && req.method() === "PUT")
       return ok({
         ok: true,
         saved_at: "2026-11-07T12:00:00.000Z",
-        next: "Turn on AIC_APNS_ENABLED in GitHub and deploy once.",
+        next: "Turn on VAIC_APNS_ENABLED in GitHub and deploy once.",
       });
     if (path === "/github" && req.method() === "GET")
       return ok({
@@ -723,7 +723,7 @@ export async function mockBackend(
         ticket: {
           id: "t-1",
           goal: "Add a power(a, b) function to add.js",
-          from: "ace",
+          from: "vaic",
           to: "orchestrator",
           status: "in_review",
           department: null,
@@ -765,7 +765,7 @@ export async function mockBackend(
           {
             id: "t-1",
             goal: "Add a power(a, b) function to add.js",
-            from: "ace",
+            from: "vaic",
             to: "orchestrator",
             status: "in_progress",
             department: null,
@@ -1033,7 +1033,7 @@ export async function mockBackend(
         label: b.label ?? id,
         url: b.url,
         status: "needs_login",
-        roles: { ace: "all", manager: "all", worker: "all" },
+        roles: { vaic: "all", manager: "all", worker: "all" },
       };
       m.connectors.push(c);
       return ok({ connector: c }, 201);

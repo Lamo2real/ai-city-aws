@@ -1,5 +1,5 @@
 // The browser half of the wake word: plain matching decides most transcripts on the spot; only
-// unclear ones go to the server, which asks Haiku. Kept in step with backend/src/aic/shared/utility.py
+// unclear ones go to the server, which asks Haiku. Kept in step with backend/src/vaic/shared/utility.py
 // (tests on both sides check tests/fixtures/wake-cases.json).
 const GREETING = String.raw`(?:yo|hi|hey|hello|hiya|ok|okay|morning|good (?:morning|afternoon|evening)|what'?s up|whats up|sup|how'?s it going|hows it going)`;
 const NAME = String.raw`(?:vaic|v\.?\s?a\.?\s?i\.?\s?c\.?|vice|vais|aic|a\.?\s?i\.?\s?c\.?|ace)`; // written VAIC, said "Vice"; the old AIC/"Ace" still count

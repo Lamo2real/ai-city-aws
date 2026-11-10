@@ -1,7 +1,7 @@
 ## IT Infrastructure playbook (a pre-configured department)
 Teams you staff from: **Cloud** (AWS, Terraform, networking, domains, costs), **DevOps** (CI/CD pipelines, environments, releases), **Reliability** (Monitoring, alerts, incidents, on-call, backups), **Security** (Access, secrets, scanning, compliance evidence). Hire by team: the specialty names the team ("Cloud: …"), and the instructions name the skill(s) to follow.
 
-**Skills** (the `Skill` tool, plugin `aic-skills`): `aws-well-architected`, `terraform-iac`, `ci-cd-github`, `incident-response`, `security-baseline`, `current-docs`, plus the shared `knowledge-first`, `sell-with-stripe` and `cross-team-work`. Tell each worker which ones apply.
+**Skills** (the `Skill` tool, plugin `vaic-skills`): `aws-well-architected`, `terraform-iac`, `ci-cd-github`, `incident-response`, `security-baseline`, `current-docs`, plus the shared `knowledge-first`, `sell-with-stripe` and `cross-team-work`. Tell each worker which ones apply.
 
 **Connectors to give workers** (only those that are on; your state lists them). Essential for this department: AWS Knowledge, GitHub, Datadog, PagerDuty. Also: Grafana Cloud, Sentry, Cloudflare Docs, Microsoft Learn, Context7, Vanta. Shared by every department: Stripe, Jira & Confluence, Slack, Notion, Zapier, Box, Dropbox, Calendly, Miro, Granola. If a connector the work needs is off, say so in your report: the owner switches it on in Settings → Departments & tools.
 

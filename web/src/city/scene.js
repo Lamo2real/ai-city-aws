@@ -80,9 +80,9 @@ const PROP = {
 function paintFigure(g, agent, poseName, f, stride = null) {
   const id = agent.id, look = identity(id);
   const [ly, ry, rx, prop, headDy = 0, bob = 0] = POSES[poseName]?.[f % 4] ?? POSES.rest[0];
-  const skin = id === "ace" ? "#a7f0ff" : SKIN[look.skin];
+  const skin = id === "vaic" ? "#a7f0ff" : SKIN[look.skin];
   let shirt = SHIRT[look.shirt], legs = TROUSERS[look.trousers], hair = HAIR[look.hair];
-  if (id === "ace") { shirt = "#54c8ee"; legs = "#2f8fc0"; hair = null; }
+  if (id === "vaic") { shirt = "#54c8ee"; legs = "#2f8fc0"; hair = null; }
   if (id === "orchestrator") { shirt = "#23222f"; legs = "#23222f"; }
   if (agent.kind === "manager") shirt = hatColor(deptOf(agent));
   const top = 2 + bob;
@@ -94,13 +94,13 @@ function paintFigure(g, agent, poseName, f, stride = null) {
   const arm = (x, dy) => { R(g, x, top + 8 + Math.min(dy, 0), 2, 5 - Math.abs(Math.min(dy, 0)) / 3, shirt); R(g, x, top + 8 + Math.min(dy, 0) - (dy < 0 ? 1 : -4), 2, 2, skin); };
   arm(2, ly);
   R(g, 3, top + 8, 8, 6, shirt); R(g, 3, top + 13, 8, 1, "rgba(0,0,0,.18)");
-  R(g, 6, top + 8, 2, 2, agent.kind === "core" && id !== "ace" ? "#fff6e0" : "rgba(255,255,255,.3)");
+  R(g, 6, top + 8, 2, 2, agent.kind === "core" && id !== "vaic" ? "#fff6e0" : "rgba(255,255,255,.3)");
   arm(10 + (rx > 0 ? rx : 0) + (rx < 0 ? rx : 0), ry);
   // Head, a big friendly block with its corners knocked off.
   const hy = top + headDy;
   R(g, 3, hy + 1, 8, 7, skin); R(g, 4, hy, 6, 1, skin);
   if (headDy > 0) R(g, 5, hy + 5, 4, 1, "#3a2a22"); // eyes shut, head down
-  else { R(g, 5, hy + 4, 1, 2, "#23202f"); R(g, 8, hy + 4, 1, 2, "#23202f"); R(g, 6, hy + 6, 2, 1, id === "ace" ? "#2f8fc0" : "rgba(120,50,40,.55)"); }
+  else { R(g, 5, hy + 4, 1, 2, "#23202f"); R(g, 8, hy + 4, 1, 2, "#23202f"); R(g, 6, hy + 6, 2, 1, id === "vaic" ? "#2f8fc0" : "rgba(120,50,40,.55)"); }
   if (hair) switch (look.hairStyle) {
     case 0: R(g, 3, hy, 8, 3, hair); R(g, 3, hy + 3, 1, 2, hair); R(g, 10, hy + 3, 1, 2, hair); break;
     case 1: R(g, 3, hy, 8, 2, hair); R(g, 6, hy + 2, 5, 1, hair); break;
@@ -109,7 +109,7 @@ function paintFigure(g, agent, poseName, f, stride = null) {
     default: R(g, 4, hy - 1, 6, 2, hair); R(g, 6, hy - 2, 2, 1, hair); R(g, 3, hy + 1, 8, 1, hair);
   }
   if (agent.kind === "manager") { const c = hatColor(deptOf(agent)); R(g, 3, hy - 2, 8, 3, c); R(g, 2, hy + 1, 10, 1, c); R(g, 4, hy - 2, 3, 1, "rgba(255,255,255,.35)"); }
-  if (id === "ace") { R(g, 4, hy + 3, 6, 1, "#ffffff"); R(g, 6, hy - 2, 2, 2, "#e8fbff"); }
+  if (id === "vaic") { R(g, 4, hy + 3, 6, 1, "#ffffff"); R(g, 6, hy - 2, 2, 2, "#e8fbff"); }
   if (id === "orchestrator") { R(g, 4, hy - 3, 6, 4, "#23222f"); R(g, 3, hy + 1, 8, 1, "#c7a23c"); R(g, 12, top + 3, 1, 6, "#fff6e0"); }
   if (prop && PROP[prop]) PROP[prop](g, 3, top + 8);
   if (prop === "lens") { const x = 10 + rx, y = top + 1; R(g, x + 1, y - 3, 4, 4, "#bfe6ff"); R(g, x, y - 2, 1, 2, "#c7a23c"); R(g, x + 5, y - 2, 1, 2, "#c7a23c"); R(g, x + 1, y - 4, 4, 1, "#c7a23c"); R(g, x + 1, y + 1, 4, 1, "#c7a23c"); }
@@ -543,7 +543,7 @@ function freeLot(g, l, text) {
 
 // Where the four of the core stand on the plaza, in art pixels from the corner of HQ's plot.
 // The Orchestrator stands on the podium at the HQ entrance; VAIC in the plaza, by the fountain.
-const CORE_SPOT = { orchestrator: [96, 100], ace: [62, 152] };
+const CORE_SPOT = { orchestrator: [96, 100], vaic: [62, 152] };
 // The executives' places at HQ while they advise (decision 140): in front of the boardroom window, left of the door.
 const EXEC_SPOT = { "exec-ceo": [22, 92], "exec-coo": [36, 92], "exec-cfo": [22, 106], "exec-cto": [36, 106] };
 const FOUNTAIN = [112, 140];
@@ -695,7 +695,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   // ---------- Who stands where: placement from the state, seats and houses kept stable, journeys only for real changes ----------
   function spotOf(id) {
     const where = placement(state, id);
-    if (where.place === "hq") { const [x, y] = EXEC_SPOT[id] ?? CORE_SPOT[id] ?? CORE_SPOT.ace; return { x: world.hq.x * TILE + x, y: world.hq.y * TILE + y, key: `hq:${id}`, seated: CORE_DESK.has(id) }; }
+    if (where.place === "hq") { const [x, y] = EXEC_SPOT[id] ?? CORE_SPOT[id] ?? CORE_SPOT.vaic; return { x: world.hq.x * TILE + x, y: world.hq.y * TILE + y, key: `hq:${id}`, seated: CORE_DESK.has(id) }; }
     const agent = state.agents[id];
     if (where.place === "station" && agent?.kind === "manager") {
       const b = world.buildings.find((x) => x.dept === where.dept);
@@ -875,7 +875,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     const letter = mailFor(e, state);
     if (letter) post(letter);
     const hop = courierFor(e); if (hop && !letter) courier(hop); // orchestrator ↔ manager goes by the mailman
-    if (e.type === "ace.visit") aceVisit(e);
+    if (e.type === "vaic.visit") vaicVisit(e);
     if (e.type === "review.result" && e.verdict === "FAIL") { const t = state.tickets[e.ticket_id], p = t && people.get(t.to); if (p) dust(p.x, p.y - 20, 14, ["#55525e", "#77747f", "#99969f"], 18, 1.2); }
     if (e.type === "ticket.status" && e.ticket.status === "done") { const p = people.get(e.ticket.to); if (p) dust(p.x, p.y - 22, 28, CONFETTI, 70, 1); }
     if (e.type === "agent.hired" && e.agent) { const b = buildingOf(deptOf(e.agent)); if (b) dust((b.x + b.w / 2) * TILE, (b.y + 3) * TILE, 24, POOF, 60, 0.7); } // someone new walks in
@@ -1018,16 +1018,16 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   }
 
   // VAIC dashes over, says what it is doing, and comes back. Its status call can repeat fast: those are not new visits.
-  function aceVisit({ to, kind }) {
+  function vaicVisit({ to, kind }) {
     const now = Date.now(), allowed = visitAllowed(lastVisit, now, to);
     lastVisit = now;
     if (!allowed) return;
-    const j = people.get("ace"), target = people.get(to);
+    const j = people.get("vaic"), target = people.get(to);
     if (!j || !target || j.visiting) return;
     root.dataset.visits = String(Number(root.dataset.visits ?? 0) + 1);
     const words = kind === "ask" ? "ASKING" : "CHECKING IN", side = target.x > 40 ? -15 : 15;
     j.visiting = true;
-    const back = () => { const home = spotOf("ace"); j.visiting = false; if (reduced() || !visible()) { j.x = home.x; j.y = home.y; } else dashTo(j, home); };
+    const back = () => { const home = spotOf("vaic"); j.visiting = false; if (reduced() || !visible()) { j.x = home.x; j.y = home.y; } else dashTo(j, home); };
     j.say = { text: words, until: performance.now() + 1500 };
     const arrived = () => { j.flip = side < 0 ? false : true; setTimeout(back, 1400); };
     if (reduced() || !visible()) { j.x = target.x + side; j.y = target.y; arrived(); } else dashTo(j, { x: target.x + side, y: target.y }, arrived);
@@ -1245,11 +1245,11 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     const frame = (f + p.phase) % 4;
     const stride = moving ? (Math.floor(now / (p.move ? 40 : 130)) % 4) : null;
     const hopY = p.hop > 0 ? -Math.round(Math.sin(p.hop * Math.PI) * 7) : 0;
-    const floatY = p.id === "ace" && !moving ? [-2, -3, -2, -1][f] : 0;
+    const floatY = p.id === "vaic" && !moving ? [-2, -3, -2, -1][f] : 0;
     const x = Math.round(p.x) - OX, y = Math.round(p.y) - OY;
     if (!p.seated || moving) { ctx.fillStyle = "rgba(20,18,40,.35)"; ctx.fillRect(x - 5, y, 10, 2); ctx.fillRect(x - 4, y + 2, 8, 1); }
     if (key === "waiting_owner" && !moving) { const k = reduced() ? 1 : f % 2; ctx.fillStyle = k ? "rgba(255,216,74,.45)" : "rgba(255,216,74,.25)"; ctx.fillRect(x - 11, y - 1, 22, 4); ctx.fillRect(x - 8, y - 3, 16, 8); }
-    if (p.id === "ace") { ctx.fillStyle = "rgba(120,220,255,.16)"; ctx.fillRect(x - 10, y - 24, 20, 26); ctx.fillRect(x - 7, y - 27, 14, 32); }
+    if (p.id === "vaic") { ctx.fillStyle = "rgba(120,220,255,.16)"; ctx.fillRect(x - 10, y - 24, 20, 26); ctx.fillRect(x - 7, y - 27, 14, 32); }
     const sprite = figure(a, pose, frame, stride);
     const sy = y - 24 + hopY + floatY;
     if (p.flip) { ctx.save(); ctx.scale(-1, 1); ctx.drawImage(sprite, -x - 10, sy); ctx.restore(); } else ctx.drawImage(sprite, x - 10, sy);
@@ -1409,7 +1409,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     // The one being looked at gets an arrow and its name; so does whoever the mouse is on, and the core keep name plates.
     for (const p of order) if (p.id === selected || p.id === hover || CORE.has(p.id)) {
       const a = state.agents[p.id];
-      if (a) label(p.id === hover && p.visual && p.visual !== "idle" ? `${p.id === "ace" ? "VAIC" : p.id}: ${VISUALS[p.visual].label}` : p.id === "ace" ? "VAIC" : p.id, p.x, p.y + 4, p.id === selected ? INK : "#fff6e0", p.id === selected ? "#ffd84a" : INK);
+      if (a) label(p.id === hover && p.visual && p.visual !== "idle" ? `${p.id === "vaic" ? "VAIC" : p.id}: ${VISUALS[p.visual].label}` : p.id === "vaic" ? "VAIC" : p.id, p.x, p.y + 4, p.id === selected ? INK : "#fff6e0", p.id === selected ? "#ffd84a" : INK);
     }
     // A publish approval is open: the Apps building waits for the owner.
     for (const b of waitingBuildings()) { const k = reduced() ? 1 : f % 2, cx = (b.x + b.w / 2) * TILE, y = b.y * TILE - 12; if (k) { ctx.fillStyle = "rgba(255,216,74,.35)"; ctx.fillRect(Math.round(cx - 50 - cam.x), Math.round(y - 3 - cam.y), 100, 15); } label("WAITING FOR YOU", cx, y, INK, "#ffd84a"); }

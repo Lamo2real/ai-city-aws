@@ -48,14 +48,14 @@ describe("microphone errors say what went wrong and what to do", () => {
 describe("the voice strip", () => {
   it("maps VAIC's presence to who is talking", () => {
     expect(speakerOf("listening")).toBe("you");
-    expect(speakerOf("speaking")).toBe("aic");
+    expect(speakerOf("speaking")).toBe("vaic");
     expect(speakerOf("thinking")).toBe("thinking");
     expect(speakerOf("idle")).toBe("idle");
     expect(speakerOf("waiting")).toBe("idle");
   });
   it.each([
     ["listening", "you", "Listening to you"],
-    ["speaking", "aic", "VAIC is talking"],
+    ["speaking", "vaic", "VAIC is talking"],
     ["thinking", "thinking", "VAIC is thinking…"],
     ["idle", "idle", "Tap the mic or type"],
   ] as const)("says the %s state in words, not only colour", (presence, speaker, words) => {

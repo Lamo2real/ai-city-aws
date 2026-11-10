@@ -1,7 +1,7 @@
 import XCTest
 @testable import AICity
 
-/// Files in the chat (docs/FILES.md §8): VAIC's `ace.files` lands on its reply, the card's words, the links.
+/// Files in the chat (docs/FILES.md §8): VAIC's `vaic.files` lands on its reply, the card's words, the links.
 @MainActor
 final class FilesTests: XCTestCase {
     func store() -> HudStore {
@@ -18,9 +18,9 @@ final class FilesTests: XCTestCase {
         let h = store()
         h.chat = [ChatLine(id: "o1", who: .owner, text: "find the sunrise photo", state: .sent, at: 0)]
         h.beginTurn()
-        h.event(["type": "ace.files", "conversation": "main", "files": [sunrise]])
+        h.event(["type": "vaic.files", "conversation": "main", "files": [sunrise]])
         XCTAssertEqual(h.chat.count, 1, "held for the reply")
-        h.event(["type": "ace.reply", "conversation": "main", "text": "Here it is, Sir.", "done": true])
+        h.event(["type": "vaic.reply", "conversation": "main", "text": "Here it is, Sir.", "done": true])
         XCTAssertEqual(h.chat.last?.text, "Here it is, Sir.")
         XCTAssertEqual(h.chat.last?.files?.map(\.id), ["f-aaaaaaaaaaaa"])
     }
@@ -28,20 +28,20 @@ final class FilesTests: XCTestCase {
     func testFilesDuringAStreamingReplyJoinIt_andOtherChatsAreIgnored() {
         let h = store()
         h.beginTurn()
-        h.event(["type": "ace.reply", "conversation": "main", "text": "Two fit, Sir. ", "done": false])
-        h.event(["type": "ace.files", "conversation": "main",
+        h.event(["type": "vaic.reply", "conversation": "main", "text": "Two fit, Sir. ", "done": false])
+        h.event(["type": "vaic.files", "conversation": "main",
                  "files": [sunrise, ["id": "f-bbbbbbbbbbbb", "name": "b.png", "kind": "image", "department": "Media"]]])
-        h.event(["type": "ace.files", "conversation": "main", "files": [sunrise]])  // repeated: no duplicate
+        h.event(["type": "vaic.files", "conversation": "main", "files": [sunrise]])  // repeated: no duplicate
         XCTAssertEqual(h.chat.last?.files?.count, 2)
-        h.event(["type": "ace.files", "conversation": "app-x", "files": [["id": "f-cccccccccccc", "name": "c", "kind": "other"]]])
+        h.event(["type": "vaic.files", "conversation": "app-x", "files": [["id": "f-cccccccccccc", "name": "c", "kind": "other"]]])
         XCTAssertEqual(h.chat.last?.files?.count, 2)
     }
 
     func testWithoutATurnTheFilesArriveAsTheirOwnLine() {
         let h = store()
-        h.event(["type": "ace.files", "conversation": "main", "files": [sunrise]])
+        h.event(["type": "vaic.files", "conversation": "main", "files": [sunrise]])
         XCTAssertEqual(h.chat.count, 1)
-        XCTAssertEqual(h.chat.last?.who, .ace)
+        XCTAssertEqual(h.chat.last?.who, .vaic)
         XCTAssertEqual(h.chat.last?.text, "")
     }
 
@@ -53,7 +53,7 @@ final class FilesTests: XCTestCase {
         XCTAssertTrue(parts[1].contains("2") && parts[1].contains("4") && parts[1].contains("MB"), f.meta)
         XCTAssertTrue(parts[2].hasPrefix("Taken "), f.meta)
         // A chat saved before Files existed (no "files" key) still loads.
-        let old = #"[{"id":"a1","who":"ace","text":"hi","state":"done","at":1}]"#
+        let old = #"[{"id":"a1","who":"vaic","text":"hi","state":"done","at":1}]"#
         let lines = try JSONDecoder().decode([ChatLine].self, from: Data(old.utf8))
         XCTAssertNil(lines.first?.files)
     }
@@ -108,8 +108,8 @@ final class FilesTests: XCTestCase {
     func testReferencesForABuildArriveAsTheirOwnLabelledLine() {
         let h = store()
         h.beginTurn()
-        h.event(["type": "ace.reply", "conversation": "main", "text": "On it.", "done": false])
-        h.event(["type": "ace.files", "conversation": "main", "label": "References for this build", "files": [sunrise]])
+        h.event(["type": "vaic.reply", "conversation": "main", "text": "On it.", "done": false])
+        h.event(["type": "vaic.files", "conversation": "main", "label": "References for this build", "files": [sunrise]])
         XCTAssertEqual(h.chat.last?.filesLabel, "References for this build")
         XCTAssertEqual(h.chat.count, 2)
     }

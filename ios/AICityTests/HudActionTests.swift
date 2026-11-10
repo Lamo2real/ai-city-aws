@@ -1,4 +1,4 @@
-// AIC's `hud.action` events on the iPhone (Core/HudAction.swift, decision 143): the theme and the open page.
+// VAIC's `hud.action` events on the iPhone (Core/HudAction.swift, decision 143): the theme and the open page.
 import XCTest
 @testable import AICity
 
@@ -11,11 +11,11 @@ final class HudActionTests: XCTestCase {
         XCTAssertEqual(HudAction(event: ["type": "hud.action", "action": "open", "page": "#/city"]), .open(.city))
         XCTAssertNil(HudAction(event: ["type": "hud.action", "action": "open", "page": "#/skills"]), "no such screen on the iPhone")
         XCTAssertNil(HudAction(event: ["type": "hud.action", "action": "sign_out"]))
-        XCTAssertNil(HudAction(event: ["type": "ace.reply", "action": "theme", "value": "dark"]))
+        XCTAssertNil(HudAction(event: ["type": "vaic.reply", "action": "theme", "value": "dark"]))
     }
 
     func testHudPagesMapToTheScreensThisIPhoneHas() {
-        XCTAssertEqual(HudAction.section(forPage: "#/ace"), .aic)
+        XCTAssertEqual(HudAction.section(forPage: "#/vaic"), .vaic)
         XCTAssertEqual(HudAction.section(forPage: "#/city"), .city)
         XCTAssertEqual(HudAction.section(forPage: "#/tickets"), .tickets)
         XCTAssertEqual(HudAction.section(forPage: "#/costs"), .costs)
@@ -23,14 +23,14 @@ final class HudActionTests: XCTestCase {
         XCTAssertEqual(HudAction.section(forPage: "#/settings/connectors"), .settings)
         XCTAssertEqual(HudAction.section(forPage: "#/settings/connectors?add=github"), .settings)
         XCTAssertEqual(HudAction.section(forPage: "#/settings/open-items"), .inbox)
-        for page in ["#/apps", "#/knowledge", "#/", "", "ace", "/city", "https://example.test/#/city", "#/city<script>", "#/" + String(repeating: "a", count: 200)] {
+        for page in ["#/apps", "#/knowledge", "#/", "", "vaic", "/city", "https://example.test/#/city", "#/city<script>", "#/" + String(repeating: "a", count: 200)] {
             XCTAssertNil(HudAction.section(forPage: page), page)
         }
     }
 
     @MainActor
     func testAnEventOverTheLiveConnectionSetsTheThemeAndOpensTheScreen() {
-        let suite = "aic.tests.\(UUID().uuidString)"
+        let suite = "vaic.tests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         func model() -> AppModel {
             AppModel(configStore: ConfigStore(defaults: defaults, http: FakeHTTP { _ in (.null, 500) }, bundleHost: nil),
@@ -38,7 +38,7 @@ final class HudActionTests: XCTestCase {
         }
         let m = model()
         XCTAssertEqual(m.appearance, .system)
-        XCTAssertEqual(m.section, .aic)
+        XCTAssertEqual(m.section, .vaic)
 
         m.hud.event(["type": "hud.action", "action": "theme", "value": "light", "conversation": "main"])
         XCTAssertEqual(m.appearance, .light)
@@ -54,8 +54,8 @@ final class HudActionTests: XCTestCase {
         m.hud.event(["type": "hud.action", "action": "open", "page": "#/knowledge"])
         XCTAssertEqual(m.section, .more, "a page with no screen here is ignored")
         XCTAssertEqual(m.morePath, [.settings])
-        m.hud.event(["type": "hud.action", "action": "open", "page": "#/ace"])
-        XCTAssertEqual(m.section, .aic)
+        m.hud.event(["type": "hud.action", "action": "open", "page": "#/vaic"])
+        XCTAssertEqual(m.section, .vaic)
         defaults.removePersistentDomain(forName: suite)
     }
 }

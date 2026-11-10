@@ -3,16 +3,16 @@
 import json
 from typing import Any
 
-from aic.lambdas.api import handle_http
-from aic.lambdas.notifier import finished_job, notify, push_text
-from aic.shared.caps import default_settings
-from aic.shared.hierarchy.actions import move
-from aic.shared.push import DeviceStore, PushApps, PushDeps, apns_key_secret, apns_payload, device_id
 from city_support import City, make_city, scripted_engine
 from test_api import ev, js, make
+from vaic.lambdas.api import handle_http
+from vaic.lambdas.notifier import finished_job, notify, push_text
+from vaic.shared.caps import default_settings
+from vaic.shared.hierarchy.actions import move
+from vaic.shared.push import DeviceStore, PushApps, PushDeps, apns_key_secret, apns_payload, device_id
 
 TOKEN = "ab" * 32
-APPS = PushApps("arn:aws:sns:eu-north-1:111122223333:app/APNS/aic-prod-apns", "")
+APPS = PushApps("arn:aws:sns:eu-north-1:111122223333:app/APNS/vaic-prod-apns", "")
 
 
 class FakeSns:
@@ -53,7 +53,7 @@ async def city_with_job() -> tuple[City, dict[str, Any], dict[str, Any]]:
          "model": "fable-5-2", "parent": "orchestrator", "state": "active", "total_cost_usd": 0}
     )  # fmt: skip
     task = await c.ledger.create_ticket(
-        {"goal": "A snake game", "from": "ace", "to": "orchestrator", "department": None, "parent_id": None,
+        {"goal": "A snake game", "from": "vaic", "to": "orchestrator", "department": None, "parent_id": None,
          "kind": "task", "owner_words": "make me a snake game", "status": "in_progress"}
     )  # fmt: skip
     part = await c.ledger.create_ticket(
@@ -210,7 +210,7 @@ async def test_the_apple_key_is_checked_stored_as_a_secret_and_never_echoed() ->
     d = make()
     d.push = push_deps(d.ledger, sns, PushApps())
     before = js(await handle_http(ev("GET", "/notifications/apns"), d))
-    assert before == {"key_saved_at": None, "enabled": False, "devices": [], "secret_name": "aic/prod/apns"}
+    assert before == {"key_saved_at": None, "enabled": False, "devices": [], "secret_name": "vaic/prod/apns"}
     bad = await handle_http(
         ev(
             "PUT", "/notifications/apns", {"key_id": "short", "team_id": "ABCDE12345", "bundle_id": "com.x.y", "p8": P8}
@@ -226,9 +226,9 @@ async def test_the_apple_key_is_checked_stored_as_a_secret_and_never_echoed() ->
         ),
         d,
     )
-    assert good["statusCode"] == 200 and "AIC_APNS_ENABLED" in js(good)["next"]
+    assert good["statusCode"] == 200 and "VAIC_APNS_ENABLED" in js(good)["next"]
     assert P8 not in good["body"]
-    stored = json.loads(d.push.secrets.values["aic/prod/apns"])  # type: ignore[union-attr]
+    stored = json.loads(d.push.secrets.values["vaic/prod/apns"])  # type: ignore[union-attr]
     assert stored == {"key_id": "ABCDE12345", "team_id": "ABCDE12345", "bundle_id": "com.example.aicity", "p8": P8}
     after = js(await handle_http(ev("GET", "/notifications/apns"), d))
     assert after["key_saved_at"] and after["enabled"] is False

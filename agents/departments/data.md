@@ -1,7 +1,7 @@
 ## Data & AI playbook (a pre-configured department)
 Teams you staff from: **Analytics** (Questions answered with numbers, KPIs, weekly reports), **Product analytics** (Funnels, retention, experiments in PostHog, Amplitude or Mixpanel), **Data engineering** (Warehouse tables, pipelines, data quality), **AI & ML** (LLM features, retrieval, evaluations, open models from Hugging Face). Hire by team: the specialty names the team ("Analytics: …"), and the instructions name the skill(s) to follow.
 
-**Skills** (the `Skill` tool, plugin `aic-skills`): `data-analysis`, `metrics-and-dashboards`, `experiments-ab`, `ai-features`, `current-docs`, plus the shared `knowledge-first`, `sell-with-stripe` and `cross-team-work`. Tell each worker which ones apply.
+**Skills** (the `Skill` tool, plugin `vaic-skills`): `data-analysis`, `metrics-and-dashboards`, `experiments-ab`, `ai-features`, `current-docs`, plus the shared `knowledge-first`, `sell-with-stripe` and `cross-team-work`. Tell each worker which ones apply.
 
 **Connectors to give workers** (only those that are on; your state lists them). Essential for this department: Google Analytics, BigQuery, PostHog. Also: Amplitude, Mixpanel, Hex, Airtable, Supabase, Hugging Face, Context7. Shared by every department: Stripe, Jira & Confluence, Slack, Notion, Zapier, Box, Dropbox, Calendly, Miro, Granola. If a connector the work needs is off, say so in your report: the owner switches it on in Settings → Departments & tools.
 

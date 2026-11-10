@@ -9,8 +9,8 @@ import { base64ToFloats, pcmToBase64, toPcm16k } from "./pcm.ts";
 export interface SonicHandlers {
   /** What the owner said (Sonic's final transcript). */
   onUserText(text: string): void;
-  /** What Sonic said; `aic` is true when it was saying VAIC's answer, which reaches the chat on its own. */
-  onAssistantText(text: string, aic: boolean): void;
+  /** What Sonic said; `vaic` is true when it was saying VAIC's answer, which reaches the chat on its own. */
+  onAssistantText(text: string, vaic: boolean): void;
   /** VAIC is working on a request (on) or answered (off). */
   onThinking(on: boolean): void;
   /** Sonic's voice is playing (on) or quiet (off). */
@@ -46,14 +46,14 @@ export function primedContext(): AudioContext | null {
 
 /** Whether to try the real-time voice: always, except under a test's fake voice that did not ask for it. */
 export function sonicWanted(): boolean {
-  const w = window as unknown as { __aicVoice?: unknown; __aicSonic?: boolean };
+  const w = window as unknown as { __vaicVoice?: unknown; __vaicSonic?: boolean };
   if (typeof WebSocket === "undefined") return false;
-  if (w.__aicSonic === true) return true;
+  if (w.__vaicSonic === true) return true;
   // Off by default (the owner, 2026-11-09: "use the old way that worked"): the conversation runs on the standard
   // voice (Transcribe + Polly) until Nova Sonic is switched on, once the AWS account allows it (Bedrock answered
-  // AccessDenied). Switch on: localStorage "aic.voice.engine" = "nova-sonic".
+  // AccessDenied). Switch on: localStorage "vaic.voice.engine" = "nova-sonic".
   try {
-    return !w.__aicVoice && localStorage.getItem("aic.voice.engine") === "nova-sonic";
+    return !w.__vaicVoice && localStorage.getItem("vaic.voice.engine") === "nova-sonic";
   } catch {
     return false;
   }
@@ -176,7 +176,7 @@ export async function startSonic(h: SonicHandlers): Promise<SonicCall> {
         role?: string;
         text?: string;
         message?: string;
-        aic?: boolean;
+        vaic?: boolean;
         on?: boolean;
       };
       try {
@@ -201,7 +201,7 @@ export async function startSonic(h: SonicHandlers): Promise<SonicCall> {
         case "transcript":
           if (!m.text) return;
           if (m.role === "user") h.onUserText(m.text);
-          else h.onAssistantText(m.text, m.aic === true);
+          else h.onAssistantText(m.text, m.vaic === true);
           return;
         case "thinking":
           h.onThinking(m.on === true);

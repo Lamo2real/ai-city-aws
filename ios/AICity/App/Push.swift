@@ -4,7 +4,7 @@
 // The app asks once, after the first sign-in, with one plain sentence why. When the owner allows it, the
 // app registers with APNs on every launch (Apple's advice: the token can change) and sends the token to the
 // backend; sign-out removes this iPhone from the backend first. The notification's text (job, outcome,
-// cost) is written by the backend; the app shows it as is, and a tap opens the app on AIC.
+// cost) is written by the backend; the app shows it as is, and a tap opens the app on VAIC.
 import Foundation
 import Observation
 import UIKit
@@ -57,10 +57,10 @@ final class PushController {
     @ObservationIgnored private var token: String?
 
     private enum Key {
-        static let asked = "aic.push.asked"
-        static let device = "aic.push.device"  // the backend's id for this iPhone
-        static let token = "aic.push.token"  // the token that id belongs to
-        static let orphan = "aic.push.orphan"  // an id sign-out couldn't remove (offline); removed later
+        static let asked = "vaic.push.asked"
+        static let device = "vaic.push.device"  // the backend's id for this iPhone
+        static let token = "vaic.push.token"  // the token that id belongs to
+        static let orphan = "vaic.push.orphan"  // an id sign-out couldn't remove (offline); removed later
     }
 
     init(system: PushSystem? = nil, defaults: UserDefaults = .standard, sandbox: Bool = PushController.apnsSandbox()) {
@@ -216,7 +216,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         [.banner, .list, .sound]
     }
 
-    // The owner tapped it: open AIC.
+    // The owner tapped it: open VAIC.
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
         guard response.actionIdentifier == UNNotificationDefaultActionIdentifier else { return }
         await MainActor.run {

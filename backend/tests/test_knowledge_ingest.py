@@ -6,14 +6,15 @@ import zipfile
 
 import pytest
 
-from aic.shared.knowledge.documents import (
+from knowledge_support import pdf_with_text, png
+from vaic.shared.knowledge.documents import (
     document_text,
     needs_page_reading,
     pdf_chunks,
     pdf_page_texts,
     split_text,
 )
-from aic.shared.knowledge.fetch import (
+from vaic.shared.knowledge.fetch import (
     LinkRefused,
     RawResponse,
     address_allowed,
@@ -21,11 +22,10 @@ from aic.shared.knowledge.fetch import (
     fetch_link,
     html_to_text,
 )
-from aic.shared.knowledge.haiku import MAX_IMAGE_EDGE, fit_image
-from aic.shared.knowledge.model import entity_key, new_item_id, safe_file_name
-from aic.shared.knowledge.routing import name_for_download, route_file, route_key
-from aic.shared.knowledge.transcript import stamp, transcript_to_text
-from knowledge_support import pdf_with_text, png
+from vaic.shared.knowledge.haiku import MAX_IMAGE_EDGE, fit_image
+from vaic.shared.knowledge.model import entity_key, new_item_id, safe_file_name
+from vaic.shared.knowledge.routing import name_for_download, route_file, route_key
+from vaic.shared.knowledge.transcript import stamp, transcript_to_text
 
 
 # ---------- routing table ----------

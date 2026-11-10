@@ -8,16 +8,16 @@ from typing import Any
 
 import pytest
 
-from aic.lambdas.api import ROUTES, ApiDeps, handle_http
-from aic.runtime.host import AgentHost, HostOptions
-from aic.runtime.prompts import load_prompt
-from aic.runtime.tools import TurnCtx
-from aic.shared import workflows as wf
-from aic.shared.connectors import ConnectorStore
-from aic.shared.events import parse_event
-from aic.shared.ledger import Ledger
-from aic.shared.table import MemoryTable
 from test_apps import city_deps, ev, js, tool
+from vaic.lambdas.api import ROUTES, ApiDeps, handle_http
+from vaic.runtime.host import AgentHost, HostOptions
+from vaic.runtime.prompts import load_prompt
+from vaic.runtime.tools import TurnCtx
+from vaic.shared import workflows as wf
+from vaic.shared.connectors import ConnectorStore
+from vaic.shared.events import parse_event
+from vaic.shared.ledger import Ledger
+from vaic.shared.table import MemoryTable
 
 NOW = datetime(2026, 11, 9, 10, 0, tzinfo=UTC)  # a Monday
 TODAY = NOW.date()
@@ -31,10 +31,10 @@ def deps() -> Any:
 _MSG = iter(range(1, 10_000))
 
 
-def ace(conversation: str = "main", from_owner: bool = True, message_id: str | None = None) -> TurnCtx:
+def vaic(conversation: str = "main", from_owner: bool = True, message_id: str | None = None) -> TurnCtx:
     """VAIC's turn on a new owner message each time (message ids m-1, m-2, …) unless one is given."""
     return TurnCtx(
-        agent_id="ace", role="ace", department=None, ticket_id="", task_id="", conversation=conversation,
+        agent_id="vaic", role="vaic", department=None, ticket_id="", task_id="", conversation=conversation,
         from_owner=from_owner, message_id=message_id or f"m-{next(_MSG)}",
     )  # fmt: skip
 
@@ -65,7 +65,7 @@ def test_a_broken_definition_is_caught() -> None:
 
 
 def test_each_workflow_needs_a_connector_from_the_catalog() -> None:
-    from aic.shared.presets import catalog
+    from vaic.shared.presets import catalog
 
     for w in wf.definitions():
         assert w["connector"] is None or w["connector"] in catalog(), w["id"]  # None: nothing outside the city
@@ -89,7 +89,7 @@ def test_the_owners_words_point_at_a_workflow(words: str, found: str, direct: bo
 
 
 @pytest.mark.parametrize(
-    "words", ["how are my meta ads doing?", "pause the facebook ads", "send me a report on google ads", "hello Ace"]
+    "words", ["how are my meta ads doing?", "pause the facebook ads", "send me a report on google ads", "hello Vaic"]
 )
 def test_questions_reports_and_pausing_are_not_the_workflow(words: str) -> None:
     assert wf.recognise(words) == []
@@ -157,7 +157,7 @@ def test_the_spend_shows_daily_total_and_dates() -> None:
 # ---------- VAIC's tools: confirm first, one question at a time, never twice ----------
 async def test_nothing_starts_without_the_owners_yes_when_the_match_is_only_maybe() -> None:
     d = deps()
-    start = tool(d, ace(), "start_workflow")
+    start = tool(d, vaic(), "start_workflow")
     out = await start({"workflow_id": META, "owner_words": "our facebook ads could use some love"})
     assert "Is this what you mean, Sir: the Meta Ads campaign workflow?" in out
     assert await wf.Runs(d.ledger.table).list() == []
@@ -165,7 +165,7 @@ async def test_nothing_starts_without_the_owners_yes_when_the_match_is_only_mayb
     assert "walk you through it" in out
     # Not on a turn that isn't the owner's own message (a report, a reminder), whatever VAIC claims.
     d2 = deps()
-    out = await tool(d2, ace(from_owner=False), "start_workflow")(
+    out = await tool(d2, vaic(from_owner=False), "start_workflow")(
         {"workflow_id": META, "owner_words": "Let's create Meta ads", "owner_confirmed": True}
     )
     assert out.startswith("Not started") and await wf.Runs(d2.ledger.table).list() == []
@@ -174,7 +174,7 @@ async def test_nothing_starts_without_the_owners_yes_when_the_match_is_only_mayb
 async def test_direct_start_asks_only_whats_missing_one_at_a_time_and_never_twice() -> None:
     d = deps()
     await connect(d)
-    out = await tool(d, ace(), "start_workflow")(
+    out = await tool(d, vaic(), "start_workflow")(
         {
             "workflow_id": META,
             "owner_words": "Let's create Meta ads for my shoe shop, do it for me, starting tomorrow for 2 weeks",
@@ -185,9 +185,9 @@ async def test_direct_start_asks_only_whats_missing_one_at_a_time_and_never_twic
     assert run["mode"] == "do"  # "do it for me" was in their words: not asked
     assert set(run["values"]) == {"offer", "start_date", "end_date"}
     assert "“What should the ads achieve, Sir: sales, leads, website visits or awareness?”" in out
-    (q,) = d.bus.of_type("ace.question")
+    (q,) = d.bus.of_type("vaic.question")
     assert q["options"] == ["Sales", "Leads", "Website visits", "Awareness"]
-    update = tool(d, ace(), "update_workflow")
+    update = tool(d, vaic(), "update_workflow")
     asked: list[str] = []
     answers = {
         "objective": "Sales",
@@ -211,8 +211,8 @@ async def test_direct_start_asks_only_whats_missing_one_at_a_time_and_never_twic
 async def test_an_answer_that_cant_be_read_is_explained_and_stays_missing() -> None:
     d = deps()
     await connect(d)
-    await tool(d, ace(), "start_workflow")({"workflow_id": META, "owner_words": "create meta ads", "mode": "do"})
-    out = await tool(d, ace(), "update_workflow")({"values": {"objective": "Sales", "daily_budget": "lots"}})
+    await tool(d, vaic(), "start_workflow")({"workflow_id": META, "owner_words": "create meta ads", "mode": "do"})
+    out = await tool(d, vaic(), "update_workflow")({"values": {"objective": "Sales", "daily_budget": "lots"}})
     assert out.startswith("Tell the owner: Daily budget: I need an amount")
     run = await live(d)
     assert "objective" in run["values"] and "daily_budget" not in run["values"]
@@ -221,7 +221,7 @@ async def test_an_answer_that_cant_be_read_is_explained_and_stays_missing() -> N
 async def test_do_mode_without_the_connector_says_which_one_and_where() -> None:
     d = deps()
     await connect(d, status="needs_auth")
-    out = await tool(d, ace(), "start_workflow")(
+    out = await tool(d, vaic(), "start_workflow")(
         {"workflow_id": META, "owner_words": "let's create Meta ads, do it for me"}
     )
     assert "Meta Ads isn't connected yet" in out
@@ -230,14 +230,14 @@ async def test_do_mode_without_the_connector_says_which_one_and_where() -> None:
     (e,) = d.bus.of_type("workflow.updated")
     assert e["run"]["next"]["kind"] == "connect" and e["run"]["connector"]["connected"] is False
     # Walking through it by hand works without the connector.
-    out = await tool(d, ace(), "update_workflow")({"mode": "guide"})
+    out = await tool(d, vaic(), "update_workflow")({"mode": "guide"})
     assert "page 1 of 6" in out
 
 
 async def test_yes_to_the_money_hands_it_to_marketing_with_the_brief() -> None:
     d = deps()
     await connect(d)
-    await tool(d, ace(), "start_workflow")(
+    await tool(d, vaic(), "start_workflow")(
         {
             "workflow_id": META,
             "owner_words": "create meta ads for sales, do it for me, 300 a day from tomorrow, keep running",
@@ -245,13 +245,13 @@ async def test_yes_to_the_money_hands_it_to_marketing_with_the_brief() -> None:
                        "creative": "make them for me"},
         }
     )  # fmt: skip
-    go = tool(d, ace(), "run_workflow")
+    go = tool(d, vaic(), "run_workflow")
     # Not in the same message the money was shown in: the owner must have seen it first.
     shown_in = (await live(d))["confirm_shown_in"]
-    assert "Shall I create it" in await tool(d, ace(message_id=shown_in), "run_workflow")({"confirm": True})
+    assert "Shall I create it" in await tool(d, vaic(message_id=shown_in), "run_workflow")({"confirm": True})
     assert not d.queue.sent
     # Not on VAIC's word alone: the turn must be the owner's own message.
-    assert "Shall I create it" in await tool(d, ace(from_owner=False), "run_workflow")({"confirm": True})
+    assert "Shall I create it" in await tool(d, vaic(from_owner=False), "run_workflow")({"confirm": True})
     assert not d.queue.sent
     out = await go({"confirm": True})
     assert out.startswith("Handed to the Marketing department as task ")
@@ -269,14 +269,14 @@ async def test_yes_to_the_money_hands_it_to_marketing_with_the_brief() -> None:
 
 async def test_the_walkthrough_goes_page_by_page_asking_each_pages_inputs() -> None:
     d = deps()
-    out = await tool(d, ace(), "start_workflow")(
+    out = await tool(d, vaic(), "start_workflow")(
         {"workflow_id": META, "owner_words": "create meta ads, walk me through it"}
     )
     assert "page 1 of 6, “Open Ads Manager”" in out
-    step = tool(d, ace(), "workflow_step")
+    step = tool(d, vaic(), "workflow_step")
     out = await step({"to": "next"})
     assert "What should the ads achieve" in out  # page 2 needs the goal
-    out = await tool(d, ace(), "update_workflow")({"values": {"objective": "leads", "offer": "Free trial"}})
+    out = await tool(d, vaic(), "update_workflow")({"values": {"objective": "leads", "offer": "Free trial"}})
     assert "page 2 of 6" in out and "Choose the objective Leads" in out and "Free trial - Leads" in out
     out = await step({"to": "back"})
     assert "page 1 of 6" in out
@@ -288,7 +288,7 @@ async def test_the_walkthrough_goes_page_by_page_asking_each_pages_inputs() -> N
         if need["kind"] == "input":
             said = {"daily_budget": "50", "start_date": "today", "end_date": "after 7 days", "audience": "Sweden",
                     "link": "x.com", "creative": "my own"}[need["key"]]  # fmt: skip
-            await tool(d, ace(), "update_workflow")({"values": {need["key"]: said}})
+            await tool(d, vaic(), "update_workflow")({"values": {need["key"]: said}})
         else:
             await step({"to": "next"})
         run = (await wf.Runs(d.ledger.table).list())[0]
@@ -298,19 +298,19 @@ async def test_the_walkthrough_goes_page_by_page_asking_each_pages_inputs() -> N
 
 async def test_one_workflow_at_a_time_and_stop() -> None:
     d = deps()
-    await tool(d, ace(), "start_workflow")({"workflow_id": META, "owner_words": "create meta ads"})
+    await tool(d, vaic(), "start_workflow")({"workflow_id": META, "owner_words": "create meta ads"})
     first = await live(d)
-    await tool(d, ace(), "start_workflow")({"workflow_id": "google-ads-campaign", "owner_words": "make google ads"})
+    await tool(d, vaic(), "start_workflow")({"workflow_id": "google-ads-campaign", "owner_words": "make google ads"})
     runs = await wf.Runs(d.ledger.table).list()
     assert {r["id"]: r["status"] for r in runs}[first["id"]] == "cancelled"
-    assert await tool(d, ace(), "cancel_workflow")({}) == "Stopped. Nothing was created."
+    assert await tool(d, vaic(), "cancel_workflow")({}) == "Stopped. Nothing was created."
     assert await wf.Runs(d.ledger.table).live_in("main") is None
 
 
 async def test_list_workflows_says_whats_connected() -> None:
     d = deps()
     await connect(d)
-    out = await tool(d, ace(), "list_workflows")({})
+    out = await tool(d, vaic(), "list_workflows")({})
     assert "Meta Ads campaign" in out and "connected)" in out
     assert "Google Ads campaign" in out and "not connected; Settings → Departments & tools → Marketing" in out
 
@@ -319,14 +319,14 @@ async def test_list_workflows_says_whats_connected() -> None:
 async def test_aics_prompt_names_the_workflow_and_whats_already_known() -> None:
     d = deps()
     host = AgentHost(d, HostOptions(engine=None))  # type: ignore[arg-type]
-    inv = {"role": "ace", "kind": "task", "from": "owner", "conversation": "main"}
+    inv = {"role": "vaic", "kind": "task", "from": "owner", "conversation": "main"}
     maybe = await host._workflow_lines({**inv, "body": "our facebook ads need some love"})
     assert len(maybe) == 1 and "Is this what you mean, Sir: the Meta Ads campaign workflow?" in maybe[0]
     direct = await host._workflow_lines({**inv, "body": "let's create Meta ads"})
     assert "Start it now with start_workflow" in direct[0] and "not connected yet" in direct[0]
     assert await host._workflow_lines({**inv, "body": "what's the weather?"}) == []
     assert await host._workflow_lines({**inv, "from": "orchestrator", "body": "let's create Meta ads"}) == []
-    await tool(d, ace(), "start_workflow")(
+    await tool(d, vaic(), "start_workflow")(
         {"workflow_id": META, "owner_words": "create meta ads, 300 a day, do it for me"}
     )
     (line,) = await host._workflow_lines({**inv, "body": "Sales"})
@@ -335,7 +335,7 @@ async def test_aics_prompt_names_the_workflow_and_whats_already_known() -> None:
 
 
 def test_aics_prompt_explains_workflows() -> None:
-    p = load_prompt("ace.md")
+    p = load_prompt("vaic.md")
     for t in (
         "start_workflow",
         "update_workflow",
@@ -363,7 +363,7 @@ async def test_the_huds_routes_page_switch_mode_and_stop_but_never_spend() -> No
     a = api_deps(d)
     r = js(await handle_http(ev("GET", "/workflows"), a))
     assert {w["id"] for w in r["workflows"]} >= {META} and r["runs"] == []
-    await tool(d, ace(), "start_workflow")({"workflow_id": META, "owner_words": "create meta ads, walk me through it"})
+    await tool(d, vaic(), "start_workflow")({"workflow_id": META, "owner_words": "create meta ads, walk me through it"})
     rid = (await live(d))["id"]
     (run,) = js(await handle_http(ev("GET", "/workflows"), a))["runs"]
     assert run["id"] == rid and run["mode"] == "guide" and run["step"] == 0 and len(run["steps"]) == 6
@@ -384,11 +384,11 @@ async def test_the_huds_routes_page_switch_mode_and_stop_but_never_spend() -> No
 async def test_a_running_run_is_done_when_its_task_is() -> None:
     d = deps()
     await connect(d)
-    await tool(d, ace(), "start_workflow")(
+    await tool(d, vaic(), "start_workflow")(
         {"workflow_id": META, "owner_words": "create meta ads for sales, do it for me, 300 a day from today, keep running",
          "values": {"offer": "Shoes", "link": "x.com", "audience": "Sweden", "creative": "make them for me"}}
     )  # fmt: skip
-    await tool(d, ace(), "run_workflow")({"confirm": True})
+    await tool(d, vaic(), "run_workflow")({"confirm": True})
     run = (await wf.Runs(d.ledger.table).list())[0]
     await d.ledger.set_ticket_status(run["task_id"], "done")
     (shown,) = js(await handle_http(ev("GET", "/workflows"), api_deps(d)))["runs"]
@@ -408,14 +408,14 @@ def test_today_is_the_ledgers_day() -> None:
 async def test_the_money_shown_on_the_card_counts_as_shown() -> None:
     d = deps()
     await connect(d)
-    await tool(d, ace(), "start_workflow")(
+    await tool(d, vaic(), "start_workflow")(
         {"workflow_id": META, "owner_words": "create meta ads for sales, walk me through it, 300 a day from today, keep running",
          "values": {"offer": "Shoes", "link": "x.com", "audience": "Sweden", "creative": "make them for me"}}
     )  # fmt: skip
     rid = (await live(d))["id"]
     run = js(await handle_http(ev("POST", f"/workflows/runs/{rid}/mode", {"mode": "do"}), api_deps(d)))["run"]
     assert run["next"]["kind"] == "confirm" and "300 per day from Mon 9 Nov 2026" in run["spend"]["text"]
-    out = await tool(d, ace(), "run_workflow")({"confirm": True})  # the owner tapped "Yes, create it"
+    out = await tool(d, vaic(), "run_workflow")({"confirm": True})  # the owner tapped "Yes, create it"
     assert out.startswith("Handed to the Marketing department")
 
 
@@ -449,10 +449,10 @@ def test_the_owner_says_whether_they_are_here(words: str, here: bool | None) -> 
 async def test_an_app_is_built_to_the_end_while_the_owner_is_away() -> None:
     d = deps()
     words = "Build me an app where my family can share a shopping list"
-    out = await tool(d, ace(), "start_workflow")({"workflow_id": APP, "owner_words": words})
+    out = await tool(d, vaic(), "start_workflow")({"workflow_id": APP, "owner_words": words})
     assert "Handed to the Apps department as task" in out and "will finish it on its own" in out
     assert "what you went with for must-have parts, look, paid or private" in out  # "my family" was said
-    assert not d.bus.of_type("ace.question")  # nothing was asked
+    assert not d.bus.of_type("vaic.question")  # nothing was asked
     (msg,) = d.queue.sent
     assert "Apps department" in msg["body"] and "without waiting for them" in msg["body"]
     (t,) = [t for t in await d.ledger.list_tickets(("open",)) if t.get("kind") == "task"]
@@ -464,42 +464,42 @@ async def test_an_app_is_built_to_the_end_while_the_owner_is_away() -> None:
     assert {q["default"] for q in qs} == {"The smallest version that does the idea well", "Clean and light",
                                           "Nothing paid or private"}  # fmt: skip
     assert "Who uses it: Family or team\n" in t["brief"]
-    assert all(q["run_id"] == run["id"] and q["task_id"] == t["id"] and q["asked_by"] == "ace" for q in qs)
+    assert all(q["run_id"] == run["id"] and q["task_id"] == t["id"] and q["asked_by"] == "vaic" for q in qs)
     (e,) = d.bus.of_type("workflow.updated")
     assert len(e["run"]["taste"]) == 3 and e["run"]["inputs"][2]["assumed"] is True
 
 
 async def test_when_the_owner_is_here_the_app_is_planned_with_them_first() -> None:
     d = deps()
-    out = await tool(d, ace(), "start_workflow")(
+    out = await tool(d, vaic(), "start_workflow")(
         {"workflow_id": APP, "owner_words": "create a website for my bakery, I'm here, ask me"}
     )
     assert "Who will use it" in out and not d.queue.sent  # the idea came from their words: never asked
-    update = tool(d, ace(), "update_workflow")
+    update = tool(d, vaic(), "update_workflow")
     await update({"values": {"users": "my customers"}})
     await update({"values": {"must_have": "menu, opening hours, order form"}})
     await update({"values": {"look": "playful"}})
     out = await update({"values": {"paid_private": "Nothing paid or private"}})
     assert "Shall I build it, Sir?" in out and not d.queue.sent
-    out = await tool(d, ace(), "run_workflow")({"confirm": True})
+    out = await tool(d, vaic(), "run_workflow")({"confirm": True})
     assert out.startswith("Handed to the Apps department") and len(d.queue.sent) == 1
     assert await wf.Taste(d.ledger.table).all() == []  # nothing assumed, nothing to ask later
 
 
 async def test_saying_im_off_mid_way_lets_the_team_start() -> None:
     d = deps()
-    await tool(d, ace(), "start_workflow")(
+    await tool(d, vaic(), "start_workflow")(
         {"workflow_id": APP, "owner_words": "make me a habit tracker", "present": True}
     )
     assert not d.queue.sent
-    out = await tool(d, ace(), "update_workflow")({"present": False})
+    out = await tool(d, vaic(), "update_workflow")({"present": False})
     assert "Handed to the Apps department" in out and len(d.queue.sent) == 1
 
 
 async def test_ads_are_never_assumed_away_their_money_is_always_asked() -> None:
     d = deps()
     await connect(d)
-    out = await tool(d, ace(), "start_workflow")(
+    out = await tool(d, vaic(), "start_workflow")(
         {"workflow_id": META, "owner_words": "create meta ads, do it for me, you decide, I'm away"}
     )
     assert "Handed" not in out and not d.queue.sent
@@ -508,7 +508,7 @@ async def test_ads_are_never_assumed_away_their_money_is_always_asked() -> None:
 
 
 async def a_running_app(d: Any) -> tuple[dict[str, Any], dict[str, Any]]:
-    await tool(d, ace(), "start_workflow")({"workflow_id": APP, "owner_words": "make me a snake game"})
+    await tool(d, vaic(), "start_workflow")({"workflow_id": APP, "owner_words": "make me a snake game"})
     (t,) = [t for t in await d.ledger.list_tickets(("open",)) if t.get("kind") == "task"]
     await d.ledger.create_ticket({"id": "t-dept", "goal": "g", "from": "orchestrator", "to": "mgr-apps",
                                   "department": "Apps", "parent_id": t["id"], "kind": "assignment"})  # fmt: skip
@@ -553,8 +553,8 @@ async def test_an_answer_that_differs_reaches_whoever_can_still_change_it() -> N
         {"question": "Walls?", "options": ["Wrap around", "Walls end the game"], "default": "Walls end the game"}
     )
     qs = {q["question"]: q for q in await wf.Taste(d.ledger.table).all()}
-    answer = tool(d, ace(), "answer_taste")
-    assert "Only the owner" in await tool(d, ace(from_owner=False), "answer_taste")(
+    answer = tool(d, vaic(), "answer_taste")
+    assert "Only the owner" in await tool(d, vaic(from_owner=False), "answer_taste")(
         {"id": qs["Walls?"]["id"], "answer": "wrap around"}
     )
     sent = len(d.queue.sent)
@@ -579,7 +579,7 @@ async def test_an_answer_that_differs_reaches_whoever_can_still_change_it() -> N
     assert "the job has finished" in await answer({"id": must["id"], "answer": "add a high score table"})
 
 
-async def test_the_card_answers_taste_questions_and_aic_is_told_about_open_ones() -> None:
+async def test_the_card_answers_taste_questions_and_vaic_is_told_about_open_ones() -> None:
     d = deps()
     _t, _run = await a_running_app(d)
     a = api_deps(d)
@@ -592,7 +592,7 @@ async def test_the_card_answers_taste_questions_and_aic_is_told_about_open_ones(
     assert r["statusCode"] == 200 and "Dark and sleek" in js(r)["result"]
     assert (await handle_http(ev("POST", f"/workflows/taste/{look['id']}", {"answer": "x"}), a))["statusCode"] == 409
     host = AgentHost(d, HostOptions(engine=None))  # type: ignore[arg-type]
-    inv = {"role": "ace", "kind": "task", "from": "owner", "conversation": "main", "body": "hi Ace"}
+    inv = {"role": "vaic", "kind": "task", "from": "owner", "conversation": "main", "body": "hi Vaic"}
     (line, progress) = await host._workflow_lines(inv)
     assert line.startswith("Taste questions from the work in progress") and "answer_taste" in line
     assert "Dark and sleek" not in line and "Just me" in line
@@ -602,10 +602,10 @@ async def test_the_card_answers_taste_questions_and_aic_is_told_about_open_ones(
                 if x.startswith("Workflow:")]  # fmt: skip
 
 
-def test_the_team_and_aic_are_told_about_taste_questions() -> None:
+def test_the_team_and_vaic_are_told_about_taste_questions() -> None:
     assert "ask_taste" in load_prompt("worker.md", {"id": "w", "specialty": "s", "parent": "p"}).body
     assert "ask_taste" in load_prompt("manager.md", {"department": "Apps"}).body
-    p = load_prompt("ace.md")
+    p = load_prompt("vaic.md")
     assert "answer_taste" in p.tools and "The owner is usually away" in p.body and "never waited on" in p.body
 
 
@@ -631,9 +631,9 @@ def test_organic_content_is_recognised_only_when_asked_for_and_never_for_ads(wor
 async def test_organic_content_is_made_and_published_by_media_while_the_owner_is_away() -> None:
     d = deps()
     words = "Make a TikTok about our new summer menu, bold and energetic"
-    out = await tool(d, ace(), "start_workflow")({"workflow_id": ORGANIC, "owner_words": words})
+    out = await tool(d, vaic(), "start_workflow")({"workflow_id": ORGANIC, "owner_words": words})
     assert "Handed to the Media department as task" in out
-    assert not d.bus.of_type("ace.question")
+    assert not d.bus.of_type("vaic.question")
     (t,) = [t for t in await d.ledger.list_tickets(("open",)) if t.get("kind") == "task"]
     brief = t["brief"]
     assert "Format: A short video\n" in brief and "Tone: Bold and energetic\n" in brief

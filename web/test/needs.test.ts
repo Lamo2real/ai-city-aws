@@ -89,7 +89,7 @@ describe("Needs you counts only what can still be answered", () => {
           kind: "task",
           parent_id: null,
           owner_words: "porsche sentences",
-          from: "ace",
+          from: "vaic",
           to: "orchestrator",
         }),
         previous: null,

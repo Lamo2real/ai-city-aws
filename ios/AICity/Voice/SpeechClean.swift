@@ -5,7 +5,7 @@ import Foundation
 /// quotation marks are the owner's on purpose and stay exactly as said. A Swift port of `web/src/voice/clean.ts`.
 enum SpeechClean {
     private static let filler = "(?:uh[- ]huh|u+h*m+|u+h+|e+r+m*|a+h+|h+m+|m+h*m+|mhm)"
-    /// The same pattern as `ACE` in web/src/voice/clean.ts.
+    /// The same pattern as `VAIC` in web/src/voice/clean.ts.
     private static let name = "\\b(?:vaic|v[-. ]a[-. ]i[-. ]c|vais|vice(?!\\s+(?:president|presidents|versa|chair|chairman|principal|admiral|captain|squad|city|grip|presidency)\\b)|aic|a[-. ]i[-. ]c|ace|a[-. ]c[-. ]e)\\b"
     private static let soft: Set<String> = ["well", "so", "like", "maybe", "actually", "basically", "anyway", "and", "but", "i", "mean"]
 

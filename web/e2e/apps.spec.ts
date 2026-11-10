@@ -1,6 +1,6 @@
 // Apps the city builds (docs/APPS.md), the way the owner meets them: try one in Needs you, approve it,
 // open it from Apps and come back, remove it, and watch the city build it. The apps origin is faked by
-// the mock (https://apps.aic.test) and serves a tiny original game.
+// the mock (https://apps.vaic.test) and serves a tiny original game.
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { appRecord, at, CONFIG, hired, mockBackend } from "./mock.ts";
@@ -39,7 +39,7 @@ const PUBLISH = {
 
 test("Projects is in the nav after Work, with an empty state that says how to get one", async ({ page }) => {
   await mockBackend(page);
-  await page.goto("/#/ace");
+  await page.goto("/#/vaic");
   await expect(page.getByRole("link", { name: "Projects", exact: true })).toBeVisible(); // the menu has rendered
   const names = await page.getByRole("navigation", { name: "Screens" }).getByRole("link").allTextContents();
   expect(names.indexOf("Projects")).toBe(names.indexOf("Work") + 1);

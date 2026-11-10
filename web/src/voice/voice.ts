@@ -1,7 +1,7 @@
 // Voice behind one small interface. Production: Amazon Transcribe streaming (speech → text, with a
 // custom vocabulary for "VAIC") and Amazon Polly (text → speech, neural voice), both called
 // from the browser with short-lived credentials from a Cognito identity pool scoped to those two
-// actions only. Tests inject a fake on window.__aicVoice. Transcribe and Polly are AWS speech
+// actions only. Tests inject a fake on window.__vaicVoice. Transcribe and Polly are AWS speech
 // services, not language models.
 import { config } from "../lib/config.ts";
 import { idToken } from "../lib/auth.ts";
@@ -134,7 +134,7 @@ export function speakProblem(e: unknown): string {
 
 declare global {
   interface Window {
-    __aicVoice?: Voice;
+    __vaicVoice?: Voice;
   }
 }
 
@@ -251,7 +251,7 @@ class AwsVoice implements Voice {
       void this.outCtx.resume().catch(() => undefined);
       // A new tap tries VAIC's own voice again, even if this visit fell back to the browser's once.
       try {
-        sessionStorage.removeItem("aic.voice.tts");
+        sessionStorage.removeItem("vaic.voice.tts");
       } catch {
         /* storage blocked */
       }
@@ -576,4 +576,4 @@ class AwsVoice implements Voice {
 }
 
 let voice: Voice | null = null;
-export const getVoice = (): Voice => (voice ??= window.__aicVoice ?? new AwsVoice());
+export const getVoice = (): Voice => (voice ??= window.__vaicVoice ?? new AwsVoice());

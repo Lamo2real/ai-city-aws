@@ -8,17 +8,17 @@ from typing import Any
 
 from PIL import Image
 
-from aic.lambdas import connectors as lam
-from aic.shared import connector_signs as cs
-from aic.shared.connectors import DEFAULT_ROLES, ConnectorStore, city_signs, event
-from aic.shared.cost import Usage
-from aic.shared.events import MemoryBus
-from aic.shared.mcp_http import HttpResponse
-from aic.shared.table import MemoryTable
-from aic.shared.turn import TurnInput, TurnOutput
-from aic.shared.utility import UtilityDeps
 from city_support import make_city, scripted_engine
 from connector_fakes import TOOLS, FakeNet, Recorder, control, mcp_server, resolver
+from vaic.lambdas import connectors as lam
+from vaic.shared import connector_signs as cs
+from vaic.shared.connectors import DEFAULT_ROLES, ConnectorStore, city_signs, event
+from vaic.shared.cost import Usage
+from vaic.shared.events import MemoryBus
+from vaic.shared.mcp_http import HttpResponse
+from vaic.shared.table import MemoryTable
+from vaic.shared.turn import TurnInput, TurnOutput
+from vaic.shared.utility import UtilityDeps
 
 DEPTS = [
     {"name": "Media", "mission": "Videos, channels and creators."},
@@ -161,8 +161,8 @@ async def test_a_connector_that_connects_gets_its_departments_and_sign_on_its_re
         Recorder(),
         "gw-1",
         "pe-1",
-        "arn:aws:lambda:eu-north-1:123456789012:function:aic-prod-connector-bridge",
-        "aic-prod-connectors",
+        "arn:aws:lambda:eu-north-1:123456789012:function:vaic-prod-connector-bridge",
+        "vaic-prod-connectors",
         transport=net,
         resolve=resolver,
         labeler=labeler,

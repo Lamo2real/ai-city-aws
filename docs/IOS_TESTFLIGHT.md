@@ -16,7 +16,7 @@ developer.apple.com → **Account** → **Membership details** → copy **Team I
 developer.apple.com → **Certificates, Identifiers & Profiles** → **Identifiers** → **+** → **App IDs** → **App**:
 
 - Description: `AI City`
-- Bundle ID: **Explicit**, `com.lamo2real.aicity` (the prefix is `AIC_BUNDLE_PREFIX` in `ios/Config/AICity.xcconfig`)
+- Bundle ID: **Explicit**, `com.lamo2real.aicity` (the prefix is `VAIC_BUNDLE_PREFIX` in `ios/Config/AICity.xcconfig`)
 - Capabilities: tick **Push Notifications** (for the "a big job is done" notice)
 
 ## 3. Create the app in App Store Connect

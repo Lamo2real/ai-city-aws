@@ -14,7 +14,7 @@ final class CityReducerTests: XCTestCase {
          "department": "App", "parent_id": nil, "created_at": "2026-11-07T09:00:00Z", "updated_at": "2026-11-07T09:00:00Z"]
     }
     func snapshot() -> JSONValue {
-        ["agents": [agent("ace", kind: "core", dept: nil, ws: nil), agent("mgr-app", kind: "manager", ws: nil), agent("wkr-1")],
+        ["agents": [agent("vaic", kind: "core", dept: nil, ws: nil), agent("mgr-app", kind: "manager", ws: nil), agent("wkr-1")],
          "departments": [["name": "App", "key": "app", "mission": "Apps", "manager_id": "mgr-app", "state": "active", "created_at": "2026-11-01T00:00:00Z"]],
          "tickets": [ticket("t-1", to: "wkr-1", status: "in_progress")],
          "parked": [], "questions": [], "approvals": [], "specialists": [["id": "s1", "specialty": "Designer", "department": "App", "created_at": "2026-11-01T00:00:00Z"]],
@@ -35,7 +35,7 @@ final class CityReducerTests: XCTestCase {
         XCTAssertEqual(s.city?.running, 1)
         XCTAssertEqual(City.placement(s, "wkr-1")?.place, .station)
         XCTAssertEqual(City.placement(s, "spec-s1")?.place, .home)
-        XCTAssertEqual(City.placement(s, "ace")?.place, .hq)
+        XCTAssertEqual(City.placement(s, "vaic")?.place, .hq)
     }
 
     func testHireFilesUnderTheRegisteredSpelling() {

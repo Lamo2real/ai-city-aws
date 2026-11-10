@@ -11,14 +11,17 @@ from typing import Any
 
 import pytest
 
-from aic.lambdas import connectors as lam
-from aic.lambdas.api import handle_http
-from aic.lambdas.connector_bridge import BridgeDeps, call
-from aic.lambdas.connectors_api import ConnectorsApi
-from aic.runtime.connector_tool import add_connector_tool
-from aic.runtime.engine import EngineRequest
-from aic.runtime.tools import TurnCtx
-from aic.shared.connectors import (
+from city_support import make_city
+from connector_fakes import GATEWAY_ARN, TOOLS, FakeNet, Recorder, control, mcp_server, resolver
+from test_api import ev, js, make
+from vaic.lambdas import connectors as lam
+from vaic.lambdas.api import handle_http
+from vaic.lambdas.connector_bridge import BridgeDeps, call
+from vaic.lambdas.connectors_api import ConnectorsApi
+from vaic.runtime.connector_tool import add_connector_tool
+from vaic.runtime.engine import EngineRequest
+from vaic.runtime.tools import TurnCtx
+from vaic.shared.connectors import (
     DEFAULT_ROLES,
     KEY_IN_LINK,
     ConnectorStore,
@@ -28,11 +31,8 @@ from aic.shared.connectors import (
     make_id,
     registry_search,
 )
-from aic.shared.events import MemoryBus, parse_event
-from aic.shared.hierarchy.actions import CityDeps
-from city_support import make_city
-from connector_fakes import GATEWAY_ARN, TOOLS, FakeNet, Recorder, control, mcp_server, resolver
-from test_api import ev, js, make
+from vaic.shared.events import MemoryBus, parse_event
+from vaic.shared.hierarchy.actions import CityDeps
 
 URL = "https://mcp.higgsfield.ai/mcp"
 SECRET = "sk-test-DO-NOT-LEAK-0123456789abcdef"
@@ -104,7 +104,7 @@ def test_ids_come_from_the_name_and_a_label_for_a_second_account() -> None:
     ],
 )
 async def test_add_connector_is_offered_only_on_the_owners_own_message(frm: str, kind: str, offered: bool) -> None:
-    from aic.shared.turn import TurnOutput
+    from vaic.shared.turn import TurnOutput
 
     seen: list[list[str]] = []
 
@@ -117,8 +117,8 @@ async def test_add_connector_is_offered_only_on_the_owners_own_message(frm: str,
     await city.queue.send(
         {  # type: ignore[arg-type]
             "id": "m1",
-            "role": "ace",
-            "agentId": "ace",
+            "role": "vaic",
+            "agentId": "vaic",
             "department": None,
             "ticketId": "conv-c1",
             "taskId": "conv-c1",
@@ -134,7 +134,7 @@ async def test_add_connector_is_offered_only_on_the_owners_own_message(frm: str,
 
 
 def _ctx(from_owner: bool = True) -> TurnCtx:
-    return TurnCtx("ace", "ace", None, "conv-c1", "conv-c1", "c1", message_id="owner-m1", from_owner=from_owner)
+    return TurnCtx("vaic", "vaic", None, "conv-c1", "conv-c1", "c1", message_id="owner-m1", from_owner=from_owner)
 
 
 def _deps(net: FakeNet | None = None) -> tuple[CityDeps, Any]:
@@ -249,7 +249,7 @@ async def test_an_approval_no_longer_matching_the_record_provisions_nothing() ->
 
 # ---------- the connectors Lambda ----------
 def _lam(net: FakeNet, store: ConnectorStore | None = None) -> tuple[lam.ConnectorsDeps, Recorder, MemoryBus]:
-    from aic.shared.table import MemoryTable
+    from vaic.shared.table import MemoryTable
 
     bus = MemoryBus()
     ctl = control()
@@ -261,8 +261,8 @@ def _lam(net: FakeNet, store: ConnectorStore | None = None) -> tuple[lam.Connect
         Recorder(),
         "gw-1",
         "pe-1",
-        "arn:aws:lambda:eu-north-1:123456789012:function:aic-prod-connector-bridge",
-        "aic-prod-connectors",
+        "arn:aws:lambda:eu-north-1:123456789012:function:vaic-prod-connector-bridge",
+        "vaic-prod-connectors",
         transport=net,
         resolve=resolver,
     )
@@ -305,15 +305,15 @@ async def test_a_server_without_auth_is_synced_to_a_lambda_target_with_mapped_to
     }
     assert kw["credentialProviderConfigurations"] == [{"credentialProviderType": "GATEWAY_IAM_ROLE"}]
     pols = {p["name"]: p["definition"]["cedar"]["statement"] for p in ctl.policies.values()}  # type: ignore[attr-defined]
-    assert set(pols) == {"aic_role_ace", "aic_role_manager", "aic_role_worker"}  # no app has a grant yet
+    assert set(pols) == {"vaic_role_vaic", "vaic_role_manager", "vaic_role_worker"}  # no app has a grant yet
     # AgentCore drops the session name from IamEntity ids: the principal is the exact role ARN, never a pattern.
     assert (
-        'principal == AgentCore::IamEntity::"arn:aws:sts::123456789012:assumed-role/aic-prod-agent-worker"'
-        in pols["aic_role_worker"]
+        'principal == AgentCore::IamEntity::"arn:aws:sts::123456789012:assumed-role/vaic-prod-agent-worker"'
+        in pols["vaic_role_worker"]
     )
     assert all(" like " not in p and "/*" not in p for p in pols.values())
-    assert 'AgentCore::Action::"higgsfield___delete_video"' in pols["aic_role_worker"]
-    assert f'AgentCore::Gateway::"{GATEWAY_ARN}"' in pols["aic_role_ace"]
+    assert 'AgentCore::Action::"higgsfield___delete_video"' in pols["vaic_role_worker"]
+    assert f'AgentCore::Gateway::"{GATEWAY_ARN}"' in pols["vaic_role_vaic"]
     assert [e["status"] for e in bus.of_type("connector.updated")][-1] == "ready"
 
 
@@ -322,7 +322,7 @@ async def test_cedar_gives_a_read_level_role_only_read_only_tools_and_nothing_to
         {
             "id": "gh",
             "status": "ready",
-            "roles": {"ace": "read", "worker": "all"},
+            "roles": {"vaic": "read", "worker": "all"},
             "tools": [
                 {"name": "get_issue", "read_only": True, "destructive": False},
                 {"name": "create_issue", "read_only": False, "destructive": False},
@@ -331,14 +331,14 @@ async def test_cedar_gives_a_read_level_role_only_read_only_tools_and_nothing_to
         {
             "id": "off",
             "status": "needs_login",
-            "roles": {"ace": "all"},
+            "roles": {"vaic": "all"},
             "tools": [{"name": "x", "read_only": True, "destructive": False}],
         },
     ]
-    pols = lam.policy_statements(recs, GATEWAY_ARN, "aic-prod", "aic-prod-fn-api")
-    assert "create_issue" not in pols["aic_role_ace"] and "get_issue" in pols["aic_role_ace"]
-    assert "create_issue" in pols["aic_role_worker"]
-    assert "aic_role_orchestrator" not in pols and "aic_role_manager" not in pols
+    pols = lam.policy_statements(recs, GATEWAY_ARN, "vaic-prod", "vaic-prod-fn-api")
+    assert "create_issue" not in pols["vaic_role_vaic"] and "get_issue" in pols["vaic_role_vaic"]
+    assert "create_issue" in pols["vaic_role_worker"]
+    assert "vaic_role_orchestrator" not in pols and "vaic_role_manager" not in pols
     assert "off___x" not in "".join(pols.values())  # not ready: unreachable
 
 
@@ -348,13 +348,13 @@ async def test_removing_the_last_connector_deletes_the_policies_target_and_secre
     deps, ctl, bus = _lam(net)
     await _provisioning(deps.store)
     await lam.handle({"action": "provision", "id": "higgsfield"}, deps)
-    await deps.store.update("higgsfield", {"secret_name": "aic/prod/connectors/higgsfield"})
+    await deps.store.update("higgsfield", {"secret_name": "vaic/prod/connectors/higgsfield"})
     await lam.handle({"action": "remove", "id": "higgsfield"}, deps)
     assert await deps.store.get("higgsfield") is None
     assert ctl.policies == {}  # type: ignore[attr-defined]
     assert "delete_gateway_target" in ctl.names()
     assert deps.secrets.calls == [
-        ("delete_secret", {"SecretId": "aic/prod/connectors/higgsfield", "RecoveryWindowInDays": 7})
+        ("delete_secret", {"SecretId": "vaic/prod/connectors/higgsfield", "RecoveryWindowInDays": 7})
     ]
     assert bus.of_type("connector.updated")[-1]["status"] == "removed"
 
@@ -392,7 +392,7 @@ async def test_oauth_discovery_registers_a_client_dynamically_then_waits_for_sig
     assert rec["oauth"]["registered"] == "dcr" and rec["oauth"]["scopes"] == ["videos"]
     assert registered[0]["redirect_uris"] == ["https://identity.example.com/callback/abc"]
     create = dict(ctl.calls)["create_oauth2_credential_provider"]
-    assert create["name"] == "aic-conn-higgsfield" and create["credentialProviderVendor"] == "CustomOauth2"
+    assert create["name"] == "vaic-conn-higgsfield" and create["credentialProviderVendor"] == "CustomOauth2"
     update = dict(ctl.calls)["update_oauth2_credential_provider"]
     assert update["oauth2ProviderConfigInput"]["customOauth2ProviderConfig"]["clientId"] == "cid-1"
     assert "dcr-secret-xyz" not in json.dumps(rec)
@@ -435,7 +435,7 @@ async def test_an_identity_refusal_is_shown_in_full_with_the_aws_message() -> No
     }
     deps, ctl, _ = _lam(net)
     denied = (
-        "User: arn:aws:sts::123456789012:assumed-role/aic-prod-fn-connectors/aic-prod-connectors is not authorized "
+        "User: arn:aws:sts::123456789012:assumed-role/vaic-prod-fn-connectors/vaic-prod-connectors is not authorized "
         "to perform: bedrock-agentcore:CreateTokenVault on resource: "
         "arn:aws:bedrock-agentcore:eu-north-1:123456789012:token-vault/default"
     )
@@ -503,7 +503,7 @@ def test_schema_mapping_keeps_the_gateway_shape_and_skips_what_does_not_map() ->
 # ---------- keys never appear in logs, the ledger or responses ----------
 async def test_an_api_key_goes_to_secrets_manager_and_nowhere_else(capsys: pytest.CaptureFixture[str]) -> None:
     secrets = Recorder(
-        {"create_secret": {"ARN": "arn:aws:secretsmanager:eu-north-1:1:secret:aic/prod/connectors/higgsfield-AbC"}}
+        {"create_secret": {"ARN": "arn:aws:secretsmanager:eu-north-1:1:secret:vaic/prod/connectors/higgsfield-AbC"}}
     )
     ctl = control()
     d, invoked, c = _api(secrets=secrets, control=ctl)
@@ -550,7 +550,7 @@ async def test_a_failed_key_store_does_not_echo_the_key(capsys: pytest.CaptureFi
 
 
 async def test_the_bridge_uses_the_vault_key_in_memory_and_never_logs_it(capsys: pytest.CaptureFixture[str]) -> None:
-    from aic.shared.table import MemoryTable
+    from vaic.shared.table import MemoryTable
 
     net = FakeNet()
     net.mcp[URL] = mcp_server(TOOLS, need=f"Bearer {SECRET}")
@@ -573,18 +573,18 @@ async def test_the_bridge_uses_the_vault_key_in_memory_and_never_logs_it(capsys:
         }
     )
     out = await call(
-        {"q": "cats"}, "higgsfield___search_videos", BridgeDeps(store, identity, "aic-prod-connectors", net)
+        {"q": "cats"}, "higgsfield___search_videos", BridgeDeps(store, identity, "vaic-prod-connectors", net)
     )
     assert out == {"isError": False, "content": [{"type": "text", "text": "ran search_videos"}]}
     assert identity.calls[0] == (
         "get_workload_access_token_for_user_id",
-        {"workloadName": "aic-prod-connectors", "userId": "owner"},
+        {"workloadName": "vaic-prod-connectors", "userId": "owner"},
     )
     assert SECRET not in json.dumps(out) + json.dumps(list(store.table.items.values())) + capsys.readouterr().err  # type: ignore[attr-defined]
 
 
 async def test_the_bridge_answers_login_expired_when_the_vault_cannot_refresh() -> None:
-    from aic.shared.table import MemoryTable
+    from vaic.shared.table import MemoryTable
 
     identity = Recorder(
         {
@@ -604,10 +604,10 @@ async def test_the_bridge_answers_login_expired_when_the_vault_cannot_refresh() 
         }
     )
     out = await call({}, "gh___get_issue", BridgeDeps(store, identity, "wl", FakeNet()))
-    assert out["aic_error"] == "login_expired" and "sign in again" in out["content"][0]["text"]
+    assert out["vaic_error"] == "login_expired" and "sign in again" in out["content"][0]["text"]
     assert (await store.get("gh"))["status"] == "login_expired"  # type: ignore[index]
     unknown = await call({}, "gh___delete_repo", BridgeDeps(store, identity, "wl", FakeNet()))
-    assert unknown["isError"] and unknown["aic_error"] in ("unknown_tool", "unavailable")
+    assert unknown["isError"] and unknown["vaic_error"] in ("unknown_tool", "unavailable")
 
 
 # ---------- sign-in ----------
@@ -619,7 +619,7 @@ async def test_sign_in_starts_with_a_state_and_completes_only_with_the_same_stat
             "complete_resource_token_auth": {},
         }
     )
-    d, invoked, c = _api(identity=identity, workload="aic-prod-connectors", hud_origin="https://hud.example.com")
+    d, invoked, c = _api(identity=identity, workload="vaic-prod-connectors", hud_origin="https://hud.example.com")
     await c.store.create(
         {
             "id": "gh",
@@ -651,13 +651,13 @@ async def test_sign_in_starts_with_a_state_and_completes_only_with_the_same_stat
 
 async def test_settings_edits_roles_and_a_role_change_rewrites_cedar() -> None:
     d, invoked, c = _api()
-    await c.store.create({"id": "gh", "label": "GitHub", "url": URL, "status": "ready", "roles": {"ace": "all"}})
+    await c.store.create({"id": "gh", "label": "GitHub", "url": URL, "status": "ready", "roles": {"vaic": "all"}})
     r = await handle_http(
-        ev("PUT", "/connectors/gh", {"roles": {"ace": "read", "worker": "all"}, "approval": "writes"}), d
+        ev("PUT", "/connectors/gh", {"roles": {"vaic": "read", "worker": "all"}, "approval": "writes"}), d
     )
-    assert js(r)["connector"]["roles"] == {"ace": "read", "worker": "all"}
+    assert js(r)["connector"]["roles"] == {"vaic": "read", "worker": "all"}
     assert invoked == [{"action": "refresh", "id": "gh"}]
-    bad = await handle_http(ev("PUT", "/connectors/gh", {"roles": {"ace": "admin"}}), d)
+    bad = await handle_http(ev("PUT", "/connectors/gh", {"roles": {"vaic": "admin"}}), d)
     assert bad["statusCode"] == 400
 
 
@@ -676,7 +676,7 @@ async def test_a_link_added_without_roles_gets_the_default_roles() -> None:
     d, _invoked, _c = _api()
     r = await handle_http(ev("POST", "/connectors", {"url": URL, "label": "Higgsfield"}), d)
     assert r["statusCode"] == 201
-    assert js(r)["connector"]["roles"] == {"ace": "all", "manager": "all", "worker": "all"}
+    assert js(r)["connector"]["roles"] == {"vaic": "all", "manager": "all", "worker": "all"}
 
 
 async def test_delete_marks_removing_and_hands_the_cleanup_to_the_connectors_lambda() -> None:
@@ -693,15 +693,15 @@ def test_connectors_for_keeps_the_roles_level_and_the_workers_hire() -> None:
         {
             "id": "gh",
             "status": "ready",
-            "roles": {"ace": "read", "worker": "all"},
+            "roles": {"vaic": "read", "worker": "all"},
             "tools": [
                 {"name": "get", "read_only": True, "destructive": False},
                 {"name": "put", "read_only": False, "destructive": True},
             ],
         },
-        {"id": "slack", "status": "needs_login", "roles": {"ace": "all"}, "tools": [{"name": "post"}]},
+        {"id": "slack", "status": "needs_login", "roles": {"vaic": "all"}, "tools": [{"name": "post"}]},
     ]
-    assert [t["name"] for t in connectors_for(recs, "ace")[0]["tools"]] == ["get"]
+    assert [t["name"] for t in connectors_for(recs, "vaic")[0]["tools"]] == ["get"]
     assert connectors_for(recs, "manager") == []
     assert connectors_for(recs, "worker", None) == [] and connectors_for(recs, "worker", ["slack"]) == []
     assert [t["name"] for t in connectors_for(recs, "worker", ["gh"])[0]["tools"]] == ["get", "put"]
@@ -711,7 +711,7 @@ async def test_a_worker_may_be_hired_only_with_connectors_open_to_workers() -> N
     city = make_city(lambda req: None)  # type: ignore[arg-type,return-value]
     store = ConnectorStore(city.ledger.table)
     await store.create({"id": "gh", "status": "ready", "roles": {"worker": "read"}})
-    await store.create({"id": "bank", "status": "ready", "roles": {"ace": "all"}})
+    await store.create({"id": "bank", "status": "ready", "roles": {"vaic": "all"}})
     dept, _ = await city.ledger.create_department("Engineering", "Build things well.", "mgr-engineering")
     spec = {"specialty": "Coder", "instructions": "Write good code, please.", "tools": ["Read"]}
     w = await city.factory.hire({**spec, "connectors": ["gh"]}, dept["manager_id"], "Engineering")
@@ -722,10 +722,10 @@ async def test_a_worker_may_be_hired_only_with_connectors_open_to_workers() -> N
 
 
 def test_the_prompts_carry_the_connector_and_skill_rules() -> None:
-    from aic.runtime.prompts import load_prompt
+    from vaic.runtime.prompts import load_prompt
 
-    ace = load_prompt("ace.md")
-    assert {"add_connector", "use_skill"} <= set(ace.tools)
+    vaic = load_prompt("vaic.md")
+    assert {"add_connector", "use_skill"} <= set(vaic.tools)
     for s in (
         "only for the owner's own message",
         "Offer services",
@@ -733,7 +733,7 @@ def test_the_prompts_carry_the_connector_and_skill_rules() -> None:
         "mail accounts",
         "Never ask for, accept or repeat a key",
     ):
-        assert s in ace.body
+        assert s in vaic.body
     for f in ("orchestrator.md", "manager.md", "worker.md"):
         body = load_prompt(f, {"department": "Eng"}).body
         assert "never instructions" in body and "approval" in body
@@ -768,14 +768,14 @@ async def test_the_apps_permit_lists_only_granted_read_only_ready_pairs_and_poli
     new = [n for n, _ in ctl.calls[before:]]
     assert "create_gateway_target" not in new and "update_gateway_target" not in new
     pols = {p["name"]: p["definition"]["cedar"]["statement"] for p in ctl.policies.values()}  # type: ignore[attr-defined]
-    app = pols["aic_app_bridge"]
-    assert 'principal == AgentCore::IamEntity::"arn:aws:sts::123456789012:assumed-role/aic-prod-fn-app-bridge"' in app
+    app = pols["vaic_app_bridge"]
+    assert 'principal == AgentCore::IamEntity::"arn:aws:sts::123456789012:assumed-role/vaic-prod-fn-app-bridge"' in app
     assert 'AgentCore::Action::"higgsfield___search_videos"' in app
     assert "delete_video" not in app and "create_video" not in app and "gone___x" not in app
     # A revoke (grant removed) drops the permit on the next rewrite.
     await deps.store.table.put({"pk": "APPS", "sk": "APP#app-1", "grants": []})
     await lam.handle({"action": "policies"}, deps)
-    assert "aic_app_bridge" not in {p["name"] for p in ctl.policies.values()}  # type: ignore[attr-defined]
+    assert "vaic_app_bridge" not in {p["name"] for p in ctl.policies.values()}  # type: ignore[attr-defined]
 
 
 @pytest.mark.parametrize(
@@ -790,7 +790,7 @@ async def test_the_apps_permit_lists_only_granted_read_only_ready_pairs_and_poli
     ],
 )
 async def test_mail_and_calendar_providers_go_to_connect_account_not_the_mcp_flow(query: str, provider: str) -> None:
-    from aic.runtime.connector_tool import mail_provider
+    from vaic.runtime.connector_tool import mail_provider
 
     assert mail_provider(query) == provider
     d, _city = _deps()
@@ -798,7 +798,7 @@ async def test_mail_and_calendar_providers_go_to_connect_account_not_the_mcp_flo
     # A mail account waiting for the owner's own sign-in (or app password), never an MCP connector or approval.
     assert ("Sign in to" in out) if provider != "imap" else ("app password" in out)
     assert await ConnectorStore(d.ledger.table).list() == [] and await d.ledger.pending_approvals() == []
-    from aic.mail.accounts import AccountStore
+    from vaic.mail.accounts import AccountStore
 
     (acct,) = await AccountStore(d.ledger.table).all()
     assert acct["provider"] == provider and acct["label"] == "Work" and acct["status"] == "signing_in"
@@ -807,7 +807,7 @@ async def test_mail_and_calendar_providers_go_to_connect_account_not_the_mcp_flo
 async def test_asking_for_outlook_three_ways_gives_one_card() -> None:
     """The owner's "connect Outlook" (2026-11-10) put three app-password cards in the chat: "Microsoft", "Outlook"
     and "Outlook MCP". One request is one card; asking again shows the card that is already waiting."""
-    from aic.mail.accounts import AccountStore
+    from vaic.mail.accounts import AccountStore
 
     d, _city = _deps()
     tool = add_connector_tool(d, _ctx())
@@ -824,9 +824,9 @@ async def test_asking_for_outlook_three_ways_gives_one_card() -> None:
 async def test_outlook_without_microsoft_sign_in_says_so_and_adds_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
     """Microsoft turned off app passwords for Outlook mail, so without Microsoft sign-in there is no card that could
     work: VAIC says what's missing instead of putting an app-password form in the chat."""
-    from aic.mail.accounts import AccountStore
+    from vaic.mail.accounts import AccountStore
 
-    monkeypatch.setenv("AIC_MAIL_PROVIDERS", "")
+    monkeypatch.setenv("VAIC_MAIL_PROVIDERS", "")
     d, _city = _deps()
     out = await add_connector_tool(d, _ctx()).handler({"query": "my Outlook", "label": "Outlook"})
     assert "app passwords" in out and "isn't switched on" in out and "Nothing was added" in out
@@ -840,7 +840,7 @@ async def test_outlook_without_microsoft_sign_in_says_so_and_adds_nothing(monkey
 
 
 async def test_two_plain_imap_mailboxes_are_two_cards() -> None:
-    from aic.mail.accounts import AccountStore
+    from vaic.mail.accounts import AccountStore
 
     d, _city = _deps()
     await add_connector_tool(d, _ctx()).handler({"query": "iCloud", "label": "iCloud"})
@@ -849,19 +849,19 @@ async def test_two_plain_imap_mailboxes_are_two_cards() -> None:
 
 
 def test_links_and_other_names_are_not_mistaken_for_mail() -> None:
-    from aic.runtime.connector_tool import mail_provider
+    from vaic.runtime.connector_tool import mail_provider
 
     assert mail_provider("https://mcp.outlook-tools.example.com/mcp") is None
     assert mail_provider("higgsfield") is None and mail_provider("github") is None
 
 
 def test_runtime_created_resources_carry_the_default_tags_with_project_and_component() -> None:
-    from aic.shared.connectors import resource_tags
+    from vaic.shared.connectors import resource_tags
 
-    env = {"AIC_DEFAULT_TAGS": json.dumps({"Project": "ai-city", "Owner": "owner", "Component": "api"})}
+    env = {"VAIC_DEFAULT_TAGS": json.dumps({"Project": "ai-city", "Owner": "owner", "Component": "api"})}
     assert resource_tags(env) == {"Project": "ai-city", "Owner": "owner", "Component": "connectors"}
     assert resource_tags({}) == {"Project": "ai-city", "Component": "connectors"}
-    assert resource_tags({"AIC_DEFAULT_TAGS": "not json"}) == {"Project": "ai-city", "Component": "connectors"}
+    assert resource_tags({"VAIC_DEFAULT_TAGS": "not json"}) == {"Project": "ai-city", "Component": "connectors"}
 
 
 # ---------- plain requests: the catalog first, LinkedIn said plainly (decision 130) ----------

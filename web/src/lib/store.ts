@@ -10,7 +10,7 @@ import type { FileCardData } from "./files.ts";
 
 export interface ChatLine {
   id: string;
-  who: "owner" | "ace";
+  who: "owner" | "vaic";
   text: string;
   /** Owner lines: queued (not sent yet), sent, or failed. VAIC lines: streaming until done. */
   state: "queued" | "sent" | "failed" | "streaming" | "done";
@@ -31,7 +31,7 @@ export interface ChatLine {
   filesLabel?: string;
 }
 /** VAIC's turn in progress: when the owner sent, and the steps so far. */
-export interface AceTurn {
+export interface VaicTurn {
   started: number;
   steps: string[];
   /** Tickets VAIC opened in this turn before its reply line existed. */
@@ -74,13 +74,13 @@ export interface HudState {
   live: LiveStatus;
   presence: Presence;
   settings: Record<string, unknown> | null;
-  turn: AceTurn | null;
+  turn: VaicTurn | null;
   cards: ConnectCardState[];
 }
 
 type Listener = () => void;
-const CHAT_KEY = "aic.chat";
-const RESUME_KEY = "aic.resume";
+const CHAT_KEY = "vaic.chat";
+const RESUME_KEY = "vaic.resume";
 const RESUME_MS = 30 * 60_000;
 const readChat = (): ChatLine[] => {
   try {
@@ -145,10 +145,10 @@ class Store {
     const t = e.ticket as { id: string; from: string; status: string } | undefined;
     if (!t) return;
     if (["done", "failed", "cancelled"].includes(t.status)) return this.settleTasks((id) => id === t.id);
-    if (e.previous !== null || t.from !== "ace") return;
+    if (e.previous !== null || t.from !== "vaic") return;
     const turn = this.state.turn;
     const chat = this.state.chat;
-    const i = chat.findLastIndex((l) => l.who === "ace");
+    const i = chat.findLastIndex((l) => l.who === "vaic");
     const line = chat[i];
     if (turn && (!line || line.at < turn.started))
       return this.set({ turn: { ...turn, tasks: [...(turn.tasks ?? []), t.id] } }); // the reply has not started yet
@@ -170,16 +170,16 @@ class Store {
   }
   event(e: { type: string; [k: string]: unknown }) {
     // A project's chat (`app-…`, lib/projects.ts) is not VAIC's main chat.
-    if ((e.type === "ace.reply" || e.type === "ace.question") && String(e.conversation ?? "").startsWith("app-"))
+    if ((e.type === "vaic.reply" || e.type === "vaic.question") && String(e.conversation ?? "").startsWith("app-"))
       return;
     if (e.type === "hud.action") return hudAction(e);
-    if (e.type === "ace.files") {
+    if (e.type === "vaic.files") {
       if (String(e.conversation ?? "main") !== "main") return;
-      return this.aceFiles((e.files as FileCardData[] | undefined) ?? [], String(e.label ?? ""));
+      return this.vaicFiles((e.files as FileCardData[] | undefined) ?? [], String(e.label ?? ""));
     }
-    if (e.type === "ace.reply")
-      return this.aceReply(e as unknown as { conversation: string; text: string; done: boolean });
-    if (e.type === "activity" && e.id === "ace") this.aceStep(String(e.activity ?? ""), e.detail as string | null);
+    if (e.type === "vaic.reply")
+      return this.vaicReply(e as unknown as { conversation: string; text: string; done: boolean });
+    if (e.type === "activity" && e.id === "vaic") this.vaicStep(String(e.activity ?? ""), e.detail as string | null);
     this.taskEvent(e);
     this.cardEvent(e);
     this.during?.push(e);
@@ -197,7 +197,7 @@ class Store {
     this.announced.add(key);
     const line: ChatLine = {
       id: `a-conn-${key}-${Date.now()}`,
-      who: "ace",
+      who: "vaic",
       text: `${name} is connected, Sir.`,
       state: "done",
       at: Date.now(),
@@ -374,14 +374,14 @@ class Store {
   beginTurn() {
     this.set({ turn: { started: Date.now(), steps: [FIRST_STEP] } });
   }
-  private aceStep(activity: string, detail?: string | null) {
+  private vaicStep(activity: string, detail?: string | null) {
     const words = stepWords(activity, detail);
     const turn = this.state.turn;
     if (!words || !turn || turn.steps.at(-1) === words) return;
     this.set({ turn: { ...turn, steps: [...turn.steps, words] } });
   }
   /** Files VAIC shows (show_files): on its reply to this turn, or held for that reply until its first words. */
-  private aceFiles(cards: FileCardData[], label = "") {
+  private vaicFiles(cards: FileCardData[], label = "") {
     if (!cards.length) return;
     if (label) {
       // A labelled set (the references a build uses) is its own line, never merged into a reply's cards.
@@ -390,7 +390,7 @@ class Store {
           ...this.state.chat,
           {
             id: `a-files-${Date.now()}`,
-            who: "ace",
+            who: "vaic",
             text: "",
             state: "done",
             at: Date.now(),
@@ -403,7 +403,7 @@ class Store {
     const merge = (have: FileCardData[] = []) => [...have, ...cards.filter((c) => !have.some((h) => h.id === c.id))];
     const turn = this.state.turn;
     const chat = this.state.chat;
-    const i = chat.findLastIndex((l) => l.who === "ace");
+    const i = chat.findLastIndex((l) => l.who === "vaic");
     const line = chat[i];
     if (turn && (!line || line.at < turn.started)) return this.set({ turn: { ...turn, files: merge(turn.files) } });
     if (line && turn) {
@@ -415,16 +415,16 @@ class Store {
     this.set({
       chat: [
         ...chat,
-        { id: `a-files-${Date.now()}`, who: "ace", text: "", state: "done", at: Date.now(), files: cards },
+        { id: `a-files-${Date.now()}`, who: "vaic", text: "", state: "done", at: Date.now(), files: cards },
       ],
     });
   }
-  private aceReply(e: { text: string; done: boolean }) {
+  private vaicReply(e: { text: string; done: boolean }) {
     const chat = [...this.state.chat];
     const last = chat.at(-1);
     // The final reply arrives twice (straight from VAIC, and through the event bus as a safety net).
-    if (e.done && last?.who === "ace" && last.state === "done" && last.text === e.text) return;
-    if (last?.who === "ace" && last.state === "streaming")
+    if (e.done && last?.who === "vaic" && last.state === "done" && last.text === e.text) return;
+    if (last?.who === "vaic" && last.state === "streaming")
       chat[chat.length - 1] = {
         ...last,
         text: e.done ? e.text : last.text + e.text,
@@ -434,7 +434,7 @@ class Store {
     else
       chat.push({
         id: `a-${Date.now()}`,
-        who: "ace",
+        who: "vaic",
         text: e.text,
         state: e.done ? "done" : "streaming",
         at: Date.now(),

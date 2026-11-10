@@ -11,7 +11,7 @@ final class StaySignedInTests: XCTestCase {
     // MARK: The token store
 
     func testKeychainKeepsTokensAfterFirstUnlockOnThisDeviceOnly() {
-        let k = KeychainTokenStore(service: "city.ai.aic.tests.\(UUID().uuidString)")
+        let k = KeychainTokenStore(service: "city.ai.vaic.tests.\(UUID().uuidString)")
         defer { k.clear() }
         let t = Tokens(idToken: "i", accessToken: "a", refreshToken: "r", expiresAt: launchDay)
         XCTAssertTrue(k.save(t))
@@ -20,7 +20,7 @@ final class StaySignedInTests: XCTestCase {
     }
 
     func testKeychainSaveReplacesInPlace() {
-        let k = KeychainTokenStore(service: "city.ai.aic.tests.\(UUID().uuidString)")
+        let k = KeychainTokenStore(service: "city.ai.vaic.tests.\(UUID().uuidString)")
         defer { k.clear() }
         XCTAssertTrue(k.save(Tokens(idToken: "i1", accessToken: "a1", refreshToken: "r1", expiresAt: launchDay)))
         XCTAssertTrue(k.save(Tokens(idToken: "i2", accessToken: "a2", refreshToken: "r2", expiresAt: launchDay)))
@@ -28,7 +28,7 @@ final class StaySignedInTests: XCTestCase {
     }
 
     func testOldUnlockedOnlyItemsMoveToTheNewProtection() throws {
-        let service = "city.ai.aic.tests.\(UUID().uuidString)"
+        let service = "city.ai.vaic.tests.\(UUID().uuidString)"
         let data = try JSONEncoder().encode(Tokens(idToken: "i", accessToken: "a", refreshToken: "r", expiresAt: launchDay))
         let add: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: "owner",
                                   kSecValueData as String: data, kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly]
@@ -70,7 +70,7 @@ final class StaySignedInTests: XCTestCase {
     }
 
     private func app(_ world: World, store: TokenStore, now: Date, defaults: UserDefaults? = nil) -> AppModel {
-        let cfg = ConfigStore(defaults: defaults ?? UserDefaults(suiteName: "aic.tests.\(UUID().uuidString)")!, http: world.http, bundleHost: "site.example.test")
+        let cfg = ConfigStore(defaults: defaults ?? UserDefaults(suiteName: "vaic.tests.\(UUID().uuidString)")!, http: world.http, bundleHost: "site.example.test")
         let model = AppModel(configStore: cfg, hud: HudStore(archive: NoChatArchive()), http: world.http,
                              makeAuth: { CognitoAuth(config: $0, http: world.http, store: store, now: { now }) }, connectLive: false)
         return model
@@ -119,7 +119,7 @@ final class StaySignedInTests: XCTestCase {
     /// Offline at launch with expired tokens: the app opens (with the cached settings) and stays signed in.
     func testOfflineLaunchStaysSignedIn() async {
         let world = World()
-        let defaults = UserDefaults(suiteName: "aic.tests.\(UUID().uuidString)")!  // the same phone: the cached config.json is here
+        let defaults = UserDefaults(suiteName: "vaic.tests.\(UUID().uuidString)")!  // the same phone: the cached config.json is here
         let store = MemoryTokenStore(Tokens(idToken: "id-1", accessToken: "a", refreshToken: "refresh-1", expiresAt: launchDay.addingTimeInterval(-60)))
         let model = app(world, store: store, now: launchDay, defaults: defaults)
         await model.start()  // online once, so the config is cached
@@ -136,7 +136,7 @@ final class StaySignedInTests: XCTestCase {
         let world = World()
         let store = MemoryTokenStore(Tokens(idToken: "id-1", accessToken: "a", refreshToken: "refresh-1", expiresAt: launchDay.addingTimeInterval(600)))
         var now = launchDay
-        let cfg = ConfigStore(defaults: UserDefaults(suiteName: "aic.tests.\(UUID().uuidString)")!, http: world.http, bundleHost: "site.example.test")
+        let cfg = ConfigStore(defaults: UserDefaults(suiteName: "vaic.tests.\(UUID().uuidString)")!, http: world.http, bundleHost: "site.example.test")
         let model = AppModel(configStore: cfg, hud: HudStore(archive: NoChatArchive()), http: world.http,
                              makeAuth: { CognitoAuth(config: $0, http: world.http, store: store, now: { now }) }, connectLive: false)
         await model.start()

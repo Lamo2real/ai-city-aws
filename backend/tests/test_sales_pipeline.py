@@ -5,16 +5,16 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from aic.lambdas.api import handle_http
-from aic.lambdas.scheduler import run_job
-from aic.runtime.tools import TurnCtx
-from aic.shared import sales_pipeline as deals
-from aic.shared import standing_orders as so
 from test_api import Clock, ev, js, make
 from test_apps import city_deps, tool
+from vaic.lambdas.api import handle_http
+from vaic.lambdas.scheduler import run_job
+from vaic.runtime.tools import TurnCtx
+from vaic.shared import sales_pipeline as deals
+from vaic.shared import standing_orders as so
 
 SALES = TurnCtx(agent_id="wkr-s", role="worker", department="Sales", ticket_id="t1", task_id="t1")
-ACE = TurnCtx(agent_id="ace", role="ace", department=None, ticket_id="conv-main", task_id="conv-main")
+VAIC = TurnCtx(agent_id="vaic", role="vaic", department=None, ticket_id="conv-main", task_id="conv-main")
 
 
 async def test_deals_are_added_moved_and_go_stale_after_a_week_without_contact() -> None:
@@ -43,9 +43,9 @@ async def test_deals_are_added_moved_and_go_stale_after_a_week_without_contact()
             pass
 
 
-async def test_sales_and_aic_use_the_board_through_tools() -> None:
+async def test_sales_and_vaic_use_the_board_through_tools() -> None:
     d = city_deps()
-    assert "Added deal-" in await tool(d, ACE, "add_deal")({"name": "Initech", "contact": "Peter", "value": "1200"})
+    assert "Added deal-" in await tool(d, VAIC, "add_deal")({"name": "Initech", "contact": "Peter", "value": "1200"})
     [x] = await deals.list_deals(d.ledger)
     assert "Initech (Peter) [New lead, 1200" in await tool(d, SALES, "list_deals")({})
     out = await tool(d, SALES, "update_deal")({"id": x["id"], "contacted": True, "next_step": "Call on Friday"})

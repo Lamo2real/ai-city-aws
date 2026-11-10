@@ -6,10 +6,10 @@ from typing import Any
 
 import httpx
 
-from aic.runtime.engine import activity_for, usage_from_model_usage
-from aic.runtime.prompts import Prompt, load_prompt, parse_prompt, render
-from aic.runtime.server import create_app
-from aic.shared.cost import Usage
+from vaic.runtime.engine import activity_for, usage_from_model_usage
+from vaic.runtime.prompts import Prompt, load_prompt, parse_prompt, render
+from vaic.runtime.server import create_app
+from vaic.shared.cost import Usage
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -89,7 +89,7 @@ async def test_rejects_malformed_invocations_and_hides_error_details() -> None:
 
 # ---------- prompts ----------
 def test_every_role_prompt_exists_and_lists_its_tools() -> None:
-    assert "delegate_to_orchestrator" in load_prompt("ace.md").tools
+    assert "delegate_to_orchestrator" in load_prompt("vaic.md").tools
     assert "sign_off" in load_prompt("orchestrator.md").tools
     assert "review" in load_prompt("manager.md", {"department": "Eng"}).tools
 
@@ -119,7 +119,7 @@ def test_managers_hire_few_and_the_orchestrator_never_staffs_a_one_off() -> None
 
 
 def test_aces_prompt_states_its_name_greetings_spoken_style_and_limits() -> None:
-    body = load_prompt("ace.md").body
+    body = load_prompt("vaic.md").body
     for s in (
         "VAIC",
         "VAIC",
@@ -178,10 +178,10 @@ def test_dockerfile_builds_for_arm64_serves_8080_runs_as_non_root_keeps_bedrock_
     text = (ROOT / "services" / "agent-runtime" / "Dockerfile").read_text()
     assert len(re.findall(r"--platform=linux/arm64", text)) == 2
     assert "EXPOSE 8080" in text
-    assert re.search(r"^USER aic$", text, re.M)
+    assert re.search(r"^USER vaic$", text, re.M)
     assert "CLAUDE_CODE_USE_BEDROCK=1" in text
     assert "bubblewrap" in text  # workers' env scrubbing needs it; the flag itself is set per role
-    assert "aic.runtime.server" in text
+    assert "vaic.runtime.server" in text
     assert not re.search(r"ANTHROPIC_API_KEY|awscli|aws-cli", text)
 
 

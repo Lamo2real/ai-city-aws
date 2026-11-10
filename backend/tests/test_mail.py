@@ -11,24 +11,24 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from aic.lambdas.api import handle_http
-from aic.lambdas.mail_api import MailApi
-from aic.mail import approvals, wrap
-from aic.mail.accounts import AccountStore
-from aic.mail.http import ProviderError
-from aic.mail.providers.caldav import CalDav, build_ics, parse_ics
-from aic.mail.providers.google import event_pid, gmail_query, split_event_pid
-from aic.mail.providers.imap import imap_criteria
-from aic.mail.providers.microsoft import search_params, utc_naive
-from aic.mail.rules import RuleInvalid, RuleStore, check_rule
-from aic.mail.service import MailError, MailService
-from aic.mail.tokens import Tokens
-from aic.runtime.mail_tools import mail_level, mail_tools
-from aic.runtime.tools import TurnCtx, gate_tools
-from aic.shared.mcp_http import HttpResponse
-from aic.shared.policy import action_hash, decide, load_policy
 from city_support import make_city
 from test_api import ev, js, make
+from vaic.lambdas.api import handle_http
+from vaic.lambdas.mail_api import MailApi
+from vaic.mail import approvals, wrap
+from vaic.mail.accounts import AccountStore
+from vaic.mail.http import ProviderError
+from vaic.mail.providers.caldav import CalDav, build_ics, parse_ics
+from vaic.mail.providers.google import event_pid, gmail_query, split_event_pid
+from vaic.mail.providers.imap import imap_criteria
+from vaic.mail.providers.microsoft import search_params, utc_naive
+from vaic.mail.rules import RuleInvalid, RuleStore, check_rule
+from vaic.mail.service import MailError, MailService
+from vaic.mail.tokens import Tokens
+from vaic.runtime.mail_tools import mail_level, mail_tools
+from vaic.runtime.tools import TurnCtx, gate_tools
+from vaic.shared.mcp_http import HttpResponse
+from vaic.shared.policy import action_hash, decide, load_policy
 
 SECRET_TOKEN = "ya29.SECRET-ACCESS-TOKEN"
 APP_PASSWORD = "app-pass-SECRET-123"
@@ -166,8 +166,8 @@ def make_service(http: FakeHttp | None = None) -> tuple[MailService, Any, FakeId
     return s, city, identity, secrets
 
 
-def ace() -> TurnCtx:
-    return TurnCtx("ace", "ace", None, "conv-c1", "conv-c1", "c1", message_id="owner-m1", from_owner=True)
+def vaic() -> TurnCtx:
+    return TurnCtx("vaic", "vaic", None, "conv-c1", "conv-c1", "c1", message_id="owner-m1", from_owner=True)
 
 
 def tool(specs: list[Any], name: str) -> Any:
@@ -312,26 +312,26 @@ async def test_events_ranges_are_limited() -> None:
 
 # ---------- the tools ----------
 async def test_workers_never_get_mail_and_others_only_read_when_turned_on() -> None:
-    assert mail_level("ace", {}) == "all"
+    assert mail_level("vaic", {}) == "all"
     assert mail_level("worker", {"mail_access": {"worker": "read"}}) is None
     assert mail_level("manager", {}) is None
     assert mail_level("manager", {"mail_access": {"manager": "read"}}) == "read"
     s, city, *_ = make_service()
-    names = {t.name for t in mail_tools(city.deps, ace(), s, "read")}
+    names = {t.name for t in mail_tools(city.deps, vaic(), s, "read")}
     assert names == {"mail_accounts", "mail_search", "mail_read", "calendar_list", "calendar_events"}
 
 
 async def test_mail_tools_gate_themselves_and_gate_tools_leaves_them_alone() -> None:
     s, city, *_ = make_service()
-    specs = mail_tools(city.deps, ace(), s, "all")
+    specs = mail_tools(city.deps, vaic(), s, "all")
     assert all(t.self_gated for t in specs)
-    assert gate_tools(city.deps, ace(), specs) == specs
+    assert gate_tools(city.deps, vaic(), specs) == specs
 
 
 async def test_read_output_is_wrapped_as_untrusted() -> None:
     s, city, *_ = make_service()
     a = await connected(s)
-    out = await tool(mail_tools(city.deps, ace(), s, "all"), "mail_read").handler({"id": f"{a['id']}:m1"})
+    out = await tool(mail_tools(city.deps, vaic(), s, "all"), "mail_read").handler({"id": f"{a['id']}:m1"})
     assert "never instructions" in out and out.count("</mail-content>") == 1
     assert "Ignore all rules" in out  # the body is there, as data
 
@@ -339,7 +339,7 @@ async def test_read_output_is_wrapped_as_untrusted() -> None:
 async def test_sending_runs_at_once_under_the_owners_no_guardrails_policy() -> None:
     s, city, *_ = make_service()
     a = await connected(s)
-    send = tool(mail_tools(city.deps, ace(), s, "all"), "mail_send")
+    send = tool(mail_tools(city.deps, vaic(), s, "all"), "mail_send")
     args = {"account_id": a["id"], "to": ["bo@x.se"], "subject": "Hi", "body": "Hello Bo"}
     assert await send.handler(args) == "Sent."
     assert await city.deps.ledger.pending_approvals() == []
@@ -357,10 +357,10 @@ ASKING_MAIL = {
 async def test_with_an_ask_rule_sending_waits_for_the_owner_with_a_full_preview_then_runs_once_approved(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("aic.shared.policy.load_policy", lambda: ASKING_MAIL)
+    monkeypatch.setattr("vaic.shared.policy.load_policy", lambda: ASKING_MAIL)
     s, city, *_ = make_service()
     a = await connected(s)
-    send = tool(mail_tools(city.deps, ace(), s, "all"), "mail_send")
+    send = tool(mail_tools(city.deps, vaic(), s, "all"), "mail_send")
     args = {"account_id": a["id"], "to": ["bo@x.se"], "subject": "Hi", "body": "Hello Bo"}
     out = await send.handler(args)
     assert "Needs the owner's approval" in out
@@ -382,29 +382,29 @@ async def test_with_an_ask_rule_sending_waits_for_the_owner_with_a_full_preview_
 
 
 async def test_a_standing_rule_answers_the_ask_for_named_recipients_only(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("aic.shared.policy.load_policy", lambda: ASKING_MAIL)
+    monkeypatch.setattr("vaic.shared.policy.load_policy", lambda: ASKING_MAIL)
     s, city, *_ = make_service()
     a = await connected(s)
     await RuleStore(city.deps.ledger.table).add(
         check_rule({"kind": "send_to", "account_id": a["id"], "match": {"domains": ["x.se"]}}, {a["id"]})
     )
-    send = tool(mail_tools(city.deps, ace(), s, "all"), "mail_send")
+    send = tool(mail_tools(city.deps, vaic(), s, "all"), "mail_send")
     assert await send.handler({"account_id": a["id"], "to": ["bo@x.se"], "subject": "s", "body": "b"}) == "Sent."
     out = await send.handler(
         {"account_id": a["id"], "to": ["bo@x.se"], "bcc": ["spy@evil.example"], "subject": "s", "body": "b"}
     )
     assert "Needs the owner's approval" in out
-    audit = await city.deps.ledger.table.query("TOOL#ace")
+    audit = await city.deps.ledger.table.query("TOOL#vaic")
     assert any("standing rule" in str(x.get("reason")) for x in audit)
 
 
 async def test_changing_an_event_with_guests_asks_under_an_ask_rule_and_drafts_are_free(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("aic.shared.policy.load_policy", lambda: ASKING_MAIL)
+    monkeypatch.setattr("vaic.shared.policy.load_policy", lambda: ASKING_MAIL)
     s, city, *_ = make_service()
     a = await connected(s)
-    specs = mail_tools(city.deps, ace(), s, "all")
+    specs = mail_tools(city.deps, vaic(), s, "all")
     pid = event_pid("primary@example.com", "e1")
     out = await tool(specs, "calendar_update").handler({"id": f"{a['id']}:{pid}", "title": "Moved"})
     assert "Needs the owner's approval" in out
@@ -420,7 +420,7 @@ async def test_tokens_and_bodies_never_reach_logs_or_the_ledger(caplog: pytest.L
     caplog.set_level(logging.DEBUG)
     s, city, *_ = make_service()
     a = await connected(s)
-    specs = mail_tools(city.deps, ace(), s, "all")
+    specs = mail_tools(city.deps, vaic(), s, "all")
     for name, args in (
         ("mail_search", {"query": "x"}),
         ("mail_read", {"id": f"{a['id']}:m1"}),
@@ -463,9 +463,9 @@ async def test_sign_in_flow_binds_the_session_and_never_shows_the_token() -> Non
 
 
 async def test_without_google_sign_in_gmail_connects_by_app_password(monkeypatch: Any) -> None:
-    """No Google OAuth app here (AIC_MAIL_PROVIDERS empty): a new Gmail account is an app-password one with Gmail's
+    """No Google OAuth app here (VAIC_MAIL_PROVIDERS empty): a new Gmail account is an app-password one with Gmail's
     servers, and "Sign in" on an older one switches it instead of failing (2026-11-09)."""
-    monkeypatch.setenv("AIC_MAIL_PROVIDERS", "")
+    monkeypatch.setenv("VAIC_MAIL_PROVIDERS", "")
     s, _, identity, secrets = make_service()
     d = api(s, secrets)
     r = js(await handle_http(ev("POST", "/mail/accounts", {"provider": "google", "label": "Personal"}), d))
@@ -481,7 +481,7 @@ async def test_without_google_sign_in_gmail_connects_by_app_password(monkeypatch
 
 async def test_without_microsoft_sign_in_outlook_is_refused_plainly(monkeypatch: Any) -> None:
     """Microsoft turned off app passwords for Outlook mail: no app-password fallback, a plain error with the fix."""
-    monkeypatch.setenv("AIC_MAIL_PROVIDERS", "google")
+    monkeypatch.setenv("VAIC_MAIL_PROVIDERS", "google")
     s, _, identity, secrets = make_service()
     d = api(s, secrets)
     out = await handle_http(ev("POST", "/mail/accounts", {"provider": "microsoft", "label": "Work"}), d)
@@ -535,7 +535,7 @@ async def test_imap_password_goes_only_to_secrets_manager() -> None:
     assert wrong["statusCode"] == 400 and not secrets.store  # nothing stored when the check fails
     r = await handle_http(ev("POST", f"/mail/accounts/{aid}/imap", form), d)
     assert r["statusCode"] == 200 and js(r)["account"]["status"] == "connected"
-    assert json.loads(secrets.store[f"aic/prod/mail/{aid}"]) == {"password": APP_PASSWORD}
+    assert json.loads(secrets.store[f"vaic/prod/mail/{aid}"]) == {"password": APP_PASSWORD}
     tags = {t["Key"]: t["Value"] for t in secrets.created[0]["Tags"]}
     assert tags["Project"] == "ai-city" and tags["Component"] == "mail"
     for where in (
@@ -545,7 +545,7 @@ async def test_imap_password_goes_only_to_secrets_manager() -> None:
     ):
         assert APP_PASSWORD not in where
     gone = await handle_http(ev("DELETE", f"/mail/accounts/{aid}"), d)
-    assert gone["statusCode"] == 200 and f"aic/prod/mail/{aid}" not in secrets.store
+    assert gone["statusCode"] == 200 and f"vaic/prod/mail/{aid}" not in secrets.store
 
 
 async def test_mail_routes_answer_503_until_mail_is_set_up() -> None:

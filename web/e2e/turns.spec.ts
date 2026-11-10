@@ -9,20 +9,20 @@ test("an answer that repeats VAIC's words is sent, and VAIC answers it aloud", a
     (window as unknown as { __heard: string }).__heard = "check my mail";
     (window as unknown as { __speakMs: number }).__speakMs = 300;
   });
-  await page.goto("/#/ace");
+  await page.goto("/#/vaic");
   const strip = page.locator(".voice");
   const messages = () => m.calls.filter((c) => c.path === "/messages");
   await page.getByRole("button", { name: "Talk to VAIC", exact: true }).click();
   await expect.poll(() => messages().length).toBe(1);
-  m.send({ type: "ace.reply", conversation: "main", text: "Shall I send the email to John?", done: true });
-  await expect(strip).toHaveAttribute("data-speaker", "aic");
+  m.send({ type: "vaic.reply", conversation: "main", text: "Shall I send the email to John?", done: true });
+  await expect(strip).toHaveAttribute("data-speaker", "vaic");
   await expect(strip).toHaveAttribute("data-speaker", "you"); // VAIC finished: listening again
   await page.waitForTimeout(800); // the echo of VAIC's voice has died away
   // Almost every word is one VAIC just said: it used to be dropped as VAIC's echo, so nothing was answered.
   await page.evaluate(() => ((window as unknown as { __heard: string }).__heard = "yes, send the email to John"));
   await expect.poll(() => messages().length).toBe(2);
   expect(messages()[1]?.body).toMatchObject({ text: "yes, send the email to John", voice: true });
-  m.send({ type: "ace.reply", conversation: "main", text: "Sent.", done: true });
+  m.send({ type: "vaic.reply", conversation: "main", text: "Sent.", done: true });
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __spoken?: string[] }).__spoken ?? []))
     .toContain("Sent.");

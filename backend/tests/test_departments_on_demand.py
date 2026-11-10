@@ -4,13 +4,13 @@ its workers go home, its open work goes back to the Orchestrator, its history st
 
 import pytest
 
-from aic.lambdas.api import handle_http
-from aic.runtime.tools import TurnCtx, tools_for
-from aic.shared.hierarchy.departments import DepartmentError, clean_name, worker_model_choice
-from aic.shared.models import department_override, model_name_for, resolve_role
-from aic.shared.presets import ensure_presets, orchestrator_note
 from test_api import ev, js, make
-from test_task_control import SPEC, ace_tools, city, job
+from test_task_control import SPEC, city, job, vaic_tools
+from vaic.lambdas.api import handle_http
+from vaic.runtime.tools import TurnCtx, tools_for
+from vaic.shared.hierarchy.departments import DepartmentError, clean_name, worker_model_choice
+from vaic.shared.models import department_override, model_name_for, resolve_role
+from vaic.shared.presets import ensure_presets, orchestrator_note
 
 
 def test_names_and_model_choices_are_plain() -> None:
@@ -40,9 +40,9 @@ def test_a_departments_own_worker_model_wins_for_workers_only() -> None:
     assert model_name_for("worker", "Media", {"worker_model": ""}) == "fable-5-2"
 
 
-async def test_aic_builds_a_department_with_opus_workers_and_a_tower_event() -> None:
+async def test_vaic_builds_a_department_with_opus_workers_and_a_tower_event() -> None:
     c = await city()
-    said = await ace_tools(c)["build_department"].handler(
+    said = await vaic_tools(c)["build_department"].handler(
         {"name": "Customer Success", "mission": "Keep customers happy and renewing."}
     )
     assert said.startswith("Built Customer Success") and "Claude Fable 5.2" in said and "Claude Opus 5.5" in said
@@ -52,7 +52,7 @@ async def test_aic_builds_a_department_with_opus_workers_and_a_tower_event() -> 
     assert e["name"] == "Customer Success" and "worker_model" not in e
     # Its manager is Fable (hired with its first goal); its workers are Opus.
     task = await c.ledger.create_ticket(
-        {"goal": "Write a renewal email", "from": "ace", "to": "orchestrator", "department": None,
+        {"goal": "Write a renewal email", "from": "vaic", "to": "orchestrator", "department": None,
          "parent_id": None, "kind": "task", "status": "open"}
     )  # fmt: skip
     orch = TurnCtx(
@@ -66,13 +66,13 @@ async def test_aic_builds_a_department_with_opus_workers_and_a_tower_event() -> 
     assert mgr and mgr["model"] == "fable-5-2"
     w = await c.factory.hire(SPEC, dept["manager_id"], "Customer Success")
     assert w["model"] == "opus-5-5"
-    again = await ace_tools(c)["build_department"].handler({"name": "customer success"})
+    again = await vaic_tools(c)["build_department"].handler({"name": "customer success"})
     assert "already standing" in again and len(c.bus.of_type("department.created")) == 1
 
 
 async def test_fable_workers_only_when_the_owner_asks() -> None:
     c = await city()
-    said = await ace_tools(c)["build_department"].handler({"name": "Partnerships", "worker_model": "fable-5-2"})
+    said = await vaic_tools(c)["build_department"].handler({"name": "Partnerships", "worker_model": "fable-5-2"})
     assert "workers run on Claude Fable 5.2" in said
     dept = await c.ledger.get_department("Partnerships")
     assert dept and dept["worker_model"] == "fable-5-2"
@@ -84,7 +84,7 @@ async def test_fable_workers_only_when_the_owner_asks() -> None:
 async def test_the_ceiling_counts_only_the_owners_own_departments() -> None:
     c = await city()
     await c.ledger.update_settings({"max_departments": 1})
-    tools = ace_tools(c)
+    tools = vaic_tools(c)
     assert (await tools["build_department"].handler({"name": "Partnerships"})).startswith("Built")
     refused = await tools["build_department"].handler({"name": "Events"})
     assert refused.startswith("Not built:") and "limit is 1" in refused
@@ -96,7 +96,7 @@ async def test_the_ceiling_counts_only_the_owners_own_departments() -> None:
 async def test_demolish_asks_first_then_sends_workers_home_hands_work_back_and_keeps_history() -> None:
     c = await city()
     task = await job(c, "Write 50 sentences about the GT3", "porsche sentences", "Writing", workers=2)
-    tools = ace_tools(c)
+    tools = vaic_tools(c)
     ask = await tools["demolish_department"].handler({"name": "writing department", "confirm": False})
     assert ask.startswith("Demolish Writing? 2 workers go home and 3 unfinished parts go back to the Orchestrator.")
     assert (await c.ledger.get_department("Writing"))["state"] == "active"  # not yet
@@ -135,7 +135,7 @@ async def test_demolish_asks_first_then_sends_workers_home_hands_work_back_and_k
 async def test_a_demolished_preset_is_not_put_back_and_leaves_the_orchestrators_list() -> None:
     c = await city()
     await ensure_presets(c.ledger)
-    said = await ace_tools(c)["demolish_department"].handler({"name": "Finance", "confirm": True})
+    said = await vaic_tools(c)["demolish_department"].handler({"name": "Finance", "confirm": True})
     assert said.startswith("Demolished Finance: 0 workers")
     assert await ensure_presets(c.ledger) == []
     assert "Finance" not in [x["name"] for x in await c.ledger.list_departments()]
@@ -157,4 +157,4 @@ async def test_the_http_api_builds_and_demolishes() -> None:
     assert (await handle_http(ev("DELETE", "/departments/customer-success", {"confirm": True}), d))["statusCode"] == 404
     snap = js(await handle_http(ev("GET", "/city"), d))
     assert "Customer Success" not in [x["name"] for x in snap["departments"]]
-    assert ("POST", "/departments") in __import__("aic.lambdas.api", fromlist=["ROUTES"]).ROUTES
+    assert ("POST", "/departments") in __import__("vaic.lambdas.api", fromlist=["ROUTES"]).ROUTES

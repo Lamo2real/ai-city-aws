@@ -9,11 +9,11 @@ from typing import Any
 
 import pytest
 
-from aic.lambdas.api import handle_http
-from aic.lambdas.skills_api import SkillsApi, prepare
-from aic.runtime.skills import PLUGIN, SkillStore, use_skill_tool
-from aic.shared.skills import SkillInvalid, parse_frontmatter, path_problem, reduce_frontmatter
 from test_api import ev, js, make
+from vaic.lambdas.api import handle_http
+from vaic.lambdas.skills_api import SkillsApi, prepare
+from vaic.runtime.skills import PLUGIN, SkillStore, use_skill_tool
+from vaic.shared.skills import SkillInvalid, parse_frontmatter, path_problem, reduce_frontmatter
 
 SKILL_MD = """---
 name: pdf-report
@@ -65,7 +65,7 @@ def files(extra: dict[str, str | bytes] | None = None) -> list[dict[str, str]]:
 def api() -> tuple[Any, FakeS3]:
     s3 = FakeS3()
     d = make()
-    d.skills = SkillsApi(d.ledger, s3, "aic-prod-skills")
+    d.skills = SkillsApi(d.ledger, s3, "vaic-prod-skills")
     return d, s3
 
 
@@ -196,8 +196,8 @@ async def test_upload_stores_a_version_and_replace_moves_the_row_then_deletes_th
 async def test_roles_and_the_switch_can_be_edited_and_delete_removes_row_and_objects() -> None:
     d, s3 = api()
     await handle_http(ev("POST", "/skills", {"roles": ["worker"], "files": files()}), d)
-    r = await handle_http(ev("PUT", "/skills/pdf-report", {"roles": ["ace", "manager"], "enabled": False}), d)
-    assert js(r)["skill"]["roles"] == ["ace", "manager"] and js(r)["skill"]["enabled"] is False
+    r = await handle_http(ev("PUT", "/skills/pdf-report", {"roles": ["vaic", "manager"], "enabled": False}), d)
+    assert js(r)["skill"]["roles"] == ["vaic", "manager"] and js(r)["skill"]["enabled"] is False
     assert (await handle_http(ev("PUT", "/skills/pdf-report", {"roles": ["admin"]}), d))["statusCode"] == 400
     assert js(await handle_http(ev("DELETE", "/skills/pdf-report"), d)) == {"ok": True}
     assert s3.objects == {} and js(await handle_http(ev("GET", "/skills"), d)) == {"skills": []}
@@ -212,7 +212,7 @@ async def _stored(tmp: Path) -> tuple[SkillStore, list[dict[str, Any]]]:
             "POST",
             "/skills",
             {
-                "roles": ["worker", "ace"],
+                "roles": ["worker", "vaic"],
                 "files": files({"scripts/build.py": "print(1)", "logo.png": b"\x89PNG\r\n\x1a\n\xff\xfe"}),
             },
         ),
@@ -229,7 +229,7 @@ async def _stored(tmp: Path) -> tuple[SkillStore, list[dict[str, Any]]]:
         ),
         d,
     )
-    store = SkillStore(d.ledger.table, s3, "aic-prod-skills", tmp)
+    store = SkillStore(d.ledger.table, s3, "vaic-prod-skills", tmp)
     return store, await store.skills_for("worker")
 
 
@@ -253,7 +253,7 @@ async def test_skills_for_a_role_build_a_plugin_folder_with_only_skills_in_it(tm
 
 async def test_use_skill_lists_reads_and_serves_files_as_the_owners_instructions(tmp_path: Path) -> None:
     store, _ = await _stored(tmp_path)
-    rows = await store.skills_for("ace")
+    rows = await store.skills_for("vaic")
     tool = use_skill_tool(store, rows)
     assert "pdf-report: Turn notes" in tool.description
     assert json.loads(await tool.handler({})) == [

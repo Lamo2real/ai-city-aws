@@ -24,7 +24,7 @@ final class AttachTests: XCTestCase {
         XCTAssertEqual(Slash.matchCommands("/status now", commands), [], "words after it: no longer a hint")
     }
 
-    func testBecomesThePlainSentenceAicUnderstands() {
+    func testBecomesThePlainSentenceVaicUnderstands() {
         XCTAssertEqual(Slash.expand("/status", commands), .send("What's the status of the city?"))
         XCTAssertEqual(Slash.expand("/home", commands), .send("Send everyone home."))
         XCTAssertEqual(Slash.expand("/status please, in one line", commands), .send("What's the status of the city? please, in one line"))

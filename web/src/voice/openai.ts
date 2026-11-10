@@ -15,7 +15,7 @@ export interface OpenAiStatus {
 
 /** Closest to ChatGPT's Sol (the server's `default` wins when it answers). */
 export const OPENAI_DEFAULT_VOICE = "marin";
-const VOICE_KEY = "aic.openaiVoice";
+const VOICE_KEY = "vaic.openaiVoice";
 
 let status: OpenAiStatus | null = null;
 let loading: Promise<OpenAiStatus | null> | null = null;

@@ -1,6 +1,6 @@
 """The MCP host: runs one npm or PyPI MCP server over stdio for one connector (``docs/CONNECTORS_SKILLS.md`` §1.10).
 
-AgentCore Runtime ``aic_prod_mcp_host`` gives each connector its own microVM session (``mcp-<id>-<version hash>``).
+AgentCore Runtime ``vaic_prod_mcp_host`` gives each connector its own microVM session (``mcp-<id>-<version hash>``).
 The connector bridge Lambda sends ``POST /invocations`` with
 ``{connector_id, package: {registry_type, name, version, args[]}, env: {NAME: value}, request: <JSON-RPC message>}``.
 On the first call the exact version is installed into ``/tmp/pkg``. The process starts with an environment scrubbed to
