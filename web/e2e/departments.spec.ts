@@ -284,3 +284,19 @@ test("zoom is smooth from far out to close up", async ({ page }) => {
   await page.getByRole("button", { name: "Fit" }).click();
   await expect.poll(zoom).toBeCloseTo(before, 1);
 });
+
+test("Activity folds away and stays folded after a reload", async ({ page }) => {
+  await openCity(page);
+  const toggle = page.getByRole("button", { name: "Activity" });
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByText("Quiet.")).toBeVisible();
+  const before = (await page.locator(".cityui.feed").boundingBox())!.height;
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByText("Quiet.")).toBeHidden();
+  expect((await page.locator(".cityui.feed").boundingBox())!.height).toBeLessThan(Math.min(before, 70));
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Activity" })).toHaveAttribute("aria-expanded", "false");
+  await page.getByRole("button", { name: "Activity" }).click();
+  await expect(page.getByText("Quiet.")).toBeVisible();
+});

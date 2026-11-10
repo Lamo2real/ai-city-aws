@@ -2180,6 +2180,36 @@ table.costs tr:last-child td {
   min-height: 90px;
   overflow-y: auto;
 }
+/* Activity folds down to its title bar (the owner, 2026-11-10) */
+.cityui.feed.closed,
+.cityside .cityui.feed.closed {
+  flex: none;
+  min-height: 0;
+  overflow: hidden;
+}
+.feed.closed h3 {
+  margin: 0;
+}
+.feedtoggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+.feedtoggle .chev {
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+}
 .fline {
   display: flex;
   gap: 7px;
@@ -2452,6 +2482,9 @@ table.costs tr:last-child td {
   }
   .cityside .feed {
     flex: 1;
+  }
+  .cityside .feed.closed {
+    align-self: flex-start; /* here it sits in a row: never stretched to its neighbour's height */
   }
   .cityside .inboxbar {
     flex: 1;

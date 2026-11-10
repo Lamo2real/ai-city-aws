@@ -279,3 +279,13 @@ test("phone: Stop sits where Send was and drops VAIC's answer", async ({ page })
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await noSeriousA11y(page, "VAIC after Stop at 412px");
 });
+
+test("phone: Activity folds down to its title", async ({ page }) => {
+  await mockBackend(page);
+  await page.goto("/#/city");
+  const toggle = page.getByRole("button", { name: "Activity" });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator(".cityui.feed")).toHaveClass(/closed/);
+  expect((await page.locator(".cityui.feed").boundingBox())!.height).toBeLessThan(70);
+});

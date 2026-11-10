@@ -75,6 +75,23 @@ export function CityView({
   const [open, setOpen] = useState<Open>(null);
   const [now, setNow] = useState(Date.now());
   const [earlier, setEarlier] = useState(false);
+  // The owner can fold Activity away (2026-11-10); remembered on this device.
+  const [feedOpen, setFeedOpen] = useState(() => {
+    try {
+      return localStorage.getItem("vaic.activity") !== "closed";
+    } catch {
+      return true;
+    }
+  });
+  const toggleFeed = () =>
+    setFeedOpen((o) => {
+      try {
+        localStorage.setItem("vaic.activity", o ? "closed" : "open");
+      } catch {
+        // private window: it just isn't remembered
+      }
+      return !o;
+    });
   const [health, setHealth] = useState<string | null>(null);
   const voice = useVoice();
   const speaker = speakerOf(useHud((s) => s.presence));
@@ -306,27 +323,49 @@ export function CityView({
             What the marks mean
           </button>
         </nav>
-        <div className="cityui feed" aria-live="polite" tabIndex={0} role="log" aria-label="Activity">
-          <h3 className="pixel">Activity</h3>
-          {lines.length ? (
-            <>
-              {lines.slice(0, earlier ? 40 : 8).map((f, i) => (
-                <div key={`${f.at}-${i}`} className={`fline ${f.kind}`}>
-                  <span className="t">
-                    {new Date(f.at).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}
-                  </span>
-                  <span>{f.text}</span>
-                </div>
-              ))}
-              {!earlier && lines.length > 8 ? (
-                <button type="button" className="more" onClick={() => setEarlier(true)}>
-                  Earlier…
-                </button>
-              ) : null}
-            </>
-          ) : (
-            <p className="mute">Quiet.</p>
-          )}
+        <div
+          className={`cityui feed${feedOpen ? "" : " closed"}`}
+          aria-live={feedOpen ? "polite" : undefined}
+          tabIndex={feedOpen ? 0 : undefined}
+          role={feedOpen ? "log" : undefined}
+          aria-label="Activity"
+        >
+          <h3 className="pixel">
+            <button
+              type="button"
+              className="feedtoggle"
+              aria-expanded={feedOpen}
+              aria-controls="city-activity"
+              onClick={toggleFeed}
+              title={feedOpen ? "Hide activity" : "Show activity"}
+            >
+              Activity
+              <span className="chev" aria-hidden="true">
+                {feedOpen ? "▾" : "▸"}
+              </span>
+            </button>
+          </h3>
+          <div id="city-activity" hidden={!feedOpen}>
+            {lines.length ? (
+              <>
+                {lines.slice(0, earlier ? 40 : 8).map((f, i) => (
+                  <div key={`${f.at}-${i}`} className={`fline ${f.kind}`}>
+                    <span className="t">
+                      {new Date(f.at).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                    <span>{f.text}</span>
+                  </div>
+                ))}
+                {!earlier && lines.length > 8 ? (
+                  <button type="button" className="more" onClick={() => setEarlier(true)}>
+                    Earlier…
+                  </button>
+                ) : null}
+              </>
+            ) : (
+              <p className="mute">Quiet.</p>
+            )}
+          </div>
         </div>
       </aside>
       <div className="citybottom" role="toolbar" aria-label="Map and actions">
