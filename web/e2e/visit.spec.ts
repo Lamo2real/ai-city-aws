@@ -115,6 +115,7 @@ test.describe("reduced motion", () => {
     await mockBackend(page, { snapshot: visitSnapshot() });
     await page.goto("/#/city/visit/Application");
     const visit = page.getByRole("region", { name: "Application building" });
+    await expect(visit).toHaveAttribute("data-phase", "street"); // on the page before the observer looks for it
     const phases: string[] = [];
     await page.exposeFunction("seen", (p: string) => phases.push(p));
     await page.evaluate(() => {
