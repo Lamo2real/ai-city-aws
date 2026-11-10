@@ -324,6 +324,8 @@ module "connectors" {
   agent_role_names     = module.agents.role_names
   api_role_name        = module.api.role_names["api"]
   app_bridge_role_name = module.api.role_names["app-bridge"]
+  utility_invoke_arns  = module.agents.utility_invoke_arns
+  utility_profile_arn  = module.agents.utility_profile_arn
   default_tags         = local.base_tags
   log_retention_days   = var.log_retention_days
 }

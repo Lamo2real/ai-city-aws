@@ -16,7 +16,7 @@ export const estUsd = (v, digits = 2) => (v === null || v === undefined || Numbe
 const RECENT_MS = { done: 6000, review_fail: 20000, hired: 4000, retired: 4000 };
 
 export function initialState(now = Date.now()) {
-  return { agents: {}, activities: {}, tickets: {}, questions: {}, approvals: {}, departments: {}, reviews: {}, costs: {}, usage: null, spend: {}, caps: null, parked: {}, city: null, capHit: null, feed: [], recent: {}, apps: {}, now };
+  return { agents: {}, activities: {}, tickets: {}, questions: {}, approvals: {}, departments: {}, reviews: {}, costs: {}, usage: null, spend: {}, caps: null, parked: {}, city: null, capHit: null, feed: [], recent: {}, apps: {}, connectors: {}, now };
 }
 
 export const deptOf = (agent) => (CORE.has(agent.id) || agent.kind === "executive" ? "HQ" : agent.department || "other");
@@ -69,6 +69,7 @@ export function applySnapshot(state, snap, now = Date.now()) {
   for (const q of snap.questions ?? []) next.questions[q.id] = q;
   for (const a of snap.approvals ?? []) next.approvals[a.id] = a;
   for (const a of snap.apps ?? []) if (a?.app_id) next.apps[a.app_id] = a;
+  for (const c of snap.connectors ?? []) if (c?.id && c.status === "ready") next.connectors[c.id] = c;
   next.usage = snap.usage ?? null;
   next.spend = snap.spend ?? {};
   next.caps = snap.caps ?? null; // the limits the server enforces; null when the server did not send them
@@ -274,6 +275,15 @@ function reduceEvent(state, event, now) {
       const next = { ...state, now, apps: { ...state.apps, [a.app_id]: { ...was, ...a } } };
       if (a.version === undefined || a.version === (was.version ?? 1)) return next;
       return { ...next, feed: feed(state, `${String(a.title ?? was.title ?? "An app").slice(0, 40)} is now version ${Number(a.version)}`, "pass", now) };
+    }
+    case "connector.updated": {
+      // Decision 173: a connected tool hangs its sign by the doors of the departments that use it.
+      if (!event.id || event.status === "syncing") return state; // a refresh: the sign stays up meanwhile
+      const connectors = { ...state.connectors };
+      if (event.status !== "ready") { if (!connectors[event.id]) return state; delete connectors[event.id]; return { ...state, now, connectors }; }
+      const was = connectors[event.id] ?? {};
+      connectors[event.id] = { ...was, id: event.id, label: event.label ?? was.label, status: "ready", ...(event.departments ? { departments: event.departments, every_department: !!event.every_department } : {}), ...(event.sign ? { sign: event.sign } : {}) };
+      return { ...state, now, connectors };
     }
     case "app.removed": {
       const gone = state.apps[event.app_id];
@@ -1009,4 +1019,33 @@ export function rideLegs(world, route, from) {
   const onRoad = (p) => lanes.has(p.y) || p.x === ax;
   let prev = from;
   return route.map((p) => { const ride = onRoad(prev) && onRoad(p) && (p.x !== prev.x || p.y !== prev.y); prev = p; return ride; });
+}
+
+// ---------- Connector signs (decision 173) ----------
+// The connected tools a department uses, in a steady order (those with a logo first, then by name), for the signs
+// by its tower's doors. A tool whose departments are not known yet hangs nowhere; "every department" ones everywhere.
+export function signsFor(state, dept) {
+  const k = keyOf(dept);
+  return Object.values(state.connectors ?? {})
+    .filter((c) => c.status === "ready" && (c.every_department || (c.departments ?? []).some((d) => keyOf(d) === k)))
+    .sort((a, b) => Number(!a.sign) - Number(!b.sign) || String(a.label ?? a.id).localeCompare(String(b.label ?? b.id)) || String(a.id).localeCompare(String(b.id)));
+}
+export const PLAQUE = 14; // a 12-pixel logo in a 1-pixel ink frame
+// Where the plaques hang on a tower's lobby front: one row at door height, filling outwards from the door on both
+// sides, left first, so a tower with many tools still looks tidy. When there are more tools than places, the last
+// place says "+N". Returns [{ x, y, sign | null, more }] in art pixels.
+export function plaqueSlots(signs, { baseX, baseW, cx, foot }) {
+  const gap = 2, doorHalf = 15, y = foot - 21, step = PLAQUE + gap;
+  const perSide = Math.max(0, Math.floor((cx - doorHalf - gap - (baseX + 3)) / step));
+  const places = [];
+  for (let i = 0; i < perSide; i++) {
+    places.push(Math.round(cx - doorHalf - gap - PLAQUE - i * step)); // left of the door, going outwards
+    places.push(Math.round(cx + doorHalf + gap + i * step)); // right of the door
+  }
+  const n = signs.length;
+  if (!n || !places.length) return [];
+  const shown = n > places.length ? places.length - 1 : n;
+  const out = signs.slice(0, shown).map((sign, i) => ({ x: places[i], y, sign, more: 0 }));
+  if (n > shown) out.push({ x: places[shown], y, sign: null, more: n - shown });
+  return out;
 }

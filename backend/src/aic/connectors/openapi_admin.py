@@ -135,7 +135,7 @@ async def _oauth(d: ConnectorsDeps, rec: Record, info: dict[str, Any], auth: Map
 
 
 async def sync(d: ConnectorsDeps, id: str, specs: Any) -> Record | None:
-    from aic.lambdas.connectors import _fail, _set, aws_error, rewrite_policies
+    from aic.lambdas.connectors import _fail, _set, aws_error, labels, rewrite_policies
 
     rec = await d.store.get(id)
     if not rec or rec.get("status") in ("removing", "pending_approval", "provisioning"):
@@ -191,7 +191,7 @@ async def sync(d: ConnectorsDeps, id: str, specs: Any) -> Record | None:
         id, {"tools": tools, "target_id": target_id, "status": "ready", "error": warning, "needs": None}
     )
     await rewrite_policies(d)
-    return await _set(d, id, {})
+    return await _set(d, id, await labels(d, id))
 
 
 async def remove(d: ConnectorsDeps, rec: Record, specs: Any) -> None:

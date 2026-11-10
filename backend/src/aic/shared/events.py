@@ -303,6 +303,11 @@ class ConnectorUpdated(_E):
     auth: str
     needs: str | None = None
     error: str | None = None
+    departments: list[str] | None = None
+    """Decision 173: the departments that use it (all of them when ``every_department``)."""
+    every_department: bool | None = None
+    sign: dict[str, Any] | None = None
+    """Its logo as City pixels: ``{"size", "colors", "px"}`` (``connector_signs.pixelate``)."""
 
 
 class ConnectSignin(_E):

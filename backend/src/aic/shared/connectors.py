@@ -94,7 +94,28 @@ def event(rec: Mapping[str, Any], status: str | None = None) -> dict[str, Any]:
         e["needs"] = rec["needs"]
     if rec.get("error"):
         e["error"] = str(rec["error"])[:1000]
+    e.update(city_sign(rec))
     return e
+
+
+def city_sign(rec: Mapping[str, Any]) -> dict[str, Any]:
+    """What the City needs to hang a connector's sign by the doors (decision 173): its departments and pixel logo."""
+    out: dict[str, Any] = {}
+    if isinstance(rec.get("departments"), list):
+        out["departments"] = [str(x) for x in rec["departments"]]
+        out["every_department"] = bool(rec.get("every_department"))
+    if isinstance(rec.get("sign"), dict):
+        out["sign"] = rec["sign"]
+    return out
+
+
+def city_signs(records: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """The connected connectors as the City's snapshot carries them."""
+    return [
+        {"id": r["id"], "label": r.get("label") or r["id"], "status": "ready", **city_sign(r)}
+        for r in records
+        if r.get("status") == "ready" and r.get("id")
+    ]
 
 
 def oauth_host(rec: Mapping[str, Any]) -> str | None:

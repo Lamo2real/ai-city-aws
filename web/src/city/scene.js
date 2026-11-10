@@ -4,7 +4,7 @@
 // Reviewer; each department's manager stands at its door; panels are React (see CityView.tsx).
 // The City View: a small game world of the agents, drawn pixel by pixel on a canvas from city-state.js.
 // All of the art is drawn here in code. Every person on screen is a real agent; only the scenery moves on its own.
-import { COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, standFraction, mailFor, enqueueMail, bikeSpeed, trafficAt, rideLegs, rareCab } from "./city-state.js";
+import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, standFraction, mailFor, enqueueMail, bikeSpeed, trafficAt, rideLegs, rareCab } from "./city-state.js";
 
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const INK = "#1d1c36";
@@ -385,6 +385,37 @@ function sign(g, text, cx, y, maxW) {
   const label = fit(text, maxW), w = Math.min(textW(label), maxW) + 8;
   R(g, cx - w / 2 - 1, y - 1, w + 2, 11, INK); R(g, cx - w / 2, y, w, 9, "#c98f55"); R(g, cx - w / 2, y, w, 1, "#e2ae72"); R(g, cx - w / 2, y + 8, w, 1, "#8a5a33");
   pixelText(g, label, Math.round(cx - w / 2 + 4), y + 2, "#2e1c10");
+}
+
+// ---------- Connector signs (decision 173): a tenant plaque for each connected tool, by the tower's doors ----------
+// The logo comes from the server already as City pixels (12×12, in the City's palette); with none, the plaque
+// carries the tool's initial, big; the last place may say "+N" for the rest. Drawn into a 14×14 canvas.
+const PLAQUE_TINTS = ["#3f7fd0", "#37a564", "#e8842c", "#9a6bd0", "#d8392b", "#3f9a9a", "#b84f78", "#8d9440"];
+const lum = (hex) => { const n = parseInt(hex.slice(1), 16); return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255); };
+function plaque(item) {
+  const [c, g] = newCanvas(PLAQUE, PLAQUE), s = item.sign?.sign, S = PLAQUE - 2;
+  R(g, 0, 0, PLAQUE, PLAQUE, INK);
+  if (item.more) {
+    R(g, 1, 1, S, S, "#2c3550"); R(g, 1, 1, S, 1, "#3b4a66");
+    const txt = textW(`+${item.more}`) <= S ? `+${item.more}` : "+";
+    pixelText(g, txt, Math.round(1 + (S - textW(txt)) / 2), 5, "#fff6e0");
+    return c;
+  }
+  const px = s && typeof s.px === "string" && s.px.length === s.size * s.size && s.size === S ? s.px : null;
+  if (px) {
+    const colors = Array.isArray(s.colors) ? s.colors.filter((x) => /^#[0-9a-f]{6}$/i.test(x)) : [];
+    const used = [...px].filter((ch) => ch !== ".").map((ch) => colors[ch.charCodeAt(0) - 97]).filter(Boolean);
+    const bright = used.length ? used.reduce((a, h) => a + lum(h), 0) / used.length : 0;
+    R(g, 1, 1, S, S, bright > 150 ? "#2c3550" : "#fff6e0"); R(g, 1, 1, S, 1, bright > 150 ? "#3b4a66" : "#ffffff"); // a plate the logo shows up on
+    for (let i = 0; i < px.length; i++) { const col = colors[px.charCodeAt(i) - 97]; if (px[i] !== "." && col) R(g, 1 + (i % S), 1 + Math.floor(i / S), 1, 1, col); }
+    return c;
+  }
+  // No logo: the tool's initial, twice the size of the street lettering, on a plate in a colour of its own.
+  const name = String(item.sign?.label ?? item.sign?.id ?? "?"), ch = [...fold(name)].find((x) => GLYPH[x] && x !== " ") ?? "?";
+  R(g, 1, 1, S, S, PLAQUE_TINTS[hashOf(name) % PLAQUE_TINTS.length]); R(g, 1, 1, S, 1, "rgba(255,255,255,.35)");
+  const rows = WIDE[ch] ?? [...GLYPH[ch]].map((h) => parseInt(h, 16) << 1);
+  for (let r = 0; r < 5; r++) for (let b = 0; b < 5; b++) if (rows[r] & (16 >> b)) R(g, 2 + b * 2, 2 + r * 2, 2, 2, "#fff6e0");
+  return c;
 }
 
 // Each department's own colours, by its slot, so twelve offices look like twelve offices.
@@ -791,6 +822,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       if (!reduced() && visible()) anims.set(e.name, { kind: "build", start: performance.now(), dur: ANIM_MS.build });
     }
     if (PLACEMENT_EVENTS.has(e.type)) { sync(); markApps(); } else refreshVisuals();
+    if (e.type === "connector.updated") wake(); // a sign goes up (or comes down) by the doors
     if (e.type.startsWith("department.")) { entered = true; ground = bake(world, animSkip()); wake(); }
     const letter = mailFor(e, state);
     if (letter) post(letter);
@@ -1201,6 +1233,27 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     if (!o) { const ws = towerWindows(b); o = ws.map((w, i) => ({ w, k: hashOf(`${b.dept}:${i}`) })).sort((p, q) => p.k - q.k).map((x) => x.w); windowOrder.set(b.dept, o); }
     return o;
   }
+  // The tenant plaques of every tower, drawn once per change of the connectors (decision 173). Where they hang the
+  // lobby glass is walled over first, so a plaque never sits half on a window.
+  let signsOfState = null;
+  const signSprites = new Map();
+  function signsOf(b) {
+    if (state.connectors !== signsOfState) { signsOfState = state.connectors; signSprites.clear(); }
+    const key = `${b.dept}|${b.slot}|${b.x},${b.y},${b.w},${b.h}`;
+    if (signSprites.has(key)) return signSprites.get(key);
+    const t = towerShape(b), base = t.tiers[0], slots = plaqueSlots(signsFor(state, b.dept), { baseX: base.x, baseW: base.w, cx: t.cx, foot: t.foot });
+    let sprite = null;
+    if (slots.length) {
+      const [cv, g] = newCanvas(t.W, t.H), f = FACADES[hashOf(b.dept) % FACADES.length], dy = t.foot - 22;
+      g.translate(-t.X, -t.Y);
+      for (const gx of [base.x + 8, base.x + base.w - 24]) if (slots.some((p) => p.x < gx + 18 && p.x + PLAQUE > gx - 1)) { R(g, gx - 1, dy - 1, 18, 19, f.wall); R(g, gx - 1, dy + 17, 18, 1, f.shade); }
+      for (const p of slots) { R(g, p.x + 1, p.y + PLAQUE, PLAQUE - 1, 1, "rgba(20,18,40,.35)"); g.drawImage(plaque(p), p.x, p.y); } // each with a little shadow under it
+      sprite = cv;
+    }
+    signSprites.set(key, sprite);
+    root.dataset.signs = String([...signSprites.values()].filter(Boolean).length); // for tests: towers with signs drawn
+    return sprite;
+  }
   function drawTowerLive(b, now, ox, oy) {
     const t = towerShape(b), n = counts.get(b.dept)?.n ?? 0, lit = litOrder(b).slice(0, Math.min(litOrder(b).length, n));
     for (const w of lit) { R(ctx, w.x - ox, w.y - oy, w.w, w.h, "#ffdf94"); R(ctx, w.x - ox, w.y - oy, w.w, 1, "#fff3cf"); }
@@ -1210,6 +1263,8 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     if (o > 0) R(ctx, dx + half - gap, dy, gap * 2, 22, n ? "#ffe8b0" : "#8a7652");
     for (const [x, w] of [[dx, half - gap], [dx + half + gap, half - gap]]) if (w > 0) { R(ctx, x, dy, w, 22, "rgba(120,160,210,.82)"); R(ctx, x, dy, w, 3, "rgba(220,235,255,.9)"); R(ctx, x, dy, 1, 22, INK); R(ctx, x + w - 1, dy, 1, 22, INK); }
     R(ctx, dx, dy + 21, dw, 1, INK);
+    const signs = signsOf(b);
+    if (signs) ctx.drawImage(signs, t.X - ox, t.Y - oy);
     // The aircraft beacon on the spire blinks red, like every tower in Manhattan.
     if (!reduced() && Math.floor(now / 900) % 2) { R(ctx, t.cx - 1.5 - ox, t.top - 32 - oy, 3, 3, "#ff4a3d"); R(ctx, t.cx - 3 - ox, t.top - 33.5 - oy, 6, 6, "rgba(255,74,61,.25)"); }
   }

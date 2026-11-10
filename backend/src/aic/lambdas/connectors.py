@@ -16,7 +16,7 @@ import asyncio
 import json
 import re
 import urllib.parse
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -78,6 +78,21 @@ class ConnectorsDeps:
     resolve: Resolver = system_resolver
     tags: dict[str, str] = field(default_factory=resource_tags)
     mcp_host_arn: str = ""
+    labeler: Callable[[Record], Awaitable[dict[str, Any]]] | None = None
+    """Decision 173: on every successful connection, which departments use it and its pixel sign (None in tests that
+    don't care)."""
+
+
+async def labels(d: ConnectorsDeps, id: str) -> dict[str, Any]:
+    """The departments and sign of a connector that just connected; nothing when there is no labeler or it fails."""
+    rec = await d.store.get(id)
+    if d.labeler is None or not rec:
+        return {}
+    try:
+        return await d.labeler(rec)
+    except Exception as e:
+        log("warn", "connector.label_failed", connector=id, error=type(e).__name__)
+        return {}
 
 
 async def _emit(d: ConnectorsDeps, rec: Record | None) -> None:
@@ -403,7 +418,7 @@ async def sync(d: ConnectorsDeps, id: str) -> Record | None:
         id, {"tools": tools, "target_id": target_id, "status": "ready", "error": warning, "needs": None}
     )
     await rewrite_policies(d)
-    return await _set(d, id, {})
+    return await _set(d, id, await labels(d, id))
 
 
 # ---------- Cedar (§1.5) ----------
@@ -563,6 +578,20 @@ async def handle(event: Mapping[str, Any], d: ConnectorsDeps) -> dict[str, Any]:
 _deps: ConnectorsDeps | None = None
 
 
+def _labeler(city: Any) -> Callable[[Record], Awaitable[dict[str, Any]]]:
+    from aic.shared.clients import client
+    from aic.shared.connector_signs import label_connector
+    from aic.shared.utility import UtilityDeps, bedrock_converse_runner
+
+    runner = bedrock_converse_runner(client(city.session, "bedrock-runtime"))
+
+    async def label(rec: Record) -> dict[str, Any]:
+        deps = UtilityDeps(ledger=city.ledger, bus=city.bus, settings=await city.settings(), runner=runner)
+        return await label_connector(rec, await city.ledger.list_departments(), deps)
+
+    return label
+
+
 def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
     global _deps
     if _deps is None:
@@ -583,5 +612,6 @@ def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
             workload=require_env("AIC_CONNECTORS_WORKLOAD"),
             app_role=os.environ.get("AIC_APP_BRIDGE_ROLE") or "aic-prod-fn-app-bridge",
             mcp_host_arn=os.environ.get("AIC_MCP_HOST_ARN", ""),
+            labeler=_labeler(city),
         )
     return run(handle(event, _deps))

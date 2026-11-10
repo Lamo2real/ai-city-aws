@@ -116,8 +116,32 @@ export interface CityState {
   costs: Record<string, { usd: number; tokens: number }>;
   feed: FeedLine[];
   apps: Record<string, CityApp>;
+  /** Connected tools with their City signs (decision 173). */
+  connectors?: Record<string, CityConnectorSign>;
   now: number;
 }
+/** A connected tool as the City draws it: the departments that use it and its logo in City pixels (decision 173). */
+export interface CityConnectorSign {
+  id: string;
+  label?: string;
+  status: string;
+  departments?: string[];
+  every_department?: boolean;
+  /** ``px`` is size×size characters: "." see-through, "a"… index ``colors``. */
+  sign?: { size: number; colors: string[]; px: string };
+}
+export interface PlaqueSlot {
+  x: number;
+  y: number;
+  sign: CityConnectorSign | null;
+  more: number;
+}
+export const PLAQUE: number;
+export function signsFor(state: CityState, dept: string): CityConnectorSign[];
+export function plaqueSlots(
+  signs: CityConnectorSign[],
+  geo: { baseX: number; baseW: number; cx: number; foot: number },
+): PlaqueSlot[];
 export const CORE: Set<string>;
 export const COST_NOTE: string;
 export const MODEL_NAME: Record<string, string>;

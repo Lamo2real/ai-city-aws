@@ -439,6 +439,7 @@ function snapshotOf(city: CityState) {
     questions: Object.values(city.questions),
     approvals: Object.values(city.approvals),
     apps: Object.values(city.apps ?? {}),
+    connectors: Object.values(city.connectors ?? {}),
     usage: city.usage,
     spend: city.spend,
     caps: city.caps,

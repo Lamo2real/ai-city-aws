@@ -42,6 +42,7 @@ from aic.shared.chief_of_staff import CHIEF, away_summary, record_decision
 from aic.shared.chief_of_staff import status as chief_status
 from aic.shared.clients import client
 from aic.shared.config import caps_config
+from aic.shared.connectors import ConnectorStore, city_signs
 from aic.shared.events import EventBus, now_iso
 from aic.shared.files.service import FilesError, FilesService
 from aic.shared.files.service import NotFound as FileNotFound
@@ -370,8 +371,22 @@ async def city_snapshot(d: ApiDeps) -> dict[str, Any]:
         d.ledger.spend_breakdown("day"),
         d.ledger.list_specialists(),
         list_apps(d.ledger),
+        ConnectorStore(d.ledger.table).list(),
     )
-    agents, departments, tickets, parked, questions, approvals, today, month, day_breakdown, specialists, apps = results
+    (
+        agents,
+        departments,
+        tickets,
+        parked,
+        questions,
+        approvals,
+        today,
+        month,
+        day_breakdown,
+        specialists,
+        apps,
+        connectors,
+    ) = results
     spend = {dep["name"]: day_breakdown.get(f"DEPT#{dep['key']}", {}).get("usd", 0) for dep in departments}
     return {
         "agents": [{**a, "model_label": model_label(a["model"])} for a in agents],
@@ -382,6 +397,9 @@ async def city_snapshot(d: ApiDeps) -> dict[str, Any]:
         "approvals": approvals,
         "specialists": specialists,
         "apps": apps,
+        "connectors": city_signs(
+            connectors
+        ),  # their signs hang by the doors of the towers that use them (decision 173)
         "usage": {"usd": today["usd"], "turns": today["turns"], "tokens": today["tokens"]},
         "month": {"usd": month["usd"]},
         "spend": spend,

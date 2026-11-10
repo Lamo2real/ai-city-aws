@@ -33,6 +33,11 @@ variable "agent_role_names" {
   description = "The four runtime roles (ace, orchestrator, manager, worker): they get InvokeGateway and nothing else here."
 }
 variable "api_role_name" { type = string }
+variable "utility_invoke_arns" {
+  type        = list(string)
+  description = "Haiku 5.5 (utility role): which departments use a connector that just connected (decision 173)."
+}
+variable "utility_profile_arn" { type = string }
 variable "app_bridge_role_name" {
   type        = string
   default     = "aic-prod-fn-app-bridge"
@@ -92,6 +97,8 @@ locals {
       AIC_APP_BRIDGE_ROLE  = var.app_bridge_role_name
       AIC_KMS_KEY_ARN      = var.kms_key_arn
       AIC_DEFAULT_TAGS     = jsonencode(local.runtime_tag)
+      # Decision 173: a gated utility turn on every successful connection picks the departments that hang its sign.
+      AIC_APP_PROFILE_UTILITY = var.utility_profile_arn
     })
   }
   ledger_read = ["dynamodb:GetItem", "dynamodb:Query"]
@@ -127,6 +134,13 @@ locals {
       # remove deletes every stored spec of a connector, so it lists its own prefix.
       { Sid = "ListSpecs", Action = ["s3:ListBucket"], Resource = [aws_s3_bucket.specs.arn], Condition = { StringLike = { "s3:prefix" = ["specs/", "specs/*"] } } },
       { Sid = "PackageServers", Action = ["bedrock-agentcore:InvokeAgentRuntime", "bedrock-agentcore:StopRuntimeSession"], Resource = local.host_invoke },
+      # Decision 173: which departments use a connector, one gated utility turn on Haiku 5.5 (Converse is
+      # authorized as bedrock:InvokeModel). The turn reads the settings, the caps' spend and the departments, and
+      # writes its turn and spend rows; nothing else in the ledger.
+      { Sid = "Utility", Action = ["bedrock:InvokeModel"], Resource = var.utility_invoke_arns },
+      { Sid = "UtilityTurnLedger", Action = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:PutItem", "dynamodb:UpdateItem"], Resource = [var.ledger_arn], Condition = { "ForAllValues:StringLike" = { "dynamodb:LeadingKeys" = ["CONFIG", "SPEND#*", "TURN#*", "IDEMP#*", "AGENT#utility"] } } },
+      # The department list is the ledger's gsi1 (partition DEPT); a read of the index, no writes.
+      { Sid = "ReadDepartments", Action = ["dynamodb:Query"], Resource = ["${var.ledger_arn}/index/gsi1"] },
     ]
   }
 }

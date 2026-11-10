@@ -70,7 +70,9 @@ class UtilityDeps:
     env: Mapping[str, str] | None = None
 
 
-async def utility_turn(kind: Literal["wake-word", "title", "compaction", "triage"], text: str, d: UtilityDeps) -> str:
+async def utility_turn(
+    kind: Literal["wake-word", "title", "compaction", "triage", "connector-departments"], text: str, d: UtilityDeps
+) -> str:
     body = text[-UTILITY_MAX_CHARS:] if len(text) > UTILITY_MAX_CHARS else text
     r = await run_gated_turn(
         GatedTurn(
