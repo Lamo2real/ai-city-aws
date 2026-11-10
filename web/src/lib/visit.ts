@@ -1,6 +1,7 @@
 // Visiting a building (decisions 166, 171, 172): from the City map into a department's tower and onto the floors
 // of one of its projects. A project here is a piece of work the department has open: a job at the top of its tree
-// in the city's tickets, with the department's manager and every worker on a part of it. A floor seats eight and
+// in the city's tickets, with every worker on a part of it. The manager is never inside: he stands at the tower's
+// door on the City map, and is clicked there only (the owner, 2026-11-10). A floor seats eight and
 // belongs to one project; a bigger team continues on the floors above (1a, 1b, 1c…).
 import { CORE, plainText, ticketWords, type CityState, type CityTicket } from "../city/city-state.js";
 
@@ -10,7 +11,7 @@ export interface VisitProject {
   status: string;
   /** Its top floor: the lobby is floor 1, projects start at 2, oldest lowest. */
   floor: number;
-  /** Everyone on it: the manager first, then the workers. */
+  /** The workers on it (never the manager: he stays outside, at the door). */
   agents: string[];
   /** Its floors, lowest first: eight people a floor, never shared with another project. */
   parts: VisitFloor[];
@@ -33,14 +34,12 @@ export function deptProjects(city: CityState, dept: string): VisitProject[] {
   const roots = mine
     .filter((t) => !t.parent_id || !ids.has(t.parent_id))
     .sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? "") || a.id.localeCompare(b.id));
-  const manager = city.departments[dept]?.manager_id;
   let next = 2; // the lobby is floor 1
   return roots.map((root) => {
     const tree: CityTicket[] = [root];
     for (let k = 0; k < tree.length; k++) for (const t of all) if (t.parent_id === tree[k]!.id) tree.push(t);
     const inTree = new Set(tree.map((t) => t.id));
     const people = [
-      manager,
       ...tree.map((t) => t.to),
       ...Object.values(city.agents)
         .filter((a) => a.ticket_id && inTree.has(a.ticket_id))
@@ -48,9 +47,8 @@ export function deptProjects(city: CityState, dept: string): VisitProject[] {
     ];
     const agents = [...new Set(people)].filter((id): id is string => {
       const a = id ? city.agents[id] : undefined;
-      return !!a && !CORE.has(a.id) && a.state !== "retired" && a.kind !== "specialist";
+      return !!a && !CORE.has(a.id) && a.state !== "retired" && a.kind !== "specialist" && a.kind !== "manager";
     });
-    agents.sort((a, b) => Number(city.agents[b]!.kind === "manager") - Number(city.agents[a]!.kind === "manager"));
     const title = plainText(root.goal, 80).short;
     const count = Math.max(1, Math.ceil(agents.length / FLOOR_SEATS));
     const parts = Array.from({ length: count }, (_, k) => ({

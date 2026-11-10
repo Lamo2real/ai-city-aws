@@ -71,7 +71,8 @@ test("click a tower → its floors → pick a project → that floor in focus, t
   await expect.poll(() => visit.locator(".floor-focus").evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
   await expect(visit.getByRole("heading", { level: 2 })).toContainText("Floor 2");
   const desks = visit.getByRole("list", { name: /Who works on/ }).getByRole("button");
-  await expect(desks).toHaveCount(4); // the manager and three workers
+  await expect(desks).toHaveCount(3); // three workers; the manager stays outside, at the door
+  await expect(desks.filter({ hasText: "Manager" })).toHaveCount(0);
   await axe(page);
   await page.screenshot({ path: `${SHOTS}/city-visit-floor.png` });
 
@@ -119,7 +120,7 @@ test("a floor seats eight: a bigger project goes on up as 1a, 1b; arrows, scroll
   page,
 }) => {
   const snap = visitSnapshot();
-  // Seven more on the booking page: eleven people, so two floors (8 and 3). The login bug moves up to floor 4.
+  // Seven more on the booking page: ten workers (the manager stays outside), so two floors (8 and 2). The login bug moves up to floor 4.
   for (let i = 0; i < 7; i++)
     snap.agents.push({
       id: `wkr-app-x${i}`,
@@ -140,10 +141,10 @@ test("a floor seats eight: a bigger project goes on up as 1a, 1b; arrows, scroll
   // Outside, the choices are projects; picking one goes to its top floor.
   const picker = page.getByRole("navigation", { name: "Projects in Application" });
   await expect(picker.getByRole("button")).toHaveCount(2);
-  await expect(picker.getByRole("button", { name: /booking page/ })).toContainText("11 agents · 2 floors");
+  await expect(picker.getByRole("button", { name: /booking page/ })).toContainText("10 agents · 2 floors");
   await picker.getByRole("button", { name: /booking page/ }).click();
   await expect(title).toContainText("Floor 3 · Build the booking page for the dentist · 1b");
-  await expect(desks).toHaveCount(3);
+  await expect(desks).toHaveCount(2);
   // Down a floor with the arrow key: the same project's first floor, full.
   await page.keyboard.press("ArrowDown");
   await expect(title).toContainText("Floor 2 · Build the booking page for the dentist · 1a");
@@ -159,7 +160,7 @@ test("a floor seats eight: a bigger project goes on up as 1a, 1b; arrows, scroll
   await page.waitForTimeout(500);
   await page.mouse.wheel(0, -120);
   await expect(title).toContainText("Floor 4 · Fix the login bug in the customer portal");
-  await expect(desks).toHaveCount(2);
+  await expect(desks).toHaveCount(1);
   await expect(visit.getByRole("button", { name: "Floor above" })).toBeDisabled();
   await visit.getByRole("button", { name: "Floor below" }).click();
   await expect(title).toContainText("· 1b");

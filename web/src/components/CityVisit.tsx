@@ -1,6 +1,6 @@
 // Inside a building (decision 166). From the map, a department's tower opens here as a cutaway seen from above
 // at an angle (isometric, never first person): its floors stacked, one per project. Picking a project brings its
-// floor into focus and fades the others to a tenth, so the eye stays on that floor: the manager and the workers
+// floor into focus and fades the others to a tenth, so the eye stays on that floor: the workers
 // on that project at their desks. Clicking one turns their chair to you and opens their card. "City map" (and
 // Esc, and Back) goes out again. Pixel art drawn in code (lib/officeArt.ts) with plain HTML over it: no library.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";

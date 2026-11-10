@@ -50,21 +50,21 @@ describe("a department's projects", () => {
       ticket("s1", "someone", null, "Sales"),
     ],
   });
-  it("lists open jobs at the top of the tree, oldest lowest, with the manager and the workers on each", () => {
+  it("lists open jobs at the top of the tree, oldest lowest, with the workers on each, never the manager (he stays outside)", () => {
     const p = deptProjects(city, "App");
     expect(p.map((x) => [x.id, x.floor])).toEqual([
       ["t1", 2],
       ["t2", 3],
     ]);
-    expect(p[0]!.agents).toEqual(["mgr-app", "w1", "w2"]); // the retired worker is gone
-    expect(p[1]!.agents).toEqual(["mgr-app", "w4"]);
+    expect(p[0]!.agents).toEqual(["w1", "w2"]); // the retired worker is gone
+    expect(p[1]!.agents).toEqual(["w4"]);
   });
   it("a floor seats eight and belongs to one project: a bigger team goes on up as 1a, 1b, 1c", () => {
     const big = applySnapshot(initialState(0), {
       departments: [{ name: "App", manager_id: "mgr-app", state: "active" }],
       agents: [
         agent("mgr-app", "manager", "App"),
-        ...Array.from({ length: 17 }, (_, i) => agent(`w${i}`, "worker", "App", { ticket_id: "t1" })),
+        ...Array.from({ length: 18 }, (_, i) => agent(`w${i}`, "worker", "App", { ticket_id: "t1" })),
         agent("x1", "worker", "App", { ticket_id: "t2" }),
       ],
       tickets: [ticket("t1", "mgr-app", null), ticket("t2", "mgr-app", null, "App", "2026-11-10T09:00:00Z")],
@@ -80,7 +80,7 @@ describe("a department's projects", () => {
     expect(one!.floor).toBe(4);
     // The next project starts on a floor of its own, though the floor below has six free seats.
     expect(two!.parts.map((f) => [f.part, f.floor, f.label, f.agents])).toEqual([
-      ["a", 5, "Goal t2", ["mgr-app", "x1"]],
+      ["a", 5, "Goal t2", ["x1"]],
     ]);
   });
   it("is empty for a department with nothing open", () => {
