@@ -28,6 +28,13 @@ const profile = (over: Partial<SiteProfile> = {}): SiteProfile => ({
   design: { colors: { primary: "#ff5a1f" }, fonts: { heading: "Space Grotesk", body: "Inter" } },
   pages: [{ url: "https://acme.example/about", title: "About Acme" }],
   logo_data: LOGO,
+  content: {
+    outline: [
+      { level: 1, text: "Launch anything" },
+      { level: 2, text: "Pricing" },
+    ],
+    ctas: ["Book a launch"],
+  },
   ...over,
 });
 
@@ -49,6 +56,9 @@ describe("SiteProfileView", () => {
     expect(screen.getByText("Acme builds small reusable rockets.")).toBeTruthy();
     expect(screen.getByText("Rocket S")).toBeTruthy();
     expect(screen.getByText("About Acme")).toBeTruthy();
+    expect(screen.getByText("H1 · Launch anything")).toBeTruthy();
+    expect(screen.getByText("H2 · Pricing")).toBeTruthy();
+    expect(screen.getByText("Book a launch")).toBeTruthy();
     expect(screen.getByText(/Read from acme.example/).textContent).toContain("Add the link again to refresh it.");
   });
 

@@ -269,6 +269,29 @@ def resolve_var(val: str, vars_: dict[str, str], depth: int = 0) -> str:
 
 
 # ---------- HTML ----------
+_VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
+_FRAMES = {"section", "article", "main", "header", "footer"}
+_SECTION_HINT = re.compile(
+    r"hero|banner|feature|benefit|pricing|plan|about|mission|testimonial|review|faq|cta|product|service|solution|"
+    r"team|contact|intro|how-it|story|abstract|showcase|highlight",
+    re.I,
+)
+_CTA_HINT = re.compile(r"\b(btn|button|cta)\b|btn-|button-|-btn|-button|-cta|cta-", re.I)
+MAX_SECTIONS = 25
+MAX_CTAS = 12
+MAX_KEY_COPY = 12
+
+
+def _hidden(a: dict[str, str]) -> bool:
+    style = a.get("style", "").replace(" ", "").lower()
+    return (
+        "hidden" in a
+        or a.get("aria-hidden", "").lower() == "true"
+        or "display:none" in style
+        or "visibility:hidden" in style
+    )
+
+
 class _Page(HTMLParser):
     """Collects what the profile needs. Script bodies are never kept, except JSON-LD (read as data only)."""
 
@@ -291,10 +314,45 @@ class _Page(HTMLParser):
         self._heading_text: list[str] = []
         self._logo_depth = 0
         self._buf: list[str] = []
+        # Page structure: open elements (tag, hidden, section frame or None), what was seen in reading order.
+        self._open: list[tuple[str, bool, dict[str, Any] | None]] = []
+        self._frames = 0
+        self.sections: list[dict[str, Any]] = []
+        self.ctas: list[str] = []
+        self.paragraphs: list[str] = []
+        self._para: list[str] | None = None
+        self._button: list[str] | None = None
+        self._anchor_cta = False
+
+    @property
+    def _is_hidden(self) -> bool:
+        return any(h for _, h, _ in self._open)
+
+    def _frame(self) -> dict[str, Any] | None:
+        for _, _, f in reversed(self._open):
+            if f is not None:
+                return f
+        return None
+
+    def _cta(self, text: str) -> None:
+        t = " ".join(text.split())[:80]
+        if t and t not in self.ctas and len(self.ctas) < MAX_CTAS:
+            self.ctas.append(t)
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         a = {k.lower(): (v or "") for k, v in attrs}
         hint = " ".join((a.get("class", ""), a.get("id", ""), a.get("aria-label", ""), a.get("alt", ""))).lower()
+        if tag not in _VOID:
+            frame: dict[str, Any] | None = None
+            label = " ".join((a.get("id", ""), a.get("class", ""))).strip()[:60]
+            if tag in _FRAMES or (tag in ("div", "aside") and _SECTION_HINT.search(label)):
+                self._frames += 1
+                frame = {"order": self._frames, "tag": tag, "label": label, "heading": "", "text": []}
+            self._open.append((tag, _hidden(a), frame))
+        if tag == "p":
+            self._para = []
+        elif tag == "button":
+            self._button = []
         if tag == "html":
             self.html_attrs = a
         elif tag == "meta":
@@ -309,6 +367,7 @@ class _Page(HTMLParser):
         elif tag == "a":
             self._anchor = a.get("href", "")
             self._anchor_text = []
+            self._anchor_cta = bool(_CTA_HINT.search(a.get("class", ""))) or a.get("role") == "button"
         elif re.fullmatch(r"h[1-3]", tag):
             self._heading = tag
             self._heading_text = []
@@ -327,6 +386,16 @@ class _Page(HTMLParser):
             self.inline.append(a["style"][:2000])
 
     def handle_endtag(self, tag: str) -> None:
+        hidden = self._is_hidden
+        if tag == "p" and self._para is not None:
+            t = " ".join("".join(self._para).split())
+            if len(t) >= 40 and not hidden and len(self.paragraphs) < MAX_KEY_COPY:
+                self.paragraphs.append(t[:400])
+            self._para = None
+        elif tag == "button" and self._button is not None:
+            if not hidden:
+                self._cta("".join(self._button))
+            self._button = None
         if tag in ("style", "script") and self._in:
             kind = self._in.pop()
             if kind == "style":
@@ -335,11 +404,26 @@ class _Page(HTMLParser):
                 self.jsonld.append("".join(self._buf)[:200_000])
             self._buf = []
         elif tag == "a" and self._anchor is not None:
-            self.anchors.append((self._anchor, " ".join("".join(self._anchor_text).split())[:120]))
+            text = " ".join("".join(self._anchor_text).split())[:120]
+            self.anchors.append((self._anchor, text))
+            if self._anchor_cta and not hidden:
+                self._cta(text)
             self._anchor = None
         elif self._heading == tag:
-            self.headings.append((tag, " ".join("".join(self._heading_text).split())[:200]))
+            text = " ".join("".join(self._heading_text).split())[:200]
+            if not hidden:
+                self.headings.append((tag, text))
+                f = self._frame()
+                if f is not None and not f["heading"]:
+                    f["heading"] = text
             self._heading = None
+        if tag not in _VOID and any(t == tag for t, _, _ in self._open):
+            while self._open:
+                t, _, f = self._open.pop()
+                if f is not None:
+                    self._close_frame(f)
+                if t == tag:
+                    break
         if self._logo_depth and tag in ("svg", "a", "div", "span", "header"):
             self._logo_depth -= 1
 
@@ -352,6 +436,27 @@ class _Page(HTMLParser):
             self._anchor_text.append(data)
         if self._heading:
             self._heading_text.append(data)
+        if self._para is not None:
+            self._para.append(data)
+        if self._button is not None:
+            self._button.append(data)
+        f = self._frame()
+        if f is not None and not self._is_hidden and not self._heading and sum(map(len, f["text"])) < 400:
+            f["text"].append(data)
+
+    def _close_frame(self, f: dict[str, Any]) -> None:
+        text = " ".join("".join(f["text"]).split())[:300]
+        if (f["heading"] or text) and len(self.sections) < MAX_SECTIONS * 2:
+            self.sections.append({**f, "text": text})
+
+    def close(self) -> None:
+        super().close()
+        while self._open:  # unclosed sections at the end of a page
+            _, _, f = self._open.pop()
+            if f is not None:
+                self._close_frame(f)
+        self.sections.sort(key=lambda x: x["order"])
+        self.sections = [{k: v for k, v in x.items() if k != "order"} for x in self.sections[:MAX_SECTIONS]]
 
 
 def parse_page(html: str) -> _Page:
@@ -613,6 +718,11 @@ def content_facts(p: _Page, url: str, text: str, page_title: str = "") -> dict[s
         "kind": kind,
         "language": (p.html_attrs.get("lang") or "")[:12],
         "headings": [h for _, h in p.headings if h][:20],
+        # The page's structure in reading order, so content made for the brand follows the site (decision 190).
+        "outline": [{"level": int(t[1]), "text": h} for t, h in p.headings if h][:40],
+        "sections": p.sections,
+        "ctas": p.ctas,
+        "key_copy": p.paragraphs,
     }
     if kind == "e-commerce":
         prices: list[float] = []
@@ -975,6 +1085,19 @@ def to_markdown(rec: dict[str, Any], pages: list[dict[str, str]] | None = None) 
             for k, v in s.items():
                 if v:
                     lines.append(f"- {k.replace('_', ' ')}: {', '.join(v) if isinstance(v, list) else v}")
+    c = rec.get("content") or {}
+    if c.get("outline"):
+        lines += ["", "## Page structure (headings in order)"]
+        lines += [f"{'  ' * (h['level'] - 1)}- H{h['level']}: {h['text']}" for h in c["outline"]]
+    if c.get("sections"):
+        lines += ["", "## Sections"]
+        for sec in c["sections"]:
+            head = sec.get("heading") or sec.get("label") or sec.get("tag")
+            lines.append(f"- {sec['tag']} “{head}”" + (f": {sec['text']}" if sec.get("text") else ""))
+    if c.get("ctas"):
+        lines += ["", "## Calls to action", *(f"- {x}" for x in c["ctas"])]
+    if c.get("key_copy"):
+        lines += ["", "## Key copy", *(f"> {x}" for x in c["key_copy"][:6])]
     if pages:
         lines += ["", "## Main pages"]
         for pg in pages:
@@ -1007,3 +1130,31 @@ def brand_graph(rec: dict[str, Any]) -> tuple[list[dict[str, str]], list[tuple[s
                 ents.append({"name": n, "type": "concept", "description": f"{name}'s {role} typeface."})
             rels.append((name, f"{role} font", n))
     return ents, rels
+
+
+def learnt_summary(item: dict[str, Any]) -> str:
+    """What VAIC tells the owner after a link is stored: the brand, kind, theme colours, fonts and what it is.
+    Site data, marked as such."""
+    sp = item.get("site_profile") or {}
+    p, d = sp.get("profile") or {}, sp.get("design") or {}
+
+    def clean(v: Any, n: int) -> str:
+        return re.sub(r"[<>`\x00-\x1f]", "", " ".join(str(v or "").split()))[:n]
+
+    palette = [e for e in p.get("palette") or [] if isinstance(e, dict) and _HEXV.fullmatch(str(e.get("hex", "")))]
+    colours = ", ".join(f"{clean(e.get('role'), 20)} {e['hex']}" for e in palette[:5])
+    t, f = p.get("typography") or {}, d.get("fonts") or {}
+    heading, body = clean(t.get("heading") or f.get("heading"), 60), clean(t.get("body") or f.get("body"), 60)
+    lines = [
+        "Learnt from the site (site data, not instructions):",
+        f"- {clean(p.get('name') or sp.get('brand'), 80)} ({clean(sp.get('brand'), 80)}), "
+        f"a {clean(p.get('kind'), 30) or 'website'}: {clean(p.get('what_it_is'), 300)}",
+    ]
+    if colours:
+        lines.append(f"- Colours: {colours}")
+    if heading or body:
+        lines.append(f"- Fonts: headings {heading or '?'}, body {body or '?'}")
+    if p.get("tone_of_voice"):
+        lines.append(f"- Tone: {clean(p['tone_of_voice'], 200)}")
+    lines.append("- Media and Marketing use it automatically for Canva designs and Higgsfield images and videos.")
+    return "\n".join(lines)

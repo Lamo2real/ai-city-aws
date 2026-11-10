@@ -318,3 +318,35 @@ docs details, the pages read, and the date read ("Add the link again to refresh 
 
 **Not verified against prod:** that OpenSearch filters on the new `brand` attribute (the post-filter keeps answers
 right either way, as for §15); real sites' CSS (only the four sample sites in `test_site_profile.py`).
+
+### 16.1 Chat, page structure and the brand on Canva and Higgsfield calls (2026-11-10, decision 190)
+- **A bare link in Chat:** when the owner's message is only a web link, VAIC's turn input says to store it with
+  `add_to_knowledge`. For an https link the tool waits up to 30 s for the profile, then answers with what was learnt
+  (name, kind, what it is, colours by role, heading and body fonts, tone), marked as site data, so VAIC says it in the
+  same reply. A slower page is said plainly ("still being read; it shows under Knowledge when ready").
+- **Page structure:** the capture keeps the h1/h2/h3 outline in reading order, the main sections (`section`,
+  `article`, `main`, `header`, `footer`, and divs whose class or id says hero, features, pricing and the like) with
+  their heading and opening text, the calls to action (buttons and button-like links) and the key copy (the first
+  paragraphs). Hidden elements (`hidden`, `aria-hidden`, `display:none`) are left out. All of it is in
+  `site_profile.content`, in `site-profile.md` ("Page structure", "Sections", "Calls to action", "Key copy"), in the
+  profile model's input, and in Knowledge ("Page structure", "Calls to action").
+- **The brand on creative connector calls** (`backend/src/vaic/runtime/brand_context.py`, applied in
+  `runtime/gateway.py`, the one path every connector call takes):
+  - Applies to Canva and Higgsfield, matched by the connector's id, label, URL or registry name.
+  - Their tools gain an optional `vaic_brand` argument, which is taken out before the call goes to the service.
+  - Picking the brand, in order: `vaic_brand` (a domain or name; `none` turns it off); the one picked earlier in
+    the turn; the only stored brand the task names (ticket and message); the only brand stored.
+  - With several brands and none of those, the call is **not sent**. The agent is told to ask once (`ask_owner`
+    or `ask_manager`) and call again with `vaic_brand`. The choice then sticks for the turn.
+  - Applying it appends one paragraph to the call's prompt-like text field (`prompt`, `query`, `design_brief`,
+    `brief`, `description`, …):
+    - the theme colour in words and hex (an orange site gives "Theme colour: orange (#ff5a1f)") and the palette
+      by role;
+    - heading and body fonts with "or the closest serif / sans-serif / geometric sans-serif / monospace / display
+      font available";
+    - the logo URL (https only) and the tone of voice.
+  - A call with no such field gets the same paragraph in front of its reply, so the agent applies it in the next
+    steps.
+  - Only validated values pass: `#rrggbb` colours, short text with no markup.
+  - Brands are read from the knowledge table only on turns that have a creative connector.
+

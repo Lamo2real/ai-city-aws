@@ -110,6 +110,13 @@ export interface SiteProfile {
   };
   pages?: Array<{ url: string; title: string }>;
   logo_data?: string;
+  /** The page's structure in reading order (decision 190). */
+  content?: {
+    outline?: Array<{ level: number; text: string }>;
+    sections?: Array<{ tag: string; label?: string; heading?: string; text?: string }>;
+    ctas?: string[];
+    key_copy?: string[];
+  };
 }
 export interface KnowledgePlace {
   jurisdictions?: string[];

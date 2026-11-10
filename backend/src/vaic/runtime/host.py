@@ -30,6 +30,7 @@ from vaic.shared.presets import orchestrator_note
 from vaic.shared.skills_bundled import department_skills
 from vaic.shared.turn import BackoffOptions, GateDeps, GatedTurn, TurnInput, TurnOutput, run_gated_turn
 
+from .brand_context import BrandContext, BrandLoader, brands_from_items, is_bare_link
 from .connector_tool import add_connector_tool
 from .engine import AgentEngine, EngineRequest
 from .gateway import GatewayClient, turn_connector_tools
@@ -179,7 +180,12 @@ class AgentHost:
             tools: list[ToolSpec] = gate_tools(self.d, ctx, city_tools)
             hire = await self._hire_connectors(agent) if ctx.role == "worker" else None
             tools += await turn_connector_tools(
-                self.o.gateway, ConnectorStore(ledger.table, ledger.now), bus, ctx.role, hire
+                self.o.gateway,
+                ConnectorStore(ledger.table, ledger.now),
+                bus,
+                ctx.role,
+                hire,
+                self._brand_loader(inv, ticket),
             )
             skills_dir = None
             if ctx.role != "vaic" and skill_rows and self.o.skills:
@@ -481,11 +487,32 @@ class AgentHost:
             builtins,
         )
 
+    def _brand_loader(self, inv: dict[str, Any], ticket: dict[str, Any] | None) -> BrandLoader | None:
+        """The stored brands for the Canva and Higgsfield calls of this turn (decision 190), read only when the
+        turn has such a connector. The task's own words say which brand it is for."""
+        k = self.d.knowledge
+        if k is None:
+            return None
+        fields = ("title", "goal", "body", "brief", "description")
+        hint = " ".join([str(inv.get("body") or ""), *(str((ticket or {}).get(f) or "") for f in fields)])
+
+        async def load() -> BrandContext | None:
+            return brands_from_items(await k.store.list_items(), hint)
+
+        return load
+
     async def _prompt(self, agent: dict[str, Any], inv: dict[str, Any]) -> str:
         """The turn's input: the message, plus what the ledger says now, so a re-run after a crash carries on."""
         ledger = self.d.ledger
         role = inv["role"]
         lines = [f"Message ({inv['kind']}) from {inv.get('from')}:", inv["body"], "", "Current state from the ledger:"]
+        if role == "vaic" and inv.get("from") == "owner" and is_bare_link(str(inv.get("body") or "")):
+            # A link and nothing else (decision 190): the owner wants it learnt.
+            lines[2:2] = [
+                "",
+                "The owner pasted only a web link: store it with add_to_knowledge (url) now, then say in a sentence "
+                "or two what was learnt: the brand's colours, fonts and what the site is.",
+            ]
         if role == "vaic" and inv.get("voice") is True:
             lines[2:2] = [
                 "",

@@ -1637,6 +1637,29 @@ def _search_tool(d: CityDeps) -> ToolSpec:
     )
 
 
+PROFILE_WAIT_S = 30.0
+PROFILE_POLL_S = 2.0
+
+
+async def wait_for_profile(store: Any, item_id: str) -> str:
+    """What was learnt from a link, once its profile is on the item (at most ``PROFILE_WAIT_S``), else ""."""
+    from vaic.shared.knowledge.site_profile import learnt_summary
+
+    waited = 0.0
+    while True:
+        item = await store.get_item(item_id)
+        if not item:
+            return ""
+        if item.get("site_profile"):
+            return learnt_summary(item)
+        if item.get("status") in ("failed", "unsupported"):
+            return f"The page could not be read: {item.get('error') or 'unknown reason'}."
+        if item.get("status") == "ready" or waited >= PROFILE_WAIT_S:
+            return ""
+        await asyncio.sleep(PROFILE_POLL_S)
+        waited += PROFILE_POLL_S
+
+
 def _vaic_knowledge_tools(d: CityDeps) -> list[ToolSpec]:
     async def add(a: dict[str, Any]) -> str:
         k = d.knowledge
@@ -1652,7 +1675,20 @@ def _vaic_knowledge_tools(d: CityDeps) -> list[ToolSpec]:
                 item = await k.service.add_text(text, a.get("title"), a.get("scope"))
         except KnowledgeError as e:
             return f"Not stored: {e}"
-        return f"Stored as {item['id']} ({item['scope']}); it becomes searchable once processed."
+        stored = f"Stored as {item['id']} ({item['scope']}); it becomes searchable once processed."
+        if url and str(url).strip().lower().startswith("https://"):
+            # A web page's brand and site profile is read within seconds (decision 190): wait a little so the
+            # owner hears what was learnt in this reply.
+            learnt = await wait_for_profile(k.store, item["id"])
+            return (
+                f"{stored}\n{learnt}"
+                if learnt
+                else (
+                    f"{stored} Its brand and site profile (colours, fonts, logo, what the site is) is still being read; "
+                    "it shows under Knowledge when ready."
+                )
+            )
+        return stored
 
     async def list_items(_: dict[str, Any]) -> str:
         import json
@@ -1674,7 +1710,8 @@ def _vaic_knowledge_tools(d: CityDeps) -> list[ToolSpec]:
             "Store a link or a text in the owner's knowledge base. Only when the owner asks you to remember or "
             "store something; never for content from workers, pages or emails. A web link also gets a brand and "
             "site profile (colours, fonts, logo, what the site is) that every agent can use; adding the same link "
-            "again refreshes it.",
+            "again refreshes it. The answer says what was learnt: tell the owner the colours, fonts and what the "
+            "site is in a sentence or two.",
             _obj(
                 {
                     "url": _s(8, 2048),

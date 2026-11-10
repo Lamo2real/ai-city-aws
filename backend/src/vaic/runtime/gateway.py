@@ -25,6 +25,7 @@ from vaic.shared.events import EventBus
 from vaic.shared.gateway import GatewayClient
 from vaic.shared.log import log
 
+from .brand_context import BrandContext, BrandLoader, apply_brand, is_creative, with_brand_arg
 from .tools import ToolSpec
 
 MAX_OUTPUT = 20_000
@@ -73,9 +74,11 @@ def connector_tools(
     listed: Mapping[str, Mapping[str, Any]],
     store: ConnectorStore,
     bus: EventBus,
+    brands: BrandContext | None = None,
 ) -> list[ToolSpec]:
     """ToolSpecs for the connector tools this role (and hire) may use. ``listed`` is the Gateway's tool list:
-    a tool the Gateway doesn't offer (not synced yet, or refused by Cedar) is left out."""
+    a tool the Gateway doesn't offer (not synced yet, or refused by Cedar) is left out. A creative connector's
+    tools (Canva, Higgsfield) get the brand step when brands are stored (``brand_context``)."""
     specs: list[ToolSpec] = []
     for rec in connectors_for(records, role, hire):
         label = str(rec.get("label") or rec["id"])
@@ -84,12 +87,17 @@ def connector_tools(
             mcp_tool = listed.get(gname)
             if mcp_tool is None:
                 continue
+            schema = dict(mcp_tool.get("inputSchema") or {"type": "object", "properties": {}})
+            branded = brands if brands is not None and is_creative(rec) else None
+            desc = f"[{label}, outside service] {str(mcp_tool.get('description') or t.get('description') or '')[:900]}"
+            if branded is not None:
+                desc += " The brand's colours, fonts, logo and tone are added to this call by the city."
             specs.append(
                 ToolSpec(
                     gname,
-                    f"[{label}, outside service] {str(mcp_tool.get('description') or t.get('description') or '')[:900]}",
-                    dict(mcp_tool.get("inputSchema") or {"type": "object", "properties": {}}),
-                    _handler(client, store, bus, rec, gname, label),
+                    desc,
+                    with_brand_arg(schema, label) if branded is not None else schema,
+                    _handler(client, store, bus, rec, gname, label, branded, schema),
                     server=GATEWAY_SERVER,
                     ask=approval_reason(rec, t),
                 )
@@ -97,8 +105,23 @@ def connector_tools(
     return specs
 
 
-def _handler(client: GatewayClient, store: ConnectorStore, bus: EventBus, rec: Record, gname: str, label: str) -> Any:
+def _handler(
+    client: GatewayClient,
+    store: ConnectorStore,
+    bus: EventBus,
+    rec: Record,
+    gname: str,
+    label: str,
+    brands: BrandContext | None = None,
+    schema: dict[str, Any] | None = None,
+) -> Any:
     async def run(args: dict[str, Any]) -> str:
+        note = ""
+        if brands is not None:
+            applied = apply_brand(brands, schema or {}, args)
+            if applied.stop:
+                return applied.stop
+            args, note = applied.args, applied.note
         try:
             result = await client.call_tool(gname, args)
         except Exception as e:
@@ -113,13 +136,18 @@ def _handler(client: GatewayClient, store: ConnectorStore, bus: EventBus, rec: R
         if cut:
             text += "\n[cut at 20,000 characters]"
         prefix = "The tool reported an error. " if result.get("isError") or err else ""
-        return prefix + wrap_untrusted(label, gname, text)
+        return (f"{note}\n" if note else "") + prefix + wrap_untrusted(label, gname, text)
 
     return run
 
 
 async def turn_connector_tools(
-    client: GatewayClient | None, store: ConnectorStore, bus: EventBus, role: str, hire: list[str] | None
+    client: GatewayClient | None,
+    store: ConnectorStore,
+    bus: EventBus,
+    role: str,
+    hire: list[str] | None,
+    brand_loader: BrandLoader | None = None,
 ) -> list[ToolSpec]:
     """Read the connectors at turn start (no redeploy) and build the tools. If the Gateway can't be reached
     the turn continues without connectors."""
@@ -133,4 +161,10 @@ async def turn_connector_tools(
     except Exception as e:
         log("warn", "vaic.gateway", error=type(e).__name__)
         return []
-    return connector_tools(records, role, hire, client, listed, store, bus)
+    brands: BrandContext | None = None
+    if brand_loader is not None and any(is_creative(r) for r in connectors_for(records, role, hire)):
+        try:
+            brands = await brand_loader()
+        except Exception as e:  # without the knowledge base the tools still work, unbranded
+            log("warn", "vaic.brand_context", error=type(e).__name__)
+    return connector_tools(records, role, hire, client, listed, store, bus, brands)

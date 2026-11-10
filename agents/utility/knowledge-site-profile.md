@@ -11,6 +11,7 @@ Reply with one JSON object and nothing else:
 - audience: who it is for. offerings: its products, services or main features (short names). key_facts: up to 10 short facts worth remembering (founded, location, pricing model, numbers the site states).
 - palette: up to 8 colours with roles primary, accent, background, surface, text, muted, border or other, each a #rrggbb taken from the extracted facts (prefer CSS custom properties, then the logo's fills, then the most used colours). A note says where it is used.
 - typography: the heading and body typefaces from the extracted fonts, and in notes the sizes, weights and feel (for example "geometric sans, bold headings, 16px body").
+- Read the page structure in the facts (the outline of h1/h2/h3 headings in order, the sections with their headings, the calls to action and the key copy): the tone, offerings and layout patterns come from it.
 - tone_of_voice: how the site writes (for example "confident, short sentences, second person, playful").
 - layout_patterns: what the pages look like (for example "large hero with one button", "card grid", "rounded corners 12px", "soft shadows", "dark theme").
 - store only for a shop (categories and the price range with currency); paper only for a research paper (title, authors, abstract, main findings); docs only for documentation (what the product is and its main concepts). Leave the others out.

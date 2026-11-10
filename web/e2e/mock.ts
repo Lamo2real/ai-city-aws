@@ -438,6 +438,14 @@ export async function mockBackend(
         },
         design: { colors: { primary: "#ff5a1f" }, fonts: { heading: "Space Grotesk", body: "Inter" }, scheme: "light" },
         pages: [{ url: `https://${host}/about`, title: "About Acme" }],
+        content: {
+          outline: [
+            { level: 1, text: "Launch anything" },
+            { level: 2, text: "Why Acme" },
+            { level: 2, text: "Pricing" },
+          ],
+          ctas: ["Book a launch", "See plans"],
+        },
         logo_data:
           "data:image/svg+xml;base64," +
           btoa(
@@ -454,7 +462,9 @@ export async function mockBackend(
       if (!kItem(i.id as string)) return;
       i.status = i.kind === "other" ? "unsupported" : "ready";
       if (i.status === "ready") detect(i);
-      if (i.status === "ready" && i.kind === "link" && String(i.source).startsWith("https://")) siteProfile(i);
+      // The sample brand site only: other links keep their title, as the journeys expect.
+      if (i.status === "ready" && i.kind === "link" && String(i.source).startsWith("https://acme.example"))
+        siteProfile(i);
       kEvent(i);
     }, 1200);
   };

@@ -133,6 +133,11 @@ export function SiteProfileView({ sp }: { sp: SiteProfile }) {
       {p.docs ? (
         <List title="Documentation" items={[...(p.docs.product ? [p.docs.product] : []), ...(p.docs.concepts ?? [])]} />
       ) : null}
+      <List
+        title="Page structure"
+        items={(sp.content?.outline ?? []).slice(0, 15).map((h) => `H${h.level} · ${h.text}`)}
+      />
+      <List title="Calls to action" items={sp.content?.ctas} />
       <List title="Pages read" items={(sp.pages ?? []).map((x) => x.title || x.url)} />
       <p className="mute sp-foot">
         {`Read from ${sp.brand}${captured ? ` on ${captured}` : ""}. Add the link again to refresh it.`}

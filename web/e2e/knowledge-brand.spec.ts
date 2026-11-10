@@ -38,6 +38,8 @@ test("knowledge: a pasted link shows its brand colours, fonts, logo and what the
   await expect(item).toContainText("Acme builds small reusable rockets for research teams.");
   await expect(item).toContainText("Confident, short sentences, second person.");
   await expect(item).toContainText("Read from acme.example");
+  await expect(item).toContainText("H1 · Launch anything");
+  await expect(item).toContainText("Book a launch");
   await noSeriousA11y(page, "Knowledge brand profile");
   await item.screenshot({ path: `${SHOTS}/knowledge-brand.png` });
 });
