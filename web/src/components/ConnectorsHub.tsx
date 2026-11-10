@@ -583,8 +583,8 @@ export function ConnectorsHub(p: {
           {presets && !shownKits.length ? empty(`No tool in the catalog matches "${q}".`) : null}
           <div className="card hub-own">
             <p>
-              <b>Don't see yours?</b> Ask VAIC in plain words ("I need my Zendesk"): it finds the right one and helps you
-              sign in. Or add any tool by its link.
+              <b>Don't see yours?</b> Ask VAIC in plain words ("I need my Zendesk"): it finds the right one and helps
+              you sign in. Or add any tool by its link.
             </p>
             <Button variant="secondary" onClick={() => setAdding("link")}>
               Add by link
@@ -971,8 +971,11 @@ function CatalogCard(p: {
   const [answer, setAnswer] = useState("");
   const answerOk = !c.ask || new RegExp(c.ask.pattern).test(answer.trim().toLowerCase());
   const st = on ? rowStatus(on) : null;
+  const signIn = on && (on.status === "needs_login" || on.status === "login_expired");
+  const needsKey = on?.status === "needs_key";
+  // A card with a form open takes the whole row, so the form has room and its neighbours keep their height.
   return (
-    <li className="hub-card" aria-label={c.label}>
+    <li className={signIn || needsKey ? "hub-card hub-card-form" : "hub-card"} aria-label={c.label}>
       <div className="hub-card-head">
         <Logo id={c.id} label={c.label} />
         <div>
@@ -1027,7 +1030,7 @@ function CatalogCard(p: {
           </>
         )}
       </div>
-      {on && (on.status === "needs_login" || on.status === "login_expired") ? (
+      {on && signIn ? (
         <SignInCard
           kind="connector"
           id={on.id}
@@ -1039,7 +1042,7 @@ function CatalogCard(p: {
           signup={c.signup}
         />
       ) : null}
-      {on?.status === "needs_key" ? (
+      {on && needsKey ? (
         <KeyCard
           targetId={on.id}
           title={`Add the key for ${on.label ?? c.label}`}

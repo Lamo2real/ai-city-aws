@@ -3,6 +3,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { appRecord, hired, mockBackend } from "./mock.ts";
 import { visitSnapshot } from "./visit-data.ts";
+import { cardsFit, everyCardState, keyFormInside } from "./connector-fit.ts";
 
 const SHOTS = `${import.meta.dirname}/../../docs/screenshots`;
 /** WCAG 2 A/AA at phone width: contrast, names, focus order (the map's canvas is described separately). */
@@ -232,4 +233,24 @@ test("phone: tap a tower, pick a project, go up to its floor, an agent turns, an
   await page.getByRole("button", { name: "City map" }).tap();
   await expect(visit).toHaveCount(0);
   await expect(page.locator("section.city > canvas")).toBeVisible();
+});
+
+test("phone: Settings → Connectors cards keep every form inside the card at 375 and 412px (decision 179)", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  everyCardState(m);
+  for (const width of [375, 412]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/#/settings/connectors");
+    await page.getByRole("button", { name: "Browse", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Every department tools" })).toBeVisible();
+    await page.waitForTimeout(400); // the switch eases between its two states
+    await keyFormInside(page);
+    await cardsFit(page);
+    if (width === 375) {
+      await page.getByRole("listitem", { name: "Jira & Confluence" }).scrollIntoViewIfNeeded();
+      await page.screenshot({ path: `${SHOTS}/phone-connectors-key-form.png` });
+    }
+  }
 });

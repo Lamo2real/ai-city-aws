@@ -2589,9 +2589,27 @@ table.costs tr:last-child td {
   border-radius: var(--rg);
   padding: var(--s3) var(--s4);
   display: grid;
+  grid-template-columns: minmax(0, 1fr); /* never wider than the card it sits in */
   gap: var(--s2);
-  max-width: 34rem;
+  max-width: min(34rem, 100%);
+  min-width: 0;
+  overflow-wrap: anywhere;
   box-shadow: var(--glow);
+}
+.connect-card :is(input:not([type="checkbox"]):not([type="radio"]), select, .btn, .aselect) {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+.connect-card .btn {
+  min-height: var(--tap);
+  height: auto;
+  padding-block: var(--s1);
+  white-space: normal;
+  text-align: center;
+}
+.connect-card .row-end .btn {
+  width: auto;
 }
 /* A live connection (decision 141): a small green dot with a gentle pulse; still when less motion is preferred. */
 .live-dot {
@@ -5450,13 +5468,16 @@ button.hub-status {
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+  grid-auto-flow: row dense; /* a full-row card leaves no hole: the next cards fill the row above */
   gap: var(--s3);
 }
 .hub-card {
   display: flex;
   flex-direction: column;
   gap: var(--s2);
+  min-width: 0; /* a grid child never grows past its column, whatever it holds */
+  overflow-wrap: anywhere; /* long names, links and error messages wrap inside the card */
   padding: var(--s3) var(--s4);
   border: 1px solid var(--edge);
   border-radius: var(--rg);
@@ -5483,15 +5504,43 @@ button.hub-status {
 .hub-card-foot {
   margin-top: auto;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--s2);
   font-size: var(--fs-s);
 }
+/* "Create a … account" takes the room left beside Connect, and wraps as a whole below it when there is none. */
+.hub-card-foot > a {
+  flex: 1 1 9rem;
+  min-width: 0;
+  overflow-wrap: normal;
+}
+.hub-card-foot > .btn {
+  flex: none;
+  margin-left: auto;
+}
+.hub-card-foot > .hub-status {
+  min-width: 0;
+}
 .hub-card .connect-card,
 .hub-card .signin,
 .hub-card form {
   margin: 0;
+}
+/* A card with a sign-in or key form open (decision 179): the whole row, the form at a readable width. */
+.hub-grid > .hub-card {
+  max-width: none; /* the screen's reading measure for list items would cap a full-row card */
+}
+.hub-card-form {
+  grid-column: 1 / -1;
+}
+.hub-card-form .hub-card-foot {
+  margin-top: 0;
+}
+.hub-card .connect-card {
+  width: 100%;
+  max-width: 34rem;
 }
 .hub-actions {
   margin-bottom: var(--s4);
