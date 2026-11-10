@@ -4,12 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>VAIC</title>
-    <!-- The owner's eye (decision 169), at new file names so browsers drop the old cached amber icon (decision 173) -->
-    <!-- Only the eye's own lines, on no background, light on a dark browser and dark on a light one (decision 195).
-         /favicon.ico exists for browsers that ask for it by name, but is not linked: Safari picked it over the SVG. -->
-    <link rel="icon" type="image/svg+xml" href="/vaic-icon.svg" />
-    <link rel="icon" type="image/png" sizes="64x64" href="/vaic-icon-dark.png" media="(prefers-color-scheme: light)" />
-    <link rel="icon" type="image/png" sizes="64x64" href="/vaic-icon-light.png" media="(prefers-color-scheme: dark)" />
+    <!-- The owner's eye (decision 169): only its lines, in white, on no background, one icon for every browser
+         (decision 200). New file names again so Safari drops its cached icons. Safari put a light tile behind the
+         dark-lined version in its dark tab bar. /favicon.ico is the same white eye, for browsers that ask by name. -->
+    <link rel="icon" type="image/svg+xml" href="/vaic-eye-white.svg" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/vaic-eye-white.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   </head>
   <body>

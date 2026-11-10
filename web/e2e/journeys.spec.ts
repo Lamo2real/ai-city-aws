@@ -1481,20 +1481,33 @@ test("the logo is the owner's eye with no background, in the top bar and the bro
   expect(lum(dark.fill)).toBeGreaterThan(600);
   await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
   expect(lum((await look()).fill)).toBeLessThan(200);
-  // the tab icon: one SVG with no background shape that switches colour with the browser's theme
-  // (at new file names, so the old amber icon a browser cached is dropped: decision 173), and the tab says VAIC
+  // the tab icon: the eye's lines in white on no background, one icon only (decision 200), and the tab says VAIC
   await expect(page).toHaveTitle("VAIC");
-  await expect(page.locator('link[rel="icon"][type="image/svg+xml"]')).toHaveAttribute("href", "/vaic-icon.svg");
-  // a real favicon.ico for browsers that ask for it by name (decision 193), but never linked: Safari then picked it
-  // over the theme-following SVG and drew it on a white tile (decision 195)
+  await expect(page.locator('link[rel="icon"]')).toHaveCount(2);
+  await expect(page.locator('link[rel="icon"][type="image/svg+xml"]')).toHaveAttribute("href", "/vaic-eye-white.svg");
+  await expect(page.locator('link[rel="icon"][type="image/png"]')).toHaveAttribute("href", "/vaic-eye-white.png");
+  await expect(page.locator('link[rel="icon"][media]')).toHaveCount(0);
   expect((await page.request.get("/favicon.ico")).headers()["content-type"]).toMatch(/icon/);
-  await expect(page.locator('link[rel="icon"][href="/favicon.ico"]')).toHaveCount(0);
-  for (const png of ["/vaic-icon-dark.png", "/vaic-icon-light.png"])
-    expect((await page.request.get(png)).headers()["content-type"]).toContain("image/png");
-  expect((await page.request.get("/favicon.svg")).headers()["content-type"] ?? "").not.toContain("svg");
-  const svg = await (await page.request.get("/vaic-icon.svg")).text();
-  expect(svg).toContain("prefers-color-scheme:dark");
-  expect(svg).not.toMatch(/<rect|<circle/);
+  expect((await page.request.get("/vaic-eye-white.png")).headers()["content-type"]).toContain("image/png");
+  const svg = await (await page.request.get("/vaic-eye-white.svg")).text();
+  expect(svg).toContain('fill="#ffffff"');
+  expect(svg).not.toMatch(/<rect|<circle|<style|prefers-color-scheme/);
+  // the PNG and the .ico are white lines on see-through: no pixel is opaque and dark
+  const darkPixels = await page.evaluate(async () => {
+    const img = new Image();
+    img.src = "/vaic-eye-white.png";
+    await img.decode();
+    const c = document.createElement("canvas");
+    c.width = img.width;
+    c.height = img.height;
+    const x = c.getContext("2d")!;
+    x.drawImage(img, 0, 0);
+    const d = x.getImageData(0, 0, c.width, c.height).data;
+    let n = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i + 3]! > 200 && d[i]! + d[i + 1]! + d[i + 2]! < 600) n++;
+    return { n, corner: d[3] };
+  });
+  expect(darkPixels).toEqual({ n: 0, corner: 0 });
   expect((await page.request.get("/eye.svg")).ok()).toBe(true);
 });
 
