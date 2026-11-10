@@ -23,6 +23,7 @@ import {
 import { DOC_TYPES, placeCode, placeName, TOPICS, topicWord } from "../lib/places.ts";
 import { Banner, Button, Confirm, Loading, toast, UNDO_MS } from "./ui.tsx";
 import { Select } from "./Select.tsx";
+import { SiteProfileView } from "./SiteProfile.tsx";
 
 export const SCOPES: Array<{ value: Scope; label: string }> = [
   { value: "always", label: "Always include" },
@@ -290,6 +291,7 @@ export function KnowledgeScreen() {
                     </span>
                   </div>
                   {item.warning ? <p className="mute">{item.warning}</p> : null}
+                  {item.site_profile ? <SiteProfileView sp={item.site_profile} /> : null}
                   {item.builtin && item.summary ? <p className="mute">{item.summary}</p> : null}
                   {!item.builtin && (item.status === "ready" || item.meta_source) ? (
                     <p className="kplace">

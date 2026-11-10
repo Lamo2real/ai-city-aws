@@ -17,6 +17,7 @@ from typing import Any
 from vaic.shared.aws import aws_city, require_env
 from vaic.shared.caps import default_settings
 from vaic.shared.clients import client
+from vaic.shared.knowledge.fetch import Fetched, fetch_link
 from vaic.shared.knowledge.haiku import KnowledgeModel
 from vaic.shared.knowledge.pipeline import MediaClients, Pipeline
 from vaic.shared.knowledge.wiring import knowledge_from_env
@@ -27,6 +28,13 @@ from ._runtime import run
 _pipeline: Pipeline | None = None
 _sfn: Any = None
 _RAW_KEY = re.compile(r"^raw/(k-[A-Za-z0-9_-]{12})/[^/]+$")
+
+
+def fetch_site_asset(url: str, max_bytes: int) -> Fetched:
+    """A site profile's stylesheet, logo or extra page: https only, the address guard, tighter caps (§16)."""
+    from vaic.shared.knowledge.site_profile import ASSET_TIMEOUT_S
+
+    return fetch_link(url, max_bytes=max_bytes, timeout_s=ASSET_TIMEOUT_S, https_only=True)
 
 
 def start_run(event: dict[str, Any], sfn: Any, state_machine_arn: str) -> dict[str, Any]:
@@ -63,6 +71,7 @@ async def _build() -> Pipeline:
         kb=k.kb,
         bus=city.bus,
         model=model,
+        fetch_asset=fetch_site_asset,
         media=MediaClients(
             mediaconvert=client(city.session, "mediaconvert"),
             transcribe=client(city.session, "transcribe"),

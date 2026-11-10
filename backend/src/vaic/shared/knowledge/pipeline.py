@@ -25,8 +25,8 @@ from .documents import (
     pdf_page_texts,
     split_text,
 )
-from .extract import Extraction
-from .fetch import Fetched, decode_text, fetch_link, html_to_text
+from .extract import Entity, Extraction, Relationship
+from .fetch import Fetched, LinkRefused, decode_text, fetch_link, html_to_text
 from .haiku import KnowledgeModel
 from .jurisdiction import META_FIELDS, hints_from_name
 from .kb import FAILED as KB_FAILED
@@ -34,7 +34,18 @@ from .kb import INDEXED as KB_INDEXED
 from .kb import KnowledgeBase
 from .model import item_metadata, metadata_doc
 from .routing import TRANSCRIBE_FORMAT, extension, name_for_download, route_file, route_key
-from .service import updated_event
+from .service import KnowledgeService, updated_event
+from .site_profile import (
+    AssetFetch,
+    brand_graph,
+    canonical_url,
+    capture_site,
+    clean_profile,
+    fallback_profile,
+    model_input,
+    record,
+    to_markdown,
+)
 from .store import KnowledgeStore
 from .transcript import transcript_to_text
 
@@ -88,6 +99,8 @@ class Pipeline:
     model: KnowledgeModel | None
     media: MediaClients = field(default_factory=MediaClients)
     fetch: Callable[[str], Fetched] = fetch_link
+    fetch_asset: AssetFetch | None = None
+    """A site profile's stylesheets, logo and extra pages (url, byte cap); by default ``fetch`` with the cap checked."""
     clock_ms: Callable[[], int] = field(default=lambda: int(time.time() * 1000))
 
     async def run(self, event: dict[str, Any]) -> dict[str, Any]:
@@ -131,12 +144,41 @@ class Pipeline:
             keys.append(key)
         return await self._set(item_id, {"normalized_keys": keys})
 
-    async def _write_text(self, item: dict[str, Any], stem: str, text: str) -> dict[str, Any]:
+    @staticmethod
+    def _text_files(stem: str, text: str) -> list[tuple[str, bytes, str]]:
         parts = split_text(text, MAX_NORMALIZED_PART_BYTES)
         names = [f"{stem}.md"] if len(parts) == 1 else [f"{stem}-part{n}.md" for n in range(1, len(parts) + 1)]
-        return await self._write_normalized(
-            item, [(n, p.encode(), "text/markdown; charset=utf-8") for n, p in zip(names, parts, strict=True)]
-        )
+        return [(n, p.encode(), "text/markdown; charset=utf-8") for n, p in zip(names, parts, strict=True)]
+
+    async def _write_text(self, item: dict[str, Any], stem: str, text: str) -> dict[str, Any]:
+        return await self._write_normalized(item, self._text_files(stem, text))
+
+    # ---------- site profile (§16) ----------
+    def _asset(self, url: str, cap: int) -> Fetched:
+        if self.fetch_asset:
+            return self.fetch_asset(url, cap)
+        got = self.fetch(url)
+        if len(got.body) > cap:
+            raise LinkRefused("That file is larger than the site profile allows.")
+        return got
+
+    async def _site_profile(self, item: dict[str, Any], url: str, html: str, text: str, title: str) -> str:
+        """The page's design and content as a profile on the item (``site_profile``, ``brand``) and as markdown
+        for the knowledge base. Never fails the item: the page text is stored either way."""
+        try:
+            cap = await asyncio.to_thread(capture_site, url, html, text, self._asset, title)
+            profile: dict[str, Any] | None = None
+            if self.model:
+                try:
+                    profile = clean_profile(await self.model.site_profile(model_input(cap, text)), cap)
+                except Exception as err:  # a busy or paused model: the extracted facts still make a profile
+                    log("warn", "knowledge.site_profile_model", item=item["id"], error=type(err).__name__)
+            rec = record(cap, profile or fallback_profile(cap), self.store.now_iso())
+            await self._set(item["id"], {"site_profile": rec, "brand": cap.brand})
+            return to_markdown(rec, cap.pages)
+        except Exception as err:
+            log("warn", "knowledge.site_profile_failed", item=item["id"], error=type(err).__name__)
+            return ""
 
     def _need_model(self) -> KnowledgeModel:
         if not self.model:
@@ -166,7 +208,14 @@ class Pipeline:
             title, text = ("", body) if ct == "text/plain" else html_to_text(body)
             new_title = item["title"] if item["title"] != url or not title else title[:200]
             item = await self._set(item["id"], {"title": new_title, "content_type": ct or "text/html"})
-            await self._write_text(item, "page", f"# {new_title}\n\nSource: {got.url}\n\n{text}")
+            page = f"# {new_title}\n\nSource: {got.url}\n\n{text}"
+            files = self._text_files("page", page)
+            if ct != "text/plain" and got.url.startswith("https://"):
+                profile_md = await self._site_profile(item, got.url, body, text, title)
+                if profile_md:
+                    item = await self.store.require_item(item["id"])
+                    files += [("site-profile.md", profile_md.encode(), "text/markdown; charset=utf-8")]
+            await self._write_normalized(item, files)
             return {"kind": "text", "convert": False, "normalized": True}
         key = f"work/{item['id']}/fetched/{name}"
         await self.blobs.put(key, got.body, ct or "application/octet-stream")
@@ -378,6 +427,8 @@ class Pipeline:
             if isinstance(summary, BaseException) and not isinstance(summary, ValueError):
                 raise summary
             warnings.append("The summary could not be made.")
+        if item.get("site_profile"):
+            ex = with_brand(ex if isinstance(ex, Extraction) else None, item["site_profile"]) or ex
         if isinstance(ex, Extraction):
             await self.store.write_graph(item["id"], ex)
         else:
@@ -455,7 +506,37 @@ class Pipeline:
 
     async def _finish(self, e: dict[str, Any]) -> dict[str, Any]:
         await self._set(e["item"]["id"], {"status": "ready", "error": None}, announce=True)
+        await self._replace_older(e["item"])
         return {"status": "ready"}
+
+    async def _replace_older(self, item: dict[str, Any]) -> None:
+        """Re-adding a link refreshes it (§16): once the new copy is ready, older items of the same link go."""
+        if not str(item.get("raw_key", "")).endswith("/link.json") or not item.get("source"):
+            return
+        same = canonical_url(str(item["source"]))
+        svc = KnowledgeService(self.store, self.blobs, self.bus, self.kb)
+        for old in await self.store.list_items():
+            if (
+                old["id"] != item["id"]
+                and str(old.get("raw_key", "")).endswith("/link.json")
+                and old.get("source")
+                and canonical_url(str(old["source"])) == same
+                and str(old.get("created_at", "")) <= str(item.get("created_at", ""))
+            ):
+                try:
+                    await svc.delete(old["id"])
+                    await self.bus.put(
+                        {
+                            "type": "knowledge.updated",
+                            "id": old["id"],
+                            "status": "deleted",
+                            "title": old.get("title", ""),
+                            "scope": old["scope"],
+                            "kind": old["kind"],
+                        }
+                    )
+                except Exception as err:
+                    log("warn", "knowledge.refresh_delete_failed", item=old["id"], error=type(err).__name__)
 
     async def _mark_unsupported(self, e: dict[str, Any]) -> dict[str, Any]:
         await self._set(
@@ -473,6 +554,22 @@ class Pipeline:
             return {"item_id": item_id, "status": "gone"}
         await self._set(item_id, {"status": "failed", "error": plain_error(error)}, announce=True)
         return {"item_id": item_id, "status": "failed"}
+
+
+def with_brand(ex: Extraction | None, rec: dict[str, Any]) -> Extraction | None:
+    """The brand's own nodes first (kept apart per brand, §16), then the model's; at most 50 entities."""
+    try:
+        ents, rels = brand_graph(rec)
+    except (KeyError, TypeError):
+        return ex
+    base = ex or Extraction()
+    names = {e.name.lower() for e in base.entities}
+    extra = [Entity.model_validate(x) for x in ents if x["name"].lower() not in names]
+    merged = [*extra, *base.entities][:50]
+    kept = {e.name.lower() for e in merged}
+    new_rels = [Relationship(source=a, relation=r, target=b) for a, r, b in rels]
+    all_rels = [r for r in [*new_rels, *base.relationships] if r.source.lower() in kept and r.target.lower() in kept]
+    return Extraction(summary=base.summary, entities=merged, relationships=all_rels)
 
 
 _OURS = ("LinkRefused", "MediaJobFailed", "IngestFailed", "Unsupported")

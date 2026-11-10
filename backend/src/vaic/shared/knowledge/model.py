@@ -72,6 +72,8 @@ def kb_metadata(item_id: str, scope: str, kind: str, item: dict[str, Any] | None
         for k in ("topic", "doc_type", "language"):
             if item.get(k):
                 out[k] = str(item[k])
+        if item.get("brand"):
+            out["brand"] = str(item["brand"])  # the tenant key of a site profile (§16)
     return out
 
 

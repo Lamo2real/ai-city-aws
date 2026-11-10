@@ -129,6 +129,18 @@ class KnowledgeService:
         except LinkRefused as e:
             raise KnowledgeError(str(e)) from e
         url = url.strip()
+        if scope is None:
+            # Re-adding a link refreshes it (§16): the new copy keeps the scope the owner gave the old one.
+            from .site_profile import canonical_url
+
+            same = canonical_url(url)
+            for old in await self.store.list_items():
+                if (
+                    str(old.get("raw_key", "")).endswith("/link.json")
+                    and canonical_url(str(old.get("source", ""))) == same
+                ):
+                    scope = old.get("scope")
+                    break
         item = await self._new(
             "link", check_title(title, url), url, "text/uri-list", len(url), check_scope(scope), "link.json"
         )

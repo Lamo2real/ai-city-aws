@@ -131,25 +131,38 @@ class SearchResult:
         return "\n".join([DATA_HEADER, *self.blocks()])
 
 
-def _usable(item: dict[str, Any] | None, scopes: list[Scope], market: str | None = None) -> bool:
+def brand_filter(brand: str) -> dict[str, Any]:
+    """One brand's items only (§16): its site profile and pages, never another tenant's."""
+    return {"equals": {"key": "brand", "value": brand}}
+
+
+def _usable(
+    item: dict[str, Any] | None, scopes: list[Scope], market: str | None = None, brand: str | None = None
+) -> bool:
     if item is None or item.get("status") != "ready" or item.get("scope") not in scopes:
+        return False
+    if brand is not None and item.get("brand") != brand:
         return False
     # The item record is the truth for where an item holds (the owner may have just changed it).
     return market is None or item_holds_in(item.get("jurisdictions"), market)
 
 
-async def _retrieve(kb: KnowledgeBase, query: str, n: int, scopes: list[Scope], market: str | None) -> list[Hit]:
+async def _retrieve(
+    kb: KnowledgeBase, query: str, n: int, scopes: list[Scope], market: str | None, brand: str | None = None
+) -> list[Hit]:
     """With a market: Retrieve filtered to it. When the filter finds nothing or Bedrock refuses it (an index
     that can't filter on the attribute yet), a wider unfiltered Retrieve; ``search`` keeps only the items whose
     record holds in the market, so the answer is never mixed, only possibly shorter."""
-    if market is None:
+    if market is None and brand is None:
         return await kb.retrieve(query, n, list(scopes))
+    parts = [*([market_filter(market)] if market else []), *([brand_filter(brand)] if brand else [])]
+    extra = parts[0] if len(parts) == 1 else {"andAll": parts}
     try:
-        hits = await kb.retrieve(query, n, list(scopes), market_filter(market))
+        hits = await kb.retrieve(query, n, list(scopes), extra)
     except Exception as e:
         if type(e).__name__ not in ("ValidationException", "ClientError"):
             raise
-        log("warn", "knowledge.market_filter_refused", market=market, error=type(e).__name__)
+        log("warn", "knowledge.filter_refused", market=market, brand=brand, error=type(e).__name__)
         hits = []
     if hits:
         return hits
@@ -163,8 +176,9 @@ async def _fetch(
     max_results: int,
     scopes: list[Scope],
     market: str | None = None,
+    brand: str | None = None,
 ) -> _Cached:
-    hits = await _retrieve(kb, query, min(30, max_results * 4), scopes, market)
+    hits = await _retrieve(kb, query, min(30, max_results * 4), scopes, market, brand)
     grouped: dict[str, list[Hit]] = {}
     for h in sorted(hits, key=lambda h: h.score, reverse=True):
         grouped.setdefault(h.item_id, []).append(h)
@@ -181,13 +195,15 @@ async def search(
     include_on_request: bool = False,
     cache: SearchCache | None = None,
     market: str | None = None,
+    brand: str | None = None,
 ) -> SearchResult:
-    """``market``: only items that hold there (§15): the market, its parent regions and ``global``."""
+    """``market``: only items that hold there (§15): the market, its parent regions and ``global``.
+    ``brand``: only that brand's items (§16), its site profile and pages."""
     scopes = allowed_scopes(include_on_request)
-    key = (query.strip(), include_on_request, max_results, market)
+    key = (query.strip(), include_on_request, max_results, market, brand)
     cached = cache.get(key) if cache is not None else None
     if cached is None:
-        cached = await _fetch(kb, store, query, max_results, scopes, market)
+        cached = await _fetch(kb, store, query, max_results, scopes, market, brand)
         if cache is not None:
             cache.put(key, cached)
     ex = cached.expansion
@@ -197,7 +213,7 @@ async def search(
     out = SearchResult()
     for item_id, hs in cached.groups:
         item = records.get(item_id)
-        if _usable(item, scopes, market):
+        if _usable(item, scopes, market, brand):
             assert item is not None
             out.items.append((item, [h.text[:SNIPPET_CHARS] for h in hs[:SNIPPETS_PER_ITEM]]))
             if len(out.items) >= max_results:
@@ -205,14 +221,14 @@ async def search(
     hit_ids = {item["id"] for item, _ in out.items}
     for i in candidates:
         item = records.get(i)
-        if i not in hit_ids and _usable(item, scopes, market) and item and item.get("summary"):
+        if i not in hit_ids and _usable(item, scopes, market, brand) and item and item.get("summary"):
             out.related_items.append(item)
             if len(out.related_items) >= MAX_RELATED_ITEMS:
                 break
     if hit_ids:
         for r in ex.rels:
             # A relationship is shown only when the item it came from may be shown now.
-            if not _usable(records.get(r["item"]), scopes, market):
+            if not _usable(records.get(r["item"]), scopes, market, brand):
                 continue
             line = f"related: {_attr(r['from'])} —{_attr(r['rel'])}→ {_attr(r['to'])} (item {_attr(r['item'])})"
             if line not in out.related_lines:
@@ -257,9 +273,13 @@ async def search_markets(
     max_results: int = 5,
     include_on_request: bool = False,
     cache: SearchCache | None = None,
+    brand: str | None = None,
 ) -> str:
     """One filtered search per market, returned as separate ``<market>`` sections (§15)."""
-    results = [await search(kb, store, query, max_results, include_on_request, cache=cache, market=m) for m in markets]
+    results = [
+        await search(kb, store, query, max_results, include_on_request, cache=cache, market=m, brand=brand)
+        for m in markets
+    ]
     await label_status(store, results, year)
     parts = [DATA_HEADER, MARKETS_HEADER]
     for m, r in zip(markets, results, strict=True):

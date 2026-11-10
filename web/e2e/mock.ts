@@ -371,6 +371,43 @@ export async function mockBackend(
         .sort((x, y) => Number(y.year) - Number(x.year))[0];
       return newer ? { ...a, superseded_by: newer.id } : a;
     });
+  /** A link's brand and site profile, as the real pipeline reads it from the site's HTML and CSS (§16). */
+  const siteProfile = (i: Record<string, unknown>) => {
+    const host = new URL(String(i.source)).hostname.replace(/^www\./, "");
+    Object.assign(i, {
+      brand: host,
+      title: "Acme Rockets | Launch anything",
+      site_profile: {
+        url: i.source,
+        brand: host,
+        captured_at: at(),
+        profile: {
+          name: "Acme Rockets",
+          kind: "company",
+          what_it_is: "Acme builds small reusable rockets for research teams.",
+          audience: "University and lab research teams",
+          offerings: ["Rocket S", "Rocket M", "Launch service"],
+          key_facts: ["Founded 2019 in Gothenburg"],
+          palette: [
+            { role: "primary", hex: "#ff5a1f", note: "buttons and links" },
+            { role: "accent", hex: "#1428a0" },
+            { role: "background", hex: "#ffffff" },
+            { role: "text", hex: "#1a1a2e" },
+          ],
+          typography: { heading: "Space Grotesk", body: "Inter", notes: "bold geometric headings, 16px body" },
+          tone_of_voice: "Confident, short sentences, second person.",
+          layout_patterns: ["Large hero with one button", "Rounded corners 12px", "Soft shadows"],
+        },
+        design: { colors: { primary: "#ff5a1f" }, fonts: { heading: "Space Grotesk", body: "Inter" }, scheme: "light" },
+        pages: [{ url: `https://${host}/about`, title: "About Acme" }],
+        logo_data:
+          "data:image/svg+xml;base64," +
+          btoa(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle cx="5" cy="5" r="5" fill="#ff5a1f"/></svg>',
+          ),
+      },
+    });
+  };
   /** The pipeline, faked: processing at once, ready a moment later (unsupported for odd files). */
   const pipeline = (i: Record<string, unknown>) => {
     i.status = "processing";
@@ -379,6 +416,7 @@ export async function mockBackend(
       if (!kItem(i.id as string)) return;
       i.status = i.kind === "other" ? "unsupported" : "ready";
       if (i.status === "ready") detect(i);
+      if (i.status === "ready" && i.kind === "link" && String(i.source).startsWith("https://")) siteProfile(i);
       kEvent(i);
     }, 1200);
   };

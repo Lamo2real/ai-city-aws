@@ -3171,6 +3171,69 @@ a.pin:hover {
 .kitem-old {
   border-style: dashed;
 }
+/* A link's brand and site profile (docs/KNOWLEDGE.md §16) */
+.siteprofile {
+  margin-top: var(--s2);
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--edge);
+  border-radius: var(--rg-s);
+  background: var(--glass-deep);
+}
+.siteprofile summary {
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+  cursor: pointer;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.siteprofile h4 {
+  margin: var(--s3) 0 var(--s1);
+  font-size: inherit;
+}
+.siteprofile p,
+.siteprofile ul {
+  margin: 0 0 var(--s1);
+  overflow-wrap: anywhere;
+}
+.sp-head {
+  display: flex;
+  gap: var(--s3);
+  align-items: flex-start;
+  margin-top: var(--s2);
+}
+.sp-logo {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  border-radius: var(--r);
+  background: #ffffff;
+  padding: var(--s1);
+  flex: none;
+}
+.sp-swatches {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--s2);
+}
+.sp-swatches li {
+  display: flex;
+  gap: var(--s2);
+  align-items: center;
+}
+.sp-swatch {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: var(--r);
+  border: 1px solid var(--edge-2);
+}
+.sp-foot {
+  margin-top: var(--s2);
+}
 .tag-old {
   background: var(--glass-deep);
   color: var(--gtext);

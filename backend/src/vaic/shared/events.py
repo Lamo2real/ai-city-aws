@@ -415,11 +415,12 @@ class SupportTicket(_E):
 
 
 class KnowledgeUpdated(_E):
-    """A knowledge item's status or scope changed (``docs/KNOWLEDGE.md`` §6)."""
+    """A knowledge item's status or scope changed (``docs/KNOWLEDGE.md`` §6). ``deleted``: an older copy of a link
+    the owner added again was replaced by the new one (§16)."""
 
     type: Literal["knowledge.updated"]
     id: str
-    status: Literal["uploading", "processing", "ready", "failed", "unsupported"]
+    status: Literal["uploading", "processing", "ready", "failed", "unsupported", "deleted"]
     title: str
     scope: Literal["always", "relevant", "on_request"]
     kind: Literal["text", "document", "image", "audio", "video", "link", "other"]

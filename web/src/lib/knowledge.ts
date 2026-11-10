@@ -141,6 +141,11 @@ class KnowledgeStore {
   /** WebSocket events; only "knowledge.updated" is ours. */
   event(e: { type: string; [k: string]: unknown }) {
     if (e.type !== "knowledge.updated" || typeof e.id !== "string") return;
+    if (e.status === "deleted") {
+      // An older copy of a link the owner added again (§16): the new copy replaces it.
+      this.dispatch({ type: "removed", id: e.id });
+      return;
+    }
     const before = this.state.items.find((x) => x.id === e.id);
     this.dispatch(e as unknown as KnowledgeAction);
     // The always-include budget is counted by the server: read it again when it may have changed. A finished item

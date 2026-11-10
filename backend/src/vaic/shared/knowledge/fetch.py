@@ -189,16 +189,23 @@ def fetch_link(
     resolve: Resolver = system_resolver,
     transport: Transport = pinned_transport,
     clock: Callable[[], float] = time.monotonic,
+    max_bytes: int = MAX_BYTES,
+    timeout_s: float = TIMEOUT_S,
+    https_only: bool = False,
 ) -> Fetched:
+    """``max_bytes``/``timeout_s``/``https_only``: the tighter rules for a site profile's stylesheets, logo and extra
+    pages (every hop, redirects included, is checked again)."""
     start = clock()
     current = url
     for _ in range(MAX_REDIRECTS + 1):
         scheme, host, port, path = check_url(current)
+        if https_only and scheme != "https":
+            raise LinkRefused("Only https links are read for a site profile.")
         ip = safe_address(host, port, resolve)
-        left = TIMEOUT_S - (clock() - start)
+        left = timeout_s - (clock() - start)
         if left <= 0:
             raise LinkRefused("That page took longer than 30 seconds.")
-        r = transport(scheme, host, ip, port, path, left, MAX_BYTES)
+        r = transport(scheme, host, ip, port, path, left, max_bytes)
         if r.status in (301, 302, 303, 307, 308):
             loc = r.headers.get("location")
             if not loc:

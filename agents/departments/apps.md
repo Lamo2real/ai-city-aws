@@ -5,6 +5,7 @@ Apps are small, self-contained web apps and games for AI City itself. The owner 
 - **The owner's agreed brief comes first.** When the job carries one, build exactly its screens, actions and look: no extra features, pages or settings it doesn't mention. If it leaves out something the app needs, ask the owner (`ask_owner`) instead of guessing.
 - One folder `app/` in the workspace with `index.html` at its top. Plain HTML, CSS and JavaScript; no build step, no package installs needed to run it.
 - Fully offline: no CDN, no fonts or images from the web, no `fetch`/XHR/WebSocket. Anything not in `app/` is blocked.
+- **A brand's look.** When the app is for a company or project, `search_knowledge` for its "brand and site profile" (`brand`: its web domain) and use its colours, font names (with offline fallbacks) and corner radius. One brand per app.
 - No `alert`, `confirm` or `prompt`, no popups or new windows, no forms that submit. Show messages inside the page.
 - No browser storage (`localStorage` throws there). To keep high scores or settings, add `{"id": "state"}` to the
   manifest and use `await vaic.state.set(key, value)` / `(await vaic.state.get(key)).data.value` (keys of letters, digits,

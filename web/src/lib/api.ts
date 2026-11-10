@@ -66,6 +66,50 @@ export interface KnowledgeItem {
   folder?: string;
   /** A newer item for the same place and topic (this one stays, marked). */
   superseded_by?: string;
+  /** The site's tenant key (its domain) when a link's brand and site profile was captured (§16). */
+  brand?: string;
+  site_profile?: SiteProfile;
+}
+export interface PaletteColor {
+  role: string;
+  hex: string;
+  note?: string;
+}
+/** A link's design and content, read from its HTML and CSS (docs/KNOWLEDGE.md §16). All of it is site data. */
+export interface SiteProfile {
+  url: string;
+  brand: string;
+  captured_at: string;
+  profile: {
+    name: string;
+    kind: string;
+    what_it_is?: string;
+    audience?: string;
+    offerings?: string[];
+    key_facts?: string[];
+    palette?: PaletteColor[];
+    typography?: { heading?: string; body?: string; notes?: string };
+    tone_of_voice?: string;
+    layout_patterns?: string[];
+    store?: { categories?: string[]; price_range?: string };
+    paper?: { title?: string; authors?: string[]; abstract?: string; findings?: string[] };
+    docs?: { product?: string; concepts?: string[] };
+  };
+  design: {
+    colors: {
+      primary?: string | null;
+      accent?: string | null;
+      background?: string | null;
+      text?: string | null;
+      most_used?: string[];
+    };
+    fonts: { heading?: string; body?: string; families?: string[] };
+    logo_url?: string;
+    scheme?: string;
+    radius?: string[];
+  };
+  pages?: Array<{ url: string; title: string }>;
+  logo_data?: string;
 }
 export interface KnowledgePlace {
   jurisdictions?: string[];

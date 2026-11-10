@@ -11,6 +11,7 @@ import io
 import json
 import re
 from dataclasses import dataclass
+from typing import Any
 
 from ..models import resolve_role_from_env
 from ..turn import GateDeps, GatedTurn, run_gated_turn
@@ -121,6 +122,15 @@ class KnowledgeModel:
         if not isinstance(data, dict):
             raise ValueError("the metadata reply is not an object")
         return clean_detected(data)
+
+    async def site_profile(self, data: str) -> dict[str, Any]:
+        """The brand and site profile (§16) as the model wrote it; ``site_profile.clean_profile`` validates it.
+
+        Raises ``ValueError`` when the reply is not a JSON object.
+        """
+        from .site_profile import parse_model_profile
+
+        return parse_model_profile(await self._call(knowledge_prompt("site-profile"), data, max_tokens=3000))
 
     async def describe_image(self, title: str, data: bytes) -> str:
         img, fmt = fit_image(data)
