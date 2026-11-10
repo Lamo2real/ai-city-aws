@@ -1485,7 +1485,9 @@ test("the logo is the owner's eye with no background, in the top bar and the bro
   // the tab icon: one SVG with no background shape that switches colour with the browser's theme
   // (at new file names, so the old amber icon a browser cached is dropped: decision 173), and the tab says VAIC
   await expect(page).toHaveTitle("VAIC");
-  await expect(page.locator('link[rel="icon"]').first()).toHaveAttribute("href", "/vaic-icon.svg");
+  await expect(page.locator('link[rel="icon"][type="image/svg+xml"]')).toHaveAttribute("href", "/vaic-icon.svg");
+  // a real favicon.ico (Safari asks for it on its own), not the page: decision 193
+  expect((await page.request.get("/favicon.ico")).headers()["content-type"]).toMatch(/icon/);
   for (const png of ["/vaic-icon-dark.png", "/vaic-icon-light.png"])
     expect((await page.request.get(png)).headers()["content-type"]).toContain("image/png");
   expect((await page.request.get("/favicon.svg")).headers()["content-type"] ?? "").not.toContain("svg");
