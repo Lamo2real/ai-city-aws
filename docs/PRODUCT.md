@@ -238,6 +238,7 @@ Terraform (offline only): `fmt -check -recursive`, `init -backend=false`, `valid
 ## 10. Feature log (newest first)
 | Date | Feature | Notes |
 |---|---|---|
+| 2026-11-10 | One eye on the sign-in card | The sign-in card shows only the logo (the owner's eye and VAIC), not a second animated eye beside it (decision 186). |
 | 2026-11-10 | Activity folds away | Click Activity's title in the City to hide or show it; the choice is remembered on this device (decision 184). |
 | 2026-11-10 | Stop VAIC's answer | The owner: "can you add a cancel button when a user wants to cancel a message they have sent in the chat and just make you drop it just like chatgpt has it". While VAIC thinks or writes, Send turns into Stop (Esc too) in the Chat screen and the iPhone app; the answer is dropped at once and in VAIC's runtime, the message stays marked stopped with Edit and send again, speech stops; tools already called are named, and work handed to the team keeps going (decision 183). Not tested against real Bedrock or on a real iPhone. |
 | 2026-11-10 | Fable roles back on Fable 5.1 | The account cannot subscribe to Fable 5.2 (AWS Marketplace is not allowed for the owner's role either), so the Orchestrator, managers, Chief of Staff, executives and the Media, Research and Legal workers run on Fable 5.1 again, which the account already has; Opus 5.5 stays the fallback (decision 182). |

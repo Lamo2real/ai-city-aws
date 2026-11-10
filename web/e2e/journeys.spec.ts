@@ -61,6 +61,14 @@ test("first sign-in on our own screens: temporary password, own password, authen
   await expect(page.getByRole("region", { name: "City view" })).toBeVisible(); // signed in, the City opens first
 });
 
+test("the sign-in card shows the logo with one eye, not two", async ({ page }) => {
+  await mockBackend(page, { signedIn: false });
+  await page.goto("/");
+  const brand = page.locator(".signin-brand");
+  await expect(brand.locator(".wm-eye")).toHaveCount(1);
+  await expect(brand.locator(".eyes")).toHaveCount(0);
+});
+
 test("later sign-ins: a wrong password says so plainly; then password and code", async ({ page }) => {
   await mockBackend(page, { signedIn: false });
   await page.goto("/#/vaic");

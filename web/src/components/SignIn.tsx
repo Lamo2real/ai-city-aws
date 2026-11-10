@@ -7,7 +7,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { PASSWORD_RULES, auth, authProblem, passwordProblem, type SignInStep } from "../lib/auth.ts";
 import { config } from "../lib/config.ts";
-import { Eyes } from "./Eyes.tsx";
 import { Banner, Button } from "./ui.tsx";
 import { Wordmark } from "./Wordmark.tsx";
 
@@ -78,7 +77,6 @@ function Card(p: { title: string; step?: number; children: ReactNode }) {
     <main className="signin" aria-labelledby="signin-title">
       <div className="signin-card">
         <div className="signin-brand">
-          <Eyes presence="idle" small />
           <Wordmark />
         </div>
         {p.step ? (
