@@ -2,7 +2,7 @@
 // a sign-in button, a secure key field, the app-password form, and the add-connector approval.
 // Keys and passwords go straight to the API in their own request; they never enter the chat or the store.
 import { useState, type FormEvent } from "react";
-import { decideApproval } from "../lib/actions.ts";
+import { decideApproval, sendMessage } from "../lib/actions.ts";
 import { api, ApiError } from "../lib/api.ts";
 import { APP_PASSWORD_HOWTO, IMAP_PRESETS, sendConnectorKey, sendImapForm, type ImapForm } from "../lib/connect.ts";
 import { rememberConnect } from "../lib/connectReturn.ts";
@@ -354,6 +354,48 @@ function ApproveCard(p: { approvalId: string; action: string; reason: string; id
   );
 }
 
+type AskProps = Extract<ConnectCardState, { kind: "ask" }>;
+const SETTLED = { saved: "Saved.", discarded: "Not saved: nothing changed.", failed: "Not saved." } as const;
+
+/** VAIC's question with tappable answers; for a staged change, what will change and Yes / No (decision 206). A tap
+ * is sent as the owner's message, so typing or saying the answer works the same. */
+export function AskCard(p: AskProps) {
+  return (
+    <div className="connect-card ask-card" role="group" aria-label={p.title ?? p.question}>
+      {p.title ? <p className="ask-title">{p.title}</p> : null}
+      {p.lines?.length ? (
+        <ul className="ask-lines">
+          {p.lines.map((l) => (
+            <li key={l}>{l}</li>
+          ))}
+        </ul>
+      ) : null}
+      {p.detail ? <p className="mute">{p.detail}</p> : null}
+      <p>{p.question}</p>
+      {p.result ? (
+        <p className={p.result === "saved" ? "ask-done" : "mute"} role="status">
+          {SETTLED[p.result]}
+        </p>
+      ) : p.answered ? (
+        <p className="mute" role="status">{`${p.answered}: saving…`}</p>
+      ) : (
+        <div className="choices">
+          {p.options.map((o, i) => (
+            <button
+              key={o}
+              type="button"
+              className={`choice choice-big${i === 0 && p.changeId ? " choice-yes" : ""}`}
+              onClick={() => void sendMessage(o, { answer: o })}
+            >
+              {o}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Every connect card, in the order they arrived. Rendered under the chat by VaicScreen. */
 export function ChatCards({ cards }: { cards: ConnectCardState[] }) {
   const cat = useCatalog();
@@ -364,6 +406,7 @@ export function ChatCards({ cards }: { cards: ConnectCardState[] }) {
         if (c.kind === "approve") return <ApproveCard key={c.id} {...c} />;
         if (c.kind === "done") return <DoneCard key={c.id} title={c.title} />;
         if (c.kind === "problem") return <ProblemCard key={c.id} title={c.title} text={c.text} />;
+        if (c.kind === "ask") return <AskCard key={c.id} {...c} />;
         const signup = serviceFor(cat, c.targetId, c.title.replace(/^(Sign in to|Add the key for) /, ""))?.signup;
         if (c.kind === "key")
           return (

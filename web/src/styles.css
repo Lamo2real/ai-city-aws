@@ -4059,6 +4059,24 @@ summary,
 .choice-big {
   font-weight: 800;
 }
+/* VAIC's Yes / No (or Add) card for a staged change in the main chat (decision 206). */
+.ask-card .ask-title {
+  font-weight: 800;
+}
+.ask-card .ask-lines {
+  margin: 0;
+  padding-left: var(--s4);
+  display: grid;
+  gap: var(--s1);
+  overflow-wrap: anywhere;
+}
+.ask-card .choice-yes {
+  background: var(--accent-fill);
+  color: var(--accent-ink);
+}
+.ask-card .ask-done {
+  font-weight: 700;
+}
 .newproj {
   width: min(560px, 100%);
 }
@@ -6404,8 +6422,7 @@ a.btn-primary.chat-file-dl,
   isolation: isolate;
   background:
     radial-gradient(120% 90% at 20% 15%, rgba(255, 214, 150, 0.55), transparent 60%),
-    radial-gradient(110% 90% at 85% 90%, rgba(150, 170, 255, 0.5), transparent 60%),
-    var(--glass-deep);
+    radial-gradient(110% 90% at 85% 90%, rgba(150, 170, 255, 0.5), transparent 60%), var(--glass-deep);
 }
 .thumb-glass > img {
   position: absolute;

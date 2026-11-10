@@ -42,8 +42,11 @@ Links like `#/settings/connectors` open that page in the app.
 - **"What I did"** under a reply shows the steps VAIC took.
 - **Ask VAIC to do it for you.** Anything you can set or change on any screen, VAIC can do when you ask: "switch to
   dark mode", "turn the CFO off", "set a $20 daily limit", "delete that document", "add a standing order…", "open my
-  connectors". It just does it and tells you what changed. The only exception is a password, key or token: VAIC opens
-  the page and you paste it there yourself, because secrets never go through the chat.
+  connectors", "add a skill called release notes", "set new workers per second to 2". VAIC prepares the change, shows
+  what will change in the chat and asks "Do you want to save these changes?" with **Yes** and **No** buttons (a skill
+  shows its card with **Add**); nothing is saved until you tap Yes, type it or say it, and No leaves everything as it
+  was. When several skills fit, VAIC shows them as choices to tap. The only exception is a password, key or token:
+  VAIC opens the page and you paste it there yourself, because secrets never go through the chat.
 
 ## The City
 - The map shows HQ (VAIC and the Orchestrator), one tower per department, and the houses where workers live. Workers

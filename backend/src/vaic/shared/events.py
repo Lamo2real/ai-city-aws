@@ -371,6 +371,21 @@ class VaicQuestion(_E):
     conversation: str
     question: str
     options: list[str]
+    id: str = ""
+    """Set when the question confirms a staged change (decision 206); ``vaic.change`` with this id settles it."""
+    title: str = ""
+    lines: list[str] = []
+    """What will change, one line each ("Per goal (one manager's team): 64 → 65"), or what a skill does."""
+    detail: str = ""
+
+
+class VaicChange(_E):
+    """A change VAIC staged in the chat was saved or discarded (decision 206): the HUD closes its Yes/No card."""
+
+    type: Literal["vaic.change"]
+    conversation: str = "main"
+    id: str
+    saved: bool
 
 
 class HudAction(_E):
@@ -496,6 +511,7 @@ CityEventModel = Annotated[
     | VaicReply
     | VaicStopped
     | VaicQuestion
+    | VaicChange
     | HudAction
     | AppSubmitted
     | AppDraft

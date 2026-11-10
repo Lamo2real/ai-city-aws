@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-import math
 import os
 import re
 from collections.abc import Awaitable, Callable
@@ -37,7 +36,7 @@ from vaic.shared.apps import (
     update_app,
 )
 from vaic.shared.aws import aws_city
-from vaic.shared.caps import validate_caps
+from vaic.shared.caps import settings_patch
 from vaic.shared.chief_of_staff import CHIEF, away_summary, record_decision
 from vaic.shared.chief_of_staff import status as chief_status
 from vaic.shared.clients import client
@@ -53,7 +52,7 @@ from vaic.shared.hierarchy.departments import DepartmentError, build_department,
 from vaic.shared.hierarchy.factory import Factory
 from vaic.shared.hierarchy.queue import Queue, WorkMessage
 from vaic.shared.hierarchy.tasks import DONE_OR_GONE, cancel_task, job_rows
-from vaic.shared.ids import department_key, new_id
+from vaic.shared.ids import new_id
 from vaic.shared.knowledge.builtin import ensure_builtin_guide, remove_legacy_copies
 from vaic.shared.knowledge.service import KnowledgeError, KnowledgeService, NotFound
 from vaic.shared.knowledge.wiring import knowledge_from_env
@@ -329,19 +328,6 @@ def _str(v: Any, name: str, max_len: int = 4000) -> str:
     if len(v) > max_len:
         raise BadRequest(f"{name} is too long.")
     return v.strip()
-
-
-def _is_whole(v: Any) -> bool:
-    return isinstance(v, int | float) and not isinstance(v, bool) and math.isfinite(v) and float(v).is_integer()
-
-
-def _as_number(v: Any) -> float:
-    if isinstance(v, bool):
-        return float(v)
-    try:
-        return float(v)
-    except (TypeError, ValueError):
-        return math.nan
 
 
 async def _sweep(d: ApiDeps) -> None:
@@ -1318,55 +1304,10 @@ def _connectors(d: ApiDeps) -> ConnectorsApi:
     return d.connectors or ConnectorsApi(ConnectorStore(d.ledger.table, d.ledger.now), d.bus)
 
 
-_CAP_KEYS = ("daily_global_usd", "monthly_budget_usd", "daily_department_usd")
-_WHOLE_KEYS = (
-    "max_workers_per_goal",
-    "max_concurrent_workers_per_department",
-    "max_concurrent_workers_global",
-    "max_live_workers_city",
-    "max_open_jobs",
-    "max_departments",
-    "max_new_sessions_per_second",
-    "worker_idle_release_minutes",
-)
-
-
 async def _put_settings(b: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
-    patch: dict[str, Any] = {k: b[k] for k in (*_CAP_KEYS, *_WHOLE_KEYS) if k in b}
-    if "profile_prefix" in b:
-        if str(b["profile_prefix"]) not in ("global", "eu", "us"):
-            raise BadRequest("Pick global, eu or us.")
-        patch["profile_prefix"] = b["profile_prefix"]
-    if isinstance(b.get("notify_push"), bool):
-        patch["notify_push"] = b["notify_push"]
-    if isinstance(b.get("first_run_done"), bool):
-        patch["first_run_done"] = b["first_run_done"]
-    if isinstance(b.get("chief_of_staff_enabled"), bool):
-        patch["chief_of_staff_enabled"] = b["chief_of_staff_enabled"]
-    if isinstance(b.get("autopilot"), bool):
-        patch["autopilot"] = b["autopilot"]
-    if isinstance(b.get("mail_access"), dict):
-        # Orchestrator and managers may read mail when the owner turns it on; workers never (decision 79).
-        ma = b["mail_access"]
-        if any(k not in ("orchestrator", "manager") or v not in ("none", "read") for k, v in ma.items()):
-            raise BadRequest("mail_access takes orchestrator and manager, each none or read.")
-        patch["mail_access"] = dict(ma)
-    # "integrations" (four dead switches, removed 2026-11-08) is ignored when an old client still sends it.
-    if isinstance(b.get("department_caps"), dict):
-        patch["department_caps"] = {department_key(k): _as_number(v) for k, v in b["department_caps"].items()}
-    bad = validate_caps({k: patch[k] for k in _CAP_KEYS if k in patch})
+    patch, bad = settings_patch(b, await d.settings())
     if bad:
         return problem(400, bad)
-    for k in _WHOLE_KEYS:
-        if k in patch and (not _is_whole(patch[k]) or patch[k] < 1):
-            return problem(400, f"{k.replace('_', ' ')} must be a whole number of at least 1.")
-    if patch.get("max_new_sessions_per_second", 0) > 25:
-        return problem(400, "New sessions per second can't go above AgentCore's limit of 25.")
-    cur = await d.settings()
-    daily = patch["daily_global_usd"] if "daily_global_usd" in patch else cur.get("daily_global_usd")
-    for v in (patch.get("department_caps") or {}).values():
-        if not math.isfinite(v) or v < 0 or (daily is not None and v > daily):
-            return problem(400, "A department cap must be $0 or more, and not above the daily cap if one is set.")
     await d.ledger.update_settings(patch)
     return reply(200, {"settings": await d.settings()})
 

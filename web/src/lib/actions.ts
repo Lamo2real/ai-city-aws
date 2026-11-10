@@ -58,10 +58,12 @@ export function keyBlocked(text: string): boolean {
   return true;
 }
 
-/** Sends a message to VAIC. `voice`: the owner said it (VAIC then answers aloud when speaking is "auto"). */
-export async function sendMessage(text: string, opts: { voice?: boolean } = {}) {
+/** Sends a message to VAIC. `voice`: the owner said it (VAIC then answers aloud when speaking is "auto"); `answer`:
+ * the owner tapped this answer on VAIC's question card. */
+export async function sendMessage(text: string, opts: { voice?: boolean; answer?: string } = {}) {
   const clean = text.trim();
   if (!clean || keyBlocked(clean)) return;
+  store.answerAsk(opts.answer); // a tapped answer, or the owner's own words instead of a button (decision 206)
   const line: ChatLine = {
     id: newLineId(),
     who: "owner",

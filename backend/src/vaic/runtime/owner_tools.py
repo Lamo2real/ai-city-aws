@@ -1,5 +1,10 @@
 """VAIC does anything the owner can do in AI City (the owner, 2026-11-09, decision 143).
 
+Since decision 206 (the owner, 2026-11-11) a change is staged first: ``city_api`` with PUT, POST or DELETE shows the
+owner what will change with Yes / No buttons in the chat ("Do you want to save these changes?") and saves nothing;
+``save_change`` saves or discards it on the owner's next message (a tap, typed words or speech). ``find_skill`` looks
+up the skill catalog: one match is staged as a skill card with Add, several are offered as choices.
+
 ``city_api`` runs any HUD route as the owner (read and write: settings, connectors, departments, knowledge, skills,
 standing orders, apps, mail, calendar…) through the API's own code and checks. ``hud_action`` does what lives on the
 owner's device rather than in the city: light or dark mode, opening a page. Both work only on the owner's own message,
@@ -8,11 +13,15 @@ so a document, email or worker report can never steer them.
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
-from vaic.shared import owner_api
+from vaic.shared import owner_api, skills_catalog
+from vaic.shared.caps import SETTING_KEYS, settings_patch
+from vaic.shared.events import now_iso
 from vaic.shared.hierarchy.actions import CityDeps
+from vaic.shared.skills import PK as SKILLS_PK
 
 from .tools import ToolSpec, TurnCtx, _obj, _s
 
@@ -22,11 +31,154 @@ NOT_OWNER = (
 )
 THEMES = ("light", "dark", "system")
 PAGE = re.compile(r"#/[\w/?=&.-]{0,120}")
+PENDING_PK = "VAIC_PENDING"
+"""One staged change per conversation (sk = the conversation); a newer one replaces it."""
+SAVE_QUESTION = "Do you want to save these changes?"
+SETTING_LABELS = {
+    "daily_global_usd": "Daily cap, all departments",
+    "daily_department_usd": "Daily cap per department",
+    "monthly_budget_usd": "Monthly cap",
+    "department_caps": "Daily caps by department",
+    "max_workers_per_goal": "Workers per goal (one manager's team)",
+    "max_concurrent_workers_per_department": "Workers per department",
+    "max_concurrent_workers_global": "Workers in total",
+    "max_live_workers_city": "Workers at work in the whole city",
+    "max_open_jobs": "Jobs running at once",
+    "max_departments": "Your own departments",
+    "max_new_sessions_per_second": "New workers per second",
+    "worker_idle_release_minutes": "Minutes before an idle worker goes home",
+    "notify_push": "Push notifications",
+    "chief_of_staff_enabled": "Chief of Staff",
+    "autopilot": "Autopilot",
+    "mail_access": "Mail access",
+    "profile_prefix": "Where models run",
+}
+LIMIT_KEYS = {k for k in SETTING_KEYS if k.startswith(("max_", "worker_")) or k.endswith(("_usd", "_caps"))}
+NOT_A_SETTING = (
+    "{keys} {verb} not a setting in Settings, so there is nothing to change. The settings are: "
+    + ", ".join(k for k in SETTING_KEYS if k != "first_run_done")
+    + ". Safety rules, IAM, the policy file and self-improvement are never settings."
+)
+
+
+def _show(v: Any, key: str) -> str:
+    if v is None:
+        return "no limit"
+    if isinstance(v, bool):
+        return "on" if v else "off"
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)
+    if key.endswith("_usd"):
+        return f"${v}"
+    if isinstance(v, dict):
+        return ", ".join(f"{k} {x}" for k, x in v.items()) or "none"
+    return str(v)
+
+
+def _norm(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
 
 
 def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
     if c.role != "vaic":
         return []
+
+    conv = c.conversation or "main"
+    staged_now: list[str] = []
+    """Ids staged in this turn: they are saved only on the owner's next message, never in the same turn."""
+
+    async def stage(
+        method: str, path: str, body: dict[str, Any] | None, summary: str, card: dict[str, Any] | None = None
+    ) -> str:
+        """Keeps the call for the owner's yes and puts the Yes/No card in the chat. Returns the tool's answer."""
+        p = owner_api.clean_path(path)
+        question, options = SAVE_QUESTION, ["Yes", "No"]
+        title, lines, detail = summary or f"{method} {p}", [], ""
+        if card is not None:
+            title, lines, detail = card["title"], card["lines"], card.get("detail", "")
+            question, options = card["question"], card["options"]
+        elif method == "PUT" and p == "/settings":
+            given = body or {}
+            unknown = [k for k in given if k not in SETTING_KEYS or k == "first_run_done"]
+            if unknown or not given:
+                return NOT_A_SETTING.format(
+                    keys=", ".join(unknown) or "An empty change", verb="are" if len(unknown) > 1 else "is"
+                )
+            cur = await d.settings()
+            patch, bad = settings_patch(given, cur)
+            if bad:
+                return f"Not staged, the setting would be refused: {bad} Tell the owner in one sentence."
+            same = [k for k in patch if cur.get(k) == patch[k]]
+            if len(same) == len(patch):
+                return "Those settings already have those values. Nothing to change; tell the owner."
+            lines = [
+                f"{SETTING_LABELS.get(k, k)}: {_show(cur.get(k), k)} → {_show(v, k)}"
+                for k, v in patch.items()
+                if k not in same
+            ]
+            body = {k: v for k, v in patch.items() if k not in same}
+            page = "Limits & spending" if all(k in LIMIT_KEYS for k in body) else "General"
+            title = summary or f"Settings → {page}"
+        elif method == "POST" and (m := re.fullmatch(r"/skills/catalog/([\w-]+)", p)):
+            e = skills_catalog.find(m.group(1))
+            if e is None:
+                return "That skill is not in the catalog. Use find_skill with the owner's words."
+            built = skill_card(e, body)
+            title, lines, detail, question, options = (
+                built["title"],
+                built["lines"],
+                built["detail"],
+                built["question"],
+                built["options"],
+            )
+        elif owner_api.destructive(method, path):
+            question, options = "Do you want to go ahead?", ["Yes", "No"]
+        pid = f"chg-{d.ledger.now_ms()}"
+        await d.ledger.table.put(
+            {
+                "pk": PENDING_PK,
+                "sk": conv,
+                "id": pid,
+                "method": method,
+                "path": path,
+                "body_json": json.dumps(body) if body is not None else "",
+                "title": title,
+                "lines": lines,
+                "at": now_iso(d.ledger.now()),
+            }
+        )
+        staged_now.append(pid)
+        await d.bus.put(
+            {
+                "type": "vaic.question",
+                "conversation": conv,
+                "question": question,
+                "options": options,
+                "id": pid,
+                "title": title[:120],
+                "lines": [x[:200] for x in lines][:12],
+                "detail": detail[:300],
+            }
+        )
+        said = "; ".join(lines) if lines else title
+        return (
+            f"Staged, NOT saved yet: {title} ({said}). The owner sees it with {options[0]} / {options[1]} buttons. "
+            f'Now say what will change in one short sentence, ask "{question}" and stop. On the owner\'s yes '
+            f"(a tap on {options[0]}, or typed or spoken) call save_change with answer yes; on no, answer no. If "
+            "they ask for something different instead, stage the new change (it replaces this one)."
+        )
+
+    def skill_card(e: dict[str, Any], body: dict[str, Any] | None) -> dict[str, Any]:
+        roles = (body or {}).get("roles")
+        who = f"For: {', '.join(map(str, roles))}." if isinstance(roles, list) and roles else "For every role."
+        depts = ", ".join(e.get("departments") or [])
+        return {
+            "title": f"Add the skill {e['title']}",
+            "lines": [e["description"]],
+            "detail": " ".join(x for x in (e.get("source", ""), f"({depts})" if depts else "", who) if x),
+            "question": "Add this skill?",
+            "options": ["Add", "Not now"],
+        }
 
     async def call(a: dict[str, Any]) -> str:
         if not c.from_owner:
@@ -37,14 +189,79 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         why = owner_api.refusal(method, path)
         if why:
             return why
-        if owner_api.destructive(method, path) and a.get("confirm") is not True:
-            return (
-                "This deletes or resets something. If the owner's message clearly asked for exactly this, call "
-                "again with confirm: true; otherwise ask them in one short question."
-            )
         body = a.get("body")
-        r = await d.owner_api({"method": method, "path": path, "body": body if isinstance(body, dict) else None})
+        body = body if isinstance(body, dict) else None
+        if method != "GET":
+            return await stage(method, path, body, str(a.get("summary") or "").strip()[:120])
+        r = await d.owner_api({"method": method, "path": path, "body": None})
         return owner_api.summarise(r, strip_links=owner_api.clean_path(path).startswith("/files"))
+
+    async def save(a: dict[str, Any]) -> str:
+        if not c.from_owner:
+            return NOT_OWNER
+        row = await d.ledger.table.get(PENDING_PK, conv)
+        if not row:
+            return "Nothing is waiting to be saved. Stage the change with city_api first."
+        if row["id"] in staged_now:
+            return (
+                "You staged this change in this same turn: it waits for the owner's own yes. Ask them and stop; "
+                "they answer with the buttons, in words or by voice."
+            )
+        if d.owner_api is None and row["method"] != "HUD":
+            return "The API isn't wired to this runtime yet (VAIC_API_FUNCTION is not set)."
+        await d.ledger.table.delete(PENDING_PK, conv)
+        if str(a.get("answer")) != "yes":
+            await d.bus.put({"type": "vaic.change", "conversation": conv, "id": row["id"], "saved": False})
+            return f"Discarded, nothing changed: {row['title']}. Say so in one short sentence."
+        body = json.loads(row["body_json"]) if row.get("body_json") else None
+        if row["method"] == "HUD":  # the owner's device: light, dark or system
+            value = (body or {}).get("value")
+            await d.bus.put({"type": "hud.action", "action": "theme", "value": value, "conversation": conv})
+            await d.bus.put({"type": "vaic.change", "conversation": conv, "id": row["id"], "saved": True})
+            return f"Saved: {row['title']}. Applied on every screen the owner has open."
+        r = await d.owner_api({"method": row["method"], "path": row["path"], "body": body})
+        ok = 200 <= int(r.get("statusCode", 500)) < 300
+        await d.bus.put({"type": "vaic.change", "conversation": conv, "id": row["id"], "saved": ok})
+        head = "Saved" if ok else "Not saved, the city refused it"
+        return f"{head}: {row['title']}. " + owner_api.summarise(r, cap=1500)
+
+    async def find_skill(a: dict[str, Any]) -> str:
+        if not c.from_owner:
+            return NOT_OWNER
+        q = str(a.get("query") or "").strip()
+        found = skills_catalog.search(q, str(a.get("department") or ""))
+        exact = [e for e in found if _norm(q) in (_norm(e["name"]), _norm(e["title"]))]
+        found = exact[:1] or found
+        if not found:
+            return (
+                f'No skill in the catalog matches "{q}". Say so, and that the owner can write or upload their own '
+                "on the Skills page (or try other words)."
+            )
+        have = {r["name"] for r in await d.ledger.table.query(SKILLS_PK, "SKILL#")}
+        if len(found) == 1:
+            e = found[0]
+            if e["name"] in have:
+                return f"The owner already has the skill {e['title']} ({e['name']}). Nothing to add; say so."
+            roles = a.get("roles")
+            body: dict[str, Any] = {"roles": roles} if isinstance(roles, list) and roles else {}
+            return await stage("POST", f"/skills/catalog/{e['name']}", body, "", skill_card(e, body))
+        top = found[:5]
+        await d.bus.put(
+            {
+                "type": "vaic.question",
+                "conversation": conv,
+                "question": "Which skill do you mean?",
+                "options": [e["title"][:60] for e in top],
+            }
+        )
+        listing = "; ".join(
+            f"{e['title']} ({e['name']}{', added' if e['name'] in have else ''}): {e['description'][:140]}" for e in top
+        )
+        more = f" ({len(found) - len(top)} more fit less well.)" if len(found) > len(top) else ""
+        return (
+            f"{len(found)} skills fit: {listing}.{more} Their titles are on the owner's screen as choices. Ask which "
+            "one in one short sentence and stop; when they pick, call find_skill again with that title."
+        )
 
     async def hud(a: dict[str, Any]) -> str:
         if not c.from_owner:
@@ -55,7 +272,13 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             value = str(a.get("value") or "")
             if value not in THEMES:
                 return "theme takes light, dark or system."
-            event["value"] = value
+            card = {
+                "title": "Settings → Appearance",
+                "lines": [f"Appearance → {value}"],
+                "question": SAVE_QUESTION,
+                "options": ["Yes", "No"],
+            }
+            return await stage("HUD", "theme", {"value": value}, "", card)
         elif action == "open":
             page = str(a.get("page") or "")
             if not PAGE.fullmatch(page):
@@ -74,29 +297,58 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             "a skill, a standing order, the company brief, the executives, knowledge items, apps, mail rules, the "
             "calendar, workers and anything else on a screen. Do it; don't tell the owner where to click. method: "
             "GET, POST, PUT or DELETE; path: the route (see 'Doing things in AI City for the owner' in your "
-            "instructions), with a query string if it takes one; body: the JSON the route takes. GET first when you "
-            "need the current values. Deletes and resets need confirm: true, which you pass when the owner's own "
-            "words asked for exactly that. Routes that take a secret are refused: open the page instead.",
+            "instructions), with a query string if it takes one; body: the JSON the route takes; summary: what the "
+            'change does in a few plain words ("Turn Autopilot off"). GET runs at once. PUT, POST and DELETE are '
+            "only staged: the owner sees what will change with Yes / No buttons, and save_change saves it on their "
+            "yes. GET first when you need the current values. Routes that take a secret are refused: open the page "
+            "instead.",
             _obj(
                 {
                     "method": {"type": "string", "enum": list(owner_api.METHODS)},
                     "path": _s(1, 300),
                     "body": {"type": "object"},
-                    "confirm": {"type": "boolean"},
+                    "summary": _s(0, 120),
                 },
-                ("body", "confirm"),
+                ("body", "summary"),
             ),
             call,
             step=lambda a: (
-                f"{'Checking' if str(a.get('method', 'GET')).upper() == 'GET' else 'Changing'} "
+                f"{'Checking' if str(a.get('method', 'GET')).upper() == 'GET' else 'Preparing a change to'} "
                 f"{owner_api.clean_path(str(a.get('path') or ''))}"
             ),
         ),
         ToolSpec(
+            "save_change",
+            "Save or discard the change you staged with city_api or find_skill, on the owner's answer in their new "
+            "message: answer yes when they said yes, save, add, go ahead or tapped Yes / Add; no when they said no, "
+            "cancel, not now or tapped No / Not now. Never in the same turn you staged it.",
+            _obj({"answer": {"type": "string", "enum": ["yes", "no"]}}),
+            save,
+            step=lambda a: "Saving the change" if a.get("answer") == "yes" else "Discarding the change",
+        ),
+        ToolSpec(
+            "find_skill",
+            'Find a skill in the catalog (Skills → Discover) when the owner asks to add one ("add a skill called '
+            'release notes", "get me a skill for NDAs"). query: the owner\'s words for it; department: when they '
+            "name one; roles: when they say who gets it. One match: its card with an Add button is shown and staged "
+            "(save_change on their yes). Several: they are offered as choices. None: say so.",
+            _obj(
+                {
+                    "query": _s(1, 100),
+                    "department": _s(0, 60),
+                    "roles": {"type": "array", "items": _s(1, 40)},
+                },
+                ("department", "roles"),
+            ),
+            find_skill,
+            step=lambda a: f"Looking for the skill {str(a.get('query') or '')[:40]}",
+        ),
+        ToolSpec(
             "hud_action",
             "Change what lives on the owner's device instead of in the city. action theme with value light, dark or "
-            'system (Appearance: "switch to dark mode"); action open with page, a HUD address such as '
-            '"#/settings/connectors", to bring a screen up (also for pages where the owner must paste a secret). '
+            'system (Appearance: "switch to dark mode"; staged with Yes / No like city_api, saved by save_change); '
+            'action open with page, a HUD address such as "#/settings/connectors", to bring a screen up (also for '
+            "pages where the owner must paste a secret). "
             "Applies at once on every screen the owner has open.",
             _obj(
                 {"action": {"type": "string", "enum": ["theme", "open"]}, "value": _s(1, 20), "page": _s(2, 130)},

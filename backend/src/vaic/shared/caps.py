@@ -128,3 +128,66 @@ def validate_caps(patch: dict[str, Any]) -> str | None:
         if isinstance(v, bool) or not isinstance(v, int | float) or not math.isfinite(v) or v < 0:
             return f"{k.replace('_', ' ')} must be zero or more dollars, or empty for no limit."
     return None
+
+
+CAP_KEYS = ("daily_global_usd", "monthly_budget_usd", "daily_department_usd")
+WHOLE_KEYS = (
+    "max_workers_per_goal",
+    "max_concurrent_workers_per_department",
+    "max_concurrent_workers_global",
+    "max_live_workers_city",
+    "max_open_jobs",
+    "max_departments",
+    "max_new_sessions_per_second",
+    "worker_idle_release_minutes",
+)
+SWITCH_KEYS = ("notify_push", "first_run_done", "chief_of_staff_enabled", "autopilot")
+SETTING_KEYS = (*CAP_KEYS, *WHOLE_KEYS, *SWITCH_KEYS, "profile_prefix", "mail_access", "department_caps")
+"""Every key ``PUT /settings`` takes; anything else in a body is ignored by the route."""
+
+
+def _whole(v: Any) -> bool:
+    return isinstance(v, int | float) and not isinstance(v, bool) and math.isfinite(v) and float(v).is_integer()
+
+
+def _number(v: Any) -> float:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return math.nan
+
+
+def settings_patch(b: dict[str, Any], cur: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
+    """The checks of ``PUT /settings``, shared by the route and VAIC's staged changes (decision 206).
+
+    Returns (the patch to save, a problem in the owner's words or None)."""
+    patch: dict[str, Any] = {k: b[k] for k in (*CAP_KEYS, *WHOLE_KEYS) if k in b}
+    if "profile_prefix" in b:
+        if str(b["profile_prefix"]) not in ("global", "eu", "us"):
+            return patch, "Pick global, eu or us."
+        patch["profile_prefix"] = b["profile_prefix"]
+    for k in SWITCH_KEYS:
+        if isinstance(b.get(k), bool):
+            patch[k] = b[k]
+    if isinstance(b.get("mail_access"), dict):
+        # Orchestrator and managers may read mail when the owner turns it on; workers never (decision 79).
+        ma = b["mail_access"]
+        if any(k not in ("orchestrator", "manager") or v not in ("none", "read") for k, v in ma.items()):
+            return patch, "mail_access takes orchestrator and manager, each none or read."
+        patch["mail_access"] = dict(ma)
+    # "integrations" (four dead switches, removed 2026-11-08) is ignored when an old client still sends it.
+    if isinstance(b.get("department_caps"), dict):
+        patch["department_caps"] = {department_key(k): _number(v) for k, v in b["department_caps"].items()}
+    bad = validate_caps({k: patch[k] for k in CAP_KEYS if k in patch})
+    if bad:
+        return patch, bad
+    for k in WHOLE_KEYS:
+        if k in patch and (not _whole(patch[k]) or patch[k] < 1):
+            return patch, f"{k.replace('_', ' ')} must be a whole number of at least 1."
+    if patch.get("max_new_sessions_per_second", 0) > 25:
+        return patch, "New sessions per second can't go above AgentCore's limit of 25."
+    daily = patch["daily_global_usd"] if "daily_global_usd" in patch else cur.get("daily_global_usd")
+    for v in (patch.get("department_caps") or {}).values():
+        if not math.isfinite(v) or v < 0 or (daily is not None and v > daily):
+            return patch, "A department cap must be $0 or more, and not above the daily cap if one is set."
+    return patch, None

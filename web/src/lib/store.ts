@@ -62,6 +62,21 @@ export type ConnectCardState = (
   /** A service that turned live (its key card is done), or one that failed with the reason in full (decision 141). */
   | { kind: "done"; id: string; targetId: string; title: string }
   | { kind: "problem"; id: string; targetId: string; title: string; text: string }
+  /** VAIC's question with tappable answers (`vaic.question`). With `changeId` it confirms a staged change (decision
+   * 206): what will change and Yes / No (a skill's card and Add), settled by `vaic.change`. */
+  | {
+      kind: "ask";
+      id: string;
+      question: string;
+      options: string[];
+      changeId?: string;
+      title?: string;
+      lines?: string[];
+      detail?: string;
+      /** The answer the owner tapped, while VAIC saves it. */
+      answered?: string;
+      result?: "saved" | "discarded" | "failed";
+    }
 ) & {
   /** The chat line it appeared after ("" before any): the card stays at that point in the conversation, and later
    * messages and replies go below it (decision 164). */
@@ -94,7 +109,7 @@ const CARDS_KEY = "vaic.cards";
 const readCards = (): ConnectCardState[] => {
   try {
     return (JSON.parse(localStorage.getItem(CARDS_KEY) ?? "[]") as ConnectCardState[]).filter(
-      (c) => c && typeof c.id === "string" && c.kind !== "approve",
+      (c) => c && typeof c.id === "string" && c.kind !== "approve" && c.kind !== "ask",
     );
   } catch {
     return [];
@@ -203,6 +218,8 @@ class Store {
     if ((e.type === "vaic.reply" || e.type === "vaic.question") && String(e.conversation ?? "").startsWith("app-"))
       return;
     if (e.type === "hud.action") return hudAction(e);
+    if (e.type === "vaic.question") return this.askEvent(e);
+    if (e.type === "vaic.change") return this.changeEvent(e);
     if (e.type === "vaic.stopped") {
       if (String(e.conversation ?? "main") !== "main") return;
       const id = String(e.message_id ?? "").replace(/^owner-/, "");
@@ -279,12 +296,50 @@ class Store {
   private putCard(c: ConnectCardState) {
     const cards = this.state.cards;
     const have = cards.find((x) => x.id === c.id);
-    const key = "targetId" in c ? c.targetId : c.connectorId;
+    const key = "targetId" in c ? c.targetId : "connectorId" in c ? c.connectorId : undefined;
     const after = have?.after ?? (key && this.anchors.get(key)) ?? this.state.chat.at(-1)?.id ?? "";
     if (key && !this.anchors.has(key)) this.anchors.set(key, after);
     if (key && (c.kind === "done" || ("status" in c && c.status === "connected"))) this.anchors.delete(key); // finished
     const placed = { ...c, after };
     this.set({ cards: have ? cards.map((x) => (x.id === c.id ? placed : x)) : [...cards, placed] });
+  }
+  /** VAIC asks with tappable answers (decision 206): a newer question replaces any that is still open. */
+  private askEvent(e: { [k: string]: unknown }) {
+    if (String(e.conversation ?? "main") !== "main") return;
+    const options = Array.isArray(e.options) ? e.options.map(String) : [];
+    if (options.length < 2) return;
+    const changeId = String(e.id ?? "");
+    const lines = Array.isArray(e.lines) ? e.lines.map(String) : [];
+    this.set({ cards: this.state.cards.filter((c) => c.kind !== "ask" || c.result !== undefined) });
+    this.putCard({
+      kind: "ask",
+      id: `ask:${changeId || Date.now()}`,
+      question: String(e.question ?? ""),
+      options,
+      ...(changeId ? { changeId } : {}),
+      ...(e.title ? { title: String(e.title) } : {}),
+      ...(lines.length ? { lines } : {}),
+      ...(e.detail ? { detail: String(e.detail) } : {}),
+    });
+  }
+  /** A staged change was saved or discarded: its card says so and its buttons go. */
+  private changeEvent(e: { [k: string]: unknown }) {
+    if (String(e.conversation ?? "main") !== "main") return;
+    const c = this.state.cards.find((x) => x.kind === "ask" && x.changeId === String(e.id ?? ""));
+    if (c?.kind !== "ask") return;
+    const result = e.saved ? "saved" : c.answered && !/^(no|not now)$/i.test(c.answered) ? "failed" : "discarded";
+    this.putCard({ ...c, result });
+  }
+  /** The owner tapped an answer (`option`) or wrote their own (`option` undefined): a plain question is done, a
+   * change waits for `vaic.change`. */
+  answerAsk(option?: string) {
+    const open = this.state.cards.filter((c) => c.kind === "ask" && c.result === undefined && !c.answered);
+    if (!open.length) return;
+    this.set({
+      cards: this.state.cards.flatMap((c) =>
+        !open.includes(c) || c.kind !== "ask" ? [c] : c.changeId ? [option ? { ...c, answered: option } : c] : [],
+      ),
+    });
   }
   dropCard(id: string) {
     // A connector card the owner answered: what happens next (a sign-in, a key, or a failure) comes back to the chat.
