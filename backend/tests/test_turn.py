@@ -233,6 +233,24 @@ async def test_fable_unavailable_falls_back_to_opus() -> None:
     assert (await run_gated_turn(turn("orchestrator"), deps)).model.name == "opus-5-5"
 
 
+async def test_a_model_bedrock_refuses_through_claude_code_falls_back_to_opus() -> None:
+    """Prod, 2026-11-10 (decision 181): Fable 5.2's Marketplace subscription was missing, and Claude Code reported the
+    refusal only as "AWS authentication failed". The turn goes on with Opus instead of dying."""
+    for msg in (
+        "RuntimeError: agent turn ended with success: AWS authentication failed · refresh your AWS credentials",
+        "AccessDeniedException: Model access is denied due to IAM user or service role is not authorized to perform "
+        "the required AWS Marketplace actions (aws-marketplace:ViewSubscriptions, aws-marketplace:Subscribe)",
+    ):
+
+        async def fn(i: TurnInput, msg: str = msg) -> TurnOutput:
+            if i.model.name == "fable-5-2":
+                raise RuntimeError(msg)
+            return reply("ok")
+
+        _, _, deps = setup(fn)
+        assert (await run_gated_turn(turn("orchestrator"), deps)).model.name == "opus-5-5"
+
+
 async def test_roles_without_a_fallback_never_retry_on_another_model() -> None:
     runner = Runner(lambda _: reply("no", "refusal"))
     _, _, deps = setup(runner)

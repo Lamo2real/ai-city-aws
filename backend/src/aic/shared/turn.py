@@ -61,8 +61,13 @@ class TurnTimeout(RuntimeError):
 _THROTTLE = re.compile(
     r"ThrottlingException|TooManyRequests|ServiceUnavailable|ModelNotReady|\b429\b|\b503\b|rate.?exceeded|throttl", re.I
 )
+# A model this account cannot use right now. Claude Code reports Bedrock's refusals as "AWS authentication failed"
+# (seen on prod, 2026-11-10: Fable 5.2's AWS Marketplace subscription was never completed, so every Orchestrator
+# and Manager turn died at its first call and nobody went to work; decision 181). Those fall back to the role's
+# fallback model (Opus 5.5) instead of failing the turn.
 _UNAVAILABLE = re.compile(
-    r"ModelUnavailable|ResourceNotFound|AccessDenied.*model|model.*not.*(available|enabled)|ValidationException.*model",
+    r"ModelUnavailable|ResourceNotFound|AccessDenied.*model|model.*not.*(available|enabled)|ValidationException.*model"
+    r"|model access is denied|aws.marketplace|AWS authentication failed",
     re.I,
 )
 
