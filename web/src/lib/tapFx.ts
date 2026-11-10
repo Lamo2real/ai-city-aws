@@ -23,37 +23,88 @@ export function setTapFx(on: boolean) {
 }
 
 let ctx: AudioContext | null = null;
-/** The tap sound (the owner, 2026-11-09: "a different kind of sound"): a soft glass "tink", like a fingertip on a
- *  glass pane. Two bell-like partials (2.6 kHz and its inharmonic 2.76× overtone) that ring for about 120 ms, the
- *  overtone fading first, very quiet. Made, not loaded; ios/scripts/make_tap_sound.py writes the same sound for the
- *  iPhone. */
-export const TINK = [
-  { hz: 2600, peak: 0.03, decay: 0.12 },
-  { hz: 2600 * 2.76, peak: 0.012, decay: 0.05 },
-] as const;
-export function click() {
+/** The tap sounds (the owner, 2026-11-10, picked from twenty samples): a round synth "bloop" for every tap that
+ *  works, and a kalimba note (a thumb-piano tine) for a tap on something that can't be used right now (a disabled
+ *  button) and when something goes wrong (an error toast, or an error banner right after a tap). Made, not loaded;
+ *  ios/scripts/make_tap_sound.py writes the same two sounds for the iPhone. */
+export const BLOOP = { type: "triangle", from: 220, to: 440, peak: 0.12, seconds: 0.12 } as const;
+export const KALIMBA = { carrier: 784, ratio: 3.5, index: 1.2, peak: 0.12, seconds: 0.45 } as const;
+export type TapSound = "ok" | "no";
+
+function audio(): AudioContext | null {
+  const AC =
+    window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AC) return null;
+  ctx ??= new AC();
+  if (ctx.state === "suspended") void ctx.resume();
+  return ctx;
+}
+
+function envelope(c: AudioContext, peak: number, seconds: number, t: number): GainNode {
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(peak, t + 0.003);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
+  g.connect(c.destination);
+  return g;
+}
+
+export function click(sound: TapSound = "ok") {
   try {
-    const AC =
-      window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AC) return;
-    ctx ??= new AC();
-    if (ctx.state === "suspended") void ctx.resume();
-    const t = ctx.currentTime;
-    for (const p of TINK) {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(p.hz, t);
-      gain.gain.setValueAtTime(0.0001, t);
-      gain.gain.exponentialRampToValueAtTime(p.peak, t + 0.002);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + p.decay);
-      osc.connect(gain).connect(ctx.destination);
-      osc.start(t);
-      osc.stop(t + p.decay + 0.01);
+    const c = audio();
+    if (!c) return;
+    const t = c.currentTime;
+    if (sound === "ok") {
+      const o = c.createOscillator();
+      o.type = BLOOP.type;
+      o.frequency.setValueAtTime(BLOOP.from, t);
+      o.frequency.exponentialRampToValueAtTime(BLOOP.to, t + BLOOP.seconds);
+      o.connect(envelope(c, BLOOP.peak, BLOOP.seconds, t));
+      o.start(t);
+      o.stop(t + BLOOP.seconds + 0.02);
+      return;
+    }
+    // the kalimba: a sine carrier whose brightness (FM index) falls away as the note rings
+    const car = c.createOscillator();
+    const mod = c.createOscillator();
+    const depth = c.createGain();
+    car.frequency.value = KALIMBA.carrier;
+    mod.frequency.value = KALIMBA.carrier * KALIMBA.ratio;
+    depth.gain.setValueAtTime(KALIMBA.carrier * KALIMBA.index, t);
+    depth.gain.exponentialRampToValueAtTime(1, t + KALIMBA.seconds);
+    mod.connect(depth).connect(car.frequency);
+    car.connect(envelope(c, KALIMBA.peak, KALIMBA.seconds, t));
+    for (const o of [car, mod]) {
+      o.start(t);
+      o.stop(t + KALIMBA.seconds + 0.02);
     }
   } catch {
     /* no sound is fine */
   }
+}
+
+let lastTap = 0;
+let lastRefusal = 0;
+/** Something went wrong: the kalimba, once (never twice within a second), when tap sounds are on. ``afterTap``: only
+ *  if the owner tapped in the last few seconds, so a problem found in the background never makes a sound. */
+export function refusal(afterTap = false) {
+  const now = Date.now();
+  if (!tapFxOn() || now - lastRefusal < 1000 || (afterTap && now - lastTap > 4000)) return;
+  lastRefusal = now;
+  click("no");
+}
+
+const CONTROL =
+  'button, a[href], input, select, textarea, summary, label, [role="button"], [role="link"], [role="switch"], [role="tab"], [role="menuitem"], [role="option"], [role="checkbox"], [role="radio"]';
+/** Which sound a tap on this element gets: "no" on a control that is switched off, else "ok". */
+export function tapSound(target: EventTarget | null): TapSound {
+  const el = target instanceof Element ? target.closest(CONTROL) : null;
+  if (!el) return "ok";
+  const off =
+    el.matches(":disabled") ||
+    el.getAttribute("aria-disabled") === "true" ||
+    el.closest("[aria-disabled='true'], fieldset:disabled") !== null;
+  return off ? "no" : "ok";
 }
 
 const reduced = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
@@ -83,7 +134,10 @@ export function installTapFx(): () => void {
   const on = (e: PointerEvent) => {
     if (!e.isPrimary || (e.pointerType === "mouse" && e.button !== 0) || !tapFxOn()) return;
     rings(e.clientX, e.clientY);
-    click();
+    const sound = tapSound(e.target);
+    lastTap = Date.now();
+    if (sound === "no") lastRefusal = lastTap; // one sound per tap: an error from this tap stays quiet
+    click(sound);
   };
   document.addEventListener("pointerdown", on, { capture: true, passive: true });
   return () => document.removeEventListener("pointerdown", on, { capture: true });

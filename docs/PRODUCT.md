@@ -239,6 +239,7 @@ Terraform (offline only): `fmt -check -recursive`, `init -backend=false`, `valid
 ## 10. Feature log (newest first)
 | Date | Feature | Notes |
 |---|---|---|
+| 2026-11-10 | Two tap sounds | A synth bloop for every tap that works, a kalimba note for a tap on something switched off and for errors (web and iPhone); the owner's picks, 19 and 11, from twenty samples (decision 187). |
 | 2026-11-10 | One eye on the sign-in card | The sign-in card shows only the logo (the owner's eye and VAIC), not a second animated eye beside it (decision 186). |
 | 2026-11-10 | Activity folds away | Click Activity's title in the City to hide or show it; the choice is remembered on this device (decision 184). |
 | 2026-11-10 | Stop VAIC's answer | The owner: "can you add a cancel button when a user wants to cancel a message they have sent in the chat and just make you drop it just like chatgpt has it". While VAIC thinks or writes, Send turns into Stop (Esc too) in the Chat screen and the iPhone app; the answer is dropped at once and in VAIC's runtime, the message stays marked stopped with Edit and send again, speech stops; tools already called are named, and work handed to the team keeps going (decision 183). Not tested against real Bedrock or on a real iPhone. |

@@ -39,6 +39,18 @@ enum TapSignal {
         hypot(end.x - start.x, end.y - start.y) <= slop
     }
 
+    /// A tap on a switched-off control gets the kalimba (decision 187): the view under the finger, or one it sits in,
+    /// is a disabled UIKit control or is marked not enabled for accessibility (SwiftUI's `.disabled`).
+    static func isRefused(_ view: UIView?) -> Bool {
+        var v = view
+        while let cur = v {
+            if let control = cur as? UIControl { return !control.isEnabled }
+            if cur.accessibilityTraits.contains(.notEnabled) { return true }
+            v = cur.superview
+        }
+        return false
+    }
+
     /// When each ring starts after the tap, and its colour (the accent's two tones, light first).
     static let rings: [(delay: Double, color: UInt32)] = [(0, 0xf9c976), (secondDelay, 0xe8a33d)]
 }
@@ -85,7 +97,9 @@ final class TapObserver: UIGestureRecognizer, UIGestureRecognizerDelegate {
 @MainActor
 final class TapFeedback {
     static let shared = TapFeedback()
-    private var sound: SystemSoundID?
+    private var sounds: [String: SystemSoundID] = [:]
+    private var lastTap = Date.distantPast
+    private var lastRefusal = Date.distantPast
     private let haptic = UIImpactFeedbackGenerator(style: .light)
 
     /// Starts watching a window (once per window).
@@ -103,7 +117,10 @@ final class TapFeedback {
     func tapped(at point: CGPoint, in window: UIWindow) {
         let plan = TapSignal.plan(on: TapSignal.isOn(), reduceMotion: UIAccessibility.isReduceMotionEnabled)
         if plan.rings { rings(at: point, in: window) }
-        if plan.sound { click() }
+        lastTap = Date()
+        let refused = TapSignal.isRefused(window.hitTest(point, with: nil))
+        if refused { lastRefusal = lastTap } // one sound per tap: an error from this tap stays quiet
+        if plan.sound { play(refused ? "refuse" : "tap") }
         if plan.haptic {
             haptic.impactOccurred(intensity: 0.6)
             haptic.prepare()
@@ -141,14 +158,24 @@ final class TapFeedback {
         }
     }
 
-    /// The bundled click (ios/scripts/make_tap_sound.py; the tone the web makes), played as a system sound: quiet with the silent switch
-    /// on, never interrupting music, and no audio session of its own.
-    private func click() {
-        if sound == nil, let url = Bundle.main.url(forResource: "tap", withExtension: "wav") {
+    /// Something went wrong (an error toast or banner): the kalimba, once a second at most, when tap sounds are on.
+    /// `afterTap`: only right after the owner's own tap, so a problem found in the background makes no sound.
+    func refusal(afterTap: Bool = false) {
+        let now = Date()
+        guard TapSignal.isOn(), now.timeIntervalSince(lastRefusal) >= 1,
+              !afterTap || now.timeIntervalSince(lastTap) <= 4 else { return }
+        lastRefusal = now
+        play("refuse")
+    }
+
+    /// A bundled sound (ios/scripts/make_tap_sound.py; the web's tones: "tap" is the bloop, "refuse" the kalimba),
+    /// played as a system sound: quiet with the silent switch on, never interrupting music, no audio session.
+    private func play(_ name: String) {
+        if sounds[name] == nil, let url = Bundle.main.url(forResource: name, withExtension: "wav") {
             var id: SystemSoundID = 0
-            if AudioServicesCreateSystemSoundID(url as CFURL, &id) == kAudioServicesNoError { sound = id }
+            if AudioServicesCreateSystemSoundID(url as CFURL, &id) == kAudioServicesNoError { sounds[name] = id }
         }
-        if let sound { AudioServicesPlaySystemSound(sound) }
+        if let id = sounds[name] { AudioServicesPlaySystemSound(id) }
     }
 }
 

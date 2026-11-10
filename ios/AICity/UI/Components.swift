@@ -78,6 +78,7 @@ struct Banner: View {
         .background(glass ? tint : color.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay { if glass { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Glass.edge, lineWidth: 1) } }
         .accessibilityElement(children: .combine)
+        .onAppear { if tone == .bad { TapFeedback.shared.refusal(afterTap: true) } } // decision 187
     }
 }
 

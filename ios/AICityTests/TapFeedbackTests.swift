@@ -44,6 +44,30 @@ final class TapFeedbackTests: XCTestCase {
         XCTAssertGreaterThan(bytes, 500)
     }
 
+    /// Decision 187: the kalimba for a tap on something switched off and for errors, the bloop for the rest.
+    func testTheRefusalSoundIsBundledAndShort() throws {
+        let url = try XCTUnwrap(Bundle.main.url(forResource: "refuse", withExtension: "wav"), "the kalimba is bundled")
+        let bytes = try Data(contentsOf: url).count
+        XCTAssertLessThan(bytes, 48000, "under half a second")
+        XCTAssertGreaterThan(bytes, 500)
+    }
+
+    @MainActor
+    func testATapOnASwitchedOffControlIsRefused() {
+        let on = UIButton(), off = UIButton()
+        off.isEnabled = false
+        let inside = UIView()
+        off.addSubview(inside)
+        XCTAssertFalse(TapSignal.isRefused(on))
+        XCTAssertTrue(TapSignal.isRefused(off))
+        XCTAssertTrue(TapSignal.isRefused(inside), "a view inside a switched-off control")
+        let marked = UIView()
+        marked.accessibilityTraits = .notEnabled
+        XCTAssertTrue(TapSignal.isRefused(marked), "SwiftUI's .disabled")
+        XCTAssertFalse(TapSignal.isRefused(UIView()))
+        XCTAssertFalse(TapSignal.isRefused(nil))
+    }
+
     @MainActor
     func testTheObserverNeverTakesATouchFromAnythingElse() {
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 300, height: 600))

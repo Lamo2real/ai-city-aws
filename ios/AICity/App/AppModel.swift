@@ -66,7 +66,9 @@ final class AppModel {
     /// What is open under the More tab.
     var morePath: [AppSection] = []
     var showGuide = false
-    var toast: Toast?
+    var toast: Toast? {
+        didSet { if let t = toast, t.tone == .bad, t != oldValue { TapFeedback.shared.refusal() } } // decision 187
+    }
     private(set) var config: AppConfig?
 
     let hud: HudStore

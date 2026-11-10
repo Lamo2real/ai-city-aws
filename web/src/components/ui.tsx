@@ -1,5 +1,6 @@
 // The one design system: the same button, dialog, banner and toast everywhere.
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { refusal } from "../lib/tapFx.ts";
 
 type Variant = "primary" | "secondary" | "quiet" | "danger";
 export function Button(p: {
@@ -62,6 +63,9 @@ export function Banner(p: {
   children: ReactNode;
   action?: { label: string; onClick: () => void };
 }) {
+  useEffect(() => {
+    if (p.tone === "bad") refusal(true); // an error the owner's own tap just caused (decision 187)
+  }, [p.tone]);
   return (
     <div className={`banner banner-${p.tone}`} role={p.tone === "bad" ? "alert" : "status"}>
       <span>{p.children}</span>
@@ -182,7 +186,10 @@ export interface Toast {
   tone?: "good" | "bad" | "info";
 }
 let push: (t: Omit<Toast, "id">) => void = () => {};
-export const toast = (t: Omit<Toast, "id">) => push(t);
+export const toast = (t: Omit<Toast, "id">) => {
+  if (t.tone === "bad") refusal(); // something went wrong: the kalimba (decision 187)
+  push(t);
+};
 export const UNDO_MS = 12_000;
 
 export function Toaster() {
