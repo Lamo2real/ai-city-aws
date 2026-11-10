@@ -159,3 +159,18 @@ owner pastes the keys back (about 15 minutes by hand, plus reconnecting accounts
   `aic/prod/*` secret names for 7 days (they are scheduled for deletion), unless the owner restores those secrets
   in the Secrets Manager console first. Restoring them also brings back the old GitHub token, OpenAI key and APNs key.
 - The safety net is the owner's own download in step B. Nothing else is kept.
+
+## 6. What happened (2026-11-10)
+
+- **A** (`cd6eaad`): deployed with only in-place changes (29), no data lost.
+- **C** (`3a1ef7a`): the plan was 376 to add, 20 to change, 374 to destroy. The apply stopped part-way on two errors:
+  the Files policy on the MediaConvert role ran before the renamed role existed, and the knowledge data source was
+  updated in place under the new knowledge base instead of being replaced. Prod was down from about 16:22 to 17:08 UTC.
+- **Fix** (`f81231b`): the policy takes the role's name from its ARN; the data source is replaced with its knowledge
+  base; the plan refreshes again. Deployed: 130 added, 6 changed, 10 destroyed, the HUD uploaded.
+- As planned, the HUD address (`https://d2lcjbjaz1khxz.cloudfront.net`), the API and WebSocket URLs, the Cognito user
+  pool (`eu-north-1_HoPnV88xr`) and its HUD client were kept; the sign-in domain is now `vaic-prod-c7a02784`.
+- **D**: deletion protection back on, buckets and image repositories no longer emptied on destroy, the forget-only
+  `removed` blocks taken out. **E** (the `AIC_*` fallbacks in `deploy.yml`) waits for the owner's GitHub settings.
+- Left behind in AWS for the owner to delete when convenient: the old connectors policy engine `aic_prod_connectors`,
+  and any `aic/prod/connectors/*` and `aic/prod/oauth-*` secrets and `aic-conn-*` credential providers.

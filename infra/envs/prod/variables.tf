@@ -56,7 +56,7 @@ variable "log_retention_days" {
 
 variable "deletion_protection" {
   type        = bool
-  default     = false # the AIC → VAIC rename (docs/RENAME_PLAN.md); back to true afterwards
+  default     = true
   description = "Deletion protection on Cognito and DynamoDB. Set false (and apply) before terraform destroy."
 }
 

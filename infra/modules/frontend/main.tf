@@ -57,7 +57,7 @@ resource "aws_s3_bucket" "site" {
   #checkov:skip=CKV2_AWS_62:No event notifications are needed.
   #checkov:skip=CKV_AWS_145:The site bucket uses SSE-S3 so CloudFront with OAC can read it without a KMS key policy dance; it holds only public app files.
   bucket        = "${var.name}-hud"
-  force_destroy = true # the AIC → VAIC rename (docs/RENAME_PLAN.md)
+  force_destroy = false
   tags          = local.tags
 }
 

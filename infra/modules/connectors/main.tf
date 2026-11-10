@@ -146,16 +146,6 @@ locals {
 }
 
 # ---------- the Gateway, its role and the policy engine ----------
-# The AIC → VAIC rename (docs/RENAME_PLAN.md): the old engine still holds the Cedar policies the connectors Lambda
-# wrote, and AWS may refuse to delete it while it does; Terraform only forgets it (the owner can delete it in the
-# console) and makes this one.
-removed {
-  from = aws_bedrockagentcore_policy_engine.this
-  lifecycle {
-    destroy = false
-  }
-}
-
 resource "aws_bedrockagentcore_policy_engine" "city" {
   # AgentCore's own encryption: a customer key would need forward-access grants for every caller, and Cedar holds no secret.
   name        = replace("${var.name}-connectors", "-", "_")
@@ -223,7 +213,7 @@ resource "aws_s3_bucket" "specs" {
   #checkov:skip=CKV_AWS_18:Access logging would need another bucket; CloudTrail data events can be enabled if needed.
   #checkov:skip=CKV2_AWS_62:No event notifications are needed.
   bucket        = "${var.name}-connectors"
-  force_destroy = true # the AIC → VAIC rename (docs/RENAME_PLAN.md)
+  force_destroy = false
   tags          = local.tags
 }
 
@@ -287,7 +277,6 @@ resource "aws_s3_bucket_policy" "specs" {
 resource "aws_ecr_repository" "mcp_host" {
   name                 = "${var.name}-mcp-host"
   image_tag_mutability = "IMMUTABLE"
-  force_delete         = true # the AIC → VAIC rename (docs/RENAME_PLAN.md)
   image_scanning_configuration {
     scan_on_push = true
   }

@@ -21,7 +21,7 @@ resource "aws_s3_bucket" "skills" {
   #checkov:skip=CKV_AWS_18:Access logging would need another bucket; CloudTrail data events can be enabled if needed.
   #checkov:skip=CKV2_AWS_62:No event notifications are needed.
   bucket        = "${var.name}-skills"
-  force_destroy = true # the AIC → VAIC rename (docs/RENAME_PLAN.md)
+  force_destroy = false
   tags          = local.tags
 }
 

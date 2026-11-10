@@ -71,7 +71,7 @@ resource "aws_s3_bucket" "this" {
   #checkov:skip=CKV_AWS_144:One-region personal store; versioning and the KMS key protect it, cross-region replication would double the cost.
   #checkov:skip=CKV_AWS_18:Access logging would need another bucket; CloudTrail data events can be enabled if needed.
   bucket        = local.base
-  force_destroy = true # the AIC → VAIC rename (docs/RENAME_PLAN.md); back to false afterwards
+  force_destroy = false
   tags          = local.tags
 }
 
@@ -231,20 +231,11 @@ resource "time_sleep" "data_policy" {
 }
 
 # The index Bedrock writes into (docs/KNOWLEDGE.md section 14), created before the KB.
-# The AIC → VAIC rename (docs/RENAME_PLAN.md): the old collection takes its index with it, so Terraform only forgets
-# the old index (no call to the old collection's endpoint) and makes this one in the new collection.
-removed {
-  from = opensearch_index.items
-  lifecycle {
-    destroy = false
-  }
-}
-
 resource "opensearch_index" "knowledge" {
   name                           = "items"
   index_knn                      = true
   index_knn_algo_param_ef_search = "512"
-  force_destroy                  = true # the AIC → VAIC rename
+  force_destroy                  = false
   mappings = jsonencode({
     properties = {
       # Titan V2 vectors are normalized, so inner product is cosine.

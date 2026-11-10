@@ -97,7 +97,6 @@ locals {
 resource "aws_ecr_repository" "runtime" {
   name                 = "${var.name}-agent-runtime"
   image_tag_mutability = "IMMUTABLE"
-  force_delete         = true # the AIC → VAIC rename (docs/RENAME_PLAN.md)
   image_scanning_configuration {
     scan_on_push = true
   }
