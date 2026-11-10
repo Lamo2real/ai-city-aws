@@ -993,23 +993,33 @@ export const CAB_FADE_PX = 6 * TILE;
 export function edgeAlpha(pos, from, to) {
   return Math.max(0, Math.min(1, Math.min(pos - from, to - pos) / CAB_FADE_PX));
 }
-// One cab in a thousand that arrives is the owner's car instead (2026-11-09): a black pixel sports car with chrome
-// rims, otherwise exactly a cab (same lane, speed, fade, roof light and passengers). Decided per arrival from a
-// seed, so the same arrival is always the same car.
-export const RARE_CAB_ODDS = 1000;
-export function seededRandom(seed) {
-  let t = (hashOf(seed) + 0x6d2b79f5) >>> 0; // mulberry32, one step
-  t = Math.imul(t ^ (t >>> 15), t | 1);
-  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+// One car in every 50 that enters the road is the owner's car (the owner, 2026-11-10, decision 191; was one in a
+// thousand by chance): a black pixel sports car with chrome rims, otherwise a cab (same lanes, fade, roof light and
+// passengers). Counted, not rolled: every car that enters takes the next number from the traffic's counter
+// (`arrive`), a cruising cab each time it comes round again and a commuter's cab when it is hailed, and every 50th is
+// the owner's car, so the share is exactly 1 in 50.
+export const RARE_CAB_ODDS = 50;
+export function arrive(sim) {
+  const n = sim.arrivals ?? 0;
+  sim.arrivals = n + 1;
+  return (n + (sim.rareOffset ?? 0)) % RARE_CAB_ODDS === RARE_CAB_ODDS - 1;
 }
-export const rareCab = (seed) => seededRandom(seed) < 1 / RARE_CAB_ODDS;
 // ---------- Traffic (decision 176): signals at some junctions, give way at the rest, a couple of roundabouts, and
 // the open road outside the town driven at highway speed. A small simulation stepped by the scene's clock: every
 // cab follows the one in front, brakes for red and amber at the stop line, gives way, circles a roundabout and
 // takes its exit. The owner's sports car (the rare cab) runs the lights; it still never drives into anyone.
-// About one cab per 44 tiles of road each way (the owner halved the taxis, 2026-11-10, decision 180; was 22).
-export const CAB_PX_S = 34, CAB_GAP_PX = 44 * TILE;
+// How many cabs cruise each lane: one per 44 tiles of road (decision 180, the first halving; was 22), then halved
+// again across the whole map (decision 191): exactly half of that total, at least one per lane, the rest going to
+// the lanes that had the most.
+export const CAB_PX_S = 34, CAB_GAP_PX = 44 * TILE, CAB_SHARE = 0.5;
+export function cabsPerLane(spans) {
+  const was = spans.map((s) => Math.max(1, Math.round(s / CAB_GAP_PX)));
+  const want = was.map((n) => n * CAB_SHARE), out = want.map((w) => Math.max(1, Math.floor(w)));
+  const total = Math.max(spans.length, Math.round(was.reduce((a, b) => a + b, 0) * CAB_SHARE));
+  const order = want.map((w, i) => [w - out[i], i]).sort((a, b) => b[0] - a[0] || a[1] - b[1]);
+  for (let k = 0, sum = out.reduce((a, b) => a + b, 0); sum < total; k = (k + 1) % order.length, sum++) out[order[k][1]] += 1;
+  return out;
+}
 export const TOWN_PX_S = CAB_PX_S, HIGHWAY_PX_S = 96, RING_PX_S = 22, ACCEL_PX_S2 = 44, BRAKE_PX_S2 = 50, CAR_GAP_PX = 6;
 export const JUNCTION_HALF = 24, STOP_AT = 36, RING_R = 20;
 const CAR_LEN = { x: 24, y: 18 }, RING_LEN = 20, LOOKAHEAD = 420, TAU = Math.PI * 2;
@@ -1091,19 +1101,20 @@ export function createTraffic(world, seed = "traffic") {
     }
     lane.controls.sort((p, q) => p.dc - q.dc);
   }
-  const cars = [];
-  for (const lane of lanes) {
-    const n = Math.max(1, Math.round(lane.span / CAB_GAP_PX));
+  const cars = [], counts = cabsPerLane(lanes.map((l) => l.span));
+  const sim = { world, lanes, junctions: js, cars, guests: [], t: 0, rand: rngOf(seed), margin: M, arrivals: 0, rareOffset: hashOf(`rare:${seed}`) % RARE_CAB_ODDS };
+  for (const [li, lane] of lanes.entries()) {
+    const n = counts[li];
     for (let k = 0; k < n; k++) {
       const id = `${lane.id}:${k}`;
       let d = (k * lane.span) / n + (hashOf(id) % Math.max(1, Math.round(lane.span / n / 2)));
       if (lane.controls.some((c) => Math.abs(d - c.dc) < 70)) d += 140; // never start inside a junction
       d %= lane.span;
       const f = 0.88 + (hashOf(`pace:${id}`) % 25) / 100;
-      cars.push({ id, lane, d, v: (d >= lane.townFrom && d <= lane.townTo ? TOWN_PX_S : HIGHWAY_PX_S) * f, f, lap: 0, rare: rareCab(`${id}:0`), commit: null, stopFor: null, ring: null, braking: false });
+      cars.push({ id, lane, d, v: (d >= lane.townFrom && d <= lane.townTo ? TOWN_PX_S : HIGHWAY_PX_S) * f, f, lap: 0, rare: arrive(sim), commit: null, stopFor: null, ring: null, braking: false });
     }
   }
-  return { world, lanes, junctions: js, cars, guests: [], t: 0, rand: rngOf(seed), margin: M };
+  return sim;
 }
 const rngOf = (seed) => { let x = hashOf(seed) || 1; return () => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return (x >>> 0) / 4294967296; }; };
 
@@ -1125,6 +1136,8 @@ function tick(sim, dt) {
   for (const c of [...sim.cars, ...guestsOf(sim)]) { const j = c.ring?.j ?? (c.commit && sim.junctions.find((k) => k.id === c.commit && k.kind === "roundabout")); if (j) load.set(j, (load.get(j) ?? 0) + 1); }
   // Who is inside a junction's box right now, and on which axis.
   const inBox = (j, axis) => guestInBox(sim, j, axis) || sim.lanes.some((l) => l.axis === axis && l.controls.some((c) => c.j === j && byLane.get(l).some((o) => Math.abs(o.d - c.dc) < JUNCTION_HALF + l.len / 2)));
+  // A car on the given axis is in the junction or will be within about two seconds.
+  const approaching = (j, axis) => sim.lanes.some((l) => l.axis === axis && l.controls.some((c) => c.j === j && byLane.get(l).some((o) => o.d > c.dc - JUNCTION_HALF - l.len / 2 - Math.max(20, o.v * 2) && o.d < c.dc + JUNCTION_HALF + l.len / 2)));
   const plans = [];
   for (const lane of sim.lanes) {
     const list = byLane.get(lane);
@@ -1143,7 +1156,7 @@ function tick(sim, dt) {
         const stop = () => { cap = Math.min(cap, toStop < 0.5 ? 0 : reach(0, toStop)); hold = Math.min(hold, stopD); };
         if (j.kind === "light" && !committed) {
           const sig = signalAt(j, sim.t)[lane.axis];
-          if (car.rare) { if (inBox(j, cross)) stop(); } // the owner's car runs the lights, but never into anyone
+          if (car.rare) { if (sig === "red" ? approaching(j, cross) || inBox(j, cross) : inBox(j, cross)) stop(); else if (toStop < 2) car.commit = j.id; } // the owner's car runs a red when the way is clear, never into anyone
           else if (sig === "red") stop();
           else if (sig === "amber") { if (car.stopFor === j.id || car.v < 10 || toStop >= (car.v * car.v) / (2 * BRAKE_PX_S2 * 1.6)) { car.stopFor = j.id; stop(); } else car.commit = j.id; } // too close to stop: go
           else if (blockedBeyond || inBox(j, cross)) { car.stopFor = null; stop(); }
@@ -1151,7 +1164,7 @@ function tick(sim, dt) {
         } else if (j.kind === "giveway" && !committed) {
           if (lane.axis === "x") {
             // The street gives way: slow to a crawl at the line, go when nothing on the avenue is near.
-            const near = guestNear(sim, j) || sim.lanes.some((l) => l.axis === "y" && l.controls.some((c) => c.j === j && byLane.get(l).some((o) => o.d > c.dc - JUNCTION_HALF - l.len / 2 - Math.max(20, o.v * 2) && o.d < c.dc + JUNCTION_HALF + l.len / 2)));
+            const near = guestNear(sim, j) || approaching(j, "y");
             if (near || blockedBeyond) stop();
             else if (toStop < 6) car.commit = j.id;
             else cap = Math.min(cap, reach(12, toStop));
@@ -1202,7 +1215,7 @@ function tick(sim, dt) {
     }
     car.d = Math.min(car.d + step, Math.max(car.d, p.hold));
     if (p.enter && car.d >= p.enter.entryD) enterRing(sim, car, p.enter);
-    else if (car.d > car.lane.span) { car.d -= car.lane.span; car.lap += 1; car.rare = rareCab(`${car.id}:${car.lap}`); car.commit = null; car.v = Math.min(car.v, (car.d >= car.lane.townFrom && car.d <= car.lane.townTo ? TOWN_PX_S : HIGHWAY_PX_S) * car.f); }
+    else if (car.d > car.lane.span) { car.d -= car.lane.span; car.lap += 1; car.rare = arrive(sim); car.commit = null; car.v = Math.min(car.v, (car.d >= car.lane.townFrom && car.d <= car.lane.townTo ? TOWN_PX_S : HIGHWAY_PX_S) * car.f); }
   }
 }
 // ---------- Commuters' cabs (decision 177): a cab carrying an agent to or from work keeps to the same rules. It
@@ -1300,7 +1313,10 @@ export function rideHold(sim, r) {
   if (stopAt < -0.5) return Infinity; // over the line already: through the junction
   if (j.kind === "light") {
     const sig = signalAt(j, sim.t)[axis], v = r.rv ?? 0;
-    if (r.rare) return carsInBox(sim, j, cross) ? Math.max(0, stopAt) : Infinity; // the owner's car runs the lights
+    if (r.rare) { // the owner's car runs a red when the way is clear, never into anyone
+      const coming = sig === "red" && sim.cars.some((o) => o.lane && o.lane.axis === cross && o.lane.controls.some((c) => c.j === j && o.d > c.dc - JUNCTION_HALF - o.lane.len / 2 - Math.max(20, o.v * 2) && o.d < c.dc + JUNCTION_HALF + o.lane.len / 2));
+      return coming || carsInBox(sim, j, cross) ? Math.max(0, stopAt) : Infinity;
+    }
     if (sig === "red") return Math.max(0, stopAt);
     if (sig === "amber") { if (r.stopFor === j.id || v < 10 || stopAt >= (v * v) / (2 * BRAKE_PX_S2 * 1.6)) { r.stopFor = j.id; return Math.max(0, stopAt); } return Infinity; }
     r.stopFor = null;

@@ -105,14 +105,16 @@ describe("traffic lights", () => {
 });
 
 describe("the traffic as a whole", () => {
-  it("has half the cabs it used to: one per 44 tiles of road each way (decision 180)", () => {
+  it("has a quarter of the original cabs: halved twice, at least one per lane (decisions 180 and 191)", () => {
     expect(CAB_GAP_PX).toBe(44 * TILE);
-    for (const [n, portrait] of [[4, false], [8, false], [6, true]] as const) {
+    for (const [n, portrait] of [[2, false], [4, false], [8, false], [12, false], [6, true]] as const) {
       const sim = createTraffic(city(n, portrait));
-      const was = sim.lanes.reduce((k, l) => k + Math.max(1, Math.round(l.span / (22 * TILE))), 0);
-      expect(sim.cars.length).toBe(sim.lanes.reduce((k, l) => k + Math.max(1, Math.round(l.span / CAB_GAP_PX)), 0));
-      expect(sim.cars.length / was).toBeGreaterThan(0.4);
-      expect(sim.cars.length / was).toBeLessThan(0.6);
+      const before = sim.lanes.map((l) => Math.max(1, Math.round(l.span / CAB_GAP_PX))); // after decision 180
+      const total = before.reduce((a, b) => a + b, 0);
+      expect(sim.cars.length).toBe(Math.max(sim.lanes.length, Math.round(total / 2))); // half again
+      for (const l of sim.lanes) expect(sim.cars.filter((c) => c.lane === l).length).toBeGreaterThanOrEqual(1);
+      const first = sim.lanes.reduce((k, l) => k + Math.max(1, Math.round(l.span / (22 * TILE))), 0); // before any halving
+      expect(sim.cars.length / first).toBeLessThan(0.4);
     }
   });
 

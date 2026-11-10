@@ -1,55 +1,46 @@
-// The owner's rare cab (2026-11-09): one arrival in a thousand is a black sports coupé with chrome rims; everything
-// else about it is a cab. The odds come from a seeded random, so they are checked exactly here.
+// The owner's car (2026-11-10, decision 191): exactly one in every 50 cars that enter the road is the black sports
+// coupé with chrome rims; everything else about it is a cab. Counted per car that enters (a cruising cab each time it
+// comes round, a commuter's cab when it is hailed), not rolled, so the share is exact.
 import { describe, expect, it } from "vitest";
-import {
-  RARE_CAB_ODDS,
-  initialState,
-  layout,
-  rareCab,
-  reduce,
-  seededRandom,
-  createTraffic,
-  stepTraffic,
-  trafficCars,
-} from "../src/city/city-state.js";
+import { RARE_CAB_ODDS, arrive, createTraffic, initialState, layout, reduce, stepTraffic, trafficCars } from "../src/city/city-state.js";
 
-describe("the rare cab", () => {
-  it("is one in a thousand, from a seeded random", () => {
-    expect(RARE_CAB_ODDS).toBe(1000);
-    expect(seededRandom("a")).toBe(seededRandom("a")); // seeded: the same seed, the same draw
-    expect(seededRandom("a")).not.toBe(seededRandom("b"));
-    const draws = Array.from({ length: 200_000 }, (_, i) => seededRandom(`cab:${i}`));
-    for (const v of draws) expect(v >= 0 && v < 1).toBe(true);
-    const mean = draws.reduce((a, b) => a + b, 0) / draws.length;
-    expect(mean).toBeGreaterThan(0.49); // spread evenly
-    expect(mean).toBeLessThan(0.51);
-    const n = 1_000_000;
-    let rare = 0;
-    for (let i = 0; i < n; i++) if (rareCab(`lane:${i}`)) rare++;
-    expect(rare / n).toBeGreaterThan(0.0009); // 1 in 1000, within 10 %
-    expect(rare / n).toBeLessThan(0.0011);
-  });
-
-  it("is otherwise just a cab: same lanes, the same traffic; a new arrival rolls again", () => {
-    const s = ["A", "B", "C", "D"].reduce(
+const town = () =>
+  layout(
+    ["A", "B", "C", "D"].reduce(
       (st, name, i) => reduce(st, { type: "department.created", name, mission: "x", manager_id: `m${i}` }, i),
       initialState(0),
-    );
-    const w = layout(s, { homes: 16 });
-    const sim = createTraffic(w);
-    let seen = 0,
-      cabs = 0;
-    const laps = new Set<string>();
-    for (let t = 0; t < 1_800_000; t += 1000) {
+    ),
+    { homes: 8 },
+  );
+
+describe("the owner's car", () => {
+  it("is every 50th car to enter, never two in 50", () => {
+    expect(RARE_CAB_ODDS).toBe(50);
+    const sim = createTraffic(town());
+    const flags = Array.from({ length: 5000 }, () => arrive(sim));
+    const at = flags.flatMap((r, i) => (r ? [i] : []));
+    expect(at.length).toBeGreaterThanOrEqual(99);
+    expect(at.length).toBeLessThanOrEqual(101);
+    for (let i = 1; i < at.length; i++) expect(at[i]! - at[i - 1]!).toBe(50); // a steady one in 50
+  });
+
+  it("over a long run of real traffic, cruising cabs and hailed commuter cabs together, 1 in 50 of the cars that enter", () => {
+    const sim = createTraffic(town());
+    let entered = sim.cars.length,
+      rare = sim.cars.filter((c) => c.rare).length,
+      seen = 0,
+      onRoad = 0;
+    const laps = new Map(sim.cars.map((c) => [c.id, c.lap]));
+    for (let t = 0; t < 3 * 3_600_000; t += 1000) {
       stepTraffic(sim, 1000);
-      for (const c of trafficCars(sim)) {
-        cabs++;
-        if (c.rare) seen++;
-      }
-      for (const c of sim.cars) laps.add(`${c.id}:${c.lap}`);
+      for (const c of sim.cars) if (c.lap !== laps.get(c.id)) { laps.set(c.id, c.lap); entered++; if (c.rare) rare++; }
+      if (t % 60_000 === 0) for (let k = 0; k < 2; k++) { entered++; if (arrive(sim)) rare++; } // two commuters hail a cab a minute
+      for (const c of trafficCars(sim)) { onRoad++; if (c.rare) seen++; }
     }
-    expect(laps.size).toBeGreaterThan(sim.cars.length * 3); // cars keep arriving anew, and each arrival rolls again
-    expect(cabs).toBeGreaterThan(1000);
-    expect(seen).toBeLessThan(cabs / 100); // rare indeed
+    expect(entered).toBe(sim.arrivals); // every car that entered took a number, and only those
+    expect(entered).toBeGreaterThan(2000);
+    expect(Math.abs(rare - entered / RARE_CAB_ODDS)).toBeLessThanOrEqual(1); // exactly one in 50
+    expect(seen / onRoad).toBeGreaterThan(0.01); // and on the road, about 2 % of the time
+    expect(seen / onRoad).toBeLessThan(0.035);
   });
 });

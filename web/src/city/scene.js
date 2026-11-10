@@ -4,7 +4,7 @@
 // Reviewer; each department's manager stands at its door; panels are React (see CityView.tsx).
 // The City View: a small game world of the agents, drawn pixel by pixel on a canvas from city-state.js.
 // All of the art is drawn here in code. Every person on screen is a real agent; only the scenery moves on its own.
-import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, rareCab, roundaboutDetours, rideStep, ringOf } from "./city-state.js";
+import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf } from "./city-state.js";
 
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const INK = "#1d1c36";
@@ -231,7 +231,7 @@ function cab(view) {
   }));
   return cabs.get(view);
 }
-// The rare one (1 in RARE_CAB_ODDS arrivals, the owner's wish): a low, wide black sports coupé with chrome rims, a
+// The rare one (1 in every RARE_CAB_ODDS cars on the road, the owner's wish): a low, wide black sports coupé with chrome rims, a
 // tall swan-neck wing and a full-width rear light bar, still wearing the cab's roof light. An original drawing:
 // no badges or marks. Side on, nose on (coming down the avenue) and tail on (going up it).
 const GT_BODY = "#17171d", GT_DARK = "#0b0b10", GT_SHINE = "#3d3f50", GT_GLASS = "#283450", CHROME = "#d6dce8", CHROME_D = "#8f97a8";
@@ -1547,7 +1547,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       }
       // Hailing a cab at the kerb, and its driving off after the drop.
       const riding = !!(p.route && !p.waitUntil && p.ride?.[0]);
-      if (riding && !p.wasRiding) { p.rideAt = now; p.rareCab = rareCab(`${p.id}:${Math.round(now)}`); root.dataset.taxiRides = String(Number(root.dataset.taxiRides ?? 0) + 1); dust(p.x, p.y, 6, ["#f4c63c", "#fff6e0"], 24, 0.35); }
+      if (riding && !p.wasRiding) { p.rideAt = now; p.rareCab = traffic ? arrive(traffic) : false; /* a hailed cab enters the road and takes the next number: 1 in 50 is the owner's car */ root.dataset.taxiRides = String(Number(root.dataset.taxiRides ?? 0) + 1); dust(p.x, p.y, 6, ["#f4c63c", "#fff6e0"], 24, 0.35); }
       if (!riding && p.wasRiding && !p.inside) leaving.push({ x: p.x, y: p.y, east: !p.flip, t: 0, rare: p.rareCab });
       p.wasRiding = riding;
     }

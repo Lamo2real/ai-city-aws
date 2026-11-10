@@ -284,7 +284,7 @@ export type CityJunction = { id: string; street: number; road: number; cx: numbe
 export type CityLane = { id: string; axis: "x" | "y"; dir: 1 | -1; at: number; from: number; to: number; span: number; len: number; townFrom: number; townTo: number; controls: Array<{ j: CityJunction; dc: number; entryD: number; exitD: number; entryAng: number; exitAng: number }> };
 export type CityCar = { id: string; lane: CityLane | null; d: number; v: number; f: number; lap: number; rare: boolean; commit: string | null; stopFor: string | null; braking: boolean; ring: { j: CityJunction; ang: number; exitAng: number; toLane: CityLane; toD: number } | null };
 export type CityGuest = { id?: string; x: number; y: number; vertical: boolean; commit: string | null; ring: { j: CityJunction; ang: number } | null };
-export type CityTraffic = { world: CityWorld; lanes: CityLane[]; junctions: CityJunction[]; cars: CityCar[]; guests: CityGuest[]; t: number; rand: () => number; margin: number };
+export type CityTraffic = { world: CityWorld; lanes: CityLane[]; junctions: CityJunction[]; cars: CityCar[]; guests: CityGuest[]; t: number; rand: () => number; margin: number; arrivals: number; rareOffset: number };
 export type CityRoutePoint = CityPoint & { ring?: string };
 export type CityRider = { x: number; y: number; to?: CityRoutePoint | null; rv?: number; rare?: boolean; stopFor?: string | null; commit?: string | null; braking?: boolean; guest?: CityGuest | null };
 export const RIDE_PX_S: number;
@@ -313,6 +313,7 @@ export function createTraffic(world: CityWorld, seed?: string): CityTraffic;
 export function stepTraffic(sim: CityTraffic, dtMs: number): void;
 export function trafficCars(sim: CityTraffic): CityTrafficCar[];
 export const RARE_CAB_ODDS: number;
-export function seededRandom(seed: string): number;
-export function rareCab(seed: string): boolean;
+export function arrive(sim: CityTraffic): boolean;
+export const CAB_SHARE: number;
+export function cabsPerLane(spans: number[]): number[];
 export function rideLegs(world: CityWorld, route: CityPoint[], from: CityPoint): boolean[];
