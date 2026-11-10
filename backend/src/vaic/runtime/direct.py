@@ -178,6 +178,16 @@ async def _run_tool(req: EngineRequest, tools: dict[str, Any], use: dict[str, An
             r["status"] = "error"
         return {"toolResult": r}
 
+    async def finished(text: str, error: bool = False) -> dict[str, Any]:
+        """The result, after it is written down: what VAIC did is in its history before it says a word about it."""
+        done = getattr(req, "on_tool_done", None)
+        if done:
+            try:
+                await done(name, args, text, error)
+            except Exception as e:  # the log is a help, never a reason to lose the result
+                log("warn", "vaic.action_log_failed", error=type(e).__name__)
+        return result(text, error)
+
     spec = tools.get(name)
     if spec is None:
         return result(f"{name} is not one of your tools.", True)
@@ -188,9 +198,10 @@ async def _run_tool(req: EngineRequest, tools: dict[str, Any], use: dict[str, An
             await req.on_activity(activity_for(full), name)
         try:
             # Shielded: a call under way when the owner presses Stop still finishes whole.
-            return result(await asyncio.shield(spec.handler(args)))
+            out = await asyncio.shield(spec.handler(args))
         except Exception as e:
-            return result(f"The tool failed: {type(e).__name__}: {str(e)[:300]}", True)
+            return await finished(f"The tool failed: {type(e).__name__}: {str(e)[:300]}", True)
+        return await finished(out)
     r = await gate(
         full, args, req.ctx.role, req.ctx.agent_id, consume_approval=req.ledger.consume_approval, extra_ask=spec.ask
     )
@@ -205,6 +216,7 @@ async def _run_tool(req: EngineRequest, tools: dict[str, Any], use: dict[str, An
         await req.on_activity(activity_for(full), spec.step(args) if spec.step else name)
     try:
         # Shielded: a call under way when the owner presses Stop still finishes whole.
-        return result(await asyncio.shield(spec.handler(args)))
+        out = await asyncio.shield(spec.handler(args))
     except Exception as e:
-        return result(f"The tool failed: {type(e).__name__}: {str(e)[:300]}", True)
+        return await finished(f"The tool failed: {type(e).__name__}: {str(e)[:300]}", True)
+    return await finished(out)

@@ -109,4 +109,16 @@ describe("Stop", () => {
     store.removeLine(owner().id);
     expect(store.get().chat).toHaveLength(0);
   });
+
+  it("shows one answer per message, even if a second turn for it replies (decision 192)", async () => {
+    await sendMessage("delete both repos");
+    const id = `owner-${owner().id}`;
+    reply("Done, Sir: both deleted.", true, id);
+    reply("Done, Sir: both deleted.", true, id); // the safety-net copy through the bus
+    reply("I couldn't", false, id); // a second turn for the same message
+    reply("I couldn't delete anything.", true, id);
+    const answers = store.get().chat.filter((l) => l.who === "vaic");
+    expect(answers).toHaveLength(1);
+    expect(answers[0]).toMatchObject({ text: "Done, Sir: both deleted.", state: "done" });
+  });
 });

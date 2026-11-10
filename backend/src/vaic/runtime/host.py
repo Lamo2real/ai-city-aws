@@ -117,6 +117,19 @@ class AgentHost:
             raise RuntimeError(f"this runtime serves {self.o.role}, not {inv['role']}")
         ledger, bus = self.d.ledger, self.d.bus
         failed = False
+        if inv["role"] == "vaic" and not await ledger.claim(f"vaic-turn:{inv['id']}"):
+            # One owner message gets exactly one VAIC turn and one reply (decision 192). The same message can arrive
+            # again while or after its turn runs: the dispatcher's call retried, SQS redelivering it, the crash
+            # sweep. Running it again repeated what VAIC had done ("already exists") and contradicted its first reply.
+            log(
+                "info",
+                "turn.skipped",
+                agent=inv["agentId"],
+                message=inv["id"],
+                reason="this message already had its turn",
+            )
+            return ""
+        acted = False  # VAIC called a tool: a failed turn is not given back for a retry (it would act twice)
         try:
             await self.ensure_core()
             if self.o.git_auth is not None:
@@ -252,6 +265,14 @@ class AgentHost:
                 streamed.append(text)
                 await live.add(text)
 
+            async def on_tool_done(tool: str, args: dict[str, Any], out: str, error: bool) -> None:
+                nonlocal acted
+                acted = True
+                if is_vaic and conversation and tool not in READ_ONLY_TOOLS:
+                    await ledger.add_conversation_line(
+                        conversation, "vaic", action_line(tool, args, out, error, now_iso())
+                    )
+
             async def runner(turn: TurnInput) -> TurnOutput:
                 return await self.o.engine(
                     EngineRequest(
@@ -264,6 +285,7 @@ class AgentHost:
                         cwd=f"/tmp/work/{agent['id']}" if agent.get("kind") == "worker" else None,  # noqa: S108
                         on_needs_approval=on_needs_approval,
                         on_activity=on_activity,
+                        on_tool_done=on_tool_done,
                         on_text=on_text if is_vaic and conversation else None,
                         skills_dir=str(skills_dir) if skills_dir else None,
                         skill_names=frozenset(r["name"] for r in skill_rows) if skills_dir else frozenset(),
@@ -271,6 +293,10 @@ class AgentHost:
                     )
                 )
 
+            if is_vaic and conversation:
+                # The owner's line goes in before the turn runs (the prompt above already holds it), so the actions
+                # VAIC logs while it works sit after the message that asked for them, and before its reply.
+                await ledger.add_conversation_line(conversation, "owner", _owner_body(inv))
             gated = run_gated_turn(
                 GatedTurn(
                     kind=inv["role"],
@@ -312,16 +338,15 @@ class AgentHost:
             )
             if is_vaic and conversation:
                 await live.done(result.output.text)
-                if inv.get("from") == "owner":
-                    await ledger.add_conversation_line(conversation, "owner", inv["body"])
-                else:
-                    await ledger.add_conversation_line(conversation, "owner", f"[{inv['kind']} from {inv.get('from')}]")
                 await ledger.add_conversation_line(conversation, "vaic", result.output.text)
             await bus.put({"type": "activity", "id": agent["id"], "activity": "idle"})
             await ledger.finish_work(inv["id"])
             return result.output.text
         except BaseException:
             failed = True
+            if inv["role"] == "vaic" and not acted:
+                # Nothing was done yet: a retry of this message may run (a model error, a throttle).
+                await ledger.unclaim(f"vaic-turn:{inv['id']}")
             raise
         finally:
             if inv["role"] == "worker" and inv.get("department"):
@@ -337,11 +362,13 @@ class AgentHost:
             # "done" sends it the reliable way too (the bus), not only straight to the open HUDs.
             event = {"type": "vaic.stopped", "conversation": conversation, "message_id": inv["id"], "tools": started}
             await send({**event, "done": True})
-            await self._remember_stopped(inv, partial, started)
+            await self._remember_stopped(inv, partial, started, owner_line=False)
         await self.d.bus.put({"type": "activity", "id": "vaic", "activity": "idle"})
         await ledger.finish_work(inv["id"])
 
-    async def _remember_stopped(self, inv: dict[str, Any], partial: str, started: list[dict[str, Any]]) -> None:
+    async def _remember_stopped(
+        self, inv: dict[str, Any], partial: str, started: list[dict[str, Any]], owner_line: bool = True
+    ) -> None:
         """A stopped exchange stays in the conversation for context (the owner, 2026-11-10: "still save them as chat
         history"), like a stopped turn in ChatGPT or Claude: the owner's message, then VAIC's line starting with the
         marker (first, so the 4,000-character cap can only cut the partial answer), so a later turn reads it as
@@ -349,14 +376,14 @@ class AgentHost:
         conversation = str(inv.get("conversation") or "")
         if not conversation:
             return
-        body = inv["body"] if inv.get("from") == "owner" else f"[{inv['kind']} from {inv.get('from')}]"
         note = "(stopped by the owner"
         note += " before VAIC answered" if not partial.strip() else ""
         if started:
             note += "; tools already called: " + ", ".join(str(t.get("detail") or t.get("activity")) for t in started)
         note += ". Not an open request: do not carry it on unless the owner asks again.)"
         text = f"{note} {partial.strip()}".strip() if partial.strip() else note
-        await self.d.ledger.add_conversation_line(conversation, "owner", body)
+        if owner_line:  # a turn stopped mid-way wrote the owner's line when it started
+            await self.d.ledger.add_conversation_line(conversation, "owner", _owner_body(inv))
         await self.d.ledger.add_conversation_line(conversation, "vaic", text)
 
     async def _project_lines(self, conversation: str, recent: list[dict[str, Any]]) -> list[str]:
@@ -534,7 +561,7 @@ class AgentHost:
         if role == "vaic":
             lines += await self._workflow_lines(inv)
         if role == "vaic" and inv.get("conversation"):
-            recent = await ledger.recent_conversation(inv["conversation"])
+            recent = await ledger.recent_conversation(inv["conversation"], 16)  # room for its action log lines
             lines = [*(await self._project_lines(inv["conversation"], recent)), *lines]
             if recent:
                 lines = [
@@ -609,3 +636,54 @@ def _draft_line(dr: dict[str, Any], indent: str) -> str:
     """An app draft as the city checked it (the reason is the city's own words, not the worker's)."""
     reason = f": {dr['reason']}" if dr.get("reason") else ""
     return f"{indent}- app draft {dr['draft_id']} [{dr.get('status')}]{reason}"
+
+
+def _owner_body(inv: dict[str, Any]) -> str:
+    return str(inv["body"]) if inv.get("from") == "owner" else f"[{inv['kind']} from {inv.get('from')}]"
+
+
+ACTION_MARK = "[VAIC action"
+"""How VAIC's own action log starts in its conversation (``agents/vaic.md``: trust your action log)."""
+
+READ_ONLY_TOOLS = frozenset(
+    {
+        "get_status",
+        "get_task_status",
+        "list_notes",
+        "list_knowledge",
+        "search_knowledge",
+        "find_files",
+        "show_files",
+        "get_file",
+        "get_reports",
+        "list_standing_orders",
+        "list_workflows",
+        "list_deals",
+        "list_customer_tickets",
+        "calendar_agenda",
+        "my_workers",
+        "load_app",
+        "offer_choices",
+        "use_skill",
+    }
+)
+"""VAIC's tools that only read: they change nothing, so they are not written into its action log."""
+
+
+def action_line(tool: str, args: dict[str, Any], out: str, error: bool, at: str) -> str:
+    """One finished tool call, as VAIC's history keeps it: what it ran, when, and what came back (decision 192).
+
+    "[VAIC action 2026-11-10 19:40 UTC] run_command: gh repo delete ProjectVAIC/test-repo-1 --yes → ok: exit 0"
+    """
+    what = str(args.get("command") or "") if tool == "run_command" else ""
+    if not what:
+        what = ", ".join(f"{k}={str(v)[:120]}" for k, v in args.items() if k != "confirm" or v)
+    what = " ".join(what.split())[:300]
+    said = " ".join(str(out).split())[:300]
+    failed = (
+        error
+        or said.startswith(("Denied by policy", "Invalid input", "The tool failed"))
+        or (tool == "run_command" and not said.startswith("exit 0"))
+    )
+    when = at[:16].replace("T", " ") + " UTC"
+    return f"{ACTION_MARK} {when}] {tool}: {what} → {'FAILED' if failed else 'ok'}: {said}"

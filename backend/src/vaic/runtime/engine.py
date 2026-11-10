@@ -37,6 +37,9 @@ class EngineRequest:
     """Called when a built-in tool call needs the owner's approval for this exact action (tool, input, hash, reason)."""
     on_activity: Callable[[str, str | None], Awaitable[None]] | None = None
     """What the agent is doing, for the City view ("coding", "reading", ...)."""
+    on_tool_done: Callable[[str, dict[str, Any], str, bool], Awaitable[None]] | None = None
+    """Called once a tool call has finished (tool name, its input, what it returned, whether it failed): VAIC writes
+    its actions into the conversation as they happen (decision 192)."""
     cwd: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
     skills_dir: str | None = None

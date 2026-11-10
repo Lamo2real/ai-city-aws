@@ -111,6 +111,9 @@ class Store {
   private listeners = new Set<Listener>();
   /** Messages whose answer the owner stopped (`owner-<line id>`): anything still in flight for them is dropped. */
   private stoppedIds = new Set<string>();
+  /** Messages VAIC has already answered in full: one owner message gets one reply, so a second turn's words for the
+   * same message never show as another answer (decision 192). */
+  private answeredIds = new Set<string>();
   /** Raw events for the City scene, which keeps its own animated copy. */
   readonly sceneEvents = new Set<(e: unknown) => void>();
 
@@ -190,8 +193,12 @@ class Store {
       if (String(e.conversation ?? "main") !== "main") return;
       return this.vaicFiles((e.files as FileCardData[] | undefined) ?? [], String(e.label ?? ""));
     }
-    if (e.type === "vaic.reply")
+    if (e.type === "vaic.reply") {
+      const mid = String(e.message_id ?? "");
+      if (mid && this.answeredIds.has(mid)) return; // already answered: the repeat of the final reply, or a second turn
+      if (mid && e.done) this.answeredIds.add(mid);
       return this.vaicReply(e as unknown as { conversation: string; text: string; done: boolean });
+    }
     if (e.type === "activity" && e.id === "vaic") this.vaicStep(String(e.activity ?? ""), e.detail as string | null);
     this.taskEvent(e);
     this.cardEvent(e);

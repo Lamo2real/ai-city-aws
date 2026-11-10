@@ -12,8 +12,11 @@ import os
 from collections.abc import Mapping
 from typing import Any, Protocol
 
+from botocore.config import Config
+from botocore.exceptions import ReadTimeoutError
+
 from vaic.shared.aws import aws_city
-from vaic.shared.clients import client
+from vaic.shared.clients import client, config_for
 from vaic.shared.config import caps_config
 from vaic.shared.hierarchy.dispatch import AgentInvoker, Dispatcher, DispatcherDeps
 from vaic.shared.hierarchy.queue import WorkMessage
@@ -39,11 +42,30 @@ def session_id_for(m: WorkMessage, owner: str = "owner", version: str = "") -> s
     return session_ids.worker(m.get("department") or "none", m["agentId"])
 
 
-class AgentCoreInvoker:
-    """``client`` is a boto3 ``bedrock-agentcore`` client."""
+VAIC_CALL = Config(retries={"mode": "standard", "max_attempts": 1}, read_timeout=105, connect_timeout=5)
+"""VAIC's turn runs while the dispatcher waits for it (its reply streams to the HUD meanwhile), and a turn that
+uses tools can take longer than the shared client's 10-second read timeout. That timeout, plus botocore retrying
+the call, started the same message's turn up to five times: VAIC deleted the repos, then three more turns said it
+never had (decision 192). So VAIC's call is never retried, waits up to 105 s (under the Lambda's 120 s), and a call
+that still times out leaves the turn running in the runtime."""
 
-    def __init__(self, client: Any, arns: Mapping[str, str], live: Mapping[str, str] | None = None) -> None:
+
+def _is_timeout(e: Exception) -> bool:
+    return isinstance(e, (ReadTimeoutError, asyncio.TimeoutError, TimeoutError))
+
+
+class AgentCoreInvoker:
+    """``client`` is a boto3 ``bedrock-agentcore`` client; ``vaic_client`` the one for VAIC's calls (``VAIC_CALL``)."""
+
+    def __init__(
+        self,
+        client: Any,
+        arns: Mapping[str, str],
+        live: Mapping[str, str] | None = None,
+        vaic_client: Any = None,
+    ) -> None:
         self._client = client
+        self._vaic_client = vaic_client or client
         self._arns = arns
         # Where VAIC streams its reply straight to the HUD (the WebSocket endpoint and connections table).
         # Passed per invocation because the runtime is created before the WebSocket API.
@@ -55,14 +77,22 @@ class AgentCoreInvoker:
             raise RuntimeError(f"no runtime for {inv['role']}")
         if inv["role"] == "vaic" and self._live.get("wsEndpoint") and self._live.get("connectionsTable"):
             inv = {**inv, **self._live}
-        r = await asyncio.to_thread(
-            self._client.invoke_agent_runtime,
-            agentRuntimeArn=arn,
-            runtimeSessionId=inv["sessionId"],
-            contentType="application/json",
-            accept="application/json",
-            payload=json.dumps(inv).encode(),
-        )
+        try:
+            r = await asyncio.to_thread(
+                (self._vaic_client if inv["role"] == "vaic" else self._client).invoke_agent_runtime,
+                agentRuntimeArn=arn,
+                runtimeSessionId=inv["sessionId"],
+                contentType="application/json",
+                accept="application/json",
+                payload=json.dumps(inv).encode(),
+            )
+        except Exception as e:
+            if inv["role"] == "vaic" and _is_timeout(e):
+                # The turn reached the runtime and is still running; its reply streams to the HUD as usual. Sending
+                # the message again would only start a second turn for it (the runtime refuses that anyway).
+                log("warn", "dispatch.vaic_still_running", message=inv.get("id"))
+                return
+            raise
         status = r.get("statusCode") or r.get("ResponseMetadata", {}).get("HTTPStatusCode")
         if status and status >= 400:
             raise RuntimeError(f"runtime answered {status}")
@@ -127,6 +157,7 @@ def _dispatcher() -> Dispatcher:
             "worker": env.get("VAIC_RUNTIME_ARN_WORKER", ""),
         },
         {"wsEndpoint": env.get("VAIC_WS_ENDPOINT", ""), "connectionsTable": env.get("VAIC_CONNECTIONS_TABLE", "")},
+        city.session.client("bedrock-agentcore", config=config_for("bedrock-agentcore").merge(VAIC_CALL)),
     )
     owner = env.get("VAIC_OWNER_ID", "owner")
     version = env.get("VAIC_RUNTIME_VERSION", "")

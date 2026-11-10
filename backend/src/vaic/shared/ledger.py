@@ -667,3 +667,7 @@ class Ledger:
         return await self.table.put(
             {"pk": f"IDEMP#{key}", "sk": "META", "ttl": self.now_ms() // 1000 + ttl_seconds}, if_not_exists=True
         )
+
+    async def unclaim(self, key: str) -> None:
+        """Gives a claim back, so the next delivery of the same thing runs (it failed before doing anything)."""
+        await self.table.delete(f"IDEMP#{key}", "META")
