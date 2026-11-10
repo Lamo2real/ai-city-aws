@@ -56,7 +56,7 @@ export function applySnapshot(state, snap, now = Date.now()) {
     next.agents[a.id] = filed(next.departments, a);
     if (!listed) next.departments = touch(next, deptOf(a), now - 60000);
   }
-  // Saved specialists who are not hired right now live in the houses.
+  // Saved specialists who are not hired right now live in the apartment buildings.
   for (const sp of snap.specialists ?? []) {
     const id = `spec-${sp.id}`;
     if (!next.agents[id]) next.agents[id] = { id, kind: "specialist", role: sp.specialty, department: sp.department, model: "opus-5-5", parent: null, state: "retired", worker_state: "released", last_active_at: sp.created_at };
@@ -520,9 +520,18 @@ export const BUILDING_H = 5;
 // Every department is one tower of the same size, however many work inside (the owner's choice, decision 117):
 // workers walk in through the door and are counted on the roof instead of sitting on a terrace that grows.
 export const TOWER_H = 12;
-const PLOT_W = 9, SEATS_PER_ROW = 4, STREET = 3, HQ_W = 12, HQ_H = 11, HOUSES_PER_ROW = 4, HOUSE_W = 3, HOUSE_ROW_H = 4, HOUSE_BLOCK_ROWS = 3;
+const PLOT_W = 9, SEATS_PER_ROW = 4, STREET = 3, HQ_W = 12, HQ_H = 11;
 // How far the countryside and the roads run on past the town on every side, in tiles (the owner: a larger map).
 export const MAP_MARGIN = 48;
+
+// The three apartment buildings of a block of homes (decision 188), [kind, x, y, w, h] in tiles inside a box
+// APT_BOX_W wide and APT_BOX_H deep: a tall slim brick tower, a wide shorter one at the back, a brownstone mid-rise
+// in front, and a courtyard of grass and trees between them. Nothing stands below a door, so everyone walks straight out to the street
+// (or the footpath on a phone). Every other block is mirrored, so the town never repeats itself exactly.
+const APARTMENTS = [["slim", 0, 0, 3, 9], ["mid", 3, 5, 4, 5], ["wide", 5, 0, 5, 4]];
+const APT_BOX_W = 10, APT_BOX_H = 11;
+export const HOMES_PER_BLOCK = 24; // eight residents by each building's door
+const HOMES_PER_APT = HOMES_PER_BLOCK / APARTMENTS.length;
 
 // A tower's footprint and height in tiles, fixed by its name (decision 166): the skyline is uneven like a real
 // one, but a tower still never grows or shrinks with its headcount (decision 117) and never moves.
@@ -538,7 +547,7 @@ const gapAfter = (r, k) => (hashOf(`gap:${r}:${k}`) % 3 === 0 ? 2 : STREET);
 // towers never grow).
 // The town (decision 166): HQ and the VAIC plaza in the middle with the neighbourhood under it, the towers on both
 // sides of it, each its own size, rows as tall as their tallest tower, side streets wherever they fall.
-export function layout(state, { portrait = false, seats = {}, houses = 0 } = {}) {
+export function layout(state, { portrait = false, seats = {}, homes = 0 } = {}) {
   const names = departmentNames(state);
   for (const d of Object.keys(seats)) if (d !== "HQ" && !names.includes(d)) names.push(d); // someone works in a department the registry no longer lists
   const n = names.length;
@@ -597,34 +606,44 @@ export function layout(state, { portrait = false, seats = {}, houses = 0 } = {})
     });
   }
   const officesEnd = y - STREET;
-  const home = [];
+  // The neighbourhood (decision 188): blocks of three New York apartment buildings, one block per HOMES_PER_BLOCK
+  // residents. Wide: under HQ, a block between each pair of streets, more blocks (and streets) below when needed.
+  // Phone: under the offices, a block on each side of the avenue, rows apart by a footpath.
+  const blocks = Math.max(1, Math.ceil(homes / HOMES_PER_BLOCK));
+  const apartments = [], homeBlocks = [], paths = [], parks = [];
+  const build = (x, y, w, b) => {
+    const mirror = b % 2 === 1, off = Math.floor((w - APT_BOX_W) / 2);
+    homeBlocks.push({ x, y, w, h: APT_BOX_H, mirror });
+    for (const [kind, ax, ay, aw, ah] of APARTMENTS) apartments.push({ kind, block: b, x: x + off + (mirror ? APT_BOX_W - ax - aw : ax), y: y + ay, w: aw, h: ah });
+  };
   let homesY, homesW, homesH;
   if (portrait) {
-    // Under the offices, in rows; the avenue runs on down between them.
     homesY = y; homesW = width - 2;
-    const xs = [];
-    for (let x = 1; x + HOUSE_W <= width - 1; x += HOUSE_W) if (x + HOUSE_W <= avenueX || x >= avenueX + STREET) xs.push(x);
-    for (let i = 0; i < houses; i++) home.push({ x: xs[i % xs.length], y: homesY + Math.floor(i / xs.length) * HOUSE_ROW_H });
-    homesH = Math.max(Math.ceil(houses / xs.length) * HOUSE_ROW_H, HOUSE_ROW_H);
+    for (let b = 0; b < blocks; b++) {
+      const top = homesY + Math.floor(b / 2) * (APT_BOX_H + 1);
+      build(b % 2 ? avenueX + STREET : 1, top, b % 2 ? width - 1 - avenueX - STREET : avenueX - 1, b);
+      if (b % 2 === 0) paths.push((top + APT_BOX_H) * TILE + 8);
+    }
+    homesH = Math.ceil(blocks / 2) * (APT_BOX_H + 1);
+    if (blocks % 2) parks.push({ x: avenueX + STREET, y: homesY + homesH - APT_BOX_H - 1, w: width - 1 - avenueX - STREET, h: APT_BOX_H }); // the other side: trees
   } else {
-    // Under HQ, in a block between each pair of streets; more houses than fit add blocks (and streets) below.
     homesY = 1 + hqH + STREET; homesW = HQ_W;
-    const blocks = [];
+    const spaces = [];
     let top = homesY;
-    for (let r = 1; r < rows; r++) { blocks.push({ y: top, rows: Math.min(HOUSE_BLOCK_ROWS, Math.floor((rowH[r] - 3) / HOUSE_ROW_H) + 1), bottom: top + rowH[r] }); top += rowH[r] + STREET; }
-    let placed = 0, bottom = officesEnd;
-    for (let b = 0; placed < houses; b++) {
-      if (!blocks[b]) { blocks.push({ y, rows: HOUSE_BLOCK_ROWS, bottom: y + TOWER_H }); streets.push({ y: y + TOWER_H, x0: 0, x1: 0 }); y += TOWER_H + STREET; }
-      const bl = blocks[b];
-      for (let k = 0; k < HOUSES_PER_ROW * bl.rows && placed < houses; k++, placed++) home.push({ x: hqX + (k % HOUSES_PER_ROW) * HOUSE_W, y: bl.y + Math.floor(k / HOUSES_PER_ROW) * HOUSE_ROW_H });
-      bottom = Math.max(bottom, bl.bottom);
+    for (let r = 1; r < rows; r++) { spaces.push({ y: top, bottom: top + rowH[r] }); top += rowH[r] + STREET; }
+    let bottom = officesEnd;
+    for (let b = 0; b < blocks; b++) {
+      if (!spaces[b]) { spaces.push({ y, bottom: y + TOWER_H }); streets.push({ y: y + TOWER_H, x0: 0, x1: 0 }); y += TOWER_H + STREET; }
+      build(hqX, spaces[b].bottom - APT_BOX_H, HQ_W, b); // at the foot of the block, the doors near the street below
+      if (spaces[b].bottom - APT_BOX_H > spaces[b].y) parks.push({ x: hqX, y: spaces[b].y, w: HQ_W, h: spaces[b].bottom - APT_BOX_H - spaces[b].y });
+      bottom = Math.max(bottom, spaces[b].bottom);
     }
     homesH = bottom - homesY;
     for (const s of streets) s.x1 = width; // every street runs edge to edge, and on off the map
     if (westW.some(Boolean)) lanes.push({ x: hqX - STREET, y0: -MAP_MARGIN, y1: Math.max(y, homesY + homesH + 1) + MAP_MARGIN }); // the road west of HQ
   }
   const hq = { dept: "HQ", x: hqX, y: 1, w: HQ_W, h: hqH, color: DEPT_COLOR.HQ };
-  return { hq, buildings, lots, lanes, streets, hqStreet: portrait ? 1 + HQ_H : 1 + hqH, officesEnd, avenue: avenueX, width, height: Math.max(y, homesY + homesH + 1), homes: { x: portrait ? 1 : hqX, y: homesY, w: homesW, h: homesH, houses: home }, portrait };
+  return { hq, buildings, lots, lanes, streets, hqStreet: portrait ? 1 + HQ_H : 1 + hqH, officesEnd, avenue: avenueX, width, height: Math.max(y, homesY + homesH + 1), homes: { x: portrait ? 1 : hqX, y: homesY, w: homesW, h: homesH, apartments, blocks: homeBlocks, paths, parks }, portrait };
 }
 
 // Where a worker at work is: inside the tower, just behind its door (drawn hidden; the roof counts them). The seat
@@ -637,15 +656,24 @@ export function seatSpot(building, seat) {
   return { x: d.x, y: d.y - 2, inside: true };
 }
 
-// Two spots in each house's front yard.
+// Which apartment building a home slot is in: the slots take turns between a block's three buildings.
+export function homeOf(world, slot) {
+  const b = Math.floor(slot / HOMES_PER_BLOCK), k = slot % HOMES_PER_BLOCK;
+  return world.homes.apartments[b * APARTMENTS.length + (k % APARTMENTS.length)] ?? null;
+}
+// Where a resident stands: on the pavement by its building's door, nearest first, in two rows of four.
+const STAND = [-7, 7, -19, 19];
 export function homeSpot(world, slot) {
-  const h = world.homes.houses[Math.floor(slot / 2)];
-  return h ? { x: h.x * TILE + (slot % 2 ? 36 : 12), y: h.y * TILE + 58 } : null;
+  const a = homeOf(world, slot);
+  if (!a) return null;
+  const j = Math.floor((slot % HOMES_PER_BLOCK) / APARTMENTS.length) % HOMES_PER_APT;
+  const d = doorOf(a);
+  return { x: d.x + STAND[j % 4], y: (a.y + a.h) * TILE + 6 + Math.floor(j / 4) * 8 };
 }
 
 // An evening walk keeps to the streets: to the nearest street, along it to the avenue, along the avenue, and in.
 export function walkRoute(world, from, to) {
-  const lanes = [...world.streets.map((s) => (s.y + STREET / 2) * TILE), ...new Set(world.homes.houses.map((h) => h.y * TILE - 5))];
+  const lanes = [...world.streets.map((s) => (s.y + STREET / 2) * TILE), ...(world.homes.paths ?? [])];
   const nearest = (y) => lanes.reduce((best, l) => (Math.abs(l - y) < Math.abs(best - y) ? l : best), lanes[0] ?? y);
   const ax = (world.avenue + STREET / 2) * TILE, a = nearest(from.y), b = nearest(to.y);
   return a === b ? [{ x: from.x, y: a }, { x: to.x, y: a }, to] : [{ x: from.x, y: a }, { x: ax, y: a }, { x: ax, y: b }, { x: to.x, y: b }, to];
@@ -1312,7 +1340,7 @@ export function trafficCars(sim) {
   });
 }
 // A commute by cab: which legs of a route are ridden. A leg is ridden when it runs along a street or the avenue,
-// from the first kerb a cab can reach to the kerb in front of the tower; the path between the houses (grass, no
+// from the first kerb a cab can reach to the kerb in front of the tower; the path from the apartment doors (grass, no
 // cabs) and the steps through the doors stay a walk.
 export function rideLegs(world, route, from) {
   const lanes = new Set(world.streets.map((s) => (s.y + STREET / 2) * TILE));

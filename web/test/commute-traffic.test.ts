@@ -29,7 +29,7 @@ const city = (n: number) =>
       (st, name, i) => reduce(st, { type: "department.created", name, mission: "x", manager_id: `m${i}` }, i),
       initialState(0),
     ),
-    { houses: 8 },
+    { homes: 16 },
   );
 
 // One frame of a ride, the way the scene does it: move by rideStep, register as a guest, step the traffic.

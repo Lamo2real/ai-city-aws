@@ -113,7 +113,7 @@ describe("the ported City state", () => {
     expect(visualState(s, "w1")).toBe("waiting_owner");
     expect(topBar(s).questionsWaiting).toBe(1);
   });
-  it("saved specialists live in the houses", () => {
+  it("saved specialists live in the apartment buildings", () => {
     const s = applySnapshot(initialState(), {
       agents: [],
       specialists: [{ id: "sp1", specialty: "Tester", department: "Eng", created_at: at }],

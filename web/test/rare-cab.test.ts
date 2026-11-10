@@ -35,7 +35,7 @@ describe("the rare cab", () => {
       (st, name, i) => reduce(st, { type: "department.created", name, mission: "x", manager_id: `m${i}` }, i),
       initialState(0),
     );
-    const w = layout(s, { houses: 8 });
+    const w = layout(s, { homes: 16 });
     const sim = createTraffic(w);
     let seen = 0,
       cabs = 0;

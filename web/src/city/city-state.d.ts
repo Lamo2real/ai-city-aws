@@ -184,25 +184,49 @@ export interface CityWorld {
   portrait: boolean;
   hqStreet: number;
   officesEnd: number;
-  homes: { x: number; y: number; w: number; h: number; houses: CityPoint[] };
+  /** The neighbourhood (decision 188): blocks of three apartment buildings, and on a phone the footpaths between rows. */
+  homes: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    apartments: CityApartment[];
+    blocks: Array<{ x: number; y: number; w: number; h: number; mirror: boolean }>;
+    paths: number[];
+    /** Grass and trees: the top of a deep block, or a phone's row with one block. */
+    parks: Array<{ x: number; y: number; w: number; h: number }>;
+  };
   [k: string]: unknown;
 }
+/** One New York style apartment building, in tiles; its door is doorOf(it). */
+export interface CityApartment {
+  kind: "slim" | "mid" | "wide";
+  block: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 export const TILE: number;
+/** Home slots per block of three apartment buildings. */
+export const HOMES_PER_BLOCK: number;
 /** A tower's footprint and height in tiles, from its name alone (decision 166). */
 export function towerSize(name: string, portrait?: boolean): { w: number; h: number };
 export function layout(
   state: CityState,
-  opts?: { portrait?: boolean; seats?: Record<string, number>; houses?: number },
+  opts?: { portrait?: boolean; seats?: Record<string, number>; homes?: number },
 ): CityWorld;
 export function seatSpot(building: CityBuilding, seat: number): CityPoint;
 export function homeSpot(world: CityWorld, slot: number): CityPoint | null;
-export function doorOf(building: CityBuilding): CityPoint;
+/** The apartment building a home slot is in. */
+export function homeOf(world: CityWorld, slot: number): CityApartment | null;
+export function doorOf(building: { x: number; y: number; w: number; h: number }): CityPoint;
 export function walkRoute(world: CityWorld, from: CityPoint, to: CityPoint): CityPoint[];
 export function commuteRoute(
   world: CityWorld,
   from: CityPoint,
   to: CityPoint,
-  opts?: { leaving?: CityBuilding | null; entering?: CityBuilding | null },
+  opts?: { leaving?: CityBuilding | CityApartment | null; entering?: CityBuilding | CityApartment | null },
 ): CityPoint[];
 export function walkSpeed(route: CityPoint[], from: CityPoint): number;
 export const WALK_PX_S: number;

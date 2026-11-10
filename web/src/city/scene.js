@@ -1,10 +1,10 @@
 // The City view scene, ported from the owner's Mac HUD (ai-city/jarvis/hud/city.js): the same pixel art,
-// drawn in code, the same streets, plaza, fountain, offices, free lots and houses. Changed for AWS:
+// drawn in code, the same streets, plaza, fountain, offices, free lots and homes (New York apartment buildings since decision 188). Changed for AWS:
 // VAIC stands in the plaza where Jarvis stood, the Orchestrator at the HQ entrance, no Secretary or
 // Reviewer; each department's manager stands at its door; panels are React (see CityView.tsx).
 // The City View: a small game world of the agents, drawn pixel by pixel on a canvas from city-state.js.
 // All of the art is drawn here in code. Every person on screen is a real agent; only the scenery moves on its own.
-import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, rareCab, roundaboutDetours, rideStep, ringOf } from "./city-state.js";
+import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, rareCab, roundaboutDetours, rideStep, ringOf } from "./city-state.js";
 
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const INK = "#1d1c36";
@@ -578,18 +578,99 @@ function headquarters(g, q) {
   lamp(g, X + 12, Y + H - 4); lamp(g, X + W - 12, Y + H - 4); lamp(g, X + 60, Y + 98); lamp(g, X + 132, Y + 98);
   bench(g, X + 150, Y + H - 28); flowers(g, X + 6, Y + 78, "#d2699e"); flowers(g, X + W - 22, Y + 78, "#e0c04a");
 }
-const ROOF_HOUSE = [["#b0533f", "#c96a50"], ["#4f7fa0", "#6799b8"], ["#7f6a44", "#99835a"], ["#6a7f4a", "#83995e"], ["#8a5a80", "#a4749a"]];
-const houseWindows = (h) => ({ x: h.x * TILE + 7, y: h.y * TILE + 22, w: 8, h: 7 });
-function house(g, h, i) {
-  const X = h.x * TILE, Y = h.y * TILE, [roof, light] = ROOF_HOUSE[hashOf(`${h.x},${h.y}`) % ROOF_HOUSE.length];
-  R(g, X + 3, Y + 37, 42, 3, "rgba(20,18,40,.3)");
-  R(g, X + 4, Y + 15, 40, 23, INK); R(g, X + 5, Y + 16, 38, 21, "#e4d6b6");
-  R(g, X + 2, Y + 3, 44, 15, INK); R(g, X + 3, Y + 4, 42, 13, roof); R(g, X + 3, Y + 4, 42, 2, light);
-  for (let ry = 4; ry < 17; ry += 4) R(g, X + 3, Y + ry, 42, 1, "rgba(0,0,0,.18)");
-  R(g, X + 26, Y + 23, 10, 15, INK); R(g, X + 27, Y + 24, 8, 14, "#7a4a2a"); R(g, X + 33, Y + 31, 1, 2, "#f4c63c");
-  const w = houseWindows(h);
-  R(g, w.x - 1, w.y - 1, w.w + 2, w.h + 2, INK); R(g, w.x, w.y, w.w, w.h, "#3a3f62");
-  R(g, X + 3, Y + 41 + (i % 2), 8, 1, "#387a5c");
+// ---------- The neighbourhood (decision 188): three New York apartment buildings on every block of homes ----------
+// Brick and brownstone walls with rows of windows, black iron fire escapes zig-zagging down the front, a cornice and
+// rooftop gear (water towers, bulkheads), a stoop or an awning at the door, and a few windows lit at dusk.
+const APT_WALLS = {
+  slim: [["#9a4a38", "#b45e49", "#76352a"], ["#8c4434", "#a65845", "#6a3024"]], // red brick
+  mid: [["#6f4a3a", "#87604d", "#54362a"], ["#7b5241", "#946a56", "#5d3c2f"]], // brownstone
+  wide: [["#b48e66", "#cba57c", "#8f6e4c"], ["#a98468", "#c09c7f", "#86654d"]], // buff brick
+};
+const AWNINGS = ["#2f6e4a", "#7a2f3a", "#2f416e"];
+const STONE = "#d8cbb0", GLASS = "#2b3352", LIT = "#ffdf94", LIT_TOP = "#ffefc0";
+const ROOF_GEAR = 14; // the top of a building's plot holds its water tower and bulkheads
+function aptShape(a) {
+  const X = a.x * TILE + 2, W = a.w * TILE - 4, foot = (a.y + a.h) * TILE, top = a.y * TILE + ROOF_GEAR;
+  return { X, W, foot, top, cx: X + W / 2 };
+}
+// The windows of the upper floors, top floor first; the ground floor keeps the entrance (and the shops on a wide one).
+function aptWindows(a) {
+  const { W, foot, top, cx } = aptShape(a), cols = Math.max(2, Math.floor((W - 6) / 9)), x0 = Math.round(cx - (cols * 9 - 4) / 2), out = [];
+  for (let y = top + 9, floor = 0; y + 8 <= foot - 21; y += 13, floor++) for (let c = 0; c < cols; c++) out.push({ x: x0 + c * 9, y, w: 5, h: 8, floor, col: c, cols });
+  return out;
+}
+function waterTower(g, x, top) {
+  R(g, x - 5, top - 5, 1, 5, INK); R(g, x + 4, top - 5, 1, 5, INK); R(g, x - 1, top - 4, 2, 4, INK); // the legs
+  R(g, x - 6, top - 12, 12, 8, INK); R(g, x - 5, top - 11, 10, 6, "#8a5a3a"); R(g, x - 5, top - 11, 2, 6, "#a87048");
+  R(g, x - 5, top - 9, 10, 1, "#4a3022"); R(g, x - 5, top - 7, 10, 1, "#4a3022"); // the hoops
+  R(g, x - 5, top - 13, 10, 1, INK); R(g, x - 3, top - 14, 6, 1, INK); R(g, x - 4, top - 13, 8, 1, "#5a3a28"); // the cone
+}
+function bulkhead(g, x, top, w, c) {
+  R(g, x - 1, top - 8, w + 2, 8, INK); R(g, x, top - 7, w, 7, c); R(g, x, top - 7, w, 1, "rgba(255,255,255,.18)");
+  R(g, x + 2, top - 5, 3, 4, GLASS);
+}
+function apartment(g, a) {
+  const { X, W, foot, top, cx } = aptShape(a), k = hashOf(`apt:${a.x},${a.y}`), [wall, light, dark] = APT_WALLS[a.kind][k % 2];
+  // The pavement in front, where the residents stand, and the building's shadow on it.
+  paving(g, X - 2, foot, W + 4, 16, WALK, "#5f5b74", `apt${a.x},${a.y}`, 8);
+  R(g, X - 2, foot, W + 4, 3, "rgba(20,18,40,.35)");
+  // The roof: a water tower on the brick ones, bulkheads and a chimney on the brownstone.
+  if (a.kind === "mid") { bulkhead(g, X + 6, top, 12, dark); R(g, X + W - 14, top - 6, 4, 6, INK); R(g, X + W - 13, top - 5, 2, 5, "#7a3a2c"); }
+  else if (a.kind === "slim") { bulkhead(g, X + 4, top, 14, dark); waterTower(g, X + W - 11, top); }
+  else { waterTower(g, X + 12, top); bulkhead(g, X + W - 20, top, 10, dark); R(g, X + W / 2 - 4, top - 3, 8, 3, "#8f97a8"); }
+  // The walls: brick courses (smooth stone on the brownstone), a lit edge on the left, a shaded one on the right.
+  R(g, X - 1, top - 1, W + 2, foot - top + 1, INK); R(g, X, top, W, foot - top, wall);
+  for (let y = top + 3; y < foot; y += a.kind === "mid" ? 6 : 3) R(g, X, y, W, 1, "rgba(0,0,0,.13)");
+  if (a.kind !== "mid") for (let y = top + 1; y < foot; y += 6) for (let x = X + ((y / 3) % 2 ? 2 : 5); x < X + W; x += 6) R(g, x, y, 1, 2, "rgba(0,0,0,.09)");
+  R(g, X, top, 2, foot - top, light); R(g, X + W - 3, top, 3, foot - top, dark);
+  // The cornice with its dentils, and a stone belt over the ground floor.
+  R(g, X - 3, top - 2, W + 6, 6, INK); R(g, X - 2, top - 1, W + 4, 3, STONE); R(g, X - 2, top - 1, W + 4, 1, "#f0e6cf");
+  for (let x = X - 1; x < X + W + 2; x += 3) R(g, x, top + 2, 1, 1, "#a89a80");
+  R(g, X, foot - 21, W, 2, STONE); R(g, X, foot - 19, W, 1, "rgba(0,0,0,.2)");
+  // The windows: stone lintels, double-hung sashes, a few lit at dusk.
+  const wins = aptWindows(a);
+  for (const [i, w] of wins.entries()) {
+    R(g, w.x - 1, w.y - 2, w.w + 2, 1, STONE); R(g, w.x - 1, w.y - 1, w.w + 2, w.h + 2, INK);
+    const lit = hashOf(`${a.x},${a.y}:${i}`) % 7 === 0;
+    R(g, w.x, w.y, w.w, w.h, lit ? LIT : GLASS); R(g, w.x, w.y, w.w, 1, lit ? LIT_TOP : "rgba(255,255,255,.14)");
+    R(g, w.x, w.y + 4, w.w, 1, INK);
+  }
+  // The fire escape: black iron landings under two columns of windows, ladders zig-zagging between them.
+  if (a.kind !== "wide" && wins.length) {
+    const cols = wins[0].cols, c0 = a.kind === "slim" ? cols - 2 : 0, first = wins.find((w) => w.col === c0);
+    const fx = first.x - 3, fw = 9 + 5 + 6, floors = Math.max(...wins.map((w) => w.floor)) + 1;
+    for (let f = 0; f < floors; f++) {
+      const y = top + 9 + f * 13 + 9;
+      R(g, fx, y, fw, 1, INK); R(g, fx, y - 4, fw, 1, INK); // the landing and its rail
+      for (let x = fx; x < fx + fw; x += 3) R(g, x, y - 3, 1, 3, INK);
+      R(g, fx, y + 1, fw, 1, "rgba(0,0,0,.25)");
+      if (f < floors - 1) line(g, f % 2 ? fx + 2 : fx + fw - 3, y, f % 2 ? fx + fw - 3 : fx + 2, y + 13, INK); // down to the next one
+    }
+    R(g, fx + 2, top + 9 + (floors - 1) * 13 + 10, 1, 5, INK); R(g, fx + 4, top + 9 + (floors - 1) * 13 + 10, 1, 5, INK); // the drop ladder, pulled up
+  }
+  // The way in: a door with a lit transom, under an awning, or up the brownstone's stoop.
+  R(g, cx - 6, foot - 16, 12, 16, INK); R(g, cx - 5, foot - 15, 10, 15, "#4a2c1e"); R(g, cx - 5, foot - 15, 10, 3, LIT); R(g, cx - 5, foot - 12, 10, 1, INK);
+  R(g, cx - 1, foot - 11, 1, 11, "#2e1c12"); R(g, cx + 2, foot - 6, 1, 1, "#f4c63c");
+  if (a.kind === "mid") {
+    for (const [i, hw] of [9, 11, 13].entries()) { R(g, cx - hw - 1, foot - 3 + i * 2, hw * 2 + 2, 3, INK); R(g, cx - hw, foot - 2 + i * 2, hw * 2, 1, STONE); }
+    for (const sx of [cx - 13, cx + 12]) { R(g, sx, foot - 8, 1, 11, INK); R(g, sx - 1, foot - 9, 3, 1, INK); } // the iron railings
+  } else {
+    const aw = AWNINGS[k % AWNINGS.length];
+    R(g, cx - 10, foot - 22, 20, 6, INK); R(g, cx - 9, foot - 21, 18, 4, aw); R(g, cx - 9, foot - 21, 18, 1, "rgba(255,255,255,.25)");
+    R(g, cx - 10, foot - 16, 1, 16, INK); R(g, cx + 9, foot - 16, 1, 16, INK); // its poles
+  }
+  if (a.kind === "wide") for (const sx of [X + 4, cx + 13]) { // a corner shop either side, its windows aglow
+    const sw = Math.min(cx - 13 - (X + 4), X + W - 4 - sx); if (sw < 8) continue;
+    stallRoof(g, sx, foot - 20, sw, AWNINGS[(k + 1) % AWNINGS.length], "#f3e6cc");
+    R(g, sx - 1, foot - 12, sw + 2, 12, INK); R(g, sx, foot - 11, sw, 10, "#e8c27a"); R(g, sx, foot - 11, sw, 2, "#f6dca0");
+    for (let x = sx + 6; x < sx + sw - 2; x += 7) R(g, x, foot - 11, 1, 10, INK);
+  }
+}
+// A block's courtyard: trees, a bench and a flower box in the gaps between its buildings.
+const COURTYARD = { trees: [[4, 4.5], [9.2, 7.1], [9.3, 10.6]], bench: [8.1, 8.4], flowers: [0.3, 10.1] };
+function courtyardItems(b) {
+  const at = ([x, y]) => [(b.x + Math.floor((b.w - 10) / 2) + (b.mirror ? 10 - x : x)) * TILE, (b.y + y) * TILE];
+  return { trees: COURTYARD.trees.map(at), bench: at(COURTYARD.bench), flowers: at(COURTYARD.flowers), mirror: b.mirror };
 }
 
 // Everything that does not move, baked once per layout, with a margin of countryside so the map runs off the screen's edges.
@@ -621,12 +702,18 @@ function bake(world, skip = new Map()) {
   for (const b of world.buildings) if (b.archived) freeLot(g, b, "ARCHIVED"); else if (skip.get(b.dept) === "rise") towerPlot(g, b); else if (skip.has(b.dept)) site(g, b); else tower(g, b);
   for (const l of world.lots) if (l.demolished && skip.has(l.demolished)) site(g, { ...l, dept: l.demolished }); else freeLot(g, l, "FREE LOT");
   headquarters(g, world.hq);
-  // The neighbourhood: houses, with trees where no house stands yet.
-  const hx = world.homes.x * TILE, hy = world.homes.y * TILE, hw = world.homes.w * TILE;
-  world.homes.houses.forEach((h, i) => house(g, h, i));
-  const below = world.homes.houses.at(-1), freeY = below ? below.y * TILE + 68 : hy;
+  // The neighbourhood (decision 188): apartment buildings and their courtyards, far to near; trees in the parks.
   const onRoad = (y) => roads.some((s) => y > s.y * TILE - 30 && y < (s.y + 3) * TILE + 6);
-  for (let y = freeY; y < hy + world.homes.h * TILE - 16; y += 44) for (let x = hx + 16; x < hx + hw - 8; x += 52) { const ty = y + 26 + r() * 8; if (!onRoad(ty)) tree(g, x + r() * 10, ty, r); }
+  for (const p of world.homes.parks ?? []) for (let y = p.y * TILE + 34; y < (p.y + p.h) * TILE - 4; y += 44) for (let x = p.x * TILE + 16; x < (p.x + p.w) * TILE - 8; x += 52) { const ty = y + r() * 8; if (!onRoad(ty)) tree(g, x + r() * 10, ty, r); }
+  const near = [];
+  for (const b of world.homes.blocks) {
+    const c = courtyardItems(b);
+    for (const [x, y] of c.trees) near.push([y, () => tree(g, x, y, r)]);
+    near.push([c.bench[1] + 8, () => bench(g, c.bench[0] - (c.mirror ? 22 : 0), c.bench[1])]);
+    near.push([c.flowers[1] + 10, () => flowers(g, c.flowers[0] - (c.mirror ? 16 : 0), c.flowers[1], "#d2699e")]);
+  }
+  for (const a of world.homes.apartments) near.push([(a.y + a.h) * TILE, () => apartment(g, a)]);
+  near.sort((p, q) => p[0] - q[0]).forEach(([, draw]) => draw());
   g.fillStyle = "rgba(38,30,78,.14)"; g.fillRect(-M, -M, W + M * 2, H + M * 2); // the dusk wash over all of it
   // The map's border fades softly into the night, so roads and cabs run off into it rather than stopping at an edge.
   const E = EDGE * TILE, fade = (x0, y0, x1, y1, rx, ry, rw, rh) => { const gr = g.createLinearGradient(x0, y0, x1, y1); gr.addColorStop(0, "rgba(22,30,40,.92)"); gr.addColorStop(1, "rgba(22,30,40,0)"); g.fillStyle = gr; g.fillRect(rx, ry, rw, rh); };
@@ -666,7 +753,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   let homes = new Map();
   let effects = [], parcels = [];
   const doorQueue = new Map(); // door key → when it is next free, so walkers take turns instead of overlapping
-  const lights = new Map(); // house index → lit until (performance.now() ms)
+  const lights = new Map(); // "apartment index:window" → lit until (performance.now() ms)
   const doors = new Map(); // dept → how far its doors are open, 0 (shut) … 1 (open)
   const doorHold = new Map(); // dept → keep the doors open until (performance.now() ms)
   const counts = new Map(); // dept → { n: people inside, delta: last change, at: when } (the roof counter)
@@ -675,7 +762,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   const anims = new Map(); // dept → { kind: "rise" | "build" | "demolish", start, dur, b?, done? } (decision 134)
   const mail = { queue: [], rider: null, out: 0, back: 0 }; // the one mailman and the letters waiting for him
   let entered = false; // the towers' entrance has played (or there was nothing to show)
-  let leaving = []; // cabs driving off after dropping someone at a door or a house
+  let leaving = []; // cabs driving off after dropping someone at a door
   let traffic = null, trafficSig = "", trafficAt = 0; // the cruising cabs, their lights and roundabouts (decision 173)
   root._anims = anims; // read-only test hooks (e2e/departments.spec.ts)
   root._mail = mail;
@@ -692,7 +779,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   const dpr = () => devicePixelRatio || 1;
   const isPortrait = () => root.clientWidth < 800 && root.clientHeight > root.clientWidth;
 
-  // ---------- Who stands where: placement from the state, seats and houses kept stable, journeys only for real changes ----------
+  // ---------- Who stands where: placement from the state, seats and homes kept stable, journeys only for real changes ----------
   function spotOf(id) {
     const where = placement(state, id);
     if (where.place === "hq") { const [x, y] = EXEC_SPOT[id] ?? CORE_SPOT[id] ?? CORE_SPOT.vaic; return { x: world.hq.x * TILE + x, y: world.hq.y * TILE + y, key: `hq:${id}`, seated: CORE_DESK.has(id) }; }
@@ -721,9 +808,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     for (const [d, ids] of atDesk) { const s = assignSlots(ids, seats.get(d)); seats.set(d, s); seatCount[d] = Math.max(...s.values()) + 1; }
     homes = assignSlots(shown.ids, homes);
     const portrait = isPortrait();
-    const minHouses = portrait ? 7 : 8;
-    const houses = Math.max(minHouses, Math.ceil((Math.max(-1, ...homes.values()) + 1) / 2));
-    const next = layout(state, { portrait, seats: seatCount, houses });
+    const next = layout(state, { portrait, seats: seatCount, homes: Math.max(-1, ...homes.values()) + 1 });
     const sig = JSON.stringify(next);
     const rebaked = sig !== worldSig;
     if (rebaked) {
@@ -756,16 +841,17 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
         // Checking out: stand up, say so, take a turn at the door, and walk the streets home.
         const b = buildingOfKey(fromKey);
         p.move = null;
-        p.route = commuteRoute(world, p, to, { leaving: fromKey.startsWith("desk:") ? b : null });
-        planRide(p, { x: p.x, y: p.y }); // home by cab: from the kerb outside the tower to the kerb by the house
+        p.route = commuteRoute(world, p, to, { leaving: fromKey.startsWith("desk:") ? b : null, entering: homeOf(world, homes.get(id) ?? 0) });
+        planRide(p, { x: p.x, y: p.y }); // home by cab: from the kerb outside the tower to the kerb by the building, in at its door
         p.waitUntil = b ? queueAt(`door:${b.dept}`, 150) : performance.now();
-        p.homecoming = true; // lights the house on arrival (step() clears it)
+        p.homecoming = true; // lights a window at home on arrival (step() clears it)
         p.say = { text: "CHECKED OUT", until: performance.now() + 1800 };
       } else if (state.agents[id]?.kind === "executive" && (to.key === "home" || fromKey === "home")) {
         // An executive called in to HQ, or going home after advising (decision 140): the streets, by cab where it can.
         const from = { x: p.x, y: p.y };
         p.move = null;
-        p.route = commuteRoute(world, from, to);
+        const home = homeOf(world, homes.get(id) ?? 0);
+        p.route = commuteRoute(world, from, to, to.key === "home" ? { entering: home } : { leaving: home });
         planRide(p, from);
         p.waitUntil = performance.now() + (to.key === "home" ? 300 : 500);
         p.homecoming = to.key === "home";
@@ -774,12 +860,12 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
         setInside(p, false);
       } else if (to.key === "home") { p.x = to.x; p.y = to.y; p.move = null; p.route = null; setInside(p, false); } // any other move home is instant
       else if (to.key.startsWith("desk:") && (fresh || fromKey === "home") && buildingOfKey(to.key)) {
-        // Hired: the house lights up, then the worker walks out, along the streets and in through the door.
+        // Hired: a window lights up at home, then the worker comes out of its building's door, along the streets and in.
         const b = buildingOfKey(to.key);
         const from = { x: p.x, y: p.y };
         p.move = null;
-        p.route = commuteRoute(world, from, to, { entering: b });
-        planRide(p, from); // to work by cab, hailed at the kerb by the house
+        p.route = commuteRoute(world, from, to, { leaving: homeOf(world, homes.get(id) ?? 0), entering: b });
+        planRide(p, from); // to work by cab, hailed at the kerb by the building
         p.waitUntil = queueAt(`door:${b.dept}`, 700);
         lightHouse(id, p.waitUntil - performance.now() + 500);
       } else dashTo(p, to);
@@ -810,9 +896,11 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     doorQueue.set(key, at + staggerMs(1));
     return at;
   }
-  /** Lights a house window for a while (a worker about to leave, or just home). */
+  /** Lights the worker's own window at home for a while (about to leave, or just home). */
   function lightHouse(id, ms) {
-    const i = Math.floor((homes.get(id) ?? 0) / 2);
+    const slot = homes.get(id) ?? 0, a = homeOf(world, slot);
+    if (!a) return;
+    const i = `${world.homes.apartments.indexOf(a)}:${hashOf(`win:${slot}`)}`;
     lights.set(i, Math.max(lights.get(i) ?? 0, performance.now() + ms));
     setTimeout(() => wake(), ms + 150);
   }
@@ -1345,13 +1433,15 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     R(ctx, fx - 1, fy - 10 - jet, 2, jet, "#bfe6ff"); R(ctx, fx - 3, fy - 10 - jet, 6, 1, "#d7f1ff");
     for (const [dx, dy] of [[-3, -8 - jet + (f * 3) % 6], [3, -8 - jet + ((f + 2) * 3) % 6], [-5, -4 - ((f * 2) % 4)], [5, -6 + ((f * 2) % 4)]]) R(ctx, fx + dx, fy + dy - 2, 1, 2, "#a8dcff");
     R(ctx, fx - 12 + f * 2, fy - 1, 6, 1, "#8ab2d6"); R(ctx, fx + 6 - f * 2, fy + 2, 7, 1, "#8ab2d6");
-    // A lit window marks a house with movement: someone called in to work, or just home after checking out.
+    // A lit window marks a home with movement: someone called in to work, or just home after checking out.
     for (const [i, until] of lights) {
       if (until <= now) { lights.delete(i); continue; }
-      const hh = world.homes.houses[i];
-      if (hh) { const win = houseWindows(hh); R(ctx, win.x - ox, win.y - oy, win.w, win.h, "#ffdf94"); R(ctx, win.x - ox, win.y - oy, win.w, 2, "#ffefc0"); }
+      const [ai, wi] = i.split(":").map(Number), a = world.homes.apartments[ai], wins = a ? aptWindows(a) : [];
+      const win = wins[wi % (wins.length || 1)];
+      if (win) { R(ctx, win.x - ox, win.y - oy, win.w, win.h, LIT); R(ctx, win.x - ox, win.y - oy, win.w, 1, LIT_TOP); R(ctx, win.x - ox, win.y + 4 - oy, win.w, 1, INK); }
     }
-    if (hiddenHomes) label(`+${hiddenHomes} MORE IN WORKFORCE`, world.homes.x * TILE + 60, (world.homes.y + world.homes.h) * TILE - 12);
+    const lastBlock = world.homes.blocks.at(-1); // the sign hangs over the last block's courtyard
+    if (hiddenHomes && lastBlock) label(`+${hiddenHomes} MORE IN WORKFORCE`, (lastBlock.x + lastBlock.w / 2) * TILE, lastBlock.y * TILE + 2);
     // The towers' live parts: lit windows for the people inside, the sliding doors, the beacon and the roof counter.
     for (const b of world.buildings) if (!b.archived && !anims.has(b.dept)) drawTowerLive(b, now, ox, oy);
     for (const [d, a] of anims) drawAnim(d, a, now, ox, oy);

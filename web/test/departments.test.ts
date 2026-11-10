@@ -157,7 +157,7 @@ describe("the mailman", () => {
 
 describe("yellow cabs", () => {
   const s = city("Research", "Sales", "Legal", "Media");
-  const w = layout(s, { houses: 8 });
+  const w = layout(s, { homes: 16 });
   it("cruise every street and the through roads both ways, and stay on their lanes", () => {
     const lanes = streetLanes(w),
       aves = avenueLanes(w);

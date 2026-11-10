@@ -29,7 +29,7 @@ const city = (n: number, portrait = false) =>
       (st, name, i) => reduce(st, { type: "department.created", name, mission: "x", manager_id: `m${i}` }, i),
       initialState(0),
     ),
-    { houses: 8, portrait },
+    { homes: 16, portrait },
   );
 
 // Puts a lone car on the lane through a lit junction, `ahead` px before its stop line, everything else removed.

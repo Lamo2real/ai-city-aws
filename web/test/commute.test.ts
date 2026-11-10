@@ -37,7 +37,7 @@ function town() {
   s = reduce(s, hired("mgr-research", "Research", "manager"));
   s = reduce(s, hired("wkr-1", "Research"));
   s = reduce(s, hired("wkr-2", "Research"));
-  const world = layout(s, { seats: { Research: 2 }, houses: 8 });
+  const world = layout(s, { seats: { Research: 2 }, homes: 16 });
   return { s, world, b: world.buildings.find((x) => x.dept === "Research")! };
 }
 
