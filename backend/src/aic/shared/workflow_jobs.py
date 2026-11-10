@@ -41,6 +41,9 @@ async def hand_off(d: CityDeps, runs: wf.Runs, run: Record, w: Record) -> tuple[
             f"Not started: {open_jobs} jobs already running (the limit is {open_cap}). Tell the owner; they can "
             "stop one, or raise the limit in Settings."
         )
+    # A double tap on Start (or the button and VAIC together) starts one job, not two.
+    if run.get("status") == "running" or not await d.ledger.claim(f"wfrun:{run['id']}", 120):
+        return run, "That workflow has already started: one job is running for it."
     values = run.get("values") or {}
     conversation = run.get("conversation") or "main"
     goal = f"{w['name']}: {(values.get('offer') or values.get('idea') or {}).get('text') or w['summary']}"[:300]

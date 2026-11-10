@@ -411,7 +411,16 @@ async def review(d: ChiefDeps, only: str | None = None) -> dict[str, Any]:
         tries = int(item.get("chief_tries") or 0) + 1
         await d.ledger.table.update(_pk(kind, item), "META", UpdateOptions(set={"chief_tries": tries}))
         try:
-            if auto and item.get("needs_owner_reason"):  # left for the owner before Autopilot: carry on now
+            if tries > MAX_TRIES:
+                # Three tries did not settle it (no clear reply, or a decision that could not be carried out):
+                # no further model calls for this item. Autopilot takes the safe default; otherwise it is the owner's.
+                why = f"No decision could be carried out after {MAX_TRIES} tries."
+                if auto:
+                    results.append(await _fallback(d, kind, item, why))
+                else:
+                    await mark_needs_owner(d.ledger, kind, item, why)
+                    results.append({"id": item["id"], "result": "needs_owner"})
+            elif auto and item.get("needs_owner_reason"):  # left for the owner before Autopilot: carry on now
                 why = str(item["needs_owner_reason"])
                 results.append(await _hands(d, kind, item, str(item.get("needs_owner_service") or ""), why, ""))
             else:

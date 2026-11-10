@@ -132,7 +132,10 @@ async def direct_engine(req: EngineRequest, client: Any = None) -> TurnOutput:
         for b in blocks:
             if "toolUse" in b:
                 raw = b["toolUse"]["input"]
-                b["toolUse"]["input"] = json.loads(raw) if raw else {}
+                try:
+                    b["toolUse"]["input"] = json.loads(raw) if raw else {}
+                except ValueError:  # cut off mid-input (max tokens): the tool then reports what is missing
+                    b["toolUse"]["input"] = {}
         text = "".join(b.get("text", "") for b in blocks)
         messages.append({"role": "assistant", "content": blocks})
         if reason != "tool_use":

@@ -451,6 +451,10 @@ async def test_approving_publishes_the_draft_to_live_and_lists_it() -> None:
     assert (await handle_http(ev("POST", f"/approvals/{a['id']}", {"approved": True}), d))["statusCode"] == 409
     assert (await publish_draft(d.ledger, d.bus, origin(s3), "drf-1"))["app_id"] == app["app_id"]
     assert len(await list_apps(d.ledger)) == 1
+    # While one publish of a draft is under way, a second is turned away instead of publishing a twin.
+    assert await d.ledger.claim("publish:drf-1", 300)
+    with pytest.raises(ValueError, match="being published"):
+        await publish_draft(d.ledger, d.bus, origin(s3), "drf-1")
 
 
 async def test_a_second_app_with_the_same_title_gets_its_own_slug() -> None:
@@ -506,6 +510,11 @@ async def test_the_resume_step_wakes_the_orchestrator_only_when_the_owner_refuse
     a = await staged(d, s3)
     await on_approval_step({"step": "resume", "approvalId": a["id"], "approved": True}, d.ledger, d.queue)
     assert d.queue.sent == []  # type: ignore[attr-defined]
+    # Nobody answered in time: the card stays (a late yes still publishes) and nobody is told it was refused.
+    await on_approval_step({"step": "resume", "approvalId": a["id"], "approved": False}, d.ledger, d.queue)
+    assert d.queue.sent == []  # type: ignore[attr-defined]
+    assert (await d.ledger.get_approval(a["id"]) or {})["status"] == "pending"
+    await d.ledger.decide_approval(a["id"], False)
     await on_approval_step({"step": "resume", "approvalId": a["id"], "approved": False}, d.ledger, d.queue)
     (m,) = d.queue.sent  # type: ignore[attr-defined]
     assert (m["role"], m["agentId"], m["taskId"]) == ("orchestrator", "orchestrator", "t-task")

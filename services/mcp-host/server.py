@@ -131,6 +131,18 @@ def _npm_bin(target: Path, name: str) -> Path:
     raise HostError(502, "the npm package has no command to run")
 
 
+# ``python -c`` puts "-c" in sys.argv[0]: drop it and the target, so the package's script sees itself as argv[0].
+PYPI_BOOT = (
+    "import runpy,sys; sys.path.insert(0, sys.argv[1]); del sys.argv[:2]; "
+    "runpy.run_path(sys.argv[0], run_name='__main__')"
+)
+
+
+def pypi_argv(target: Path, script: Path) -> list[str]:
+    """Runs an installed PyPI command with ``target`` (where uv put the package) on the import path."""
+    return [sys.executable, "-c", PYPI_BOOT, str(target), str(script)]
+
+
 def _pypi_script(target: Path, name: str) -> Path:
     bins = sorted(p for p in (target / "bin").glob("*") if p.is_file()) if (target / "bin").is_dir() else []
     norm = re.sub(r"[-_.]+", "-", name).lower()
@@ -156,9 +168,7 @@ def default_install(pkg: Package, target: Path) -> list[str]:
         raise HostError(502, f"installing {pkg.name} {pkg.version} failed")
     if pkg.registry_type == "npm":
         return ["node", str(_npm_bin(target, pkg.name))]
-    script = _pypi_script(target, pkg.name)
-    boot = "import runpy,sys; sys.path.insert(0, sys.argv.pop(1)); runpy.run_path(sys.argv[0], run_name='__main__')"
-    return [sys.executable, "-c", boot, str(target), str(script)]
+    return pypi_argv(target, _pypi_script(target, pkg.name))
 
 
 Installer = Callable[[Package, Path], list[str]]

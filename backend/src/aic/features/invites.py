@@ -136,6 +136,8 @@ def _candidates(start: datetime | date, rule: dict[str, str]) -> Iterator[dateti
                 if date(y, m, dom) >= day0:
                     yield at(date(y, m, dom))
             k += 1
+            if not days and k > 1200:
+                return  # a hundred years of months without one match: the rule never happens
     elif freq == "YEARLY":
         k = 0
         while True:
@@ -169,7 +171,14 @@ def occurrences(v: Json, w0: datetime, w1: datetime) -> list[tuple[str, str]]:
     lo, hi = w0.date(), w1.date()
     out: list[tuple[str, str]] = []
     seen = 0
-    for occ in _candidates(start, rule) if rule else iter([start]):
+    it = _candidates(start, rule) if rule else iter([start])
+    while True:
+        try:
+            occ = next(it)
+        except StopIteration:
+            break
+        except (ValueError, OverflowError, TypeError):
+            break  # a rule that makes no sense (or never matches): keep what was found, never fail the import
         seen += 1
         if count is not None and seen > count:
             break

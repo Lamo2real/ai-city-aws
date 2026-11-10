@@ -227,8 +227,7 @@ async def _manager_agent(city: City, name: str = "Builders") -> str:
     return mgr
 
 
-async def test_a_worker_turn_whose_microvm_died_is_re_sent_by_the_stale_lease_sweep() -> None:
-    city = make_city(scripted_engine({"worker": worker}))
+async def _lost_worker_message(city: City) -> tuple[WorkMessage, dict[str, Any]]:
     await _manager_agent(city)
     w = await city.factory.hire(
         {"specialty": "Dev", "instructions": "Write the code please.", "tools": ["Bash"]},
@@ -270,6 +269,12 @@ async def test_a_worker_turn_whose_microvm_died_is_re_sent_by_the_stale_lease_sw
             "body": "Assignment: write it",
         },
     )
+    return msg, t
+
+
+async def test_a_worker_turn_whose_microvm_died_is_re_sent_by_the_stale_lease_sweep() -> None:
+    city = make_city(scripted_engine({"worker": worker}))
+    msg, t = await _lost_worker_message(city)
     # The dispatcher started it, then the microVM died: the lease is taken, the turn never finished.
     await city.ledger.acquire_worker_slot("Builders", 100, 100)
     await city.ledger.begin_work(msg["id"], 60_000, dict(msg))
@@ -280,6 +285,66 @@ async def test_a_worker_turn_whose_microvm_died_is_re_sent_by_the_stale_lease_sw
     assert (await city.ledger.get_ticket(t["id"]) or {})["status"] == "in_review"
     assert await city.ledger.active_workers() == 0  # the dead turn's slot was given back
     assert await city.ledger.is_work_done("m-lost")
+
+
+class _Accepts:
+    """Like AgentCore for a worker: the job is accepted and runs later, on its own."""
+
+    async def invoke(self, inv: dict[str, Any]) -> None:
+        return None
+
+
+def _async_dispatcher(city: City) -> Dispatcher:
+    return Dispatcher(
+        DispatcherDeps(
+            ledger=city.ledger,
+            bus=city.bus,
+            queue=city.queue,
+            invoker=_Accepts(),
+            settings=city.deps.settings,
+            session_id_for=session_id_for,
+            worker_lease_ms=451 * 60_000,
+        )
+    )
+
+
+async def test_a_long_worker_turn_is_not_sent_again_while_it_is_still_running() -> None:
+    city = make_city(scripted_engine({"worker": worker}))
+    msg, _ = await _lost_worker_message(city)
+    assert await _async_dispatcher(city).handle(msg) == "started"
+    city.advance(60 * 60_000)  # an hour in: far past a normal turn's lease, well inside a worker's long job
+    assert await resume_stale(city.ledger, city.queue) == 0
+    assert await city.ledger.active_workers() == 1
+    city.advance(400 * 60_000)  # past the long-job limit: now it is a dead turn
+    assert await resume_stale(city.ledger, city.queue) == 1
+
+
+async def test_a_worker_turn_that_fails_gives_its_slot_back_once_and_is_sent_again_soon() -> None:
+    async def boom(req: EngineRequest, call: Call) -> str:
+        raise RuntimeError("the model call failed")
+
+    city = make_city(scripted_engine({"worker": boom}))
+    msg, _ = await _lost_worker_message(city)
+    assert await _async_dispatcher(city).handle(msg) == "started"
+    try:
+        await city.host.run_turn({**msg, "sessionId": "s-1", "async": True})
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("the turn should have failed")
+    assert await city.ledger.active_workers() == 0
+    assert await resume_stale(city.ledger, city.queue) == 1  # at once, not after the long lease
+    assert await city.ledger.active_workers() == 0  # and the slot is not given back a second time
+
+
+async def test_a_turn_for_a_stopped_job_is_finished_so_the_sweep_does_not_send_it_again() -> None:
+    city = make_city(scripted_engine({"worker": worker}))
+    msg, t = await _lost_worker_message(city)
+    assert await _async_dispatcher(city).handle(msg) == "started"
+    await city.ledger.set_ticket_status(t["id"], "cancelled", "stopped")
+    assert await city.host.run_turn({**msg, "sessionId": "s-1", "async": True}) == ""
+    assert await city.ledger.is_work_done(msg["id"])
+    assert await city.ledger.active_workers() == 0
 
 
 async def test_the_next_ace_turn_sees_the_earlier_exchange_typed_or_spoken() -> None:
@@ -409,3 +474,24 @@ async def test_500_concurrent_hires_respect_the_ceilings_and_queue_the_rest() ->
     assert per_second_max <= 20
     assert peak == 150  # the ceilings were actually reached
     assert deferred > 0  # the rest waited in the queue
+
+
+async def test_a_spoken_request_runs_as_a_turn_although_it_comes_with_no_session_id() -> None:
+    async def says(req: EngineRequest, call: Call) -> str:
+        return "Good morning, Sir."
+
+    city = make_city(scripted_engine({"ace": says}))
+    spoken = {
+        "id": "voice-1",
+        "role": "ace",
+        "agentId": "ace",
+        "department": None,
+        "ticketId": "conv-main",
+        "taskId": "conv-main",
+        "kind": "task",
+        "from": "owner",
+        "body": "good morning",
+        "conversation": "main",
+        "voice": True,
+    }
+    assert await city.host.run_turn(spoken) == "Good morning, Sir."

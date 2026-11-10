@@ -185,3 +185,47 @@ def test_customer_support_orders_carry_the_desk_and_others_dont() -> None:
     assert "open_ticket" in so.goal_text(sup, []) and "open_ticket" not in so.goal_text(
         {**sup, "department": "Sales"}, []
     )
+
+
+async def test_a_standing_order_whose_job_cannot_be_sent_starts_again_on_the_next_beat_and_others_still_run() -> None:
+    city = make_city(scripted_engine({"ace": ace}))
+    await city.host.ensure_core()
+    first = await so.add_order(city.ledger, {"source": "Slack #support", "instructions": "Answer new messages."})
+    second = await so.add_order(city.ledger, {"source": "Slack #sales", "instructions": "Answer new messages."})
+    real, sent = city.queue.send, {"n": 0}
+
+    async def flaky(m: object, delay: int = 0) -> None:
+        sent["n"] += 1
+        if sent["n"] == 1:
+            raise RuntimeError("SQS is unavailable")
+        await real(m, delay)  # type: ignore[arg-type]
+
+    city.queue.send = flaky  # type: ignore[method-assign]
+    assert (await so.run_due(city.deps))["started"] == 1  # the first could not start; the second did
+    failed, ok = sorted(await so.list_orders(city.ledger), key=lambda o: bool(o.get("last_job_id")))
+    assert not failed.get("last_job_id") and not failed.get("last_run_at") and ok["last_job_id"]
+    assert {failed["id"], ok["id"]} == {first["id"], second["id"]}
+    jobs = [j for j in await city.ledger.list_tickets(ALL_STATUSES) if j.get("standing_order") == failed["id"]]
+    assert [j["status"] for j in jobs] == ["cancelled"]
+    assert (await so.run_due(city.deps))["started"] == 1  # the next beat starts the one that failed
+
+
+async def test_one_ticket_that_cannot_move_does_not_hold_up_the_others() -> None:
+    city = make_city(scripted_engine({"ace": ace}))
+    await city.host.ensure_core()
+    d = city.deps
+    for name in ("One", "Two"):
+        await desk.open_ticket(d, {"title": f"{name} is broken", "details": "It does not start.", "customer": name,
+                                   "channel": "slack", "where": "#support", "thread": name,
+                                   "department": "IT Infrastructure"}, "Customer Support")  # fmt: skip
+    real, sent = city.queue.send, {"n": 0}
+
+    async def flaky(m: object, delay: int = 0) -> None:
+        sent["n"] += 1
+        if sent["n"] == 1:
+            raise RuntimeError("SQS is unavailable")
+        await real(m, delay)  # type: ignore[arg-type]
+
+    city.queue.send = flaky  # type: ignore[method-assign]
+    assert await desk.advance(d) == {"tickets_moved": 1}
+    assert sorted(t["status"] for t in await desk.list_tickets(city.ledger)) == ["new", "with_team"]

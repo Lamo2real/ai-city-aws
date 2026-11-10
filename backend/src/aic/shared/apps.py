@@ -479,6 +479,25 @@ async def publish_draft(
     """Copies ``drafts/<draft_id>/`` to ``live/<app_id>/`` and records the app with the owner's grants (a subset
     of the draft's capabilities; default all) and pin (default the manifest's suggestion, while fewer than 6 are
     pinned). Idempotent on draft_id. Raises ValueError for grants the draft didn't ask for."""
+    # Two approvals of one draft at the same moment (a double tap, the Chief of Staff and the owner together)
+    # would each pass the check below and publish the app twice. One at a time; the second finds it published.
+    lock = f"publish:{draft_id}"
+    if not await ledger.claim(lock, 300):
+        raise ValueError("That app is being published right now. Give it a moment.")
+    try:
+        return await _publish_draft(ledger, bus, origin, draft_id, grants, pinned)
+    finally:
+        await ledger.table.delete(f"IDEMP#{lock}", "META")
+
+
+async def _publish_draft(
+    ledger: Ledger,
+    bus: EventBus,
+    origin: AppsOrigin,
+    draft_id: str,
+    grants: list[Capability] | None,
+    pinned: bool | None,
+) -> Record:
     for existing in await list_apps(ledger):
         if existing.get("draft_id") == draft_id:
             return existing

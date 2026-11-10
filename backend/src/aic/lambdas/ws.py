@@ -132,7 +132,10 @@ async def broadcast(detail: Any, table: Table, poster: Poster) -> dict[str, int]
         else:
             counts["sent"] += 1
 
-    await asyncio.gather(*(one(c) for c in await table.query_index("gsi1", "CONN")))
+    # One connection that fails never stops the others, or makes the whole event be delivered a second time.
+    for r in await asyncio.gather(*(one(c) for c in await table.query_index("gsi1", "CONN")), return_exceptions=True):
+        if isinstance(r, BaseException):
+            log("error", "ws.post_failed", error=f"{type(r).__name__}: {r}")
     return counts
 
 

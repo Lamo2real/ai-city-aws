@@ -70,6 +70,7 @@ export function StreamedText(p: { text: string; streaming: boolean; onGrow?: () 
 
   useEffect(() => onGrow.current?.(), [shown]);
 
-  const visible = p.streaming ? revealable(p.text, shown) : p.text;
+  // With reduced motion nothing counts up, so the text itself is shown as it arrives.
+  const visible = p.streaming && !reducedMotion() ? revealable(p.text, shown) : p.text;
   return <Markdown text={visible} />;
 }

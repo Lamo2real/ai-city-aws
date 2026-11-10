@@ -496,18 +496,36 @@ def app_call_from_env() -> AppCall:
     return cast(AppCall, app_call)
 
 
+def mail_error() -> type[Exception]:
+    """The mail module's plain-words error (a mailbox that is gone, an approval already used). The bridge shows it
+    to the app as "unavailable" instead of failing the request."""
+    try:
+        from aic.mail.service import MailError  # type: ignore[import-not-found,unused-ignore]
+    except ImportError:
+        return _NoMailError
+    return cast(type[Exception], MailError)
+
+
+class _NoMailError(Exception):
+    pass
+
+
 class _BoundProposals:
     def __init__(self, ledger: Ledger, service: Any, approvals: Any) -> None:
         self._ledger, self._service, self._approvals = ledger, service, approvals
 
     async def file(self, tool: str, args: dict[str, Any], requested_by: str) -> dict[str, Any]:
-        return cast(
-            dict[str, Any],
-            plain(await self._approvals.file(self._ledger, self._service, tool, args, requested_by=requested_by)),
-        )
+        try:
+            a = await self._approvals.file(self._ledger, self._service, tool, args, requested_by=requested_by)
+        except mail_error() as e:
+            raise Unavailable(str(e)) from e
+        return cast(dict[str, Any], plain(a))
 
     async def execute(self, approval: dict[str, Any]) -> Any:
-        return plain(await self._approvals.execute(self._ledger, self._service, approval))
+        try:
+            return plain(await self._approvals.execute(self._ledger, self._service, approval))
+        except mail_error() as e:
+            raise Unavailable(str(e)) from e
 
 
 def proposals_from_env(ledger: Ledger) -> MailProposals:

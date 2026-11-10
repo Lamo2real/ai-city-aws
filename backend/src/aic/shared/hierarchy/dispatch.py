@@ -35,6 +35,9 @@ class DispatcherDeps:
     session_id_for: Callable[[WorkMessage], str]
     lease_ms: int = 16 * 60_000
     """Lease on a message while its turn runs: the turn timeout plus a minute."""
+    worker_lease_ms: int | None = None
+    """A worker's turn is a long job with its own, much longer limit; its lease has to outlast it, or the crash
+    sweep sends the same work again while it is still running. None means ``lease_ms``."""
 
 
 def _deferred(m: WorkMessage) -> WorkMessage:
@@ -101,7 +104,8 @@ class Dispatcher:
             await release()
             await self._defer(m, DEFER_SECONDS["rate"])
             return "deferred:rate"
-        if not await ledger.begin_work(m["id"], self.d.lease_ms, dict(m)):
+        lease_ms = (self.d.worker_lease_ms if is_worker else None) or self.d.lease_ms
+        if not await ledger.begin_work(m["id"], lease_ms, dict(m)):
             await release()
             return "duplicate"
         try:
@@ -133,10 +137,11 @@ async def resume_stale(ledger: Ledger, queue: Queue) -> int:
         if not w.get("message"):
             continue
         m = cast(WorkMessage, w["message"])
-        await ledger.abandon_work(w["key"])
-        # A dead worker turn never gave its slot back.
-        if m["role"] == "worker" and m.get("department"):
-            await ledger.release_worker_slot(cast(str, m["department"]))
+        # Sent before the lease is dropped: if sending fails, the next sweep finds the work again.
         await queue.send(_deferred(m))
+        await ledger.abandon_work(w["key"])
+        # A dead worker turn never gave its slot back; a turn that failed but lived already did.
+        if m["role"] == "worker" and m.get("department") and not w.get("slot_released"):
+            await ledger.release_worker_slot(cast(str, m["department"]))
         n += 1
     return n

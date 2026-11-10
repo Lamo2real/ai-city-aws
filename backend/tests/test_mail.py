@@ -15,7 +15,8 @@ from aic.lambdas.api import handle_http
 from aic.lambdas.mail_api import MailApi
 from aic.mail import approvals, wrap
 from aic.mail.accounts import AccountStore
-from aic.mail.providers.caldav import build_ics, parse_ics
+from aic.mail.http import ProviderError
+from aic.mail.providers.caldav import CalDav, build_ics, parse_ics
 from aic.mail.providers.google import event_pid, gmail_query, split_event_pid
 from aic.mail.providers.imap import imap_criteria
 from aic.mail.providers.microsoft import search_params, utc_naive
@@ -582,3 +583,22 @@ async def test_app_proposals_run_only_after_approval_and_only_once() -> None:
 def test_the_return_url_carries_no_secret() -> None:
     q = parse_qs(urlparse("https://hud.example.com/?connect=return").query)
     assert q == {"connect": ["return"]}
+
+
+async def test_caldav_never_sends_the_password_to_another_server() -> None:
+    asked: list[str] = []
+
+    class NoHttp:
+        async def request(self, *a: Any, **k: Any) -> Any:
+            asked.append(str(a))
+            raise AssertionError("no request may leave")
+
+    async def password() -> str:
+        return "app-password"
+
+    dav = CalDav(NoHttp(), "https://dav.example.com/cal/me/", "me@example.com", password)  # type: ignore[arg-type]
+    with pytest.raises(ProviderError, match="does not belong"):
+        await dav.get_event("https://attacker.example/c/1.ics")
+    with pytest.raises(ProviderError, match="does not belong"):
+        await dav.events("2026-11-01T00:00:00Z", "2026-11-02T00:00:00Z", ["https://dav.example.com.evil.io/c/"], None)
+    assert asked == []

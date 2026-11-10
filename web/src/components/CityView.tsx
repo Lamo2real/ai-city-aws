@@ -393,12 +393,16 @@ export function CityPanel({
   onBuilt?: (dept: string) => void;
 }) {
   const ref = useRef<HTMLElement>(null);
+  // onClose is a new function on every render of the city; read through a ref so this effect runs only when
+  // the panel opens for something else. Otherwise every city update moved the focus to Close mid-typing.
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
     ref.current?.querySelector<HTMLElement>("button")?.focus();
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && close.current();
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
-  }, [open, onClose]);
+  }, [open]);
   const title =
     "agent" in open
       ? (city.agents[open.agent]?.role ?? open.agent)
@@ -417,7 +421,7 @@ export function CityPanel({
           ×
         </button>
       </header>
-      {"agent" in open ? <AgentPanel id={open.agent} city={city} /> : null}
+      {"agent" in open ? <AgentPanel key={open.agent} id={open.agent} city={city} /> : null}
       {"build" in open ? <BuildDepartment compact onDone={onBuilt} /> : null}
       {"dept" in open ? <DeptPanel name={open.dept} city={city} onZoom={onZoom} onGone={onClose} /> : null}
       {"dept" in open ? <DeptApps name={open.dept} city={city} /> : null}

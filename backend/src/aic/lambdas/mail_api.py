@@ -65,6 +65,16 @@ def _err(status: int, message: str, fix: str | None = None) -> Answer:
     return status, {"error": message, "fix": fix}
 
 
+def _port(v: Any, name: str, default: int) -> int:
+    try:
+        n = int(v or default)
+    except (TypeError, ValueError):
+        n = 0
+    if not 1 <= n <= 65535:
+        raise MailError(f"{name} must be a number between 1 and 65535.")
+    return n
+
+
 def _str(v: Any, name: str, lo: int = 1, hi: int = 300) -> str:
     s = str(v or "").strip()
     if not lo <= len(s) <= hi:
@@ -269,9 +279,9 @@ async def _imap(c: MailApi, a: dict[str, Any], b: dict[str, Any]) -> Answer:
     address = _str(b.get("address"), "Address", 3, 200)
     conf: dict[str, Any] = {
         "imap_host": _str(b.get("imap_host"), "IMAP server", 3, 200),
-        "imap_port": int(b.get("imap_port") or 993),
+        "imap_port": _port(b.get("imap_port"), "IMAP port", 993),
         "smtp_host": _str(b.get("smtp_host"), "SMTP server", 3, 200),
-        "smtp_port": int(b.get("smtp_port") or 465),
+        "smtp_port": _port(b.get("smtp_port"), "SMTP port", 465),
         "smtp_starttls": bool(b.get("smtp_starttls")),
         "username": str(b.get("username") or address)[:200],
     }

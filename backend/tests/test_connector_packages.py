@@ -247,6 +247,20 @@ def test_the_host_installs_exactly_the_approved_version(tmp_path: Path) -> None:
     assert pypi[:3] == ["uv", "pip", "install"] and pypi[-1] == "mcp-server-fetch==2025.4.7" and str(tmp_path) in pypi
 
 
+def test_a_pypi_package_really_starts_with_its_folder_on_the_import_path(tmp_path: Path) -> None:
+    import subprocess
+
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg" / "helper_mod.py").write_text("WORD = 'started'\n")
+    script = tmp_path / "run-me"
+    script.write_text("import sys, helper_mod\nprint(helper_mod.WORD, sys.argv)\n")
+    r = subprocess.run(
+        [*srv.pypi_argv(tmp_path / "pkg", script), "--flag"], capture_output=True, text=True, timeout=30, check=False
+    )
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == f"started {[str(script), '--flag']}"
+
+
 def _host(tmp_path: Path) -> tuple[Any, list[Any]]:
     installs: list[Any] = []
 

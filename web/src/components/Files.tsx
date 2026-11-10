@@ -445,12 +445,18 @@ export function FileViewer(p: {
   const [confirming, setConfirming] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  // Focus once, when the sheet opens: the props are a new object on every render, so focusing in the effect
+  // below took the cursor out of the note field on every keystroke's re-render.
   useEffect(() => {
     ref.current?.querySelector<HTMLElement>("button")?.focus();
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && !confirming && p.onClose();
+  }, []);
+  const onClose = useRef(p.onClose);
+  onClose.current = p.onClose;
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && !confirming && onClose.current();
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
-  }, [p, confirming]);
+  }, [confirming]);
 
   const changed =
     name.trim() !== f.name || folder.trim() !== f.folder || tags !== f.tags.join(", ") || note !== (f.note ?? "");

@@ -168,14 +168,19 @@ function NewProject({ onClose }: { onClose: () => void }) {
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
   }, [onClose]);
+  const starting = useRef(false);
   const start = async (e?: FormEvent) => {
     e?.preventDefault();
     if (!idea.trim()) return setError("Write one sentence about your app first.");
+    if (starting.current) return; // Enter held down, or pressed twice: one app, not several
+    starting.current = true;
     try {
       const p = await projects.start(idea);
       location.hash = `/apps/${p.key}`;
     } catch (err) {
       setError(problem(err));
+    } finally {
+      starting.current = false;
     }
   };
   return (

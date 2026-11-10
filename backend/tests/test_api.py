@@ -289,6 +289,21 @@ async def test_stores_connections_with_a_ttl_broadcasts_and_drops_gone_connectio
     assert r == {"sent": 1, "gone": 1}
     assert await table.get("CONN#c2", "META") is None
     assert (await broadcast({"type": "nope"}, table, Ok()))["sent"] == 0
+
+    class Breaks:  # one connection that fails never stops the others
+        async def post(self, cid: str, data: str) -> Any:
+            if cid == "c1":
+                raise RuntimeError("the connection broke")
+            return "ok"
+
+    await on_connection({"requestContext": {"routeKey": "$connect", "connectionId": "c3"}}, table, 0)
+    assert await broadcast(
+        {"type": "agent.retired", "id": "w1", "at": "2026-11-06T12:00:00.000Z"}, table, Breaks()
+    ) == {
+        "sent": 1,
+        "gone": 0,
+    }
+    await on_connection({"requestContext": {"routeKey": "$disconnect", "connectionId": "c3"}}, table)
     await on_connection({"requestContext": {"routeKey": "$disconnect", "connectionId": "c1"}}, table)
     assert await table.query_index("gsi1", "CONN") == []
 
@@ -313,10 +328,30 @@ async def test_stores_the_task_token_and_wakes_the_agent_with_the_owners_decisio
     )
     await on_approval_step({"step": "store_token", "approvalId": a["id"], "taskToken": "tok"}, d.ledger, d.queue)
     assert (await d.ledger.get_approval(a["id"]) or {})["task_token"] == "tok"
-    await on_approval_step({"step": "resume", "approvalId": a["id"], "approved": False}, d.ledger, d.queue)
+    # Nobody answered within the workflow's day: that is not a refusal. The card closes and the agent is told so.
+    await on_approval_step({"step": "resume", "approvalId": a["id"], "approved": False}, d.ledger, d.queue, None, d.bus)
     m = d.queue.sent[0]
     assert (m["role"], m["agentId"], m["kind"]) == ("worker", "w1", "answer")
-    assert "refused" in m["body"]
+    assert "did not answer" in m["body"] and "not refused" in m["body"]
+    assert (await d.ledger.get_approval(a["id"]) or {})["status"] == "withdrawn"
+    assert await d.ledger.decide_approval(a["id"], True) is None  # a late tap approves nothing
+    # Run again for the same closed card (or one whose job stopped): nobody is told twice.
+    await on_approval_step({"step": "resume", "approvalId": a["id"], "approved": False}, d.ledger, d.queue)
+    assert len(d.queue.sent) == 1
+    # A real refusal still says refused.
+    b = await d.ledger.request_approval(
+        {
+            "agent": "w1",
+            "ticket_id": "t1",
+            "tool": "Bash",
+            "action": "npm publish",
+            "hash": "h2",
+            "reason": "publishing",
+        }
+    )
+    await d.ledger.decide_approval(b["id"], False)
+    await on_approval_step({"step": "resume", "approvalId": b["id"], "approved": False}, d.ledger, d.queue)
+    assert "refused this action" in d.queue.sent[1]["body"]
 
 
 # ---------- the owner's direct controls: no model in the loop ----------

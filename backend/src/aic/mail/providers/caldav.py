@@ -210,6 +210,10 @@ class CalDav:
         extra: dict[str, str] | None = None,
         raw: bytes | None = None,
     ) -> Any:
+        # Ids are URLs that arrive from tool arguments: the password only ever goes to this account's own server.
+        mine, asked = urllib.parse.urlsplit(self.url), urllib.parse.urlsplit(url)
+        if (asked.scheme, asked.netloc.lower()) != (mine.scheme, mine.netloc.lower()):
+            raise ProviderError("That id does not belong to this calendar account.")
         h = await self._auth()
         if depth is not None:
             h["Depth"] = depth

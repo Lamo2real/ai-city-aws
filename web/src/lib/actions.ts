@@ -3,7 +3,7 @@
 import { api, ApiError } from "./api.ts";
 import { listConnectors, listMailAccounts, looksLikeKey } from "./connect.ts";
 import { store, type ChatLine } from "./store.ts";
-import { toast } from "../components/ui.tsx";
+import { errorText, toast } from "../components/ui.tsx";
 
 const CONVERSATION = "main";
 const newLineId = () => `o${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -23,24 +23,28 @@ async function deliver(line: ChatLine) {
     // and "thinking" must not come back after it.
     if (store.get().chat.at(-1)?.id === line.id) store.set({ presence: "thinking" });
   } catch (e) {
-    patchLine(line.id, { state: "failed" });
-    if (!(e instanceof ApiError) || e.status === 0 || e.status >= 500) return; // kept in the outbox
-    throw e;
+    if (!(e instanceof ApiError) || e.status === 0 || e.status >= 500) return patchLine(line.id, { state: "failed" }); // kept in the outbox
+    // Refused: say why in full, and never send it again (it would be refused again, and hold up the lines after it).
+    patchLine(line.id, { state: "failed", refused: true });
+    toast({ tone: "bad", text: errorText(e, "VAIC did not accept that message.") });
   }
+}
+
+/** Keys never go through the chat (CONNECTORS_SKILLS.md §1.3.7): true, with the reason shown, when the text looks
+ * like one, so nothing is sent or stored (and the message box keeps what was typed). */
+export function keyBlocked(text: string): boolean {
+  if (!looksLikeKey(text.trim())) return false;
+  toast({
+    text: "That looks like a key or password, so it wasn't sent. Use the safe field in the card or in Settings, Connectors. If it was a real key, revoke it.",
+    tone: "bad",
+  });
+  return true;
 }
 
 /** Sends a message to VAIC. `voice`: the owner said it (VAIC then answers aloud when speaking is "auto"). */
 export async function sendMessage(text: string, opts: { voice?: boolean } = {}) {
   const clean = text.trim();
-  if (!clean) return;
-  if (looksLikeKey(clean)) {
-    // Keys never go through the chat (CONNECTORS_SKILLS.md §1.3.7): nothing is sent or stored.
-    toast({
-      text: "That looks like a key or password, so it wasn't sent. Use the safe field in the card or in Settings, Connectors. If it was a real key, revoke it.",
-      tone: "bad",
-    });
-    return;
-  }
+  if (!clean || keyBlocked(clean)) return;
   const line: ChatLine = {
     id: newLineId(),
     who: "owner",
@@ -87,8 +91,8 @@ if (typeof window !== "undefined") {
 
 /** Re-sends everything the outbox holds. The server ignores a line it already has (same client id). */
 export async function flushOutbox() {
-  for (const l of store.get().chat.filter((x) => x.who === "owner" && (x.state === "queued" || x.state === "failed")))
-    await deliver(l);
+  const waiting = (x: ChatLine) => x.who === "owner" && !x.refused && (x.state === "queued" || x.state === "failed");
+  for (const l of store.get().chat.filter(waiting)) await deliver(l);
 }
 
 export async function loadCity() {

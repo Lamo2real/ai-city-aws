@@ -214,23 +214,36 @@ async def run_due(d: CityDeps) -> dict[str, int]:
                 "owner_words": f"standing order: {o['source']}"[:500],
             },
         )
-        await d.ledger.table.update(
-            "STANDING", o["id"], UpdateOptions(set={"last_run_at": now, "last_job_id": t["id"]})
-        )
-        await send(
-            d,
-            {
-                "role": "orchestrator",
-                "agentId": "orchestrator",
-                "department": None,
-                "ticketId": t["id"],
-                "taskId": t["id"],
-                "kind": "task",
-                "from": "ace",
-                "body": f"New task from the owner's standing order {o['id']}.\nGoal: {t['goal']}\n"
-                f"Send it to the {o['department']} department.",
-            },
-        )
+        try:
+            # must_exist: an order the owner removed a moment ago is never written back as an empty row.
+            await d.ledger.table.update(
+                "STANDING", o["id"], UpdateOptions(set={"last_run_at": now, "last_job_id": t["id"]}, must_exist=True)
+            )
+            await send(
+                d,
+                {
+                    "role": "orchestrator",
+                    "agentId": "orchestrator",
+                    "department": None,
+                    "ticketId": t["id"],
+                    "taskId": t["id"],
+                    "kind": "task",
+                    "from": "ace",
+                    "body": f"New task from the owner's standing order {o['id']}.\nGoal: {t['goal']}\n"
+                    f"Send it to the {o['department']} department.",
+                },
+            )
+        except Exception as e:
+            # The job never reached the Orchestrator: close it and put the order's last run back, so the order is
+            # not left waiting for a job nobody is doing and the next beat starts it again. The other orders still run.
+            log("error", "standing.start_failed", order=o["id"], job=t["id"], error=f"{type(e).__name__}: {e}")
+            try:
+                await d.ledger.set_ticket_status(t["id"], "cancelled", "The standing order could not start this run.")
+                back = {"last_run_at": o.get("last_run_at"), "last_job_id": o.get("last_job_id")}
+                await d.ledger.table.update("STANDING", o["id"], UpdateOptions(set=back, must_exist=True))
+            except Exception as e2:
+                log("error", "standing.undo_failed", order=o["id"], job=t["id"], error=f"{type(e2).__name__}: {e2}")
+            continue
         log("info", "standing.started", order=o["id"], job=t["id"])
         started += 1
     return {"started": started, "still_running": skipped}

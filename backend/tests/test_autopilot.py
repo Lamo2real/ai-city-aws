@@ -76,6 +76,23 @@ async def test_a_reply_that_is_never_a_decision_ends_with_the_default_after_thre
     assert "No clear decision" in got["reason"]
 
 
+async def test_with_autopilot_off_three_failed_tries_leave_it_to_the_owner_and_stop_calling_the_model() -> None:
+    d = make()
+    _, q = await _stuck_research(d)
+    assert (await handle_http(ev("PUT", "/settings", {"autopilot": False}), d))["statusCode"] == 200
+    model = Model("hmm")
+    await review(chief(d, model))
+    for _ in range(MAX_TRIES - 1):
+        await _again(d, model, q["id"])
+    assert len(model.calls) == MAX_TRIES
+    out = await _again(d, model, q["id"])
+    assert out["results"] == [{"id": q["id"], "result": "needs_owner"}]
+    got = await d.ledger.get_question(q["id"])
+    assert got is not None and got["status"] == "open" and "3 tries" in got["needs_owner_reason"]
+    assert (await _again(d, model, q["id"]))["results"] == []  # the owner's now: skipped from here on
+    assert len(model.calls) == MAX_TRIES
+
+
 async def test_a_failing_model_ends_with_a_refusal_for_an_approval() -> None:
     d = make()
     a = await d.ledger.request_approval(

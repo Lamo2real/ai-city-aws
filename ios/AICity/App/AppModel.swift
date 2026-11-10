@@ -309,6 +309,9 @@ final class AppModel {
         await deliver(line)
     }
 
+    /// Lines the server refused (a 4xx): shown as failed, never re-sent by the outbox.
+    @ObservationIgnored private var refused: Set<String> = []
+
     private func deliver(_ line: ChatLine) async {
         guard let api else { hud.patchLine(line.id, state: .failed); return }
         do {
@@ -317,7 +320,10 @@ final class AppModel {
             hud.presence = .thinking
         } catch {
             hud.patchLine(line.id, state: .failed)
-            if let e = error as? APIError, e.status != 0, e.status < 500 { show(e.errorDescription ?? "Not sent.", tone: .bad) }
+            if let e = error as? APIError, e.status != 0, e.status < 500 {
+                refused.insert(line.id)  // the server said no: sending it again would only repeat the error
+                show(e.errorDescription ?? "Not sent.", tone: .bad)
+            }
         }
     }
 
@@ -346,7 +352,7 @@ final class AppModel {
 
     /// Re-sends everything the outbox holds. The server ignores a line it already has (same client id).
     func flushOutbox() async {
-        for l in hud.unsent { await deliver(l) }
+        for l in hud.unsent where !refused.contains(l.id) { await deliver(l) }
     }
 
     func loadCity() async {

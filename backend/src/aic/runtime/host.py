@@ -114,6 +114,7 @@ class AgentHost:
         if self.o.role and self.o.role != inv["role"]:
             raise RuntimeError(f"this runtime serves {self.o.role}, not {inv['role']}")
         ledger, bus = self.d.ledger, self.d.bus
+        failed = False
         try:
             await self.ensure_core()
             if self.o.git_auth is not None:
@@ -124,12 +125,14 @@ class AgentHost:
             agent = await ledger.get_agent(inv["agentId"])
             if not agent or agent.get("state") == "retired":
                 log("warn", "turn.skipped", agent=inv["agentId"], reason="no such agent or retired")
+                await ledger.finish_work(inv["id"])  # nothing to run: the crash sweep must not send it again
                 return ""
             if agent.get("state") == "dormant":
                 await ledger.update_agent(agent["id"], {"state": "active"})
             ticket = await ledger.get_ticket(inv["ticketId"])
             if ticket and ticket["status"] == "cancelled":
                 log("info", "turn.skipped", agent=inv["agentId"], reason="the owner stopped this job")
+                await ledger.finish_work(inv["id"])
                 return ""
             if ticket and ticket["status"] == "open" and ticket["to"] == agent["id"]:
                 await move(self.d, ticket["id"], "in_progress", "picked up")
@@ -254,7 +257,7 @@ class AgentHost:
                     kind=inv["role"],
                     role=inv["role"],
                     agent_id=agent["id"],
-                    session_id=inv["sessionId"],
+                    session_id=inv.get("sessionId") or inv["id"],  # a spoken turn comes with no session id
                     department=inv.get("department"),
                     ticket_id=inv["ticketId"],
                     models=models,
@@ -290,9 +293,13 @@ class AgentHost:
             await bus.put({"type": "activity", "id": agent["id"], "activity": "idle"})
             await ledger.finish_work(inv["id"])
             return result.output.text
+        except BaseException:
+            failed = True
+            raise
         finally:
             if inv["role"] == "worker" and inv.get("department"):
                 await ledger.release_worker_slot(inv["department"])
+                await ledger.worker_turn_ended(inv["id"], failed)
 
     async def _project_lines(self, conversation: str, recent: list[dict[str, Any]]) -> list[str]:
         """A project chat in the Apps studio: which app it is about (and the chat it began in), or that it is

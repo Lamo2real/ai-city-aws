@@ -14,6 +14,7 @@ from typing import Any, Protocol
 
 from aic.shared.aws import aws_city
 from aic.shared.clients import client
+from aic.shared.config import caps_config
 from aic.shared.hierarchy.dispatch import AgentInvoker, Dispatcher, DispatcherDeps
 from aic.shared.hierarchy.queue import WorkMessage
 from aic.shared.ids import session_ids
@@ -131,6 +132,8 @@ def _dispatcher() -> Dispatcher:
             invoker=invoker,
             settings=city.settings,
             session_id_for=lambda m: session_id_for(m, owner, version),
+            # A worker's turn may run for the whole long-job limit; its lease outlasts that by a minute.
+            worker_lease_ms=(caps_config()["async_job_soft_limit_minutes"] + 1) * 60_000,
         )
     )
     return _cached

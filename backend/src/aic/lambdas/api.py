@@ -303,7 +303,10 @@ def _body(event: dict[str, Any], max_len: int = 64_000) -> dict[str, Any]:
     raw = event.get("body")
     if not raw:
         return {}
-    text = base64.b64decode(raw).decode("utf-8") if event.get("isBase64Encoded") else str(raw)
+    try:
+        text = base64.b64decode(raw).decode("utf-8") if event.get("isBase64Encoded") else str(raw)
+    except ValueError as e:  # not base64, or not text
+        raise BadRequest("That request could not be read.") from e
     if len(text) > max_len:
         raise BadRequest("That message is too long.")
     try:

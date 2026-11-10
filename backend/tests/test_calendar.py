@@ -224,6 +224,23 @@ def test_monthly_by_weekday_until_and_all_day() -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    "rule",
+    [
+        "FREQ=MONTHLY;BYDAY=6MO",
+        "FREQ=MONTHLY;BYMONTHDAY=40",
+        "FREQ=DAILY;INTERVAL=abc",
+        "FREQ=DAILY;INTERVAL=" + "9" * 20,
+    ],
+)
+def test_a_repeat_rule_that_makes_no_sense_gives_no_dates_and_never_fails(rule: str) -> None:
+    body = f"UID:bad@x\r\nSUMMARY:Odd\r\nDTSTART:20261110T150000Z\r\nDTEND:20261110T160000Z\r\nRRULE:{rule}"
+    found = inv.occurrences(
+        inv.parse(ics(body))[0], datetime(2026, 11, 1, tzinfo=UTC), datetime(2027, 6, 1, tzinfo=UTC)
+    )
+    assert len(found) <= 1  # at most the first date itself
+
+
 def test_a_cancelled_invitation_says_cancel() -> None:
     (v,) = inv.parse(
         ics("UID:weekly-1@corp.com\r\nSEQUENCE:1\r\nSTATUS:CANCELLED\r\nDTSTART:20261020T070000Z", "CANCEL")

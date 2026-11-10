@@ -21,7 +21,7 @@ on:
     branches: [main]
     paths-ignore:
       - "docs/**"
-      - "**/*.md"
+      - "*.md" # the top folder's only: prompts and skills (agents/**/*.md, skills/**/*.md) are code and must deploy
       - "ios/**" # the iPhone app is built in Xcode, nothing in it deploys
       - ".github/workflows/ios-testflight.yml" # the iPhone app's own pipeline
   workflow_dispatch:

@@ -39,6 +39,7 @@ from .app_caps import (
     check_params,
     connector_tool,
     gate_name,
+    mail_error,
     no_app_call,
     plain,
 )
@@ -242,7 +243,7 @@ async def serve_bridge(event: dict[str, Any], d: BridgeDeps) -> dict[str, Any]:
         return _err("invalid", str(e))
     except LoginExpired as e:
         return _err("login_expired", str(e) or "An account needs you to sign in again.")
-    except Unavailable as e:
+    except (Unavailable, mail_error()) as e:
         return _err("unavailable", str(e) or "That data isn't available right now.")
     await d.ledger.audit_tool(agent, name, "done", f"{round((time.monotonic() - started) * 1000)} ms")
     return {"ok": True, "data": fit(data)}

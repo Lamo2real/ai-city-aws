@@ -572,6 +572,7 @@ class Ledger:
             "ttl": now // 1000 + 7 * 86_400,
             "gsi1pk": "WORK#started",
             "gsi1sk": str(now + lease_ms),
+            "slot_released": False,
         }
         if message:
             s["message"] = message
@@ -592,11 +593,23 @@ class Ledger:
             UpdateOptions(set={"state": "abandoned", "lease_until": 0, "gsi1pk": "WORK#abandoned"}),
         )
 
+    async def worker_turn_ended(self, key: str, failed: bool) -> None:
+        """The worker's turn is over and its slot is given back, so the crash sweep must not give it back again.
+
+        A failed turn also ends its lease now: the sweep sends it again within minutes, not after the long lease.
+        """
+        s: Record = {"slot_released": True}
+        if failed:
+            s.update(lease_until=0, gsi1sk="0")
+        await self.table.update(
+            f"WORK#{key}", "META", UpdateOptions(set=s, must_exist=True, expect={"state": "started"})
+        )
+
     async def stale_work(self) -> list[Record]:
         """Units of work whose lease ran out without finishing: the turn crashed or its microVM died."""
         now = self.now_ms()
         return [
-            {"key": i["pk"][5:], "message": i.get("message")}
+            {"key": i["pk"][5:], "message": i.get("message"), "slot_released": bool(i.get("slot_released"))}
             for i in await self.table.query_index("gsi1", "WORK#started")
             if float(i.get("lease_until", 0)) <= now
         ]

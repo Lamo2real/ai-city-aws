@@ -2,7 +2,7 @@
 // phone). Everything else can be done by asking VAIC ("send the workers home", "what's the status?").
 import { ChatCards } from "./ConnectCard.tsx";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
-import { sendMessage } from "../lib/actions.ts";
+import { keyBlocked, sendMessage } from "../lib/actions.ts";
 import { knowledgeApi } from "../lib/api.ts";
 import {
   allCommands,
@@ -219,8 +219,10 @@ export function AceScreen({ go }: { go: (view: string) => void }) {
     if (voice.dictating) voice.toggleDictate(); // stop dictating; send what is shown
     let body = slash?.kind === "send" ? slash.text : t;
     if (items.length) body = `${body || "Take a look at what I attached."}\n\n${attachedLine(items)}`;
+    if (keyBlocked(body)) return; // not sent: what was typed and attached stays in the box
     setText("");
     base.current = "";
+    pending.current = ""; // the dictated words were just sent: a late update must not put them back in the box
     setAttached([]);
     // Typed or dictated, the message is text and VAIC answers in text; the voice button is for talking.
     await sendMessage(body);

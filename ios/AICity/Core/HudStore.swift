@@ -165,6 +165,8 @@ final class HudStore {
 
     func event(_ e: JSONValue) {
         let type = e["type"].string ?? ""
+        // A project's chat ("app-…") is not VAIC's main chat (the web HUD filters the same way).
+        if type == "ace.reply" || type == "ace.question", (e["conversation"].string ?? "").hasPrefix("app-") { return }
         if type == "ace.reply" { return aceReply(text: e["text"].string ?? "", done: e["done"].bool ?? false) }
         if type == "knowledge.updated" { return onKnowledgeUpdated(e) }
         if type == "hud.action" { return onHudAction(e) }

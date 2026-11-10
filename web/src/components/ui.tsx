@@ -19,6 +19,9 @@ export function Button(p: {
       setBusy(true);
       try {
         await r;
+      } catch (e) {
+        // A press that fails always says so, in full (the owner's rule); a screen that shows its own error catches it first.
+        toast({ tone: "bad", text: errorText(e, "That didn't work. Try again.") });
       } finally {
         setBusy(false);
       }

@@ -442,22 +442,22 @@ def _report(job: Record | None) -> str:
 
 async def advance(d: CityDeps) -> dict[str, int]:
     """Moves every open ticket one step. Called by the scheduler with the standing orders, every 5 minutes."""
-    moved = 0
     business_on = await _company_running(d)
-    for t in await list_tickets(d.ledger):
+
+    async def one(t: Record) -> int:
         status = t.get("status")
         if str(t.get("order_id") or "").startswith(COMPANY_ORDERS) and not business_on:
-            continue  # the owner turned the business off (decision 138): its tickets wait, nothing new starts
+            return 0  # the owner turned the business off (decision 138): its tickets wait, nothing new starts
         if status == "new":
             started = await _start(d, t, team_goal(t), str(t["department"]), "the fix")
             await _note(
                 d, t, "support desk", f"Sent to {t['department']}.", {"status": "with_team", "team_job": started}
             )
-            moved += 1
+            return 1
         elif status == "with_team":
             job = await d.ledger.get_ticket(str(t.get("team_job"))) if t.get("team_job") else None
             if job and job.get("status") not in FINAL:
-                continue
+                return 0
             if job and job.get("status") == "done":
                 fix = _report(job) or "Done."
                 await _note(d, t, str(t["department"]), f"Fixed: {fix}", {"status": "fixed", "resolution": fix,
@@ -469,16 +469,16 @@ async def advance(d: CityDeps) -> dict[str, int]:
             else:
                 await _note(d, t, "support desk", f"{t['department']} couldn't fix it after {TRIES} tries.",
                             {"status": "stuck"})  # fmt: skip
-            moved += 1
+            return 1
         elif status == "fixed":
             started = await _start(d, t, _back(t), _back_to(t), "the reply" if _customer(t) else "the result")
             said = "Customer Support is telling the reporter." if _customer(t) else f"Back to {_back_to(t)}."
             await _note(d, t, "support desk", said, {"status": "replying", "reply_job": started})
-            moved += 1
+            return 1
         elif status == "replying":
             job = await d.ledger.get_ticket(str(t.get("reply_job"))) if t.get("reply_job") else None
             if job and job.get("status") not in FINAL:
-                continue
+                return 0
             if job and job.get("status") == "done":
                 said = "Customer told" if _customer(t) else "Taken back"
                 await _note(d, t, _back_to(t), f"{said}: {_report(job) or 'done.'}", {"status": "closed"})
@@ -488,7 +488,15 @@ async def advance(d: CityDeps) -> dict[str, int]:
                             {"reply_job": new, "tries": int(t.get("tries") or 0) + 1})  # fmt: skip
             else:
                 await _note(d, t, "support desk", "The reply couldn't be sent.", {"status": "stuck"})
-            moved += 1
+            return 1
+        return 0
+
+    moved = 0
+    for t in await list_tickets(d.ledger):
+        try:  # one ticket that cannot move never holds up the others; it is tried again on the next beat
+            moved += await one(t)
+        except Exception as e:
+            log("error", "support.advance_failed", ticket=t.get("id"), error=f"{type(e).__name__}: {e}")
     return {"tickets_moved": moved}
 
 

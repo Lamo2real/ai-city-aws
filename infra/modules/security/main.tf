@@ -81,6 +81,9 @@ resource "aws_iam_policy" "boundary" {
           "secretsmanager:GetSecretValue", "secretsmanager:CreateSecret", "secretsmanager:PutSecretValue", "secretsmanager:DeleteSecret", "secretsmanager:TagResource", "sns:Publish", "states:*", "lambda:InvokeFunction", "execute-api:ManageConnections",
           "ecr:GetAuthorizationToken", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer", "sts:AssumeRole", "sts:TagSession",
           "transcribe:StartStreamTranscription", "transcribe:StartStreamTranscriptionWebSocket", "polly:SynthesizeSpeech",
+          # Only the API role grants these: a phone's push endpoint (docs/NOTIFICATIONS.md) and the owner's own sign-in.
+          "sns:CreatePlatformEndpoint", "sns:SetEndpointAttributes", "sns:GetEndpointAttributes", "sns:DeleteEndpoint",
+          "cognito-idp:AdminCreateUser",
           # Only the API role grants it, on the apps distribution (removing a published app).
           "cloudfront:CreateInvalidation",
           # The knowledge base (docs/KNOWLEDGE.md section 9).

@@ -194,6 +194,8 @@ locals {
     ledger-writer = [{ Action = ["dynamodb:PutItem"], Resource = [var.ledger_arn] }]
     scheduler = [
       { Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] },
+      # The calendar import removes events that are gone in one batch (features/calendar.py).
+      { Action = ["dynamodb:BatchWriteItem"], Resource = [var.ledger_arn] },
       { Action = ["events:PutEvents"], Resource = [var.bus_arn] },
       { Action = ["sqs:SendMessage"], Resource = values(var.queue_arns) },
       # warm_ace: the "warm" ping to AIC's runtime only (never the other roles).
@@ -217,6 +219,8 @@ locals {
     notifier = [{ Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] }] # push rights: modules/notifications
     approvals = [
       { Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] },
+      # An approval nobody answered in time closes its card (approval.withdrawn).
+      { Action = ["events:PutEvents"], Resource = [var.bus_arn] },
       { Action = ["sqs:SendMessage"], Resource = values(var.queue_arns) },
       # An approval decided before its token was stored (decision 125): this function sends the result itself.
       # Named, not referenced: the state machine already depends on this function.

@@ -15,7 +15,7 @@ AI City is the owner's personal organization of AI agents, running only in the o
 ## Rules
 - New features are built on a feature branch and merged into `main` (which deploys). After the merge, delete the feature branch locally and on GitHub. The repository also deletes a pull request's branch automatically when it is merged.
 - Every push to `main` deploys prod automatically (`deploy.yml`, no approval step: the owner's choice). So an agent session never runs `terraform apply`, image pushes or AWS CLI changes itself, and pushes to `main` only when the owner asks for it in that session. A commit message containing `[skip ci]` does not deploy.
-- `ci.yml` runs only by hand; `deploy.yml` runs on pushes to `main` (docs-only pushes excepted) or by hand, never on pull requests.
+- `ci.yml` runs only by hand; `deploy.yml` runs on pushes to `main` (pushes that touch only `docs/**`, the top folder's `*.md` or `ios/**` excepted) or by hand, never on pull requests.
 - Every taggable resource carries the default cost-allocation tags (`Project`, `App`, `Environment`, `Owner`, `ManagedBy`, `CostCenter`, `Component`; plus `AgentRole` on agent runtimes and inference profiles).
 - Secrets live in Secrets Manager and are read by name at runtime. Never write a secret to code, Terraform, logs, prompts, docs or commits.
 - The GitHub token is the owner's, one for the whole city, in Secrets Manager `aic/prod/github` (pasted in Settings → GitHub, `docs/GITHUB_ACCESS.md`); runtimes hand it to git and gh through the environment and never read, print or store it.

@@ -601,3 +601,21 @@ def test_app_updated_and_publish_capabilities_validate() -> None:
     e = parse_event({"type": "approval.requested", "at": "x", "id": "ap", "agent": "o", "action": "p", "reason": "r",
                      "kind": "app.publish", "capabilities": [CAL], "pin": True})  # fmt: skip
     assert (e["capabilities"], e["pin"]) == ([CAL], True)
+
+
+async def test_a_mail_problem_reaches_the_app_as_unavailable_not_a_crash() -> None:
+    from aic.mail.service import MailError
+    from aic.shared.app_caps import Unavailable, _BoundProposals
+
+    class Approvals:
+        async def file(self, *a: object, **k: object) -> dict[str, object]:
+            raise MailError("That mailbox was removed.")
+
+        async def execute(self, *a: object) -> dict[str, object]:
+            raise MailError("That approval was already used, or isn't approved.")
+
+    bound = _BoundProposals(None, None, Approvals())  # type: ignore[arg-type]
+    with pytest.raises(Unavailable, match="mailbox was removed"):
+        await bound.file("mail.draft", {}, "app:x")
+    with pytest.raises(Unavailable, match="already used"):
+        await bound.execute({})

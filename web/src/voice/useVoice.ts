@@ -57,6 +57,9 @@ const THOUGHT_PAUSE_MS = 1100;
 const thought: { parts: string[]; timer: number | undefined } = { parts: [], timer: undefined };
 // The real-time call while it runs (one for the whole page).
 const sonic: { current: SonicCall | null } = { current: null };
+// The open microphone, kept here and not in one screen's own state: the City view and the VAIC screen each use this
+// hook, and the one the owner moves to must be able to close the mic the other one opened.
+const mic: { current: (() => void) | null } = { current: null };
 /** Loudness of the real-time call, for the visualizer; null when no call runs. */
 export const sonicLevels = () => sonic.current?.levels() ?? null;
 const lineId = () => `v${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -158,14 +161,14 @@ function askAic(text: string): Promise<string> {
 }
 
 export function useVoice(dictation?: DictationTarget) {
-  const [listening, setListening] = useState(false);
+  const [listening, setListening] = useState(() => !!mic.current);
   const [conversation, setConversation] = useState(convo.current);
   const [speakMode, setSpeakModeState] = useState<SpeakMode>(readSpeakMode);
   const [dictatingNow, setDictatingNow] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   // Which voice the conversation runs on, and why the standard one when the real-time one could not start.
   const [engine, setEngine] = useState<{ kind: "realtime" | "standard"; why?: string } | null>(null);
-  const stop = useRef<(() => void) | null>(null);
+  const stop = mic;
   const dictating = useRef(false);
   const target = useRef(dictation);
   target.current = dictation;
@@ -359,6 +362,15 @@ export function useVoice(dictation?: DictationTarget) {
     setListening(false);
     if (store.get().presence === "listening") store.set({ presence: "idle" });
   }, []);
+
+  // Leaving the screen while dictating into its message box: the box is gone, so the microphone closes. A voice
+  // conversation is not tied to one screen and carries on; the screen the owner moves to can end it.
+  useEffect(
+    () => () => {
+      if (dictating.current) end();
+    },
+    [end],
+  );
 
   const endConversation = useCallback(() => {
     stopCues();
