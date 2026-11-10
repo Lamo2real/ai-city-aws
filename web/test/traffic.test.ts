@@ -3,7 +3,9 @@
 // distance, and the owner's car alone runs the lights.
 import { describe, expect, it } from "vitest";
 import {
+  CAB_GAP_PX,
   HIGHWAY_PX_S,
+  TILE,
   JUNCTION_HALF,
   RED_MS,
   SIGNAL_CYCLE_MS,
@@ -103,6 +105,17 @@ describe("traffic lights", () => {
 });
 
 describe("the traffic as a whole", () => {
+  it("has half the cabs it used to: one per 44 tiles of road each way (decision 180)", () => {
+    expect(CAB_GAP_PX).toBe(44 * TILE);
+    for (const [n, portrait] of [[4, false], [8, false], [6, true]] as const) {
+      const sim = createTraffic(city(n, portrait));
+      const was = sim.lanes.reduce((k, l) => k + Math.max(1, Math.round(l.span / (22 * TILE))), 0);
+      expect(sim.cars.length).toBe(sim.lanes.reduce((k, l) => k + Math.max(1, Math.round(l.span / CAB_GAP_PX)), 0));
+      expect(sim.cars.length / was).toBeGreaterThan(0.4);
+      expect(sim.cars.length / was).toBeLessThan(0.6);
+    }
+  });
+
   for (const [n, portrait] of [[2, false], [4, false], [8, false], [6, true]] as const) {
     it(`flows without crashes or gridlock (${n} towers${portrait ? ", phone" : ""})`, () => {
       const w = city(n, portrait);

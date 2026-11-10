@@ -976,11 +976,12 @@ export function seededRandom(seed) {
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
 export const rareCab = (seed) => seededRandom(seed) < 1 / RARE_CAB_ODDS;
-// ---------- Traffic (decision 173): signals at some junctions, give way at the rest, a couple of roundabouts, and
+// ---------- Traffic (decision 176): signals at some junctions, give way at the rest, a couple of roundabouts, and
 // the open road outside the town driven at highway speed. A small simulation stepped by the scene's clock: every
 // cab follows the one in front, brakes for red and amber at the stop line, gives way, circles a roundabout and
 // takes its exit. The owner's sports car (the rare cab) runs the lights; it still never drives into anyone.
-export const CAB_PX_S = 34, CAB_GAP_PX = 22 * TILE;
+// About one cab per 44 tiles of road each way (the owner halved the taxis, 2026-11-10, decision 180; was 22).
+export const CAB_PX_S = 34, CAB_GAP_PX = 44 * TILE;
 export const TOWN_PX_S = CAB_PX_S, HIGHWAY_PX_S = 96, RING_PX_S = 22, ACCEL_PX_S2 = 44, BRAKE_PX_S2 = 50, CAR_GAP_PX = 6;
 export const JUNCTION_HALF = 24, STOP_AT = 36, RING_R = 20;
 const CAR_LEN = { x: 24, y: 18 }, RING_LEN = 20, LOOKAHEAD = 420, TAU = Math.PI * 2;
