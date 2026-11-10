@@ -42,14 +42,14 @@ test("workers walk in through automatic doors, the roof counts them, and they co
 
   m.send(hired("wkr-research-a1", "Research"));
   // The doors open as the worker reaches them, the worker disappears inside, the doors shut, the roof says 1.
-  await expect.poll(() => door(page), { timeout: 10_000, intervals: [50] }).toBeGreaterThan(0.5);
-  await expect.poll(() => inside(page, "wkr-research-a1"), { timeout: 10_000 }).toBe(true);
+  await expect.poll(() => door(page), { timeout: 60_000, intervals: [50] }).toBeGreaterThan(0.5); // after a cab ride in the traffic
+  await expect.poll(() => inside(page, "wkr-research-a1"), { timeout: 60_000 }).toBe(true);
   await expect.poll(() => count(page)).toBe(1);
   await expect.poll(() => door(page), { timeout: 5000 }).toBe(0);
 
   // Ten more: the counter climbs, the tower keeps its size.
   for (let i = 0; i < 10; i++) m.send(hired(`wkr-research-b${i}`, "Research"));
-  await expect.poll(() => count(page), { timeout: 30_000 }).toBe(11);
+  await expect.poll(() => count(page), { timeout: 90_000 }).toBe(11);
   expect(await tower(page)).toEqual(size);
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${SHOTS}/city-towers.png` });

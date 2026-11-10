@@ -1,13 +1,14 @@
 // Traffic (decision 173): lights at some junctions, a couple of roundabouts, highway pace out of town. The page's
 // own simulation is read through the read-only hooks on section.city (_traffic, _signals, _view).
 import { expect, test, type Page } from "@playwright/test";
-import { mockBackend } from "./mock.ts";
+import { hired, mockBackend } from "./mock.ts";
 
 type Junction = { id: string; kind: string; cx: number; cy: number };
 type Lane = { id: string; axis: "x" | "y"; len: number; townFrom: number; townTo: number; controls: Array<{ j: Junction; dc: number }> };
 type Car = { id: string; lane: Lane | null; d: number; v: number; rare: boolean };
 type Hooks = {
-  _traffic?: { junctions: Junction[]; cars: Car[]; t: number };
+  _traffic?: { junctions: Junction[]; cars: Car[]; t: number; guests: Array<{ id?: string; x: number; y: number }> };
+  _people?: Map<string, { x: number; y: number; inside?: boolean; route?: unknown; rv?: number }>;
   _signals?: () => Array<{ id: string; x: string; y: string }>;
   _view?: () => { x: number; y: number; zoom: number };
   dataset: DOMStringMap;
@@ -111,4 +112,36 @@ test("cabs circle the roundabouts and run at highway pace out in the countryside
   await zoomTo(page, "roundabout");
   await page.waitForTimeout(600);
   await page.screenshot({ path: info.outputPath("city-roundabout.png") });
+});
+
+test("a commuter's cab drives in the traffic: the lights and the other cabs see it, at cab pace", async ({ page }) => {
+  test.slow();
+  const m = await mockBackend(page);
+  await page.goto("/#/city");
+  await expect(page.locator("section.city")).toHaveAttribute("data-city-ready", "1");
+  await expect(page.getByText(/No departments yet/)).toBeVisible();
+  await page.waitForTimeout(250);
+  m.send({ type: "department.created", name: "Research", mission: "x", manager_id: "mgr-research" });
+  m.send(hired("mgr-research", "Research", "manager"));
+  m.send(hired("wkr-research-a1", "Research"));
+  // While it rides, it is one of the traffic's guests and never faster than a cab.
+  const seen: number[] = [];
+  const started = Date.now();
+  await expect
+    .poll(
+      async () => {
+        const s = await hooks(page, (h) => ({
+          guest: (h._traffic?.guests ?? []).some((g) => g.id === "wkr-research-a1"),
+          rv: h._people?.get("wkr-research-a1")?.rv ?? 0,
+          inside: !!h._people?.get("wkr-research-a1")?.inside,
+        }));
+        if (s.guest) seen.push(s.rv);
+        return s.inside && seen.length > 0;
+      },
+      { timeout: 60_000, intervals: [100] },
+    )
+    .toBe(true);
+  expect(seen.length).toBeGreaterThan(5); // a real ride, not a jump
+  expect(Math.max(...seen)).toBeLessThanOrEqual(56.01); // cab pace (RIDE_PX_S)
+  expect(Date.now() - started).toBeGreaterThan(2500); // longer than the old 2.5 s commute
 });

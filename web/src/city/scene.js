@@ -4,7 +4,7 @@
 // Reviewer; each department's manager stands at its door; panels are React (see CityView.tsx).
 // The City View: a small game world of the agents, drawn pixel by pixel on a canvas from city-state.js.
 // All of the art is drawn here in code. Every person on screen is a real agent; only the scenery moves on its own.
-import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, rareCab } from "./city-state.js";
+import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, rareCab, roundaboutDetours, rideStep, ringOf } from "./city-state.js";
 
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const INK = "#1d1c36";
@@ -757,8 +757,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
         const b = buildingOfKey(fromKey);
         p.move = null;
         p.route = commuteRoute(world, p, to, { leaving: fromKey.startsWith("desk:") ? b : null });
-        p.ride = rideLegs(world, p.route, p); // home by cab: from the kerb outside the tower to the kerb by the house
-        p.speed = walkSpeed(p.route, p);
+        planRide(p, { x: p.x, y: p.y }); // home by cab: from the kerb outside the tower to the kerb by the house
         p.waitUntil = b ? queueAt(`door:${b.dept}`, 150) : performance.now();
         p.homecoming = true; // lights the house on arrival (step() clears it)
         p.say = { text: "CHECKED OUT", until: performance.now() + 1800 };
@@ -767,8 +766,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
         const from = { x: p.x, y: p.y };
         p.move = null;
         p.route = commuteRoute(world, from, to);
-        p.ride = rideLegs(world, p.route, from);
-        p.speed = walkSpeed(p.route, from);
+        planRide(p, from);
         p.waitUntil = performance.now() + (to.key === "home" ? 300 : 500);
         p.homecoming = to.key === "home";
         if (to.key !== "home") lightHouse(id, 900);
@@ -781,8 +779,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
         const from = { x: p.x, y: p.y };
         p.move = null;
         p.route = commuteRoute(world, from, to, { entering: b });
-        p.ride = rideLegs(world, p.route, from); // to work by cab, hailed at the kerb by the house
-        p.speed = walkSpeed(p.route, from);
+        planRide(p, from); // to work by cab, hailed at the kerb by the house
         p.waitUntil = queueAt(`door:${b.dept}`, 700);
         lightHouse(id, p.waitUntil - performance.now() + 500);
       } else dashTo(p, to);
@@ -792,6 +789,16 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     winBox.replaceChildren(...lit);
     refreshVisuals();
     root.dataset.people = String(people.size);
+  }
+  // A commute's cab legs drive with the traffic (decision 177): round a roundabout rather than over it, at cab pace,
+  // stopping for lights and giving way. The walks at either end keep the old brisk pace.
+  function planRide(p, from) {
+    p.ride = rideLegs(world, p.route, from);
+    if (traffic) ({ route: p.route, ride: p.ride } = roundaboutDetours(traffic.junctions, p.route, p.ride, from));
+    let walk = 0, at = from;
+    p.route.forEach((q, i) => { if (!p.ride[i]) walk += Math.hypot(q.x - at.x, q.y - at.y); at = q; });
+    p.speed = walkSpeed([{ x: walk, y: 0 }], { x: 0, y: 0 });
+    p.rv = 0; p.commit = null; p.stopFor = null;
   }
   const buildingOfKey = (key) => {
     const m = /^(?:desk|door):([^:]+)/.exec(key ?? "");
@@ -1433,10 +1440,14 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
         if (t >= 1) { const then = p.move.then; p.move = null; if (p.key.startsWith("desk:")) setInside(p, true); else dust(p.x, p.y - 4, 12, ["#ffe9a0", "#fff6e0", "#f4c63c"], 50, 0.45); then?.(); }
       } else if (p.route) {
         busy = true;
-        const to = p.route[0], dx = to.x - p.x, dy = to.y - p.y, d = Math.hypot(dx, dy), s = eased(p, (p.speed ?? WALK_SPEED) * dt, d);
+        const to = p.route[0], dx = to.x - p.x, dy = to.y - p.y, d = Math.hypot(dx, dy);
+        let s;
+        if (p.ride?.[0] && traffic) { p.to = to; p.rare = !!p.rareCab || root.dataset.rareCabs === "all"; s = rideStep(traffic, p, dt); } // a cab in the traffic
+        else s = eased(p, (p.speed ?? WALK_SPEED) * dt, d);
         if (Math.abs(dx) > 0.5) p.flip = dx < 0;
         if (d <= s) {
           p.x = to.x; p.y = to.y; p.route.shift(); p.ride?.shift();
+          if (to.ring && !p.route[0]?.ring) p.commit = null; // off the roundabout
           if (!p.route.length) {
             p.route = null; p.speed = null; p.ride = null;
             if (p.key.startsWith("desk:")) setInside(p, true); // in through the doors: out of sight, counted on the roof
@@ -1449,6 +1460,16 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       if (riding && !p.wasRiding) { p.rideAt = now; p.rareCab = rareCab(`${p.id}:${Math.round(now)}`); root.dataset.taxiRides = String(Number(root.dataset.taxiRides ?? 0) + 1); dust(p.x, p.y, 6, ["#f4c63c", "#fff6e0"], 24, 0.35); }
       if (!riding && p.wasRiding && !p.inside) leaving.push({ x: p.x, y: p.y, east: !p.flip, t: 0, rare: p.rareCab });
       p.wasRiding = riding;
+    }
+    if (traffic) {
+      // The commuters' cabs, as the traffic sees them: crossing a junction, waiting at a line, or on a roundabout.
+      traffic.guests = [];
+      for (const p of people.values()) {
+        if (!(p.route && !p.waitUntil && p.ride?.[0])) { p.guest = null; continue; }
+        const to = p.route[0], j = ringOf(traffic, { x: p.x, y: p.y, to });
+        p.guest = { id: p.id, x: p.x, y: p.y, vertical: Math.abs(to.y - p.y) > Math.abs(to.x - p.x), commit: p.commit, ring: j ? { j, ang: Math.atan2(p.y - j.cy, p.x - j.cx) } : null };
+        traffic.guests.push(p.guest);
+      }
     }
     if (stepMail(dt, now)) busy = true;
     if (leaving.length) { busy = true; leaving = leaving.filter((c) => { c.t += dt; c.x += (c.east ? 1 : -1) * 70 * dt; return c.t < 1.4; }); }

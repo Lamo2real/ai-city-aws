@@ -47,10 +47,12 @@ test("hired workers commute in from their houses, and finished workers walk home
   const mid2 = (await person(page, "wkr-research-a1"))!;
   expect(Math.hypot(mid2.x - mid1.x, mid2.y - mid1.y)).toBeGreaterThan(4); // really on the move
   await page.screenshot({ path: `${SHOTS}/city-commute.png` });
-  // Both arrive and sit; the walk takes about 2.5 s plus the turn at the door.
+  // Both arrive and sit; the cab ride keeps to the traffic (lights, roundabouts), so it takes a while (decision 177).
   await expect
-    .poll(() => person(page, "wkr-research-b2").then((p) => !p!.walking && !p!.waiting), { timeout: 10_000 })
+    .poll(() => person(page, "wkr-research-b2").then((p) => !p!.walking && !p!.waiting), { timeout: 60_000 })
     .toBe(true);
+  await expect.poll(() => person(page, "wkr-research-a1").then((p) => !p!.walking && !p!.waiting), { timeout: 60_000 }).toBe(true);
+  const atWork = (await person(page, "wkr-research-a1"))!;
   m.send({ type: "activity", id: "wkr-research-a1", activity: "coding" });
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${SHOTS}/city-working.png` });
@@ -64,11 +66,11 @@ test("hired workers commute in from their houses, and finished workers walk home
   await expect.poll(() => person(page, "wkr-research-a1").then((p) => p!.walking && !p!.waiting)).toBe(true);
   await page.screenshot({ path: `${SHOTS}/city-going-home.png` }); // mid-walk, "CHECKED OUT" above them
   await expect
-    .poll(() => person(page, "wkr-research-a1").then((p) => !p!.walking && !p!.waiting), { timeout: 10_000 })
+    .poll(() => person(page, "wkr-research-a1").then((p) => !p!.walking && !p!.waiting), { timeout: 60_000 })
     .toBe(true);
   const home = (await person(page, "wkr-research-a1"))!;
   expect(home.key).toBe("home");
-  expect(Math.hypot(home.x - mid2.x, home.y - mid2.y)).toBeGreaterThan(30); // actually travelled
+  expect(Math.hypot(home.x - atWork.x, home.y - atWork.y)).toBeGreaterThan(30); // actually travelled
 });
 
 test("with reduced motion, placement is instant: hired sits at once, retired is simply at home", async ({ page }) => {
@@ -111,7 +113,7 @@ test("an executive lives at home, rides to HQ when called in, and goes home afte
   const going = (await person(page, "exec-cfo"))!;
   expect(going.walking || going.waiting).toBe(true); // a commute, not a teleport
   await expect
-    .poll(() => person(page, "exec-cfo").then((p) => !p!.walking && !p!.waiting), { timeout: 10_000 })
+    .poll(() => person(page, "exec-cfo").then((p) => !p!.walking && !p!.waiting), { timeout: 60_000 })
     .toBe(true);
   const office = (await person(page, "exec-cfo"))!;
   expect(Math.hypot(office.x - home.x, office.y - home.y)).toBeGreaterThan(30);
@@ -120,6 +122,6 @@ test("an executive lives at home, rides to HQ when called in, and goes home afte
   m.send({ type: "executive.office", id: "exec-cfo", at_hq: false, agent: cfo("dormant") });
   await expect.poll(() => person(page, "exec-cfo")).toMatchObject({ key: "home" });
   await expect
-    .poll(() => person(page, "exec-cfo").then((p) => !p!.walking && !p!.waiting), { timeout: 10_000 })
+    .poll(() => person(page, "exec-cfo").then((p) => !p!.walking && !p!.waiting), { timeout: 60_000 })
     .toBe(true);
 });

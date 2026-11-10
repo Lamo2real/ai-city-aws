@@ -259,7 +259,15 @@ export function avenueLanes(world: CityWorld): Array<{ x0: number; x1: number; y
 export type CityJunction = { id: string; street: number; road: number; cx: number; cy: number; kind: "light" | "roundabout" | "giveway"; offset?: number };
 export type CityLane = { id: string; axis: "x" | "y"; dir: 1 | -1; at: number; from: number; to: number; span: number; len: number; townFrom: number; townTo: number; controls: Array<{ j: CityJunction; dc: number; entryD: number; exitD: number; entryAng: number; exitAng: number }> };
 export type CityCar = { id: string; lane: CityLane | null; d: number; v: number; f: number; lap: number; rare: boolean; commit: string | null; stopFor: string | null; braking: boolean; ring: { j: CityJunction; ang: number; exitAng: number; toLane: CityLane; toD: number } | null };
-export type CityTraffic = { world: CityWorld; lanes: CityLane[]; junctions: CityJunction[]; cars: CityCar[]; t: number; rand: () => number; margin: number };
+export type CityGuest = { id?: string; x: number; y: number; vertical: boolean; commit: string | null; ring: { j: CityJunction; ang: number } | null };
+export type CityTraffic = { world: CityWorld; lanes: CityLane[]; junctions: CityJunction[]; cars: CityCar[]; guests: CityGuest[]; t: number; rand: () => number; margin: number };
+export type CityRoutePoint = CityPoint & { ring?: string };
+export type CityRider = { x: number; y: number; to?: CityRoutePoint | null; rv?: number; rare?: boolean; stopFor?: string | null; commit?: string | null; braking?: boolean; guest?: CityGuest | null };
+export const RIDE_PX_S: number;
+export function roundaboutDetours(js: CityJunction[], route: CityPoint[], ride: boolean[], from: CityPoint): { route: CityRoutePoint[]; ride: boolean[] };
+export function ringOf(sim: CityTraffic, r: CityRider): CityJunction | null;
+export function rideHold(sim: CityTraffic, r: CityRider): number;
+export function rideStep(sim: CityTraffic, r: CityRider, dt: number): number;
 export type CityTrafficCar = { id: string; x: number; y: number; east: boolean; vertical: boolean; alpha: number; rare: boolean; braking: boolean; v: number; lane?: string; ring?: string };
 export const TOWN_PX_S: number;
 export const HIGHWAY_PX_S: number;

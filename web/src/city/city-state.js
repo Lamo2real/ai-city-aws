@@ -1074,7 +1074,7 @@ export function createTraffic(world, seed = "traffic") {
       cars.push({ id, lane, d, v: (d >= lane.townFrom && d <= lane.townTo ? TOWN_PX_S : HIGHWAY_PX_S) * f, f, lap: 0, rare: rareCab(`${id}:0`), commit: null, stopFor: null, ring: null, braking: false });
     }
   }
-  return { world, lanes, junctions: js, cars, t: 0, rand: rngOf(seed), margin: M };
+  return { world, lanes, junctions: js, cars, guests: [], t: 0, rand: rngOf(seed), margin: M };
 }
 const rngOf = (seed) => { let x = hashOf(seed) || 1; return () => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return (x >>> 0) / 4294967296; }; };
 
@@ -1093,9 +1093,9 @@ function tick(sim, dt) {
   for (const list of byLane.values()) list.sort((a, b) => a.d - b.d);
   // A roundabout takes three cars at a time, counting the ones already let on.
   const load = new Map();
-  for (const c of sim.cars) { const j = c.ring?.j ?? (c.commit && sim.junctions.find((k) => k.id === c.commit && k.kind === "roundabout")); if (j) load.set(j, (load.get(j) ?? 0) + 1); }
+  for (const c of [...sim.cars, ...guestsOf(sim)]) { const j = c.ring?.j ?? (c.commit && sim.junctions.find((k) => k.id === c.commit && k.kind === "roundabout")); if (j) load.set(j, (load.get(j) ?? 0) + 1); }
   // Who is inside a junction's box right now, and on which axis.
-  const inBox = (j, axis) => sim.lanes.some((l) => l.axis === axis && l.controls.some((c) => c.j === j && byLane.get(l).some((o) => Math.abs(o.d - c.dc) < JUNCTION_HALF + l.len / 2)));
+  const inBox = (j, axis) => guestInBox(sim, j, axis) || sim.lanes.some((l) => l.axis === axis && l.controls.some((c) => c.j === j && byLane.get(l).some((o) => Math.abs(o.d - c.dc) < JUNCTION_HALF + l.len / 2)));
   const plans = [];
   for (const lane of sim.lanes) {
     const list = byLane.get(lane);
@@ -1122,7 +1122,7 @@ function tick(sim, dt) {
         } else if (j.kind === "giveway" && !committed) {
           if (lane.axis === "x") {
             // The street gives way: slow to a crawl at the line, go when nothing on the avenue is near.
-            const near = sim.lanes.some((l) => l.axis === "y" && l.controls.some((c) => c.j === j && byLane.get(l).some((o) => o.d > c.dc - JUNCTION_HALF - l.len / 2 - Math.max(20, o.v * 2) && o.d < c.dc + JUNCTION_HALF + l.len / 2)));
+            const near = guestNear(sim, j) || sim.lanes.some((l) => l.axis === "y" && l.controls.some((c) => c.j === j && byLane.get(l).some((o) => o.d > c.dc - JUNCTION_HALF - l.len / 2 - Math.max(20, o.v * 2) && o.d < c.dc + JUNCTION_HALF + l.len / 2)));
             if (near || blockedBeyond) stop();
             else if (toStop < 6) car.commit = j.id;
             else cap = Math.min(cap, reach(12, toStop));
@@ -1136,7 +1136,7 @@ function tick(sim, dt) {
               const busy = ring.some((o) => {
                 const toEntry = ringArc(o.ring.ang, ctl.entryAng), toExit = ringArc(o.ring.ang, o.ring.exitAng);
                 return (toEntry < 50 && toExit > toEntry) || TAU * RING_R - toEntry < RING_LEN + CAR_GAP_PX;
-              });
+              }) || ringGuestNear(sim, j, ctl.entryAng);
               const letOn = sim.cars.some((o) => o !== car && !o.ring && o.commit === j.id && o.lane.controls.some((k) => k.j === j && ringArc(k.entryAng, ctl.entryAng) < 50));
               if (busy || letOn || (load.get(j) ?? 0) >= 3) { cap = Math.min(cap, toYield < 0.5 ? 0 : reach(0, toYield)); hold = Math.min(hold, Math.max(d, yieldD)); }
               else { car.commit = j.id; load.set(j, (load.get(j) ?? 0) + 1); }
@@ -1151,7 +1151,7 @@ function tick(sim, dt) {
   for (const [j, ring] of byRing) {
     for (const car of ring) {
       let cap = RING_PX_S * car.f, ahead = Infinity;
-      for (const o of ring) if (o !== car) { const a = ringArc(car.ring.ang, o.ring.ang); if (a > 0 && a < ahead) ahead = a; }
+      for (const o of [...ring, ...guestsOf(sim).filter((g) => g.ring?.j === j)]) if (o !== car) { const a = ringArc(car.ring.ang, o.ring.ang); if (a > 0 && a < ahead) ahead = a; }
       if (ahead < Infinity) cap = Math.min(cap, reach(0, ahead - RING_LEN - CAR_GAP_PX));
       const toExit = ringArc(car.ring.ang, car.ring.exitAng), out = byLane.get(car.ring.toLane) ?? [];
       if (out.some((o) => Math.abs(o.d - car.ring.toD) < car.ring.toLane.len + CAR_GAP_PX)) cap = Math.min(cap, reach(0, toExit - 1));
@@ -1176,6 +1176,114 @@ function tick(sim, dt) {
     else if (car.d > car.lane.span) { car.d -= car.lane.span; car.lap += 1; car.rare = rareCab(`${car.id}:${car.lap}`); car.commit = null; car.v = Math.min(car.v, (car.d >= car.lane.townFrom && car.d <= car.lane.townTo ? TOWN_PX_S : HIGHWAY_PX_S) * car.f); }
   }
 }
+// ---------- Commuters' cabs (decision 177): a cab carrying an agent to or from work keeps to the same rules. It
+// drives the route's centre line, so the simulation sees it as a guest: cruising cabs keep out of a junction it is
+// crossing, give way to it on a roundabout and at a give-way line. Each frame `rideStep` says how far it may go.
+export const RIDE_PX_S = 56;
+const guestsOf = (sim) => sim.guests ?? [];
+const RIDE_LEN = { x: 24, y: 18 };
+function guestInBox(sim, j, axis) {
+  return guestsOf(sim).some((g) => !g.ring && (axis === "y") === g.vertical && Math.abs(g.x - j.cx) < JUNCTION_HALF + 12 && Math.abs(g.y - j.cy) < JUNCTION_HALF + 12);
+}
+const guestNear = (sim, j) => guestsOf(sim).some((g) => !g.ring && g.vertical && Math.abs(g.x - j.cx) < 12 && Math.abs(g.y - j.cy) < JUNCTION_HALF + 50);
+const ringGuestNear = (sim, j, ang) => guestsOf(sim).some((g) => g.ring?.j === j && (ringArc(g.ring.ang, ang) < 50 || TAU * RING_R - ringArc(g.ring.ang, ang) < RING_LEN + CAR_GAP_PX));
+const carsInBox = (sim, j, axis) => sim.cars.some((o) => o.lane && o.lane.axis === axis && o.lane.controls.some((c) => c.j === j && Math.abs(o.d - c.dc) < JUNCTION_HALF + o.lane.len / 2)) || guestInBox(sim, j, axis);
+
+// A ride through a roundabout goes round the ring (anticlockwise, keeping right) instead of over the island: the
+// route's straight run or turn at the roundabout's centre becomes an entry point, an arc and an exit point.
+export function roundaboutDetours(js, route, ride, from) {
+  const out = [], flags = [];
+  let prev = from;
+  route.forEach((p, i) => {
+    const next = route[i + 1], j = ride[i] && js.find((k) => k.kind === "roundabout" && Math.abs(k.cx - p.x) < 1 && Math.abs(k.cy - p.y) < 1);
+    const through = ride[i] && !j && js.find((k) => k.kind === "roundabout" && onSegment(prev, p, k));
+    const at = j || through;
+    if (at && (j ? next && ride[i + 1] : true)) {
+      const inDir = unit(prev, at.cx === p.x && at.cy === p.y ? p : { x: at.cx, y: at.cy }), outDir = j ? unit(p, next) : inDir;
+      const a0 = Math.atan2(-inDir.y, -inDir.x), a1 = Math.atan2(outDir.y, outDir.x);
+      let sweep = ((a0 - a1) % TAU + TAU) % TAU;
+      if (sweep < 0.01) sweep = TAU;
+      const n = Math.max(2, Math.ceil(sweep / 0.35));
+      for (let k = 0; k <= n; k++) { const a = a0 - (sweep * k) / n; out.push({ x: at.cx + RING_R * Math.cos(a), y: at.cy + RING_R * Math.sin(a), ring: at.id }); flags.push(true); }
+      if (!j) { out.push(p); flags.push(ride[i]); }
+    } else { out.push(p); flags.push(ride[i]); }
+    prev = p;
+  });
+  return { route: out, ride: flags };
+}
+const unit = (a, b) => { const d = Math.hypot(b.x - a.x, b.y - a.y) || 1; return { x: (b.x - a.x) / d, y: (b.y - a.y) / d }; };
+function onSegment(a, b, j) {
+  const c = { x: j.cx, y: j.cy };
+  if (Math.abs(a.x - b.x) < 1 && Math.abs(a.x - c.x) < 1) return (c.y - a.y) * (c.y - b.y) < 0 && Math.abs(c.y - b.y) > RING_R;
+  if (Math.abs(a.y - b.y) < 1 && Math.abs(a.y - c.y) < 1) return (c.x - a.x) * (c.x - b.x) < 0 && Math.abs(c.x - b.x) > RING_R;
+  return false;
+}
+
+// The roundabout a rider is driving round right now, if any.
+export function ringOf(sim, r) {
+  const j = r.to?.ring && sim.junctions.find((k) => k.id === r.to.ring);
+  return j && Math.abs(Math.hypot(r.x - j.cx, r.y - j.cy) - RING_R) < 1.5 ? j : null;
+}
+// How far a commuter's cab moves this frame (`r` is the rider: x, y, its next route point `to`, and its own speed
+// `rv`, stop memory and roundabout commitment, kept on it between frames).
+export function rideStep(sim, r, dt) {
+  const hold = rideHold(sim, r), onRing = ringOf(sim, r) !== null;
+  const cap = Math.min(onRing ? RING_PX_S : RIDE_PX_S, hold === Infinity ? Infinity : hold < 0.5 ? 0 : reach(0, hold));
+  r.rv = cap < (r.rv ?? 0) ? cap : Math.min(cap, (r.rv ?? 0) + ACCEL_PX_S2 * 1.4 * dt);
+  r.braking = cap < RIDE_PX_S * 0.5;
+  return Math.max(0, Math.min(r.rv * dt, hold));
+}
+export function rideHold(sim, r) {
+  const to = r.to;
+  if (!to) return Infinity;
+  const rj = ringOf(sim, r);
+  if (rj) {
+    // On the ring: keep behind whoever is ahead on it.
+    const j = rj, ang = Math.atan2(r.y - j.cy, r.x - j.cx);
+    let ahead = Infinity;
+    for (const o of [...sim.cars.filter((c) => c.ring?.j === j), ...guestsOf(sim).filter((g) => g.ring?.j === j && g !== r.guest)]) { const a = ringArc(ang, o.ring.ang); if (a > 0.5 && a < ahead) ahead = a; }
+    return ahead === Infinity ? Infinity : Math.max(0, ahead - RING_LEN - CAR_GAP_PX);
+  }
+  const dx = to.x - r.x, dy = to.y - r.y;
+  const axis = Math.abs(dx) >= Math.abs(dy) ? "x" : "y", sign = Math.sign(axis === "x" ? dx : dy) || 1, L = RIDE_LEN[axis], cross = axis === "x" ? "y" : "x";
+  if ((axis === "x" ? Math.abs(dy) : Math.abs(dx)) > 1) return Infinity;
+  const len = Math.abs(axis === "x" ? dx : dy);
+  let best = null;
+  for (const j of sim.junctions) {
+    if (Math.abs(axis === "x" ? j.cy - r.y : j.cx - r.x) > 1) continue;
+    const along = sign * (axis === "x" ? j.cx - r.x : j.cy - r.y);
+    if (along <= 0 || along > len + RING_R + 1) continue;
+    if (!best || along < best.along) best = { j, along };
+  }
+  if (!best) return Infinity;
+  const { j, along } = best;
+  if (j.kind === "roundabout") {
+    const yieldAt = along - RING_R - L / 2 - 2;
+    if (r.commit === j.id || yieldAt < -0.5 || yieldAt > 24) return Infinity;
+    const entryAng = Math.atan2(r.y - j.cy, r.x - j.cx);
+    const load = sim.cars.filter((c) => c.ring?.j === j || c.commit === j.id).length + guestsOf(sim).filter((g) => g !== r.guest && (g.ring?.j === j || g.commit === j.id)).length;
+    const busy = sim.cars.some((o) => { if (o.ring?.j !== j) return false; const toEntry = ringArc(o.ring.ang, entryAng), toExit = ringArc(o.ring.ang, o.ring.exitAng); return (toEntry < 50 && toExit > toEntry) || TAU * RING_R - toEntry < RING_LEN + CAR_GAP_PX; }) || guestsOf(sim).some((g) => g !== r.guest && g.ring?.j === j && (ringArc(g.ring.ang, entryAng) < 50 || TAU * RING_R - ringArc(g.ring.ang, entryAng) < RING_LEN + CAR_GAP_PX));
+    if (busy || load >= 3) return Math.max(0, yieldAt);
+    r.commit = j.id;
+    return Infinity;
+  }
+  const stopAt = along - STOP_AT - L / 2;
+  if (stopAt < -0.5) return Infinity; // over the line already: through the junction
+  if (j.kind === "light") {
+    const sig = signalAt(j, sim.t)[axis], v = r.rv ?? 0;
+    if (r.rare) return carsInBox(sim, j, cross) ? Math.max(0, stopAt) : Infinity; // the owner's car runs the lights
+    if (sig === "red") return Math.max(0, stopAt);
+    if (sig === "amber") { if (r.stopFor === j.id || v < 10 || stopAt >= (v * v) / (2 * BRAKE_PX_S2 * 1.6)) { r.stopFor = j.id; return Math.max(0, stopAt); } return Infinity; }
+    r.stopFor = null;
+    return carsInBox(sim, j, cross) ? Math.max(0, stopAt) : Infinity;
+  }
+  if (axis === "x") {
+    const near = sim.cars.some((o) => o.lane && o.lane.axis === "y" && o.lane.controls.some((c) => c.j === j && o.d > c.dc - JUNCTION_HALF - o.lane.len / 2 - Math.max(20, o.v * 2) && o.d < c.dc + JUNCTION_HALF + o.lane.len / 2)) || guestNear(sim, j);
+    return near ? Math.max(0, stopAt) : Infinity;
+  }
+  return carsInBox(sim, j, "x") ? Math.max(0, stopAt) : Infinity;
+}
+
 // Onto the roundabout: straight on half the time, otherwise left or right; never back the way it came.
 function enterRing(sim, car, ctl) {
   const j = ctl.j, from = car.lane, options = [];
