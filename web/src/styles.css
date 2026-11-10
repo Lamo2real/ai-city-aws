@@ -4475,7 +4475,9 @@ summary,
     width: 100%;
   }
   .screen > .citytabs {
-    position: static;
+    position: relative; /* not static: the sliding highlight is placed inside the pill, not the whole page */
+    top: auto;
+    right: auto;
     width: calc(100% - 10px); /* lines up with the City card's row (its 9px + 12px inset) */
     margin: 0 5px var(--s3);
   }

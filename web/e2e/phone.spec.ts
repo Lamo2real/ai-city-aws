@@ -167,3 +167,18 @@ test("phone: the + menu opens upwards inside the screen and its rows are easy to
   await expect(menu).toHaveCount(0);
   await expect(plus).toBeFocused();
 });
+
+test("phone: the City | Features highlight stays inside its pill on Features", async ({ page }) => {
+  await mockBackend(page);
+  await page.goto("/#/city/features");
+  await expect(page.getByRole("heading", { name: "Features", level: 1 })).toBeVisible();
+  const pill = (await page.locator(".citytabs").boundingBox())!;
+  const thumb = page.locator(".citytabs-thumb");
+  await expect(async () => {
+    const t = (await thumb.boundingBox())!;
+    expect(t.height).toBeLessThanOrEqual(pill.height);
+    expect(t.width).toBeLessThanOrEqual(pill.width / 2 + 1);
+    expect(t.y).toBeGreaterThanOrEqual(pill.y - 1);
+    expect(t.x + t.width).toBeLessThanOrEqual(pill.x + pill.width + 1);
+  }).toPass();
+});
