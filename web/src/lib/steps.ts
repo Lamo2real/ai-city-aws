@@ -29,6 +29,8 @@ export const FIRST_STEP = BY_ACTIVITY.understanding!;
 export function stepWords(activity: string, detail?: string | null): string | null {
   if (activity === "idle") return null;
   if (detail?.startsWith("Running: ")) return detail; // VAIC's run_command says the command itself
+  // A step the runtime already said in words ("Searched the web: …", decision 204), not a bare tool name.
+  if (detail && /^[A-Z][a-z]+ /.test(detail)) return detail;
   const tool = (detail ?? "").replace(/^mcp__city__/, "");
   return BY_TOOL[tool] ?? BY_ACTIVITY[activity] ?? "Working on it";
 }

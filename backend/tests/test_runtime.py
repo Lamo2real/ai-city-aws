@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from vaic.runtime.engine import activity_for, usage_from_model_usage
+from vaic.runtime.engine import activity_for, step_detail, usage_from_model_usage
 from vaic.runtime.prompts import Prompt, load_prompt, parse_prompt, render
 from vaic.runtime.server import create_app
 from vaic.shared.cost import Usage
@@ -197,3 +197,32 @@ async def test_a_warm_ping_answers_at_once_without_running_a_turn() -> None:
         assert r.status_code == 200 and r.json() == {"status": "warm"}
         assert turns == []  # no ledger, no model: the container just says it is up
         assert (await c.get("/ping")).json()["status"] == "Healthy"
+
+
+def test_step_detail_says_each_step_plainly_and_blanks_secrets() -> None:
+    assert step_detail("Bash", {"command": "npm run build"}) == "Ran npm run build"
+    assert step_detail("Bash", {"command": "git push origin main"}).startswith("Pushed the code to GitHub")
+    assert (
+        step_detail("Write", {"file_path": "/tmp/work/w1/app/src/cards.svg"})
+        == "Created an SVG image: app/src/cards.svg"
+    )
+    assert step_detail("Edit", {"file_path": "/tmp/work/w1/app/index.html"}) == "Edited app/index.html"
+    assert step_detail("WebSearch", {"query": "memory game for kids"}) == "Searched the web: memory game for kids"
+    assert step_detail("WebFetch", {"url": "https://example.com/a"}) == "Read a web page: https://example.com/a"
+    assert (
+        step_detail("mcp__city__search_knowledge", {"query": "brand colours"})
+        == "Searched your knowledge: brand colours"
+    )
+    assert step_detail("mcp__canva__generate_design", {}) == "Used canva: generate design"
+    assert step_detail("mcp__city__assign", {}) is None
+    for secret in (
+        "curl -H 'Authorization: Bearer abc.def' x",
+        "export GITHUB_TOKEN=ghp_abcdefghijklmnop",
+        "git push https://user:hunter2@github.com/a/b",
+        "aws configure set aws_access_key_id AKIAABCDEFGHIJKLMNOP",
+        "echo api_key=12345",
+    ):
+        out = step_detail("Bash", {"command": secret}) or ""
+        for leak in ("abc.def", "ghp_abcdefghijklmnop", "hunter2", "AKIAABCDEFGHIJKLMNOP", "12345"):
+            assert leak not in out, out
+    assert len(step_detail("Bash", {"command": "x" * 500}) or "") <= 220

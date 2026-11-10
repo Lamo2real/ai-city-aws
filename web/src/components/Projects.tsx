@@ -22,6 +22,7 @@ import {
   type TimelineItem,
 } from "../lib/projects.ts";
 import { useHud } from "../lib/store.ts";
+import { building, groupLabel, groupSteps, useBuildSteps, type StepKind } from "../lib/buildSteps.ts";
 import { AppFrame, AppIcon, GrantList, PinButton, problem } from "./Apps.tsx";
 import { Banner, Button, Confirm, SendIcon, toast } from "./ui.tsx";
 import { Select } from "./Select.tsx";
@@ -402,10 +403,11 @@ function ProjectChat({ project }: { project: Project }) {
   const [text, setText] = useState("");
   const log = useRef<HTMLDivElement>(null);
   const chat = lines ?? [];
+  const stepCount = useBuildSteps(conv)?.length ?? 0;
   useEffect(() => {
     const el = log.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [chat.length, chat.at(-1)?.text, ask, thinking]);
+  }, [chat.length, chat.at(-1)?.text, ask, thinking, stepCount]);
   const send = async (words: string) => {
     try {
       await projects.send(conv, words);
@@ -465,6 +467,7 @@ function ProjectChat({ project }: { project: Project }) {
             </span>
           </article>
         ) : null}
+        <BuildLog conv={conv} />
         {ask ? (
           <div className="pj-ask" role="group" aria-label={ask.question}>
             <p className="pj-ask-q">{ask.question}</p>
@@ -785,5 +788,69 @@ function DeviceGlyph({ d }: { d: Device }) {
     <svg {...common}>
       <rect x="3" y="3" width="18" height="18" rx="2" />
     </svg>
+  );
+}
+
+const STEP_ICON: Record<StepKind, string> = {
+  command: "M5 7l4 4-4 4M11 16h8",
+  github: "M6 4v12M18 8v8M6 16a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM18 4a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM18 16a2 2 0 1 0 0 4M6 12c6 0 12-1 12-4",
+  edit: "M4 20h4L19 9l-4-4L4 16zM14 6l4 4",
+  image: "M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15 9h.01",
+  read: "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5",
+  web: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18",
+  knowledge: "M5 4h10a4 4 0 0 1 4 4v12H9a4 4 0 0 1-4-4zM5 16a4 4 0 0 1 4-4h10",
+  other: "M5 12h.01M12 12h.01M19 12h.01",
+};
+function StepIcon({ kind }: { kind: StepKind }) {
+  return (
+    <svg className="bl-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d={STEP_ICON[kind]} />
+    </svg>
+  );
+}
+
+/** The builders' steps under the conversation, the way Claude shows its own: runs of one kind fold into a line
+ * ("Ran 3 commands ›") that opens to every step, and a ring with three dots turns while they work (decision 204). */
+function BuildLog({ conv }: { conv: string }) {
+  const list = useBuildSteps(conv);
+  const active = useHud((s) => building(s.city, conv));
+  if (!list?.length && !active) return null;
+  const groups = groupSteps(list ?? []);
+  return (
+    <section className="buildlog" aria-label="What the builders are doing">
+      {groups.map((g, i) =>
+        g.steps.length === 1 ? (
+          <p key={`${g.steps[0]!.at}-${i}`} className="bl-step">
+            <StepIcon kind={g.kind} />
+            <span>{g.steps[0]!.text}</span>
+          </p>
+        ) : (
+          <details key={`${g.steps[0]!.at}-${i}`} className="bl-group">
+            <summary>
+              <StepIcon kind={g.kind} />
+              <span>{groupLabel(g.kind, g.steps.length)}</span>
+              <svg className="bl-chev" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </summary>
+            <ol>
+              {g.steps.map((s, j) => (
+                <li key={`${s.at}-${j}`}>{s.text}</li>
+              ))}
+            </ol>
+          </details>
+        ),
+      )}
+      {active ? (
+        <div className="bl-working" role="status">
+          <span className="bl-ring" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
+          <span className="sr">The builders are working</span>
+        </div>
+      ) : null}
+    </section>
   );
 }

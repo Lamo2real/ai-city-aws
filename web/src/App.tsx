@@ -20,6 +20,7 @@ import { FirstRun } from "./components/FirstRun.tsx";
 import { KnowledgeScreen } from "./components/Knowledge.tsx";
 import { FilesScreen } from "./components/Files.tsx";
 import { files } from "./lib/files.ts";
+import { buildSteps } from "./lib/buildSteps.ts";
 import { knowledge } from "./lib/knowledge.ts";
 import { projects } from "./lib/projects.ts";
 import { workflows } from "./lib/workflows.ts";
@@ -99,6 +100,9 @@ export function App() {
       live.onEvent((e) => {
         chief.event(e); // before the store, so a decision can still read the item it is about
         store.event(e);
+        buildSteps.event(e, store.get().city); // after the store, so the step's job is known
+        if (e.type === "app.published" && typeof e.app_id === "string" && typeof e.conversation === "string")
+          buildSteps.move(e.conversation, `app-${e.app_id}`);
         knowledge.event(e);
         files.event(e);
         projects.event(e);

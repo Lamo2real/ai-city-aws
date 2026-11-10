@@ -7071,3 +7071,116 @@ a.btn-primary.chat-file-dl,
     display: none;
   }
 }
+
+/* ---------- A project's build steps, the way Claude shows its own (decision 204) ---------- */
+.buildlog {
+  display: grid;
+  gap: 2px;
+  margin: var(--s1) 0;
+  font-size: var(--fs-s, 14px);
+  color: var(--gmute);
+}
+.bl-step,
+.bl-group > summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 4px 6px;
+  border-radius: 8px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.bl-group > summary {
+  cursor: pointer;
+  list-style: none;
+  width: fit-content;
+}
+.bl-group > summary::-webkit-details-marker {
+  display: none;
+}
+.bl-group > summary:hover {
+  color: var(--gtext);
+  background: var(--glass);
+}
+.bl-icon,
+.bl-chev {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.bl-chev {
+  transition: transform var(--dur-m) var(--ease-out);
+}
+.bl-group[open] .bl-chev {
+  transform: rotate(90deg);
+}
+.bl-group ol {
+  list-style: none;
+  margin: 2px 0 6px 13px;
+  padding: 0 0 0 16px;
+  border-left: 1px solid var(--edge);
+  display: grid;
+  gap: 4px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+/* The ring with three dots that turns while the builders work, centred under the steps. */
+.bl-working {
+  display: flex;
+  justify-content: center;
+  padding: var(--s2) 0;
+}
+.bl-ring {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--edge-2);
+  background: var(--glass-2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.bl-ring i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--amber);
+  animation: bl-dot 1.2s ease-in-out infinite;
+}
+.bl-ring i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.bl-ring i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes bl-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bl-ring i {
+    animation: none;
+    opacity: 0.8;
+  }
+  .bl-chev {
+    transition: none;
+  }
+}

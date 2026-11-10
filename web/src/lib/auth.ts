@@ -186,7 +186,7 @@ export async function bootAuth(
 export async function signOutHere() {
   await auth().signOut();
   try {
-    for (const k of ["vaic.chat", "vaic.draft", "vaic.cards"]) localStorage.removeItem(k);
+    for (const k of ["vaic.chat", "vaic.draft", "vaic.cards", "vaic.buildsteps"]) localStorage.removeItem(k);
   } catch {
     /* no storage */
   }

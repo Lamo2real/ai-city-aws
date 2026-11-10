@@ -254,3 +254,52 @@ test("light appearance: the studio reads well", async ({ page }) => {
   await expect(page.getByRole("button", { name: /New project/ })).toBeVisible();
   await noSeriousA11y(page, "Projects in light");
 });
+
+test("while the builders work, the project chat shows their steps like Claude: grouped, openable, with a turning ring", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  await page.goto("/#/apps");
+  await page.getByRole("button", { name: /New project/ }).click();
+  const dialog = page.getByRole("dialog", { name: "What should your app do?" });
+  await dialog.getByPlaceholder("Describe your app in one sentence").fill("A memory game with animal cards");
+  await dialog.getByRole("button", { name: "Start building" }).click();
+  await expect(page).toHaveURL(/#\/apps\/new-[a-z0-9]+$/);
+  const conv = `app-${page.url().split("/apps/")[1]}`;
+  // The job comes from this project's conversation; a worker gets a part of it.
+  const root = { id: "t-mem", from: "vaic", to: "orchestrator", goal: "Memory game", kind: "task", department: null, conversation: conv };
+  const part = { id: "t-mem-1", parent_id: "t-mem", from: "mgr-apps", to: "wkr-dev", goal: "Build it", kind: "task", department: "Apps" };
+  m.send({ type: "ticket.status", previous: null, ticket: { ...root, status: "open" } });
+  m.send({ type: "ticket.status", previous: null, ticket: { ...part, status: "in_progress" } });
+  const say = (activity: string, detail: string) => m.send({ type: "activity", id: "wkr-dev", activity, detail });
+  say("researching", "Searched your knowledge: animal pictures");
+  say("running", "Ran npm create vite@latest memory");
+  say("running", "Ran npm install");
+  say("coding", "Created an SVG image: memory/src/cards/lion.svg");
+  say("coding", "Edited memory/src/App.tsx");
+  say("running", "Pushed the code to GitHub: git push origin main");
+  // A step from another project's worker never shows here.
+  m.send({ type: "activity", id: "someone-else", activity: "running", detail: "Ran rm -rf nothing" });
+
+  const log = page.getByRole("region", { name: "What the builders are doing" });
+  await expect(log.getByText("Searched your knowledge: animal pictures")).toBeVisible();
+  const cmds = log.locator("details").filter({ hasText: "Ran 2 commands" });
+  await expect(cmds).toBeVisible();
+  await expect(log.getByText("Ran npm install")).toBeHidden(); // folded, like Claude
+  await cmds.locator("summary").click();
+  await expect(log.getByText("Ran npm install")).toBeVisible();
+  await expect(log.getByText("Created an SVG image: memory/src/cards/lion.svg")).toBeVisible();
+  await expect(log.getByText("Pushed the code to GitHub: git push origin main")).toBeVisible();
+  await expect(log.getByText("rm -rf")).toHaveCount(0);
+  const ring = log.getByRole("status");
+  await expect(ring).toHaveText("The builders are working");
+  await expect(ring.locator(".bl-ring i").first()).toHaveCSS("animation-name", "bl-dot");
+  await page.screenshot({ path: `${SHOTS}/project-build-steps.png` });
+
+  // Finished: the ring goes, the steps stay, and a reload keeps them.
+  m.send({ type: "ticket.status", previous: "in_progress", ticket: { ...part, status: "done" } });
+  m.send({ type: "ticket.status", previous: "open", ticket: { ...root, status: "done" } });
+  await expect(ring).toHaveCount(0);
+  await page.reload();
+  await expect(log.getByText("Searched your knowledge: animal pictures")).toBeVisible();
+});

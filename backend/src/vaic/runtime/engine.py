@@ -73,6 +73,83 @@ def activity_for(tool: str) -> str:
     return next((a for r, a in _ACTIVITY if r.search(tool)), "working")
 
 
+# Anything that looks like a secret in a command or address is blanked before a step is shown (decision 204).
+_SECRET = re.compile(
+    r"(gh[pousr]_[A-Za-z0-9]{8,}|github_pat_\w{8,}|sk-[\w-]{8,}|xox[abprs]-[\w-]{8,}|AKIA[0-9A-Z]{16}"
+    r"|(?i:bearer)\s+\S+|(?i:(?:password|passwd|token|secret|api[_-]?key|access[_-]?key)\S*)\s*[=:]\s*\S+"
+    r"|https?://[^\s/@]+:[^\s/@]+@|[A-Za-z0-9+/_-]{40,})"
+)
+
+
+def _clean(text: Any, n: int = 160) -> str:
+    one = " ".join(str(text or "").split())
+    one = _SECRET.sub("•••", one)
+    return one if len(one) <= n else one[: n - 1] + "…"
+
+
+def _base(path: Any) -> str:
+    p = str(path or "")
+    for root in ("/tmp/work/", "/tmp/"):  # noqa: S108 (a label, not a file the runtime opens)
+        if root in p:
+            p = p.split(root, 1)[1].split("/", 1)[-1]
+    return _clean(p, 120)
+
+
+def step_detail(tool: str, args: dict[str, Any] | None) -> str | None:
+    """One tool call as a short line for the owner, the way Claude shows its steps: what ran, what was read or
+    written, what was searched. Tool input is outside content: only a short, secret-blanked label is kept."""
+    a = args or {}
+    name = tool.removeprefix("mcp__city__")
+    if tool == "Bash" or name == "run_command":
+        cmd = _clean(a.get("command") or a.get("cmd"), 200)
+        if re.search(r"\bgit\s+push\b", cmd):
+            return f"Pushed the code to GitHub: {cmd}"
+        if re.search(r"\bgit\s+(clone|commit|checkout|pull)\b|\bgh\s", cmd):
+            return f"GitHub: {cmd}"
+        return f"Ran {cmd}" if cmd else "Ran a command"
+    if tool in ("Write", "Edit", "MultiEdit"):
+        path = _base(a.get("file_path"))
+        verb = "Created" if tool == "Write" else "Edited"
+        if path.lower().endswith(".svg"):
+            return f"{verb} an SVG image: {path}"
+        if re.search(r"\.(png|jpe?g|gif|webp|avif|ico)$", path.lower()):
+            return f"{verb} an image: {path}"
+        return f"{verb} {path}" if path else f"{verb} a file"
+    if tool == "Read":
+        return f"Read {_base(a.get('file_path'))}"
+    if tool == "Glob":
+        return f"Looked for files: {_clean(a.get('pattern'), 80)}"
+    if tool == "Grep":
+        return f"Searched the code for {_clean(a.get('pattern'), 80)}"
+    if tool == "WebSearch":
+        return f"Searched the web: {_clean(a.get('query'), 120)}"
+    if tool == "WebFetch":
+        return f"Read a web page: {_clean(a.get('url'), 140)}"
+    if "browser" in tool:
+        url = a.get("url") or a.get("start_url")
+        return f"Browsed {_clean(url, 140)}" if url else "Used the browser"
+    if "code_interpreter" in tool:
+        return "Ran code in the sandbox"
+    if name == "search_knowledge":
+        return f"Searched your knowledge: {_clean(a.get('query') or a.get('text'), 120)}"
+    if name == "list_knowledge":
+        return "Looked through your knowledge"
+    if name == "add_to_knowledge":
+        return "Saved to your knowledge"
+    if name in ("submit_app", "load_app"):
+        return "Handed in the app for checks" if name == "submit_app" else "Opened the app's current version"
+    if name == "hire_worker":
+        return f"Hired a {_clean(a.get('role') or 'worker', 60)}"
+    if name.startswith("report_to"):
+        return "Reported back"
+    if name in {"file_handoff", "artifacts"}:
+        return "Saved files to share"
+    if tool.startswith("mcp__") and not tool.startswith("mcp__city__"):
+        _, server, fn = [*tool.split("__", 2), "", ""][:3]
+        return f"Used {server.replace('_', ' ').replace('-', ' ')}: {fn.replace('_', ' ')}"
+    return None
+
+
 def usage_from_model_usage(mu: dict[str, dict[str, Any]], ttl: str) -> Usage:
     """Usage from the SDK's per-model totals, split by cache-write lifetime."""
     inp = out = read = w5_total = w1_total = 0
@@ -171,7 +248,7 @@ def _options(req: EngineRequest, b: _Binding) -> Any:
             await r_.on_needs_approval(name, input, r.needs_approval.hash, r.needs_approval.reason)
         if r.decision == "allow":
             if r_.on_activity:
-                await r_.on_activity(activity_for(name), None)
+                await r_.on_activity(activity_for(name), step_detail(name, input))
             return PermissionResultAllow(updated_input=input)
         return PermissionResultDeny(message=r.reason)
 
