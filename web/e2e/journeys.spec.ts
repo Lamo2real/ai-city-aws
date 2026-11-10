@@ -1481,33 +1481,36 @@ test("the logo is the owner's eye with no background, in the top bar and the bro
   expect(lum(dark.fill)).toBeGreaterThan(600);
   await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
   expect(lum((await look()).fill)).toBeLessThan(200);
-  // the tab icon: the eye's lines in white on no background, one icon only (decision 200), and the tab says VAIC
+  // the tab icon: the eye's lines only, black on a light browser and white on a dark one, one SVG (decision 203)
   await expect(page).toHaveTitle("VAIC");
-  await expect(page.locator('link[rel="icon"]')).toHaveCount(2);
-  await expect(page.locator('link[rel="icon"][type="image/svg+xml"]')).toHaveAttribute("href", "/vaic-eye-white.svg");
-  await expect(page.locator('link[rel="icon"][type="image/png"]')).toHaveAttribute("href", "/vaic-eye-white.png");
-  await expect(page.locator('link[rel="icon"][media]')).toHaveCount(0);
+  await expect(page.locator('link[rel="icon"]')).toHaveCount(1);
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "/vaic-eye-auto.svg");
   expect((await page.request.get("/favicon.ico")).headers()["content-type"]).toMatch(/icon/);
-  expect((await page.request.get("/vaic-eye-white.png")).headers()["content-type"]).toContain("image/png");
-  const svg = await (await page.request.get("/vaic-eye-white.svg")).text();
-  expect(svg).toContain('fill="#ffffff"');
-  expect(svg).not.toMatch(/<rect|<circle|<style|prefers-color-scheme/);
-  // the PNG and the .ico are white lines on see-through: no pixel is opaque and dark
-  const darkPixels = await page.evaluate(async () => {
-    const img = new Image();
-    img.src = "/vaic-eye-white.png";
-    await img.decode();
-    const c = document.createElement("canvas");
-    c.width = img.width;
-    c.height = img.height;
-    const x = c.getContext("2d")!;
-    x.drawImage(img, 0, 0);
-    const d = x.getImageData(0, 0, c.width, c.height).data;
-    let n = 0;
-    for (let i = 0; i < d.length; i += 4) if (d[i + 3]! > 200 && d[i]! + d[i + 1]! + d[i + 2]! < 600) n++;
-    return { n, corner: d[3] };
-  });
-  expect(darkPixels).toEqual({ n: 0, corner: 0 });
+  const svg = await (await page.request.get("/vaic-eye-auto.svg")).text();
+  expect(svg).toContain("path{fill:#000}");
+  expect(svg).toContain("@media (prefers-color-scheme:dark){path{fill:#fff}}");
+  expect(svg).not.toMatch(/<rect|<circle/);
+  // drawn as an image, it is see-through around the lines, and its lines follow the browser's theme
+  const ink = async (scheme: "light" | "dark") => {
+    await page.emulateMedia({ colorScheme: scheme });
+    return page.evaluate(async () => {
+      const img = new Image();
+      img.src = `/vaic-eye-auto.svg?${Math.random()}`;
+      await img.decode();
+      const c = document.createElement("canvas");
+      c.width = c.height = 64;
+      const x = c.getContext("2d")!;
+      x.drawImage(img, 0, 0, 64, 64);
+      const d = x.getImageData(0, 0, 64, 64).data;
+      let sum = 0, n = 0;
+      for (let i = 0; i < d.length; i += 4) if (d[i + 3]! > 200) { sum += d[i]!; n++; }
+      return { corner: d[3], lines: n > 20, red: Math.round(sum / Math.max(1, n)) };
+    });
+  };
+  const light = await ink("light");
+  expect(light).toMatchObject({ corner: 0, lines: true });
+  expect(light.red).toBeLessThan(60);
+  expect((await ink("dark")).red).toBeGreaterThan(200);
   expect((await page.request.get("/eye.svg")).ok()).toBe(true);
 });
 
