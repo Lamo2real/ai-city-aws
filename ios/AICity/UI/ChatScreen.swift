@@ -29,7 +29,15 @@ struct ChatScreen: View {
                             Text("Say hi. Type, or tap the mic and just talk.")
                                 .foregroundStyle(.secondary).padding(.top, 24).frame(maxWidth: .infinity)
                         }
-                        ForEach(hud.chat) { line in MessageRow(line: line).id(line.id) }
+                        ForEach(hud.chat) { line in
+                            MessageRow(line: line) {
+                                // "Edit and send again": the stopped message goes back into the box.
+                                model.hud.removeLine(line.id)
+                                draft = line.text
+                                focused = true
+                            }
+                            .id(line.id)
+                        }
                         if hud.waitingForVaic, let turn = hud.turn { VaicStatusRow(turn: turn).id("status") }
                     }
                     .padding()
@@ -175,6 +183,8 @@ struct StatusBarFade: View {
 
 struct MessageRow: View {
     var line: ChatLine
+    /// A stopped message's "Edit and send again".
+    var onEdit: () -> Void = {}
     @State private var showSteps = false
 
     var body: some View {
@@ -188,14 +198,19 @@ struct MessageRow: View {
                         .foregroundStyle(Glass.text)
                         .glassTint(Glass.youTint, radius: 18, edge: Glass.edge2)
                         .textSelection(.enabled)
-                    if line.state == .failed || line.state == .queued {
+                    if line.stopped == true {
+                        Text(StopWords.note(line)).font(.caption.italic()).foregroundStyle(.secondary)
+                            .multilineTextAlignment(.trailing)
+                        Button("Edit and send again", action: onEdit)
+                            .font(.caption.weight(.semibold)).frame(minHeight: 44)
+                    } else if line.state == .failed || line.state == .queued {
                         Label("Not sent yet. It will send when the connection is back.", systemImage: "clock")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("You: \(line.text)\(line.state == .failed || line.state == .queued ? ". Not sent yet." : "")")
+            .accessibilityElement(children: line.stopped == true ? .contain : .combine)
+            .accessibilityLabel("You: \(line.text)\(line.stopped == true ? ". \(StopWords.note(line))" : line.state == .failed || line.state == .queued ? ". Not sent yet." : "")")
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 if !line.text.isEmpty || line.state == .streaming {
@@ -223,6 +238,16 @@ struct MessageRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+}
+
+/// The note under a message whose answer the owner stopped (decision 183).
+enum StopWords {
+    static func note(_ line: ChatLine) -> String {
+        var s = "Stopped."
+        if let steps = line.stoppedSteps, !steps.isEmpty { s += " VAIC had already done: \(steps.joined(separator: ", "))." }
+        if line.handedOn == true { s += " Work it handed to the team keeps going; stop that job in Jobs." }
+        return s
     }
 }
 
@@ -370,6 +395,12 @@ struct Composer: View {
             .frame(minHeight: 44)
             .submitLabel(.send)
             .onSubmit(send)
+            // Esc on a hardware keyboard stops VAIC's answer, as on the web.
+            .onKeyPress(.escape) {
+                guard model.hud.busyLine != nil else { return .ignored }
+                model.stopReply()
+                return .handled
+            }
             .accessibilityLabel("Message to VAIC")
             // The field's own height says whether the words wrapped; the two-row shape then stays until the box is empty.
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { h in
@@ -410,7 +441,20 @@ struct Composer: View {
         .accessibilityHint("Tap to talk, tap again to send what you said. VAIC answers aloud.")
     }
 
-    private var sendButton: some View {
+    /// While VAIC thinks or writes its answer, Send becomes Stop (like ChatGPT and Claude).
+    @ViewBuilder private var sendButton: some View {
+        if model.hud.busyLine != nil {
+            Button { model.stopReply() } label: {
+                Image(systemName: "stop.fill").font(.subheadline).frame(width: 44, height: 44)
+            }
+            .buttonStyle(.glassPrimaryCircle)
+            .accessibilityLabel("Stop VAIC's answer")
+        } else {
+            plainSendButton
+        }
+    }
+
+    private var plainSendButton: some View {
         Button(action: send) {
             Image(systemName: "arrow.up").font(.headline).frame(width: 44, height: 44)
         }

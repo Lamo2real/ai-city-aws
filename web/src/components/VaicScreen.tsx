@@ -2,7 +2,7 @@
 // phone). Everything else can be done by asking VAIC ("send the workers home", "what's the status?").
 import { ChatCards } from "./ConnectCard.tsx";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
-import { keyBlocked, sendMessage } from "../lib/actions.ts";
+import { keyBlocked, sendMessage, stopReply } from "../lib/actions.ts";
 import { knowledgeApi } from "../lib/api.ts";
 import {
   allCommands,
@@ -26,7 +26,7 @@ import { statusWords } from "./Knowledge.tsx";
 import { PlusMenu, type Insert } from "./PlusMenu.tsx";
 import { StreamedText } from "./StreamedText.tsx";
 import { FileCards } from "./FileCards.tsx";
-import { Banner, ClearIcon, ClockIcon, MicIcon, SendIcon, toast, WaveIcon } from "./ui.tsx";
+import { Banner, ClearIcon, ClockIcon, MicIcon, SendIcon, StopIcon, toast, WaveIcon } from "./ui.tsx";
 import { MicWave, VoiceVisualizer } from "./VoiceVisualizer.tsx";
 import { WorkflowCard } from "./WorkflowCard.tsx";
 import { workflows } from "../lib/workflows.ts";
@@ -228,6 +228,35 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
     await sendMessage(body);
     input.current?.focus();
   };
+  // While VAIC thinks or writes its answer, Send becomes Stop (like ChatGPT and Claude); Esc stops too.
+  const busy = turn ? store.busyLine() : undefined;
+  const stop = () => {
+    if (!stopReply()) return;
+    voice.stopSpeaking();
+    input.current?.focus();
+  };
+  const stopRef = useRef(stop);
+  stopRef.current = stop;
+  const busyNow = !!busy;
+  useEffect(() => {
+    if (!busyNow) return;
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      // Esc first closes whatever is open (a menu, a dialog, the slash list); only then does it stop VAIC.
+      if (document.querySelector("[role=dialog], [role=menu], .slash-pop, .plus-pop")) return;
+      e.preventDefault();
+      stopRef.current();
+    };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [busyNow]);
+  /** "Edit": the stopped message comes back into the box to change and send again. */
+  const editStopped = (id: string, words: string) => {
+    store.removeLine(id);
+    setTyped(words);
+    input.current?.focus();
+    pendingSelection.current = [words.length, words.length];
+  };
   const lastLine = chat.at(-1);
   // Right after the owner sends, VAIC's status row (eye, current step, seconds) shows until its first words.
   const waitingForVaic = presence === "thinking" && lastLine?.who === "owner" && lastLine.state !== "failed";
@@ -307,7 +336,16 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
                   {l.who === "vaic" && l.state === "done" && l.steps ? (
                     <VaicSteps steps={l.steps} tookMs={l.tookMs} running={stepsRunning(l)} started={l.started} />
                   ) : null}
-                  {l.state === "failed" || l.state === "queued" ? (
+                  {l.who === "owner" && l.stopped ? (
+                    <span className="note is-stopped">
+                      Stopped.
+                      {l.stoppedSteps?.length ? ` VAIC had already done: ${l.stoppedSteps.join(", ")}.` : ""}
+                      {l.handedOn ? " Work it handed to the team keeps going; stop that job in Jobs." : ""}{" "}
+                      <button type="button" className="linkish" onClick={() => editStopped(l.id, l.text)}>
+                        Edit and send again
+                      </button>
+                    </span>
+                  ) : l.state === "failed" || l.state === "queued" ? (
                     <span className="note">Not sent yet. It will send when the connection is back.</span>
                   ) : null}
                 </div>
@@ -447,14 +485,26 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
                 >
                   <WaveIcon />
                 </button>
-                <button
-                  type="submit"
-                  className="send"
-                  aria-label="Send to VAIC"
-                  disabled={(!text.trim() && !items.length) || !sendable(items)}
-                >
-                  <SendIcon size={20} />
-                </button>
+                {busy ? (
+                  <button
+                    type="button"
+                    className="send stop"
+                    onClick={stop}
+                    aria-label="Stop VAIC's answer"
+                    title="Stop (Esc)"
+                  >
+                    <StopIcon />
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    className="send"
+                    aria-label="Send to VAIC"
+                    disabled={(!text.trim() && !items.length) || !sendable(items)}
+                  >
+                    <SendIcon size={20} />
+                  </button>
+                )}
               </>
             )}
           </div>

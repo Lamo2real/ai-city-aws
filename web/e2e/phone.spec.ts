@@ -254,3 +254,28 @@ test("phone: Settings → Connectors cards keep every form inside the card at 37
     }
   }
 });
+
+test("phone: Stop sits where Send was and drops VAIC's answer", async ({ page }) => {
+  const m = await mockBackend(page);
+  await page.goto("/#/vaic");
+  await page.getByRole("textbox", { name: "Message to VAIC" }).fill("tell me a long story");
+  await page.getByRole("button", { name: "Send to VAIC" }).click();
+  const stop = page.getByRole("button", { name: "Stop VAIC's answer" });
+  await expect(stop).toBeInViewport({ ratio: 1 });
+  expect((await stop.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  const id = (m.calls.find((c) => c.path === "/messages")!.body as { client_id: string }).client_id;
+  m.send({
+    type: "vaic.reply",
+    conversation: "main",
+    text: "Once upon a time",
+    done: false,
+    message_id: `owner-${id}`,
+  });
+  await expect(page.getByText("Once upon a time")).toBeVisible();
+  await stop.tap();
+  await expect(page.getByText("Once upon a time")).toHaveCount(0);
+  await expect(page.getByText("Stopped.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit and send again" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await noSeriousA11y(page, "VAIC after Stop at 412px");
+});

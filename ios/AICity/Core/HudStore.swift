@@ -18,6 +18,11 @@ struct ChatLine: Codable, Equatable, Identifiable, Sendable {
     var files: [ChatFile]?
     /// A heading over the files ("References for this build", decision 154).
     var filesLabel: String?
+    /// Owner lines: the owner pressed Stop on VAIC's answer (decision 183), and what VAIC had already done by then.
+    var stopped: Bool?
+    var stoppedSteps: [String]?
+    /// VAIC had already handed work to the team: Stop does not undo that (the job's own Stop does).
+    var handedOn: Bool?
 }
 
 struct VaicTurn: Equatable, Sendable {
@@ -72,6 +77,8 @@ final class HudStore {
     @ObservationIgnored private let archive: ChatArchive
     @ObservationIgnored private var recentlyClosed: [String: DecidedItem] = [:]
     @ObservationIgnored private var during: [JSONValue]?
+    /// Messages whose answer the owner stopped ("owner-<line id>"): anything still in flight for them is dropped.
+    @ObservationIgnored private var stoppedIds: Set<String> = []
     @ObservationIgnored var clock: () -> Double = nowMs
     /// The City scene (the web HUD's own, in a web view) keeps its own animated copy: it gets the raw
     /// snapshot plus the events that arrived while it loaded, then every event.
@@ -167,6 +174,14 @@ final class HudStore {
         let type = e["type"].string ?? ""
         // A project's chat ("app-…") is not VAIC's main chat (the web HUD filters the same way).
         if type == "vaic.reply" || type == "vaic.question", (e["conversation"].string ?? "").hasPrefix("app-") { return }
+        if type == "vaic.stopped" {
+            guard (e["conversation"].string ?? "main") == "main", let id = e["message_id"].string else { return }
+            let tools = e["tools"].array.map { (activity: $0["activity"].string ?? "", detail: $0["detail"].string) }
+            return stopTurn(String(id.dropFirst(id.hasPrefix("owner-") ? 6 : 0)), tools: tools)
+        }
+        if type == "vaic.reply" || type == "vaic.files", let id = e["message_id"].string, stoppedIds.contains(id) {
+            return  // the owner stopped this answer: a late piece of it never shows
+        }
         if type == "vaic.reply" { return vaicReply(text: e["text"].string ?? "", done: e["done"].bool ?? false) }
         if type == "knowledge.updated" { return onKnowledgeUpdated(e) }
         if type == "hud.action" { return onHudAction(e) }
@@ -192,6 +207,40 @@ final class HudStore {
         city = City.reduce(city, e, now: clock())
         if during == nil { onSceneEvent(e) }
     }
+
+    /// The owner's message VAIC is still working on (thinking or writing), if any: what Stop would drop.
+    var busyLine: ChatLine? {
+        guard turn != nil, let i = chat.lastIndex(where: { $0.who == .owner }) else { return nil }
+        let line = chat[i]
+        if line.stopped == true { return nil }
+        return chat[(i + 1)...].contains { $0.who == .vaic && $0.state == .done } ? nil : line
+    }
+
+    /// Stop (decision 183): the owner's line stays, marked stopped; VAIC's half-written answer goes; the turn ends.
+    /// Also run when VAIC confirms it dropped the turn (`vaic.stopped`), with the tools it had already called.
+    func stopTurn(_ lineId: String, tools: [(activity: String, detail: String?)] = []) {
+        stoppedIds.insert("owner-\(lineId)")
+        guard let i = chat.firstIndex(where: { $0.id == lineId && $0.who == .owner }) else { return }
+        let wasCurrent = busyLine?.id == lineId  // a late confirmation must not end a newer turn
+        var steps: [String] = []
+        for t in tools { if let w = Steps.words(activity: t.activity, detail: t.detail), !steps.contains(w) { steps.append(w) } }
+        let handedOn = tools.contains { $0.activity == "delegating" || ($0.detail ?? "").contains("delegate_to_orchestrator") }
+        // Only VAIC's half-written answer to this message goes, never a reply to a message sent after it.
+        let end = chat[(i + 1)...].firstIndex { $0.who == .owner } ?? chat.count
+        var c = chat
+        c[i].stopped = true
+        if !steps.isEmpty { c[i].stoppedSteps = steps }
+        if handedOn { c[i].handedOn = true }
+        c = c.enumerated().filter { j, l in !(j > i && j < end && l.who == .vaic && l.state == .streaming) }.map(\.element)
+        chat = c
+        if wasCurrent {
+            turn = nil
+            if presence != .listening { presence = .idle }
+        }
+    }
+
+    /// "Edit": a stopped message leaves the chat; its words go back in the box.
+    func removeLine(_ id: String) { chat.removeAll { $0.id == id } }
 
     /// Starts VAIC's turn: the status row shows from now until its first words.
     func beginTurn() { turn = VaicTurn(started: clock(), steps: [Steps.first]) }
@@ -249,7 +298,9 @@ final class HudStore {
         chat[i].state = state
     }
 
-    var unsent: [ChatLine] { chat.filter { $0.who == .owner && ($0.state == .queued || $0.state == .failed) } }
+    var unsent: [ChatLine] {
+        chat.filter { $0.who == .owner && $0.stopped != true && ($0.state == .queued || $0.state == .failed) }
+    }
 
     /// Right after the owner sends, VAIC's status row shows until its first words.
     var waitingForVaic: Bool {

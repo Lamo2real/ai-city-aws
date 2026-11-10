@@ -1144,6 +1144,16 @@ main {
   font-size: 14px;
   color: var(--bad-l);
 }
+/* The owner stopped VAIC's answer (decision 183): a calm note, not an error. */
+.msg .note.is-stopped {
+  color: inherit;
+  font-style: italic;
+}
+.msg .note.is-stopped .linkish {
+  color: inherit;
+  font-style: normal;
+  font-weight: 700;
+}
 /* VAIC's turn before its first words: the eye blinking slowly, the step in silver with a soft shimmer, seconds. */
 .msg-pending {
   min-height: 28px;

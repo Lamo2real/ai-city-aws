@@ -85,7 +85,13 @@ async def test_aics_reply_goes_straight_to_the_hud_when_the_runtime_knows_the_we
     city.host.o.live_sender = live_sender
     await city.owner_says("what's 9 + 9?")
     await city.run()
-    assert direct[0] == {"type": "vaic.reply", "conversation": "c1", "text": "Eight", "done": False}
+    assert direct[0] == {
+        "type": "vaic.reply",
+        "conversation": "c1",
+        "text": "Eight",
+        "done": False,
+        "message_id": "owner-13-c1",
+    }
     assert direct[-1]["done"] and direct[-1]["text"] == "Eighteen."
     # Pieces only went the fast way; the final reply also went through the bus as a safety net.
     assert [(e["done"], e["text"]) for e in city.bus.of_type("vaic.reply")] == [(True, "Eighteen.")]

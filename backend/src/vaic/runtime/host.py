@@ -39,6 +39,7 @@ from .mail_tools import mail_level, mail_tools
 from .prompts import department_template, load_prompt
 from .references import refs_note, task_refs, worker_material
 from .skills import SkillStore, empty_home, use_skill_tool
+from .stop import unless_stopped
 from .tools import (
     ToolSpec,
     TurnCtx,
@@ -134,6 +135,10 @@ class AgentHost:
                 log("info", "turn.skipped", agent=inv["agentId"], reason="the owner stopped this job")
                 await ledger.finish_work(inv["id"])
                 return ""
+            if inv["role"] == "vaic" and await ledger.turn_stopped(inv["id"]):
+                log("info", "turn.skipped", agent=inv["agentId"], reason="the owner pressed Stop")
+                await ledger.finish_work(inv["id"])
+                return ""
             if ticket and ticket["status"] == "open" and ticket["to"] == agent["id"]:
                 await move(self.d, ticket["id"], "in_progress", "picked up")
             if agent.get("kind") == "worker" and agent.get("worker_state") != "working":
@@ -209,7 +214,11 @@ class AgentHost:
             async def on_needs_approval(tool: str, input: dict[str, Any], hash: str, reason: str) -> None:
                 await file_approval(self.d, ctx, tool, input, hash, reason)
 
+            started: list[dict[str, Any]] = []  # VAIC's tool calls so far, said plainly if the owner presses Stop
+
             async def on_activity(activity: str, detail: str | None) -> None:
+                if is_vaic:
+                    started.append({"activity": activity, "detail": detail})
                 e: dict[str, Any] = {"type": "activity", "id": agent["id"], "activity": activity}
                 if detail:
                     e["detail"] = detail
@@ -228,7 +237,7 @@ class AgentHost:
                 # The final reply always also goes the reliable way (the HUD ignores a repeat).
                 await bus.put(event)
 
-            live = LiveReply(send, conversation or "")
+            live = LiveReply(send, conversation or "", message_id=inv["id"] if is_vaic else None)
 
             async def on_text(text: str) -> None:
                 await live.add(text)
@@ -252,7 +261,7 @@ class AgentHost:
                     )
                 )
 
-            result = await run_gated_turn(
+            gated = run_gated_turn(
                 GatedTurn(
                     kind=inv["role"],
                     role=inv["role"],
@@ -269,6 +278,14 @@ class AgentHost:
                 ),
                 GateDeps(ledger=ledger, bus=bus, settings=settings, backoff=self.o.backoff, runner=runner),
             )
+            if not is_vaic:
+                result = await gated
+            else:
+                done, stopped = await unless_stopped(gated, lambda: ledger.turn_stopped(inv["id"]))
+                if stopped or done is None:
+                    await self._stopped(inv, started, send)
+                    return ""
+                result = done
             u = result.output.usage
             metric(
                 {"Role": inv["role"], "Model": result.model.name},
@@ -300,6 +317,26 @@ class AgentHost:
             if inv["role"] == "worker" and inv.get("department"):
                 await ledger.release_worker_slot(inv["department"])
                 await ledger.worker_turn_ended(inv["id"], failed)
+
+    async def _stopped(self, inv: dict[str, Any], started: list[dict[str, Any]], send: Send) -> None:
+        """The owner pressed Stop mid-turn (decision 183): nothing more is said for that message. The HUD hears it
+        was dropped, with the tool calls already made; VAIC's memory keeps the exchange only if something was done,
+        so it knows later."""
+        ledger, conversation = self.d.ledger, str(inv.get("conversation") or "")
+        log("info", "vaic.stopped", message=inv["id"], tools=len(started))
+        if conversation:
+            # "done" sends it the reliable way too (the bus), not only straight to the open HUDs.
+            event = {"type": "vaic.stopped", "conversation": conversation, "message_id": inv["id"], "tools": started}
+            await send({**event, "done": True})
+            if started:
+                body = inv["body"] if inv.get("from") == "owner" else f"[{inv['kind']} from {inv.get('from')}]"
+                done = ", ".join(str(t.get("detail") or t.get("activity")) for t in started)
+                await ledger.add_conversation_line(conversation, "owner", body)
+                await ledger.add_conversation_line(
+                    conversation, "vaic", f"[The owner pressed Stop before I answered. Tools already called: {done}.]"
+                )
+        await self.d.bus.put({"type": "activity", "id": "vaic", "activity": "idle"})
+        await ledger.finish_work(inv["id"])
 
     async def _project_lines(self, conversation: str, recent: list[dict[str, Any]]) -> list[str]:
         """A project chat in the Apps studio: which app it is about (and the chat it began in), or that it is

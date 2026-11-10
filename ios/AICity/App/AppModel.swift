@@ -309,6 +309,20 @@ final class AppModel {
         await deliver(line)
     }
 
+    /// Stop (decision 183), like ChatGPT and Claude: drops VAIC's answer to the message it is working on, here at once
+    /// and in VAIC's runtime (no more words, no further tool calls), and stops it speaking.
+    func stopReply() {
+        guard let line = hud.busyLine else { return }
+        hud.stopTurn(line.id)
+        voice.stopSpeaking()
+        guard let api else { return }
+        Task {
+            do { try await api.stopMessage(clientId: line.id) } catch {
+                show("Stopped here, but VAIC could not be reached to stop its work. Its answer will not show.")
+            }
+        }
+    }
+
     /// Lines the server refused (a 4xx): shown as failed, never re-sent by the outbox.
     @ObservationIgnored private var refused: Set<String> = []
 
@@ -317,7 +331,7 @@ final class AppModel {
         do {
             try await api.sendMessage(line.text, clientId: line.id)
             hud.patchLine(line.id, state: .sent)
-            hud.presence = .thinking
+            if hud.chat.last?.id == line.id, hud.chat.last?.stopped != true { hud.presence = .thinking }
         } catch {
             hud.patchLine(line.id, state: .failed)
             if let e = error as? APIError, e.status != 0, e.status < 500 {

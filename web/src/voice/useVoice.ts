@@ -617,6 +617,8 @@ export function useVoice(dictation?: DictationTarget) {
     speakMode,
     /** Listening into the message box (the dictate icon), not to send. */
     dictating: listening && dictatingNow,
+    /** The owner pressed Stop on VAIC's answer (decision 183): its speech stops too; the conversation stays on. */
+    stopSpeaking: stopTalking,
     /** For the City view's sound tile: anything but "never". */
     sound: speakMode !== "never",
     problem,

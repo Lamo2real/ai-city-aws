@@ -17,9 +17,13 @@ FLUSH_SECONDS = 0.08
 
 
 class LiveReply:
-    def __init__(self, send: Send, conversation: str, clock: Callable[[], float] = time.monotonic) -> None:
+    def __init__(
+        self, send: Send, conversation: str, clock: Callable[[], float] = time.monotonic, message_id: str | None = None
+    ) -> None:
         self._send = send
         self._conversation = conversation
+        # The owner's message being answered: the HUD drops pieces of a reply whose message it stopped.
+        self._id = {"message_id": message_id} if message_id else {}
         self._clock = clock
         self._buf = ""
         self._last = 0.0
@@ -34,12 +38,16 @@ class LiveReply:
             return
         text, self._buf = self._buf, ""
         self._last = self._clock()
-        await self._send({"type": "vaic.reply", "conversation": self._conversation, "text": text, "done": False})
+        await self._send(
+            {"type": "vaic.reply", "conversation": self._conversation, "text": text, "done": False, **self._id}
+        )
 
     async def done(self, text: str) -> None:
         """The whole reply: it replaces what was streamed (which may include text written before a tool call)."""
         self._buf = ""
-        await self._send({"type": "vaic.reply", "conversation": self._conversation, "text": text, "done": True})
+        await self._send(
+            {"type": "vaic.reply", "conversation": self._conversation, "text": text, "done": True, **self._id}
+        )
 
 
 _posters: dict[str, Send] = {}

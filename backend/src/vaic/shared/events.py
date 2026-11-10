@@ -344,6 +344,23 @@ class VaicReply(_E):
     conversation: str
     text: str
     done: bool
+    message_id: str | None = None
+    """The owner's message this answers, so a HUD that pressed Stop on it drops anything still in flight."""
+
+
+class StoppedStep(_M):
+    activity: str
+    detail: str | None = None
+
+
+class VaicStopped(_E):
+    """The owner pressed Stop (decision 183): VAIC dropped its turn on ``message_id``. ``tools``: the tool calls it had
+    already started (they finish; nothing after them runs)."""
+
+    type: Literal["vaic.stopped"]
+    conversation: str
+    message_id: str
+    tools: list[StoppedStep] = []
 
 
 class VaicQuestion(_E):
@@ -476,6 +493,7 @@ CityEventModel = Annotated[
     | CalendarChanged
     | SpendCapReachedEvent
     | VaicReply
+    | VaicStopped
     | VaicQuestion
     | HudAction
     | AppSubmitted

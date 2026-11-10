@@ -19,6 +19,11 @@ export interface ChatLine {
   refused?: boolean;
   /** Owner lines: said by voice (the mic or the wake word, or dictated and not edited by keyboard). */
   voice?: boolean;
+  /** Owner lines: the owner pressed Stop on VAIC's answer (decision 183), and what VAIC had already done by then. */
+  stopped?: boolean;
+  stoppedSteps?: string[];
+  /** VAIC had already handed work on to the team: Stop does not undo that (the job's own Stop does). */
+  handedOn?: boolean;
   /** VAIC lines: the steps VAIC took before answering, and how long until its first words (ms). */
   steps?: string[];
   tookMs?: number;
@@ -104,6 +109,8 @@ class Store {
     cards: [],
   };
   private listeners = new Set<Listener>();
+  /** Messages whose answer the owner stopped (`owner-<line id>`): anything still in flight for them is dropped. */
+  private stoppedIds = new Set<string>();
   /** Raw events for the City scene, which keeps its own animated copy. */
   readonly sceneEvents = new Set<(e: unknown) => void>();
 
@@ -173,6 +180,12 @@ class Store {
     if ((e.type === "vaic.reply" || e.type === "vaic.question") && String(e.conversation ?? "").startsWith("app-"))
       return;
     if (e.type === "hud.action") return hudAction(e);
+    if (e.type === "vaic.stopped") {
+      if (String(e.conversation ?? "main") !== "main") return;
+      const id = String(e.message_id ?? "").replace(/^owner-/, "");
+      return this.stopTurn(id, (e.tools as { activity: string; detail?: string | null }[] | undefined) ?? []);
+    }
+    if ((e.type === "vaic.reply" || e.type === "vaic.files") && this.stoppedIds.has(String(e.message_id ?? ""))) return; // the owner stopped this answer: a late piece of it never shows
     if (e.type === "vaic.files") {
       if (String(e.conversation ?? "main") !== "main") return;
       return this.vaicFiles((e.files as FileCardData[] | undefined) ?? [], String(e.label ?? ""));
@@ -371,6 +384,51 @@ class Store {
     this.set({ city: { ...this.state.city, apps } });
   }
   /** Starts VAIC's turn: the status row shows from now until its first words. */
+  /** The owner's message VAIC is still working on (thinking or writing), if any: what Stop would drop. */
+  busyLine(): ChatLine | undefined {
+    if (!this.state.turn) return undefined;
+    const chat = this.state.chat;
+    const i = chat.findLastIndex((l) => l.who === "owner");
+    const line = chat[i];
+    if (!line || line.stopped || line.refused) return undefined;
+    return chat.slice(i + 1).some((l) => l.who === "vaic" && l.state === "done") ? undefined : line;
+  }
+  /** Stop (decision 183): the owner's line stays, marked stopped; VAIC's half-written answer goes; the turn ends.
+   * Also run when VAIC confirms it dropped the turn (`vaic.stopped`, on every open HUD), with the tools it had
+   * already called. */
+  stopTurn(lineId: string, tools: { activity: string; detail?: string | null }[] = []) {
+    this.stoppedIds.add(`owner-${lineId}`);
+    const chat = this.state.chat;
+    const i = chat.findIndex((l) => l.id === lineId && l.who === "owner");
+    if (i < 0) return;
+    const steps = [...new Set(tools.map((t) => stepWords(t.activity, t.detail)).filter((w): w is string => !!w))];
+    const handedOn = tools.some((t) => t.activity === "delegating" || /delegate_to_orchestrator/.test(t.detail ?? ""));
+    const line = chat[i]!;
+    // Only VAIC's half-written answer to this message goes, never a reply to a message sent after it.
+    const end = chat.findIndex((l, j) => j > i && l.who === "owner");
+    const next = chat
+      .filter((l, j) => !(j > i && (end < 0 || j < end) && l.who === "vaic" && l.state === "streaming"))
+      .map((l) =>
+        l === line
+          ? {
+              ...l,
+              stopped: true,
+              ...(steps.length ? { stoppedSteps: steps } : {}),
+              ...(handedOn || l.handedOn ? { handedOn: true } : {}),
+            }
+          : l,
+      );
+    const presence = this.state.presence;
+    const wasCurrent = this.busyLine()?.id === lineId; // a late confirmation must not end a newer turn
+    this.set({
+      chat: next,
+      ...(wasCurrent ? { turn: null, presence: presence === "listening" ? "listening" : "idle" } : {}),
+    });
+  }
+  /** "Edit": a stopped message leaves the chat; its words go back in the box. */
+  removeLine(id: string) {
+    this.set({ chat: this.state.chat.filter((l) => l.id !== id) });
+  }
   beginTurn() {
     this.set({ turn: { started: Date.now(), steps: [FIRST_STEP] } });
   }

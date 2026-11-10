@@ -8,6 +8,7 @@ and audit as the SDK path (under the same ``mcp__city__<tool>`` and ``mcp__gatew
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import threading
@@ -47,24 +48,37 @@ async def _stream(client: Any, kwargs: dict[str, Any]) -> Any:
     loop = asyncio.get_running_loop()
     q: asyncio.Queue[Any] = asyncio.Queue()
     done = object()
+    quit = threading.Event()  # the turn was stopped (the owner's Stop): the thread closes the stream
+
+    def put(x: Any) -> None:
+        with contextlib.suppress(RuntimeError):  # the loop may be gone by then
+            loop.call_soon_threadsafe(q.put_nowait, x)
 
     def read() -> None:
         try:
-            for ev in client.converse_stream(**kwargs)["stream"]:
-                loop.call_soon_threadsafe(q.put_nowait, ev)
+            stream = client.converse_stream(**kwargs)["stream"]
+            for ev in stream:
+                if quit.is_set():
+                    with contextlib.suppress(Exception):
+                        stream.close()
+                    return
+                put(ev)
         except Exception as e:  # handed to the turn
-            loop.call_soon_threadsafe(q.put_nowait, e)
+            put(e)
         finally:
-            loop.call_soon_threadsafe(q.put_nowait, done)
+            put(done)
 
     threading.Thread(target=read, daemon=True).start()
-    while True:
-        ev = await q.get()
-        if ev is done:
-            return
-        if isinstance(ev, Exception):
-            raise ev
-        yield ev
+    try:
+        while True:
+            ev = await q.get()
+            if ev is done:
+                return
+            if isinstance(ev, Exception):
+                raise ev
+            yield ev
+    finally:
+        quit.set()
 
 
 async def direct_engine(req: EngineRequest, client: Any = None) -> TurnOutput:
@@ -173,7 +187,8 @@ async def _run_tool(req: EngineRequest, tools: dict[str, Any], use: dict[str, An
         if req.on_activity:
             await req.on_activity(activity_for(full), name)
         try:
-            return result(await spec.handler(args))
+            # Shielded: a call under way when the owner presses Stop still finishes whole.
+            return result(await asyncio.shield(spec.handler(args)))
         except Exception as e:
             return result(f"The tool failed: {type(e).__name__}: {str(e)[:300]}", True)
     r = await gate(
@@ -189,6 +204,7 @@ async def _run_tool(req: EngineRequest, tools: dict[str, Any], use: dict[str, An
         # ``step`` says it from its arguments ("Running: git push").
         await req.on_activity(activity_for(full), spec.step(args) if spec.step else name)
     try:
-        return result(await spec.handler(args))
+        # Shielded: a call under way when the owner presses Stop still finishes whole.
+        return result(await asyncio.shield(spec.handler(args)))
     except Exception as e:
         return result(f"The tool failed: {type(e).__name__}: {str(e)[:300]}", True)

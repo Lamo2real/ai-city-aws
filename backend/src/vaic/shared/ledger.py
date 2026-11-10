@@ -655,6 +655,13 @@ class Ledger:
     async def recent_conversation(self, conversation: str, n: int = 12) -> list[Record]:
         return [_strip(i) for i in (await self.table.query(f"CONV#{conversation}"))[-n:]]
 
+    async def stop_turn(self, message_id: str) -> None:
+        """The owner pressed Stop on a message to VAIC: its turn is dropped (decision 183). Kept a day."""
+        await self.table.put({"pk": f"STOP#{message_id}", "sk": "META", "ttl": self.now_ms() // 1000 + 86_400})
+
+    async def turn_stopped(self, message_id: str) -> bool:
+        return await self.table.get(f"STOP#{message_id}", "META") is not None
+
     async def claim(self, key: str, ttl_seconds: int = 86_400) -> bool:
         """True the first time a key is seen (within its TTL), False for a duplicate delivery."""
         return await self.table.put(

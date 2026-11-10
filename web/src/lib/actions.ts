@@ -21,13 +21,30 @@ async function deliver(line: ChatLine) {
     patchLine(line.id, { state: "sent" });
     // Only if VAIC has not answered yet: its reply can arrive before this request returns (it is always warm),
     // and "thinking" must not come back after it.
-    if (store.get().chat.at(-1)?.id === line.id) store.set({ presence: "thinking" });
+    const last = store.get().chat.at(-1);
+    if (last?.id === line.id && !last.stopped) store.set({ presence: "thinking" });
   } catch (e) {
     if (!(e instanceof ApiError) || e.status === 0 || e.status >= 500) return patchLine(line.id, { state: "failed" }); // kept in the outbox
     // Refused: say why in full, and never send it again (it would be refused again, and hold up the lines after it).
     patchLine(line.id, { state: "failed", refused: true });
     toast({ tone: "bad", text: errorText(e, "VAIC did not accept that message.") });
   }
+}
+
+/** Stop (decision 183): drops VAIC's answer to the message it is working on, like Stop in ChatGPT or Claude. The
+ * chat shows it at once; VAIC's runtime then cancels the turn (no more words, no further tool calls). Work VAIC
+ * already handed to the team keeps going: the job's own Stop ends that. */
+export function stopReply(): boolean {
+  const line = store.busyLine();
+  if (!line) return false;
+  store.stopTurn(line.id);
+  api(`/messages/${line.id}/stop`, { method: "POST", body: {} }).catch(() =>
+    toast({
+      tone: "info",
+      text: "Stopped here, but VAIC could not be reached to stop its work. Its answer will not show.",
+    }),
+  );
+  return true;
 }
 
 /** Keys never go through the chat (CONNECTORS_SKILLS.md §1.3.7): true, with the reason shown, when the text looks
@@ -91,7 +108,8 @@ if (typeof window !== "undefined") {
 
 /** Re-sends everything the outbox holds. The server ignores a line it already has (same client id). */
 export async function flushOutbox() {
-  const waiting = (x: ChatLine) => x.who === "owner" && !x.refused && (x.state === "queued" || x.state === "failed");
+  const waiting = (x: ChatLine) =>
+    x.who === "owner" && !x.refused && !x.stopped && (x.state === "queued" || x.state === "failed");
   for (const l of store.get().chat.filter(waiting)) await deliver(l);
 }
 

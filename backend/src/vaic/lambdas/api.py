@@ -97,6 +97,7 @@ ROUTES: list[tuple[str, str]] = [
     ("GET", "/city/agent?id=x"),
     ("POST", "/city/instruct"),
     ("POST", "/messages"),
+    ("POST", "/messages/o-12345678/stop"),
     ("POST", "/wake-check"),
     ("GET", "/tickets"),
     ("GET", "/tickets/t-1"),
@@ -803,6 +804,10 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
             )
         )
         return reply(202, {"accepted": True, "conversation": conversation})
+    if is_("POST", r"/messages/[\w-]{8,64}/stop"):
+        # The owner's Stop (decision 183): VAIC's runtime drops that turn; work it already handed on keeps going.
+        await d.ledger.stop_turn(f"owner-{seg[1]}")
+        return reply(202, {"stopped": True})
     if is_("POST", r"/wake-check"):
         transcript = _str(_body(event).get("transcript"), "Transcript", 2000)
         if not d.utility_runner:

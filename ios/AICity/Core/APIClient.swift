@@ -58,6 +58,10 @@ final class APIClient: @unchecked Sendable {
     func sendMessage(_ text: String, clientId: String) async throws {
         try await request("/messages", method: "POST", body: ["text": .string(text), "conversation": "main", "client_id": .string(clientId)])
     }
+    /// Stop (decision 183): VAIC drops its turn on this message; work already handed to the team keeps going.
+    func stopMessage(clientId: String) async throws {
+        try await request("/messages/\(Self.seg(clientId))/stop", method: "POST", body: [:])
+    }
     func answer(question id: String, with answer: String) async throws {
         try await request("/questions/\(Self.seg(id))/answer", method: "POST", body: ["answer": .string(answer)])
     }
