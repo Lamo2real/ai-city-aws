@@ -243,6 +243,7 @@ Terraform (offline only): `fmt -check -recursive`, `init -backend=false`, `valid
 ## 10. Feature log (newest first)
 | Date | Feature | Notes |
 |---|---|---|
+| 2026-11-10 | Tab icon: only the eye's lines | No tile and nothing filled in: the eye's lines in white on a dark browser and dark on a light one; favicon.ico is no longer linked, so Safari uses the theme-following icon (decision 195). |
 | 2026-11-10 | GitHub in one place | The GitHub token is added, replaced or removed on GitHub's card in Settings → Connectors, which also connects GitHub's tools with it; the separate Settings → GitHub page is gone, and its old address opens that card (decision 194). |
 | 2026-11-10 | favicon.ico is the eye | Safari asks for /favicon.ico itself; it now gets the owner's eye instead of the page, so the old amber icon goes (decision 193). |
 | 2026-11-10 | One message, one VAIC turn; VAIC's action log; simple informal answers | The owner: VAIC deleted the repos as asked, then three more replies to the same message said it never had. Cause: the dispatcher's call to VAIC timed out after 10 s and botocore retried it up to five times, each retry a new turn; and VAIC's history held only its final words, so the extra turns couldn't see the delete. Fixed: one turn per message id, VAIC's call never retried, actions logged as they happen, and the owner's style rule in `agents/vaic.md` (decision 192). |
