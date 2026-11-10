@@ -114,33 +114,6 @@ function paintFigure(g, agent, poseName, f, stride = null) {
   if (prop && PROP[prop]) PROP[prop](g, 3, top + 8);
   if (prop === "lens") { const x = 10 + rx, y = top + 1; R(g, x + 1, y - 3, 4, 4, "#bfe6ff"); R(g, x, y - 2, 1, 2, "#c7a23c"); R(g, x + 5, y - 2, 1, 2, "#c7a23c"); R(g, x + 1, y - 4, 4, 1, "#c7a23c"); R(g, x + 1, y + 1, 4, 1, "#c7a23c"); }
 }
-// A seated figure seen from behind, facing its monitor (decision 166, the office floor): hair over the head, the
-// shirt's back, arms forward to the keyboard.
-function paintBack(g, agent) {
-  const id = agent.id, look = identity(id);
-  const skin = id === "ace" ? "#a7f0ff" : SKIN[look.skin];
-  let shirt = SHIRT[look.shirt], hair = HAIR[look.hair];
-  if (id === "ace") { shirt = "#54c8ee"; hair = null; }
-  if (id === "orchestrator") shirt = "#23222f";
-  if (agent.kind === "manager") shirt = hatColor(deptOf(agent));
-  const top = 2;
-  R(g, 2, top + 8, 2, 5, shirt); R(g, 10, top + 8, 2, 5, shirt); // arms, forward to the desk
-  R(g, 3, top + 8, 8, 6, shirt); R(g, 6, top + 9, 2, 4, "rgba(0,0,0,.12)");
-  R(g, 3, top + 1, 8, 7, skin); R(g, 4, top, 6, 1, skin);
-  if (hair) { R(g, 3, top, 8, 6, hair); R(g, 4, top - 1, 6, 1, hair); if (look.hairStyle === 3) R(g, 3, top + 6, 8, 2, hair); }
-  if (agent.kind === "manager") { const c = hatColor(deptOf(agent)); R(g, 3, top - 2, 8, 3, c); R(g, 2, top + 1, 10, 1, c); }
-}
-// The look of an agent for the HUD's office floor, as a picture: from the front, or from behind at its monitor.
-const sprites = new Map();
-export function agentSprite(agent, facing = "front") {
-  const key = `${agent.id}|${agent.kind}|${agent.department}|${facing}`;
-  if (!sprites.has(key)) {
-    const [c, g] = newCanvas(14, 21);
-    if (facing === "back") paintBack(g, agent); else paintFigure(g, agent, "rest", 0);
-    sprites.set(key, c.toDataURL());
-  }
-  return sprites.get(key);
-}
 // A tower's colours, the same as on the map: its facade and its department's accent (by its slot).
 export function towerLook(dept, slot = 0) {
   const f = FACADES[hashOf(dept) % FACADES.length], [accent, light, dark] = ROOFS[((slot % ROOFS.length) + ROOFS.length) % ROOFS.length];
@@ -1433,6 +1406,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     fit: () => { fitView(true); wake(); },
     select: (id) => { if (id) selectAgent(id); else { selected = null; wake(); } },
     building: (dept) => world?.buildings.find((x) => x.dept === dept) ?? null,
+    screenOf: (dept) => { const b = world?.buildings.find((x) => x.dept === dept); return b ? { x: ((b.x + b.w / 2) * TILE - cam.x) * cam.zoom, y: ((b.y + b.h * 0.55) * TILE - cam.y) * cam.zoom } : null; },
     focusBuilding: (dept) => { const b = world && [world.hq, ...world.buildings].find((x) => x.dept === dept); if (b) zoomToBuilding(b); },
     resume() { resume(); if (world) { fitView(); wake(); } },
     get state() { return state; },

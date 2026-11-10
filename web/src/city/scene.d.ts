@@ -8,6 +8,8 @@ export interface CityScene {
   fit(): void;
   select(id: string | null): void;
   focusBuilding(dept: string): void;
+  /** Where the department's tower is on the screen, in CSS pixels from the City's corner, or null. */
+  screenOf(dept: string): { x: number; y: number } | null;
   /** The department's tower on the map (its slot, plot and size), or null. */
   building(dept: string): { dept: string; slot: number; x: number; y: number; w: number; h: number } | null;
   resume(): void;
@@ -28,11 +30,6 @@ export function mountCity(
   },
 ): CityScene;
 
-/** An agent as a 14×21 pixel picture (a data URL): from the front, or seated from behind facing its monitor. */
-export function agentSprite(
-  agent: { id: string; kind: string; department: string | null },
-  facing?: "front" | "back",
-): string;
 /** A tower's colours, as on the map. */
 export function towerLook(
   dept: string,

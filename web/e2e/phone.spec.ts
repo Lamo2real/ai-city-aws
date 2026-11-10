@@ -213,11 +213,11 @@ test("phone: tap a tower, pick a project, go up to its floor, an agent turns, an
   // A click, not touchscreen.tap: Playwright's emulated tap never reaches the canvas here (no pointer events at all).
   await page.mouse.click(at!.x, at!.y);
   const visit = page.getByRole("region", { name: "Application building" });
-  await expect(visit).toHaveAttribute("data-phase", "street");
+  await expect(visit).toHaveAttribute("data-phase", "building");
   const noScroll = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
   expect(await noScroll()).toBe(true);
-  await page.screenshot({ path: `${SHOTS}/phone-visit-street.png` });
-  await noSeriousA11y(page, "street at 412px");
+  await page.screenshot({ path: `${SHOTS}/phone-visit-building.png` });
+  await noSeriousA11y(page, "building at 412px");
   await page.getByRole("button", { name: /booking page/ }).tap();
   await expect(visit).toHaveAttribute("data-phase", "floor", { timeout: 5000 });
   const tester = visit.getByRole("button", { name: /^Tester/ });

@@ -89,11 +89,48 @@ export function CityView({
     base.current = to;
     location.replace(`#${to === 0 || !visit ? "/city" : visitHash(visit.dept)}`);
   };
+  // Into a building in one move (decision 166): the map dives at the tower, slowly at first and then faster
+  // (an ease-in), and the building arrives and settles (an ease-out). Out again, the map eases back from close up.
+  const still = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const aim = (dept: string) => {
+    const at = scene.current?.screenOf(dept);
+    if (at && canvas.current) canvas.current.style.transformOrigin = `${at.x}px ${at.y}px`;
+    return !!at;
+  };
   const enter = (dept: string) => {
     setOpen(null);
     scene.current?.select(null);
-    go(visitHash(dept).slice(1));
+    const arrive = () => go(visitHash(dept).slice(1));
+    const c = canvas.current;
+    if (!c || still() || !aim(dept)) return arrive();
+    c.style.transition = "transform 500ms cubic-bezier(0.6, 0, 1, 0.5)";
+    c.style.transform = "scale(5)";
+    root.current?.classList.add("diving");
+    setTimeout(arrive, 440);
   };
+  const wasIn = useRef<string | null>(null);
+  useEffect(() => {
+    const c = canvas.current;
+    root.current?.classList.toggle("diving", !!visit); // the map's panels stay away while inside, and fade back after
+    if (visit) {
+      wasIn.current = visit.dept;
+      return;
+    }
+    const from = wasIn.current;
+    wasIn.current = null;
+    if (!c) return;
+    if (!from || still()) {
+      c.style.transition = "none";
+      c.style.transform = "";
+      return;
+    }
+    aim(from);
+    c.style.transition = "none";
+    c.style.transform = "scale(2.6)";
+    void c.offsetWidth; // start from close up, then ease back
+    c.style.transition = "transform 650ms cubic-bezier(0.16, 1, 0.3, 1)";
+    c.style.transform = "";
+  }, [visit?.dept]);
   useEffect(() => {
     if (open && "agent" in open && !visit?.project) setOpen(null); // left the floor: its agent's card goes too
     if (open && "dept" in open && visit) setOpen(null);

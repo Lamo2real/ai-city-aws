@@ -131,6 +131,8 @@ export function departmentNames(state: CityState): string[];
 export function standingDepartments(state: CityState): string[];
 export function deptOf(agent: CityAgent): string;
 export function deptColor(name: string): string;
+/** A stable number from a string: the same look on every load. */
+export function hashOf(s: string): number;
 export function visualState(state: CityState, id: string, now?: number): string;
 export function agentStatus(state: CityState, id: string, now?: number): string;
 export interface CityPoint {

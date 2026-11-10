@@ -1,4 +1,4 @@
-// Inside a building (decision 166): click a tower on the map → stand in front of it → pick a project → fly up
+// Inside a building (decision 166): click a tower on the map → its floors as a cutaway → pick a project →
 // into its floor → click an agent, who turns to you → out again with one button, Esc or Back.
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
@@ -22,7 +22,7 @@ export async function towerOnScreen(page: Page, dept: string) {
     return { x: r.left + ((b.x + b.w / 2) * 16 - v.x) * v.zoom, y: r.top + ((b.y + b.h) * 16 - 44 - v.y) * v.zoom };
   }, dept);
 }
-export async function clickTower(page: Page, dept: string) {
+async function clickTower(page: Page, dept: string) {
   // Zoom to it first (from its card), so it is clear of the panels, then click the tower itself on the map.
   await page.getByRole("navigation", { name: "Departments" }).getByRole("button", { name: dept }).click();
   const card = page.getByRole("dialog", { name: `${dept} department` });
@@ -38,7 +38,7 @@ async function axe(page: Page) {
   expect(r.violations.map((v) => `${v.id}: ${v.help}`)).toEqual([]);
 }
 
-test("click a tower → its street → pick a project → fly up into its floor → an agent turns to you → out", async ({
+test("click a tower → its floors → pick a project → that floor in focus, the rest faded → an agent turns to you → out", async ({
   page,
 }) => {
   await mockBackend(page, { snapshot: visitSnapshot() });
@@ -49,17 +49,26 @@ test("click a tower → its street → pick a project → fly up into its floor 
 
   await clickTower(page, "Application");
   const visit = page.getByRole("region", { name: "Application building" });
-  await expect(visit).toHaveAttribute("data-phase", "street");
+  await expect(visit).toHaveAttribute("data-phase", "building");
   await expect(page).toHaveURL(/#\/city\/visit\/Application$/);
   const picker = page.getByRole("navigation", { name: "Projects in Application" });
   await expect(picker.getByRole("button")).toHaveCount(2);
   await axe(page);
-  await page.screenshot({ path: `${SHOTS}/city-visit-street.png` });
+  await page.screenshot({ path: `${SHOTS}/city-visit-building.png` });
 
   // Picking a project flies up the tower (the camera moves) and ends on that floor.
   await picker.getByRole("button", { name: /booking page/ }).click();
-  await expect(visit).toHaveAttribute("data-phase", "rise");
-  await expect(visit).toHaveAttribute("data-phase", "floor", { timeout: 5000 });
+  await expect(visit).toHaveAttribute("data-phase", "floor");
+  // The floor in focus is whole; the other project's floor and the tower's shell (lobby, storeys above) are
+  // barely visible.
+  await expect(visit.locator(".floor-focus")).toHaveCount(1);
+  await expect(visit.locator(".floor-faded")).toHaveCount(4);
+  await expect
+    .poll(() =>
+      visit.locator(".floor-faded").evaluateAll((els) => els.map((el) => getComputedStyle(el).opacity).join()),
+    )
+    .toBe("0.07,0.07,0.07,0.07");
+  await expect.poll(() => visit.locator(".floor-focus").evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
   await expect(visit.getByRole("heading", { level: 2 })).toContainText("Floor 2");
   const desks = visit.getByRole("list", { name: /Who works on/ }).getByRole("button");
   await expect(desks).toHaveCount(4); // the manager and three workers
@@ -73,18 +82,18 @@ test("click a tower → its street → pick a project → fly up into its floor 
   await expect(page.getByRole("dialog", { name: "Designer" })).toBeVisible();
   await page.waitForTimeout(700);
   await page.screenshot({ path: `${SHOTS}/city-visit-agent.png` });
-  // Esc closes the card first (the chair turns back), then goes one step out: to the street.
+  // Esc closes the card first (the chair turns back), then goes one step out: to all the floors.
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Designer" })).toHaveCount(0);
   await expect(designer).toHaveAttribute("aria-pressed", "false");
   await page.keyboard.press("Escape");
-  await expect(visit).toHaveAttribute("data-phase", "street");
+  await expect(visit).toHaveAttribute("data-phase", "building");
   // Back goes to the map; Forward comes in again; "City map" goes all the way out.
   await page.goBack();
   await expect(visit).toHaveCount(0);
   await expect(page).toHaveURL(/:\d+\/(#\/city)?$/); // back where it started: `/` or `#/city`
   await page.goForward();
-  await expect(visit).toHaveAttribute("data-phase", "street");
+  await expect(visit).toHaveAttribute("data-phase", "building");
   await picker.getByRole("button", { name: /login bug/ }).click();
   await expect(visit).toHaveAttribute("data-phase", "floor", { timeout: 5000 });
   await page.getByRole("button", { name: "City map" }).click();
@@ -100,7 +109,7 @@ test("a department with no projects says so; Go inside works from the keyboard",
   await page.getByRole("button", { name: "Go inside" }).focus();
   await page.keyboard.press("Enter");
   const visit = page.getByRole("region", { name: "Sales building" });
-  await expect(visit).toHaveAttribute("data-phase", "street");
+  await expect(visit).toHaveAttribute("data-phase", "building");
   await expect(visit.getByText(/Nobody in Sales is working on a project right now/)).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(visit).toHaveCount(0);
@@ -108,11 +117,11 @@ test("a department with no projects says so; Go inside works from the keyboard",
 
 test.describe("reduced motion", () => {
   test.use({ reducedMotion: "reduce" });
-  test("no fly: picking a project cuts straight to its floor", async ({ page }) => {
+  test("no animation: picking a project cuts straight to its floor", async ({ page }) => {
     await mockBackend(page, { snapshot: visitSnapshot() });
     await page.goto("/#/city/visit/Application");
     const visit = page.getByRole("region", { name: "Application building" });
-    await expect(visit).toHaveAttribute("data-phase", "street"); // on the page before the observer looks for it
+    await expect(visit).toHaveAttribute("data-phase", "building"); // on the page before the observer looks for it
     const phases: string[] = [];
     await page.exposeFunction("seen", (p: string) => phases.push(p));
     await page.evaluate(() => {
@@ -127,5 +136,12 @@ test.describe("reduced motion", () => {
     await visit.getByRole("button", { name: /booking page/ }).click();
     await expect(visit).toHaveAttribute("data-phase", "floor");
     expect(phases).toEqual(["floor"]);
+    const moving = await visit.evaluate((el) =>
+      [el, el.querySelector(".visitstage")!, el.querySelector(".floorstack")!, el.querySelector(".floor")!].map((x) => {
+        const s = getComputedStyle(x);
+        return `${s.animationName} ${s.transitionDuration}`;
+      }),
+    );
+    expect(moving).toEqual(["none 0s", "none 0s", "none 0s", "none 0s"]);
   });
 });
