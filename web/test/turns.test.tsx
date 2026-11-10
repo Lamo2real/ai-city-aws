@@ -186,4 +186,18 @@ describe("talking over VAIC", () => {
     await waitFor(() => expect(played.at(-1)).toBe("About four thousand dollars."));
     c.off();
   });
+
+  it("while VAIC is still thinking, the owner is heard: what they add is sent at once (always listening)", async () => {
+    const c = await conversation();
+    await hear("Book a table for tonight");
+    await waitFor(() => expect(sent).toHaveLength(1), { timeout: 3000 });
+    expect(store.get().presence).not.toBe("idle"); // VAIC is working on it, the mic stays open
+    expect(mic.onText).not.toBeNull();
+    await new Promise((r) => setTimeout(r, 700));
+    await hear("actually make it for four people", Date.now());
+    await waitFor(() => expect(sent).toEqual(["Book a table for tonight", "actually make it for four people"]), {
+      timeout: 3000,
+    });
+    c.off();
+  });
 });

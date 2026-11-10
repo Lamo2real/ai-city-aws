@@ -128,6 +128,15 @@ export function confidence(items: Array<{ Type?: string; Confidence?: number }> 
 /** Words Transcribe is this unsure of are dropped as background (music lyrics, a TV, far-away talk). */
 export const MIN_CONFIDENCE = 0.55;
 
+/** The microphone handed over nothing but digital silence for SILENT_MS: in Mac Safari a context made before the
+ *  microphone was granted got exactly this while the owner talked (2026-11-10). A real microphone, even in a
+ *  quiet room with noise suppression, is never this flat for long. */
+export const SILENT_MS = 4000;
+export function deadSilence(levels: Array<{ t: number; v: number }>): boolean {
+  if (levels.length < 2 || levels.at(-1)!.t - levels[0]!.t < SILENT_MS) return false;
+  return levels.every((l) => l.v < 1e-6);
+}
+
 /** Whether the microphone heard something clearly louder than the room's steady background (its 20th percentile
  *  over the last seconds) between `from` and `to` (ms, the phrase's own time from Transcribe, with a margin): the
  *  owner close to the mic, not the music. Judged on the phrase itself, never on "the last few seconds": Transcribe's
@@ -139,5 +148,5 @@ export function standsOut(levels: Array<{ t: number; v: number }>, from: number,
   const floor = sorted[Math.floor(sorted.length * 0.2)] ?? 0;
   const during = levels.filter((l) => l.t >= from - 250 && l.t <= to + 250).map((l) => l.v);
   if (!during.length) return true; // no level for that moment (it has scrolled out): don't drop the owner
-  return Math.max(...during) >= Math.max(0.01, floor * 2.5);
+  return Math.max(...during) >= floor * 2.5 && Math.max(...during) > 0;
 }

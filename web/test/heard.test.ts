@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { aroundBarge, confidence, isOwnerSpeech, newWords, standsOut, stripEcho } from "../src/voice/heard.ts";
+import {
+  aroundBarge,
+  confidence,
+  deadSilence,
+  isOwnerSpeech,
+  newWords,
+  SILENT_MS,
+  standsOut,
+  stripEcho,
+} from "../src/voice/heard.ts";
 
 const reply = "Sir, I only caught OK there. Was that a yes to something I said, or did you want me to do something?";
 
@@ -81,5 +90,24 @@ describe("talking over VAIC (barge-in) is heard", () => {
     expect(stripEcho("in the main office wait, make it Friday", said)).toBe("wait, make it Friday");
     expect(stripEcho("the meeting, make it Friday", said)).toBe("the meeting, make it Friday"); // too short to tell
     expect(stripEcho("Move the meeting to Friday", said)).toBe("Move the meeting to Friday");
+  });
+});
+
+describe("a microphone that hands over only silence (Mac Safari, 2026-11-10)", () => {
+  const run = (v: number, ms: number) => Array.from({ length: ms / 100 + 1 }, (_, i) => ({ t: i * 100, v }));
+  it("is told apart only after a few seconds of exact silence", () => {
+    expect(deadSilence(run(0, SILENT_MS))).toBe(true);
+    expect(deadSilence(run(0, SILENT_MS - 500))).toBe(false); // too early to say
+  });
+  it("a very quiet room with noise suppression still counts as a working microphone", () => {
+    expect(deadSilence(run(0.0003, SILENT_MS))).toBe(false);
+  });
+});
+
+describe("Safari's quiet microphone (voice processing)", () => {
+  it("speech that stands out from a near-silent room is kept, however quiet in absolute terms", () => {
+    const room = Array.from({ length: 40 }, (_, i) => ({ t: i * 100, v: 0.0008 }));
+    expect(standsOut([...room, { t: 4100, v: 0.006 }], 4000, 4200)).toBe(true); // was dropped under the old 0.01 floor
+    expect(standsOut(room, 2000, 2400)).toBe(false); // the room alone is not the owner
   });
 });

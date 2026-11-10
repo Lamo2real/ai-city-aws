@@ -37,7 +37,7 @@ jobs:
       - run: python3 backend/scripts/build_lambdas.py
       - name: Playwright (mocked backend)
         run: |
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium webkit
           npm run e2e -w web
       - uses: hashicorp/setup-terraform@v3
         with:

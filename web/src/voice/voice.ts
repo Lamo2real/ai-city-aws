@@ -7,7 +7,7 @@ import { config } from "../lib/config.ts";
 import { idToken } from "../lib/auth.ts";
 import { readVoiceId } from "./modes.ts";
 import { speakable } from "./speech.ts";
-import { confidence, MIN_CONFIDENCE, standsOut } from "./heard.ts";
+import { confidence, deadSilence, MIN_CONFIDENCE, standsOut } from "./heard.ts";
 import { toast } from "../components/ui.tsx";
 import {
   browserListen,
@@ -49,6 +49,10 @@ export interface Voice {
 /** A tenth of a second of silence (8 kHz mono WAV), played inside the tap to unlock the media element. */
 const SILENCE =
   "data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==";
+
+/** The microphone is open but the browser hands over only silence. */
+export const SILENT_MIC =
+  "The microphone is on, but no sound reaches VAIC from it. Check the input in System Settings → Sound → Input (and Safari → Settings for this website → Microphone → Allow), then tap the voice button again.";
 
 const awsSays = (e: unknown) => {
   const m = ((e as { message?: string } | null)?.message ?? "").trim();
@@ -319,15 +323,14 @@ class AwsVoice implements Voice {
     // stricter about prompts and audio that start long after the gesture.
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia)
       throw named("NoMicSupport", "navigator.mediaDevices.getUserMedia is not available");
-    const ctx = this.primed ?? new AudioContext();
-    this.primed = null;
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
       });
     } catch (e) {
-      void ctx.close().catch(() => undefined);
+      this.primed?.close().catch(() => undefined);
+      this.primed = null;
       throw e;
     }
     let stopped = false;
@@ -336,57 +339,126 @@ class AwsVoice implements Voice {
       stopped = true;
       this.inMeter = null;
       stream.getTracks().forEach((t) => t.stop());
-      void ctx.close().catch(() => undefined);
     };
     try {
-      return await this.stream(ctx, stream, release, onText, onPartial, onError);
+      return await this.stream(stream, release, onText, onPartial, onError);
     } catch (e) {
       release();
       throw e;
     }
   }
 
+  /** The AudioContext the microphone is read through, made AFTER the microphone was granted. Mac Safari gave a
+   *  context made earlier (in the tap, before the permission) nothing but silence from the microphone: the owner
+   *  talked, the bar stayed on "Listening to you…" and Transcribe heard nothing (the owner, 2026-11-10). While the
+   *  microphone is on, Safari lets a new context start; other browsers still have the tap's activation. The tap's
+   *  own context is the fallback when a new one stays paused. */
+  private async micContext(): Promise<AudioContext> {
+    const primed = this.primed;
+    this.primed = null;
+    const running = async (c: AudioContext, ms: number) => {
+      if (c.state !== "running")
+        await Promise.race([c.resume().catch(() => undefined), new Promise((r) => setTimeout(r, ms))]);
+      return c.state === "running";
+    };
+    try {
+      const fresh = new AudioContext();
+      if (await running(fresh, 800)) {
+        void primed?.close().catch(() => undefined);
+        return fresh;
+      }
+      void fresh.close().catch(() => undefined);
+    } catch {
+      /* no new context: the tap's one below */
+    }
+    const ctx = primed ?? new AudioContext();
+    // Safari can leave resume() pending forever outside a tap: wait briefly, then say so instead of hanging.
+    if (!(await running(ctx, 1500))) {
+      void ctx.close().catch(() => undefined);
+      throw named("AudioSuspended", `AudioContext is ${ctx.state}`);
+    }
+    return ctx;
+  }
+
   private async stream(
-    ctx: AudioContext,
     stream: MediaStream,
     release: () => void,
     onText: (text: string, heard?: Heard) => void,
     onPartial?: (text: string) => void,
     onError?: (e: unknown) => void,
   ) {
-    // Safari can leave resume() pending forever outside a tap: wait briefly, then say so instead of hanging.
-    if (ctx.state !== "running")
-      await Promise.race([ctx.resume().catch(() => undefined), new Promise((r) => setTimeout(r, 1500))]);
-    if (ctx.state !== "running") throw named("AudioSuspended", `AudioContext is ${ctx.state}`);
     const { TranscribeStreamingClient, StartStreamTranscriptionCommand } =
       await import("@aws-sdk/client-transcribe-streaming");
     const c = config();
-    const source = ctx.createMediaStreamSource(stream);
-    const meter = ctx.createAnalyser();
-    meter.fftSize = 1024;
-    source.connect(meter);
-    this.inMeter = meter;
-    this.inBuf = new Float32Array(meter.fftSize);
-    const node = ctx.createScriptProcessor(4096, 1, 1);
     const chunks: Uint8Array[] = [];
     let wake: (() => void) | null = null;
     let open = true;
     // The room, for the noise gate (heard.ts): the loudness of every chunk over the last seconds.
     const levels: Array<{ t: number; v: number }> = [];
     let audioT0 = 0; // when the first audio went out: Transcribe's StartTime counts from here
-    node.onaudioprocess = (ev) => {
-      const data = ev.inputBuffer.getChannelData(0);
-      let sum = 0;
-      for (const x of data) sum += x * x;
-      const now = Date.now();
-      if (!audioT0) audioT0 = now - (data.length / ctx.sampleRate) * 1000;
-      levels.push({ t: now, v: Math.sqrt(sum / data.length) });
-      while (levels.length && now - levels[0]!.t > 12_000) levels.shift();
-      chunks.push(toPcm16(data, ctx.sampleRate));
-      wake?.();
+    // The microphone's audio graph. Rebuilt once on a fresh context if the microphone gives only silence.
+    let unwire: () => void = () => undefined;
+    let sinceWired: Array<{ t: number; v: number }> = [];
+    let rewired = false;
+    let alive = false;
+    const wire = (ac: AudioContext) => {
+      sinceWired = [];
+      const source = ac.createMediaStreamSource(stream);
+      const meter = ac.createAnalyser();
+      meter.fftSize = 1024;
+      source.connect(meter);
+      this.inMeter = meter;
+      this.inBuf = new Float32Array(meter.fftSize);
+      const node = ac.createScriptProcessor(4096, 1, 1);
+      node.onaudioprocess = (ev) => {
+        if (!open) return;
+        const data = ev.inputBuffer.getChannelData(0);
+        let sum = 0;
+        for (const x of data) sum += x * x;
+        const now = Date.now();
+        if (!audioT0) audioT0 = now - (data.length / ac.sampleRate) * 1000;
+        const v = Math.sqrt(sum / data.length);
+        levels.push({ t: now, v });
+        if (v >= 1e-6)
+          alive = true; // real sound: the microphone works, nothing more to watch
+        else if (!alive) sinceWired.push({ t: now, v });
+        while (levels.length && now - levels[0]!.t > 12_000) levels.shift();
+        chunks.push(toPcm16(data, ac.sampleRate));
+        wake?.();
+        if (!alive && deadSilence(sinceWired)) void silent();
+      };
+      source.connect(node);
+      node.connect(ac.destination);
+      unwire = () => {
+        node.onaudioprocess = null;
+        node.disconnect();
+        source.disconnect();
+        meter.disconnect();
+        void ac.close().catch(() => undefined);
+      };
     };
-    source.connect(node);
-    node.connect(ctx.destination);
+    // Nothing but silence from the microphone: one new context; still silent, say so plainly (and keep listening,
+    // in case it is only a very quiet room).
+    let told = false;
+    const silent = async () => {
+      sinceWired = [];
+      if (rewired) {
+        if (told) return;
+        told = true;
+        logVoiceError("the microphone gives only silence", null);
+        toast({ text: SILENT_MIC, tone: "bad" });
+        return;
+      }
+      rewired = true;
+      unwire();
+      try {
+        wire(await this.micContext());
+      } catch (e) {
+        stop();
+        onError?.(e);
+      }
+    };
+    wire(await this.micContext());
     async function* audio() {
       while (open) {
         if (!chunks.length) await new Promise<void>((r) => (wake = r));
@@ -395,19 +467,26 @@ class AwsVoice implements Voice {
         if (chunk) yield { AudioEvent: { AudioChunk: chunk } };
       }
     }
-    const client = new TranscribeStreamingClient({
-      region: c.transcribeRegion || c.region,
-      credentials: await credentials(),
-    });
-    const res = await client.send(
-      new StartStreamTranscriptionCommand({
-        LanguageCode: "en-US",
-        MediaEncoding: "pcm",
-        MediaSampleRateHertz: PCM_RATE,
-        VocabularyName: c.transcribeVocabulary || undefined,
-        AudioStream: audio(),
-      }),
-    );
+    let res: import("@aws-sdk/client-transcribe-streaming").StartStreamTranscriptionCommandOutput;
+    try {
+      const client = new TranscribeStreamingClient({
+        region: c.transcribeRegion || c.region,
+        credentials: await credentials(),
+      });
+      res = await client.send(
+        new StartStreamTranscriptionCommand({
+          LanguageCode: "en-US",
+          MediaEncoding: "pcm",
+          MediaSampleRateHertz: PCM_RATE,
+          VocabularyName: c.transcribeVocabulary || undefined,
+          AudioStream: audio(),
+        }),
+      );
+    } catch (e) {
+      open = false;
+      unwire();
+      throw e;
+    }
     void (async () => {
       for await (const ev of res.TranscriptResultStream ?? []) {
         for (const r of ev.TranscriptEvent?.Transcript?.Results ?? []) {
@@ -435,13 +514,14 @@ class AwsVoice implements Voice {
       logVoiceError("speech stream broke", e);
       onError?.(e);
     });
-    return () => {
+    function stop() {
+      if (!open) return;
       open = false;
       wake?.();
-      node.disconnect();
-      source.disconnect();
+      unwire();
       release();
-    };
+    }
+    return stop;
   }
 
   /** The analyser every clip plays through, so the voice line can follow VAIC's loudness. Built once. */

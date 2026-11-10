@@ -19,8 +19,10 @@ export default defineConfig({
     {
       name: "desktop",
       use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
-      testIgnore: /phone\.spec\.ts/,
+      testIgnore: /(phone|safari)\.spec\.ts/,
     },
+    // Safari's engine for the voice path (the owner talks in Mac Safari): `npx playwright install webkit`.
+    { name: "safari", use: { ...devices["Desktop Safari"] }, testMatch: /safari\.spec\.ts/ },
     { name: "phone", use: { ...devices["Pixel 7"] }, testMatch: /phone\.spec\.ts/ },
   ],
 });
