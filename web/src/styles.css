@@ -2043,6 +2043,32 @@ table.costs tr:last-child td {
   touch-action: none;
   image-rendering: pixelated;
 }
+/* The buildings' names in screen text, so they read at any zoom (decision 167): drawn over the painted sign while
+   that sign is too small to read, under the HUD's panels. They never take a click: the building under them does. */
+.city-plates {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.city-plates > span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(29, 28, 54, 0.88);
+  box-shadow: 0 0 0 1px rgba(255, 246, 224, 0.25);
+  color: #fff6e0;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  text-align: center;
+  white-space: normal;
+  width: max-content;
+  will-change: transform;
+}
 /* The City's boxes are refractive glass (the owner, 2026-11-09, decision 153): the town bends through them
    (#city-glass, an SVG turbulence + displacement filter in CityView, Chromium), with a light blur everywhere else
    (Safari, Firefox), a warm parchment tint strong enough for the ink text, and a 1px lit top edge for thickness. */

@@ -616,7 +616,10 @@ function eased(o, step, toNext) {
   return s;
 }
 
-const DASH_MS = 320, WALK_SPEED = 46, SCENERY_MS = 125, TRAFFIC_MS = 50, ZOOMS = [1, 1.5, 2, 3, 4, 5, 6];
+const DASH_MS = 320, WALK_SPEED = 46, SCENERY_MS = 125, TRAFFIC_MS = 50;
+// Zoom is smooth and continuous (the owner, 2026-11-10): from far out to close up, eased between, never in steps.
+// Below PLATE_BELOW the painted signs are too small to read, so every building gets a name plate in screen text.
+const ZOOM_MIN = 0.35, ZOOM_MAX = 8, ZOOM_STEP = 1.5, PLATE_BELOW = 2.6;
 
 // `insets()` says how much of the root the HUD's own bars cover, so the map is fitted into the free part.
 export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0, r: 0, b: 0 }), onSelectAgent = () => {}, onSelectBuilding = () => {}, onOpenApp = () => {}, onState = () => {} } = {}) {
@@ -634,7 +637,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   const doors = new Map(); // dept → how far its doors are open, 0 (shut) … 1 (open)
   const doorHold = new Map(); // dept → keep the doors open until (performance.now() ms)
   const counts = new Map(); // dept → { n: people inside, delta: last change, at: when } (the roof counter)
-  const cam = { x: 0, y: 0, wantX: 0, wantY: 0, zoom: 2, userMoved: false };
+  const cam = { x: 0, y: 0, wantX: 0, wantY: 0, zoom: 2, wantZoom: 2, anchor: null, userMoved: false };
   let OX = 0, OY = 0; // the camera rounded to whole art pixels, the same for the ground and everything on it
   const anims = new Map(); // dept → { kind: "rise" | "build" | "demolish", start, dur, b?, done? } (decision 134)
   const mail = { queue: [], rider: null, out: 0, back: 0 }; // the one mailman and the letters waiting for him
@@ -649,6 +652,9 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   root._view = () => ({ x: cam.x, y: cam.y, zoom: cam.zoom }); // the camera, for tests that click a tower
   root._world = () => world; // the layout, for tests: towers keep one size whatever the headcount
   const winBox = document.createElement("div"); winBox.id = "citywindows"; winBox.hidden = true; winBox.setAttribute("aria-hidden", "true"); root.append(winBox);
+  // The buildings' names in real screen text, readable at any zoom (under the HUD's panels, over the map).
+  const plates = document.createElement("div"); plates.className = "city-plates"; plates.setAttribute("aria-hidden", "true"); canvas.after(plates);
+  const plateOf = new Map(); // dept → its plate
   let selected = null, hover = null, lastVisit = 0, hiddenHomes = 0;
 
   const visible = () => root.offsetParent !== null && !document.hidden;
@@ -978,7 +984,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     if (reduced() || !visible()) { j.x = target.x + side; j.y = target.y; arrived(); } else dashTo(j, { x: target.x + side, y: target.y }, arrived);
   }
 
-  // ---------- The view: integer-ish zoom, crisp pixels, pan and pinch ----------
+  // ---------- The view: smooth continuous zoom, crisp pixels from 1× up, pan and pinch ----------
   // The room the map may use: not under the side column on a wide screen, not under the top rows or bottom rows on a phone.
   function safeArea() {
     const n = insets();
@@ -991,6 +997,10 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     const cssW = `${(w * n) / dpr()}px`, cssH = `${(h * n) / dpr()}px`;
     if (canvas.style.width !== cssW) { canvas.style.width = cssW; canvas.style.height = cssH; }
     ctx.imageSmoothingEnabled = false;
+    const look = cam.zoom < 1 ? "auto" : ""; // shrunk below one art pixel, pixelated scaling would shimmer
+    if (canvas.style.imageRendering !== look) canvas.style.imageRendering = look;
+    const z = cam.zoom.toFixed(2);
+    if (root.dataset.zoom !== z) root.dataset.zoom = z; // for tests
     return { w, h };
   }
   // Pan anywhere over the countryside, never past where the map has faded out (centred when it all fits).
@@ -1003,31 +1013,68 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     const px = ((area.l + area.r) / 2) / cam.zoom, py = ((area.t + area.b) / 2) / cam.zoom;
     [cam.wantX, cam.wantY] = clampCam(x - px, y - py);
   }
-  // The biggest zoom that shows the whole map, and never below one art pixel per screen pixel.
+  // The zoom that shows the whole map (on a phone: its whole width, never below one art pixel per screen pixel).
   function fitView(force = false) {
     if (!world || (cam.userMoved && !force) || !root.clientWidth) return;
     const area = safeArea(), W = world.width * TILE, H = world.height * TILE;
     const portrait = world.portrait;
-    const usable = ZOOMS.filter((z) => z * dpr() === Math.round(z * dpr()) || dpr() === 1);
-    let best = 1;
-    for (const z of usable.length ? usable : ZOOMS) if (W * z <= area.r - area.l && (portrait || H * z <= area.b - area.t)) best = z;
-    cam.zoom = best;
+    const fitW = (area.r - area.l) / W, fitH = portrait ? Infinity : (area.b - area.t) / H;
+    const best = clampZoom(Math.max(portrait ? 1 : ZOOM_MIN, Math.min(fitW, fitH)));
+    cam.zoom = best; cam.wantZoom = best; cam.anchor = null;
     if (force) cam.userMoved = false;
     viewSize();
     centreOn(W / 2, portrait ? (area.b - area.t) / 2 / best : H / 2, area); // a phone starts at the top of the map, HQ first
     cam.x = cam.wantX; cam.y = cam.wantY;
   }
+  // As far out as the whole countryside, faded border and all, is on screen (not further: past that is only empty
+  // space), and as far in as ZOOM_MAX.
+  function clampZoom(z) {
+    let lo = ZOOM_MIN;
+    if (world && root.clientWidth) {
+      const M = (MARGIN - EDGE / 2) * TILE, W = world.width * TILE, H = world.height * TILE;
+      lo = Math.max(ZOOM_MIN, Math.min(root.clientWidth / (W + 2 * M), root.clientHeight / (H + 2 * M)));
+    }
+    return Math.max(lo, Math.min(ZOOM_MAX, z));
+  }
+  // Zoom right now, keeping the point under (cx, cy) where it is: for a pinch, which follows the fingers.
   function setZoom(z, cx = root.clientWidth / 2, cy = root.clientHeight / 2) {
-    if (z === cam.zoom) return;
+    z = clampZoom(z);
     const ax = cam.x + cx / cam.zoom, ay = cam.y + cy / cam.zoom;
-    cam.zoom = z; cam.userMoved = true;
+    cam.zoom = z; cam.wantZoom = z; cam.anchor = null; cam.userMoved = true;
     viewSize();
     [cam.x, cam.y] = clampCam(ax - cx / z, ay - cy / z);
     cam.wantX = cam.x; cam.wantY = cam.y;
     wake();
   }
-  const zoomStep = (dir, cx, cy) => { const i = ZOOMS.indexOf(cam.zoom) + dir; if (ZOOMS[i]) setZoom(ZOOMS[i], cx, cy); };
-  const zoomToBuilding = (b) => { cam.userMoved = true; const i = Math.max(ZOOMS.indexOf(cam.zoom), ZOOMS.indexOf(3)); cam.zoom = ZOOMS[i]; viewSize(); centreOn((b.x + b.w / 2) * TILE, (b.y + b.h / 2) * TILE); wake(); };
+  // Zoom smoothly (eased in step()) towards z, keeping the map point under (cx, cy) under the pointer, or carrying
+  // it to (tx, ty) on the way (a building flies to the middle). Reduced motion: at once.
+  function zoomTo(z, cx = root.clientWidth / 2, cy = root.clientHeight / 2, tx = cx, ty = cy) {
+    z = clampZoom(z);
+    cam.userMoved = true;
+    cam.wantZoom = z;
+    cam.anchor = { ax: cam.x + cx / cam.zoom, ay: cam.y + cy / cam.zoom, cx, cy, tx, ty };
+    if (reduced()) settleZoom(1);
+    wake();
+  }
+  // One easing step of the zoom (k = 1: all the way). Returns whether it is still moving.
+  function settleZoom(k) {
+    const a = cam.anchor;
+    if (!a) return false;
+    const lz = Math.log(cam.zoom), lw = Math.log(cam.wantZoom), next = lz + (lw - lz) * k;
+    cam.zoom = Math.abs(lw - next) < 0.002 ? cam.wantZoom : Math.exp(next);
+    a.cx += (a.tx - a.cx) * k; a.cy += (a.ty - a.cy) * k;
+    if (Math.abs(a.tx - a.cx) < 0.5 && Math.abs(a.ty - a.cy) < 0.5) { a.cx = a.tx; a.cy = a.ty; }
+    viewSize();
+    [cam.x, cam.y] = clampCam(a.ax - a.cx / cam.zoom, a.ay - a.cy / cam.zoom);
+    cam.wantX = cam.x; cam.wantY = cam.y;
+    if (cam.zoom === cam.wantZoom && a.cx === a.tx && a.cy === a.ty) cam.anchor = null;
+    return !!cam.anchor;
+  }
+  const zoomStep = (dir, cx, cy) => zoomTo(cam.wantZoom * (dir > 0 ? ZOOM_STEP : 1 / ZOOM_STEP), cx, cy);
+  const zoomToBuilding = (b) => {
+    const area = safeArea(), bx = (b.x + b.w / 2) * TILE, by = (b.y + b.h / 2) * TILE;
+    zoomTo(Math.max(cam.wantZoom, 3), (bx - cam.x) * cam.zoom, (by - cam.y) * cam.zoom, (area.l + area.r) / 2, (area.t + area.b) / 2);
+  };
 
   // Pick by art position. Figures get a forgiving box: fingers are bigger than sprites.
   const toArt = (ev) => { const r = root.getBoundingClientRect(); return { x: cam.x + (ev.clientX - r.left) / cam.zoom, y: cam.y + (ev.clientY - r.top) / cam.zoom }; };
@@ -1053,12 +1100,11 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   const pointers = new Map();
   canvas.addEventListener("wheel", (ev) => {
     ev.preventDefault();
-    if (Math.abs(ev.deltaY) < 4 && !ev.ctrlKey) return;
     const r = root.getBoundingClientRect();
-    wheelSum += ev.deltaY;
-    if (Math.abs(wheelSum) > 60) { zoomStep(wheelSum < 0 ? 1 : -1, ev.clientX - r.left, ev.clientY - r.top); wheelSum = 0; }
+    // A wheel notch, a trackpad scroll or a trackpad pinch (ctrlKey) all zoom in proportion to how far they move.
+    const d = ev.deltaY * (ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? 400 : 1);
+    zoomTo(cam.wantZoom * Math.exp(-d * (ev.ctrlKey ? 0.01 : 0.0018)), ev.clientX - r.left, ev.clientY - r.top);
   }, { passive: false });
-  let wheelSum = 0;
   canvas.addEventListener("pointerdown", (ev) => {
     pointers.set(ev.pointerId, ev);
     canvas.setPointerCapture?.(ev.pointerId);
@@ -1072,15 +1118,15 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     pointers.set(ev.pointerId, ev);
     if (pointers.size === 2) {
       const [a, b] = [...pointers.values()], d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-      if (pinchDist && Math.abs(d / pinchDist - 1) > 0.25) { const r = root.getBoundingClientRect(); zoomStep(d > pinchDist ? 1 : -1, (a.clientX + b.clientX) / 2 - r.left, (a.clientY + b.clientY) / 2 - r.top); pinchDist = d; }
-      if (!pinchDist) pinchDist = d;
+      if (pinchDist) { const r = root.getBoundingClientRect(); setZoom(cam.zoom * (d / pinchDist), (a.clientX + b.clientX) / 2 - r.left, (a.clientY + b.clientY) / 2 - r.top); } // follows the fingers
+      pinchDist = d;
       drag = null;
       return;
     }
     if (!drag) return;
     const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
     if (Math.hypot(dx, dy) > 5) drag.moved = true;
-    if (drag.moved) { cam.userMoved = true; [cam.x, cam.y] = clampCam(drag.cx - dx / cam.zoom, drag.cy - dy / cam.zoom); cam.wantX = cam.x; cam.wantY = cam.y; wake(); }
+    if (drag.moved) { cam.userMoved = true; if (cam.anchor) { cam.anchor = null; cam.wantZoom = cam.zoom; } [cam.x, cam.y] = clampCam(drag.cx - dx / cam.zoom, drag.cy - dy / cam.zoom); cam.wantX = cam.x; cam.wantY = cam.y; wake(); }
   });
   const endPointer = (ev) => {
     pointers.delete(ev.pointerId);
@@ -1161,6 +1207,29 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       const img = bubble(key);
       if (loud && !reduced() && f % 2) { ctx.fillStyle = "rgba(255,216,74,.4)"; ctx.fillRect(x - 12, y - 17 + bounce, 24, 19); }
       ctx.drawImage(img, x - 8, y - 15 + bounce);
+    }
+  }
+  // Name plates over the painted signs, in screen text, while those signs are too small to read.
+  function drawPlates() {
+    const show = cam.zoom < PLATE_BELOW;
+    if (plates.hidden !== !show) plates.hidden = !show;
+    if (!show) return;
+    const want = new Map();
+    const hq = world.hq;
+    want.set("HQ", { x: (hq.x + hq.w / 2) * TILE, y: hq.y * TILE + 36, w: 60 });
+    for (const b of world.buildings) {
+      if (b.archived || anims.has(b.dept)) continue;
+      const t = towerShape(b);
+      want.set(b.dept, { x: t.cx, y: t.tiers[0].y + 13, w: t.tiers[0].w });
+    }
+    for (const [d, el] of plateOf) if (!want.has(d)) { el.remove(); plateOf.delete(d); }
+    for (const [d, p] of want) {
+      let el = plateOf.get(d);
+      if (!el) { el = document.createElement("span"); el.textContent = d; el.dataset.dept = d; plates.append(el); plateOf.set(d, el); }
+      const sx = Math.round((p.x - OX) * cam.zoom), sy = Math.round((p.y - OY) * cam.zoom);
+      const t = `translate(${sx}px, ${sy}px) translate(-50%, -50%)`, mw = `${Math.max(64, Math.round(p.w * cam.zoom) + 16)}px`;
+      if (el.style.transform !== t) el.style.transform = t;
+      if (el.style.maxWidth !== mw) el.style.maxWidth = mw;
     }
   }
   function label(text, wx, wy, fg = "#fff6e0", bg = INK) {
@@ -1271,6 +1340,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     // A publish approval is open: the Apps building waits for the owner.
     for (const b of waitingBuildings()) { const k = reduced() ? 1 : f % 2, cx = (b.x + b.w / 2) * TILE, y = b.y * TILE - 12; if (k) { ctx.fillStyle = "rgba(255,216,74,.35)"; ctx.fillRect(Math.round(cx - 50 - cam.x), Math.round(y - 3 - cam.y), 100, 15); } label("WAITING FOR YOU", cx, y, INK, "#ffd84a"); }
     for (const p of order) if (p.say && p.say.until > performance.now()) label(p.say.text, p.x, p.y - 46, INK, "#8fdcff"); // VAIC's word stays on top of every mark
+    drawPlates();
     const s = selected && people.get(selected);
     if (s) { const bob = reduced() ? 0 : [0, 1, 2, 1][f]; const x = Math.round(s.x) - OX, y = Math.round(s.y) - OY - (s.visual && s.visual !== "idle" ? 46 : 32) + bob; R(ctx, x - 4, y, 8, 2, INK); R(ctx, x - 3, y, 6, 2, "#ffd84a"); R(ctx, x - 3, y + 2, 6, 2, INK); R(ctx, x - 2, y + 2, 4, 1, "#ffd84a"); R(ctx, x - 1, y + 4, 2, 2, INK); }
   }
@@ -1342,6 +1412,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       busy = true;
       parcels = parcels.filter((p) => { p.t += dt / 0.9; if (p.t < 1) return true; dust(p.target.x, p.target.y - 14, 8, p.kind === "ticket" ? ["#f4c63c", "#fff6e0"] : ["#49ad7c", "#fff6e0"], 34, 0.4); return false; });
     }
+    if (cam.anchor && settleZoom(reduced() ? 1 : Math.min(1, dt * 10))) busy = true;
     if (Math.abs(cam.wantX - cam.x) > 0.5 || Math.abs(cam.wantY - cam.y) > 0.5) {
       busy = true;
       const k = reduced() ? 1 : Math.min(1, dt * 8);
