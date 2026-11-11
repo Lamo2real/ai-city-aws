@@ -230,7 +230,7 @@ def test_every_department_s_managers_and_workers_carry_the_shared_handoff_rules(
             assert "approval class" in text and "disagree" in text and "don't choose silently" in text
         assert "`file_handoff`" in manager and "Rejected (<reason code>)" in manager and "decision owner" in manager
         assert "Decision rights" in manager and "section 8" in manager and "never add a hold" in manager
-        assert "never to that department's workers" in worker
+        assert "`file_handoff`" in worker and "decision 241" in worker and "leave the issue open" in worker
     # Each department's own playbook and worker rules stay as they were, first and unchanged.
     d = agents_dir() / "departments"
     for f in d.glob("*.md"):

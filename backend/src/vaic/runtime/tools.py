@@ -39,6 +39,7 @@ from vaic.shared.events import now_iso
 from vaic.shared.files.service import chat_card
 from vaic.shared.github import redact
 from vaic.shared.hierarchy.actions import (
+    FINAL,
     STAND_DOWN_NOTE,
     CityDeps,
     answer_question,
@@ -1498,6 +1499,12 @@ def _worker_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         return "Question sent to your manager."
 
     async def report(a: dict[str, Any]) -> str:
+        job = await d.ledger.get_ticket(c.ticket_id)
+        if job and job.get("desk_direct"):
+            # A ticket's result that came straight back to this worker (decision 241): its report is the reply.
+            if job.get("status") not in FINAL:
+                await desk.mark_replied(d, str(job.get("support_ticket") or ""), str(a["summary"]), c.agent_id)
+            return "Closed: that job came from the ticket desk, so nothing goes to your manager. End your turn."
         m = await manager()
         artifacts = a.get("artifacts") or []
         checks = a.get("checks") or ""
@@ -1505,6 +1512,9 @@ def _worker_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             f"{a['summary']}\nArtifacts: {', '.join(map(str, artifacts)) or 'none'}\nChecks: {checks or 'none'}"
         )
         await move(d, c.ticket_id, "in_review", "reported", {"result": body})
+        for j in await d.ledger.tickets_of(c.agent_id, ("open", "in_progress")):
+            if j.get("desk_direct"):  # a handoff's result it used but forgot to close (decision 241)
+                await desk.mark_replied(d, str(j.get("support_ticket") or ""), str(a["summary"]), c.agent_id)
         await d.ledger.update_agent(c.agent_id, {"worker_state": "review"})
         await d.bus.put({"type": "worker.state", "id": c.agent_id, "state": "reporting"})
         await send(
@@ -2113,11 +2123,12 @@ def _support_desk_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
 
     async def open_(a: dict[str, Any]) -> str:
         try:
-            t, new = await desk.open_ticket(d, a, who)
+            t, new = await desk.open_ticket(d, a, who, c.agent_id)
         except desk.Invalid as e:
             return str(e)
         if not new:
             return f"This conversation already has ticket {_ticket_line(t)}. Don't open another."
+        await desk.step_now(d, str(t["id"]))  # to the team at once, not on the next beat (decision 241)
         return (
             f"Opened ticket {t['id']} (number {t['tracker_key']}). The desk sends it to {t['department']} and comes "
             "back to Customer Support to tell the reporter when it's fixed."
@@ -2134,9 +2145,11 @@ def _support_desk_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         task = await d.ledger.get_ticket(c.task_id) if c.task_id else None
         origin = str((task or {}).get("standing_order") or "")
         try:
-            t = await desk.file_handoff(d, {**a, "order_id": origin or None}, c.department or "", who)
+            t = await desk.file_handoff(d, {**a, "order_id": origin or None}, c.department or "", who, c.agent_id)
         except desk.Invalid as e:
             return str(e)
+        await desk.step_now(d, str(t["id"]))  # to the receiving department at once (decision 241)
+        back = "you" if c.role == "worker" else t["from_department"]
         return (
             f"Filed {t['id']} for {t['department']}"
             + (
@@ -2144,13 +2157,21 @@ def _support_desk_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 if t["tracker"] == "Jira"
                 else ""
             )
-            + f". The desk sends it to them; when it's done the result comes back to {t['from_department']} as a "
-            "new job. Carry on with what you can meanwhile; don't wait."
+            + f". The desk has sent it to them; when it's done the result comes back to {back} as a new job"
+            + (f" (to {t['from_department']}'s manager if you have gone home by then)" if c.role == "worker" else "")
+            + ". Carry on with what you can meanwhile; don't wait."
         )
 
     async def fixed(a: dict[str, Any]) -> str:
         t = await desk.mark_fixed(d, str(a.get("ticket") or ""), str(a.get("summary") or ""), who)
-        return "Marked fixed: Customer Support tells the reporter next." if t else "There is no ticket with that id."
+        if not t:
+            return "There is no ticket with that id."
+        await desk.step_now(d, str(t["id"]))  # the result goes back at once (decision 241)
+        return (
+            "Marked fixed: Customer Support tells the reporter now."
+            if t.get("kind") != "handoff"
+            else f"Marked fixed: the result has gone back to {t['from_department']}."
+        )
 
     async def replied(a: dict[str, Any]) -> str:
         t = await desk.mark_replied(d, str(a.get("ticket") or ""), str(a.get("summary") or ""), who)
@@ -2207,12 +2228,16 @@ def _support_desk_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             [
                 ToolSpec(
                     "file_handoff",
-                    "Managers only: hand work to another department (decision 135), e.g. Customer Support → "
-                    "Application for a site error, Marketing → Sales for a qualified lead, Sales → Finance for an "
-                    "invoice. to_department; title; details (everything they need); priority (low, normal, high, "
+                    "Hand work to another department (decisions 135, 241): any department to any other, managers "
+                    "and workers alike, when your own judgement says another team owns the next step, e.g. "
+                    "Customer Support → Application for a site error, IT Infrastructure → Marketing for a "
+                    "status-page post, Marketing → Sales for a qualified lead, Sales → Finance for an invoice. "
+                    "to_department; title; details (everything they need); priority (low, normal, high, "
                     "urgent); ref (the deal, order or CRM record it is about); reply_to (the ticket or handoff id "
-                    "you are working on, so the chain is kept); tracker_key (if you already filed it in Jira). The "
-                    "receiving manager assigns a worker; the result comes back to you as a new job.",
+                    "you are working on, so the chain is kept); tracker_key (if you already filed it in Jira: the "
+                    "receiving team updates that same issue). It goes to them at once; the receiving manager "
+                    "assigns a worker; the result comes back to you as a new job (to your manager if you are a "
+                    "worker who has gone home by then), and you close the Jira issue.",
                     _obj(
                         {
                             "to_department": _s(2),
@@ -2228,7 +2253,7 @@ def _support_desk_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                     handoff,
                 )
             ]
-            if c.role == "manager"
+            if c.role in ("manager", "worker")
             else []
         ),
     ]

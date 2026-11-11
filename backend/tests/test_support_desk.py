@@ -105,17 +105,12 @@ async def test_a_slack_message_becomes_a_ticket_is_fixed_by_it_and_the_reporter_
         city.advance(16 * 60_000)
         return out
 
-    await beat()  # intake: Support opens the ticket and says "on it" in the thread
+    await beat()  # intake → IT fixes it → Support tells the reporter: one beat, no waiting for the next (decision 241)
     [t] = await desk.list_tickets(city.ledger)
-    assert (t["status"], t["department"], t["channel"], t["thread"]) == ("new", "IT Infrastructure", "slack",
-                                                                         INBOX[0]["ts"])  # fmt: skip
+    assert (t["department"], t["channel"], t["thread"]) == ("IT Infrastructure", "slack", INBOX[0]["ts"])
     assert SLACK[0]["thread"] == INBOX[0]["ts"] and "on it" in SLACK[0]["text"]
-    await beat()  # the desk sends it to IT, which fixes it
-    t = await desk.get_ticket(city.ledger, t["id"])
-    assert t is not None and t["status"] == "fixed" and "renewed the login certificate" in t["resolution"]
-    await beat()  # Customer Support tells the reporter in the same thread
-    t = await desk.get_ticket(city.ledger, t["id"])
-    assert t is not None and t["status"] == "closed" and t["words"] == "Customer told"
+    assert "renewed the login certificate" in t["resolution"]
+    assert t["status"] == "closed" and t["words"] == "Customer told"
     assert SLACK[-1] == {"channel": "#support", "thread": INBOX[0]["ts"],
                          "text": "Fixed: login works again. Reach out any time."}  # fmt: skip
     # Nothing is filed twice: the intake round skipped the handled message, and the job tree is finished.

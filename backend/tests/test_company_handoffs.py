@@ -187,18 +187,20 @@ async def test_zalando_runs_itself_support_to_application_and_back_and_a_lead_fr
     assert ZALANDO in system and "Application (errors on the website" in system
 
 
-async def test_handoffs_are_managers_only_and_never_loop() -> None:
+async def test_any_department_hands_off_to_any_other_and_never_loops() -> None:
     d = city_deps()
     mk = TurnCtx(agent_id="mgr-marketing", role="manager", department="Marketing", ticket_id="t1", task_id="t1")
     wk = TurnCtx(agent_id="wkr-1", role="worker", department="Marketing", ticket_id="t1", task_id="t1")
     with_tools = {t.name for t in __import__("vaic.runtime.tools", fromlist=["tools_for"]).tools_for(d, wk)}
-    assert "file_handoff" not in with_tools  # workers don't file between departments
+    assert "file_handoff" in with_tools  # workers file between departments too (decision 241)
     file = tool(d, mk, "file_handoff")
     assert "your own department" in await file({"to_department": "marketing", "title": "x y z"})
     assert (await file({"to_department": "Sales", "title": "Lead A"})).startswith("Filed")
     assert "already has this open" in await file({"to_department": "Sales", "title": "Lead A"})
     [a] = await desk.list_tickets(d.ledger)
-    assert a["chain"] == ["Marketing", "Sales"] and a["tracker"] == desk.BOARD and a["words"] == "Filed"
+    assert (
+        a["chain"] == ["Marketing", "Sales"] and a["tracker"] == desk.BOARD and a["words"] == "Being worked on"
+    )  # sent at once
     # Back and forth is allowed, but a chain stops at four departments: no endless ping-pong.
     sales = TurnCtx(agent_id="mgr-sales", role="manager", department="Sales", ticket_id="t2", task_id="t2")
     out = await tool(d, sales, "file_handoff")({"to_department": "Marketing", "title": "Need a case study",
