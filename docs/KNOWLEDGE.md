@@ -572,7 +572,7 @@ manager playbook and worker rules (`department_template` and `department_worker_
 statuses and explicit accept, reject with a reason or input-required (section 2; `ticket_note` / `ticket_fixed`),
 decision rights (3), the routing rule (new work manager-to-manager through `file_handoff`, workers only inside an
 accepted task, 7.1) and the twelve template fields in `file_handoff`'s `details` (7.2); section 8's classes are named in
-the handoff and hold nothing beyond the owner's rules (decision 237). Each department's own playbook, worker rules and
+the handoff as advice only, the owner's answer (decisions 237 and 240). Each department's own playbook, worker rules and
 handoff document are unchanged and come first; where they disagree with the shared documents, agents follow their own
 and say so. Every disagreement found is listed for the owner in `docs/HANDOFF_DISAGREEMENTS.md`.
 **IT infrastructure (decision 226).** `knowledge/seed/infrastructure/` (the folder is the department key; the card

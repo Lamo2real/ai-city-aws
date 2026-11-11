@@ -28,6 +28,8 @@ Paths: `S/` is `knowledge/seed/shared/`, `<key>/` is `knowledge/seed/<key>/`. Sh
 | 0.5 | Handoff fields | `file_handoff` has to_department, title, details, priority, ref, reply_to (`agents/manager.md:20`) | Twelve fields; incomplete requests rejected (`S/route:62-77`) |
 | 0.6 (possible) | Customer contact | "Customer Support tells the customer; you never contact another team's customers" (`agents/manager.md:20`) | "Sales owns commercial expansion and the renewal quote" (`S/map:95`) |
 
+0.1 and 0.2: the owner decided (2026-11-11) that section 8 is advice only, with no enforced approvals; the prompts say so (decision 240). The department rows below that concern approval are advice on both sides for the same reason.
+
 0.3 to 0.5 are now bridged in the prompts (the twelve fields go in `details`; accept, reject or input-required by
 `ticket_note` / `ticket_fixed`); `manager.md` itself is unchanged.
 
