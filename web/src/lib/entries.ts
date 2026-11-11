@@ -30,6 +30,8 @@ export interface EntryRow {
   seed_removed?: boolean;
   sync?: "pending" | "done" | "failed";
   has_newer_default?: boolean;
+  /** A newer version is indexing or failed to: agents still read the previous ready one (decision 235). */
+  previous_in_use?: boolean;
   updated_at?: string;
   changed_by?: string;
 }
@@ -104,6 +106,7 @@ export function entryFlags(e: EntryRow, today = new Date().toISOString().slice(0
   if (e.has_newer_default) out.push("Newer default");
   if (e.sync === "failed" || e.status === "failed") out.push("Not indexed");
   else if (e.status === "processing" && !e.deleted) out.push("Indexing");
+  if (e.previous_in_use && !e.deleted) out.push("Previous version in use");
   if (e.volatility === "fast-moving" && e.review_by < today && !e.deleted) out.push("Past review date");
   return out;
 }

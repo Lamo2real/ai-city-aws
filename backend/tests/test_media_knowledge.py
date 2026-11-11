@@ -9,7 +9,7 @@ import re
 
 import pytest
 
-from test_knowledge_entries import SEEDS, IgnoresFilters, _no_sleep, rig, small
+from test_knowledge_entries import SEEDS, IgnoresFilters, _no_sleep, rig, settled, small
 from vaic.shared.knowledge.entries import index_parts, mentioned_concepts, seed_root
 from vaic.shared.knowledge.entry_service import EntryService
 from vaic.shared.knowledge.evaluation import load_eval, offline_eval
@@ -103,14 +103,16 @@ async def test_replacing_a_document_leaves_only_the_new_version_in_the_index_and
     r = rig()
     s = EntryService(r.registry, r.projector, seeds=lambda: small(DISCLOSURE))
     await run_seed(small(DISCLOSURE), r.registry, r.projector, MODEL)
+    await settled(r)
     before = {u for u in r.kb.docs if f"/{DISCLOSURE}/" in u}
     kid = f"kn-{DISCLOSURE}"
     assert ("MENTIONS", kid, "media/concept/likeness") in r.graph.edges
     await s.update(
         DISCLOSURE, {"content": "## Short version\n\nLabel realistic AI video at first exposure (Article 50)."}
     )
+    await settled(r)  # the new version is indexed: the switch, then the old parts and graph edges go (decision 235)
     after = {u for u in r.kb.docs if f"/{DISCLOSURE}/" in u}
-    assert len(after) == 2 and len(before) > 2 and after < before
+    assert len(after) == 2 and len(before) > 2 and all("/v2/" in u for u in after)
     assert not [
         k for k in r.blobs.objects if f"/{DISCLOSURE}/" in k and k.split("/")[-1].split(".")[0] not in ("0", "1")
     ]
@@ -138,11 +140,6 @@ async def test_an_edited_or_deleted_document_survives_a_redeploy() -> None:
     assert (await r.registry.get(DISCLOSURE) or {})["newer_default"]["summary"] == "Shipped later."
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Not built yet: keeping the last ready version active while a new one indexes is the shared change the "
-    "Application session is building; until it lands an edit or re-index hides the document until it is indexed again.",
-)
 async def test_a_failed_re_index_leaves_the_old_version_active() -> None:
     r = rig()
     s = EntryService(r.registry, r.projector, seeds=lambda: small(DISCLOSURE))
@@ -153,7 +150,8 @@ async def test_a_failed_re_index_leaves_the_old_version_active() -> None:
     r.kb.throttle = 100  # Bedrock stays busy for longer than the retries
     await s.reindex(DISCLOSURE)
     rec = await r.registry.get(DISCLOSURE) or {}
-    assert rec["status"] == "ready"
+    # The new version failed; agents keep reading the old one (decision 235).
+    assert rec["status"] == "failed" and rec["active"]["version"] == 1
 
 
 # ---------- isolation ----------

@@ -9,7 +9,7 @@ import re
 
 import pytest
 
-from test_knowledge_entries import SEEDS, IgnoresFilters, _no_sleep, rig, small
+from test_knowledge_entries import SEEDS, IgnoresFilters, _no_sleep, rig, settled, small
 from vaic.shared.knowledge.entries import index_parts, mentioned_concepts, seed_root
 from vaic.shared.knowledge.entry_service import EntryService
 from vaic.shared.knowledge.evaluation import load_eval, offline_eval
@@ -95,15 +95,17 @@ async def test_replacing_a_sales_document_leaves_only_the_new_version_in_the_ind
     r = rig()
     s = EntryService(r.registry, r.projector, seeds=lambda: small(CLOSER))
     await run_seed(small(CLOSER), r.registry, r.projector, MODEL)
+    await settled(r)
     before = {u for u in r.kb.docs if f"/{CLOSER}/" in u}
     kid = f"kn-{CLOSER}"
     assert ("MENTIONS", kid, "sales/concept/objection-handling") in r.graph.edges
     await s.update(CLOSER, {"content": "## Short version\n\nAsk about their goal, then the price of waiting."})
+    await settled(r)  # the new version is indexed: the switch, then the old parts and graph edges go
     after = {u for u in r.kb.docs if f"/{CLOSER}/" in u}
-    assert len(after) == 2 and len(before) > 2 and after < before
-    part1 = next(v for k, v in r.blobs.objects.items() if k.endswith(f"/{CLOSER}/1.md"))
+    assert len(after) == 2 and len(before) > 2 and all("/v2/" in u for u in after)
+    part1 = next(v for k, v in r.blobs.objects.items() if k.endswith(f"/{CLOSER}/v2/1.md"))
     assert b"Short version" in (part1 if isinstance(part1, bytes) else part1[0])
-    assert not [k for k in r.blobs.objects if f"/{CLOSER}/" in k and k.split("/")[-1].split(".")[0] not in ("0", "1")]
+    assert not [k for k in r.blobs.objects if f"/{CLOSER}/" in k and "/v2/" not in k]
     # The graph keeps the entry but only what the new text mentions.
     mentions = {e for e in r.graph.edges if e[0] == "MENTIONS" and e[1] == kid}
     assert mentions == {("MENTIONS", kid, "sales/concept/closer")}  # from the title; the objections are gone

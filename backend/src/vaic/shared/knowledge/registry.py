@@ -26,6 +26,12 @@ _LIST_FIELDS = (
     "confidence", "volatility", "as_of", "review_by", "origin", "builtin", "status", "error", "user_modified",
     "deleted", "retired", "seed_removed", "sync", "updated_at", "changed_by",
 )  # fmt: skip
+_ACTIVE_FIELDS = (
+    "entry_id", "department", "domain", "title", "summary", "type", "audience", "platforms", "objectives",
+    "confidence", "volatility", "as_of", "review_by", "sources", "related", "requires", "supersedes", "content",
+    "cross_refs", "document", "origin", "content_hash", "version", "ingest_uris",
+)  # fmt: skip
+"""What an ``active`` snapshot keeps: the version agents read while a newer one is being indexed."""
 
 
 def entry_item_id(entry_id: str) -> str:
@@ -41,10 +47,32 @@ def record_json(rec: dict[str, Any]) -> dict[str, Any]:
 
 
 def list_row(rec: dict[str, Any]) -> dict[str, Any]:
-    """What the list shows: no content, a flag for a newer default."""
+    """What the list shows: no content, a flag for a newer default and one for the previous version in use."""
     row = {k: rec[k] for k in _LIST_FIELDS if k in rec}
     row["has_newer_default"] = bool(rec.get("newer_default"))
+    row["previous_in_use"] = bool(rec.get("active"))
     return row
+
+
+def keep_active(rec: dict[str, Any] | None) -> dict[str, Any]:
+    """The ``active`` patch for a record about to get a new version (decision 235): the version agents read until
+    the new one is completely indexed. A ready record is snapshotted; one already waiting keeps its snapshot."""
+    if not rec or rec.get("deleted") or rec.get("retired"):
+        return {"active": None}
+    if rec.get("status") == "ready":
+        return {"active": {k: rec[k] for k in _ACTIVE_FIELDS if k in rec}}
+    return {"active": rec.get("active")}
+
+
+def served(rec: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The version of an entry that agents read: the record when it is ready; while a newer version is indexing
+    (or failed to), the previous ready version kept in ``active``."""
+    if not rec or rec.get("status") == "ready" or not rec.get("active"):
+        return rec
+    if rec.get("deleted") or rec.get("retired") or rec.get("status") not in ("processing", "failed"):
+        return rec
+    active = rec["active"]
+    return {**rec, **active, "version": active.get("version", 0), "status": "ready", "active": None}
 
 
 def entry_fields(e: Entry, origin: str) -> dict[str, Any]:

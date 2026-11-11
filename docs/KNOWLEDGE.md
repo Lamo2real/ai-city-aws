@@ -378,11 +378,24 @@ content_hash}. The vector store and the graph are projections, rebuildable from 
 
 **Vector store.** The same knowledge base and OpenSearch Serverless index `items` (one shared index; a collection
 per department would cost about $186/month each). Each entry is indexed as parts: `normalized/builtin/<department>/
-<entry id>/<n>.md` (+ `.metadata.json`), `<n>` = 0 for the card (title, department, domain, type, audience, platforms,
+<entry id>/v<version>/<n>.md` (+ `.metadata.json`; entries indexed before decision 235 have no `v<version>` folder),
+`<n>` = 0 for the card (title, department, domain, type, audience, platforms,
 as_of, review_by, volatility, confidence, summary, when to use) and one per heading section, split at sentence ends
-to stay under Bedrock's default 300-token chunk, each starting `<title> › <heading>`. Deterministic URIs, so a
-re-index replaces, and parts an edit no longer has are deleted. Metadata: `item_id`, `scope` (relevant), `kind`,
-`department`, `domain`, `entry_type`, `audience`, `volatility`, `confidence`, `origin`, `part`, `platforms`. The
+to stay under Bedrock's default 300-token chunk, each starting `<title> › <heading>`. Metadata: `item_id`, `scope`
+(relevant), `kind`, `department`, `domain`, `entry_type`, `audience`, `volatility`, `confidence`, `origin`, `part`,
+`version`, `platforms`.
+
+**Versions (decision 235, every department).** An edit, a reset, a re-index, a changed seed or a repair writes the
+entry's next version (`version` on the record) into its own folder and indexes it beside the version agents read. The
+record keeps that previous ready version in `active` (its text, fields, `version` and `ingest_uris`) while the new one
+is `processing` (the HUD shows "Indexing" and "Previous version in use"). Once the index has every new part
+(`seeder.settle`, run by `seed_status`, the deploy's wait and the Knowledge list), the record switches: status `ready`,
+the graph moves to the new version (edges replaced), then the previous version's parts leave the index and S3 (the
+bucket keeps non-current object versions). If the index refuses or fails the new version, its parts are deleted, the
+record is `failed` with the reason, and agents keep reading `active`; Re-index or the next deploy tries again. A second
+edit before the first is indexed drops the unfinished version. `search_knowledge` reads `active` for an entry that is
+`processing` or `failed`, and keeps only hits whose `version` matches the version it reads (parts without a version are
+accepted). Delete removes every version. The
 embedding model and its 1024 dimensions stay as configured (`embeddings.knowledge`; the index is Terraform's); the
 model id is stored on every record, and a change re-embeds every entry on the next deploy.
 
@@ -471,10 +484,9 @@ workers (`application.workers.md`) consult the knowledge base before planning, a
 compliance first, independent evidence second, the rest after (the source states no precedence; this is the owner's
 order); follow section 16's three lists and section 17's handoffs; verify `needs_verification` and stale
 `[FAST-MOVING]` facts; say `[GAP]` points are unknown; and give legal content as orientation for a human to confirm.
-Not built (shared code, every department): Download of a document's original, and a versioned Replace that keeps the
-last ready version searchable while a new one indexes and after a failed index (today an edit, reset or re-index hides
-the entry until it is indexed again; its test is an expected failure). The section 16 approval gates stay prompt rules:
-the policy gate's rules have no department scope.
+Replace keeps the previous version active until the new one is indexed (decision 235, "Versions" above). Not built:
+Download of a document's original. The section 16 approval gates stay prompt rules, as the owner chose; the policy
+gate's rules have no department scope.
 
 **Data and AI (decision 227).** `knowledge/seed/data/` (the folder is the department key `data`): 22 documents, one
 per numbered section of `knowledge/source/data-and-ai-research.md` (verbatim, 30,357 words, SHA-256 pinned) plus "Data

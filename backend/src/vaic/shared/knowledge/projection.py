@@ -1,8 +1,10 @@
 """Projections of the entry registry (§17): the parts in S3 and the vector store, and the graph.
 
-An entry is indexed as one small document per part (``normalized/builtin/<department>/<entry id>/<n>.md`` with
-its ``.metadata.json``), so ids are deterministic (``<entry id>#<n>``) and re-indexing replaces instead of adding.
-Parts an edit no longer has are deleted from the index. The graph gets the entry vertex and its edges.
+An entry is indexed as one small document per part, under a folder per version
+(``normalized/builtin/<department>/<entry id>/v<version>/<n>.md`` with its ``.metadata.json``; decision 235), so a new
+version is indexed beside the one agents are reading. Once it is completely indexed the record switches to it, and
+only then are the old version's parts deleted and the graph moved to the new version (``seeder.settle``). A failed
+index deletes the new parts and leaves the old version active. The graph gets the entry vertex and its edges.
 """
 
 from __future__ import annotations
@@ -96,13 +98,15 @@ class EntryProjector:
     def uri(self, key: str) -> str:
         return f"s3://{self.blobs.bucket}/{key}"
 
-    async def write_parts(self, e: Entry, origin: str, label: str) -> list[tuple[str, dict[str, Any]]]:
-        """Writes every part and its metadata file to S3; returns the documents to ingest."""
+    async def write_parts(
+        self, e: Entry, origin: str, label: str, version: int = 1
+    ) -> list[tuple[str, dict[str, Any]]]:
+        """Writes every part of one version and its metadata files to S3; returns the documents to ingest."""
         docs = []
-        prefix = parts_prefix(e.department, e.id)
+        prefix = f"{parts_prefix(e.department, e.id)}v{version}/"
         for n, text in enumerate(index_parts(e, label)):
             key = f"{prefix}{n}.md"
-            meta = kb_entry_metadata(e, origin, n)
+            meta = kb_entry_metadata(e, origin, n, version)
             await self.blobs.put(key, text.encode(), "text/markdown")
             await self.blobs.put(
                 f"{key}.metadata.json", json.dumps({"metadataAttributes": meta}).encode(), "application/json"

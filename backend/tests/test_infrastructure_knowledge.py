@@ -10,7 +10,7 @@ import re
 
 import pytest
 
-from test_knowledge_entries import SEEDS, IgnoresFilters, _no_sleep, rig, small
+from test_knowledge_entries import SEEDS, IgnoresFilters, _no_sleep, rig, settled, small
 from vaic.shared.knowledge.entries import canonical_department, index_parts, mentioned_concepts, seed_root
 from vaic.shared.knowledge.entry_service import EntryService
 from vaic.shared.knowledge.evaluation import load_eval, offline_eval
@@ -100,15 +100,17 @@ async def test_replacing_a_document_leaves_only_the_new_version_in_the_index_and
     r = rig()
     s = EntryService(r.registry, r.projector, seeds=lambda: small(DR))
     await run_seed(small(DR), r.registry, r.projector, MODEL)
+    await settled(r)
     before = {u for u in r.kb.docs if f"/{DR}/" in u}
     kid = f"kn-{DR}"
     assert ("MENTIONS", kid, "infrastructure/concept/vault-lock") in r.graph.edges
     await s.update(DR, {"content": "## Short version\n\nRestore from the locked vault in the recovery account."})
+    await settled(r)  # the new version is indexed: the switch, then the old parts and graph edges go (decision 235)
     after = {u for u in r.kb.docs if f"/{DR}/" in u}
-    assert len(after) == 2 and len(before) > 2 and after < before
-    part1 = next(v for k, v in r.blobs.objects.items() if k.endswith(f"/{DR}/1.md"))
+    assert len(after) == 2 and len(before) > 2 and all("/v2/" in u for u in after)
+    part1 = next(v for k, v in r.blobs.objects.items() if k.endswith(f"/{DR}/v2/1.md"))
     assert b"Short version" in (part1 if isinstance(part1, bytes) else part1[0])
-    assert not [k for k in r.blobs.objects if f"/{DR}/" in k and k.split("/")[-1].split(".")[0] not in ("0", "1")]
+    assert not [k for k in r.blobs.objects if f"/{DR}/" in k and "/v2/" not in k]
     mentions = {e[2] for e in r.graph.edges if e[0] == "MENTIONS" and e[1] == kid}
     assert "infrastructure/concept/vault-lock" in mentions  # from the summary, which the new text keeps
     assert "infrastructure/concept/kiro" not in mentions and "infrastructure/concept/pocketos" not in mentions
@@ -133,11 +135,6 @@ async def test_an_edited_or_deleted_document_survives_a_redeploy() -> None:
     assert not reset["deleted"] and reset["sync"] == "done"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Not built: an edit or re-index hides the document until it is indexed again (status processing, then "
-    "failed); keeping the last ready version active is the shared change assigned to the Application session.",
-)
 async def test_a_failed_re_index_leaves_the_old_version_active() -> None:
     r = rig()
     s = EntryService(r.registry, r.projector, seeds=lambda: small(DR))
@@ -148,7 +145,8 @@ async def test_a_failed_re_index_leaves_the_old_version_active() -> None:
     r.kb.throttle = 100  # Bedrock stays busy for longer than the retries
     await s.reindex(DR)
     rec = await r.registry.get(DR) or {}
-    assert rec["status"] == "ready"
+    # The new version failed; agents keep reading the old one (decision 235).
+    assert rec["status"] == "failed" and rec["active"]["version"] == 1
     r.kb.hits = [Hit(f"kn-{DR}", "vault lock", 0.8, "relevant", attributes={"department": "infrastructure"})]
     res = await search(r.kb, r.store, "q", caller=Caller(department="infrastructure", role="worker", related=False))
     assert [i["entry_id"] for i, _ in res.items] == [DR]

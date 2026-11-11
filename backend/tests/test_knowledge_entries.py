@@ -205,6 +205,13 @@ def rig() -> Rig:
     )  # fmt: skip
 
 
+async def settled(r: Rig) -> None:
+    """The index finishes every part it was given; the entries switch to their new versions (decision 235)."""
+    for u in r.kb.status:
+        r.kb.status[u] = "INDEXED"
+    await refresh_status(r.registry, r.projector, list(SEEDS.taxonomies))
+
+
 def small(*ids: str, changes: dict[str, dict[str, Any]] | None = None) -> SeedSet:
     """A seed set of a few real entries (optionally changed), with their links trimmed to the set."""
     out = SeedSet(taxonomies=dict(SEEDS.taxonomies))
@@ -357,11 +364,13 @@ async def test_editing_moves_parts_and_drops_the_ones_that_are_gone() -> None:
     r = rig()
     s = EntryService(r.registry, r.projector, seeds=lambda: small(B))
     await run_seed(small(B), r.registry, r.projector, MODEL)
+    await settled(r)
     before = sorted(u for u in r.kb.docs if f"/{B}/" in u)
     await s.update(B, {"content": "## One section\n\nShort now."})
+    await settled(r)
     after = sorted(u for u in r.kb.docs if f"/{B}/" in u)
-    assert len(after) == 2 and len(before) > 2 and set(after) < set(before)
-    assert not [k for k in r.blobs.objects if k.startswith(f"normalized/builtin/marketing/{B}/2.md")]
+    assert len(after) == 2 and len(before) > 2 and all("/v2/" in u for u in after)
+    assert not [k for k in r.blobs.objects if f"/{B}/v1/" in k]
     assert [h["action"] for h in await r.registry.history(B)][:1] == ["update"]
 
 
@@ -391,6 +400,7 @@ def test_plan_repairs_a_lagging_edit_of_any_origin() -> None:
 async def test_the_graph_has_the_taxonomy_and_the_entries_with_departments_on_every_vertex() -> None:
     r = rig()
     await run_seed(SEEDS, r.registry, r.projector, MODEL)
+    await settled(r)
     labels = {label for label, _ in r.graph.vertices}
     assert labels == {"Department", "Domain", "Platform", "Objective", "Concept", "KnowledgeEntry"}
     assert {v["department"] for v in r.graph.vertices.values()} == set(SEEDS.taxonomies)
@@ -540,7 +550,9 @@ async def test_entry_routes_list_read_edit_reset_and_delete() -> None:
         assert gone["entry"]["deleted"]
         assert (await handle_http(ev("GET", "/knowledge/entries/marketing.seo.nope"), d))["statusCode"] == 404
         hist = js(await handle_http(ev("GET", f"/knowledge/entries/{A}"), d))["history"]
-        assert [h["action"] for h in hist][:3] == ["reset", "update", "seed.create"]
+        # Rows written in the same millisecond sort by their random suffix, so only the set of the last two is fixed.
+        acts = [h["action"] for h in hist]
+        assert set(acts[:2]) == {"reset", "update"} and acts[2] == "seed.create"
     finally:
         api_mod._entry_service = None
 

@@ -33,6 +33,7 @@ from .jurisdiction import (
 )
 from .kb import Hit, KnowledgeBase
 from .model import DATA_HEADER, Scope
+from .registry import served
 from .store import KnowledgeStore
 
 MAX_RELATED_ITEMS = 3
@@ -366,10 +367,13 @@ async def search(
     candidates = [i for i, _ in ex.items[: MAX_RELATED_ITEMS * 4]]
     rel_items = [r["item"] for r in ex.rels]
     records = await store.get_items([*(i for i, _ in cached.groups), *candidates, *rel_items])
+    # An entry whose new version is still being indexed (or failed to) is read as its previous ready version.
+    records = {k: v for k, v in ((k, served(v)) for k, v in records.items()) if v is not None}
     out = SearchResult()
-    for item_id, hs in cached.groups:
+    for item_id, found in cached.groups:
         item = records.get(item_id)
-        if _usable(item, scopes, market, brand, caller):
+        hs = [h for h in found if _same_version(h, item)] if item and item.get("entry_id") else found
+        if hs and _usable(item, scopes, market, brand, caller):
             assert item is not None
             out.items.append((item, [h.text[:SNIPPET_CHARS] for h in hs[:SNIPPETS_PER_ITEM]]))
             if len(out.items) >= max_results:
@@ -398,13 +402,22 @@ async def search(
         extra = await store.get_items([i for i in near if i not in hit_ids][: MAX_RELATED_ENTRIES * 3])
         added = 0
         for i in near:
-            item = extra.get(i)
+            item = served(extra.get(i))
             if item and i not in hit_ids and _usable(item, scopes, market, brand, caller):
                 out.related_items.append(item)
                 added += 1
                 if added >= MAX_RELATED_ENTRIES:
                     break
     return out
+
+
+def _same_version(h: Hit, item: dict[str, Any]) -> bool:
+    """A part of the version being read (decision 235); parts written before versions existed carry none."""
+    v = h.attributes.get("version")
+    try:
+        return v is None or int(float(v)) == int(item.get("version") or 0)
+    except (TypeError, ValueError):
+        return False
 
 
 def _placed(r: SearchResult) -> list[dict[str, Any]]:

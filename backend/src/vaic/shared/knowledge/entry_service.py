@@ -27,8 +27,8 @@ from .entries import (
     load_seeds,
 )
 from .projection import EntryProjector, safe
-from .registry import EntryRegistry, entry_fields, list_row, record_json
-from .seeder import project_many, refresh_status
+from .registry import EntryRegistry, entry_fields, keep_active, list_row, record_json
+from .seeder import all_uris, project_many, refresh_status, settle
 
 EDITABLE = (
     "title", "summary", "content", "domain", "type", "audience", "platforms", "objectives", "confidence",
@@ -87,10 +87,8 @@ class EntryService:
         recs = [r for d in depts for r in await self.registry.in_department(d)]
         stale = [r for r in recs if r.get("status") == "processing" and r.get("sync") == "done"][:REFRESH_AT_MOST]
         for r in stale:
-            done, err = await self.projector.indexed(list(r.get("ingest_uris") or []))
-            if err or done:
-                patch = {"status": "failed", "error": err} if err else {"status": "ready", "error": None}
-                r.update(await self.registry.update(str(r["entry_id"]), patch) or patch)
+            if await settle(self.registry, self.projector, r, self.seeds().taxonomies) != "processing":
+                r.update(await self.registry.get(str(r["entry_id"])) or {})
         words = (q.get("q") or "").lower().split()
 
         def keep(r: dict[str, Any]) -> bool:
@@ -200,6 +198,7 @@ class EntryService:
                 "sync": "pending",
                 "embed_model": self._model(),
                 "changed_by": by,
+                **keep_active(rec),
             }
         )
         await self.registry.audit(entry_id, "update", by, ", ".join(sorted(patch)), e.content_hash())
@@ -215,10 +214,12 @@ class EntryService:
             entry_id, {"deleted": True, "status": "deleted", "sync": "pending", "changed_by": by}
         )
         err = await safe(
-            self.projector.unproject(str(rec["department"]), entry_id, list(rec.get("ingest_uris") or [])),
+            self.projector.unproject(str(rec["department"]), entry_id, all_uris(rec)),
             "removing from the index and graph",
         )
-        await self.registry.update(entry_id, {"sync": "failed" if err else "done", "error": err, "ingest_uris": []})
+        await self.registry.update(
+            entry_id, {"sync": "failed" if err else "done", "error": err, "ingest_uris": [], "active": None}
+        )
         await self.registry.audit(entry_id, "delete", by, err or "")
         return record_json(await self._require(entry_id))
 
@@ -245,6 +246,7 @@ class EntryService:
                 "sync": "pending",
                 "embed_model": self._model(),
                 "changed_by": by,
+                **keep_active(rec),
             }
         )
         await self.registry.audit(entry_id, "reset", by, "", e.content_hash())
@@ -256,14 +258,15 @@ class EntryService:
         await self.registry.audit(entry_id, "reindex", by)
         if rec.get("deleted") or rec.get("retired"):
             err = await safe(
-                self.projector.unproject(str(rec["department"]), entry_id, list(rec.get("ingest_uris") or [])),
+                self.projector.unproject(str(rec["department"]), entry_id, all_uris(rec)),
                 "removing from the index and graph",
             )
-            await self.registry.update(entry_id, {"sync": "failed" if err else "done", "error": err})
+            await self.registry.update(entry_id, {"sync": "failed" if err else "done", "error": err, "active": None})
             return record_json(await self._require(entry_id))
         e = entry_from_fields(rec, self.taxonomy(str(rec["department"])))
-        await self.registry.update(entry_id, {"status": "processing", "sync": "pending", "error": None})
-        return await self._project(e, rec)
+        patch = {**keep_active(rec), "status": "processing", "sync": "pending", "error": None}
+        return await self._project(e, await self.registry.update(entry_id, patch) or {**rec, **patch})
 
     async def status(self) -> dict[str, int]:
-        return await refresh_status(self.registry, self.projector, list(self.seeds().taxonomies))
+        taxes = self.seeds().taxonomies
+        return await refresh_status(self.registry, self.projector, list(taxes), taxes)

@@ -108,7 +108,7 @@ async def _seed(event: dict[str, Any]) -> dict[str, Any]:
     projector = EntryProjector(k.blobs, k.kb, k.store.graph)
     seeds = load_seeds()
     if event.get("action") == "seed_status":
-        return {"ok": True, **(await refresh_status(registry, projector, list(seeds.taxonomies)))}
+        return {"ok": True, **(await refresh_status(registry, projector, list(seeds.taxonomies), seeds.taxonomies))}
     if event.get("action") == "knowledge_eval":
         from vaic.shared.knowledge.evaluation import live_eval
 

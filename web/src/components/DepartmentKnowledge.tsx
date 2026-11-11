@@ -21,6 +21,7 @@ const FLAG_TONE: Record<string, string> = {
   Retired: "failed",
   "Not indexed": "failed",
   Indexing: "processing",
+  "Previous version in use": "builtin",
   "Past review date": "old",
   "Newer default": "builtin",
   "House style": "dept",

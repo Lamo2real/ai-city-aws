@@ -533,8 +533,9 @@ def index_parts(e: Entry, department_label: str, words: int = PART_WORDS) -> lis
     return parts
 
 
-def kb_entry_metadata(e: Entry, origin: str, part: int) -> dict[str, Any]:
-    """The filterable attributes on every part (``department`` is what isolation filters on)."""
+def kb_entry_metadata(e: Entry, origin: str, part: int, version: int = 0) -> dict[str, Any]:
+    """The filterable attributes on every part (``department`` is what isolation filters on; ``version`` tells
+    search which version of the entry a part belongs to, decision 235)."""
     out: dict[str, Any] = {
         "item_id": e.item_id,
         "scope": "relevant",
@@ -548,6 +549,8 @@ def kb_entry_metadata(e: Entry, origin: str, part: int) -> dict[str, Any]:
         "origin": origin,
         "part": part,
     }
+    if version:
+        out["version"] = version
     if e.platforms:
         out["platforms"] = list(e.platforms)
     return out

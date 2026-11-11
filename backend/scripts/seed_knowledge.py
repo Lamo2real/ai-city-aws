@@ -65,7 +65,7 @@ def main() -> int:
     registry = EntryRegistry(k.store.table)
     projector = EntryProjector(k.blobs, k.kb, k.store.graph)
     if a.status:
-        print(json.dumps(asyncio.run(refresh_status(registry, projector, list(seeds.taxonomies)))))
+        print(json.dumps(asyncio.run(refresh_status(registry, projector, list(seeds.taxonomies), seeds.taxonomies))))
         return 0
     if a.eval:
         from vaic.shared.knowledge.evaluation import live_eval

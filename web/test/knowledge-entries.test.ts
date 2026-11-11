@@ -44,6 +44,15 @@ describe("department knowledge entries", () => {
     expect(entryFlags(row({ type: "house-style" }))).toEqual(["House style"]);
     expect(entryFlags(row({ sync: "failed" }))).toEqual(["Not indexed"]);
     expect(entryFlags(row({ status: "processing" }))).toEqual(["Indexing"]);
+    // A newer version indexing or failed: agents still read the previous one (decision 235).
+    expect(entryFlags(row({ status: "processing", previous_in_use: true }))).toEqual([
+      "Indexing",
+      "Previous version in use",
+    ]);
+    expect(entryFlags(row({ status: "failed", previous_in_use: true }))).toEqual([
+      "Not indexed",
+      "Previous version in use",
+    ]);
     expect(entryFlags(row({ volatility: "fast-moving", review_by: "2026-01-01" }), "2026-11-11")).toEqual([
       "Past review date",
     ]);
