@@ -51,8 +51,10 @@ export const capped = (text: unknown, max: number): string => {
 export const appList = (apps: Record<string, CityApp> | undefined): CityApp[] =>
   Object.values(apps ?? {}).sort((a, b) => (b.published_at ?? "").localeCompare(a.published_at ?? ""));
 export const isPublish = (a: CityApproval) => a.kind === "app.publish";
-/** The department building an app or a publish approval belongs to. */
-export const appsDepartment = (x: { department?: string | null }) => x.department || "Apps";
+/** The department building an app or a publish approval belongs to: Application builds and publishes every app
+ * (decision 220), so an app of the old "Apps" department stands there too. */
+export const appsDepartment = (x: { department?: string | null }) =>
+  !x.department || /^apps?$/i.test(x.department) ? "Application" : x.department;
 
 export async function loadApps() {
   const r = await api<{ apps: CityApp[] }>("/apps");

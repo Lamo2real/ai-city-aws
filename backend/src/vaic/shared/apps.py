@@ -22,6 +22,7 @@ from .app_state import delete_state
 from .events import EventBus, now_iso
 from .ids import new_id
 from .ledger import Ledger, Record, strip
+from .presets import replaced_by
 from .table import UpdateOptions
 
 MAX_HISTORY = 5
@@ -147,6 +148,14 @@ def slugify(title: str, taken: Iterable[str] = ()) -> str:
         if slug not in used:
             return slug
         n += 1
+
+
+def home_department(name: Any) -> str:
+    """The department an app belongs to: one a preset took over ("Apps") belongs to that preset (Application,
+    decision 220), so a late submission from the old department still lands in the right building."""
+    s = str(name or "")
+    p = replaced_by(s)
+    return str(p["name"]) if p else s
 
 
 def is_hire_id(hire_id: str) -> bool:
@@ -292,7 +301,7 @@ async def stage_submission(
         "hire_id": hire_id,
         "ticket_id": str(detail.get("ticket_id", "")),
         "task_id": str(detail.get("task_id", "")),
-        "department": str(detail.get("department", "")),
+        "department": home_department(detail.get("department")),
         "title": title,
         "description": clean_text(detail.get("description"), DESCRIPTION_MAX),
         "icon": str(icon) if icon else None,
@@ -546,7 +555,7 @@ async def _publish_draft(
         "url": origin.live_url(app_id),
         "draft_id": draft_id,
         "task_id": dr.get("task_id"),
-        "department": dr.get("department"),
+        "department": home_department(dr.get("department")),
         "capabilities": asked,
         "grants": chosen,
         "granted_at": now_iso(ledger.now()),

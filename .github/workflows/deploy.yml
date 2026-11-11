@@ -242,6 +242,17 @@ jobs:
           fn="$(terraform output -raw scheduler_function_name 2>/dev/null || echo vaic-prod-scheduler)"
           aws lambda invoke --function-name "$fn" --payload '{"job":"warm_vaic"}' \
             --cli-binary-format raw-in-base64-out /dev/null || echo "warm-up skipped"
+      - name: fold departments a preset took over ("Apps" into Application, decision 220; idempotent)
+        working-directory: infra/envs/prod
+        run: |
+          fn="$(terraform output -raw scheduler_function_name 2>/dev/null || echo vaic-prod-scheduler)"
+          aws lambda invoke --function-name "$fn" --payload '{"job":"merge_departments"}' \
+            --cli-binary-format raw-in-base64-out merge.json > merge-invoke.json \
+            || { echo "::warning::The department merge was not invoked; the next City load runs it."; exit 0; }
+          cat merge.json; echo
+          if jq -e 'has("FunctionError")' merge-invoke.json > /dev/null; then
+            echo "::warning::The department merge failed; the next City load runs it again."
+          fi
       - name: outputs for the HUD upload
         id: out
         working-directory: infra/envs/prod

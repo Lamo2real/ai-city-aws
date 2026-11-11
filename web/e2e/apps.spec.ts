@@ -139,22 +139,22 @@ test("remove an app: it asks first, deletes it and goes back to Apps", async ({ 
   await expect(page.getByText(/No apps yet/)).toBeVisible();
 });
 
-test("the City shows the build: the Apps building, the waiting sign, a cabinet per app", async ({ page }) => {
+test("the City shows the build: the Application building, the waiting sign, a cabinet per app", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/#/city");
   const city = page.locator("section.city");
   await expect(city).toHaveAttribute("data-city-ready", "1");
   m.send({
     type: "department.created",
-    name: "Apps",
-    mission: "Small games and tools for AI City.",
-    manager_id: "mgr-apps",
+    name: "Application",
+    mission: "Web apps, sites and games, the apps published in AI City too.",
+    manager_id: "mgr-application",
   });
-  m.send(hired("mgr-apps", "Apps", "manager"));
-  m.send(hired("wkr-apps-g1", "Apps"));
+  m.send(hired("mgr-application", "Application", "manager"));
+  m.send(hired("wkr-apps-g1", "Application"));
   m.send({ type: "activity", id: "wkr-apps-g1", activity: "editing", detail: "app/index.html", at: at() });
-  await expect(page.locator(".feed")).toContainText("New department: Apps");
-  await expect(page.locator(".feed")).toContainText("Apps hired a JavaScript developer");
+  await expect(page.locator(".feed")).toContainText("New department: Application");
+  await expect(page.locator(".feed")).toContainText("Application hired a JavaScript developer");
   m.send({ type: "app.draft", draft_id: "drf-0000000000aa", title: "Star Sweeper", status: "ready" });
   m.send({ type: "approval.requested", ...PUBLISH });
   await expect(city).toHaveAttribute("data-apps-waiting", "1");
@@ -163,27 +163,28 @@ test("the City shows the build: the Apps building, the waiting sign, a cabinet p
   await page.screenshot({ path: `${SHOTS}/city-app-waiting.png` });
   m.send({ type: "approval.decided", id: PUBLISH.id, approved: true });
   const { app_id, slug, title, url } = appRecord("app-0000000000aa", "star-sweeper", "Star Sweeper");
-  m.send({ type: "app.published", app_id, slug, title, url, task_id: "t-apps", department: "Apps" });
+  m.send({ type: "app.published", app_id, slug, title, url, task_id: "t-apps", department: "Application" });
   await expect(city).toHaveAttribute("data-apps", "1");
   await expect(city).toHaveAttribute("data-apps-waiting", "0");
   await expect(page.locator(".feed")).toContainText("New app: Star Sweeper");
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${SHOTS}/city-app-published.png` });
   // The building's panel lists the app too (the cabinet's keyboard twin) and opens it.
-  await page.getByRole("navigation", { name: "Departments" }).getByRole("button", { name: "Apps" }).click();
-  const panel = page.getByRole("dialog", { name: "Apps department" });
+  await page.getByRole("navigation", { name: "Departments" }).getByRole("button", { name: "Application" }).click();
+  const panel = page.getByRole("dialog", { name: "Application department" });
   await expect(panel).toContainText("Apps built here (1)");
   await noSeriousA11y(page, "City with an app");
   await panel.getByRole("link", { name: "Star Sweeper" }).click();
   await expect(page).toHaveURL(/#\/apps\/star-sweeper$/);
   await page.goBack();
   await expect(city).toHaveAttribute("data-city-ready", "1");
-  // After a reload the cabinet comes back from the snapshot; app.removed takes it away.
+  // After a reload the cabinet comes back from the snapshot; app.removed takes it away. An app of the old Apps
+  // department (decision 220) stands at Application.
   m.apps.push(appRecord("app-0000000000aa", "star-sweeper", "Star Sweeper", { department: "Apps" }));
   (m.snapshot.departments as unknown[]).push({
-    name: "Apps",
+    name: "Application",
     mission: "Games",
-    manager_id: "mgr-apps",
+    manager_id: "mgr-application",
     state: "active",
     created_at: at(),
   });
@@ -196,7 +197,9 @@ test("the City shows the build: the Apps building, the waiting sign, a cabinet p
 test("clicking a cabinet on the map opens its app", async ({ page }) => {
   await mockBackend(page, {
     snapshot: {
-      departments: [{ name: "Apps", mission: "Games", manager_id: "mgr-apps", state: "active", created_at: at() }],
+      departments: [
+        { name: "Application", mission: "Games", manager_id: "mgr-application", state: "active", created_at: at() },
+      ],
     },
     apps: [appRecord("app-0000000000aa", "star-sweeper", "Star Sweeper", { department: "Apps" })],
   });

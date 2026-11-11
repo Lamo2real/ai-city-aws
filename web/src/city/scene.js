@@ -945,8 +945,9 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   }
   function refreshVisuals() { const now = Date.now(); for (const p of people.values()) p.visual = visualState(state, p.id, now); }
 
-  // ---------- Apps (docs/APPS.md): cabinets at the Apps building, and a sign while one waits for the owner ----------
-  const appsDept = (x) => x?.department || "Apps";
+  // ---------- Apps (docs/APPS.md): cabinets at the Application building, and a sign while one waits for the owner ----------
+  // Application builds and publishes every app (decision 220); the old "Apps" department's apps stand there too.
+  const appsDept = (x) => (!x?.department || /^apps?$/i.test(x.department) ? "Application" : x.department);
   const buildingOf = (name) => world?.buildings.find((x) => x.dept === name) ?? world?.buildings.find((x) => x.dept.toLowerCase() === String(name).toLowerCase());
   // Where each published app's cabinet stands: in a row on the pavement left of the door, at most four per building.
   function appMarkers() {

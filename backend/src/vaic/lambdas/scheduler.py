@@ -16,12 +16,15 @@ again (within the cap) when work resumes.
 - standing_orders: every 5 minutes, each due standing order starts one ordinary job for its department
   (decision 125); one live job per order at a time. On the same beat the support desk moves each open customer
   ticket one step (decision 131).
+- merge_departments: run once by the deploy after Terraform (decision 220): a department a preset took over
+  ("Apps", now Application) is demolished through the normal path and its apps and drafts are re-homed. Idempotent.
 - warm_vaic: keeps VAIC's runtime container running (a "warm" ping every few minutes on the owner's conversation
   session), so a message never pays the container's cold start. Created ENABLED: an idle container costs nothing.
 """
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Mapping
 from datetime import timedelta
@@ -31,6 +34,7 @@ from vaic.shared.aws import aws_city
 from vaic.shared.caps import default_settings
 from vaic.shared.events import EventBus, now_iso
 from vaic.shared.hierarchy.actions import OPEN_ASSIGNMENT, CityDeps, move, send
+from vaic.shared.hierarchy.departments import merge_replaced_departments
 from vaic.shared.hierarchy.dispatch import resume_stale
 from vaic.shared.hierarchy.factory import Factory, FactoryClient
 from vaic.shared.hierarchy.queue import Queue
@@ -44,7 +48,16 @@ from ._runtime import run
 from .dispatcher import AgentCoreInvoker, AgentInvoker, session_id_for
 from .improve import improvement_allowed
 
-Job = Literal["sweep", "retire_idle", "reminders", "improve", "warm_vaic", "calendar_import", "standing_orders"]
+Job = Literal[
+    "sweep",
+    "retire_idle",
+    "reminders",
+    "improve",
+    "warm_vaic",
+    "calendar_import",
+    "standing_orders",
+    "merge_departments",
+]
 
 # The conversations the HUD talks to VAIC on (see api.py: POST /messages uses "main").
 WARM_CONVERSATIONS = ("main",)
@@ -209,6 +222,22 @@ async def run_job(
         )
         # The support desk moves each open customer ticket one step on the same beat (decision 131).
         return {**(await run_due(d)), **(await advance_tickets(d))}
+    if job == "merge_departments":
+        # Run by the deploy after Terraform (decision 220): "Apps" folded into Application, once. Idempotent.
+
+        async def merge_settings() -> dict[str, Any]:
+            return await ledger.settings(default_settings())
+
+        md = CityDeps(
+            ledger=ledger,
+            bus=bus,
+            queue=queue,
+            factory=factory or Factory(ledger, bus, merge_settings),
+            settings=merge_settings,
+            max_review_rounds=3,
+        )
+        merged = await merge_replaced_departments(md)
+        return {"merged": json.dumps(merged)}
     if job in ("sweep", "retire_idle"):
         settings: Record = await ledger.settings(default_settings())
         minutes = int(settings.get("worker_idle_release_minutes") or 15)

@@ -15,7 +15,7 @@ a "waiting for you" sign while the publish approval is open, and a finished mark
 
 ## Flow
 ```
-owner → VAIC delegate_to_orchestrator → Orchestrator (department "Apps") → Manager → Worker(s)
+owner → VAIC delegate_to_orchestrator → Orchestrator (department "Application"; the Apps department was folded into it, decision 220) → Manager → Worker(s)
 worker builds in /tmp/work/<hire_id>/app/  →  tool submit_app  (worker runtime, workspace role)
    uploads files to s3://<workspaces>/hires/<hire_id>/app/<path>, puts event app.submitted
 EventBridge rule (type = app.submitted) → apps Lambda (vaic-prod-apps)
@@ -123,14 +123,14 @@ from the workspaces bucket (KMS decrypt), validates (`shared/apps.py`, shared wi
 - The deploy uploads nothing to the apps bucket.
 
 ## Prompts (`agents/`)
-- `agents/departments/apps.md` (new): self-contained web apps and games for AI City. One folder
+- `agents/departments/application.md`, section "Apps and games for AI City" (it was `apps.md` until decision 220 folded the Apps department into Application): self-contained web apps and games for AI City. One folder
   `app/` with `index.html`; plain HTML/CSS/JS, no build step, no CDN or network (it will be blocked), no
   `alert/confirm/prompt`, no popups, no storage (wrap any `localStorage` use in try/catch; keep state in
   memory), keyboard + mouse + touch, fits any size (it runs in an iframe), an `icon.svg`. **Original content
   only**: no recreation of an existing game, its name, characters, art, music or levels, even renamed.
   The manager's review checks: index.html present, runs offline, original, controls explained on screen,
   `submit_app` called and its draft is `ready` (the manager sees `app.draft` in the ticket history).
-- `orchestrator.md`: "a game, toy or small tool for AI City itself → the Apps department; after a PASS the
+- `orchestrator.md`: "a game, toy or small tool for AI City itself → Application (decision 220); after a PASS the
   city asks the owner to publish it, so don't promise it is live".
 - `vaic.md`: when the owner asks for a game or app, delegate; say it will appear under Apps after they
   approve it in Needs you.
@@ -148,7 +148,7 @@ from the workspaces bucket (KMS decrypt), validates (`shared/apps.py`, shared wi
   attributes, `src = preview_url`), Approve (primary) / Refuse.
 - Store: `apps` list from the snapshot/`GET /apps`, updated by `app.published` / `app.removed`;
   `appsUrl` from `config.json`.
-- City view (`web/src/city/`): the Apps department building appears on `department.created` (exists);
+- City view (`web/src/city/`): the Application building (decision 220; an app of the old Apps department stands there too) appears on `department.created` (exists);
   workers' activity bubbles (exist); add: a "waiting for you" sign on the building while a draft is
   `awaiting_owner` (`approval.requested` with kind `app.publish`), confetti + a small arcade-cabinet marker
   per published app at the building on `app.published` (from the snapshot after a reload), removed on

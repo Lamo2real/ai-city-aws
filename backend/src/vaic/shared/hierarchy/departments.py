@@ -8,11 +8,12 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from ..events import now_iso
 from ..ids import department_key, manager_id
 from ..ledger import Record
 from ..log import log
 from ..models import WORKER_MODELS, current_name
-from ..presets import preset_for
+from ..presets import preset_for, replaced_by
 from .actions import OPEN_ASSIGNMENT, CityDeps, _walk_home, move, send
 
 NAME_MAX = 40
@@ -20,10 +21,35 @@ DEMOLISHED_NOTE = "the owner demolished the department"
 
 
 def preset_named(name: str) -> dict[str, Any] | None:
-    """The preset whose own name or key this is (aliases don't count: "Customer Success" is not Support)."""
+    """The preset whose own name or key this is (aliases don't count: "Customer Success" is not Support), or the
+    preset that took over a department of this name ("Apps" is Application, decision 220)."""
+    if r := replaced_by(name):
+        return dict(r)
     p = preset_for(name)
     if p and department_key(name) in (department_key(p["name"]), department_key(p["key"])):
         return dict(p)
+    return None
+
+
+def choice_options(new: str, existing: str) -> list[str]:
+    """The owner's two answers when a new department would overlap an existing one (decision 220)."""
+    return [f"New department: {new}"[:60], f"Use {existing}"[:60]]
+
+
+def owner_pick(answer: str, new: str, existing: str) -> str | None:
+    """``create``, ``use`` or None (unclear) from the owner's tap or words for that question."""
+    a, n, e = department_key(answer), department_key(new), department_key(existing)
+    if not a:
+        return None
+    has_new, has_old = bool(n) and n in a, bool(e) and e in a
+    if has_new and not has_old:
+        return "create"
+    if has_old and not has_new:
+        return "use"
+    if a.startswith(("new", "create", "build", "make", "a-new", "yes-new")):
+        return "create"
+    if a.startswith(("use", "existing", "the-existing", "keep", "do-it-in", "in-the")):
+        return "use"
     return None
 
 
@@ -137,7 +163,7 @@ async def demolition_plan(d: CityDeps, dept: Record) -> dict[str, Any]:
     return {"name": dept["name"], "workers": workers, "parts": parts}
 
 
-async def demolish_department(d: CityDeps, dept: Record) -> dict[str, Any]:
+async def demolish_department(d: CityDeps, dept: Record, instead: str = "") -> dict[str, Any]:
     """Demolishes a standing department: every worker goes home, every open part of it is cancelled and handed
     back to the Orchestrator (one message per job, so it can re-plan with the other departments or tell VAIC),
     the manager retires, and the record stays in the ledger as history (``state: demolished``) so a demolished
@@ -176,8 +202,13 @@ async def demolish_department(d: CityDeps, dept: Record) -> dict[str, Any]:
                 "body": (
                     f"The owner demolished the {dept['name']} department. Its part of this job was cancelled: "
                     + "; ".join(g for g in goals if g)
-                    + ". Hand that part to another standing department if one fits, or report to VAIC what is "
-                    f"left undone. Do not create or use {dept['name']} again."
+                    + (
+                        f". Hand that part to the {instead} department, which took over its work."
+                        if instead
+                        else ". Hand that part to another standing department if one fits, or report to VAIC what "
+                        "is left undone."
+                    )
+                    + f" Do not create or use {dept['name']} again."
                 ),
             },
         )
@@ -189,3 +220,64 @@ async def demolish_department(d: CityDeps, dept: Record) -> dict[str, Any]:
     await d.bus.put({"type": "department.demolished", "name": dept["name"], "workers": sent, "parts": parts})
     log("info", "department.demolished", name=dept["name"], workers=sent, parts=parts, jobs=len(jobs))
     return {"name": dept["name"], "workers": sent, "parts": parts, "jobs": len(jobs)}
+
+
+MERGES_PK = "MIGRATIONS"
+
+
+async def merge_replaced_departments(d: CityDeps, files: Any = None) -> list[dict[str, Any]]:
+    """Folds each department a preset took over (``replaces`` in config/departments.json; "Apps" into Application,
+    decision 220) into that preset, once. Runs on deploy (the scheduler's ``merge_departments`` job) and again on
+    a City load until it has run, so it is idempotent: the old department is demolished through the normal path
+    (its workers go home, its open parts go back to the Orchestrator to hand to the preset, its manager retires,
+    its history stays), its published apps and drafts are re-homed to the preset, and so are its files when the
+    files store is given. A marker per old name records what was done; with it in place a call is one read."""
+    from ..apps import APPS_PK, DRAFTS_PK  # late: apps imports the ledger helpers this module shares
+    from ..presets import presets
+    from ..table import UpdateOptions
+
+    done: list[dict[str, Any]] = []
+    for p in presets():
+        for old in p.get("replaces") or []:
+            key = department_key(old)
+            mark = await d.ledger.table.get(MERGES_PK, f"DEPT_MERGE#{key}")
+            if mark and (mark.get("files_moved") or files is None):
+                continue
+            out: dict[str, Any] = {"from": old, "into": p["name"]}
+            if not mark:
+                rec = await d.ledger.get_department(old)
+                if rec and rec.get("state") != "demolished":
+                    r = await demolish_department(d, rec, instead=p["name"])
+                    out.update(demolished=True, workers=r["workers"], parts=r["parts"])
+                else:
+                    out.update(demolished=False, already_demolished=bool(rec))
+                moved = {"apps": 0, "drafts": 0}
+                for pk, kind in ((APPS_PK, "apps"), (DRAFTS_PK, "drafts")):
+                    for row in await d.ledger.table.query(pk):
+                        if department_key(str(row.get("department") or "")) == key:
+                            await d.ledger.table.update(pk, row["sk"], UpdateOptions(set={"department": p["name"]}))
+                            moved[kind] += 1
+                out.update(moved)
+                if rec:
+                    await d.ledger.table.update(f"DEPT#{key}", "META", UpdateOptions(set={"merged_into": p["name"]}))
+            if files is not None:
+                n = 0
+                for f in await files.all():
+                    if department_key(str(f.get("department") or "")) == key:
+                        await files.update(str(f["id"]), {"department": p["name"]})
+                        n += 1
+                out["files"] = n
+            await d.ledger.table.put(
+                {
+                    **(mark or {}),
+                    "pk": MERGES_PK,
+                    "sk": f"DEPT_MERGE#{key}",
+                    "into": p["name"],
+                    "at": (mark or {}).get("at") or now_iso(d.ledger.now()),
+                    **({"files_moved": True} if files is not None else {}),
+                    **({k: v for k, v in out.items() if k not in ("from", "into")}),
+                }
+            )
+            log("info", "department.merged", **{k: str(v) for k, v in out.items()})
+            done.append(out)
+    return done

@@ -1,5 +1,5 @@
 {
-  "$comment": "Pre-configured departments (decisions 113, 114). The Orchestrator uses these names when work fits; any other department is still created as data. Each department's manager prompt is agents/departments/<key>.md and its skills are agents/skills/<name>/SKILL.md. 'shared' tools and skills belong to every department. 'essential' marks the tools most businesses in that field use: Settings -> Departments and its setup guide put them first. Every url answered an MCP initialize on 2026-11-08 (401 with OAuth resource metadata, or 200). 'aka' lists other names the owner may use for a service. 'setup': 'own_app' marks servers whose sign-in has no self-registration (checked 2026-11-09, decision 141): the owner pastes their own app's id and secret, or an access token. 'not_offered' names services that can't be connected directly or safely, why in plain words, and the catalog services that do the job instead (decision 130). Read by backend/src/vaic/shared/presets.py; served by GET /departments/presets.",
+  "$comment": "Pre-configured departments (decisions 113, 114). The Orchestrator uses these names when work fits; any other department is still created as data. Each department's manager prompt is agents/departments/<key>.md and its skills are agents/skills/<name>/SKILL.md. 'shared' tools and skills belong to every department. 'essential' marks the tools most businesses in that field use: Settings -> Departments and its setup guide put them first. Every url answered an MCP initialize on 2026-11-08 (401 with OAuth resource metadata, or 200). 'aka' lists other names the owner may use for a service. 'setup': 'own_app' marks servers whose sign-in has no self-registration (checked 2026-11-09, decision 141): the owner pastes their own app's id and secret, or an access token. 'not_offered' names services that can't be connected directly or safely, why in plain words, and the catalog services that do the job instead (decision 130). 'replaces' names an older department this preset took over (decision 220): that name always means the preset, nothing builds it again, and its records are moved over once on deploy. Read by backend/src/vaic/shared/presets.py; served by GET /departments/presets.",
   "shared": {
     "name": "Shared by every department",
     "mission": "Tools every team uses: one Stripe account for everything sold, one place for tickets, chat, docs, files and meetings.",
@@ -11,7 +11,13 @@
     {
       "key": "application",
       "name": "Application",
+      "replaces": ["Apps"],
       "aliases": [
+        "apps",
+        "app",
+        "app studio",
+        "games",
+        "game development",
         "applications",
         "app development",
         "application development",
@@ -28,7 +34,7 @@
         "frontend",
         "full stack"
       ],
-      "mission": "Build the owner's software: web apps and sites, iOS and Android apps, backends and APIs, payments and integrations, tested and shipped through GitHub.",
+      "mission": "Build the owner's software: web apps, sites and games (the apps published in AI City too), iOS and Android apps, backends and APIs, payments and integrations, tested and shipped through GitHub.",
       "teams": [
         {
           "name": "Backend",

@@ -158,10 +158,11 @@ async def test_a_preset_gets_its_manager_with_its_first_goal_and_own_departments
     mgr = await d.ledger.get_agent("mgr-marketing")
     assert mgr and mgr["kind"] == "manager" and mgr["department"] == "Marketing"
     # Twelve presets exist; the ceiling (6 by default) counts only the owner's own departments.
-    for i in range(6):
-        out = await tool(d, ORCH, "create_department")({"name": f"Garden {i}", "mission": "Grow vegetables."})
+    # Six departments with nothing in common (one that overlaps another would ask the owner first, decision 220).
+    for name in ("Garden", "Bakery", "Choir", "Kennel", "Pottery", "Aviary"):
+        out = await tool(d, ORCH, "create_department")({"name": name, "mission": "Look after it."})
         assert out.startswith("Created"), out
-    refused = await tool(d, ORCH, "create_department")({"name": "Garden 6", "mission": "Grow vegetables."})
+    refused = await tool(d, ORCH, "create_department")({"name": "Orchard", "mission": "Grow trees."})
     assert refused.startswith("Refused")
     ok = await tool(d, ORCH, "create_department")({"name": "Sales", "mission": "Sell the owner's products."})
     assert "already exists" in ok

@@ -48,7 +48,13 @@ from vaic.shared.files.service import NotFound as FileNotFound
 from vaic.shared.files.wiring import files_from_env
 from vaic.shared.github import GitHubDeps, GitHubError, github_token_secret, whoami
 from vaic.shared.hierarchy.actions import CityDeps, answer_question, send_home, send_workers_home, sweep_stale_asks
-from vaic.shared.hierarchy.departments import DepartmentError, build_department, demolish_department, find_standing
+from vaic.shared.hierarchy.departments import (
+    DepartmentError,
+    build_department,
+    demolish_department,
+    find_standing,
+    merge_replaced_departments,
+)
 from vaic.shared.hierarchy.factory import Factory
 from vaic.shared.hierarchy.queue import Queue, WorkMessage
 from vaic.shared.hierarchy.tasks import DONE_OR_GONE, cancel_task, job_rows
@@ -358,6 +364,10 @@ async def city_snapshot(d: ApiDeps) -> dict[str, Any]:
             log("info", "departments.seeded", names=json.dumps(made))
     except Exception as e:  # the City still loads; the next snapshot tries again
         log("warn", "departments.seed_failed", error=type(e).__name__)
+    try:  # "Apps" folded into Application (decision 220): normally done on deploy; one read once it has run
+        await merge_replaced_departments(_action_deps(d), d.files.store if d.files is not None else None)
+    except Exception as e:
+        log("warn", "departments.merge_failed", error=type(e).__name__)
     if d.knowledge is not None:  # the built-in AI City guide, indexed in the Knowledge base
         await ensure_builtin_guide(d.knowledge.store, d.knowledge.blobs, d.knowledge.kb)
     results: list[Any] = await asyncio.gather(

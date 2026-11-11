@@ -5,7 +5,7 @@ import { applySnapshot, initialState, reduce } from "../src/city/city-state.js";
 import { AppFrame } from "../src/components/Apps.tsx";
 import { ProjectPage, ProjectsScreen } from "../src/components/Projects.tsx";
 import { Inbox } from "../src/components/Inbox.tsx";
-import { capped, onAppsOrigin, route } from "../src/lib/apps.ts";
+import { appsDepartment, capped, onAppsOrigin, route } from "../src/lib/apps.ts";
 import { loadConfig } from "../src/lib/config.ts";
 import { store } from "../src/lib/store.ts";
 
@@ -189,5 +189,16 @@ describe("screens", () => {
     expect(container.querySelectorAll(".btn-primary")).toHaveLength(1);
     expect(container.querySelector(".btn-primary")?.textContent).toBe("Approve");
     expect(screen.getByRole("button", { name: "Refuse" })).toBeTruthy();
+  });
+});
+
+describe("appsDepartment (decision 220)", () => {
+  it("puts every app at Application, the old Apps department's too", () => {
+    expect(appsDepartment({})).toBe("Application");
+    expect(appsDepartment({ department: null })).toBe("Application");
+    expect(appsDepartment({ department: "Apps" })).toBe("Application");
+    expect(appsDepartment({ department: "apps" })).toBe("Application");
+    expect(appsDepartment({ department: "Application" })).toBe("Application");
+    expect(appsDepartment({ department: "Media" })).toBe("Media");
   });
 });

@@ -85,6 +85,58 @@ def preset_for(name: str) -> Preset | None:
     return None
 
 
+def replaced_by(name: str) -> Preset | None:
+    """The preset that took over an older department of this name (``replaces``, decision 220): "Apps" is
+    Application. That name always means the preset, and nothing builds it again."""
+    n = _key(name or "")
+    for p in presets():
+        if n and n in {_key(r) for r in p.get("replaces") or []}:
+            return p
+    return None
+
+
+_GENERIC = {"and", "of", "the", "for", "a", "an", "to", "in", "on", "with", "team", "teams", "department",
+            "dept", "new", "own", "owner", "s", "everything", "business", "work", "what", "from", "all"}  # fmt: skip
+
+
+def _tokens(text: str) -> set[str]:
+    out = set()
+    for word in _key(text).split():
+        w = word[:-1] if len(word) > 3 and word.endswith("s") and not word.endswith("ss") else word
+        if w not in _GENERIC and len(w) > 1:
+            out.add(w)
+    return out
+
+
+def _vocabulary(dept: dict[str, Any]) -> set[str]:
+    name = str(dept.get("name", ""))
+    p = preset_for(name)
+    words = [name, str(dept.get("mission") or "")]
+    if p and _key(p["name"]) == _key(name):
+        words += [p["key"], p["mission"], *(p.get("aliases") or []), *(t["name"] for t in p.get("teams") or [])]
+        words += [str(t.get("does") or "") for t in p.get("teams") or []]
+    return set().union(*(_tokens(w) for w in words))
+
+
+def overlapping(name: str, standing: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The standing department whose work a new department called ``name`` would overlap (decision 220), or None.
+
+    A name that already is a standing department (its own name or a preset alias) is not an overlap: it is that
+    department. Otherwise the new name's words are matched against each department's name, mission, aliases and
+    teams; the best match wins (the earlier one on a tie)."""
+    resolved = preset_for(name) or replaced_by(name)
+    target = _key(resolved["name"] if resolved else name)
+    if any(_key(str(x.get("name", ""))) == target for x in standing):
+        return None
+    words = _tokens(name)
+    best, score = None, 0
+    for x in standing:
+        hit = len(words & _vocabulary(x))
+        if hit > score:
+            best, score = x, hit
+    return best
+
+
 def _connectors(ids: list[str], essential: list[str]) -> list[dict[str, Any]]:
     cat = catalog()
     return [{"id": c, **cat[c], "essential": c in essential} for c in ids if c in cat]

@@ -450,11 +450,11 @@ async def test_an_app_is_built_to_the_end_while_the_owner_is_away() -> None:
     d = deps()
     words = "Build me an app where my family can share a shopping list"
     out = await tool(d, vaic(), "start_workflow")({"workflow_id": APP, "owner_words": words})
-    assert "Handed to the Apps department as task" in out and "will finish it on its own" in out
+    assert "Handed to the Application department as task" in out and "will finish it on its own" in out
     assert "what you went with for must-have parts, look, paid or private" in out  # "my family" was said
     assert not d.bus.of_type("vaic.question")  # nothing was asked
     (msg,) = d.queue.sent
-    assert "Apps department" in msg["body"] and "without waiting for them" in msg["body"]
+    assert "Application department" in msg["body"] and "without waiting for them" in msg["body"]
     (t,) = [t for t in await d.ledger.list_tickets(("open",)) if t.get("kind") == "task"]
     assert words in t["brief"] and "The owner is away" in t["brief"] and "ask_taste" in t["brief"]
     assert "Look: Clean and light (assumed)" in t["brief"] and "how one page should behave" in t["brief"]
@@ -482,7 +482,7 @@ async def test_when_the_owner_is_here_the_app_is_planned_with_them_first() -> No
     out = await update({"values": {"paid_private": "Nothing paid or private"}})
     assert "Shall I build it, Sir?" in out and not d.queue.sent
     out = await tool(d, vaic(), "run_workflow")({"confirm": True})
-    assert out.startswith("Handed to the Apps department") and len(d.queue.sent) == 1
+    assert out.startswith("Handed to the Application department") and len(d.queue.sent) == 1
     assert await wf.Taste(d.ledger.table).all() == []  # nothing assumed, nothing to ask later
 
 
@@ -493,7 +493,7 @@ async def test_saying_im_off_mid_way_lets_the_team_start() -> None:
     )
     assert not d.queue.sent
     out = await tool(d, vaic(), "update_workflow")({"present": False})
-    assert "Handed to the Apps department" in out and len(d.queue.sent) == 1
+    assert "Handed to the Application department" in out and len(d.queue.sent) == 1
 
 
 async def test_ads_are_never_assumed_away_their_money_is_always_asked() -> None:

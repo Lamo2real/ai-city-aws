@@ -56,9 +56,11 @@ from vaic.shared.hierarchy.actions import (
 from vaic.shared.hierarchy.departments import (
     DepartmentError,
     build_department,
+    choice_options,
     demolish_department,
     demolition_plan,
     find_standing,
+    owner_pick,
     preset_named,
 )
 from vaic.shared.hierarchy.factory import WORKER_TOOLS, worker_spec
@@ -81,7 +83,8 @@ from vaic.shared.knowledge.site_profile import brand_key
 from vaic.shared.log import log
 from vaic.shared.models import model_label, model_name_for
 from vaic.shared.policy import decide, gate
-from vaic.shared.presets import preset_for
+from vaic.shared.presets import overlapping, preset_for, replaced_by
+from vaic.shared.table import UpdateOptions
 from vaic.shared.utility import UtilityDeps, about_ai_city, triage
 
 CITY_SERVER = "city"
@@ -343,6 +346,51 @@ def _vaic_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 if verdict.department
                 else ""
             ) + (f" ({verdict.reason})" if verdict.reason else "")
+        choice: dict[str, str] | None = None
+        if verdict and verdict.route == "new_department" and verdict.department:
+            # A new department whose work overlaps a standing one is the owner's call (decision 220): a new one
+            # with the suggested name, or the project in the best-fitting existing one.
+            standing = await d.ledger.list_departments()
+            same = preset_for(verdict.department) or replaced_by(verdict.department)
+            reason = f" ({verdict.reason})" if verdict.reason else ""
+            if same and any(department_key(str(x.get("name", ""))) == department_key(same["name"]) for x in standing):
+                hint = f"\nTriage suggests the {same['name']} department.{reason}"
+            elif near := overlapping(verdict.department, standing):
+                new = " ".join(verdict.department.split())[:40]
+                new = new[:1].upper() + new[1:]
+                pick = owner_pick(str(a.get("department_choice") or ""), new, str(near["name"]))
+                if not a.get("confirm") or pick is None:
+                    await d.bus.put(
+                        {
+                            "type": "vaic.question",
+                            "conversation": c.conversation or "main",
+                            "question": f"A new {new} department, or do it in {near['name']}?"[:200],
+                            "options": [*choice_options(new, str(near["name"])), "Not now"],
+                        }
+                    )
+                    log("info", "department.overlap", new=new, existing=str(near["name"]), at="vaic")
+                    return (
+                        f"Ask the owner first: this project would get a new department, {new}, but {near['name']} "
+                        "already does that kind of work. Their choices are on the screen as buttons. Ask in one "
+                        f"short sentence (“A new {new} department, or do it in {near['name']}?”) and stop. Nothing "
+                        "was started. When they pick, call delegate_to_orchestrator again with confirm=true and "
+                        "department_choice = their answer (the new name, or the existing department's); on no or "
+                        "not now, start nothing."
+                    )
+                if pick == "create":
+                    choice = {"create": new}
+                    hint = (
+                        f"\nThe owner chose a new department for this project: {new}. Create it with "
+                        "create_department and give it this work; existing departments may still take their own "
+                        "parts of it."
+                    )
+                else:
+                    choice = {"use": str(near["name"])}
+                    hint = (
+                        f"\nThe owner chose to do this project in the existing {near['name']} department instead "
+                        f"of a new {new} department: create no department for it. {near['name']} takes the main "
+                        "part; other existing departments may take their own parts."
+                    )
         open_cap = int((await d.settings()).get("max_open_jobs") or 3)
         # Standing orders' rounds (decision 125) don't take the owner's job slots.
         open_jobs = len([j for j in await running_jobs(d) if not j.get("standing_order")])
@@ -388,6 +436,7 @@ def _vaic_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 **({"brief": brief} if brief else {}),
                 **({"workers": workers} if workers else {}),
                 **({"references": refs} if refs else {}),
+                **({"department_choice": choice} if choice else {}),
                 "owner_words": str(a.get("owner_words", ""))[:500],  # so "the Porsche thing" finds it later
             },
         )
@@ -395,7 +444,7 @@ def _vaic_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         if target:
             body += (
                 f"\nThis changes the existing app “{target['title']}” ({target['app_id']}, version "
-                f"{target.get('version') or 1}). Send it to the Apps department; the result is a new version of it."
+                f"{target.get('version') or 1}). Send it to the Application department; the result is a new version of it."
             )
         if cons:
             body += f"\nConstraints: {cons}"
@@ -638,7 +687,9 @@ def _vaic_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             "time; otherwise leave it out and the team decides. When the owner points at stored files for the work "
             '("follow the best practices in my React guide", "make the UI like that sunset image"), find them with '
             "find_files and pass references: each file_id with use follow (guidance to follow) or inspiration (the "
-            "look), and a short note on what to take from it.",
+            "look), and a short note on what to take from it. When it says the work overlaps an existing department, "
+            "the owner picks with buttons: pass department_choice = their answer (the new department's name or the "
+            "existing one's) with confirm=true.",
             _obj(
                 {
                     "goal": _s(3),
@@ -661,8 +712,9 @@ def _vaic_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                         },
                     },
                     "confirm": {"type": "boolean"},
+                    "department_choice": _s(0, 100),
                 },
-                ("constraints", "app_id", "brief", "workers", "references", "confirm"),
+                ("constraints", "app_id", "brief", "workers", "references", "confirm", "department_choice"),
             ),
             delegate,
         ),
@@ -766,6 +818,8 @@ def _ask_owner(d: CityDeps, c: TurnCtx) -> ToolSpec:
 
 # ---------- Orchestrator ----------
 def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
+    ask_spec = _ask_owner(d, c)
+
     async def ensure_manager(dept: dict[str, Any]) -> dict[str, Any]:
         """A department's manager: hired the first time the department gets a goal (a preset stands empty until
         then), dormant until its first turn."""
@@ -788,6 +842,60 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         await d.bus.put({"type": "agent.hired", "agent": mgr})
         return mgr
 
+    async def overlap_gate(name: str, existing: list[dict[str, Any]]) -> str:
+        """A new department whose work overlaps a standing one waits for the owner's choice (decision 220): a new
+        one with this name, or the project in the best-fitting existing department. The choice VAIC already got
+        is on the task (``department_choice``); otherwise the owner is asked here, with buttons in Needs you.
+        Returns why nothing was created, or "" to go ahead."""
+        task = await d.ledger.get_ticket(c.task_id) or {}
+        chosen = task.get("department_choice") or {}
+        if chosen.get("use"):
+            return (
+                f"Not created: the owner chose to do this project in the existing {chosen['use']} department, "
+                f"not a new one. Send the work there with assign_to_department; other existing departments may "
+                "take their own parts."
+            )
+        if department_key(str(chosen.get("create") or "")) == department_key(name):
+            return ""
+        near = overlapping(name, existing)
+        if not near:
+            return ""
+        asked = task.get("department_question") or {}
+        if asked.get("id") and department_key(str(asked.get("new") or "")) == department_key(name):
+            q = await d.ledger.get_question(str(asked["id"])) or {}
+            if q.get("status") == "open":
+                return "Still waiting for the owner's answer on that department. End your turn."
+            pick = owner_pick(str(q.get("answer") or ""), name, str(asked.get("existing") or near["name"]))
+            if q.get("status") == "answered" and pick:
+                choice = {"create": name} if pick == "create" else {"use": str(asked.get("existing") or near["name"])}
+                await d.ledger.table.update(
+                    f"TICKET#{c.task_id}", "META", UpdateOptions(set={"department_choice": choice})
+                )
+                return "" if pick == "create" else await overlap_gate(name, existing)
+        options = choice_options(name, str(near["name"]))
+        said = await ask_spec.handler(
+            {
+                "question": (
+                    f"This project would get a new department, {name}, but {near['name']} already does that kind "
+                    f"of work. Create {name}, or do the project in {near['name']}?"
+                ),
+                "options": options,
+                "default_answer": options[1],
+            }
+        )
+        q_id = m.group(1) if (m := re.search(r"question (q-[\w-]+)", said)) else ""
+        await d.ledger.table.update(
+            f"TICKET#{c.task_id}",
+            "META",
+            UpdateOptions(set={"department_question": {"id": q_id, "new": name, "existing": str(near["name"])}}),
+        )
+        log("info", "department.overlap", new=name, existing=str(near["name"]), at="orchestrator")
+        return (
+            f"Not created yet: {name} overlaps {near['name']}, so the owner was asked which they want (question "
+            f"{q_id}). End your turn; their answer arrives as a new message, then call create_department again "
+            f"(it goes ahead only if they chose {name}) or assign to {near['name']}."
+        )
+
     async def create_department(a: dict[str, Any]) -> str:
         name = str(a["name"]).strip()
         preset = preset_for(name)
@@ -799,6 +907,8 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         existing = await d.ledger.list_departments()
         extra = [x for x in existing if not preset_named(str(x.get("name", "")))]
         known = any(department_key(str(x.get("name", ""))) == department_key(name) for x in existing)
+        if not preset and not known and (why := await overlap_gate(name, existing)):
+            return why
         if not preset and not known and len(extra) >= dept_cap:
             log("info", "department.refused", name=name, departments=len(extra), cap=dept_cap)
             return (
@@ -829,6 +939,8 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         return f"Created {dept['name']}, managed by {mgr['id']}."
 
     async def assign(a: dict[str, Any]) -> str:
+        if took_over := replaced_by(str(a["department"])):  # "Apps" is Application now (decision 220)
+            a = {**a, "department": took_over["name"]}
         dept = await d.ledger.get_department(str(a["department"]))
         if not dept and (preset := preset_for(str(a["department"]))):  # "Engineering" → IT
             dept = await d.ledger.get_department(preset["name"])

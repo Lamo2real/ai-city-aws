@@ -421,7 +421,7 @@
       "id": "app-build",
       "name": "App build",
       "summary": "A whole app built and finished by the team, from your idea to a working app under Projects.",
-      "department": "Apps",
+      "department": "Application",
       "connector": null,
       "skill": "web-frontend",
       "modes": ["do"],
