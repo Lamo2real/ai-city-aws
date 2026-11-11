@@ -523,7 +523,7 @@ disclosure and liability, vulnerable customers and self-harm): domain `complianc
 domain `agent-guardrails`, type `policy`. `_eval.yaml`: 17 questions, offline 17/17 in the top 5. Managers
 (`agents/departments/support.md`) and workers (`support.workers.md`) apply compliance, evidence, house style; follow
 section 27's tiers with `ask_owner` before gated actions; hand self-harm disclosures, legal threats and vulnerable
-customers to the owner at once; use section 28 for handoffs. The approval tiers are prompt rules (no department scope
+customers to the owner at once; use section 28 for handoffs. The approval tiers are prompt rules (the owner's choice) (no department scope
 in the policy gate); not built as for Application: Download, the versioned Replace, the shared scope.
 **Media (decision 233).** `knowledge/seed/media/`: 26 documents, one per numbered section of
 `knowledge/source/media-research.md` (verbatim, 28,866 words, SHA-256 pinned) plus "Media: About this knowledge base"
