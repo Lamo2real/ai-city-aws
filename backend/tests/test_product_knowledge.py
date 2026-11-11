@@ -219,12 +219,12 @@ def test_product_managers_and_workers_carry_the_knowledge_rules() -> None:
         assert "House style third, and by default" in text and "brand's own voice" in text
         assert "Never imitate Alex Hormozi" in text and "catchphrases or performance figures" in text
         assert "`entry_type` `policy`" in text and "`entry_type` `checklist`" in text
-        assert "Guardrails for the department's AI agents" in text and "ask_owner" in text
+        assert "Guardrails for the department's AI agents" in text and "is advice" in text  # decision 240
         for gated in ("price, packaging", "roadmap commitment", "personal data or uses AI in a new way", "legal-terms"):
-            assert gated in text, gated
+            assert gated in worker, gated  # the full list stays with the workers (decision 240)
         assert "needs_verification" in text and "[GAP]" in text and "[FAST-MOVING" in text
         assert "never final legal, tax or accounting advice" in text
-        assert "Handoffs with other departments" in text and "not a human approval" in text
+        assert "Handoffs with other departments" in text and "decision 240" in text
 
 
 # ---------- retrieval ----------

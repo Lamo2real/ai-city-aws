@@ -134,6 +134,18 @@ describe("connect cards follow the city's events", () => {
     store.event({ type: "connector.updated", id: "higgsfield", label: "Higgsfield", status: "ready", auth: "oauth" });
     expect(store.get().cards).toMatchObject([{ kind: "signin", status: "connected" }]);
   });
+  it("an ad campaign over the owner's limit gets a Start it / Don't start card (decision 240)", () => {
+    store.event({
+      type: "approval.requested",
+      id: "ap-9",
+      kind: "ad.spend",
+      action: "Start this ad campaign? …",
+      reason: 'Meta campaign "Spring sale" plans 600 USD; your ad spend limit is 500 USD per campaign.',
+    });
+    expect(store.get().cards).toMatchObject([{ kind: "approve", spend: true, action: expect.stringContaining("600") }]);
+    store.event({ type: "approval.decided", id: "ap-9", approved: true });
+    expect(store.get().cards).toEqual([]);
+  });
   it("mail accounts get a sign-in card, IMAP an app-password card", () => {
     store.event({ type: "connect.signin", account_id: "ma-1", provider: "microsoft", label: "Work" });
     store.event({ type: "connect.signin", account_id: "ma-2", provider: "imap", label: "Fastmail" });

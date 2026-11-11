@@ -19,6 +19,7 @@ from typing import Any
 
 from vaic.shared import executives as execs
 from vaic.shared import owner_api, skills_catalog
+from vaic.shared.ad_spend import AdLimitStore
 from vaic.shared.caps import SETTING_KEYS, settings_patch
 from vaic.shared.events import now_iso
 from vaic.shared.hierarchy.actions import CityDeps
@@ -75,6 +76,11 @@ def _show(v: Any, key: str) -> str:
     if isinstance(v, dict):
         return ", ".join(f"{k} {x}" for k, x in v.items()) or "none"
     return str(v)
+
+
+def _money(r: dict[str, Any]) -> str:
+    amount = float(r.get("amount") or 0)
+    return f"{amount:,.2f}".rstrip("0").rstrip(".") + f" {r.get('currency') or ''}".rstrip()
 
 
 def _norm(text: str) -> str:
@@ -307,6 +313,68 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         await d.bus.put(event)
         return "Done on the owner's screens (web and iPhone). Say what changed in one short sentence."
 
+    async def ad_limit(a: dict[str, Any]) -> str:
+        store = AdLimitStore(d.ledger.table, d.ledger.now)
+        action = str(a.get("action") or "")
+        waiting = [x for x in await d.ledger.pending_approvals() if x.get("kind") == "ad.spend"]
+        if action == "get":
+            cur = await store.get()
+            head = (
+                f"The ad spend limit is {_money(cur)} per campaign (set {str(cur['set_at'])[:10]})."
+                if cur
+                else "There is no ad spend limit: every campaign starts without asking."
+            )
+            if waiting:
+                head += " Waiting for the owner: " + "; ".join(f"{x['id']}: {x.get('reason', '')}" for x in waiting)
+            return head + " Say so."
+        if action == "history":
+            rows = await store.history()
+            if not rows:
+                return "The ad spend limit has never been set."
+            return "Changes, newest first: " + "; ".join(
+                f"{str(r['at'])[:10]} {'set to ' + _money(r) if r['action'] == 'set' else 'removed'}" for r in rows
+            )
+        if not c.from_owner:
+            return NOT_OWNER
+        if action in ("confirm", "refuse"):
+            want = str(a.get("approval_id") or "")
+            if not want and len(waiting) > 1:
+                return (
+                    "Several campaigns are waiting: "
+                    + "; ".join(f"{x['id']}: {x.get('reason', '')}" for x in waiting)
+                    + ". Ask which one."
+                )
+            ap = await d.ledger.get_approval(want) if want else (waiting[0] if waiting else None)
+            if not ap or ap.get("kind") != "ad.spend" or ap.get("status") != "pending":
+                return "No ad campaign is waiting for that answer. Check get_status or Needs you for the right one."
+            r = await d.owner_api(
+                {"method": "POST", "path": f"/approvals/{ap['id']}", "body": {"approved": action == "confirm"}}
+            )
+            ok = 200 <= int(r.get("statusCode", 500)) < 300
+            log("info" if ok else "error", "vaic.ad_spend_answer", id=ap["id"], approved=action == "confirm", ok=ok)
+            if not ok:
+                return "The city refused that answer: " + owner_api.summarise(r, cap=400)
+            return (
+                "Confirmed: the campaign starts now. Say so in one sentence."
+                if action == "confirm"
+                else "Refused: the campaign won't start. Say so in one sentence."
+            )
+        if action == "remove":
+            gone = await store.remove()
+            log("info", "vaic.ad_limit", action="remove", removed=gone)
+            return "Removed: there is no ad spend limit now." if gone else "There was no ad spend limit to remove."
+        if action == "set":
+            try:
+                rec = await store.set(float(a.get("amount") or 0), str(a.get("currency") or "USD"))
+            except (TypeError, ValueError) as e:
+                return str(e) or "The limit must be an amount above zero."
+            log("info", "vaic.ad_limit", action="set", amount=rec["amount"], currency=rec["currency"])
+            return (
+                f"Saved: the ad spend limit is now {_money(rec)} per campaign. Any campaign planned above it waits "
+                "for the owner's yes in the chat. Confirm the new value back in one sentence."
+            )
+        return "action is set, get, remove, history, confirm or refuse."
+
     return [
         ToolSpec(
             "city_api",
@@ -374,5 +442,32 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             ),
             hud,
             step=lambda a: "Changing your screen",
+        ),
+        ToolSpec(
+            "ad_spend_limit",
+            "The owner's ad spend limit, the one approval left (decision 240): a campaign whose total planned spend "
+            "(daily budget times days, or the lifetime budget) is over it waits for the owner's yes before it starts "
+            "or its budget is raised; below it, it just starts. It covers every agent and every ad connector. action "
+            "set with amount (a number) and currency (USD, EUR, SEK...; what the owner said, USD when they gave $) "
+            'when the owner says e.g. "confirm with me before any campaign over $500" or "make it $1,000"; it '
+            "replaces the old value at once, no Yes/No card. action get for the current limit (and history for past "
+            'changes), action remove to drop it. When the owner answers a waiting campaign in words ("yes, start '
+            "it\"), action confirm or refuse with approval_id (the ad.spend approval). Only on the owner's own "
+            "message. Say the new value back plainly.",
+            _obj(
+                {
+                    "action": {"type": "string", "enum": ["set", "get", "remove", "history", "confirm", "refuse"]},
+                    "amount": {"type": "number", "minimum": 0.01},
+                    "currency": _s(3, 8),
+                    "approval_id": _s(3, 64),
+                },
+                ("amount", "currency", "approval_id"),
+            ),
+            ad_limit,
+            step=lambda a: (
+                "Checking your ad spend limit"
+                if a.get("action") in ("get", "history")
+                else "Saving your ad spend limit"
+            ),
         ),
     ]

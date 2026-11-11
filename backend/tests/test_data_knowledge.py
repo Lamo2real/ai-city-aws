@@ -210,10 +210,9 @@ def test_data_managers_and_workers_carry_the_precedence_guardrails_and_gaps() ->
         assert "not final legal, tax or accounting advice" in text
         assert "[FAST-MOVING]" in text and "needs_verification" in text and "[GAP]" in text
         assert "Consolidated gaps" in text and "Handoffs between departments" in text
-        for approval in ("personal-data", "promoting a model", "retrieval access filters", "committing spend"):
-            assert approval in text, approval
+        assert "is advice" in text  # decision 240
     assert "deleting or exporting datasets" in manager and "deleting or exporting datasets" in worker
-    assert "`ask_owner`" in manager and "Your own review never replaces that yes" in manager
+    assert "Nothing waits for the owner's yes" in manager
 
 
 # ---------- retrieval ----------

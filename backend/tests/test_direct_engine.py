@@ -1,10 +1,12 @@
 """VAIC's direct Bedrock engine: streams text, runs city tools through the policy gate, loops on tool use."""
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 
 from vaic.runtime.direct import direct_engine
 from vaic.runtime.tools import ToolSpec
+from vaic.shared.table import MemoryTable
 
 
 def text_round(*pieces: str, stop: str = "end_turn") -> list[dict[str, Any]]:
@@ -42,6 +44,10 @@ class FakeBedrock:
 class Ledger:
     def __init__(self) -> None:
         self.audit: list[tuple[str, str]] = []
+        self.table = MemoryTable()  # the owner's ad spend limit is read from it (decision 240)
+
+    def now(self) -> datetime:
+        return datetime(2026, 11, 11, tzinfo=UTC)
 
     async def consume_approval(self, *_: Any) -> bool:
         return False

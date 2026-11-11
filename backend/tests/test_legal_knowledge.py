@@ -221,7 +221,7 @@ def test_legal_managers_and_workers_carry_the_knowledge_rules() -> None:
         assert "search_knowledge" in text and "law and compliance first" in text.lower()
         assert "independent evidence second" in text
         assert "`entry_type` `policy`" in text and "`entry_type` `checklist`" in text
-        assert "Guardrails for the department's AI agents" in text and "ask_owner" in text
+        assert "Guardrails for the department's AI agents" in text and "is advice" in text  # decision 240
         for gated in (
             "signing or accepting any contract",
             "legal position to a counterparty",
@@ -229,12 +229,12 @@ def test_legal_managers_and_workers_carry_the_knowledge_rules() -> None:
             "dispute",
             "commits the company legally",
         ):
-            assert gated in text, gated
+            assert gated in worker, gated  # the full list stays with the workers (decision 240)
         assert "needs_verification" in text and "[GAP]" in text and "[FAST-MOVING" in text
         assert "section 20" in text.lower()
         assert "never final legal, tax or accounting advice" in text
         assert "Hand-offs with the other departments" in text
-        assert "not a human approval" in text and "silence is never approval" in text.lower()
+        assert "decision 240" in text
 
 
 # ---------- retrieval ----------

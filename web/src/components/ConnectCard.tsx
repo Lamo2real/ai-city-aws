@@ -322,7 +322,14 @@ export function ImapCard(p: {
   );
 }
 
-function ApproveCard(p: { approvalId: string; action: string; reason: string; id: string; connectorId?: string }) {
+function ApproveCard(p: {
+  approvalId: string;
+  action: string;
+  reason: string;
+  id: string;
+  connectorId?: string;
+  spend?: boolean;
+}) {
   const [problem, setProblem] = useState<string | null>(null);
   const decide = async (yes: boolean) => {
     setProblem(null);
@@ -334,9 +341,10 @@ function ApproveCard(p: { approvalId: string; action: string; reason: string; id
     }
   };
   return (
-    <div className="connect-card" role="group" aria-label="Connect a service?">
+    <div className="connect-card" role="group" aria-label={p.spend ? "Start this ad campaign?" : "Connect a service?"}>
+      {p.spend ? <p>Start this ad campaign?</p> : null}
       <p>{p.action}</p>
-      <p className="mute">{p.reason}</p>
+      {p.reason ? <p className="mute">{p.reason}</p> : null}
       {problem ? (
         <p className="field-error" role="alert">
           {problem}
@@ -344,10 +352,10 @@ function ApproveCard(p: { approvalId: string; action: string; reason: string; id
       ) : null}
       <div className="row-end">
         <Button variant="quiet" onClick={() => decide(false)}>
-          Not now
+          {p.spend ? "Don't start" : "Not now"}
         </Button>
         <Button variant="secondary" onClick={() => decide(true)}>
-          Connect
+          {p.spend ? "Start it" : "Connect"}
         </Button>
       </div>
     </div>

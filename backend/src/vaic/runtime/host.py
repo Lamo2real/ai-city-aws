@@ -28,6 +28,7 @@ from vaic.shared.knowledge.search import always_block
 from vaic.shared.leads import is_job_report, save_lead_csvs
 from vaic.shared.log import log, metric
 from vaic.shared.models import resolve_role_from_env
+from vaic.shared.policy import NeedsApproval
 from vaic.shared.presets import orchestrator_note
 from vaic.shared.skills_bundled import department_skills
 from vaic.shared.turn import BackoffOptions, GateDeps, GatedTurn, TurnInput, TurnOutput, run_gated_turn
@@ -233,8 +234,8 @@ class AgentHost:
             settings = await self.d.settings()
             is_vaic = inv["role"] == "vaic"
 
-            async def on_needs_approval(tool: str, input: dict[str, Any], hash: str, reason: str) -> None:
-                await file_approval(self.d, ctx, tool, input, hash, reason)
+            async def on_needs_approval(tool: str, input: dict[str, Any], need: NeedsApproval) -> None:
+                await file_approval(self.d, ctx, tool, input, need.hash, need.reason, kind=need.kind)
 
             started: list[dict[str, Any]] = []  # VAIC's tool calls so far, said plainly if the owner presses Stop
 

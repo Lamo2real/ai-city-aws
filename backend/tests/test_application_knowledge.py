@@ -201,12 +201,12 @@ def test_application_managers_and_workers_carry_the_knowledge_rules() -> None:
         assert "search_knowledge" in text and "law and compliance first" in text.lower()
         assert "independent evidence second" in text
         assert "`entry_type` `policy`" in text and "`entry_type` `checklist`" in text
-        assert "Guardrails for the department's AI agents" in text and "ask_owner" in text
-        assert "lockfile" in text and "migration" in text and "secrets" in text and "pipelines" in text
+        assert "Guardrails for the department's AI agents" in text and "is advice" in text  # decision 240
+        assert "merge" in text and "secrets" in text
         assert "needs_verification" in text and "[GAP]" in text and "[FAST-MOVING" in text
         assert "never final legal, tax or accounting advice" in text
         assert "Handing work to and receiving work from other departments" in text
-        assert "not a human approval" in text
+        assert "decision 240" in text  # the approval list is advice
 
 
 # ---------- retrieval ----------

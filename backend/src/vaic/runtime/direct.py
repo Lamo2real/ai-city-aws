@@ -15,6 +15,7 @@ import threading
 import time
 from typing import Any
 
+from vaic.shared.ad_spend import spend_ask
 from vaic.shared.cost import Usage
 from vaic.shared.log import log
 from vaic.shared.policy import gate
@@ -202,10 +203,13 @@ async def _run_tool(req: EngineRequest, tools: dict[str, Any], use: dict[str, An
         except Exception as e:
             return await finished(f"The tool failed: {type(e).__name__}: {str(e)[:300]}", True)
         return await finished(out)
-    r = await gate(full, args, req.ctx.role, req.ctx.agent_id, consume_approval=req.ledger.consume_approval)
+    ask = await spend_ask(req.ledger.table, full, args, req.ledger.now())
+    r = await gate(
+        full, args, req.ctx.role, req.ctx.agent_id, consume_approval=req.ledger.consume_approval, spend_ask=ask
+    )
     await req.ledger.audit_tool(req.ctx.agent_id, full, r.decision, r.reason)
     if r.needs_approval and req.on_needs_approval:
-        await req.on_needs_approval(full, args, r.needs_approval.hash, r.needs_approval.reason)
+        await req.on_needs_approval(full, args, r.needs_approval)
     if r.decision != "allow":
         return result(r.reason, True)
     if req.on_activity:

@@ -219,11 +219,11 @@ def test_support_managers_and_workers_carry_the_precedence_and_guardrails() -> N
         assert "never use his name, likeness or catchphrases with customers" in text
         assert "brand's own voice" in text and "performance figures" in text
         assert "needs_verification" in text and "[GAP]" in text
-        assert "Guardrails for the department's AI agents" in text and "ask_owner" in text
+        assert "Guardrails for the department's AI agents" in text and "is advice" in text  # decision 240
         assert "self-harm" in text and "112" in text and "90101" in text and "do not counsel" in text
         assert "orientation for a human to confirm" in text and "legal, tax or accounting advice" in text
         assert "Handoffs between Customer support and the other departments" in text
-        assert "any refund" in text and "legal threat" in text
+        assert "refunds" in text and "legal threat" in text
 
 
 # ---------- retrieval ----------

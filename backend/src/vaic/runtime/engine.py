@@ -13,9 +13,10 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol, cast
 
+from vaic.shared.ad_spend import spend_ask
 from vaic.shared.cost import Usage
 from vaic.shared.ledger import Ledger
-from vaic.shared.policy import gate
+from vaic.shared.policy import NeedsApproval, gate
 from vaic.shared.turn import StopReason, TurnInput, TurnOutput
 
 from .skills import skill_allowed
@@ -33,7 +34,7 @@ class EngineRequest:
     ledger: Ledger
     on_text: Callable[[str], Awaitable[None]] | None = None
     """Text as it streams, for VAIC's spoken replies."""
-    on_needs_approval: Callable[[str, dict[str, Any], str, str], Awaitable[None]] | None = None
+    on_needs_approval: Callable[[str, dict[str, Any], NeedsApproval], Awaitable[None]] | None = None
     """Called when a built-in tool call needs the owner's approval for this exact action (tool, input, hash, reason)."""
     on_activity: Callable[[str, str | None], Awaitable[None]] | None = None
     """What the agent is doing, for the City view ("coding", "reading", ...)."""
@@ -242,10 +243,11 @@ def _options(req: EngineRequest, b: _Binding) -> Any:
             r_.ctx.role,
             r_.ctx.agent_id,
             consume_approval=r_.ledger.consume_approval,
+            spend_ask=await spend_ask(r_.ledger.table, name, input, r_.ledger.now()),
         )
         await r_.ledger.audit_tool(r_.ctx.agent_id, name, r.decision, r.reason)
         if r.needs_approval and r_.on_needs_approval:
-            await r_.on_needs_approval(name, input, r.needs_approval.hash, r.needs_approval.reason)
+            await r_.on_needs_approval(name, input, r.needs_approval)
         if r.decision == "allow":
             if r_.on_activity:
                 await r_.on_activity(activity_for(name), step_detail(name, input))

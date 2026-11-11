@@ -216,7 +216,7 @@ def test_finance_managers_and_workers_carry_the_knowledge_rules() -> None:
         assert "not final legal, tax or accounting advice" in text
         assert "Handoffs between Finance and the other departments" in text
         assert "compliance always overrides it" in text.lower()
-    assert "ask_owner" in manager and "auditor, an authority or an investor" in manager
+    assert "is advice" in manager and "auditor, an authority or an investor" in manager
 
 
 # ---------- retrieval ----------

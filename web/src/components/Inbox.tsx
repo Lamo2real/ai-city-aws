@@ -227,6 +227,7 @@ function whatHappens(a: CityApproval): string {
   if (p?.kind === "event")
     return `${p.action ?? "Change an event"}${p.title ? `: “${capped(p.title, 60)}”` : ""}${p.start ? ` on ${when(p.start)}` : ""}`;
   if (a.kind === "connector.add") return `Connect a new service: ${capped(a.action, 60)}`;
+  if (a.kind === "ad.spend") return `Start an ad campaign over your limit: ${capped(String(a.reason ?? ""), 90)}`;
   const tool = (a as { tool?: string }).tool;
   if (!tool || tool === "Bash") return "Run a command on its work computer";
   return `Use ${tool.replace(/^mcp__[^_]+__/, "").replace(/_/g, " ")}`;

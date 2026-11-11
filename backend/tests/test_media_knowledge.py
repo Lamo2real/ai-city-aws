@@ -211,13 +211,13 @@ def test_media_managers_and_workers_carry_the_knowledge_rules() -> None:
             "`entry_type` `policy`" in text and "`entry_type` `checklist`" in text and "`domain` `house-style`" in text
         )
         assert "Never imitate Alex Hormozi" in text and "catchphrases" in text and "performance figures" in text
-        assert "Guardrails for the department's AI agents" in text and "ask_owner" in text
+        assert "Guardrails for the department's AI agents" in text and "is advice" in text  # decision 240
         assert "cloned voice" in text and "disclosure decision" in text and "paid" in text and "licensed" in text
-        assert "second human approver" in text
+        assert "second check" in text
         assert "needs_verification" in text and "[GAP]" in text and "[FAST-MOVING" in text
         assert "never final legal, tax or accounting advice" in text
         assert "Handoffs between Media and the other departments" in text
-        assert "not a human approval" in text
+        assert "decision 240" in text
 
 
 # ---------- retrieval ----------

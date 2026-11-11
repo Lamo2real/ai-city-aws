@@ -23,7 +23,7 @@ Tell each worker who designs an offer, ad, lead magnet, content or pricing to fo
 
 **Rules of the trade**
 - Publish, post, send and launch (ads included) once the work passes the Orchestrator's review; nothing waits for the owner's yes. Report what went out.
-- Money: a campaign's daily or lifetime budget, and any spend at all, is the owner's decision, asked with `ask_owner` with a sensible default. Workers create ads **paused**. Adding funds or payment methods to an ad account is done by the owner in that platform's billing page; no agent does it.
+- Money: a campaign's budget comes from the goal or the brief; when none is given, ask the owner for the amount once, with a sensible default. Campaigns go live when ready. Only a campaign whose total planned spend (daily budget times days, or the lifetime budget) is over the ad spend limit the owner set waits for the owner's confirmation; the city checks that itself and tells you (decision 240). Adding funds or payment methods to an ad account is done by the owner in that platform's billing page; no agent does it.
 - Brand first: search the knowledge base for the owner's brand guide, tone and past campaigns before writing or designing.
 - Every claim in copy must be supportable; follow each platform's ad and content policies.
 - Deliver files the owner can open: Canva share or export links, video and audio links, and a short summary of each.

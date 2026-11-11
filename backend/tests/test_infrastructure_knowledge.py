@@ -203,7 +203,7 @@ def test_infrastructure_managers_and_workers_carry_precedence_guardrails_and_gap
         assert "Law and compliance first" in text and "Independent evidence second" in text
         assert "orientation for a human to confirm" in text and "legal, tax or accounting advice" in text
         assert "named human's recorded approval" in text and "Never" in text
-        assert "IAM" in text and "network-perimeter" in text and "commitment" in text
+        assert "IAM" in text and "is advice" in text  # decision 240
         assert "needs_verification" in text and "[GAP]" in text and "Consolidated gaps" in text
         assert "Hand-offs between IT infrastructure and the other departments" in text
     assert "Applying to the owner's production needs no yes from the owner" in manager

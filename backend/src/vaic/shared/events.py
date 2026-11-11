@@ -202,7 +202,7 @@ class ApprovalRequested(_E):
     action: str
     reason: str
     cost_hint: str | None = None
-    kind: Literal["tool", "app.publish", "connector.add"] = "tool"
+    kind: Literal["tool", "app.publish", "connector.add", "ad.spend"] = "tool"
     """``connector.add`` for an add-connector approval (the chat shows a connector card)."""
     connector_id: str | None = None
     preview: dict[str, Any] | None = None

@@ -386,8 +386,8 @@ async def decide(d: ChiefDeps, kind: Kind, item: Record, tries: int = 1) -> dict
 
 
 def _waiting(item: Record, auto: bool) -> bool:
-    if item.get("decided_by") == CHIEF:
-        return False
+    if item.get("decided_by") == CHIEF or item.get("kind") == "ad.spend":
+        return False  # an ad spend confirmation is the owner's alone, Autopilot or not (decision 240)
     return auto or not item.get("needs_owner_reason")
 
 

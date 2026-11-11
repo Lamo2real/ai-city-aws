@@ -209,7 +209,7 @@ def test_research_managers_and_workers_carry_precedence_guardrails_and_gaps() ->
         assert "personal data" in text and "deliverable" in text and "confidential" in text
         assert "needs_verification" in text and "[GAP]" in text and "Consolidated gaps" in text
         assert "Research: Handoffs with other departments" in text
-    assert "ask_owner" in manager and "Stop and escalate" in manager
+    assert "is advice" in manager and "Stop and escalate" in manager
 
 
 # ---------- retrieval ----------

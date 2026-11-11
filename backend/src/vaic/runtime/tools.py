@@ -20,6 +20,7 @@ from vaic.shared import company
 from vaic.shared import sales_pipeline as deals
 from vaic.shared import standing_orders as standing
 from vaic.shared import support_desk as desk
+from vaic.shared.ad_spend import spend_ask
 from vaic.shared.apps import (
     MAX_FILE_BYTES,
     MAX_FILES,
@@ -2305,8 +2306,10 @@ async def file_approval(
     hash: str,
     reason: str,
     preview: dict[str, Any] | None = None,
+    kind: str = "tool",
 ) -> None:
-    """Files an owner approval bound to this exact action (once per action while it is pending)."""
+    """Files an owner approval bound to this exact action (once per action while it is pending). ``kind``
+    ``ad.spend`` (the owner's ad spend limit, decision 240) is answered only by the owner, in the chat or Needs you."""
     if any(a.get("hash") == hash for a in await d.ledger.pending_approvals()):
         return
     cmd = input.get("command")
@@ -2318,8 +2321,10 @@ async def file_approval(
         "action": action,
         "hash": hash,
         "reason": reason,
-        "kind": "tool",
+        "kind": kind,
     }
+    if kind == "ad.spend":
+        rec["action"] = f"Start this ad campaign? {reason}"[:300]
     if preview:
         rec["preview"] = preview  # what Needs you shows (an email or an event), MAIL_CALENDAR.md §5.5
     a = await d.ledger.request_approval(rec)
@@ -2327,9 +2332,9 @@ async def file_approval(
         "type": "approval.requested",
         "id": a["id"],
         "agent": c.agent_id,
-        "action": action,
+        "action": rec["action"],
         "reason": reason,
-        "kind": "tool",
+        "kind": kind,
     }
     if preview:
         e["preview"] = preview
@@ -2345,10 +2350,12 @@ def gate_tools(d: CityDeps, c: TurnCtx, specs: list[ToolSpec]) -> list[ToolSpec]
 
         async def handler(args: dict[str, Any]) -> str:
             name = mcp_name(s.name)
-            r = await gate(name, args, c.role, c.agent_id, consume_approval=d.ledger.consume_approval)
+            ask = await spend_ask(d.ledger.table, name, args, d.ledger.now())
+            r = await gate(name, args, c.role, c.agent_id, consume_approval=d.ledger.consume_approval, spend_ask=ask)
             await d.ledger.audit_tool(c.agent_id, name, r.decision, r.reason)
             if r.needs_approval:
-                await file_approval(d, c, name, args, r.needs_approval.hash, r.needs_approval.reason)
+                n = r.needs_approval
+                await file_approval(d, c, name, args, n.hash, n.reason, kind=n.kind)
             if r.decision == "deny":
                 return f"Denied by policy: {r.reason}"
             bad = validate_args(s.schema, args)

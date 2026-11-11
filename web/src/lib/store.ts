@@ -46,7 +46,16 @@ export interface VaicTurn {
 }
 /** A connect card under VAIC's chat: an add-connector approval, a sign-in button, a key field or an app-password form. */
 export type ConnectCardState = (
-  | { kind: "approve"; id: string; approvalId: string; action: string; reason: string; connectorId?: string }
+  | {
+      kind: "approve";
+      id: string;
+      approvalId: string;
+      action: string;
+      reason: string;
+      connectorId?: string;
+      /** An ad campaign over the owner's ad spend limit (decision 240). */
+      spend?: boolean;
+    }
   | {
       kind: "signin";
       id: string;
@@ -365,6 +374,16 @@ class Store {
         connectorId: s("connector_id") || undefined,
       });
     }
+    if (e.type === "approval.requested" && e.kind === "ad.spend")
+      // Over the owner's ad spend limit: only the owner's yes starts it (decision 240).
+      return this.putCard({
+        kind: "approve",
+        id: `ap:${s("id")}`,
+        approvalId: s("id"),
+        action: s("reason"),
+        reason: "",
+        spend: true,
+      });
     if (e.type === "approval.decided") return this.dropCard(`ap:${s("id")}`);
     if (e.type === "connect.signin") {
       const label = s("label");
