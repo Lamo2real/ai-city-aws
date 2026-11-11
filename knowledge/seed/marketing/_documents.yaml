@@ -1,0 +1,110 @@
+# Whole documents kept byte for byte in this folder (docs/KNOWLEDGE.md section 17, decision 222). Each is seeded as
+# one entry with the file as its text; its fields are here so the file itself stays exactly as the owner gave it.
+# cross_refs: the section numbers the document cites in the main research document, mapped to the entries that hold
+# those sections now (the research was split into entries).
+documents:
+- file: marketing-hormozi-playbook.md
+  id: marketing.house-style.hormozi-playbook
+  department: marketing
+  domain: house-style
+  title: 'Marketing: House style (Hormozi playbook)'
+  summary: 'The owner''s chosen default style for offers, lead magnets, ads, content and pricing sequences: the
+    value equation, Grand Slam offers, lead magnets, the Core Four, hook-retain-reward content, call-out-value-CTA
+    ads and the money model, with guardrails and a pre-flight checklist. A house style, not evidence: compliance
+    always overrides it, and the strategy, unit-economics and measurement entries govern budget split and how results
+    are judged.'
+  type: house-style
+  audience: both
+  confidence: house-style
+  volatility: annual
+  platforms: []
+  objectives:
+  - leads
+  - sales
+  - consideration
+  as_of: '2026-11-11'
+  review_by: '2027-11-11'
+  related:
+  - strategy.brand-and-activation-split
+  - strategy.value-proposition-and-messaging
+  - measurement.unit-economics-formulas
+  - creative.cross-platform-creative-rules
+  - compliance.sweden-misleading-claims-and-prices
+  - compliance.eu-email-and-sms-consent
+  cross_refs:
+    '1':
+    - campaign-planning.briefs
+    - campaign-planning.objectives-and-kpis
+    - campaign-planning.planning-order-and-plan-contents
+    - strategy.brand-and-activation-split
+    - strategy.budget-allocation
+    - strategy.budget-setting
+    - strategy.category-entry-points
+    - strategy.distinctive-brand-assets
+    - strategy.how-brands-grow
+    - strategy.icp-and-buying-groups
+    - strategy.jobs-to-be-done
+    - strategy.positioning
+    - strategy.segmentation-and-category-reach
+    - strategy.value-proposition-and-messaging
+    '2':
+    - measurement.unit-economics-formulas
+    - measurement.ltv-cac-benchmarks
+    '3':
+    - measurement.triangulation
+    - measurement.lift-tests-and-mmm-tools
+    - measurement.experiment-design
+    - measurement.utm-governance
+    '4':
+    - meta-ads.ai-info-labels
+    - meta-ads.attribution-changes-2026
+    - meta-ads.capi-emq-and-conversion-lift
+    - meta-ads.click-to-message-and-whatsapp
+    - meta-ads.creative-diversification
+    - meta-ads.delivery-and-account-structure
+    - meta-ads.existing-customers-and-budget-type
+    - meta-ads.generative-features-and-ai-terms
+    - meta-ads.learning-phase-and-budgets
+    - meta-ads.partnership-ads
+    - meta-ads.playbook-lead-generation
+    - meta-ads.playbooks-ecommerce-local-apps
+    - meta-ads.sensitive-data-sources
+    - meta-ads.special-ad-categories
+    '10':
+    - tiktok-ads.creative-and-ai-disclosure
+    - tiktok-ads.gmv-max-spark-and-search
+    - tiktok-ads.lead-generation
+    - tiktok-ads.smart-plus-and-learning
+    - tiktok-ads.tracking-benchmarks-and-regulation
+    - tiktok-organic.watch-time-and-keywords
+    '13':
+    - creative.ai-generated-creative
+    - creative.cross-platform-creative-rules
+    - creative.what-drives-effectiveness
+    '17':
+    - creator-marketing.budgets-and-tiers
+    - creator-marketing.rates-rights-and-whitelisting
+    - creator-marketing.selection-contracts-and-measurement
+    '19':
+    - compliance.accessibility-b2c
+    - compliance.ai-act-article-50
+    - compliance.eu-cookie-consent-and-pending-reforms
+    - compliance.eu-email-and-sms-consent
+    - compliance.eu-platform-rules
+    - compliance.green-claims
+    - compliance.nordic-b2b-email
+    - compliance.political-ads-eu
+    - compliance.sweden-ad-disclosure
+    - compliance.sweden-cookies-and-meta-pixel
+    - compliance.sweden-misleading-claims-and-prices
+    - compliance.sweden-sector-rules
+    - compliance.sweden-telemarketing
+    - compliance.uk-and-us-endorsements
+    '20':
+    - market-sweden.benchmarks-email-only
+    - market-sweden.copy-norms
+    - market-sweden.ecommerce-payment-and-delivery
+    - market-sweden.platform-usage
+    - market-sweden.search-ai-media-and-ad-market
+    - market-sweden.seasonal-calendar
+  seed_version: 1

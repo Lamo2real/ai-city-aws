@@ -45,9 +45,20 @@ def load_prompt(file: str, vars: dict[str, str] | None = None) -> Prompt:
     return replace(p, body=render(p.body, vars or {}))
 
 
-def department_template(department: str) -> str:
+def _department_file_key(department: str) -> str:
     preset = preset_for(department)  # "Data & Analytics", "Customer Support", "Engineering" → data, support, it
-    key = preset["key"] if preset else re.sub(r"[^a-z0-9]+", "-", department.lower())
+    return preset["key"] if preset else re.sub(r"[^a-z0-9]+", "-", department.lower())
+
+
+def department_template(department: str) -> str:
     d = agents_dir() / "departments"
-    f = d / f"{key}.md"
+    f = d / f"{_department_file_key(department)}.md"
     return (f if f.is_file() else d / "default.md").read_text(encoding="utf-8").strip()
+
+
+def department_worker_rules(department: str) -> str:
+    """What every worker of a department must follow (``agents/departments/<key>.workers.md``), or nothing."""
+    if not department:
+        return ""
+    f = agents_dir() / "departments" / f"{_department_file_key(department)}.workers.md"
+    return f.read_text(encoding="utf-8").strip() if f.is_file() else ""

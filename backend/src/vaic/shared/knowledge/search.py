@@ -117,7 +117,7 @@ def entry_visible(item: dict[str, Any], caller: Caller | None) -> bool:
     return not c.platforms or bool(set(c.platforms) & set(item.get("platforms") or []))
 
 
-def entry_block(item: dict[str, Any], today: date | None = None) -> str:
+def entry_block(item: dict[str, Any], today: date | None = None, snippets: list[str] | None = None) -> str:
     """A whole entry with what an agent needs to hedge: dates, volatility, confidence and sources."""
     stale = (
         item.get("volatility") == "fast-moving"
@@ -128,7 +128,16 @@ def entry_block(item: dict[str, Any], today: date | None = None) -> str:
         for k in ("department", "domain", "type", "as_of", "review_by", "volatility", "confidence", "origin")
         if item.get(k)
     )
-    body = str(item.get("content") or "")[:ENTRY_CHARS]
+    body = str(item.get("content") or "")
+    if len(body) > ENTRY_CHARS:
+        # A long whole document: the passages that matched, not a cut-off start (decision 222).
+        body = "\n…\n".join(snippets) if snippets else body[:ENTRY_CHARS]
+    refs = item.get("cross_refs") or {}
+    if refs:
+        body += (
+            "\n\nCross-references (sections of the main research and the entries that hold them now):\n"
+            + "\n".join(f"- section {k}: {', '.join(v)}" for k, v in refs.items())
+        )
     sources = "\n".join(f"- {s}" for s in (item.get("sources") or [])[:20])
     return (
         f'<knowledge entry="{_attr(item.get("entry_id"))}" title="{_attr(item.get("title"))}"{attrs}'
@@ -221,7 +230,7 @@ class SearchResult:
         parts: list[str] = []
         for item, snippets in self.items:
             if item.get("entry_id"):
-                parts.append(entry_block(item))
+                parts.append(entry_block(item, snippets=snippets))
                 continue
             parts.append(knowledge_block(item, "\n…\n".join(snippets), self.statuses.get(item["id"])))
         for item in self.related_items:

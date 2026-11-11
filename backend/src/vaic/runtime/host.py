@@ -39,7 +39,7 @@ from .gateway import GatewayClient, turn_connector_tools
 from .github_auth import GitAuth
 from .live import LiveReply, Send
 from .mail_tools import mail_level, mail_tools
-from .prompts import department_template, load_prompt
+from .prompts import department_template, department_worker_rules, load_prompt
 from .references import refs_note, task_refs, worker_material
 from .skills import SkillStore, empty_home, use_skill_tool
 from .stop import unless_stopped
@@ -531,6 +531,7 @@ class AgentHost:
                     "specialty": agent.get("specialty") or agent["role"],
                     "parent": agent.get("parent") or manager_id(inv.get("department") or ""),
                     "instructions": str(spec.get("instructions", "")),
+                    "department_rules": department_worker_rules(str(inv.get("department") or "")),
                     "tools": ", ".join(granted),
                 },
             ).body,

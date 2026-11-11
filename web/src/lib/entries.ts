@@ -2,7 +2,7 @@
 // which the owner can read, edit, delete, reset to the shipped default, re-index and add to.
 import { api } from "./api.ts";
 
-export type EntryType = "principle" | "playbook" | "checklist" | "benchmark" | "policy" | "glossary";
+export type EntryType = "principle" | "playbook" | "checklist" | "benchmark" | "policy" | "glossary" | "house-style";
 export type EntryStatus = "processing" | "ready" | "failed" | "deleted" | "retired";
 
 export interface EntryRow {
@@ -39,6 +39,9 @@ export interface Entry extends EntryRow {
   sources?: string[];
   related?: string[];
   requires?: string[];
+  /** A whole document's own references: "section 19" → the entries that hold it now (decision 222). */
+  cross_refs?: Record<string, string[]>;
+  document?: string;
   newer_default?: (Partial<Entry> & { seed_hash?: string }) | null;
 }
 
@@ -93,6 +96,7 @@ export const entriesApi = {
 /** Short state words for a row, most important first. */
 export function entryFlags(e: EntryRow, today = new Date().toISOString().slice(0, 10)): string[] {
   const out: string[] = [];
+  if (e.type === "house-style") out.push("House style");
   if (e.retired) out.push("Retired");
   else if (e.deleted) out.push("Deleted");
   if (e.origin === "user") out.push("Yours");

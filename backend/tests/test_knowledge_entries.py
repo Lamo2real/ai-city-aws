@@ -61,6 +61,8 @@ def test_every_seed_file_validates_and_ids_are_unique() -> None:
 def test_every_entry_is_atomic_sourced_and_free_of_gap_passages() -> None:
     tax = SEEDS.taxonomies["marketing"]
     for e in SEEDS.entries.values():
+        if e.document:  # a whole document kept unchanged (decision 222)
+            continue
         words = len(e.body.split())
         assert 90 <= words <= 700, (e.id, words)
         assert "[GAP" not in e.body, e.id
@@ -551,3 +553,62 @@ async def test_ingest_retries_while_bedrock_throttles() -> None:
     r.kb.throttle = 99
     with pytest.raises(ThrottlingException):
         await r.projector.ingest(docs)
+
+
+# ---------- the house-style document (decision 222) ----------
+PLAYBOOK = "marketing.house-style.hormozi-playbook"
+PLAYBOOK_SHA256 = "668e6d6cec506db8d882eaa84bfab41d895b5e95e080597ee9f5e914434ffb0e"
+
+
+def test_the_house_style_playbook_is_stored_unchanged_and_seeded_as_one_document() -> None:
+    import hashlib
+
+    path = seed_root() / "marketing" / "marketing-hormozi-playbook.md"
+    raw = path.read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == PLAYBOOK_SHA256  # byte for byte what the owner gave
+    e = SEEDS.entries[PLAYBOOK]
+    assert e.document == "marketing-hormozi-playbook.md" and e.body == raw.decode().strip()
+    assert e.title == "Marketing: House style (Hormozi playbook)"
+    assert e.confidence == "house-style" and e.type == "house-style" and e.domain == "house-style"
+    assert len(e.sources) > 20
+
+
+def test_the_playbooks_section_numbers_point_to_the_entries_that_hold_them() -> None:
+    e = SEEDS.entries[PLAYBOOK]
+    refs = dict(e.cross_refs)
+    assert set(refs) == {"1", "2", "3", "4", "10", "13", "17", "19", "20"}
+    assert all(r in SEEDS.entries for ids in refs.values() for r in ids)
+    assert "marketing.compliance.sweden-misleading-claims-and-prices" in refs["19"]
+    assert all(r.split(".")[1] == "market-sweden" for r in refs["20"])
+    assert "section 19 → " in index_parts(e, "Marketing")[0]
+
+
+async def test_a_long_document_comes_back_as_its_matching_passages_with_cross_references() -> None:
+    from vaic.shared.knowledge.search import entry_block
+
+    rec = {**SEEDS.entries[PLAYBOOK].fields(), "title": "T"}
+    out = entry_block(rec, snippets=["the value equation passage"])
+    assert "the value equation passage" in out and "Status of this section" not in out
+    assert "- section 19: marketing.compliance." in out
+
+
+def test_marketing_managers_and_workers_are_told_to_apply_the_house_style_within_its_limits() -> None:
+    from vaic.runtime.prompts import department_template, department_worker_rules
+
+    for text in (department_template("Marketing"), department_worker_rules("Marketing")):
+        assert "House style (Hormozi playbook)" in text
+        assert "Compliance entries" in text and "override" in text
+        assert "never use his name, likeness or catchphrases" in text
+        assert "brand's own voice" in text
+    assert "budget split" in department_template("Marketing")
+    assert department_worker_rules("Sales") == "" and department_worker_rules("") == ""
+
+
+async def test_the_playbook_survives_a_redeploy_after_the_owner_edits_it() -> None:
+    r = rig()
+    seeds = small(PLAYBOOK)
+    s = EntryService(r.registry, r.projector, seeds=lambda: seeds)
+    assert (await run_seed(seeds, r.registry, r.projector, MODEL)).counts() == {"create": 1}
+    await s.update(PLAYBOOK, {"summary": "Our own summary."})
+    assert (await run_seed(seeds, r.registry, r.projector, MODEL)).changed() == []
+    assert (await r.registry.get(PLAYBOOK) or {})["summary"] == "Our own summary."

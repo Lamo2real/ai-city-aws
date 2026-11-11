@@ -41,6 +41,7 @@ describe("department knowledge entries", () => {
     expect(entryFlags(row({ user_modified: true, has_newer_default: true }))).toEqual(["Edited", "Newer default"]);
     expect(entryFlags(row({ deleted: true, user_modified: true }))).toEqual(["Deleted", "Edited"]);
     expect(entryFlags(row({ origin: "user" }))).toEqual(["Yours"]);
+    expect(entryFlags(row({ type: "house-style" }))).toEqual(["House style"]);
     expect(entryFlags(row({ sync: "failed" }))).toEqual(["Not indexed"]);
     expect(entryFlags(row({ status: "processing" }))).toEqual(["Indexing"]);
     expect(entryFlags(row({ volatility: "fast-moving", review_by: "2026-01-01" }), "2026-11-11")).toEqual([

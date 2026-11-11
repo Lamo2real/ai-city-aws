@@ -226,3 +226,9 @@ Every `[GAP]` passage in `knowledge/source/marketing-research.md`, by the entry 
 
 ## marketing.youtube-ads.measurement-and-costs
 - No first-party 2026 dataset of YouTube cost per view or CPM by format exists in the sources; Google's dedicated connected-TV buying documentation, Shorts safe-zone dimensions and campaign-level frequency cap settings for standard Video and Demand Gen campaigns were not fetched. YouTube organic search and recommendation guidance is in section 8.
+
+## marketing.house-style.hormozi-playbook
+The document is kept unchanged, so these lines stay in it, labelled [GAP]; they are listed here for the next research pass.
+- The three books ($100M Offers, 2021; $100M Leads, 2023; $100M Money Models, 2025) were not read directly for this section; every item below comes from third-party summaries, podcast summaries and notes, read on 11 November 2026, so exact wording and step counts should be checked against the books before being quoted.
+- That legal point was not verified against primary text in this research; see section 19 and take legal advice for specific claims.
+- No independent study was found that measures the effect of any of these frameworks. The books' own step counts, examples and scripts were not verified. Hormozi's guidance specific to software companies is limited to cautions; no SaaS-specific playbook from him was found.

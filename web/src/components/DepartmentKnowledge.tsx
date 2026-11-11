@@ -23,6 +23,7 @@ const FLAG_TONE: Record<string, string> = {
   Indexing: "processing",
   "Past review date": "old",
   "Newer default": "builtin",
+  "House style": "dept",
 };
 
 export function DepartmentKnowledge() {
@@ -228,6 +229,16 @@ function EntryView(p: { row: EntryRow; list: EntryList; reload: () => Promise<vo
                   {s}
                 </a>
               </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+      {entry.cross_refs && Object.keys(entry.cross_refs).length ? (
+        <details>
+          <summary>Cross-references</summary>
+          <ul>
+            {Object.entries(entry.cross_refs).map(([k, ids]) => (
+              <li key={k}>{`Section ${k}: ${ids.map((i) => i.split(".").slice(1).join(" › ")).join(", ")}`}</li>
             ))}
           </ul>
         </details>

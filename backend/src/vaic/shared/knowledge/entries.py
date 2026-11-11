@@ -23,9 +23,10 @@ from ..config import _load as load_config
 from ..config import repo_root
 from ..ids import department_key
 
-ENTRY_TYPES = ("principle", "playbook", "checklist", "benchmark", "policy", "glossary")
+ENTRY_TYPES = ("principle", "playbook", "checklist", "benchmark", "policy", "glossary", "house-style")
 AUDIENCES = ("manager", "worker", "both")
-CONFIDENCES = ("established", "vendor", "platform-claim", "contested", "inference")
+CONFIDENCES = ("established", "vendor", "platform-claim", "contested", "inference", "house-style")
+"""``house-style``: the owner's chosen default style, not evidence (decision 222)."""
 VOLATILITIES = ("evergreen", "annual", "fast-moving")
 ORIGINS = ("system", "user")
 ITEM_PREFIX = "kn-"
@@ -80,6 +81,10 @@ class Entry:
     requires: tuple[str, ...] = ()
     supersedes: tuple[str, ...] = ()
     seed_version: int = 1
+    cross_refs: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    """A whole document's own references (``section 19`` → the entries that hold it now); empty for entries."""
+    document: str = ""
+    """For a whole document stored unchanged: its file name in the department folder."""
 
     @property
     def item_id(self) -> str:
@@ -107,6 +112,9 @@ class Entry:
             "supersedes": list(self.supersedes),
             "seed_version": self.seed_version,
             "content": self.body,
+            # Only when set, so entries without them keep their content hash.
+            **({"cross_refs": {k: list(v) for k, v in self.cross_refs}} if self.cross_refs else {}),
+            **({"document": self.document} if self.document else {}),
         }
 
     def content_hash(self) -> str:
@@ -286,6 +294,13 @@ def entry_from_meta(meta: dict[str, Any], body: str, tax: Taxonomy) -> Entry:
     for k, refs in links.items():
         if bad := [r for r in refs if not ENTRY_ID_RE.fullmatch(r) or r == eid]:
             raise EntryError(f"{k} has an invalid or self reference: {bad[0]}")
+    refs_raw = meta.get("cross_refs") or {}
+    if not isinstance(refs_raw, dict):
+        raise EntryError("cross_refs must map a reference (a section number) to entry ids")
+    cross_refs = tuple(
+        (str(k), tuple(_full_id(str(r), dept) for r in (v or [])))
+        for k, v in sorted(refs_raw.items(), key=lambda x: _ref_order(str(x[0])))
+    )
     try:
         seed_version = int(meta.get("seed_version") or 1)
     except (TypeError, ValueError) as e:
@@ -310,7 +325,13 @@ def entry_from_meta(meta: dict[str, Any], body: str, tax: Taxonomy) -> Entry:
         requires=links["requires"],
         supersedes=links["supersedes"],
         seed_version=max(1, seed_version),
+        cross_refs=cross_refs,
+        document=str(meta.get("document") or ""),
     )
+
+
+def _ref_order(k: str) -> tuple[int, str]:
+    return (int(k), "") if k.isdigit() else (10**6, k)
 
 
 def entry_from_fields(f: dict[str, Any], tax: Taxonomy) -> Entry:
@@ -336,6 +357,10 @@ def validate_links(entries: dict[str, Entry], known: set[str] | None = None) -> 
             for r in getattr(e, k):
                 if r not in ids:
                     out.append(f"{e.id}: {k} points to {r}, which does not exist")
+        for ref, targets in e.cross_refs:
+            for r in targets:
+                if r not in ids:
+                    out.append(f"{e.id}: cross reference {ref} points to {r}, which does not exist")
     return out
 
 
@@ -350,10 +375,13 @@ def load_seeds(root: Path | None = None) -> SeedSet:
             out.errors.append(f"{dept}/_taxonomy.yaml: {err}")
             continue
         out.taxonomies[dept] = tax
+        documents = _load_documents(base / dept, tax, out)
         for path in sorted((base / dept).rglob("*.md")):
             rel = path.relative_to(base).as_posix()
             if any(part.startswith("_") for part in path.relative_to(base / dept).parts):
                 continue
+            if path.parent == base / dept and path.name in documents:
+                continue  # a whole document, read through _documents.yaml
             try:
                 meta, body = split_front_matter(path.read_text(encoding="utf-8"))
                 e = entry_from_meta(meta, body, tax)
@@ -372,6 +400,43 @@ def load_seeds(root: Path | None = None) -> SeedSet:
     return out
 
 
+def _load_documents(folder: Path, tax: Taxonomy, out: SeedSet) -> set[str]:
+    """Whole documents kept byte for byte in the department folder (``<name>.md`` with no front matter), described
+    by ``_documents.yaml``: one entry each, with the file as its text. Returns the file names it covers."""
+    side = folder / "_documents.yaml"
+    if not side.is_file():
+        return set()
+    try:
+        rows = (yaml.safe_load(side.read_text(encoding="utf-8")) or {}).get("documents") or []
+    except yaml.YAMLError as bad:
+        out.errors.append(f"{tax.department}/_documents.yaml: not valid YAML ({str(bad).splitlines()[0]})")
+        return set()
+    names: set[str] = set()
+    for row in rows:
+        name = str(row.get("file") or "")
+        names.add(name)
+        rel = f"{tax.department}/_documents.yaml ({name or 'no file'})"
+        path = folder / name
+        if not name.endswith(".md") or "/" in name or not path.is_file():
+            out.errors.append(f"{rel}: file must be a .md file in the department folder")
+            continue
+        body = path.read_text(encoding="utf-8")
+        meta = {k: v for k, v in row.items() if k != "file"}
+        meta["document"] = name
+        if not meta.get("sources"):
+            meta["sources"] = list(dict.fromkeys(re.findall(r"\]\((https?://[^)\s]+)\)", body)))[:MAX_LIST]
+        try:
+            e = entry_from_meta(meta, body, tax)
+        except EntryError as err:
+            out.errors.append(f"{rel}: {err}")
+            continue
+        if e.id in out.entries:
+            out.errors.append(f"{rel}: duplicate id {e.id}")
+            continue
+        out.entries[e.id] = e
+    return names
+
+
 def entry_markdown(e: Entry) -> str:
     """The seed-file form of an entry (front matter + body): what ``load_seeds`` reads back."""
     meta = {k: v for k, v in e.fields().items() if k not in ("entry_id", "content")}
@@ -379,6 +444,7 @@ def entry_markdown(e: Entry) -> str:
     for k in ("related", "requires", "supersedes"):
         if not meta[k]:
             del meta[k]
+    meta.pop("document", None)
     fm = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True, width=1000)
     return f"---\n{fm}---\n\n{e.body}\n"
 
@@ -435,6 +501,11 @@ def index_parts(e: Entry, department_label: str, words: int = PART_WORDS) -> lis
         f"As of {e.as_of}; review by {e.review_by}; volatility: {e.volatility}; confidence: {e.confidence}.",
         f"Summary: {e.summary}",
     ]
+    if e.cross_refs:
+        head.append(
+            "Cross-references (sections of the main research, now these entries): "
+            + "; ".join(f"section {k} → {', '.join(v)}" for k, v in e.cross_refs)
+        )
     parts = ["\n".join(head)]
     heading = ""
     section: list[str] = []

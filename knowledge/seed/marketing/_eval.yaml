@@ -49,3 +49,7 @@ questions:
     expect: [seo.technical-and-content-basics]
   - q: Should we use a seasonality adjustment for a three-day sale?
     expect: [google-ads.seasonality-and-data-exclusions]
+  - q: How should we structure an offer so it is hard to refuse?
+    expect: [house-style.hormozi-playbook]
+  - q: What should a lead magnet be and what should it lead to?
+    expect: [house-style.hormozi-playbook]

@@ -433,3 +433,19 @@ on or grouping is off.
 `config/departments.json`), its entries under `<key>/<domain>/<slug>.md`, optionally `_eval.yaml`; run
 `uv run python backend/scripts/seed_knowledge.py --validate`; add a paragraph to `agents/departments/<key>.md` on
 when to consult it; merge. No code changes.
+
+**Whole documents and the house style (decision 222).** A department folder may also hold whole documents kept byte
+for byte (`<name>.md`, no front matter), described in `_documents.yaml` (the same fields as an entry plus `file` and
+`cross_refs`); each is seeded as one entry whose text is the file. Marketing has one:
+`marketing-hormozi-playbook.md`, "Marketing: House style (Hormozi playbook)", id
+`marketing.house-style.hormozi-playbook`, domain `house-style`, type and confidence `house-style` (the owner's chosen
+default style, not evidence). `cross_refs` maps the section numbers it cites in the main research (1, 2, 3, 4, 10, 13,
+17, 19, 20) to the entries that hold them now; they are written on its indexed card, returned with it by
+`search_knowledge` and listed on its card in the HUD. A document longer than 6,000 characters comes back as the
+passages that matched plus its summary. Marketing managers (`agents/departments/marketing.md`) and, through the new
+`agents/departments/<key>.workers.md` (the worker prompt's `{{department_rules}}`), Marketing workers are told to apply
+it by default to offers, lead magnets, ads, content and pricing sequences; compliance entries override it; the
+strategy, unit-economics and measurement entries govern budget split and judging; the brand's own voice, never Alex
+Hormozi's name, likeness or catchphrases. Its `[GAP]` lines stay in the unchanged file and are also listed in
+`knowledge/gaps/marketing.md`.
+

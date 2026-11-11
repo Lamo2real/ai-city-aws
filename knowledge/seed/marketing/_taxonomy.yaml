@@ -29,6 +29,7 @@ domains:
   - {id: compliance, label: Compliance, description: "Consent, privacy, ad law, disclosure and AI labelling (EU, Sweden, UK, US)"}
   - {id: market-sweden, label: Sweden, description: "Swedish market data, calendar, payment, delivery and copy norms"}
   - {id: agent-guardrails, label: Agent guardrails, description: "Approval gates and limits for the marketing agents"}
+  - {id: house-style, label: House style, description: "The owner's chosen default style (not evidence): offers, lead magnets, ads, content, pricing sequences"}
 
 platforms:
   - {id: meta, label: Meta}
