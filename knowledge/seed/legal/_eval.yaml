@@ -1,0 +1,57 @@
+# The retrieval evaluation for the legal knowledge base (docs/KNOWLEDGE.md section 17): realistic questions a Legal
+# agent asks, each with the documents that should appear in the top results. A question counts as a hit when any
+# expected document is in the top 5. The tests score it offline (keyword-only); the deploy scores it against the real
+# hybrid index and prints the hit rate. Files starting with "_" are never seeded as entries.
+department: legal
+top_k: 5
+questions:
+  # contracts
+  - q: What liability cap should we accept as supplier in a SaaS contract, and is 12 months' fees market standard?
+    expect: [legal.contracts.saas-and-commercial-contracts]
+  - q: What must a DPA with a sub-processor contain under GDPR Article 28(3)?
+    expect: [legal.contracts.routine-documents]
+  - q: Can we warrant that AI output from our product does not infringe copyright, and what does the model vendor give us?
+    expect: [legal.contracts.ai-contract-terms]
+  - q: Who can sign a contract for a Swedish aktiebolag under firmateckning, and is an electronic signature enough?
+    expect: [legal.contracts.saas-and-commercial-contracts]
+  # privacy, GDPR and IMY
+  - q: How fast must we notify IMY of a personal-data breach and what fines has IMY issued recently?
+    expect: [legal.privacy.privacy-gdpr-imy]
+  - q: Can we still transfer personal data to a US sub-processor under the EU-US Data Privacy Framework?
+    expect: [legal.privacy.privacy-gdpr-imy]
+  # AI regulation
+  - q: When do the EU AI Act high-risk requirements apply after Regulation (EU) 2026/1744, and what applies on 2 December 2026?
+    expect: [legal.ai-regulation.eu-ai-act-and-swedish-supervision, legal.pending-changes.pending-changes-and-dated-milestones]
+  - q: Which Swedish authority supervises the AI Act and what happens after 31 December 2026?
+    expect: [legal.ai-regulation.eu-ai-act-and-swedish-supervision]
+  # employment, corporate, disputes
+  - q: What notice period and redundancy order apply when terminating an employee under LAS, and must we consult the union under MBL?
+    expect: [legal.employment.employment-law]
+  - q: What must the board do when equity falls below half the registered share capital and a control balance sheet is needed?
+    expect: [legal.corporate.corporate-law]
+  - q: How do we interrupt the limitation period on an unpaid invoice and apply for a payment order at Kronofogden?
+    expect: [legal.disputes.disputes-and-enforcement]
+  # consumer, sanctions, digital
+  - q: Does our consumer checkout need a withdrawal function (ångerknapp) from 19 June 2026?
+    expect: [legal.consumer.consumer-facing-terms]
+  - q: Are we covered by Cybersäkerhetslagen (NIS2) and what are the incident reporting clocks?
+    expect: [legal.digital-regulation.digital-and-data-regulation]
+  - q: How do we screen a customer against sanctions under Sweden's 2025 sanctions act, and who clears a hit?
+    expect: [legal.financial-crime.sanctions-export-aml-bribery-competition, legal.guardrails.agent-guardrails]
+  # a pending change with a date
+  - q: When will the new Swedish Produktansvarslag apply to software and has the Riksdag adopted it?
+    expect: [legal.pending-changes.pending-changes-and-dated-milestones, legal.consumer.consumer-facing-terms]
+  - q: When are Data Act switching charges and egress fees banned?
+    expect: [legal.pending-changes.pending-changes-and-dated-milestones, legal.contracts.saas-and-commercial-contracts]
+  # guardrails and handoffs
+  - q: Can a Legal agent sign a contract or send a legal position to a counterparty without human approval?
+    expect: [legal.guardrails.agent-guardrails]
+  - q: What does Legal hand back to Marketing when it reviews campaign copy with environmental claims?
+    expect: [legal.handoffs.handoffs-with-other-departments, legal.marketing-sector.marketing-regulation-and-sector-add-ons]
+  - q: How often do legal research AI tools hallucinate citations?
+    expect: [legal.legal-ai.ai-doing-legal-work]
+  # gaps: the agent must say it does not know
+  - q: What are the export-control rules for our software and how do we classify it?
+    expect: [legal.gaps.consolidated-gaps, legal.financial-crime.sanctions-export-aml-bribery-competition]
+  - q: What should our shareholder agreement and fundraising documents say?
+    expect: [legal.gaps.consolidated-gaps]

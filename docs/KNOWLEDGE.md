@@ -551,6 +551,21 @@ and workers (`research.workers.md`) apply law and compliance first, independent 
 and `[GAP]` handling, legal content as orientation and the section 19 handoffs. The guardrails' three-tier table is
 696 words, kept whole.
 
+**Legal (decision 232).** `knowledge/seed/legal/`: 22 documents, one per numbered section of
+`knowledge/source/legal-research.md` (verbatim, 39,314 words, SHA-256 pinned) plus "Legal: About this knowledge base"
+(the opening summary and the reading guide); the closing Conclusion stays with section 21, "Legal: Consolidated gaps",
+its own document. 20 domains; "platforms" are the jurisdictions `sweden`, `eu`, `us`. Type `policy`: the law and
+compliance sections 1 to 15 and the pending changes (20); guardrails (18): domain `guardrails`, type `checklist`, the
+only one; legal operations and hand-offs `playbook`, AI in legal work `benchmark`, About and gaps `glossary`. No
+`[HOUSE STYLE]` paragraph exists in the source. Section 20 ("Pending changes and dated milestones") is fast-moving with
+`review_by` 2026-11-19, its first milestone, so from then on retrieval marks it `needs_verification`. `_eval.yaml`: 21
+questions, offline 21/21 in the top 5. Three tables are kept whole at 751, 723 and 871 words (the shared test allows
+900). Managers (`agents/departments/legal.md`) and workers (`legal.workers.md`) consult first; apply law and
+compliance first, independent evidence second (the source states no precedence; this is the owner's order); follow
+section 18's three tiers with `ask_owner` before every "needs human approval" item; tag points in force, adopted or
+proposed; verify past dates and `needs_verification`; say `[GAP]` points are unknown; give orientation only; and use
+section 19's hand-offs. The section 18 approval gates stay prompt rules (the policy gate has no department scope).
+
 **Adding the next department.** Put the source unchanged under `knowledge/source/`, write
 `knowledge/seed/<department key>/` (the key in `config/departments.json`, not its display name) with `_taxonomy.yaml`,
 one Markdown file per document with front matter, and `_eval.yaml`; run `uv run python backend/scripts/seed_knowledge.py

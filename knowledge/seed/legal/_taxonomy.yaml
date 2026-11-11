@@ -1,0 +1,91 @@
+# The legal department's knowledge taxonomy (docs/KNOWLEDGE.md section 17). Content: one document per numbered
+# section of knowledge/source/legal-research.md (the only source), plus "About this knowledge base" (the opening
+# summary and "How to read and split this document"); the closing conclusion stays with section 21, consolidated gaps.
+# Seeded and scoped exactly like marketing, sales and application (decision 232). "Platforms" are jurisdictions here.
+department: legal
+label: Legal
+seed_version: 1
+
+domains:
+  - {id: overview, label: Overview, description: "The opening summary, the labels, the verification statuses and the caveats"}
+  - {id: orientation, label: Orientation, description: "The department's job, the regime map and the dates that need action"}
+  - {id: contracts, label: Contracts, description: "SaaS and commercial contracts, routine documents (NDAs, DPAs, resellers, consultancy, terms, open source) and AI contract terms"}
+  - {id: consumer, label: Consumer terms, description: "Consumer information, withdrawal, renewal and unfair terms"}
+  - {id: corporate, label: Corporate, description: "Aktiebolagslagen, registers, options and investment screening"}
+  - {id: ip, label: Intellectual property, description: "Copyright, inventions, trade secrets, trademarks, text and data mining"}
+  - {id: employment, label: Employment, description: "Swedish employment law"}
+  - {id: disputes, label: Disputes, description: "Limitation, deadlines, payment orders, courts and collection"}
+  - {id: privacy, label: Privacy, description: "GDPR, Swedish law, IMY practice and cookies"}
+  - {id: ai-regulation, label: AI regulation, description: "The EU AI Act as amended and the Swedish supervisory set-up"}
+  - {id: digital-regulation, label: Digital regulation, description: "DSA, DMA, Data Act, NIS2, Cyber Resilience Act, accessibility, eIDAS"}
+  - {id: marketing-sector, label: Marketing and sectors, description: "Marketing law pointers and finance, health and public-sector add-ons"}
+  - {id: financial-crime, label: Sanctions, AML, bribery and competition, description: "Sanctions, export control, AML scope, bribery and competition"}
+  - {id: compliance-programme, label: Compliance programme, description: "Policies, accountability, calendar, change tracking and incident clocks"}
+  - {id: legal-ops, label: Legal operations, description: "Intake, matters, playbooks, self-service, outside counsel, metrics, tooling"}
+  - {id: legal-ai, label: AI in legal work, description: "Evidence on AI accuracy and the professional rules"}
+  - {id: guardrails, label: Guardrails, description: "What the department's agents may do alone, what needs human approval, what they must never do"}
+  - {id: handoffs, label: Handoffs, description: "Work to and from the other departments"}
+  - {id: pending-changes, label: Pending changes, description: "Dated milestones and pending matters; a date already past needs verification"}
+  - {id: gaps, label: Gaps, description: "What the knowledge base does not know"}
+
+platforms:
+  - {id: sweden, label: Sweden}
+  - {id: eu, label: EU}
+  - {id: us, label: US}
+
+objectives:
+  - {id: contracts, label: Contracts}
+  - {id: privacy, label: Privacy}
+  - {id: compliance, label: Compliance}
+  - {id: people, label: People}
+  - {id: governance, label: Governance}
+  - {id: disputes, label: Disputes}
+  - {id: ip, label: Intellectual property}
+  - {id: ai, label: AI}
+
+# The concept vocabulary (an entry MENTIONS a concept when one of its aliases appears in its text; all-capital
+# aliases match case-sensitively).
+concepts:
+  - {id: gdpr, label: GDPR, kind: law, aliases: [GDPR]}
+  - {id: imy, label: IMY, kind: authority, aliases: [IMY]}
+  - {id: dpa, label: Data processing agreement, kind: document, aliases: [DPA, DPAs, Article 28(3)]}
+  - {id: dpia, label: DPIA, kind: practice, aliases: [DPIA, DPIAs, data protection impact assessment]}
+  - {id: dpf, label: EU-US Data Privacy Framework, kind: law, aliases: [Data Privacy Framework]}
+  - {id: digital-omnibus, label: Digital Omnibus, kind: proposal, aliases: [Digital Omnibus]}
+  - {id: ai-act, label: EU AI Act, kind: law, aliases: [AI Act, 2026/1744]}
+  - {id: data-act, label: Data Act, kind: law, aliases: [Data Act]}
+  - {id: dsa, label: Digital Services Act, kind: law, aliases: [Digital Services Act, DSA]}
+  - {id: dma, label: Digital Markets Act, kind: law, aliases: [Digital Markets Act]}
+  - {id: nis2, label: NIS2, kind: law, aliases: [NIS2, Cybersäkerhetslagen, Cybersäkerhetslag]}
+  - {id: cra, label: Cyber Resilience Act, kind: law, aliases: [Cyber Resilience Act]}
+  - {id: eaa, label: European Accessibility Act, kind: law, aliases: [European Accessibility Act]}
+  - {id: dfa, label: Digital Fairness Act, kind: proposal, aliases: [Digital Fairness Act]}
+  - {id: product-liability, label: Produktansvarslag, kind: law, aliases: [Produktansvarslag, Product Liability Directive]}
+  - {id: contracts-act, label: Contracts Act, kind: law, aliases: [Contracts Act, avtalslagen, section 36]}
+  - {id: molntjanster, label: Molntjänster 2023, kind: standard, aliases: [Molntjänster]}
+  - {id: common-paper, label: Common Paper, kind: standard, aliases: [Common Paper]}
+  - {id: liability-cap, label: Liability cap, kind: practice, aliases: [liability cap, liability caps, cap on liability]}
+  - {id: scc-arbitration, label: SCC arbitration, kind: practice, aliases: [SCC]}
+  - {id: firmateckning, label: Signature authority, kind: practice, aliases: [firmateckning, signature authority, signing authority]}
+  - {id: aktiebolagslagen, label: Aktiebolagslagen, kind: law, aliases: [Aktiebolagslag, Aktiebolagslagen]}
+  - {id: control-balance-sheet, label: Control balance sheet, kind: practice, aliases: [control balance sheet, kontrollbalansräkning]}
+  - {id: las, label: Employment Protection Act (LAS), kind: law, aliases: [LAS, Employment Protection Act]}
+  - {id: mbl, label: Co-determination Act (MBL), kind: law, aliases: [MBL, Co-determination Act]}
+  - {id: collective-agreement, label: Collective agreement, kind: practice, aliases: [collective agreement]}
+  - {id: non-compete, label: Non-compete, kind: practice, aliases: [non-compete, non-competes]}
+  - {id: pay-transparency, label: Pay transparency, kind: proposal, aliases: [pay transparency, pay-transparency]}
+  - {id: whistleblowing, label: Whistleblowing, kind: law, aliases: [whistleblowing, whistleblower]}
+  - {id: trade-secrets, label: Trade secrets, kind: law, aliases: [Trade Secrets Act, trade secret, trade secrets]}
+  - {id: trademark, label: Trademark, kind: law, aliases: [trademark, trademarks]}
+  - {id: tdm, label: Text and data mining, kind: law, aliases: [text and data mining]}
+  - {id: open-source, label: Open-source licences, kind: practice, aliases: [AGPL, open-source licence, copyleft]}
+  - {id: limitation, label: Limitation period, kind: law, aliases: [limitation period, limitation periods, preskription]}
+  - {id: kronofogden, label: Kronofogden, kind: authority, aliases: [Kronofogden]}
+  - {id: sanctions, label: Sanctions, kind: law, aliases: [sanctions act, sanctions screening, 2025:327]}
+  - {id: aml, label: Anti-money laundering, kind: law, aliases: [AML Act, Penningtvättslagen, AML Regulation]}
+  - {id: bribery, label: Bribery, kind: law, aliases: [bribery, Brottsbalken]}
+  - {id: competition, label: Competition law, kind: law, aliases: [Konkurrenslagen, competition law]}
+  - {id: marketing-act, label: Marknadsföringslagen, kind: law, aliases: [Marknadsföringslagen]}
+  - {id: hallucination, label: AI hallucination, kind: risk, aliases: [hallucinated, hallucination, fabricated]}
+  - {id: privilege, label: Legal privilege, kind: risk, aliases: [privilege, privileged]}
+  - {id: citation-check, label: Citation check, kind: control, aliases: [citation check, citation checking]}

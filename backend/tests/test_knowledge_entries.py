@@ -163,10 +163,10 @@ def test_every_indexed_part_starts_with_the_title_and_stays_small() -> None:
             assert p.startswith(f"{e.title} › "), (e.id, p[:80])
             # Tables are kept whole; four sales tables are longer (each row repeats its source link, decision 224),
             # and the application guardrails' approval and "never" tables are 553 and 527 words (decision 225),
-            # the IT infrastructure hand-offs table is 455 (decision 226), and the finance guardrails and gaps tables
-            # 825 and 727 (decision 228), and four product tables 539 to 877 (guardrails, precedence, handoffs,
-            # Sweden and the EU; decision 230), and the research guardrails' table 696 (decision 231); Bedrock splits
-            # them.
+            # the IT infrastructure hand-offs table is 455 (decision 226), the finance guardrails and gaps tables
+            # 825 and 727 (decision 228), four product tables 539 to 877 (guardrails, precedence, handoffs, Sweden and
+            # the EU; decision 230), the research guardrails' table 696 (decision 231), and the legal regime map,
+            # hand-off and pending-changes tables 751, 723 and 871 (decision 232); Bedrock splits them.
             table = p.split("\n\n", 1)[1].startswith("|")
             assert len(p.split()) <= (900 if table else 260), (e.id, len(p.split()))
 
@@ -618,7 +618,7 @@ def test_marketing_managers_and_workers_are_told_to_apply_the_house_style_within
         assert "never use his name, likeness or catchphrases" in text
         assert "brand's own voice" in text
     assert "budget split" in department_template("Marketing")
-    assert department_worker_rules("Legal") == "" and department_worker_rules("") == ""
+    assert department_worker_rules("Media") == "" and department_worker_rules("") == ""
 
 
 async def test_the_playbook_survives_a_redeploy_after_the_owner_edits_it() -> None:
