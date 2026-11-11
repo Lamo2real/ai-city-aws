@@ -128,7 +128,26 @@ export type UploadTicket =
   | { method: "PUT"; url: string; headers: Record<string, string> }
   | { multipart: true; upload_id: string; part_size: number; part_urls: string[] };
 
+/** A short-lived address of a knowledge document's original (presigned S3 GET, an attachment). */
+export interface DownloadTicket {
+  url: string;
+  file_name: string;
+  expires_in: number;
+}
+
+/** Starts the browser's download of a presigned address (S3 answers with Content-Disposition: attachment). */
+export function startDownload(t: DownloadTicket): void {
+  const a = document.createElement("a");
+  a.href = t.url;
+  a.download = t.file_name;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 export const knowledgeApi = {
+  download: (id: string) => api<DownloadTicket>(`/knowledge/${encodeURIComponent(id)}/download`),
   list: () => api<{ items: KnowledgeItem[]; always_tokens: number; always_budget: number }>("/knowledge"),
   startUpload: (body: {
     file_name: string;

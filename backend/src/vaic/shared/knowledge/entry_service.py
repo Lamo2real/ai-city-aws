@@ -13,6 +13,7 @@ from collections.abc import Callable
 from datetime import date, timedelta
 from typing import Any
 
+from .download import entry_download
 from .entries import (
     AUDIENCES,
     CONFIDENCES,
@@ -126,6 +127,13 @@ class EntryService:
     async def get(self, entry_id: str) -> dict[str, Any]:
         rec = await self._require(entry_id)
         return {"entry": record_json(rec), "history": await self.registry.history(entry_id)}
+
+    async def download(self, entry_id: str) -> dict[str, Any]:
+        """A short-lived address of the active version as a file (``download.py``); deleted entries have none."""
+        out = await entry_download(await self.registry.get(entry_id), self.seeds(), self.projector.blobs)
+        if out is None:
+            raise EntryNotFound("That knowledge entry does not exist or was deleted.")
+        return out
 
     # ---------- write ----------
     async def _project(self, e: Entry, rec: dict[str, Any]) -> dict[str, Any]:

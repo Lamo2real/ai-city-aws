@@ -1,9 +1,9 @@
 // Knowledge: the owner drops files or pastes a link or text; each item shows its live status, how the
 // agents may use it (always / when relevant / only when asked) and Delete with Undo (docs/KNOWLEDGE.md §11).
 // Items are grouped by where and when they hold ("Sweden · 2026 · Tax"), filterable, and the owner can correct
-// what was found automatically (§15).
+// what was found automatically (§15). Download saves a document's original (a link has none: it opens instead).
 import { useEffect, useState, type DragEvent } from "react";
-import type { KnowledgeItem, KnowledgeKind, Scope } from "../lib/api.ts";
+import { knowledgeApi, startDownload, type KnowledgeItem, type KnowledgeKind, type Scope } from "../lib/api.ts";
 import {
   addFiles,
   addPasted,
@@ -104,6 +104,14 @@ export function KnowledgeScreen() {
     setError(null);
     try {
       await setScope(item.id, scope);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  const download = async (item: KnowledgeItem) => {
+    setError(null);
+    try {
+      startDownload(await knowledgeApi.download(item.id));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -320,8 +328,8 @@ export function KnowledgeScreen() {
                   {editing === item.id ? (
                     <PlaceEditor item={item} onDone={() => setEditing(null)} onError={setError} />
                   ) : null}
-                  {item.builtin ? null : (
-                    <div className="kitem-actions">
+                  <div className="kitem-actions">
+                    {item.builtin ? null : (
                       <fieldset className="scope">
                         <legend className="sr-only">{`How the agents use “${item.title}”`}</legend>
                         {SCOPES.map((o) => (
@@ -337,11 +345,18 @@ export function KnowledgeScreen() {
                           </label>
                         ))}
                       </fieldset>
+                    )}
+                    {item.kind !== "link" && item.status !== "uploading" ? (
+                      <Button variant="quiet" onClick={() => void download(item)} label={`Download “${item.title}”`}>
+                        Download
+                      </Button>
+                    ) : null}
+                    {item.builtin ? null : (
                       <Button variant="quiet" onClick={() => setConfirming(item)} label={`Delete “${item.title}”`}>
                         Delete
                       </Button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </li>
               );
             })}

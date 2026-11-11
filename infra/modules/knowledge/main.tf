@@ -66,7 +66,7 @@ locals {
   lambda_errors       = ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
 }
 
-# ---------- S3: raw/, work/, normalized/ ----------
+# ---------- S3: raw/, work/, normalized/, downloads/ ----------
 resource "aws_s3_bucket" "this" {
   #checkov:skip=CKV_AWS_144:One-region personal store; versioning and the KMS key protect it, cross-region replication would double the cost.
   #checkov:skip=CKV_AWS_18:Access logging would need another bucket; CloudTrail data events can be enabled if needed.
@@ -118,6 +118,20 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
     }
     expiration {
       days = 7
+    }
+    noncurrent_version_expiration {
+      noncurrent_days = 1
+    }
+  }
+  # Download copies of department entries (written per request, presigned for 5 minutes): gone after a day.
+  rule {
+    id     = "expire-downloads"
+    status = "Enabled"
+    filter {
+      prefix = "downloads/"
+    }
+    expiration {
+      days = 1
     }
     noncurrent_version_expiration {
       noncurrent_days = 1

@@ -63,6 +63,7 @@ validated; at most 50 entities per item). Enrichment and KB ingestion run in par
 ## 4. Storage layout
 S3 `vaic-prod-knowledge`:
 - `raw/<item_id>/<file name>` — the upload as given; a link is `raw/<item_id>/link.json` `{"url": …}`; pasted text is `raw/<item_id>/note.md`. **An object created under `raw/` starts the pipeline** (S3 → EventBridge default bus → knowledge Lambda `{"action": "start", "bucket", "key"}` → `states:StartExecution` with execution name = `item_id` taken from the key and input `{"item_id"}`; `ExecutionAlreadyExists` means it already ran and is ignored).
+- `downloads/entries/<entry id>/<sha256>.md` — a department entry's file for Download (decision 246), written on each request and presigned for 5 minutes; expires after a day.
 - `work/<item_id>/…` — MediaConvert audio and Transcribe output (expire after 7 days).
 - `normalized/<item_id>/<name>` + `normalized/<item_id>/<name>.metadata.json` — the KB data source (inclusion prefix `normalized/`). Metadata:
   `{"metadataAttributes": {"item_id": "k-…", "scope": "relevant", "kind": "document"}}` (filterable: `item_id`, `scope`, `kind`; the title is not stored in vector metadata). The same attributes are sent inline with direct ingestion; the file stays so a manual full sync agrees.
@@ -93,6 +94,8 @@ Pipeline bookkeeping on the item (optional, shown in Item JSON): `upload_id` (mu
 | `POST /knowledge/text` | `{text (≤ 200,000 chars), title, scope?}` → `{item}` |
 | `PUT /knowledge/<id>` | `{scope?, title?, jurisdictions?, year?, in_force_from?, in_force_to?, topic?, doc_type?, language?}` → `{item}` (a scope or place change rewrites the metadata files and re-ingests the item's documents with the new inline metadata; scope also updates the `Item` node; place fields set `meta_source: "owner"`, §15) |
 | `DELETE /knowledge/<id>` | → `{ok: true}` (`DeleteKnowledgeBaseDocuments`, S3 objects, graph, item record) |
+| `GET /knowledge/<id>/download` | → `{url, file_name, expires_in: 300}`: a presigned GET (attachment) of `raw_key`, the original byte for byte; also `kn-builtin-guide` (its PDF, "AI City guide.pdf"); pasted text is named after its title; 404 for an unknown, deleted or not yet uploaded item, 400 for a link (no file) (decision 246) |
+| `GET /knowledge/entries/<id>/download` | → the same for a department or shared entry (§17): the version agents read, as a `.md` file (decision 246); 404 when deleted, retired or unknown |
 
 Item JSON = the DynamoDB item without `pk/sk/gsi*/graph_keys`. Errors as the other routes (plain words).
 Bucket CORS: `PUT` from the HUD origin, `ETag` exposed.
@@ -128,7 +131,7 @@ The HUD's CSP `connect-src` allows `https://vaic-prod-knowledge.s3.eu-north-1.am
 
 ## 9. IAM (permission boundary on every role, as everywhere)
 - Runtimes (all roles): `bedrock:Retrieve` on the one KB; `dynamodb:GetItem/Query/BatchGetItem` on the knowledge table; `neptune-graph:ReadDataViaQuery` on the graph. VAIC also `PutItem`/`UpdateItem` on `ITEM#*` and `s3:PutObject` on `raw/*`.
-- api Lambda: knowledge table read/write; S3 `raw/*` put (presign), multipart, delete under the item's prefixes (`raw/`, `work/`, `normalized/`; list limited to those prefixes); put under `normalized/*` (a scope change rewrites `.metadata.json`); `bedrock:IngestKnowledgeBaseDocuments`/`DeleteKnowledgeBaseDocuments` on the knowledge base; `neptune-graph:ReadDataViaQuery`/`WriteDataViaQuery`/`DeleteDataViaQuery` on the graph.
+- api Lambda: knowledge table read/write; S3 `raw/*` put (presign), multipart, delete under the item's prefixes (`raw/`, `work/`, `normalized/`; list limited to those prefixes); put under `normalized/*` (a scope change rewrites `.metadata.json`); for Download (decision 246) `s3:GetObject` on `raw/*` and `normalized/builtin/ai-city-guide.pdf`, and `s3:PutObject`/`s3:GetObject` on `downloads/*` (presigned GETs are signed with this role); `bedrock:IngestKnowledgeBaseDocuments`/`DeleteKnowledgeBaseDocuments` on the knowledge base; `neptune-graph:ReadDataViaQuery`/`WriteDataViaQuery`/`DeleteDataViaQuery` on the graph.
 - knowledge Lambda: S3 read/write on the bucket; Transcribe `StartTranscriptionJob`/`GetTranscriptionJob`; MediaConvert `CreateJob`/`GetJob` + `iam:PassRole` on the MediaConvert role only; Bedrock `InvokeModel`/`Converse` on the utility (Haiku 5.5) profile; `bedrock:IngestKnowledgeBaseDocuments`/`GetKnowledgeBaseDocuments`/`DeleteKnowledgeBaseDocuments`; `neptune-graph:ReadDataViaQuery`/`WriteDataViaQuery`/`DeleteDataViaQuery` on the graph; table read/write; `events:PutEvents` on the bus; `states:StartExecution` on the ingest state machine and `states:DescribeExecution` on its runs; ledger `GetItem`/`PutItem`/`UpdateItem`/`Query` (cost rows, spend counters, pause and caps).
 - KB service role: read `normalized/*`, `bedrock:InvokeModel` on Titan V2, `aoss:APIAccessAll` on the collection, KMS. OpenSearch Serverless policies: encryption (project KMS key), network (collection endpoint reachable, IAM-authenticated; Bedrock is allowed as a source service), data access (KB role: read/write index `items`; the deploy role: create/update the index only).
 - MediaConvert role (`vaic-prod-knowledge-mediaconvert`): read `raw/*`, write `work/*`, KMS. The permission boundary allows `iam:PassRole` on this role only, to `mediaconvert.amazonaws.com` only, and denies passing any other role.
@@ -157,7 +160,8 @@ The backend answers every step as `{item_id, …}` plus the fields above (`start
 ## 11. HUD
 A **Knowledge** screen beside the others: one drop zone (files, many at once) + "Paste a link or text" field;
 the list shows title, kind icon, status (with progress words: "Uploading 40 %", "Transcribing", "Ready"),
-the scope as a three-way choice (Always include / When relevant / Only when I ask), and Delete (confirm + Undo
+the scope as a three-way choice (Always include / When relevant / Only when I ask), Download (every card with a file:
+uploads, pasted text and the built-in guide; not links; decision 246), and Delete (confirm + Undo
 for 10 s, then the DELETE call). Shows the always-include budget ("3,200 of 8,000 tokens"). Live updates from
 `knowledge.updated`. One primary button per screen; 44 px targets; plain errors; axe clean.
 
@@ -444,6 +448,16 @@ Marketing) that opens into the entries by domain with search; each entry shows i
 with Edit, Delete, Reset to default, View newer default and Re-index; "Add an entry". Hidden while place filters are
 on or grouping is off.
 
+**Download (decision 246).** Each entry's actions in the HUD have Download (not for a deleted or retired entry):
+`GET /knowledge/entries/<id>/download` returns a presigned GET valid for 5 minutes of the version agents read
+(`served`: while a newer version indexes, the previous one). While that is the shipped default (origin `system`, same
+`content_hash` as the seed), the file is the seed file exactly as shipped: front matter and body for an entry, the
+whole document byte for byte for a `_documents.yaml` document. Once the owner has edited it, or for the owner's own
+entry, it is the same seed-file form made from the record (`entry_markdown`), or a whole document's text. The bytes
+are written to `downloads/entries/<entry id>/<sha256>.md` (expires after a day) and that object is presigned with the
+title as file name. Only the owner reaches the route; agents have no tool for it. The iPhone app has no Knowledge
+screen, so Download is on the web HUD only.
+
 **Retrieval evaluation.** `_eval.yaml`: 22 marketing questions → the entry ids that should be in the top 5. Offline
 (BM25 over the parts, keywords only) in the tests: 22/22. The live hybrid number is printed by every deploy.
 
@@ -489,8 +503,8 @@ workers (`application.workers.md`) consult the knowledge base before planning, a
 compliance first, independent evidence second, the rest after (the source states no precedence; this is the owner's
 order); follow section 16's three lists and section 17's handoffs; verify `needs_verification` and stale
 `[FAST-MOVING]` facts; say `[GAP]` points are unknown; and give legal content as orientation for a human to confirm.
-Replace keeps the previous version active until the new one is indexed (decision 235, "Versions" above). Not built:
-Download of a document's original. The section 16 approval gates stay prompt rules, as the owner chose; the policy
+Replace keeps the previous version active until the new one is indexed (decision 235, "Versions" above). Download:
+see "Download" below (decision 246). The section 16 approval gates stay prompt rules, as the owner chose; the policy
 gate's rules have no department scope.
 
 **Data and AI (decision 227).** `knowledge/seed/data/` (the folder is the department key `data`): 22 documents, one
@@ -529,7 +543,7 @@ domain `agent-guardrails`, type `policy`. `_eval.yaml`: 17 questions, offline 17
 (`agents/departments/support.md`) and workers (`support.workers.md`) apply compliance, evidence, house style; follow
 section 27's tiers with `ask_owner` before gated actions; hand self-harm disclosures, legal threats and vulnerable
 customers to the owner at once; use section 28 for handoffs. The approval tiers are prompt rules (the owner's choice) (no department scope
-in the policy gate); not built as for Application: Download, the versioned Replace, the shared scope.
+in the policy gate). Download is built for every department (decision 246).
 **Media (decision 233).** `knowledge/seed/media/`: 26 documents, one per numbered section of
 `knowledge/source/media-research.md` (verbatim, 28,866 words, SHA-256 pinned) plus "Media: About this knowledge base"
 (the opening summary and "How to read and split this document"); the conclusion stays with section 25, "Media:
@@ -570,7 +584,7 @@ a shared hit come from the shared documents. Every other department's isolation 
 in, tagged Built in and Shared, "Every department's agents use it", with the same entry actions. Types: section 8
 (guardrails) and 9 (Sweden and EU) `policy`; 7 (routing and message template) and 10 (gaps) `checklist`.
 `_eval.yaml`: 16 handoff questions; offline 16/16 in the top 5, alone and ranked together with each seeded department's
-own documents. Download is not built (no department has it; the owner said skip it for Sales).
+own documents. Download works here as for every department (decision 246).
 Prompts (decision 239): `agents/shared/handoffs.manager.md` and `handoffs.worker.md` are appended to every department's
 manager playbook and worker rules (`department_template` and `department_worker_rules` in `runtime/prompts.py`; also for
 `default.md` and departments the owner builds on demand): one accountable owner (section 1), the catalogue's artefacts,

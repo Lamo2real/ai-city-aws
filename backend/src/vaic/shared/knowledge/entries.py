@@ -351,6 +351,8 @@ class SeedSet:
     taxonomies: dict[str, Taxonomy] = field(default_factory=dict)
     entries: dict[str, Entry] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
+    paths: dict[str, Path] = field(default_factory=dict)
+    """Each entry's seed file, as shipped (what Download returns while the shipped version is the active one)."""
 
 
 def validate_links(entries: dict[str, Entry], known: set[str] | None = None) -> list[str]:
@@ -401,6 +403,7 @@ def load_seeds(root: Path | None = None) -> SeedSet:
                 out.errors.append(f"{rel}: duplicate id {e.id}")
                 continue
             out.entries[e.id] = e
+            out.paths[e.id] = path
     out.errors.extend(validate_links(out.entries))
     return out
 
@@ -439,6 +442,7 @@ def _load_documents(folder: Path, tax: Taxonomy, out: SeedSet) -> set[str]:
             out.errors.append(f"{rel}: duplicate id {e.id}")
             continue
         out.entries[e.id] = e
+        out.paths[e.id] = path
     return names
 
 

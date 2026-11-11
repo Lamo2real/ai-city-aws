@@ -1,6 +1,6 @@
 // Department knowledge entries (docs/KNOWLEDGE.md §17): the built-in knowledge bases each department's agents use,
 // which the owner can read, edit, delete, reset to the shipped default, re-index and add to.
-import { api } from "./api.ts";
+import { api, type DownloadTicket } from "./api.ts";
 
 export type EntryType = "principle" | "playbook" | "checklist" | "benchmark" | "policy" | "glossary" | "house-style";
 export type EntryStatus = "processing" | "ready" | "failed" | "deleted" | "retired";
@@ -93,6 +93,7 @@ export const entriesApi = {
   remove: (id: string) => api<{ entry: Entry }>(path(id), { method: "DELETE" }),
   reset: (id: string) => api<{ entry: Entry }>(`${path(id)}/reset`, { method: "POST" }),
   reindex: (id: string) => api<{ entry: Entry }>(`${path(id)}/reindex`, { method: "POST" }),
+  download: (id: string) => api<DownloadTicket>(`${path(id)}/download`),
 };
 
 /** Short state words for a row, most important first. */

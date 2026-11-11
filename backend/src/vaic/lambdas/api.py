@@ -59,7 +59,8 @@ from vaic.shared.hierarchy.factory import Factory
 from vaic.shared.hierarchy.queue import Queue, WorkMessage
 from vaic.shared.hierarchy.tasks import DONE_OR_GONE, cancel_task, job_rows
 from vaic.shared.ids import new_id
-from vaic.shared.knowledge.builtin import ensure_builtin_guide, remove_legacy_copies
+from vaic.shared.knowledge.builtin import GUIDE_ID, ensure_builtin_guide, remove_legacy_copies
+from vaic.shared.knowledge.download import item_download
 from vaic.shared.knowledge.entries import EntryError
 from vaic.shared.knowledge.entry_service import EntryNotFound, EntryService
 from vaic.shared.knowledge.projection import EntryProjector
@@ -203,6 +204,8 @@ ROUTES: list[tuple[str, str]] = [
     ("DELETE", "/knowledge/entries/marketing.seo.local-seo"),
     ("POST", "/knowledge/entries/marketing.seo.local-seo/reset"),
     ("POST", "/knowledge/entries/marketing.seo.local-seo/reindex"),
+    ("GET", "/knowledge/entries/marketing.seo.local-seo/download"),
+    ("GET", "/knowledge/k-aaaaaaaaaaaa/download"),
     ("GET", "/files"),
     ("GET", "/files/f-aaaaaaaaaaaa"),
     ("POST", "/files/uploads"),
@@ -1209,6 +1212,8 @@ async def _knowledge(event: dict[str, Any], method: str, path: str, d: ApiDeps) 
             return reply(200, await k.list())
         if is_("GET", rf"/knowledge/{_ITEM}"):
             return reply(200, await k.get(item_id))
+        if is_("GET", rf"/knowledge/(?:{_ITEM}|{GUIDE_ID})/download"):
+            return reply(200, await item_download(k.store, k.blobs, path.split("/")[2]))
         if is_("POST", r"/knowledge/uploads"):
             return reply(201, await k.create_upload(_body(event)))
         if is_("POST", rf"/knowledge/uploads/{_ITEM}/complete"):
@@ -1248,7 +1253,7 @@ def entry_service(d: ApiDeps) -> EntryService:
 async def _entries(event: dict[str, Any], method: str, path: str, d: ApiDeps) -> dict[str, Any]:
     """Department knowledge entries (``docs/KNOWLEDGE.md`` §17): owner-only like every route."""
     s = entry_service(d)
-    m = re.fullmatch(rf"/knowledge/entries(?:/({_ENTRY}))?(?:/(reset|reindex))?", path)
+    m = re.fullmatch(rf"/knowledge/entries(?:/({_ENTRY}))?(?:/(reset|reindex|download))?", path)
     if not m:
         return problem(404, "There is nothing here.")
     eid, verb = m.group(1), m.group(2)
@@ -1269,6 +1274,8 @@ async def _entries(event: dict[str, Any], method: str, path: str, d: ApiDeps) ->
             return reply(200, {"entry": await s.reset(eid)})
         if eid and method == "POST" and verb == "reindex":
             return reply(200, {"entry": await s.reindex(eid)})
+        if eid and method == "GET" and verb == "download":
+            return reply(200, await s.download(eid))
     except EntryNotFound as e:
         return problem(404, str(e))
     except EntryError as e:

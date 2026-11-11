@@ -153,7 +153,7 @@ export interface Mock {
   mail: Array<Record<string, unknown>>;
   apps: Array<Record<string, unknown>>;
   /** The knowledge base: stored items (newest first) and the S3 PUTs the HUD made. */
-  knowledge: { items: Array<Record<string, unknown>>; puts: string[] };
+  knowledge: { items: Array<Record<string, unknown>>; puts: string[]; downloads: string[] };
   /** The built-in department knowledge entries (docs/KNOWLEDGE.md §17), by entry id. */
   entries: Array<Record<string, unknown>>;
   /** Files (docs/FILES.md): stored files (newest first) and the S3 PUTs the HUD made. */
@@ -330,7 +330,7 @@ export async function mockBackend(
       notify_push: true,
       first_run_done: opts.firstRunDone ?? true,
     },
-    knowledge: { items: [], puts: [] },
+    knowledge: { items: [], puts: [], downloads: [] },
     entries: MOCK_ENTRIES.map((e) => ({ ...e })),
     files: { items: [], puts: [] },
   };
@@ -958,11 +958,16 @@ export async function mockBackend(
       m.entries.push(e);
       return ok({ entry: e }, 201);
     }
-    const entry = /^\/knowledge\/entries\/([a-z0-9.-]+)(?:\/(reset|reindex))?$/.exec(path);
+    const entry = /^\/knowledge\/entries\/([a-z0-9.-]+)(?:\/(reset|reindex|download))?$/.exec(path);
     if (entry) {
       const e = m.entries.find((x) => x.entry_id === entry[1]);
       if (!e) return ok({ error: "That knowledge entry does not exist." }, 404);
       const verb = entry[2];
+      if (verb === "download") {
+        if (e.deleted) return ok({ error: "That knowledge entry does not exist or was deleted." }, 404);
+        const url = `${S3_URL}/downloads/entries/${e.entry_id}/abc.md?signed=get`;
+        return ok({ url, file_name: `${e.title}.md`, expires_in: 300 });
+      }
       if (req.method() === "GET" && !verb) return ok({ entry: e, history: [] });
       if (req.method() === "PUT") Object.assign(e, body, { user_modified: e.origin === "system", updated_at: at() });
       if (req.method() === "DELETE") Object.assign(e, { deleted: true, status: "deleted", updated_at: at() });
@@ -980,6 +985,19 @@ export async function mockBackend(
         );
       if (verb === "reindex") Object.assign(e, { sync: "done", status: "ready", error: null, updated_at: at() });
       return ok({ entry: e });
+    }
+    // Download (presigned GET of the original): a link has no file.
+    const dl = /^\/knowledge\/(k-[\w-]+|kn-builtin-guide)\/download$/.exec(path);
+    if (dl && req.method() === "GET") {
+      const i = kItem(dl[1]!);
+      if (!i) return ok({ error: "That item does not exist." }, 404);
+      if (i.kind === "link") return ok({ error: "A link has no file to download: open the link instead." }, 400);
+      const name = String(i.title);
+      return ok({
+        url: `${S3_URL}/raw/${i.id}/${encodeURIComponent(name)}?signed=get`,
+        file_name: name,
+        expires_in: 300,
+      });
     }
     const one = /^\/knowledge\/(k-[\w-]+)$/.exec(path);
     if (one) {
@@ -1304,6 +1322,19 @@ export async function mockBackend(
     };
     if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers });
     const url = new URL(req.url());
+    if (req.method() === "GET") {
+      // A presigned download: the original as an attachment.
+      m.knowledge.downloads.push(url.pathname);
+      const name = decodeURIComponent(url.pathname.split("/").pop()!);
+      return route.fulfill({
+        status: 200,
+        headers: {
+          "content-type": "application/octet-stream",
+          "content-disposition": `attachment; filename="${name}"`,
+        },
+        body: `original bytes of ${url.pathname}`,
+      });
+    }
     m.knowledge.puts.push(url.pathname + url.search);
     const part = url.searchParams.get("partNumber");
     if (!part) {

@@ -156,6 +156,10 @@ locals {
       { Action = ["s3:PutObject", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts", "s3:DeleteObject"], Resource = ["${var.knowledge_bucket_arn}/raw/*"] },
       { Action = ["s3:PutObject", "s3:DeleteObject"], Resource = ["${var.knowledge_bucket_arn}/normalized/*"] },
       { Action = ["s3:DeleteObject"], Resource = ["${var.knowledge_bucket_arn}/work/*"] },
+      # Download (the owner's, 2026-11-11): presigned GETs of an upload's original and the built-in guide's PDF, and
+      # of a department entry's file, written under downloads/ (expires after a day) on each request.
+      { Action = ["s3:GetObject"], Resource = ["${var.knowledge_bucket_arn}/raw/*", "${var.knowledge_bucket_arn}/normalized/builtin/ai-city-guide.pdf"] },
+      { Action = ["s3:PutObject", "s3:GetObject"], Resource = ["${var.knowledge_bucket_arn}/downloads/*"] },
       { Action = ["s3:ListBucket"], Resource = [var.knowledge_bucket_arn], Condition = { StringLike = { "s3:prefix" = ["raw/*", "work/*", "normalized/*"] } } },
       { Action = ["bedrock:StartIngestionJob", "bedrock:IngestKnowledgeBaseDocuments", "bedrock:GetKnowledgeBaseDocuments", "bedrock:ListKnowledgeBaseDocuments", "bedrock:DeleteKnowledgeBaseDocuments"], Resource = [var.knowledge_base_arn] },
       { Action = ["neptune-graph:ReadDataViaQuery", "neptune-graph:WriteDataViaQuery", "neptune-graph:DeleteDataViaQuery"], Resource = [var.knowledge_graph_arn] },

@@ -14,6 +14,7 @@ import {
   type EntryRow,
   type HistoryRow,
 } from "../lib/entries.ts";
+import { startDownload } from "../lib/api.ts";
 import { Banner, Button, Confirm, Loading, toast } from "./ui.tsx";
 import { Select } from "./Select.tsx";
 
@@ -204,6 +205,14 @@ function EntryView(p: { row: EntryRow; list: EntryList; reload: () => Promise<vo
       setError((e as Error).message);
     }
   };
+  const download = async () => {
+    setError(null);
+    try {
+      startDownload(await entriesApi.download(p.row.entry_id));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
   if (error && !entry) return <Banner tone="bad">{error}</Banner>;
   if (!entry) return <Loading what="the entry" />;
   const system = entry.origin === "system";
@@ -286,6 +295,11 @@ function EntryView(p: { row: EntryRow; list: EntryList; reload: () => Promise<vo
         {entry.sync === "failed" || entry.status === "failed" ? (
           <Button variant="quiet" onClick={() => act("Indexed again", () => entriesApi.reindex(entry.entry_id))}>
             Re-index
+          </Button>
+        ) : null}
+        {!entry.deleted && !entry.retired ? (
+          <Button variant="quiet" onClick={() => void download()} label={`Download “${entry.title}”`}>
+            Download
           </Button>
         ) : null}
         {!entry.deleted && !entry.retired ? (
