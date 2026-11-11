@@ -320,7 +320,7 @@ function look(agent: { id: string; kind: string }) {
     hair2: shade(hair, 1.35),
     style: (h >>> 8) % 6,
     shirt: manager ? "#2c3350" : SHIRT[(h >>> 12) % SHIRT.length]!,
-    legs: TROUSERS[(h >>> 16) % TROUSERS.length]!,
+    legs: manager ? "#262b40" : TROUSERS[(h >>> 16) % TROUSERS.length]!,
     beard: (h >>> 19) % 6 === 0,
     manager,
   };
@@ -383,7 +383,7 @@ function paintBack(g: G, agent: { id: string; kind: string }) {
   }
 }
 // Turned to you: the chair behind, a face, a collar, hands on the armrests, feet on the floor.
-function paintFront(g: G, agent: { id: string; kind: string }) {
+export function paintFront(g: G, agent: { id: string; kind: string }) {
   const p = look(agent);
   chairBack(g);
   chairBase(g);
@@ -438,6 +438,14 @@ function paintFront(g: G, agent: { id: string; kind: string }) {
     R(g, CX + 4, 8, 2, 3, p.hair);
     R(g, CX - 4, 11, 9, 1, p.hair);
     R(g, CX - 2, 9, 5, 1, p.hair);
+  }
+  if (p.manager) {
+    // Sunglasses (the owner, 2026-11-11): two dark lenses, a bridge, a glint on each.
+    R(g, CX - 5, 5, 5, 3, "#101018");
+    R(g, CX + 1, 5, 5, 3, "#101018");
+    R(g, CX - 5, 5, 11, 1, "#101018");
+    R(g, CX - 4, 6, 1, 1, "#8fa4c8");
+    R(g, CX + 2, 6, 1, 1, "#8fa4c8");
   }
   const hair = (x: number, y: number, w: number, h: number, c = p.hair) => R(g, CX + x, y, w, h, c);
   switch (p.style) {

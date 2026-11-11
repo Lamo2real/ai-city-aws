@@ -35,3 +35,8 @@ export function towerLook(
   dept: string,
   slot?: number,
 ): { wall: string; shade: string; trim: string; glass: string; accent: string; light: string; dark: string };
+
+/** A Department Manager's suit and sunglasses colours. */
+export const SUIT: { jacket: string; lapel: string; shirt: string; shades: string; glint: string };
+/** Paints one person (14×20 art pixels) onto a 2D context. */
+export function paintFigure(g: { fillStyle: unknown; fillRect(x: number, y: number, w: number, h: number): void }, agent: { id: string; kind: string; department?: string }, pose: string, frame: number, stride?: number | null): void;

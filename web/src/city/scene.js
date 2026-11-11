@@ -51,7 +51,7 @@ const SKIN = ["#f6cfa8", "#eebb8e", "#d99b6c", "#b97a4e", "#8f5a38", "#6c422a"];
 const HAIR = ["#3a2a22", "#6b4226", "#b5763a", "#e2c26a", "#c6543a", "#23222f", "#8a8aa0"];
 const SHIRT = ["#e0625a", "#4f8fd6", "#49ad7c", "#e6a53c", "#9a6bd0", "#39a7a8", "#d2699e", "#7fa04a", "#c97a45", "#6f7bd8"];
 const TROUSERS = ["#32344f", "#4a3a34", "#2d4a56", "#51406a"];
-const hatColor = (name) => deptColor(name) === deptColor("other") ? SHIRT[hashOf(name) % SHIRT.length] : deptColor(name);
+const tieColor = (name) => deptColor(name) === deptColor("other") ? SHIRT[hashOf(name) % SHIRT.length] : deptColor(name);
 
 // Arms in each pose: [left dy, right dy, right dx, prop, head dy, body bob], one entry per frame of four.
 const POSES = {
@@ -77,14 +77,18 @@ const PROP = {
   tablet2: (g, x, y) => { R(g, x + 1, y - 1, 6, 6, "#2a2d4a"); R(g, x + 2, y, 4, 4, "#c8f0ff"); },
   clip: (g, x, y) => { R(g, x + 1, y - 2, 6, 7, "#8a5a33"); R(g, x + 2, y - 1, 4, 5, "#fff6e0"); R(g, x + 3, y - 3, 2, 2, "#c9c9d6"); },
 };
-function paintFigure(g, agent, poseName, f, stride = null) {
+// A Department Manager's dark suit (the owner, 2026-11-11): jacket and trousers, a white shirt, a tie in his
+// department's colour, and sunglasses. His own skin and hair stay.
+export const SUIT = { jacket: "#262b40", lapel: "#3a4266", shirt: "#eef0f4", shades: "#101018", glint: "#8fa4c8" };
+export function paintFigure(g, agent, poseName, f, stride = null) {
   const id = agent.id, look = identity(id);
   const [ly, ry, rx, prop, headDy = 0, bob = 0] = POSES[poseName]?.[f % 4] ?? POSES.rest[0];
   const skin = id === "vaic" ? "#a7f0ff" : SKIN[look.skin];
   let shirt = SHIRT[look.shirt], legs = TROUSERS[look.trousers], hair = HAIR[look.hair];
   if (id === "vaic") { shirt = "#54c8ee"; legs = "#2f8fc0"; hair = null; }
   if (id === "orchestrator") { shirt = "#23222f"; legs = "#23222f"; }
-  if (agent.kind === "manager") shirt = hatColor(deptOf(agent));
+  const suit = agent.kind === "manager";
+  if (suit) { shirt = SUIT.jacket; legs = SUIT.jacket; }
   const top = 2 + bob;
   // Legs and shoes; a stride shortens one leg and then the other.
   const lL = stride === 1 ? 3 : 5, lR = stride === 3 ? 3 : 5;
@@ -94,7 +98,8 @@ function paintFigure(g, agent, poseName, f, stride = null) {
   const arm = (x, dy) => { R(g, x, top + 8 + Math.min(dy, 0), 2, 5 - Math.abs(Math.min(dy, 0)) / 3, shirt); R(g, x, top + 8 + Math.min(dy, 0) - (dy < 0 ? 1 : -4), 2, 2, skin); };
   arm(2, ly);
   R(g, 3, top + 8, 8, 6, shirt); R(g, 3, top + 13, 8, 1, "rgba(0,0,0,.18)");
-  R(g, 6, top + 8, 2, 2, agent.kind === "core" && id !== "vaic" ? "#fff6e0" : "rgba(255,255,255,.3)");
+  if (suit) { R(g, 5, top + 8, 1, 4, SUIT.lapel); R(g, 8, top + 8, 1, 4, SUIT.lapel); R(g, 6, top + 8, 2, 2, SUIT.shirt); R(g, 6, top + 9, 2, 4, tieColor(deptOf(agent))); }
+  else R(g, 6, top + 8, 2, 2, agent.kind === "core" && id !== "vaic" ? "#fff6e0" : "rgba(255,255,255,.3)");
   arm(10 + (rx > 0 ? rx : 0) + (rx < 0 ? rx : 0), ry);
   // Head, a big friendly block with its corners knocked off.
   const hy = top + headDy;
@@ -108,7 +113,7 @@ function paintFigure(g, agent, poseName, f, stride = null) {
     case 3: R(g, 3, hy, 8, 2, hair); R(g, 3, hy + 2, 1, 5, hair); R(g, 10, hy + 2, 1, 5, hair); break;
     default: R(g, 4, hy - 1, 6, 2, hair); R(g, 6, hy - 2, 2, 1, hair); R(g, 3, hy + 1, 8, 1, hair);
   }
-  if (agent.kind === "manager") { const c = hatColor(deptOf(agent)); R(g, 3, hy - 2, 8, 3, c); R(g, 2, hy + 1, 10, 1, c); R(g, 4, hy - 2, 3, 1, "rgba(255,255,255,.35)"); }
+  if (suit) { R(g, 4, hy + 4, 3, 2, SUIT.shades); R(g, 7, hy + 4, 3, 2, SUIT.shades); R(g, 3, hy + 4, 8, 1, SUIT.shades); R(g, 4, hy + 4, 1, 1, SUIT.glint); R(g, 7, hy + 4, 1, 1, SUIT.glint); }
   if (id === "vaic") { R(g, 4, hy + 3, 6, 1, "#ffffff"); R(g, 6, hy - 2, 2, 2, "#e8fbff"); }
   if (id === "orchestrator") { R(g, 4, hy - 3, 6, 4, "#23222f"); R(g, 3, hy + 1, 8, 1, "#c7a23c"); R(g, 12, top + 3, 1, 6, "#fff6e0"); }
   if (prop && PROP[prop]) PROP[prop](g, 3, top + 8);
