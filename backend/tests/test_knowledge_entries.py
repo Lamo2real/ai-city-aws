@@ -619,7 +619,7 @@ def test_marketing_managers_and_workers_are_told_to_apply_the_house_style_within
         assert "never use his name, likeness or catchphrases" in text
         assert "brand's own voice" in text
     assert "budget split" in department_template("Marketing")
-    assert department_worker_rules("Media") == "" and department_worker_rules("") == ""
+    assert department_worker_rules("Knitting circle") == "" and department_worker_rules("") == ""
 
 
 async def test_the_playbook_survives_a_redeploy_after_the_owner_edits_it() -> None:
