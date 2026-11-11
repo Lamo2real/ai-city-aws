@@ -564,8 +564,16 @@ a shared hit come from the shared documents. Every other department's isolation 
 in, tagged Built in and Shared, "Every department's agents use it", with the same entry actions. Types: section 8
 (guardrails) and 9 (Sweden and EU) `policy`; 7 (routing and message template) and 10 (gaps) `checklist`.
 `_eval.yaml`: 16 handoff questions; offline 16/16 in the top 5, alone and ranked together with each seeded department's
-own documents. The departments' manager and worker prompts are pointed to it as each department's knowledge base
-lands. Download is not built (no department has it; the owner said skip it for Sales).
+own documents. Download is not built (no department has it; the owner said skip it for Sales).
+Prompts (decision 239): `agents/shared/handoffs.manager.md` and `handoffs.worker.md` are appended to every department's
+manager playbook and worker rules (`department_template` and `department_worker_rules` in `runtime/prompts.py`; also for
+`default.md` and departments the owner builds on demand): one accountable owner (section 1), the catalogue's artefacts,
+statuses and explicit accept, reject with a reason or input-required (section 2; `ticket_note` / `ticket_fixed`),
+decision rights (3), the routing rule (new work manager-to-manager through `file_handoff`, workers only inside an
+accepted task, 7.1) and the twelve template fields in `file_handoff`'s `details` (7.2); section 8's classes are named in
+the handoff and hold nothing beyond the owner's rules (decision 237). Each department's own playbook, worker rules and
+handoff document are unchanged and come first; where they disagree with the shared documents, agents follow their own
+and say so. Every disagreement found is listed for the owner in `docs/HANDOFF_DISAGREEMENTS.md`.
 **IT infrastructure (decision 226).** `knowledge/seed/infrastructure/` (the folder is the department key; the card
 says "IT infrastructure"): 21 documents, one per numbered section of
 `knowledge/source/it-infrastructure-research.md` (verbatim) plus "IT infrastructure: About this knowledge base" (the

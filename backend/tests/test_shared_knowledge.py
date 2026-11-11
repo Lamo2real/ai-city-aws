@@ -213,3 +213,29 @@ def test_the_handoff_questions_still_find_the_shared_documents_beside_a_departme
     pool = [e for e in SEEDS.entries.values() if e.department in (dept, SHARED)]
     hits = sum(bool(set(bm25_rank(q["q"], pool, "x")[:k]) & set(q["expect"])) for q in questions)
     assert hits / len(questions) >= 0.9, (dept, hits)
+
+
+# ---------- prompts ----------
+def test_every_department_s_managers_and_workers_carry_the_shared_handoff_rules() -> None:
+    from vaic.runtime.prompts import agents_dir, department_template, department_worker_rules
+    from vaic.shared.presets import presets
+
+    names = [str(p["name"]) for p in presets()]
+    assert len(names) >= 12
+    for name in [*names, "Knitting circle"]:  # every preset and a department the owner builds on demand
+        manager, worker = department_template(name), department_worker_rules(name)
+        for text in (manager, worker):
+            assert "search_knowledge" in text and "Shared: Responsibility map" in text
+            assert "manager-to-manager" in text and "accepted" in text and "twelve fields" in text
+            assert "approval class" in text and "disagree" in text and "don't choose silently" in text
+        assert "`file_handoff`" in manager and "Rejected (<reason code>)" in manager and "decision owner" in manager
+        assert "Decision rights" in manager and "section 8" in manager and "never add a hold" in manager
+        assert "never to that department's workers" in worker
+    # Each department's own playbook and worker rules stay as they were, first and unchanged.
+    d = agents_dir() / "departments"
+    for f in d.glob("*.md"):
+        key = f.name.removesuffix(".workers.md").removesuffix(".md")
+        if f.name.endswith(".workers.md"):
+            assert department_worker_rules(key).startswith(f.read_text(encoding="utf-8").strip()), f.name
+        elif key not in ("default", "engineering"):
+            assert department_template(key).startswith(f.read_text(encoding="utf-8").strip()), f.name

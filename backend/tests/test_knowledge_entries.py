@@ -624,7 +624,7 @@ async def test_a_long_document_comes_back_as_its_matching_passages_with_cross_re
 
 
 def test_marketing_managers_and_workers_are_told_to_apply_the_house_style_within_its_limits() -> None:
-    from vaic.runtime.prompts import department_template, department_worker_rules
+    from vaic.runtime.prompts import department_own_worker_rules, department_template, department_worker_rules
 
     for text in (department_template("Marketing"), department_worker_rules("Marketing")):
         assert "House style (Hormozi playbook)" in text
@@ -632,7 +632,7 @@ def test_marketing_managers_and_workers_are_told_to_apply_the_house_style_within
         assert "never use his name, likeness or catchphrases" in text
         assert "brand's own voice" in text
     assert "budget split" in department_template("Marketing")
-    assert department_worker_rules("Knitting circle") == "" and department_worker_rules("") == ""
+    assert department_own_worker_rules("Knitting circle") == "" and department_worker_rules("") == ""
 
 
 async def test_the_playbook_survives_a_redeploy_after_the_owner_edits_it() -> None:

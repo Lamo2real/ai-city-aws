@@ -50,15 +50,32 @@ def _department_file_key(department: str) -> str:
     return preset["key"] if preset else re.sub(r"[^a-z0-9]+", "-", department.lower())
 
 
+def shared_handoffs(role: str) -> str:
+    """How every department passes work to another, from the shared handoff documents (decision 239):
+    ``agents/shared/handoffs.manager.md`` or ``handoffs.worker.md``."""
+    return (agents_dir() / "shared" / f"handoffs.{role}.md").read_text(encoding="utf-8").strip()
+
+
 def department_template(department: str) -> str:
+    """The department's manager playbook (``agents/departments/<key>.md``, or ``default.md``), then the shared
+    handoff rules every department's manager follows."""
     d = agents_dir() / "departments"
     f = d / f"{_department_file_key(department)}.md"
-    return (f if f.is_file() else d / "default.md").read_text(encoding="utf-8").strip()
+    own = (f if f.is_file() else d / "default.md").read_text(encoding="utf-8").strip()
+    return f"{own}\n\n{shared_handoffs('manager')}"
 
 
-def department_worker_rules(department: str) -> str:
-    """What every worker of a department must follow (``agents/departments/<key>.workers.md``), or nothing."""
+def department_own_worker_rules(department: str) -> str:
+    """The department's own worker rules (``agents/departments/<key>.workers.md``), or nothing."""
     if not department:
         return ""
     f = agents_dir() / "departments" / f"{_department_file_key(department)}.workers.md"
     return f.read_text(encoding="utf-8").strip() if f.is_file() else ""
+
+
+def department_worker_rules(department: str) -> str:
+    """What every worker of a department must follow: its own rules, then the shared handoff rules."""
+    if not department:
+        return ""
+    own = department_own_worker_rules(department)
+    return f"{own}\n\n{shared_handoffs('worker')}" if own else shared_handoffs("worker")
