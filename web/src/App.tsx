@@ -17,6 +17,7 @@ import { VaicScreen } from "./components/VaicScreen.tsx";
 import { CityView } from "./components/CityView.tsx";
 import { FeaturesScreen } from "./components/Features.tsx";
 import { FirstRun } from "./components/FirstRun.tsx";
+import { UpdateNotice } from "./components/UpdateNotice.tsx";
 import { KnowledgeScreen } from "./components/Knowledge.tsx";
 import { FilesScreen } from "./components/Files.tsx";
 import { files } from "./lib/files.ts";
@@ -231,6 +232,7 @@ export function App() {
       </main>
       {guide ? <FirstRun onDone={finishGuide} /> : null}
       <Toaster />
+      <UpdateNotice />
       {view !== "vaic" && !(view === "city" && (!slug || visit)) && !(view === "apps" && slug) ? (
         <div className="fab">
           <Button variant="quiet" onClick={() => go("vaic")} label="Talk to VAIC">

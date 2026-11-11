@@ -101,4 +101,11 @@ describe("GitHub workflows", () => {
     expect(tf).toMatch(/scripts\/push-image\.sh/);
     expect(tf).toMatch(/depends_on\s+= \[terraform_data\.image\]/);
   });
+  it("version.json is never cached for a year: uploaded no-cache after index.html and invalidated", () => {
+    const text = readFileSync(join(WF, "deploy.yml"), "utf8");
+    expect(text).toMatch(/s3 sync web\/dist[^\n]*--exclude version\.json/);
+    expect(text).toMatch(/s3 cp web\/dist\/version\.json "s3:\/\/\$\{BUCKET\}\/version\.json" --cache-control "no-cache"/);
+    expect(text.indexOf("web/dist/index.html")).toBeLessThan(text.indexOf("web/dist/version.json"));
+    expect(text).toMatch(/create-invalidation[^\n]*"\/version\.json"/);
+  });
 });

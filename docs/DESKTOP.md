@@ -30,6 +30,12 @@ Always the newest: **https://github.com/Lamo2real/ai-city-aws/releases/latest**
 Steps 2 and 3 come back once for each new version of the Mac app. The app itself rarely changes: everything you
 see in it comes live from the City, so new City features appear without reinstalling.
 
+**New versions on the Mac.** The Mac app can't install updates itself until it is signed (below). Instead, from
+version 1.0.7 on, it looks at the releases when it starts and once a day while open; when a newer one is out it says
+"VAIC 1.0.x is out" with a **Download** button that opens the right `.dmg` (Apple Silicon or Intel) in your
+browser. Open it and drag VAIC onto Applications to replace the old one (then steps 2 and 3 once). Version 1.0.6 and
+older have no such notice: download the next version once by hand.
+
 ## Install on Windows
 
 1. Run the `.exe`. Windows may say "Windows protected your PC" (the app isn't signed yet): click **More info**,
@@ -38,6 +44,13 @@ see in it comes live from the City, so new City features appear without reinstal
 3. Sign in. The first time you press the voice button, allow the microphone.
 
 The Windows app checks for a new version each time it starts and installs it when you quit.
+
+## New versions of the City itself
+
+Everything inside the app, the iPhone home-screen app and the browser comes live from the City. When a newer
+version of the City goes live while VAIC is open, a small notice says "A new version of VAIC is ready" with a
+**Reload** button. Nothing reloads by itself, so whatever you are typing or saying is never cut off: press Reload
+when it suits you.
 
 ## On the iPhone
 
@@ -76,6 +89,18 @@ and switches signing on in `.github/workflows/desktop.yml` and `desktop/electron
   provider and come back; only the HUD gets the microphone (audio only), the clipboard and full screen.
   The user agent leaves out "Electron", so Google's sign-in page accepts it; if a provider still refuses,
   connect that account once in the browser: connections live in the City and work in the app too.
+- `desktop/src/releases.js` (tested in `desktop/test/releases.test.js`): the Mac-only release check. A packaged Mac
+  app reads `api.github.com/repos/Lamo2real/ai-city-aws/releases` on start and every 24 hours, takes the newest
+  published `desktop-vX.Y.Z` release, and when it is newer than `app.getVersion()` shows a native dialog once per
+  version per session; Download opens that release's `-mac-arm64.dmg` or `-mac-x64.dmg` (by `process.arch`), only
+  ever a `https://github.com` link. Windows keeps `electron-updater`. Unauthenticated GitHub API: 60 calls an hour
+  per address, far above one a day.
+- The HUD's "new version" notice (`web/src/lib/version.ts`, `web/src/components/UpdateNotice.tsx`): each build
+  stamps a hash of `index.html` (which names every hashed bundle) into `<meta name="hud-version">` and
+  `/version.json` (`web/vite.config.ts`). The deploy uploads `version.json` with `Cache-Control: no-cache` after
+  `index.html` and invalidates it; CloudFront's CachingOptimized policy then keeps it at most a second. The page
+  checks on start, on focus or when it shows again (at most once a minute) and every 5 minutes while visible, and
+  shows the notice when the ids differ. Same source, same id: a deploy that doesn't change the HUD shows nothing.
 - Sign-in tokens stay in the app's own data folder on that computer (readable only by that computer's user), like
   Chrome's; signing out removes them.
 - `.github/workflows/desktop.yml` runs on pushes to `main` that change `desktop/` (or by hand): tests, builds the

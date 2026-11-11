@@ -1,10 +1,11 @@
 // VAIC for Mac and Windows: one window onto the live HUD (docs/DESKTOP.md, decision in docs/DECISIONS.md).
 // It loads the site rather than a copy of it, so every deploy reaches the app at once and the HUD's own address,
 // sign-in and allowed origins work unchanged. The rules for what the window may do are in policy.js.
-import { app, BrowserWindow, session, shell } from "electron";
+import { app, BrowserWindow, dialog, session, shell } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { appUrl, navigateAction, newWindowAction, permissionAllowed, plainUserAgent } from "./policy.js";
+import { CHECK_EVERY_MS, RELEASES_API, shouldCheck, updateToOffer } from "./releases.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const URL_ = appUrl(app.isPackaged, process.env.VAIC_DESKTOP_URL);
@@ -114,6 +115,33 @@ async function checkForUpdates() {
   }
 }
 
+/** Mac only: the app is not signed by Apple, so it can't update itself. On start and once a day it looks at GitHub
+ * Releases and, when a newer version is out, offers the .dmg for this Mac's chip in the browser (releases.js). */
+let offered = null;
+async function checkMacRelease() {
+  if (!shouldCheck(process.platform, app.isPackaged)) return;
+  try {
+    const r = await fetch(RELEASES_API, { headers: { Accept: "application/vnd.github+json" } });
+    if (!r.ok) return;
+    const n = updateToOffer(await r.json(), { running: app.getVersion(), arch: process.arch, offered });
+    if (!n) return;
+    offered = n.version;
+    const opts = {
+      type: "info",
+      message: `VAIC ${n.version} is out`,
+      detail: `You have ${app.getVersion()}. Download the new version, open it and drag VAIC onto Applications to replace this one.`,
+      buttons: ["Download", "Later"],
+      defaultId: 0,
+      cancelId: 1,
+    };
+    const win = main && !main.isDestroyed() ? main : null;
+    const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
+    if (response === 0) openExternal(n.dmg);
+  } catch (e) {
+    console.warn("release check failed", e?.message ?? e);
+  }
+}
+
 app.on("second-instance", () => {
   if (!main) return;
   if (main.isMinimized()) main.restore();
@@ -131,6 +159,8 @@ app.whenReady().then(async () => {
   // The microphone: macOS and Windows ask once, the first time the voice button is used (NSMicrophoneUsageDescription).
   main = createWindow();
   checkForUpdates();
+  checkMacRelease();
+  setInterval(checkMacRelease, CHECK_EVERY_MS);
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) main = createWindow();
   });

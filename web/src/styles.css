@@ -506,6 +506,16 @@ main {
   border: 1px solid var(--edge-2);
   box-shadow: var(--lift);
 }
+/* "A new version of VAIC is ready": the toast's glass, centred under the top bar, until the owner presses Reload. */
+.update-notice {
+  position: fixed;
+  left: 50%;
+  top: calc(var(--top-h, 64px) + var(--s2));
+  transform: translateX(-50%);
+  z-index: 51;
+  width: max-content;
+  max-width: calc(100% - 32px);
+}
 .loading {
   display: grid;
   gap: var(--s2);
