@@ -4,7 +4,7 @@
 // Reviewer; each department's manager stands at its door; panels are React (see CityView.tsx).
 // The City View: a small game world of the agents, drawn pixel by pixel on a canvas from city-state.js.
 // All of the art is drawn here in code. Every person on screen is a real agent; only the scenery moves on its own.
-import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf, taxiCall, RIDE_PX_S, TO_WORK_BOOST } from "./city-state.js";
+import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf, taxiCall, RIDE_PX_S, TO_WORK_BOOST, HOMES_PER_BLOCK } from "./city-state.js";
 
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const INK = "#1d1c36";
@@ -820,7 +820,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     for (const [d, ids] of atDesk) { const s = assignSlots(ids, seats.get(d)); seats.set(d, s); seatCount[d] = Math.max(...s.values()) + 1; }
     homes = assignSlots(shown.ids, homes);
     const portrait = isPortrait();
-    const next = layout(state, { portrait, seats: seatCount, homes: Math.max(-1, ...homes.values()) + 1 });
+    const next = layout(state, { portrait, seats: seatCount, homes: Math.min(HOMES_PER_BLOCK, Math.max(-1, ...homes.values()) + 1) }); // one block of homes, never more (decision 213)
     const sig = JSON.stringify(next);
     const rebaked = sig !== worldSig;
     if (rebaked) {
@@ -841,7 +841,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       const to = spotOf(id);
       let p = people.get(id);
       const fresh = !p;
-      if (fresh) { const start = !still && to.key.startsWith("desk") ? homeSpot(world, homes.get(id) ?? 0) ?? to : to; p = { id, x: start.x, y: start.y, key: fresh && start === to ? to.key : "home", phase: hashOf(id) % 4, flip: false, hop: 0 }; setInside(p, start === to && !!to.inside); people.set(id, p); }
+      if (fresh) { const start = !still && to.key.startsWith("desk") ? homeSpot(world, homes.get(id) ?? 0) ?? to : to; p = { id, x: start.x, y: start.y, key: fresh && start === to ? to.key : "home", phase: hashOf(id) % 4, flip: false, hop: 0 }; setInside(p, !!start.inside); people.set(id, p); }
       if (p.visiting) continue; // VAIC is out; it comes back by itself
       p.seated = to.seated;
       if (p.key === to.key) { if (!p.move && !p.route) { p.x = to.x; p.y = to.y; } else if (p.route) p.route[p.route.length - 1] = to; else if (p.move) p.move.to = to; continue; } // a new layout only shifts them
@@ -871,7 +871,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
         if (to.key !== "home") lightHouse(id, 900);
         else p.say = { text: "HOME", until: performance.now() + 1500 };
         setInside(p, false);
-      } else if (to.key === "home") { p.x = to.x; p.y = to.y; p.move = null; p.route = null; setInside(p, false); } // any other move home is instant
+      } else if (to.key === "home") { p.x = to.x; p.y = to.y; p.move = null; p.route = null; setInside(p, true); } // any other move home is instant, and indoors
       else if (to.key.startsWith("desk:") && (fresh || fromKey === "home") && buildingOfKey(to.key)) {
         // Hired: a window lights up at home, then the worker comes out of its building's door, along the streets and in.
         const b = buildingOfKey(to.key);
@@ -926,9 +926,10 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   /** In a tower (hidden, counted on its roof) or out on the streets. Who is inside which tower is kept apart from
    *  where they are going, so the counter drops only when they step out of the doors. */
   function setInside(p, yes) {
-    const m = /^desk:([^:]+)/.exec(p.key ?? "");
-    p.inside = !!(yes && m);
-    p.insideOf = p.inside ? m[1] : null;
+    const m = /^desk:([^:]+)/.exec(p.key ?? ""), home = p.key === "home" && world;
+    p.inside = !!(yes && (m || home));
+    // At home (decision 213): inside the apartment building, one lit window each, counted on its roof.
+    p.insideOf = !p.inside ? null : m ? m[1] : `home:${world.homes.apartments.indexOf(homeOf(world, homes.get(p.id) ?? 0))}`;
   }
   function dashTo(p, to, then) {
     p.waitUntil = null;
@@ -1477,6 +1478,18 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       const win = wins[wi % (wins.length || 1)];
       if (win) { R(ctx, win.x - ox, win.y - oy, win.w, win.h, LIT); R(ctx, win.x - ox, win.y - oy, win.w, 1, LIT_TOP); R(ctx, win.x - ox, win.y + 4 - oy, win.w, 1, INK); }
     }
+    // Who is home (decision 213): one lit window each, from a stable order, and the number on the roof like a tower.
+    const homeCount = new Map();
+    for (const p of people.values()) if (p.inside && p.insideOf?.startsWith("home:")) { const ai = Number(p.insideOf.slice(5)); homeCount.set(ai, (homeCount.get(ai) ?? 0) + 1); }
+    let athome = 0;
+    world.homes.apartments.forEach((a, ai) => {
+      const n = homeCount.get(ai) ?? 0, wins = aptWindows(a), { top, cx } = aptShape(a);
+      athome += n;
+      const order = wins.map((_, i) => i).sort((x, y) => hashOf(`home:${ai}:${x}`) - hashOf(`home:${ai}:${y}`));
+      for (const i of order.slice(0, n)) { const win = wins[i]; R(ctx, win.x - ox, win.y - oy, win.w, win.h, LIT); R(ctx, win.x - ox, win.y - oy, win.w, 1, LIT_TOP); R(ctx, win.x - ox, win.y + 4 - oy, win.w, 1, INK); }
+      label(String(n), cx, top - 22, INK, n ? "#ffd84a" : "#d9d1bf");
+    });
+    if (root.dataset.atHome !== String(athome)) root.dataset.atHome = String(athome); // for tests
     const lastBlock = world.homes.blocks.at(-1); // the sign hangs over the last block's courtyard
     if (hiddenHomes && lastBlock) label(`+${hiddenHomes} MORE IN WORKFORCE`, (lastBlock.x + lastBlock.w / 2) * TILE, lastBlock.y * TILE + 2);
     // The towers' live parts: lit windows for the people inside, the sliding doors, the beacon and the roof counter.
@@ -1603,7 +1616,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
           if (to.ring && !p.route[0]?.ring) p.commit = null; // off the roundabout
           if (!p.route.length) {
             p.route = null; p.speed = null; p.ride = null; p.toWork = false; // dropped at the door: the glow goes out
-            if (p.key.startsWith("desk:")) setInside(p, true); // in through the doors: out of sight, counted on the roof
+            if (p.key.startsWith("desk:") || p.key === "home") setInside(p, true); // in through the doors: out of sight, counted on the roof
             if (p.homecoming) { p.homecoming = false; lightHouse(p.id, 1500); dust(p.x, p.y - 8, 10, POOF, 28, 0.5); } // home: the light goes on, then out
           }
         } else { p.x += (dx / d) * s; p.y += (dy / d) * s; }

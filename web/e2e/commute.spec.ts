@@ -224,3 +224,36 @@ test("reloading the City puts people who are already working in their lit window
   m.send(hired("wkr-research-b2", "Research"));
   await expect.poll(() => person(page, "wkr-research-b2").then((p) => !!p && (p.waiting || p.walking))).toBe(true);
 });
+
+test("people at home are inside their apartment building: a lit window each, the count on its roof, and the neighbourhood never grows (decision 213)", async ({ page }) => {
+  const agents = [
+    hired("mgr-research", "Research", "manager").agent,
+    ...Array.from({ length: 30 }, (_, i) => ({ ...hired(`wkr-research-h${i}`, "Research").agent, state: "retired", worker_state: "released" })),
+  ];
+  await mockBackend(page, {
+    snapshot: {
+      departments: [{ key: "research", name: "Research", mission: "x", manager_id: "mgr-research", state: "active", created_at: "2026-11-11T00:00:00Z" }],
+      agents,
+    },
+  });
+  await page.goto("/#/city");
+  const city = page.locator("section.city");
+  await expect(city).toHaveAttribute("data-city-ready", "1");
+  const homeState = () =>
+    page.evaluate(() => {
+      const el = document.querySelector("section.city") as unknown as {
+        _people: Map<string, { inside?: boolean; insideOf?: string | null; key: string }>;
+        dataset: DOMStringMap;
+      };
+      const ps = [...el._people.values()].filter((p) => p.key === "home");
+      return { home: ps.length, outside: ps.filter((p) => !p.inside).length, counted: Number(el.dataset.atHome ?? -1) };
+    });
+  await expect.poll(() => homeState().then((s) => s.home)).toBeGreaterThanOrEqual(24);
+  const s = await homeState();
+  expect(s.outside).toBe(0); // nobody waits on the pavement
+  expect(s.counted).toBe(s.home); // all counted on the roofs
+  // One block of three buildings, however many live there.
+  const blocks = await page.evaluate(() => (document.querySelector("section.city") as unknown as { _traffic: { world: { homes: { blocks: unknown[] } } } })._traffic.world.homes.blocks.length);
+  expect(blocks).toBe(1);
+  await page.screenshot({ path: `${SHOTS}/city-homes.png` });
+});

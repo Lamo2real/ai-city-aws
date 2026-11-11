@@ -530,8 +530,9 @@ export function assignSlots(ids, previous = new Map()) {
   return slots;
 }
 
-// A released worker stays home as history, but only the latest few stand in the neighbourhood; the rest are in Workforce.
-export const RETIRED_SHOWN = 24;
+// A released worker stays home as history. Everyone at home is indoors and counted on the roofs (decision 213), so
+// all of them are shown; the cap only keeps a very long history from slowing the page.
+export const RETIRED_SHOWN = 1000;
 export function residents(state) {
   const all = Object.values(state.agents).filter((a) => !CORE.has(a.id) && a.kind !== "core");
   const away = all.filter((a) => a.state === "retired" && placement(state, a.id).place === "home").sort((a, b) => (b.last_active_at ?? "").localeCompare(a.last_active_at ?? "") || a.id.localeCompare(b.id));
@@ -689,8 +690,11 @@ export function seatSpot(building, seat) {
 }
 
 // Which apartment building a home slot is in: the slots take turns between a block's three buildings.
+// The neighbourhood never grows past the blocks it has (decision 213): later slots share the same buildings, their
+// windows already lit, and the count on the roof says how many are home.
 export function homeOf(world, slot) {
-  const b = Math.floor(slot / HOMES_PER_BLOCK), k = slot % HOMES_PER_BLOCK;
+  const blocks = Math.max(1, world.homes.blocks.length);
+  const b = Math.floor(slot / HOMES_PER_BLOCK) % blocks, k = slot % HOMES_PER_BLOCK;
   return world.homes.apartments[b * APARTMENTS.length + (k % APARTMENTS.length)] ?? null;
 }
 // Where a resident stands: on the pavement by its building's door, nearest first, in two rows of four.
@@ -700,7 +704,7 @@ export function homeSpot(world, slot) {
   if (!a) return null;
   const j = Math.floor((slot % HOMES_PER_BLOCK) / APARTMENTS.length) % HOMES_PER_APT;
   const d = doorOf(a);
-  return { x: d.x + STAND[j % 4], y: (a.y + a.h) * TILE + 6 + Math.floor(j / 4) * 8 };
+  return { x: d.x + STAND[j % 4], y: (a.y + a.h) * TILE + 6 + Math.floor(j / 4) * 8, inside: true }; // at home: indoors (decision 213)
 }
 
 // An evening walk keeps to the streets: to the nearest street, along it to the avenue, along the avenue, and in.
