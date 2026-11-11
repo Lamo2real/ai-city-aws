@@ -433,7 +433,7 @@ too for a caller without a department), audience and entry filters (`RETRIEVE_EN
 242 once the probe of decision 236 showed the index applying filters on attributes Bedrock mapped; the empty results
 of decisions 218-221 came from the scope filter on the plain `keyword` field `scope`), and a department caller
 fetches 30 hits. Since decision 221 an empty filtered Retrieve is retried once as a plain Retrieve (no filter,
-default search type, 30 results), kept as a safety net; the deploy's evaluation prints how often it was used. VAIC, the Orchestrator and the executives see no department entries. The audience
+default search type, 30 results), kept as a safety net by the owner's choice (decision 242); the deploy's evaluation prints how often it was used. VAIC, the Orchestrator and the executives see no department entries. The audience
 defaults to the caller's role (manager: manager + both; worker: worker + both), widened with `audience: "all"`;
 optional `domain`, `platforms`, `entry_type`; `related` (default on) adds up to 3 `REQUIRES`/`RELATED_TO`
 neighbours of the same department as summaries. Entries come back whole with `as_of`, `review_by`, `volatility`,
