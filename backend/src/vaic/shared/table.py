@@ -177,14 +177,6 @@ def _from_dynamo(v: Any) -> Any:
     return v
 
 
-def _deserialize(item: dict[str, Any]) -> dict[str, Any]:
-    """The low-level client answers in typed form ({"S": "x"})."""
-    from boto3.dynamodb.types import TypeDeserializer
-
-    d = TypeDeserializer()
-    return {k: d.deserialize(v) for k, v in item.items()}
-
-
 class DynamoTable:
     """``table`` is a boto3 ``dynamodb.Table`` resource (or anything with the same methods, for tests)."""
 
@@ -287,7 +279,11 @@ class DynamoTable:
         )
 
     async def batch_get(self, keys: list[tuple[str, str]]) -> list[Item]:
-        """BatchGetItem in chunks of 100, consistent reads, retrying unprocessed keys."""
+        """BatchGetItem in chunks of 100, consistent reads, retrying unprocessed keys.
+
+        ``self._t.meta.client`` is the table resource's client, which converts plain Python values to DynamoDB's
+        typed form and back by itself: keys go out plain (typed keys were wrapped twice and refused as "The provided
+        key element does not match the schema", decision 223) and answers come back plain."""
         out: list[Item] = []
         unique = list(dict.fromkeys(keys))
         name = self._t.name
@@ -295,13 +291,13 @@ class DynamoTable:
         for i in range(0, len(unique), 100):
             request: dict[str, Any] = {
                 name: {
-                    "Keys": [{"pk": {"S": pk}, "sk": {"S": sk}} for pk, sk in unique[i : i + 100]],
+                    "Keys": [{"pk": pk, "sk": sk} for pk, sk in unique[i : i + 100]],
                     "ConsistentRead": True,
                 }
             }
             for _ in range(5):
                 r = await asyncio.to_thread(client.batch_get_item, RequestItems=request)
-                out.extend(_from_dynamo(_deserialize(x)) for x in r.get("Responses", {}).get(name, []))
+                out.extend(_from_dynamo(x) for x in r.get("Responses", {}).get(name, []))
                 request = r.get("UnprocessedKeys") or {}
                 if not request:
                     break

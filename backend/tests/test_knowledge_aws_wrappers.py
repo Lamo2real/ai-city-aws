@@ -1,5 +1,6 @@
 """The thin AWS wrappers, on fake boto3 clients: Retrieve parsing, sync conflicts, S3 calls, Converse blocks."""
 
+import json
 from typing import Any, ClassVar
 
 import pytest
@@ -184,13 +185,16 @@ def test_the_api_lambda_does_not_import_pypdf_or_pillow() -> None:
     assert r.returncode == 0, r.stderr
 
 
-async def test_dynamo_batch_get_reads_typed_answers_and_retries_unprocessed_keys() -> None:
+async def test_dynamo_batch_get_sends_plain_keys_and_retries_unprocessed_keys() -> None:
+    """The table resource's client converts values itself, so keys and answers are plain (decision 223)."""
+    from decimal import Decimal
+
     from vaic.shared.table import DynamoTable
 
     answers = [
-        {"Responses": {"t": [{"pk": {"S": "ITEM#a"}, "sk": {"S": "META"}, "n": {"N": "3"}}]},
-         "UnprocessedKeys": {"t": {"Keys": [{"pk": {"S": "ITEM#b"}, "sk": {"S": "META"}}]}}},
-        {"Responses": {"t": [{"pk": {"S": "ITEM#b"}, "sk": {"S": "META"}, "x": {"BOOL": True}}]}},
+        {"Responses": {"t": [{"pk": "ITEM#a", "sk": "META", "n": Decimal(3)}]},
+         "UnprocessedKeys": {"t": {"Keys": [{"pk": "ITEM#b", "sk": "META"}]}}},
+        {"Responses": {"t": [{"pk": "ITEM#b", "sk": "META", "x": True}]}},
     ]  # fmt: skip
     sent: list[Any] = []
 
@@ -208,11 +212,31 @@ async def test_dynamo_batch_get_reads_typed_answers_and_retries_unprocessed_keys
 
     got = await DynamoTable(Tbl()).batch_get([("ITEM#a", "META"), ("ITEM#b", "META"), ("ITEM#a", "META")])
     assert got == [{"pk": "ITEM#a", "sk": "META", "n": 3}, {"pk": "ITEM#b", "sk": "META", "x": True}]
-    assert sent[0]["t"]["Keys"] == [
-        {"pk": {"S": "ITEM#a"}, "sk": {"S": "META"}},
-        {"pk": {"S": "ITEM#b"}, "sk": {"S": "META"}},
-    ]
+    assert sent[0]["t"]["Keys"] == [{"pk": "ITEM#a", "sk": "META"}, {"pk": "ITEM#b", "sk": "META"}]
     assert sent[0]["t"]["ConsistentRead"] is True
+
+
+async def test_dynamo_batch_get_puts_well_formed_keys_on_the_wire() -> None:
+    """With a real boto3 table resource (no network): the request body carries each key typed exactly once."""
+    import boto3
+
+    from vaic.shared.table import DynamoTable
+
+    session = boto3.Session(aws_access_key_id="x", aws_secret_access_key="y", region_name="eu-north-1")
+    table = session.resource("dynamodb").Table("t")
+    bodies: list[bytes] = []
+
+    class Stop(Exception):
+        pass
+
+    def grab(request: Any, **_: Any) -> None:
+        bodies.append(request.body)
+        raise Stop
+
+    table.meta.client.meta.events.register("before-send.dynamodb.BatchGetItem", grab)
+    with pytest.raises(Stop):
+        await DynamoTable(table).batch_get([("ITEM#kn-a", "META")])
+    assert json.loads(bodies[0])["RequestItems"]["t"]["Keys"] == [{"pk": {"S": "ITEM#kn-a"}, "sk": {"S": "META"}}]
 
 
 def test_the_api_lambda_builds_its_clients_while_loading_inside_lambda(monkeypatch: pytest.MonkeyPatch) -> None:
