@@ -281,3 +281,32 @@ def test_the_new_tools_pass_the_policy_gate(tool: str, args: dict[str, Any]) -> 
     from vaic.shared.policy import decide
 
     assert decide(mcp_name(tool), args)[0] == "allow"
+
+
+async def test_the_coo_review_switches_on_from_the_chat_in_the_shape_the_get_gives() -> None:
+    # The owner, 2026-11-11: "turn on the COO bottleneck review", daily, Yes → "not saved". VAIC sent back the
+    # reviews list it read from GET /executives and the save crashed (AttributeError) after the Yes (decision 209).
+    c, _, t = wired()
+    got = json.loads((await t["city_api"].handler({"method": "GET", "path": "/executives"})).split(" ", 1)[1])
+    reviews = [
+        {**r, "enabled": True, "every_days": 1} if r["id"] == "coo-bottleneck-review" else r for r in got["reviews"]
+    ]
+    out = await t["city_api"].handler({"method": "PUT", "path": "/executives", "body": {"reviews": reviews}})
+    assert "Staged, NOT saved" in out
+    out = await turn(c)["save_change"].handler({"answer": "yes"})
+    assert out.startswith("Saved"), out
+    after = json.loads((await t["city_api"].handler({"method": "GET", "path": "/executives"})).split(" ", 1)[1])
+    coo = next(r for r in after["reviews"] if r["id"] == "coo-bottleneck-review")
+    assert coo["enabled"] is True and coo["every_days"] == 1
+    # The documented shape works too.
+    body = {"reviews": {"cfo-cost-review": {"enabled": True, "every_days": 7}}, "enabled": {"cto": False}}
+    await t["city_api"].handler({"method": "PUT", "path": "/executives", "body": body})
+    assert (await turn(c)["save_change"].handler({"answer": "yes"})).startswith("Saved")
+
+
+async def test_a_body_in_the_wrong_shape_is_a_plain_400_vaic_can_fix() -> None:
+    _, api, _ = wired()
+    r = await vaic_call({"method": "PUT", "path": "/executives", "body": {"enabled": True}}, api)
+    assert r["statusCode"] == 400 and "ceo, coo, cfo and cto" in r["body"]
+    r = await vaic_call({"method": "PUT", "path": "/executives", "body": {"reviews": "daily"}}, api)
+    assert r["statusCode"] == 400 and "reviews takes" in r["body"]

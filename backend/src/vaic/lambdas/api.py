@@ -1293,6 +1293,15 @@ async def vaic_call(call: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         return await _route(event, d)
     except BadRequest as e:
         return problem(400, str(e))
+    except (AttributeError, TypeError, KeyError) as e:
+        # A body in a shape the route doesn't take (a list where it reads an object, a missing key): say so, so
+        # VAIC can fix the call and ask again, instead of "something went wrong" (decision 209).
+        log("error", "api.failed", path=path, error=type(e).__name__, via="vaic", detail=str(e)[:300])
+        return problem(
+            400,
+            f"That body doesn't fit {method} {owner_api.clean_path(path)} ({type(e).__name__}: {str(e)[:200]}). "
+            "Check the shape the route takes and send it again.",
+        )
     except Exception as e:
         log("error", "api.failed", path=path, error=type(e).__name__, via="vaic")
         return problem(500, f"Something went wrong on our side ({type(e).__name__}: {str(e)[:300]}).")

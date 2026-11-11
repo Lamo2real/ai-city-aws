@@ -224,17 +224,41 @@ class Invalid(ValueError):
     """A bad change from the owner's screen, in words the screen can show."""
 
 
+def _keyed(body: Any) -> dict[str, dict[str, Any]]:
+    """The change in the shape ``set_config`` reads. Also takes the lists ``GET /executives`` gives
+    (``executives: [{id, enabled}]``, ``reviews: [{id, enabled, every_days}]``), as VAIC sends back what it read
+    (a list here crashed the save after the owner's Yes, decision 209). Anything else is a plain ``Invalid``."""
+    if not isinstance(body, dict):
+        raise Invalid("Send an object with enabled and/or reviews.")
+    enabled: Any = body.get("enabled") or {}
+    if isinstance(body.get("executives"), list):  # the GET's list, as sent back
+        enabled = {str(x.get("id")): x.get("enabled") for x in body["executives"] if isinstance(x, dict)}
+    reviews: Any = body.get("reviews") or {}
+    if isinstance(reviews, list):
+        reviews = {
+            str(x.get("id")): {k: x[k] for k in ("enabled", "every_days") if k in x}
+            for x in reviews
+            if isinstance(x, dict)
+        }
+    if not isinstance(enabled, dict):
+        raise Invalid("enabled takes ceo, coo, cfo and cto, each true or false.")
+    if not isinstance(reviews, dict):
+        raise Invalid("reviews takes {review id: {enabled, every_days}}.")
+    return {"enabled": enabled, "reviews": reviews}
+
+
 async def set_config(ledger: Ledger, body: dict[str, Any]) -> dict[str, Any]:
     """``PUT /executives``: ``enabled: {ceo: bool, …}`` and ``reviews: {id: {enabled, every_days}}``. Only the owner
     calls this (the HUD's switches); no agent has a tool for it."""
     cur = await ledger.table.get("EXEC", "config") or {}
     enabled = dict(cur.get("enabled") or {})
     reviews = {k: dict(v) for k, v in (cur.get("reviews") or {}).items()}
-    for k, v in (body.get("enabled") or {}).items():
+    body = _keyed(body)
+    for k, v in body["enabled"].items():
         if k not in EXECUTIVES or not isinstance(v, bool):
             raise Invalid("enabled takes ceo, coo, cfo and cto, each true or false.")
         enabled[k] = v
-    for k, v in (body.get("reviews") or {}).items():
+    for k, v in body["reviews"].items():
         if k not in REVIEWS or not isinstance(v, dict):
             raise Invalid(f"There is no review called {k}.")
         row = reviews.setdefault(k, {})
