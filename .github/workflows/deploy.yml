@@ -341,6 +341,7 @@ jobs:
           # The retrieval evaluation on the live hybrid index: printed for the owner, never blocking.
           aws lambda invoke --function-name "$fn" --payload '{"action":"knowledge_eval"}' \
             --cli-binary-format raw-in-base64-out --cli-read-timeout 900 eval.json || true
+          jq -c '.probe // empty' eval.json || true
           head -c 4000 eval.json; echo
           jq -r '.results[] | "Retrieval hit rate (\(.department), top \(.k)): \(.hits)/\(.total) = \(.hit_rate)"' eval.json \
             && jq -c '.results[].misses[]' eval.json || echo "retrieval evaluation skipped"

@@ -150,3 +150,56 @@ async def _unfiltered(kb: Any, query: str) -> dict[str, Any]:
         "item_ids": [(x.get("metadata") or {}).get("item_id") for x in res[:5]],
         "uris": [((x.get("location") or {}).get("s3Location") or {}).get("uri") for x in res[:5]],
     }
+
+
+async def retrieve_probe(kb: Any, query: str, department: str) -> dict[str, Any]:
+    """Diagnosis only (decision 236): the same question through Retrieve with each setting alone and combined, so
+    the deploy log shows which one the live index answers with nothing: the search type, the filter, or a filter
+    on a field the index maps itself (``scope``, ``item_id``: ``keyword``) versus one Bedrock mapped
+    (``department``: ``text`` with a ``.keyword`` subfield). Hit counts or the error per variant; read-only."""
+    import asyncio
+
+    runtime = getattr(kb, "_runtime", None)
+    if runtime is None:
+        return {"skipped": "no Bedrock client"}
+
+    async def call(search_type: str | None, flt: dict[str, Any] | None) -> Any:
+        cfg: dict[str, Any] = {"numberOfResults": 5}
+        if search_type:
+            cfg["overrideSearchType"] = search_type
+        if flt:
+            cfg["filter"] = flt
+        try:
+            r = await asyncio.to_thread(
+                runtime.retrieve,
+                knowledgeBaseId=kb.kb_id,
+                retrievalQuery={"text": query},
+                retrievalConfiguration={"vectorSearchConfiguration": cfg},
+            )
+        except Exception as e:
+            return f"{type(e).__name__}: {str(e)[:240]}"
+        res = r.get("retrievalResults", [])
+        meta = [x.get("metadata") or {} for x in res[:2]]
+        return {"hits": len(res), "ids": [m.get("item_id") for m in meta], "scopes": [m.get("scope") for m in meta]}
+
+    plain = await call(None, None)
+    first = plain["ids"][0] if isinstance(plain, dict) and plain["ids"] else "none"
+    first_scope = plain["scopes"][0] if isinstance(plain, dict) and plain["scopes"] else "relevant"
+    scope = {"in": {"key": "scope", "value": ["always", "relevant"]}}
+    dept = {"equals": {"key": "department", "value": department}}
+    item = {"equals": {"key": "item_id", "value": first}}
+    out: dict[str, Any] = {"query": query, "plain": plain}
+    for name, st, f in (
+        ("hybrid", "HYBRID", None),
+        ("semantic", "SEMANTIC", None),
+        ("scope_in", None, scope),
+        ("scope_equals", None, {"equals": {"key": "scope", "value": first_scope}}),
+        ("item_id_equals", None, item),
+        ("department_equals", None, dept),
+        ("department_in", None, {"in": {"key": "department", "value": [department]}}),
+        ("hybrid_department", "HYBRID", dept),
+        ("semantic_scope_in", "SEMANTIC", scope),
+        ("hybrid_scope_in", "HYBRID", scope),
+    ):
+        out[name] = await call(st, f)
+    return out

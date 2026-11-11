@@ -643,3 +643,33 @@ async def test_the_playbook_survives_a_redeploy_after_the_owner_edits_it() -> No
     await s.update(PLAYBOOK, {"summary": "Our own summary."})
     assert (await run_seed(seeds, r.registry, r.projector, MODEL)).changed() == []
     assert (await r.registry.get(PLAYBOOK) or {})["summary"] == "Our own summary."
+
+
+def test_retrieve_probe_reports_each_variant() -> None:
+    """Decision 236: the deploy's read-only probe sends one Retrieve per setting and reports counts or errors."""
+    import asyncio
+
+    from vaic.shared.knowledge.evaluation import retrieve_probe
+
+    class Runtime:
+        def __init__(self) -> None:
+            self.calls: list[dict] = []
+
+        def retrieve(self, **kw: object) -> dict:
+            cfg = kw["retrievalConfiguration"]["vectorSearchConfiguration"]  # type: ignore[index]
+            self.calls.append(cfg)
+            if "filter" in cfg:
+                raise RuntimeError("failed to create query: Field 'scope.keyword' not found")
+            return {"retrievalResults": [{"metadata": {"item_id": "kn-a", "scope": "relevant"}}]}
+
+    class KB:
+        kb_id = "kb"
+        _runtime = Runtime()
+
+    out = asyncio.run(retrieve_probe(KB(), "q", "marketing"))
+    assert out["plain"] == {"hits": 1, "ids": ["kn-a"], "scopes": ["relevant"]}
+    assert out["hybrid"]["hits"] == 1
+    assert out["scope_in"].startswith("RuntimeError")
+    assert {"equals": {"key": "item_id", "value": "kn-a"}} in [c.get("filter") for c in KB._runtime.calls]
+    assert {"equals": {"key": "scope", "value": "relevant"}} in [c.get("filter") for c in KB._runtime.calls]
+    assert asyncio.run(retrieve_probe(object(), "q", "marketing")) == {"skipped": "no Bedrock client"}

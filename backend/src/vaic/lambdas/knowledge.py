@@ -110,10 +110,13 @@ async def _seed(event: dict[str, Any]) -> dict[str, Any]:
     if event.get("action") == "seed_status":
         return {"ok": True, **(await refresh_status(registry, projector, list(seeds.taxonomies), seeds.taxonomies))}
     if event.get("action") == "knowledge_eval":
-        from vaic.shared.knowledge.evaluation import live_eval
+        from vaic.shared.knowledge.evaluation import live_eval, retrieve_probe
 
+        probe = await retrieve_probe(
+            k.kb, "How should I structure a Meta account for a new ecommerce brand?", "marketing"
+        )
         results = [(await live_eval(k.kb, k.store, d)).as_json() for d in seeds.taxonomies]
-        return {"ok": True, "results": results}
+        return {"ok": True, "probe": probe, "results": results}
     report = await run_seed(
         seeds, registry, projector, embedding_model(), dry_run=bool(event.get("dry_run")), by="deploy"
     )
