@@ -1,0 +1,42 @@
+# Installers for docs/DESKTOP.md, built by .github/workflows/desktop.yml.
+appId: city.ai.vaic
+productName: VAIC
+copyright: Lamo2real
+directories:
+  output: dist
+  buildResources: build
+files:
+  - src/**
+  - package.json
+artifactName: VAIC-${version}-${os}-${arch}.${ext}
+publish:
+  provider: github
+  owner: Lamo2real
+  repo: ai-city-aws
+mac:
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  # Not signed by Apple yet: an ad-hoc signature, so Apple Silicon Macs open it after "Open Anyway" (docs/DESKTOP.md).
+  identity: "-"
+  hardenedRuntime: false
+  extendInfo:
+    NSMicrophoneUsageDescription: VAIC listens when you talk to it with the voice button.
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: msi
+      arch: [x64]
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: VAIC
+msi:
+  oneClick: false
+  perMachine: false
+  createDesktopShortcut: true
+  shortcutName: VAIC

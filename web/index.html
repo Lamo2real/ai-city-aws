@@ -9,6 +9,12 @@
          links and put a light tile behind a dark PNG. /favicon.ico (white lines) is for browsers that ask by name. -->
     <link rel="icon" type="image/svg+xml" href="/vaic-eye-auto.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- Add to Home Screen (iPhone, Android, desktop Chrome): opens full screen as "VAIC" (docs/DESKTOP.md). -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="VAIC" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
   </head>
   <body>
     <div id="root"></div>

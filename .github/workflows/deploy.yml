@@ -24,6 +24,8 @@ on:
       - "*.md" # the top folder's only: prompts and skills (agents/**/*.md, skills/**/*.md) are code and must deploy
       - "ios/**" # the iPhone app is built in Xcode, nothing in it deploys
       - ".github/workflows/ios-testflight.yml" # the iPhone app's own pipeline
+      - "desktop/**" # the Mac and Windows app has its own pipeline (desktop.yml) and deploys nothing
+      - ".github/workflows/desktop.yml"
   workflow_dispatch:
 
 permissions:

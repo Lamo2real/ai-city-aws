@@ -1,0 +1,106 @@
+# VAIC for Mac and Windows (docs/DESKTOP.md; the owner's request, 2026-11-11).
+# Every push to main that changes the desktop app (desktop/) tests it, builds the installers and publishes them as a
+# GitHub Release: the Mac .dmg (Apple Silicon and Intel) and the Windows .exe and .msi. The newest is always at
+# https://github.com/Lamo2real/ai-city-aws/releases/latest. The Windows app updates itself from these releases.
+# The app loads the live HUD, so HUD changes need no new release. Nothing in AWS is touched.
+#
+# Not signed yet: the Mac app carries an ad-hoc signature (opened once with "Open Anyway") and the Windows app none
+# (SmartScreen's "Run anyway"). Signing needs the owner's Apple Developer ID and a Windows certificate (docs/DESKTOP.md).
+name: Desktop app
+
+on:
+  push:
+    branches: [main]
+    paths: ["desktop/**", ".github/workflows/desktop.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+
+  build:
+    needs: test
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: macos-latest
+            dist: dist:mac
+          - os: windows-latest
+            dist: dist:win
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: desktop
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --no-audit --no-fund
+      # One version per run, so the Windows updater always sees the newest as newer.
+      - run: npm version "1.0.${{ github.run_number }}" --no-git-tag-version
+      - run: npm run ${{ matrix.dist }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.os }}
+          if-no-files-found: error
+          path: |
+            desktop/dist/*.dmg
+            desktop/dist/*.exe
+            desktop/dist/*.msi
+            desktop/dist/*.blockmap
+            desktop/dist/latest*.yml
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: 1.0.${{ github.run_number }}
+        run: |
+          ls -la out
+          cat > notes.md <<EOF
+          VAIC for Mac and Windows, version ${VERSION}. Install guide: https://github.com/${GITHUB_REPOSITORY}/blob/main/docs/DESKTOP.md
+
+          - **Mac (Apple Silicon: M1 or newer):** VAIC-${VERSION}-mac-arm64.dmg
+          - **Mac (Intel):** VAIC-${VERSION}-mac-x64.dmg
+          - **Windows:** VAIC-${VERSION}-win-x64.exe (or the .msi)
+
+          Only someone with the owner's email, password and authenticator code can sign in.
+          EOF
+          gh release create "desktop-v${VERSION}" out/* \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "VAIC desktop ${VERSION}" --notes-file notes.md --latest
+          echo "## VAIC desktop ${VERSION}: https://github.com/${GITHUB_REPOSITORY}/releases/latest" >> "$GITHUB_STEP_SUMMARY"

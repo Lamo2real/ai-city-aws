@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"
+    />
+    <title>VAIC</title>
+    <style>
+      body {
+        margin: 0;
+        height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #0b0d10;
+        color: #e8eaed;
+        font:
+          15px/1.5 -apple-system,
+          "Segoe UI",
+          system-ui,
+          sans-serif;
+      }
+      main {
+        max-width: 360px;
+        padding: 24px;
+        text-align: center;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 8px;
+      }
+      p {
+        color: #9aa0a6;
+        margin: 0 0 20px;
+      }
+      a {
+        display: inline-block;
+        padding: 10px 22px;
+        border-radius: 999px;
+        background: #e8eaed;
+        color: #0b0d10;
+        text-decoration: none;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>VAIC can't be reached</h1>
+      <p>Check your internet connection, then try again.</p>
+      <a id="retry" href="#">Try again</a>
+    </main>
+    <script>
+      // The main process only lets this window go to the HUD's own address (policy.js).
+      const to = new URLSearchParams(location.search).get("to") || "";
+      if (to.startsWith("https://") || to.startsWith("http://localhost")) document.getElementById("retry").href = to;
+    </script>
+  </body>
+</html>

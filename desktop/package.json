@@ -1,0 +1,24 @@
+{
+  "name": "vaic-desktop",
+  "productName": "VAIC",
+  "version": "1.0.0",
+  "private": true,
+  "description": "VAIC for Mac and Windows: the AI City HUD in its own window.",
+  "author": "Lamo2real",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/",
+    "dist:mac": "electron-builder --mac --publish never",
+    "dist:win": "electron-builder --win --publish never"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
+  },
+  "devDependencies": {
+    "electron": "^45.3.0",
+    "electron-builder": "^26.18.0"
+  }
+}
