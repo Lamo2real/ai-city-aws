@@ -14,10 +14,6 @@ on:
     paths: ["desktop/**", ".github/workflows/desktop.yml"]
   workflow_dispatch:
 
-concurrency:
-  group: desktop-release
-  cancel-in-progress: false
-
 permissions:
   contents: read
 
@@ -77,6 +73,10 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+    # One release at a time (only publishing is serialized; tests and builds may overlap).
+    concurrency:
+      group: desktop-publish
+      cancel-in-progress: false
     timeout-minutes: 10
     permissions:
       contents: write
