@@ -1,0 +1,98 @@
+# The sales department's knowledge taxonomy (docs/KNOWLEDGE.md section 17). Content: one document per numbered section
+# of knowledge/source/sales-research.md (the only source), seeded and scoped exactly like marketing (decision 224).
+department: sales
+label: Sales
+seed_version: 1
+
+domains:
+  - {id: overview, label: Overview, description: "The three-layer stack, what each claim label means, and the conclusion"}
+  - {id: strategy, label: Strategy, description: "Three layers, one funnel, choosing the motion"}
+  - {id: house-style, label: House style, description: "The owner's chosen default style (not evidence): mentality, CLOSER, objections, qualification, scripts, pricing, money model, referrals"}
+  - {id: precedence, label: Precedence, description: "Compliance first, evidence second, house style third, conflict by conflict"}
+  - {id: saas-b2b, label: SaaS and B2B, description: "The house style mapped onto SaaS and B2B; SaaS motions and pricing"}
+  - {id: methodologies, label: Methodologies, description: "SPIN, Challenger, MEDDICC, Sandler, Gap, JOLT and others"}
+  - {id: qualification, label: Qualification, description: "Qualification frameworks and recording unknowns"}
+  - {id: conversations, label: Conversations, description: "The evidence on sales conversations"}
+  - {id: buyers, label: Buyers, description: "Buyer behaviour in 2025 to 2026"}
+  - {id: pipeline, label: Pipeline, description: "Pipeline design and stage exit criteria"}
+  - {id: team, label: Team, description: "Roles and team models"}
+  - {id: metrics, label: Metrics, description: "Formulas and benchmarks"}
+  - {id: management, label: Management, description: "Forecasting, pipeline reviews, CRM hygiene"}
+  - {id: post-sale, label: Post-sale, description: "Onboarding, retention, expansion, advocacy and partners"}
+  - {id: prospecting, label: Prospecting, description: "Who to pursue, when, and through which warm route"}
+  - {id: outbound, label: Outbound, description: "Cold email, cold calling, LinkedIn and multichannel sequences"}
+  - {id: inbound, label: Inbound, description: "Inbound lead handling"}
+  - {id: ai-in-sales, label: AI in sales, description: "What the evidence supports for AI in sales and what it does not"}
+  - {id: compliance, label: Compliance, description: "Outreach law by country, Sweden, recording, EU sales tactics, contracting, bribery, competition, data, and the AI-agent guardrails"}
+  - {id: gaps, label: Gaps, description: "What the knowledge base does not know"}
+
+platforms:
+  - {id: email, label: Email}
+  - {id: phone, label: Phone}
+  - {id: sms, label: SMS}
+  - {id: linkedin, label: LinkedIn}
+  - {id: chat, label: Chat and direct messages}
+  - {id: video-call, label: Video call}
+  - {id: in-person, label: In person}
+
+objectives:
+  - {id: prospecting, label: Prospecting}
+  - {id: qualification, label: Qualification}
+  - {id: closing, label: Closing}
+  - {id: retention, label: Retention}
+  - {id: expansion, label: Expansion}
+
+# The concept vocabulary (an entry MENTIONS a concept when one of its aliases appears in its text; all-capital
+# aliases match case-sensitively).
+concepts:
+  - {id: win-rate, label: Win rate, kind: metric, aliases: [win rate, win rates]}
+  - {id: close-rate, label: Close rate, kind: metric, aliases: [close rate, closing rate]}
+  - {id: show-rate, label: Show rate, kind: metric, aliases: [show rate, show-rate]}
+  - {id: reply-rate, label: Reply rate, kind: metric, aliases: [reply rate, reply rates, response rate]}
+  - {id: connect-rate, label: Connect rate, kind: metric, aliases: [connect rate, connection rate]}
+  - {id: sales-cycle, label: Sales cycle, kind: metric, aliases: [sales cycle, cycle length]}
+  - {id: pipeline-coverage, label: Pipeline coverage, kind: metric, aliases: [pipeline coverage, coverage ratio]}
+  - {id: cash-collected, label: Cash collected, kind: metric, aliases: [cash collected]}
+  - {id: nrr, label: Net revenue retention, kind: metric, aliases: [NRR, net revenue retention, net dollar retention]}
+  - {id: grr, label: Gross revenue retention, kind: metric, aliases: [GRR, gross revenue retention]}
+  - {id: churn, label: Churn, kind: metric, aliases: [churn]}
+  - {id: cac, label: CAC, kind: metric, aliases: [CAC, customer acquisition cost]}
+  - {id: cac-payback, label: CAC payback, kind: metric, aliases: [CAC payback, payback period]}
+  - {id: ltv, label: LTV, kind: metric, aliases: [LTV, lifetime value]}
+  - {id: acv, label: ACV, kind: metric, aliases: [ACV, annual contract value]}
+  - {id: quota-attainment, label: Quota attainment, kind: metric, aliases: [quota attainment, attainment]}
+  - {id: forecast-accuracy, label: Forecast accuracy, kind: metric, aliases: [forecast accuracy]}
+  - {id: speed-to-lead, label: Speed to lead, kind: tactic, aliases: [speed to lead, speed-to-lead, response time], measured_by: [show-rate]}
+  - {id: closer, label: CLOSER, kind: framework, aliases: [CLOSER]}
+  - {id: objection-handling, label: Objection handling, kind: tactic, aliases: [objection, objections]}
+  - {id: payment-ladder, label: Payment ladder, kind: tactic, aliases: [payment ladder, payment plan, payment plans, prepay]}
+  - {id: money-model, label: Money model, kind: framework, aliases: [money model, attraction offer, upsell, downsell, continuity]}
+  - {id: referrals, label: Referrals, kind: tactic, aliases: [referral, referrals, affiliate, affiliates]}
+  - {id: spin, label: SPIN Selling, kind: framework, aliases: [SPIN]}
+  - {id: challenger, label: Challenger Sale, kind: framework, aliases: [Challenger]}
+  - {id: meddicc, label: MEDDICC, kind: framework, aliases: [MEDDIC, MEDDICC, MEDDPICC]}
+  - {id: bant, label: BANT, kind: framework, aliases: [BANT]}
+  - {id: sandler, label: Sandler, kind: framework, aliases: [Sandler]}
+  - {id: jolt, label: JOLT Effect, kind: framework, aliases: [JOLT]}
+  - {id: gap-selling, label: Gap Selling, kind: framework, aliases: [Gap Selling]}
+  - {id: neat, label: NEAT Selling, kind: framework, aliases: [NEAT]}
+  - {id: buying-group, label: Buying group, kind: concept, aliases: [buying group, buying groups, stakeholder, stakeholders]}
+  - {id: product-qualified-lead, label: Product-qualified lead, kind: concept, aliases: [product-qualified lead, PQL, PQLs]}
+  - {id: sdr, label: SDR, kind: role, aliases: [SDR, SDRs, setter, setters]}
+  - {id: account-executive, label: Account executive, kind: role, aliases: [account executive, AE, AEs, closer role]}
+  - {id: cold-email, label: Cold email, kind: channel, aliases: [cold email, cold-email]}
+  - {id: cold-calling, label: Cold calling, kind: channel, aliases: [cold call, cold calls, cold calling, dial, dials]}
+  - {id: deliverability, label: Deliverability, kind: tactic, aliases: [deliverability, spam rate, bounce rate]}
+  - {id: intent-data, label: Intent data, kind: tactic, aliases: [intent data, buying signals, trigger events]}
+  - {id: ai-sdr, label: AI SDR, kind: tool, aliases: [AI SDR, AI SDRs]}
+  - {id: gdpr, label: GDPR, kind: regulation, aliases: [GDPR, legitimate interest]}
+  - {id: ai-act-article-50, label: AI Act Article 50, kind: regulation, aliases: [Article 50, AI Act]}
+  - {id: swedish-written-confirmation, label: Swedish written confirmation, kind: regulation, aliases: [written confirmation, accepts in writing, distansavtalslagen]}
+  - {id: consumer-credit, label: Consumer credit, kind: regulation, aliases: [consumer credit, Consumer Credit Act]}
+  - {id: withdrawal-right, label: Withdrawal right, kind: regulation, aliases: [withdrawal right, right of withdrawal, cooling-off]}
+  - {id: unfair-practices-blacklist, label: Unfair practices blacklist, kind: regulation, aliases: [blacklist, blacklisted, false urgency, false scarcity]}
+  - {id: call-recording, label: Call recording, kind: regulation, aliases: [call recording, recording calls, record calls]}
+  - {id: anti-bribery, label: Anti-bribery, kind: regulation, aliases: [anti-bribery, bribery, gifts]}
+  - {id: nix-register, label: NIX register, kind: regulation, aliases: [NIX, do-not-call, Do Not Call]}
+  - {id: human-approval, label: Human approval, kind: tactic, aliases: [human approval, approval gate, approval gates, sign-off]}
+  - {id: ai-disclosure, label: AI disclosure, kind: regulation, aliases: [AI disclosure, disclose themselves, disclosure]}

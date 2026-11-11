@@ -449,3 +449,12 @@ strategy, unit-economics and measurement entries govern budget split and judging
 Hormozi's name, likeness or catchphrases. Its `[GAP]` lines stay in the unchanged file and are also listed in
 `knowledge/gaps/marketing.md`.
 
+**Sales (decision 224).** `knowledge/seed/sales/`: 33 documents, one per numbered section of
+`knowledge/source/sales-research.md` (verbatim) plus "Sales: Overview, labels and conclusion", in 20 domains; the
+`[GAP]` passages stay in their sections and section 32 is "Sales: Consolidated gaps". House style (sections 2 to 10):
+domain, type and confidence `house-style`. Compliance (27 to 31): domain `compliance`, type `policy` (the only sales
+documents of that type). `_eval.yaml`: 23 questions, offline 22/23 in the top 5. The entry text limit is 32,000
+characters (sections 11, 15 and 24 are longer than the old 20,000). Sales managers (`agents/departments/sales.md`) and
+workers (`sales.workers.md`) apply compliance first, evidence second (larger multi-stakeholder deals, hesitant
+buyers), house style third and by default, in the brand's own voice, never Hormozi's name, likeness, catchphrases or
+figures; `needs_verification` facts are verified, `[GAP]` points are said to be unknown.

@@ -1,0 +1,52 @@
+# The retrieval evaluation for the sales knowledge base (docs/KNOWLEDGE.md section 17, decision 224): realistic
+# questions a sales agent asks, each with the documents that should appear in the top results. A hit is any expected
+# document in the top 5. The tests score it offline (keyword-only); the deploy scores it on the live index.
+department: sales
+top_k: 5
+questions:
+  - q: How do I handle "I need to think about it"?
+    expect: [house-style.objection-handling, precedence.compliance-evidence-house-style, conversations.evidence]
+  - q: What must be true before a deal moves to proposal?
+    expect: [pipeline.design-and-stage-criteria]
+  - q: Can I close a Swedish consumer on the phone?
+    expect: [compliance.sweden, precedence.compliance-evidence-house-style]
+  - q: What reply rate should cold email get?
+    expect: [outbound.channels, metrics.formulas-and-benchmarks]
+  - q: How should I present payment options?
+    expect: [house-style.pricing-and-payment-presentation]
+  - q: How fast should we call back a new inbound lead?
+    expect: [house-style.qualification-and-speed-to-lead, inbound.lead-handling]
+  - q: Can we record our sales calls, and what do we have to tell the customer?
+    expect: [compliance.recording-and-eu-sales-tactics, precedence.compliance-evidence-house-style]
+  - q: Can I tell a prospect the offer ends tonight to get a decision?
+    expect: [compliance.recording-and-eu-sales-tactics, precedence.compliance-evidence-house-style]
+  - q: Do we need consent to cold email business addresses in Germany or Denmark?
+    expect: [compliance.outreach-by-country-and-channel]
+  - q: When should I use MEDDICC instead of BANT to qualify?
+    expect: [qualification.frameworks, methodologies.established-methodologies]
+  - q: How do I run a sales call with the CLOSER framework?
+    expect: [house-style.closer-framework]
+  - q: What win rate and sales cycle length are normal for new business?
+    expect: [metrics.formulas-and-benchmarks]
+  - q: Does an AI agent have to say it is an AI when it talks to a prospect?
+    expect: [compliance.ai-agent-guardrails, compliance.outreach-by-country-and-channel, precedence.compliance-evidence-house-style]
+  - q: Can we offer a monthly payment plan to Swedish consumers?
+    expect: [compliance.sweden, precedence.compliance-evidence-house-style]
+  - q: How do I write a price-raise letter to existing customers?
+    expect: [house-style.price-raises-retention-referrals]
+  - q: When should I make an upsell offer?
+    expect: [house-style.money-model]
+  - q: How do I ask happy customers for referrals?
+    expect: [house-style.price-raises-retention-referrals, post-sale.retention-expansion-advocacy]
+  - q: Do AI SDRs book more meetings than human reps?
+    expect: [ai-in-sales.supported-and-not]
+  - q: How many people are in a B2B buying group and do buyers want to talk to a rep?
+    expect: [buyers.buyer-behaviour]
+  - q: How should we forecast and run weekly pipeline reviews?
+    expect: [management.forecasting-and-crm]
+  - q: Can I send a gift to the buyer at a prospect company?
+    expect: [compliance.contracting-bribery-competition-data, precedence.compliance-evidence-house-style]
+  - q: How does a SaaS free trial map onto the attraction offer?
+    expect: [saas-b2b.house-style-for-saas-and-b2b]
+  - q: What follow-up cadence for no-shows is not known yet?
+    expect: [gaps.consolidated-gaps, house-style.qualification-and-speed-to-lead]

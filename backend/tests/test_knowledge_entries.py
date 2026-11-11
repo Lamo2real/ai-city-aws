@@ -46,21 +46,26 @@ MODEL = "embed-model-1"
 
 
 # ---------- the seed files ----------
+def _of(department: str) -> list[Entry]:
+    return [e for e in SEEDS.entries.values() if e.department == department]
+
+
 def test_every_seed_file_validates_and_ids_are_unique() -> None:
     assert SEEDS.errors == []
     assert "marketing" in SEEDS.taxonomies
     assert len(SEEDS.entries) >= 120
     ids = list(SEEDS.entries)
+    marketing = [i for i in ids if i.startswith("marketing.")]
     assert len(ids) == len(set(ids))
     assert all(ENTRY_ID_RE.fullmatch(i) for i in ids)
     # The file system can't hold two files at one path, so also check every file was read.
     files = [p for p in (seed_root() / "marketing").rglob("*.md") if not p.name.startswith("_")]
-    assert len(files) == len(ids)
+    assert len(files) == len(marketing)
 
 
 def test_every_entry_is_atomic_sourced_and_free_of_gap_passages() -> None:
     tax = SEEDS.taxonomies["marketing"]
-    for e in SEEDS.entries.values():
+    for e in _of("marketing"):
         if e.document:  # a whole document kept unchanged (decision 222)
             continue
         words = len(e.body.split())
@@ -70,7 +75,7 @@ def test_every_entry_is_atomic_sourced_and_free_of_gap_passages() -> None:
         assert e.sources or e.confidence == "inference", e.id
         if e.volatility == "fast-moving":
             assert e.review_by <= "2027-03-01", e.id
-    domains = {e.domain for e in SEEDS.entries.values()}
+    domains = {e.domain for e in _of("marketing")}
     assert domains == set(tax.domains), set(tax.domains) - domains
 
 
@@ -156,7 +161,9 @@ def test_every_indexed_part_starts_with_the_title_and_stays_small() -> None:
         assert parts[0].startswith(f"# {e.title}") and e.summary in parts[0] and e.review_by in parts[0]
         for p in parts[1:]:
             assert p.startswith(f"{e.title} › "), (e.id, p[:80])
-            assert len(p.split()) <= 260, (e.id, len(p.split()))
+            # Tables are kept whole; four sales tables are longer (each row repeats its source link, decision 224).
+            table = p.split("\n\n", 1)[1].startswith("|")
+            assert len(p.split()) <= (450 if table else 260), (e.id, len(p.split()))
 
 
 def test_concepts_come_only_from_the_taxonomy() -> None:
@@ -379,7 +386,12 @@ async def test_the_graph_has_the_taxonomy_and_the_entries_with_departments_on_ev
     await run_seed(SEEDS, r.registry, r.projector, MODEL)
     labels = {label for label, _ in r.graph.vertices}
     assert labels == {"Department", "Domain", "Platform", "Objective", "Concept", "KnowledgeEntry"}
-    assert all(v["department"] == "marketing" for v in r.graph.vertices.values())
+    assert {v["department"] for v in r.graph.vertices.values()} == {"marketing", "sales"}
+    for (label, vid), v in r.graph.vertices.items():
+        if label == "KnowledgeEntry":
+            assert vid.removeprefix("kn-").split(".")[0] == v["department"]
+        else:
+            assert vid.split("/")[0] == v["department"], vid
     kinds = {e[0] for e in r.graph.edges}
     assert kinds >= {
         "PART_OF",
@@ -601,7 +613,7 @@ def test_marketing_managers_and_workers_are_told_to_apply_the_house_style_within
         assert "never use his name, likeness or catchphrases" in text
         assert "brand's own voice" in text
     assert "budget split" in department_template("Marketing")
-    assert department_worker_rules("Sales") == "" and department_worker_rules("") == ""
+    assert department_worker_rules("Finance") == "" and department_worker_rules("") == ""
 
 
 async def test_the_playbook_survives_a_redeploy_after_the_owner_edits_it() -> None:

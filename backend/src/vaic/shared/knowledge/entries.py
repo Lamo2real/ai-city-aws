@@ -35,7 +35,9 @@ _SLUG = r"[a-z0-9]+(?:-[a-z0-9]+)*"
 ENTRY_ID_RE = re.compile(rf"{_SLUG}\.{_SLUG}\.{_SLUG}")
 MAX_TITLE = 200
 MAX_SUMMARY = 500
-MAX_BODY_CHARS = 20_000
+MAX_BODY_CHARS = 32_000
+"""Raised from 20,000 for the sales research's longest sections (decision 224); long entries return their matching
+passages in search."""
 MAX_LIST = 40
 PART_WORDS = 180
 """Each indexed document (one per part) stays under Bedrock's default 300-token chunk, so every chunk the vector
