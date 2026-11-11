@@ -184,7 +184,6 @@ async def test_search_filters_by_scope_unless_the_owner_asked_for_on_request_mat
     r = await search(w.kb, w.store, "anything")
     parts = filter_parts(w.kb.calls[-1]["filter"])
     assert {"in": {"key": "scope", "value": ["always", "relevant"]}} in parts
-    assert any(p.get("notIn", {}).get("key") == "department" for p in parts)  # department knowledge (§17)
     assert w.kb.calls[-1]["overrideSearchType"] == "HYBRID"
     assert [i["id"] for i, _ in r.items] == [rel["id"]]
     r = await search(w.kb, w.store, "anything", include_on_request=True)

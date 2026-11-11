@@ -43,6 +43,10 @@ CACHE_SIZE = 256
 CACHE_TTL_S = 60.0
 
 
+RETRIEVE_ENTRY_FILTERS = False
+"""Send the department/audience/entry filters to Retrieve too (off until the index is shown to apply them)."""
+ENTRY_FETCH = 30
+"""Hits fetched for a department caller, so its entries are found after other departments' are dropped."""
 ENTRY_CHARS = 6000
 """An entry is returned whole (they are written to stand alone), up to this many characters."""
 MAX_RELATED_ENTRIES = 3
@@ -271,7 +275,12 @@ async def _retrieve(
     """With a market: Retrieve filtered to it. When the filter finds nothing or Bedrock refuses it (an index
     that can't filter on the attribute yet), a wider unfiltered Retrieve; ``search`` keeps only the items whose
     record holds in the market, so the answer is never mixed, only possibly shorter."""
-    who = caller_filter(caller)
+    # The department, audience and entry filters are applied to the records only (``entry_visible``): the live
+    # index returned nothing when they were sent to Retrieve (2026-11-11 deploy, 0/22), so Retrieve keeps the
+    # proven scope filter and fetches more, and isolation stays exactly as strict.
+    who = caller_filter(caller) if RETRIEVE_ENTRY_FILTERS else None
+    if caller is not None and caller.department in all_departments():
+        n = max(n, ENTRY_FETCH)
     parts = [
         *([market_filter(market)] if market else []),
         *([brand_filter(brand)] if brand else []),

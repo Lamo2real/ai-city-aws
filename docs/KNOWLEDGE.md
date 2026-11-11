@@ -412,9 +412,10 @@ entry becomes `user_modified`); `DELETE` (tombstone; out of index and graph; S3 
 (`sync: failed`, `error`) and shown on the card.
 
 **Isolation, enforced in `search.py`.** `search_knowledge` takes the department from the calling agent (managers and
-workers; `department` canonicalised to the config key), never from its arguments. The Retrieve filter excludes
-every other department (`notIn`), and every hit is re-checked against its record, so an index that ignores a filter
-can only shorten an answer. VAIC, the Orchestrator and the executives see no department entries. The audience
+workers; `department` canonicalised to the config key), never from its arguments. Every hit is checked against its record (department, audience, domain, platforms, type),
+so isolation never depends on the index. Since decision 218 Retrieve carries only the scope filter (the first live
+evaluation found 0/22 with the department `notIn` filter sent to it) and a department caller fetches 30 hits;
+`RETRIEVE_ENTRY_FILTERS` in `search.py` turns the index-side filter back on once the index is shown to apply it. VAIC, the Orchestrator and the executives see no department entries. The audience
 defaults to the caller's role (manager: manager + both; worker: worker + both), widened with `audience: "all"`;
 optional `domain`, `platforms`, `entry_type`; `related` (default on) adds up to 3 `REQUIRES`/`RELATED_TO`
 neighbours of the same department as summaries. Entries come back whole with `as_of`, `review_by`, `volatility`,

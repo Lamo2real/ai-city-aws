@@ -436,17 +436,23 @@ async def test_only_the_marketing_department_retrieves_marketing_entries(kb_clas
         assert res.items == [] and res.related_items == []
 
 
-async def test_the_retrieve_filter_keeps_other_departments_and_the_other_role_out() -> None:
+async def test_the_other_role_is_kept_out_by_the_record_check() -> None:
     r = await _seeded_search_rig(FakeKnowledgeBase())
     await search(r.kb, r.store, "q", caller=Caller(department="marketing", role="manager"))
-    f = json.dumps(r.kb.calls[0]["filter"])
-    assert '"notIn": {"key": "department"' in f and '"sales"' in f and '"marketing"' not in f.split("audience")[0]
-    assert '{"notIn": {"key": "audience", "value": ["worker"]}}' in f
+    assert r.kb.calls[0]["max_results"] == 30  # room for the department's entries after others are dropped
     # A manager does not get worker-only entries unless they widen the audience.
     res = await search(r.kb, r.store, "q", caller=Caller(department="marketing", role="manager"))
     assert res.items == []
     res = await search(r.kb, r.store, "q", caller=Caller(department="marketing", role="manager", audience="all"))
     assert len(res.items) == 2
+
+
+def test_the_caller_filter_is_still_built_for_when_the_index_applies_it() -> None:
+    from vaic.shared.knowledge.search import caller_filter
+
+    f = json.dumps(caller_filter(Caller(department="marketing", role="manager")))
+    assert '"notIn": {"key": "department"' in f and '"sales"' in f
+    assert '{"notIn": {"key": "audience", "value": ["worker"]}}' in f
 
 
 async def test_an_old_fast_moving_entry_is_marked_for_verification() -> None:

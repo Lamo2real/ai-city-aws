@@ -118,5 +118,9 @@ async def live_eval(kb: Any, store: Any, department: str, root: Path | None = No
         if set(top) & set(x["expect"]):
             out.hits += 1
         else:
-            out.misses.append({"q": x["q"], "expected": x["expect"], "got": top})
+            # What the index itself returned (scope filter only), so a miss can be told apart from an empty index.
+            raw = await kb.retrieve(x["q"], 10, ["always", "relevant"])
+            out.misses.append(
+                {"q": x["q"], "expected": x["expect"], "got": top, "index": [h.item_id for h in raw][:10]}
+            )
     return out
