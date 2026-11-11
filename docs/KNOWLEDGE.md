@@ -476,6 +476,15 @@ last ready version searchable while a new one indexes and after a failed index (
 the entry until it is indexed again; its test is an expected failure). The section 16 approval gates stay prompt rules:
 the policy gate's rules have no department scope.
 
+**Data and AI (decision 227).** `knowledge/seed/data/` (the folder is the department key `data`): 22 documents, one
+per numbered section of `knowledge/source/data-and-ai-research.md` (verbatim, 30,357 words, SHA-256 pinned) plus "Data
+and AI: About this knowledge base"; the conclusion stays with section 21, "Data and AI: Consolidated gaps", its own
+document. 22 domains. Type `policy`: privacy (6), AI governance and law (16), responsible AI (17) and the guardrails
+(19, also domain `guardrails`). No `[HOUSE STYLE]` material. `_eval.yaml`: 18 questions, offline 18/18 in the top 5.
+Section 8 (Neptune, OpenSearch) is knowledge for the agents' work, not a change to this pipeline. Managers
+(`agents/departments/data.md`) and workers (`data.workers.md`) follow the same order and handling as Application, with
+section 19's approval rows behind `ask_owner` (prompt rules; the policy gate has no department scope).
+
 **A "shared" scope (planned, not built).** A cross-department document would live in `knowledge/seed/shared/` with its
 own `_taxonomy.yaml` (`department: shared`); `entry_visible` and `caller_filter` in `search.py` would let every
 department caller (never VAIC) see `department == "shared"` records beside its own; the HUD shows it as its own card;

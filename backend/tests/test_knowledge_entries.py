@@ -388,12 +388,7 @@ async def test_the_graph_has_the_taxonomy_and_the_entries_with_departments_on_ev
     await run_seed(SEEDS, r.registry, r.projector, MODEL)
     labels = {label for label, _ in r.graph.vertices}
     assert labels == {"Department", "Domain", "Platform", "Objective", "Concept", "KnowledgeEntry"}
-    assert {v["department"] for v in r.graph.vertices.values()} == {
-        "marketing",
-        "sales",
-        "application",
-        "infrastructure",
-    }
+    assert {v["department"] for v in r.graph.vertices.values()} == set(SEEDS.taxonomies)
     for (label, vid), v in r.graph.vertices.items():
         if label == "KnowledgeEntry":
             assert vid.removeprefix("kn-").split(".")[0] == v["department"]

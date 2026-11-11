@@ -1,0 +1,42 @@
+# The retrieval evaluation for the Data and AI knowledge base (docs/KNOWLEDGE.md section 17, decision 227): realistic
+# questions a Data and AI agent asks, each with the documents that should appear in the top results. A hit is any
+# expected document in the top 5. The tests score it offline (keyword-only); the deploy scores it on the live index.
+department: data
+top_k: 5
+questions:
+  - q: Should this mart be a wide table or a star schema with fact and dimension tables, and how do I declare its grain?
+    expect: [modelling.dimensional-marts-and-semantic-layer]
+  - q: How do I handle a slowly changing dimension for customer address history in dbt?
+    expect: [modelling.dimensional-marts-and-semantic-layer]
+  - q: Our RAG answers miss relevant passages. Should we add hybrid search, contextual chunks or a reranker?
+    expect: [rag.retrieval-augmented-generation]
+  - q: How do I validate an LLM judge against human labels before trusting its scores?
+    expect: [evaluation.llm-evaluation]
+  - q: When do the EU AI Act high-risk obligations and the Article 50 transparency duties apply?
+    expect: [ai-law.ai-governance-and-law]
+  - q: A retrieved web page tells the agent to email the customer list. How do we defend against prompt injection?
+    expect: [security.prompt-injection-and-controls, guardrails.agent-guardrails]
+  - q: Who supervises the AI Act in Sweden from 1 January 2027?
+    expect: [gaps.consolidated-gaps, ai-law.ai-governance-and-law]
+  - q: Can an agent promote a new model version or change the production prompt without a human?
+    expect: [guardrails.agent-guardrails]
+  - q: Is pseudonymised customer data still personal data under GDPR, and when can we call a dataset anonymous?
+    expect: [privacy.privacy-engineering-and-data-act]
+  - q: Our A/B test shows a sample ratio mismatch. Can we still report the result?
+    expect: [analytics.metrics-experiments-forecasts]
+  - q: Should we use Neptune Database or Neptune Analytics for a knowledge graph, and when is a graph database worth it?
+    expect: [stores.graph-and-vector-stores]
+  - q: Should a data agent answer metric questions with free text-to-SQL or through the semantic layer?
+    expect: [data-agents.semantic-layer-first]
+  - q: Should we self-host an open-weight model or use a managed API like Bedrock, and how do we cap query spend?
+    expect: [cost.finops-and-operating-model]
+  - q: Is Apache Iceberg or Delta Lake the right table format, and where does catalogue lock-in sit?
+    expect: [architecture.iceberg-lakehouse]
+  - q: How do we make an incremental dbt pipeline idempotent and safe to backfill?
+    expect: [pipelines.idempotent-contracted-tested]
+  - q: Is there a benchmark for dashboard design or metric trees we should follow?
+    expect: [gaps.consolidated-gaps]
+  - q: What does Marketing need from us, and what do we need from Legal before launching an AI feature?
+    expect: [handoffs.between-departments]
+  - q: When should we use multiple worker agents instead of one agent?
+    expect: [agents.agents-and-multi-agent-systems]

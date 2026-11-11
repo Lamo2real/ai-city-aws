@@ -1,0 +1,544 @@
+# The Data and AI department's knowledge taxonomy (docs/KNOWLEDGE.md section 17). Content: one document per
+# numbered section of knowledge/source/data-and-ai-research.md (the only source), seeded and scoped exactly like
+# marketing and sales (decision 227). The folder is the department key in config/departments.json ("data").
+department: data
+label: Data and AI
+seed_version: 1
+domains:
+- id: overview
+  label: Overview
+  description: What the labels mean and the caveats that apply to everything
+- id: architecture
+  label: Data architecture
+  description: Lakehouse, table formats, catalogues, layering, batch and streaming
+- id: modelling
+  label: Data modelling
+  description: Dimensional marts, grain, slowly changing dimensions, dbt models, semantic layer
+- id: pipelines
+  label: Pipelines
+  description: Orchestration, idempotent loads, backfills, contracts and tests
+- id: quality
+  label: Data quality
+  description: Quality dimensions, tests, SLOs, lineage and data incidents
+- id: governance
+  label: Data governance
+  description: Ownership, data mesh, tag-based access and the governance kit
+- id: privacy
+  label: Privacy engineering
+  description: Pseudonymisation, anonymisation, GDPR in pipelines, the Data Act, residency
+- id: analytics
+  label: Analytics and experimentation
+  description: Metrics, A/B tests, sample ratio mismatch, forecasting
+- id: stores
+  label: Graph and vector stores
+  description: Neptune, OpenSearch and other stores as knowledge for client and product work
+- id: ml
+  label: Machine learning and MLOps
+  description: Baselines, the ML lifecycle, model registry, drift
+- id: llm
+  label: LLM engineering
+  description: Model choice, routing, context, tools, caching, fine-tuning versus RAG
+- id: rag
+  label: RAG and retrieval
+  description: Hybrid retrieval, chunking, rerankers, graph RAG, access filters, evaluation
+- id: agents
+  label: Agents
+  description: Multi-agent evidence, orchestration, memory, MCP and A2A
+- id: data-agents
+  label: Data agents
+  description: Text-to-SQL and semantic-layer grounding
+- id: evaluation
+  label: Evaluation
+  description: Eval sets, LLM judges, regression tests
+- id: security
+  label: AI security
+  description: Prompt injection, OWASP, layered controls
+- id: ai-law
+  label: AI governance and law
+  description: EU AI Act, GDPR and AI, standards, Sweden (orientation, not legal advice)
+- id: responsible-ai
+  label: Responsible AI
+  description: Documentation, fairness testing, oversight, incidents
+- id: cost
+  label: Cost and FinOps
+  description: Managed versus self-hosted, cost limits, FinOps, operating model
+- id: guardrails
+  label: Guardrails
+  description: What agents may do alone, what needs human approval, what they must never do
+- id: handoffs
+  label: Handoffs
+  description: What Data and AI hands to and receives from other departments
+- id: gaps
+  label: Gaps
+  description: What the knowledge base does not know
+platforms:
+- id: aws
+  label: AWS
+- id: bedrock
+  label: Amazon Bedrock
+- id: opensearch
+  label: OpenSearch
+- id: neptune
+  label: Amazon Neptune
+- id: sagemaker
+  label: SageMaker
+- id: dbt
+  label: dbt
+- id: iceberg
+  label: Apache Iceberg
+- id: snowflake
+  label: Snowflake
+- id: databricks
+  label: Databricks
+- id: bigquery
+  label: BigQuery
+- id: mlflow
+  label: MLflow
+objectives:
+- id: data-platform
+  label: Data platform
+- id: analytics
+  label: Analytics
+- id: ai-features
+  label: AI features
+- id: governance
+  label: Governance
+- id: compliance
+  label: Compliance
+concepts:
+- id: lakehouse
+  label: Lakehouse
+  kind: concept
+  aliases:
+  - lakehouse
+  - Iceberg
+- id: catalogue
+  label: Catalogue
+  kind: concept
+  aliases:
+  - catalogue
+  - catalog
+- id: medallion
+  label: Medallion layers
+  kind: concept
+  aliases:
+  - bronze
+  - silver
+  - gold
+  - medallion
+- id: dimensional-model
+  label: Dimensional model
+  kind: concept
+  aliases:
+  - dimensional
+  - Kimball
+  - star schema
+  - fact table
+- id: grain
+  label: Grain
+  kind: concept
+  aliases:
+  - grain
+- id: scd
+  label: Slowly changing dimension
+  kind: concept
+  aliases:
+  - slowly changing
+  - SCD
+- id: semantic-layer
+  label: Semantic layer
+  kind: concept
+  aliases:
+  - semantic layer
+- id: data-contract
+  label: Data contract
+  kind: concept
+  aliases:
+  - data contract
+  - model contract
+  - contracts
+- id: idempotency
+  label: Idempotent loads
+  kind: concept
+  aliases:
+  - idempotent
+  - microbatch
+  - backfill
+- id: data-test
+  label: Data tests
+  kind: concept
+  aliases:
+  - data test
+  - unit test
+  - unit tests
+- id: data-slo
+  label: Data SLO
+  kind: metric
+  aliases:
+  - SLO
+  - SLOs
+  - freshness
+- id: lineage
+  label: Lineage
+  kind: concept
+  aliases:
+  - lineage
+  - OpenLineage
+- id: data-incident
+  label: Data incident
+  kind: concept
+  aliases:
+  - incident
+  - incidents
+- id: lf-tags
+  label: Lake Formation tags
+  kind: tool
+  aliases:
+  - Lake Formation
+  - LF-Tag
+  - LF-Tags
+- id: data-mesh
+  label: Data mesh
+  kind: concept
+  aliases:
+  - data mesh
+- id: pii
+  label: Personal data
+  kind: regulation
+  aliases:
+  - personal data
+  - PII
+- id: pseudonymisation
+  label: Pseudonymisation
+  kind: regulation
+  aliases:
+  - pseudonymis
+  - pseudonymous
+- id: anonymisation
+  label: Anonymisation
+  kind: regulation
+  aliases:
+  - anonymis
+  - anonymous
+- id: data-act
+  label: EU Data Act
+  kind: regulation
+  aliases:
+  - Data Act
+- id: gdpr
+  label: GDPR
+  kind: regulation
+  aliases:
+  - GDPR
+- id: article-22
+  label: GDPR Article 22
+  kind: regulation
+  aliases:
+  - Article 22
+- id: ai-act
+  label: EU AI Act
+  kind: regulation
+  aliases:
+  - AI Act
+- id: article-50
+  label: AI Act Article 50
+  kind: regulation
+  aliases:
+  - Article 50
+- id: article-5
+  label: AI Act Article 5
+  kind: regulation
+  aliases:
+  - Article 5
+- id: high-risk
+  label: High-risk AI
+  kind: regulation
+  aliases:
+  - high-risk
+  - Annex III
+- id: gpai
+  label: General-purpose AI
+  kind: regulation
+  aliases:
+  - general-purpose AI
+  - GPAI
+- id: iso-42001
+  label: ISO/IEC 42001
+  kind: regulation
+  aliases:
+  - '42001'
+- id: nist-ai-rmf
+  label: NIST AI RMF
+  kind: regulation
+  aliases:
+  - NIST AI RMF
+  - AI RMF
+- id: metric-definition
+  label: Metric definition
+  kind: metric
+  aliases:
+  - metric definition
+  - one definition
+- id: ab-test
+  label: A/B test
+  kind: tactic
+  aliases:
+  - A/B
+  - experiment
+  - experiments
+- id: srm
+  label: Sample ratio mismatch
+  kind: metric
+  aliases:
+  - sample ratio mismatch
+  - SRM
+- id: cuped
+  label: Variance reduction
+  kind: tactic
+  aliases:
+  - CUPED
+  - variance reduction
+- id: sequential-testing
+  label: Sequential testing
+  kind: tactic
+  aliases:
+  - sequential
+  - peeking
+- id: mde
+  label: Minimum detectable effect
+  kind: metric
+  aliases:
+  - minimum detectable effect
+  - MDE
+- id: forecast
+  label: Forecasting
+  kind: tactic
+  aliases:
+  - forecast
+  - forecasts
+  - MASE
+- id: graph-db
+  label: Graph database
+  kind: tool
+  aliases:
+  - graph database
+  - Neptune
+- id: vector-store
+  label: Vector store
+  kind: tool
+  aliases:
+  - vector store
+  - vector index
+  - HNSW
+- id: hybrid-search
+  label: Hybrid search
+  kind: tactic
+  aliases:
+  - hybrid search
+  - hybrid retrieval
+  - BM25
+- id: reranker
+  label: Reranker
+  kind: tool
+  aliases:
+  - reranker
+  - reranking
+- id: embedding
+  label: Embedding model
+  kind: tool
+  aliases:
+  - embedding
+  - embeddings
+- id: chunking
+  label: Chunking
+  kind: tactic
+  aliases:
+  - chunk
+  - chunks
+  - chunking
+  - contextual retrieval
+- id: rag
+  label: RAG
+  kind: concept
+  aliases:
+  - RAG
+  - retrieval-augmented
+- id: graphrag
+  label: Graph RAG
+  kind: concept
+  aliases:
+  - GraphRAG
+  - graph RAG
+  - Graph RAG
+- id: access-filter
+  label: Retrieval access filter
+  kind: tactic
+  aliases:
+  - access filter
+  - tenant filter
+  - metadata filter
+- id: model-routing
+  label: Model routing
+  kind: tactic
+  aliases:
+  - routing
+  - router
+- id: context-engineering
+  label: Context engineering
+  kind: tactic
+  aliases:
+  - context engineering
+  - context window
+- id: prompt-caching
+  label: Prompt caching
+  kind: tactic
+  aliases:
+  - prompt caching
+  - cache
+- id: fine-tuning
+  label: Fine-tuning
+  kind: tactic
+  aliases:
+  - fine-tuning
+  - fine-tune
+  - fine-tuned
+- id: structured-output
+  label: Structured outputs
+  kind: tactic
+  aliases:
+  - structured output
+  - JSON schema
+- id: multi-agent
+  label: Multi-agent system
+  kind: concept
+  aliases:
+  - multi-agent
+- id: orchestrator
+  label: Orchestrator
+  kind: role
+  aliases:
+  - orchestrator
+- id: mcp
+  label: MCP
+  kind: tool
+  aliases:
+  - MCP
+  - Model Context Protocol
+- id: a2a
+  label: A2A
+  kind: tool
+  aliases:
+  - A2A
+- id: text-to-sql
+  label: Text-to-SQL
+  kind: tactic
+  aliases:
+  - text-to-SQL
+  - Spider
+- id: eval-set
+  label: Evaluation set
+  kind: tactic
+  aliases:
+  - evaluation set
+  - eval set
+  - error analysis
+- id: llm-judge
+  label: LLM judge
+  kind: tactic
+  aliases:
+  - LLM judge
+  - LLM-as-judge
+  - judge
+- id: prompt-injection
+  label: Prompt injection
+  kind: concept
+  aliases:
+  - prompt injection
+  - prompt-injection
+- id: lethal-trifecta
+  label: Lethal trifecta
+  kind: concept
+  aliases:
+  - lethal trifecta
+  - lethal-trifecta
+- id: owasp
+  label: OWASP lists
+  kind: regulation
+  aliases:
+  - OWASP
+- id: sandbox
+  label: Sandbox
+  kind: tactic
+  aliases:
+  - sandbox
+  - sandboxed
+- id: model-registry
+  label: Model registry
+  kind: tool
+  aliases:
+  - model registry
+  - Model Registry
+  - champion alias
+- id: drift
+  label: Drift monitoring
+  kind: metric
+  aliases:
+  - drift
+- id: baseline
+  label: Baseline
+  kind: tactic
+  aliases:
+  - baseline
+- id: model-card
+  label: Model and system cards
+  kind: tactic
+  aliases:
+  - model card
+  - system card
+  - datasheet
+- id: fairness
+  label: Fairness testing
+  kind: tactic
+  aliases:
+  - fairness
+  - bias
+  - disaggregated
+- id: human-oversight
+  label: Human oversight
+  kind: tactic
+  aliases:
+  - human oversight
+  - automation bias
+- id: human-approval
+  label: Human approval
+  kind: tactic
+  aliases:
+  - human approval
+  - approval
+  - sign-off
+- id: finops
+  label: FinOps
+  kind: concept
+  aliases:
+  - FinOps
+- id: unit-economics
+  label: Unit economics
+  kind: metric
+  aliases:
+  - unit economics
+  - cost per
+- id: self-hosting
+  label: Self-hosting
+  kind: tactic
+  aliases:
+  - self-host
+  - self-hosting
+  - open-weight
+- id: scan-limit
+  label: Query scan limits
+  kind: tactic
+  aliases:
+  - scan cap
+  - scan limit
+  - data usage control
+  - budget alarm
