@@ -578,9 +578,26 @@ section 18's three tiers with `ask_owner` before every "needs human approval" it
 proposed; verify past dates and `needs_verification`; say `[GAP]` points are unknown; give orientation only; and use
 section 19's hand-offs. The section 18 approval gates stay prompt rules (the policy gate has no department scope).
 
+**Operations (decision 234).** `knowledge/seed/operations/`: 28 documents, one per numbered section of
+`knowledge/source/operations-research.md` (verbatim, 28,160 words, SHA-256 pinned) plus "Operations: About this
+knowledge base" (the opening summary and the reading guide); section 2 (house style, 37,505 characters, more than the
+32,000 a document may hold) is two documents cut at the "Training" sub-heading, "House style: scaling roadmap,
+constraint and management" and "House style: training, delegation, hiring, culture and performance"; the conclusion
+stays with section 26, "Operations: Consolidated gaps". 23 domains. House style (2): domain, type and confidence
+`house-style`. Legal (18 Swedish employment framework, 19 work environment, 20 employee data and monitoring, 21 AI in
+people decisions): domain `compliance`, type `policy`, the only operations documents of that type. Guardrails (24):
+domain `guardrails`, type `checklist`, the only one. "sections 13 to 23" is read as a range in `cross_refs`, and
+"section 2" points to both house-style parts. `_eval.yaml`: 17 questions, offline 17/17 in the top 5. The precedence
+collision table is 926 words, kept whole (Bedrock splits it). Managers (`agents/departments/operations.md`) and workers
+(`operations.workers.md`) apply section 3 (law first, evidence second, house style third), the house style by default
+in the brand's own voice (never Alex or Leila Hormozi's name, likeness, catchphrases or figures), section 24's three
+lists with `ask_owner` before every approval item, `needs_verification` and `[GAP]` handling, legal content as
+orientation, and section 25's handoffs. Approval gates stay prompt rules (the policy gate has no department scope).
+
 **Adding the next department.** Put the source unchanged under `knowledge/source/`, write
 `knowledge/seed/<department key>/` (the key in `config/departments.json`, not its display name) with `_taxonomy.yaml`,
 one Markdown file per document with front matter, and `_eval.yaml`; run `uv run python backend/scripts/seed_knowledge.py
 --validate`; add `agents/departments/<key>.md` guidance and `<key>.workers.md`; copy
-`backend/tests/test_research_knowledge.py` for the department. No code changes: the seeder, registry,
+`backend/tests/test_research_knowledge.py` (or `test_operations_knowledge.py` for a source with house style) for the
+department. No code changes: the seeder, registry,
 projections, record check and HUD card are department-generic.

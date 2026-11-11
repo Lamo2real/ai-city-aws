@@ -1,0 +1,95 @@
+# The operations department's knowledge taxonomy (docs/KNOWLEDGE.md section 17). Content: one document per numbered
+# section of knowledge/source/operations-research.md (the only source), plus "About this knowledge base" (the opening
+# summary and reading guide); section 2 (house style) is two documents because it is longer than one document may be,
+# and the closing conclusion stays with section 26 (consolidated gaps). Seeded and scoped exactly like marketing,
+# sales and application (decision 234).
+department: operations
+label: Operations
+seed_version: 1
+
+domains:
+  - {id: overview, label: Overview, description: "The opening summary, the labels and caveats, and the department's three-layer rule"}
+  - {id: house-style, label: House style, description: "The owner's chosen default style (not evidence): Alex and Leila Hormozi's operating models"}
+  - {id: precedence, label: Precedence, description: "Law first, evidence second, house style third, and the collision table"}
+  - {id: processes, label: Process management, description: "SIPOC, SOPs, checklists, PDCA, DMAIC, the five focusing steps, automation"}
+  - {id: rhythm, label: Operating rhythm, description: "OKRs, EOS, 4DX, meetings, RAPID, DACI, RACI and decision records"}
+  - {id: projects, label: Projects, description: "PMBOK, PRINCE2, reference-class estimation, project templates"}
+  - {id: service-levels, label: Service levels and capacity, description: "SLI, SLO, SLA, queueing and capacity planning"}
+  - {id: vendors, label: Vendors and procurement, description: "SaaS estate, AI pricing, GDPR Article 28 contracts, MBL, vendor templates"}
+  - {id: risk, label: Risk, continuity and quality, description: "ISO 31000, quality, business continuity, AI Act risk"}
+  - {id: organisation, label: Organisation design, description: "Span of control, async work, reorganising in Sweden"}
+  - {id: business-systems, label: Business systems, description: "Systems of record and revenue operations"}
+  - {id: ai-operations, label: AI operations, description: "Operating a company with AI agents in 2026"}
+  - {id: hiring, label: Hiring, description: "Selection evidence, structured interviews, Swedish hiring law, the pipeline"}
+  - {id: onboarding, label: Onboarding, description: "Statutory first-week deadlines, evidence, checklist"}
+  - {id: performance, label: Performance, description: "Evidence, Swedish limits, a light performance cycle"}
+  - {id: compensation, label: Compensation and benefits, description: "Pay survey, pay transparency, pension, insurance, benefits"}
+  - {id: offboarding, label: Offboarding, description: "LAS, redundancy, final pay, offboarding checklist"}
+  - {id: compliance, label: Compliance, description: "Swedish employment, work-environment, employee-data and AI-in-people-decisions law (orientation, not legal advice)"}
+  - {id: contractors, label: Contractors and international teams, description: "Contractor or employee, permits, foreign staff, hiring abroad"}
+  - {id: calendar, label: Handbook and calendar, description: "Mandatory written items, annual duties, handbook, people-operations calendar"}
+  - {id: guardrails, label: Guardrails, description: "What the department's agents may do alone, what needs human approval, what they must never do"}
+  - {id: handoffs, label: Handoffs, description: "Work to and from the other departments"}
+  - {id: gaps, label: Gaps, description: "What the knowledge base does not know"}
+
+platforms: []
+
+objectives:
+  - {id: scale, label: Scale}
+  - {id: efficiency, label: Efficiency}
+  - {id: people, label: People}
+  - {id: compliance, label: Compliance}
+  - {id: reliability, label: Reliability}
+  - {id: cost, label: Cost}
+
+# The concept vocabulary (an entry MENTIONS a concept when one of its aliases appears in its text; all-capital
+# aliases match case-sensitively).
+concepts:
+  - {id: scaling-roadmap, label: Scaling roadmap, kind: framework, aliases: [scaling roadmap, ten-level roadmap]}
+  - {id: constraint, label: The one constraint, kind: practice, aliases: [Theory of Constraints, five focusing steps, the constraint]}
+  - {id: more-better-new, label: More, better, new, kind: practice, aliases: [more, better, new, more-better-new]}
+  - {id: approval-limits, label: Written approval limits, kind: control, aliases: [approval limit, approval limits, spending limit, spending limits]}
+  - {id: sop, label: SOP, kind: artefact, aliases: [SOP, SOPs, standard operating procedure]}
+  - {id: sipoc, label: SIPOC, kind: practice, aliases: [SIPOC, SIPOCs]}
+  - {id: pdca, label: PDCA, kind: practice, aliases: [PDCA, kaizen]}
+  - {id: dmaic, label: DMAIC, kind: practice, aliases: [DMAIC]}
+  - {id: okr, label: OKRs, kind: framework, aliases: [OKR, OKRs]}
+  - {id: eos, label: EOS, kind: framework, aliases: [EOS, Level 10]}
+  - {id: four-dx, label: 4DX, kind: framework, aliases: [4DX]}
+  - {id: rapid, label: RAPID, kind: framework, aliases: [RAPID]}
+  - {id: daci, label: DACI, kind: framework, aliases: [DACI]}
+  - {id: raci, label: RACI, kind: framework, aliases: [RACI]}
+  - {id: decision-record, label: Decision record, kind: artefact, aliases: [decision record, decision records]}
+  - {id: pmbok, label: PMBOK, kind: standard, aliases: [PMBOK]}
+  - {id: prince2, label: PRINCE2, kind: standard, aliases: [PRINCE2]}
+  - {id: reference-class, label: Reference-class forecasting, kind: practice, aliases: [reference-class forecasting, reference class, outside view]}
+  - {id: slo, label: Service level objective, kind: metric, aliases: [SLO, SLOs, SLI, SLA]}
+  - {id: utilisation, label: Utilisation, kind: metric, aliases: [utilisation, queueing]}
+  - {id: iso-31000, label: ISO 31000, kind: standard, aliases: [ISO 31000]}
+  - {id: business-continuity, label: Business continuity, kind: practice, aliases: [business continuity, ISO 22301]}
+  - {id: structured-interview, label: Structured interview, kind: practice, aliases: [structured interview, structured interviews, structured-interview]}
+  - {id: scorecard, label: Scorecard, kind: artefact, aliases: [scorecard, scorecards]}
+  - {id: pay-survey, label: Annual pay survey, kind: duty, aliases: [pay survey, lönekartläggning]}
+  - {id: pay-transparency, label: Pay transparency, kind: law, aliases: [pay transparency, Pay Transparency Directive]}
+  - {id: las, label: LAS (Employment Protection Act), kind: law, aliases: [LAS]}
+  - {id: mbl, label: MBL (Co-determination Act), kind: law, aliases: [MBL]}
+  - {id: work-environment-act, label: Work Environment Act, kind: law, aliases: [Work Environment Act, arbetsmiljölagen]}
+  - {id: afs-2023, label: AFS 2023 provisions, kind: law, aliases: [AFS 2023:1, AFS 2023:2]}
+  - {id: safety-representative, label: Safety representative, kind: role, aliases: [safety representative, safety committee]}
+  - {id: gdpr, label: GDPR, kind: law, aliases: [GDPR]}
+  - {id: article-22, label: GDPR Article 22, kind: law, aliases: [Article 22]}
+  - {id: article-28, label: GDPR Article 28, kind: law, aliases: [Article 28]}
+  - {id: imy, label: IMY, kind: authority, aliases: [IMY]}
+  - {id: ai-act, label: EU AI Act, kind: law, aliases: [AI Act, Digital Omnibus]}
+  - {id: monitoring, label: Employee monitoring, kind: risk, aliases: [monitoring, monitor individuals]}
+  - {id: whistleblowing, label: Whistleblowing, kind: law, aliases: [whistleblowing]}
+  - {id: discrimination, label: Discrimination Act, kind: law, aliases: [Discrimination Act, active measures, harassment]}
+  - {id: sick-pay, label: Sick pay and rehabilitation, kind: duty, aliases: [sick pay, rehabilitation]}
+  - {id: parental-leave, label: Parental leave, kind: law, aliases: [parental leave, VAB]}
+  - {id: holiday, label: Holiday, kind: law, aliases: [Annual Leave Act, holiday pay, semesterlagen]}
+  - {id: work-permit, label: Work permit, kind: law, aliases: [work permit, work permits]}
+  - {id: contractor-classification, label: Contractor classification, kind: risk, aliases: [contractor classification, contractor or employee]}
+  - {id: redundancy, label: Redundancy, kind: process, aliases: [redundancy, redundancies]}
+  - {id: probation, label: Probation, kind: process, aliases: [probation, probationary]}
+  - {id: human-oversight, label: Human oversight, kind: control, aliases: [human oversight, human approval, named human]}
+  - {id: saas-spend, label: SaaS spend, kind: metric, aliases: [SaaS spend, SaaS estate, licence utilisation]}

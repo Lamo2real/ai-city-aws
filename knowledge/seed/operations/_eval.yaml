@@ -1,0 +1,50 @@
+# The retrieval evaluation for the operations knowledge base (docs/KNOWLEDGE.md section 17): realistic questions an
+# Operations agent asks, each with the documents that should appear in the top results. A question counts as a hit
+# when any expected document is in the top 5. The tests score it offline (keyword-only); the deploy scores it against
+# the real hybrid index and prints the hit rate. Files starting with "_" are never seeded as entries.
+department: operations
+top_k: 5
+questions:
+  # hiring and onboarding
+  - q: What steps should our hiring process follow for a new support role, and which interview format predicts performance best?
+    expect: [operations.hiring.hiring]
+  - q: What may we ask candidates and how long can we keep rejected candidates' data in Sweden?
+    expect: [operations.hiring.hiring, operations.compliance.employee-data-and-monitoring]
+  - q: What must be done in a new hire's first week, including the written employment terms deadline?
+    expect: [operations.onboarding.onboarding]
+  # ending employment (Swedish law)
+  - q: How much notice do we need and what objective reasons are required to dismiss an employee under LAS?
+    expect: [operations.offboarding.offboarding, operations.precedence.law-evidence-house-style]
+  - q: Before making two roles redundant, do we have to negotiate under MBL even without a collective agreement?
+    expect: [operations.offboarding.offboarding, operations.organisation.organisation-design-and-scaling]
+  # work environment
+  - q: Who is responsible for the work environment and when do we need a safety representative or a safety committee?
+    expect: [operations.compliance.swedish-work-environment-law]
+  - q: What does systematic work environment management under AFS 2023:1 require of a small company with remote staff?
+    expect: [operations.compliance.swedish-work-environment-law]
+  # vendors and procurement
+  - q: How should we select and contract a new SaaS vendor that will process our customers' personal data?
+    expect: [operations.vendors.vendor-and-procurement-management]
+  # operating rhythm and decision rights
+  - q: What weekly meeting and quarterly goal rhythm should a small company run, and who decides what?
+    expect: [operations.rhythm.operating-rhythm-and-decision-rights]
+  # processes and projects
+  - q: How do we write an SOP for a recurring process and decide what to automate?
+    expect: [operations.processes.process-management]
+  - q: How should we estimate how long an internal project will take instead of trusting the team's guess?
+    expect: [operations.projects.project-and-programme-management]
+  # pay and data
+  - q: When is the annual pay survey due and what does the EU pay transparency directive change for us?
+    expect: [operations.compensation.compensation-and-benefits]
+  - q: Can we monitor employees' activity or use GPS tracking on company laptops?
+    expect: [operations.compliance.employee-data-and-monitoring]
+  - q: Can an AI agent screen and rank job applicants automatically, and what does the AI Act require?
+    expect: [operations.compliance.ai-in-people-decisions, operations.guardrails.agent-guardrails]
+  # house style and guardrails
+  - q: Which level of the scaling roadmap are we on and what single constraint should we fix first?
+    expect: [operations.house-style.scaling-roadmap-constraint-and-management]
+  - q: Which actions may an Operations agent take alone and which need a human's approval?
+    expect: [operations.guardrails.agent-guardrails]
+  # a gap: the knowledge base says it does not know
+  - q: What are the 2027 income base amount and the ITP pension premiums?
+    expect: [operations.gaps.consolidated-gaps]

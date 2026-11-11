@@ -167,9 +167,10 @@ def test_every_indexed_part_starts_with_the_title_and_stays_small() -> None:
             # 825 and 727 (decision 228), four product tables 539 to 877 (guardrails, precedence, handoffs, Sweden and
             # the EU; decision 230), the research guardrails' table 696 (decision 231), the legal regime map,
             # hand-off and pending-changes tables 751, 723 and 871 (decision 232), and the media vendor-terms and
-            # precedence tables 724 and 605 (decision 233); Bedrock splits them.
+            # precedence tables 724 and 605 (decision 233), and the operations precedence collision table 926
+            # (decision 234); Bedrock splits them.
             table = p.split("\n\n", 1)[1].startswith("|")
-            assert len(p.split()) <= (900 if table else 260), (e.id, len(p.split()))
+            assert len(p.split()) <= (1000 if table else 260), (e.id, len(p.split()))
 
 
 def test_concepts_come_only_from_the_taxonomy() -> None:
