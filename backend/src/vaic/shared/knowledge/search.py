@@ -287,9 +287,9 @@ async def _retrieve(
         *([who] if who else []),
     ]
     if not parts:
-        return await kb.retrieve(query, n, list(scopes))
+        hits = await kb.retrieve(query, n, list(scopes))
+        return hits or await _plain(kb, query, n)
     extra = parts[0] if len(parts) == 1 else {"andAll": parts}
-    refused = False
     try:
         hits = await kb.retrieve(query, n, list(scopes), extra)
     except Exception as e:
@@ -297,10 +297,20 @@ async def _retrieve(
             raise
         log("warn", "knowledge.filter_refused", market=market, brand=brand, error=type(e).__name__)
         # The record check in ``search`` still keeps other departments' entries out of the answer.
-        refused, hits = True, []
-    if hits or not (refused or market or brand):
+        hits = []
+    if hits:
         return hits
-    return await kb.retrieve(query, 30, list(scopes))
+    return await _plain(kb, query, n)
+
+
+PLAIN_FETCH = 30
+
+
+async def _plain(kb: KnowledgeBase, query: str, n: int) -> list[Hit]:
+    """The fallback when a filtered Retrieve finds nothing: no filter at all, so the record check alone decides
+    scope, market, brand and department. On 2026-11-11 the live index answered every filtered hybrid call with
+    nothing and the plain call with the right documents (decision 221)."""
+    return await kb.retrieve(query, max(n, PLAIN_FETCH), [])
 
 
 async def _fetch(

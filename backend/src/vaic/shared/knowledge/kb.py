@@ -53,6 +53,10 @@ def scope_filter(scopes: list[str], extra: dict[str, Any] | None = None) -> dict
 
 
 def retrieval_config(max_results: int, scopes: list[str], extra: dict[str, Any] | None = None) -> dict[str, Any]:
+    """No scopes and no extra filter: the plain call (no filter, default search type), the one the live index was
+    shown to answer on 2026-11-11 when every filtered hybrid call came back empty (decision 221)."""
+    if not scopes and not extra:
+        return {"vectorSearchConfiguration": {"numberOfResults": max_results}}
     return {
         "vectorSearchConfiguration": {
             "numberOfResults": max_results,
@@ -200,6 +204,8 @@ class FakeKnowledgeBase:
         self.calls.append({"query": query, "max_results": max_results, **cfg})
         if extra and self.fail_filters:
             return []
+        if "filter" not in cfg:
+            return self.hits[:max_results]
         f = cfg["filter"]
         return [h for h in self.hits if matches_filter({**h.attributes, "scope": h.scope}, f)][:max_results]
 

@@ -319,7 +319,7 @@ async def test_when_the_index_cant_filter_the_record_check_still_keeps_markets_a
     s = _sections(out)
     assert it["ccpa"]["id"] in s["US"]
     assert it["gdpr"]["id"] not in s["US"]
-    assert len(w.kb.calls) == 2 and "andAll" not in w.kb.calls[1]["filter"]  # the wider unfiltered retry
+    assert len(w.kb.calls) == 2 and "filter" not in w.kb.calls[1]  # the wider plain retry (decision 221)
 
 
 async def test_a_market_with_nothing_stored_says_so() -> None:
