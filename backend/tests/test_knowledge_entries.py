@@ -163,9 +163,10 @@ def test_every_indexed_part_starts_with_the_title_and_stays_small() -> None:
             assert p.startswith(f"{e.title} › "), (e.id, p[:80])
             # Tables are kept whole; four sales tables are longer (each row repeats its source link, decision 224),
             # and the application guardrails' approval and "never" tables are 553 and 527 words (decision 225),
-            # and the IT infrastructure hand-offs table is 455 (decision 226).
+            # the IT infrastructure hand-offs table is 455 (decision 226), and the finance guardrails and gaps tables
+            # 825 and 727 (decision 228); Bedrock splits them.
             table = p.split("\n\n", 1)[1].startswith("|")
-            assert len(p.split()) <= (600 if table else 260), (e.id, len(p.split()))
+            assert len(p.split()) <= (850 if table else 260), (e.id, len(p.split()))
 
 
 def test_concepts_come_only_from_the_taxonomy() -> None:
@@ -615,7 +616,7 @@ def test_marketing_managers_and_workers_are_told_to_apply_the_house_style_within
         assert "never use his name, likeness or catchphrases" in text
         assert "brand's own voice" in text
     assert "budget split" in department_template("Marketing")
-    assert department_worker_rules("Finance") == "" and department_worker_rules("") == ""
+    assert department_worker_rules("Legal") == "" and department_worker_rules("") == ""
 
 
 async def test_the_playbook_survives_a_redeploy_after_the_owner_edits_it() -> None:

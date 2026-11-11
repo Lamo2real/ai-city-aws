@@ -1,0 +1,100 @@
+# The finance department's knowledge taxonomy (docs/KNOWLEDGE.md section 17). Content: one document per numbered section
+# of knowledge/source/finance-research.md (the only source), seeded and scoped exactly like marketing and sales
+# (decision 228).
+department: finance
+label: Finance
+seed_version: 1
+
+domains:
+  - {id: overview, label: Overview, description: "About this knowledge base (labels, qualifiers, caveats) and what the department is for"}
+  - {id: house-style, label: House style, description: "The owner's chosen default style (not evidence): money models as cash-flow design"}
+  - {id: precedence, label: Precedence, description: "Law first, evidence second, house style third, collision by collision"}
+  - {id: bookkeeping, label: Bookkeeping, description: "Bookkeeping law and standards for a Swedish aktiebolag: BFL, ÅRL, K2 and K3, archiving"}
+  - {id: revenue-recognition, label: Revenue recognition, description: "SaaS revenue recognition and capitalised development"}
+  - {id: close, label: Close and reporting, description: "Month-end and year-end close, annual report, audit, board duties, equity test"}
+  - {id: invoicing, label: Invoicing and receivables, description: "Invoice content, credit notes, payment terms, late payment, Stripe reconciliation, collections"}
+  - {id: vat, label: VAT, description: "Moms in Sweden, the EU and beyond: rates, returns, reverse charge, OSS, e-invoicing, ViDA"}
+  - {id: tax, label: Tax, description: "Corporate tax, owner taxation (3:12) and R&D incentives"}
+  - {id: payroll, label: Payroll, description: "Employer contributions, växa-stöd, AGI, holiday pay, benefits, employee stock options"}
+  - {id: calendar, label: Calendar, description: "Recurring dates and deadlines for a Swedish aktiebolag"}
+  - {id: planning, label: Planning, description: "Budgeting, rolling forecasts, driver models, scenarios, board packs"}
+  - {id: metrics, label: SaaS metrics, description: "Formulas, mistakes and 2025 to 2026 benchmarks"}
+  - {id: cash, label: Cash, description: "Cash, working capital, runway, treasury and currency"}
+  - {id: pricing, label: Pricing, description: "Pricing and packaging from a finance view"}
+  - {id: funding, label: Funding, description: "Valuation, loans, grants, equity, debt and investor reporting"}
+  - {id: controls, label: Controls, description: "Financial controls and fraud risk"}
+  - {id: ai-in-finance, label: AI in finance, description: "COSO and FRC guidance on AI in the finance function"}
+  - {id: guardrails, label: Guardrails, description: "What the department's AI agents may do alone, what needs human approval, what they must never do"}
+  - {id: handoffs, label: Handoffs, description: "What Finance receives from and hands over to the other departments"}
+  - {id: other-regimes, label: Other regimes, description: "CSRD, UK VAT, DAC7, Pillar Two, US sales tax; and the conclusion"}
+  - {id: gaps, label: Gaps, description: "What the knowledge base does not know and what to re-check first"}
+
+platforms: []
+
+objectives:
+  - {id: planning, label: Planning}
+  - {id: cash, label: Cash}
+  - {id: pricing, label: Pricing}
+  - {id: compliance, label: Compliance}
+  - {id: close, label: Close}
+  - {id: billing, label: Billing}
+  - {id: metrics, label: Metrics}
+  - {id: funding, label: Funding}
+  - {id: controls, label: Controls}
+
+# The concept vocabulary (an entry MENTIONS a concept when one of its aliases appears in its text; all-capital
+# aliases match case-sensitively).
+concepts:
+  - {id: arr, label: ARR, kind: metric, aliases: [ARR, annual recurring revenue]}
+  - {id: mrr, label: MRR, kind: metric, aliases: [MRR, monthly recurring revenue]}
+  - {id: nrr, label: Net revenue retention, kind: metric, aliases: [NRR, net revenue retention]}
+  - {id: grr, label: Gross revenue retention, kind: metric, aliases: [GRR, gross revenue retention]}
+  - {id: churn, label: Churn, kind: metric, aliases: [churn]}
+  - {id: cac, label: CAC, kind: metric, aliases: [CAC, customer acquisition cost]}
+  - {id: cac-payback, label: CAC payback, kind: metric, aliases: [CAC payback, payback period, cash payback]}
+  - {id: ltv, label: LTV, kind: metric, aliases: [LTV, lifetime value, LTGP]}
+  - {id: burn-multiple, label: Burn multiple, kind: metric, aliases: [burn multiple, burn rate, net burn]}
+  - {id: runway, label: Runway, kind: metric, aliases: [runway, default alive]}
+  - {id: rule-of-40, label: Rule of 40, kind: metric, aliases: [Rule of 40]}
+  - {id: gross-margin, label: Gross margin, kind: metric, aliases: [gross margin, gross margins]}
+  - {id: deferred-revenue, label: Deferred revenue, kind: concept, aliases: [deferred revenue, förutbetalda intäkter, prepaid]}
+  - {id: revenue-recognition, label: Revenue recognition, kind: concept, aliases: [revenue recognition, straight-line, IFRS 15]}
+  - {id: capitalised-development, label: Capitalised development, kind: concept, aliases: [capitalise, capitalising, fond för utvecklingsutgifter]}
+  - {id: month-end-close, label: Month-end close, kind: concept, aliases: [month-end close, month-end, year-end close]}
+  - {id: annual-report, label: Annual report, kind: concept, aliases: [annual report, årsredovisning]}
+  - {id: equity-test, label: Equity test, kind: regulation, aliases: [kontrollbalansräkning, half the share capital, equity test]}
+  - {id: k2-k3, label: K2 and K3, kind: regulation, aliases: [K2, K3]}
+  - {id: bfl, label: Bokföringslagen, kind: regulation, aliases: [Bokföringslag, BFL, bookkeeping law]}
+  - {id: abl, label: Aktiebolagslagen, kind: regulation, aliases: [Aktiebolagslag, ABL]}
+  - {id: vat, label: VAT, kind: regulation, aliases: [VAT, moms]}
+  - {id: reverse-charge, label: Reverse charge, kind: regulation, aliases: [reverse charge, reverse-charge, omvänd betalningsskyldighet]}
+  - {id: vies, label: VIES, kind: tool, aliases: [VIES]}
+  - {id: oss, label: One Stop Shop, kind: regulation, aliases: [OSS, One Stop Shop]}
+  - {id: vida, label: ViDA, kind: regulation, aliases: [ViDA]}
+  - {id: e-invoicing, label: E-invoicing, kind: regulation, aliases: [e-invoicing, e-invoice, Peppol]}
+  - {id: corporate-tax, label: Corporate tax, kind: regulation, aliases: [corporate tax, corporate income tax, bolagsskatt]}
+  - {id: periodiseringsfond, label: Periodiseringsfond, kind: regulation, aliases: [periodiseringsfond]}
+  - {id: rules-3-12, label: 3:12 rules, kind: regulation, aliases: ["3:12"]}
+  - {id: rd-deduction, label: R&D deduction, kind: regulation, aliases: [R&D deduction, research deduction, FoU]}
+  - {id: employer-contributions, label: Employer contributions, kind: regulation, aliases: [employer contributions, arbetsgivaravgifter]}
+  - {id: agi, label: Employer return (AGI), kind: regulation, aliases: [AGI, employer return, arbetsgivardeklaration]}
+  - {id: vaxa-stod, label: Växa-stöd, kind: regulation, aliases: [växa-stöd, Växa-stöd]}
+  - {id: holiday-pay, label: Holiday pay, kind: regulation, aliases: [holiday pay, Semesterlagen, semesterlön]}
+  - {id: employee-stock-options, label: Qualified employee stock options, kind: regulation, aliases: [kvalificerade personaloptioner, employee stock options, option programme, option programmes]}
+  - {id: late-payment-interest, label: Late-payment interest, kind: regulation, aliases: [late-payment interest, Räntelag, dröjsmålsränta, late interest]}
+  - {id: invoice, label: Invoice, kind: concept, aliases: [invoice, invoices, credit note, credit notes]}
+  - {id: stripe, label: Stripe, kind: tool, aliases: [Stripe]}
+  - {id: rolling-forecast, label: Rolling forecast, kind: tactic, aliases: [rolling forecast, driver-based, scenario, scenarios]}
+  - {id: cash-forecast-13-week, label: 13-week cash forecast, kind: tactic, aliases: [13-week]}
+  - {id: currency, label: Currency exposure, kind: concept, aliases: [currency, FX, exchange rate]}
+  - {id: money-model, label: Money model, kind: framework, aliases: [money model, money models, attraction offer, upsell, downsell, continuity]}
+  - {id: prepay, label: Prepay, kind: tactic, aliases: [prepay, prepayment, annual prepayment]}
+  - {id: valuation, label: Valuation, kind: concept, aliases: [valuation, multiple, multiples]}
+  - {id: almi, label: Almi, kind: tool, aliases: [Almi]}
+  - {id: segregation-of-duties, label: Segregation of duties, kind: tactic, aliases: [segregation, approval matrix, four-eyes]}
+  - {id: payment-fraud, label: Payment fraud, kind: concept, aliases: [payment fraud, business email compromise, CEO fraud, fraud]}
+  - {id: coso, label: COSO, kind: framework, aliases: [COSO]}
+  - {id: human-approval, label: Human approval, kind: tactic, aliases: [human approval, needs human approval, approves, approval]}
+  - {id: csrd, label: CSRD, kind: regulation, aliases: [CSRD, Omnibus]}
+  - {id: dac7, label: DAC7, kind: regulation, aliases: [DAC7]}
+  - {id: pillar-two, label: Pillar Two, kind: regulation, aliases: [Pillar Two]}

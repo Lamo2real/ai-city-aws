@@ -484,6 +484,21 @@ document. 22 domains. Type `policy`: privacy (6), AI governance and law (16), re
 Section 8 (Neptune, OpenSearch) is knowledge for the agents' work, not a change to this pipeline. Managers
 (`agents/departments/data.md`) and workers (`data.workers.md`) follow the same order and handling as Application, with
 section 19's approval rows behind `ask_owner` (prompt rules; the policy gate has no department scope).
+**Finance (decision 228).** `knowledge/seed/finance/`: 23 documents, one per numbered section of
+`knowledge/source/finance-research.md` (verbatim, 31,585 words, last heading "Corrections applied in this document",
+SHA-256 pinned) plus "Finance: About this knowledge base" (the opening summary and the reading guide); section 22 (the
+conclusion) stays with section 21, "Finance: Other regimes a growing SaaS company meets", and section 23 is "Finance:
+Consolidated gaps and unverified points", its own document. 22 domains. House style (section 2): domain, type and
+confidence `house-style` (the only one). Legal and compliance (sections 4 to 11 and 21: bookkeeping, revenue
+recognition, close, invoicing, VAT, tax, payroll, calendar, other regimes): type `policy`, each in its own domain so
+`domain` narrows to one area. Guardrails (section 19): domain `guardrails`, type `checklist` (the only one).
+`_eval.yaml`: 17 questions, offline 16/17 in the top 5. The guardrails and gaps tables are 825 and 727 words, kept
+whole (Bedrock splits them). Managers (`agents/departments/finance.md`) and workers (`finance.workers.md`) consult the
+knowledge base first; apply law first, evidence second, house style third and by default (section 3), in the brand's
+own voice, never Hormozi's name, likeness, catchphrases or figures; follow section 19's three tiers (the approval tier
+through `ask_owner`); verify `needs_verification` facts; say `[GAP]` points are unknown; give bookkeeping, VAT, tax,
+payroll and other-regime content as orientation for a human to confirm; and hand work over by section 20. The section
+19 approval tier stays prompt rules (the policy gate's rules have no department scope; the owner's choice pending).
 
 **A "shared" scope (planned, not built).** A cross-department document would live in `knowledge/seed/shared/` with its
 own `_taxonomy.yaml` (`department: shared`); `entry_visible` and `caller_filter` in `search.py` would let every
