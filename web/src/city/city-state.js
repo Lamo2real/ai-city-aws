@@ -73,7 +73,36 @@ export function applySnapshot(state, snap, now = Date.now()) {
   next.usage = snap.usage ?? null;
   next.spend = snap.spend ?? {};
   next.caps = snap.caps ?? null; // the limits the server enforces; null when the server did not send them
-  return next;
+  return staffed(next);
+}
+
+// The id the runtime gives a department's manager (manager_id in backend/src/vaic/shared/ids.py).
+export const managerIdOf = (name) => `mgr-${String(name ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "x"}`;
+
+// Every standing tower has its Department Manager at the door at all times (the owner, 2026-11-11, decision 212),
+// built-in or built on demand, even before the runtime has hired him (it does so with the department's first goal).
+// A department without a manager record gets a stand-in from its registry entry, marked `standin`; the real record
+// replaces it as soon as it arrives. Returns the same state when nothing changes.
+export function staffed(state) {
+  const standing = Object.values(state.departments).filter((d) => d.name !== "HQ" && d.state !== "demolished");
+  const want = new Map(standing.map((d) => [keyOf(d.name), d]));
+  const real = new Set(Object.values(state.agents).filter((a) => a.kind === "manager" && !a.standin && a.state !== "retired").map((a) => keyOf(a.department)));
+  let agents = null;
+  for (const a of Object.values(state.agents)) {
+    if (!a.standin) continue;
+    const k = keyOf(a.department);
+    if (!want.has(k) || real.has(k)) { agents ??= { ...state.agents }; delete agents[a.id]; }
+  }
+  for (const [k, d] of want) {
+    if (real.has(k)) continue;
+    const id = d.manager_id || managerIdOf(d.name);
+    const have = (agents ?? state.agents)[id];
+    if (have && have.standin && have.department === d.name && have.state !== "retired") continue;
+    if (have && !have.standin && have.state !== "retired") continue;
+    agents ??= { ...state.agents };
+    agents[id] = { id, kind: "manager", role: `${d.name} Manager`, department: d.name, model: "fable-5-1", parent: "orchestrator", state: "dormant", worker_state: null, total_cost_usd: 0, standin: true };
+  }
+  return agents ? { ...state, agents } : state;
 }
 
 // What only a snapshot carries (the gate's counters, parked tickets, spend), taken without rebuilding the scene's state.
@@ -90,7 +119,7 @@ const asked = (state, event, now) => ({ ...state, now, questions: { ...state.que
 // One event in, a new state out. Unknown events change nothing. A line it adds to the feed also carries the
 // event's story in plain words (or none, for bookkeeping nobody needs to read), which the Activity panel shows.
 export function reduce(state, event, now = Date.now()) {
-  const next = reduceEvent(state, event, now);
+  const next = staffed(reduceEvent(state, event, now));
   if (next.feed === state.feed || !next.feed.length) return next;
   const story = storyOf(event, state);
   return story ? { ...next, feed: [{ ...next.feed[0], story }, ...next.feed.slice(1)] } : next;
@@ -399,6 +428,9 @@ export function placement(state, id) {
   // The executives (decision 140): permanent, at home until the Orchestrator calls them in, at HQ while they advise.
   if (a.kind === "executive") return a.state === "active" ? { place: "hq", dept: "HQ", why: "called in" } : { place: "home", dept: "HQ", why: "off duty" };
   const dept = deptOf(a);
+  // A department's manager always stands at its tower's door (decision 212), dormant, idle or busy; the scene puts
+  // him beside the door, never at home and never on a floor (decision 201). Only a retired one has left.
+  if (a.kind === "manager" && a.state !== "retired") return { place: "station", dept, why: hasOpenWork(state, id) ? "ticket" : "manager" };
   if (hasOpenWork(state, id)) return { place: "station", dept, why: "ticket" };
   if (a.awaiting_merge) return { place: "station", dept, why: "merge" };
   if (a.state !== "retired" && a.worker_state !== "released") return { place: "station", dept, why: "hired" }; // managers too: an idle one stays in its window
@@ -775,7 +807,7 @@ export const workersWorking = (state) =>
   Object.values(state.agents).filter((a) => a.kind === "worker" && a.state !== "retired" && BUSY.has(a.worker_state)).length;
 
 export function topBar(state) {
-  const agents = Object.values(state.agents).filter((a) => !CORE.has(a.id) && a.kind !== "specialist");
+  const agents = Object.values(state.agents).filter((a) => !CORE.has(a.id) && a.kind !== "specialist" && !a.standin); // a stand-in manager is drawn, not hired
   return {
     agentsTotal: agents.length,
     // "Agents working now" = workers running right now (not waiting on an answer, not in review). Managers,

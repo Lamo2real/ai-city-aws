@@ -10,6 +10,8 @@ export interface CityAgent {
   worker_state?: string | null;
   total_cost_usd?: number;
   ticket_id?: string | null;
+  /** A stand-in manager the City drew from the department record before the runtime hired the real one (decision 212). */
+  standin?: boolean;
 }
 export interface CityTicket {
   id: string;
@@ -152,6 +154,10 @@ export const VISUALS: Record<string, { label: string; words: string; pose: strin
 export function initialState(now?: number): CityState;
 export function applySnapshot(state: CityState, snap: unknown, now?: number): CityState;
 export function reduce(state: CityState, event: unknown, now?: number): CityState;
+/** Every standing tower gets its manager: a stand-in from the department record when no manager agent exists (decision 212). */
+export function staffed(state: CityState): CityState;
+/** The runtime's manager id for a department name (mgr-<key>). */
+export function managerIdOf(name: string): string;
 export function departmentNames(state: CityState): string[];
 /** The towers standing: a demolished one keeps its lot until the next snapshot but is not a department any more. */
 export function standingDepartments(state: CityState): string[];
