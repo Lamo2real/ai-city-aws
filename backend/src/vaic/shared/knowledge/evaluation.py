@@ -120,7 +120,33 @@ async def live_eval(kb: Any, store: Any, department: str, root: Path | None = No
         else:
             # What the index itself returned (scope filter only), so a miss can be told apart from an empty index.
             raw = await kb.retrieve(x["q"], 10, ["always", "relevant"])
-            out.misses.append(
-                {"q": x["q"], "expected": x["expect"], "got": top, "index": [h.item_id for h in raw][:10]}
-            )
+            miss: dict[str, Any] = {"q": x["q"], "expected": x["expect"], "got": top, "index": [h.item_id for h in raw]}
+            if not out.misses:  # once: the index with no filter at all, and what metadata its hits carry
+                miss["unfiltered"] = await _unfiltered(kb, x["q"])
+            out.misses.append(miss)
     return out
+
+
+async def _unfiltered(kb: Any, query: str) -> dict[str, Any]:
+    """A Retrieve with no filter, for diagnosis only: how many hits, and the metadata keys and ids they carry."""
+    import asyncio
+
+    runtime = getattr(kb, "_runtime", None)
+    if runtime is None:
+        return {"skipped": "no Bedrock client"}
+    try:
+        r = await asyncio.to_thread(
+            runtime.retrieve,
+            knowledgeBaseId=kb.kb_id,
+            retrievalQuery={"text": query},
+            retrievalConfiguration={"vectorSearchConfiguration": {"numberOfResults": 5}},
+        )
+    except Exception as e:
+        return {"error": f"{type(e).__name__}: {str(e)[:300]}"}
+    res = r.get("retrievalResults", [])
+    return {
+        "hits": len(res),
+        "metadata_keys": [sorted((x.get("metadata") or {}).keys())[:20] for x in res[:3]],
+        "item_ids": [(x.get("metadata") or {}).get("item_id") for x in res[:5]],
+        "uris": [((x.get("location") or {}).get("s3Location") or {}).get("uri") for x in res[:5]],
+    }
