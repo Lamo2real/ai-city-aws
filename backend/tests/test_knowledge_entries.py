@@ -165,7 +165,8 @@ def test_every_indexed_part_starts_with_the_title_and_stays_small() -> None:
             # and the application guardrails' approval and "never" tables are 553 and 527 words (decision 225),
             # the IT infrastructure hand-offs table is 455 (decision 226), and the finance guardrails and gaps tables
             # 825 and 727 (decision 228), and four product tables 539 to 877 (guardrails, precedence, handoffs,
-            # Sweden and the EU; decision 230); Bedrock splits them.
+            # Sweden and the EU; decision 230), and the research guardrails' table 696 (decision 231); Bedrock splits
+            # them.
             table = p.split("\n\n", 1)[1].startswith("|")
             assert len(p.split()) <= (900 if table else 260), (e.id, len(p.split()))
 

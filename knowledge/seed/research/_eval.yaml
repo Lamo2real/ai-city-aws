@@ -1,0 +1,57 @@
+# The retrieval evaluation for the research knowledge base (docs/KNOWLEDGE.md section 17): realistic questions a
+# Research agent asks, each with the documents that should appear in the top results. A question counts as a hit when
+# any expected document is in the top 5. The tests score it offline (keyword-only); the deploy scores it against the
+# real hybrid index and prints the hit rate. Files starting with "_" are never seeded as entries.
+department: research
+top_k: 5
+questions:
+  # market sizing and forecasting
+  - q: How should we size the market for our SaaS product, and where do TAM, SAM and SOM figures come from?
+    expect: [research.market.market-analysis-and-forecasting]
+  - q: How do I make a forecast with a reference class and record a numeric probability?
+    expect: [research.market.market-analysis-and-forecasting]
+  # surveys
+  - q: How do I design a customer survey questionnaire and pick a sample size with an acceptable margin of error?
+    expect: [research.surveys.survey-and-interview-research]
+  - q: How do we defend a survey against fraudulent and AI-generated responses from panels?
+    expect: [research.surveys.survey-and-interview-research]
+  # competitive intelligence: allowed and hard stops
+  - q: What competitive intelligence methods are allowed, and what is a hard stop, such as contacting a competitor or using a leaked document?
+    expect: [research.competitive-intelligence.competitive-intelligence, research.guardrails.agent-guardrails]
+  # judging a source
+  - q: How do I judge whether a web source or statistic is trustworthy and trace a claim to its origin?
+    expect: [research.desk-research.desk-research]
+  # scraping
+  - q: Can we scrape a website that has a login wall, a CAPTCHA or a robots.txt block?
+    expect: [research.compliance.web-scraping-and-data-access, research.guardrails.agent-guardrails]
+  - q: Is text and data mining of copyrighted articles lawful in the EU and Sweden, and what does the rights reservation change?
+    expect: [research.compliance.copyright-and-text-and-data-mining]
+  # likelihood and confidence
+  - q: How should a report state likelihood on a probability scale and keep analytic confidence separate?
+    expect: [research.reporting.reporting]
+  # gap
+  - q: What does the knowledge base not know about conjoint and MaxDiff sample sizes or TAM/SAM/SOM definitions?
+    expect: [research.gaps.consolidated-gaps]
+  # AI-assisted research
+  - q: How often do AI research agents cite pages that do not actually support the claim, and how do we verify citations?
+    expect: [research.ai-research.reliable-ai-assisted-research]
+  # personal data and ethics
+  - q: Can we store personal data about named individuals or record a research interview under GDPR?
+    expect: [research.compliance.personal-data-in-research]
+  - q: Does the Swedish ethics-review act apply to a company research project with sensitive personal data?
+    expect: [research.compliance.swedish-ethics-review]
+  # data sources
+  - q: Which free official Swedish registers give company data, like Bolagsverket and SCB, and what are their API limits?
+    expect: [research.data-sources.public-data-sources]
+  # confidentiality
+  - q: Can I put a client name or confidential figures into an external search query or AI tool?
+    expect: [research.security.confidential-information, research.guardrails.agent-guardrails]
+  # design, guardrails, handoffs, academic
+  - q: What goes into a research specification the commissioner signs before a study starts?
+    expect: [research.design.research-design]
+  - q: Which research actions need human approval before an agent takes them?
+    expect: [research.guardrails.agent-guardrails]
+  - q: What does Research hand over to Finance or Sales when they request market sizing or battlecards?
+    expect: [research.handoffs.handoffs-with-other-departments]
+  - q: How should we cite a preprint and judge a technology's readiness level?
+    expect: [research.academic-tech.academic-and-technology-research]

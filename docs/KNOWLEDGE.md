@@ -539,9 +539,21 @@ Regulation (13) and frameworks (12): domain `compliance`, type `policy`; guardra
 (`infrastructure.workers.md`) apply law and compliance first, independent evidence second, the section 18 guardrails,
 `needs_verification` and `[GAP]` handling and the section 19 hand-offs.
 
+**Research (decision 231).** `knowledge/seed/research/` (the department key `research`): 21 documents, one per
+numbered section of `knowledge/source/research-dept-research.md` (verbatim, 25,165 words, SHA-256 pinned) plus
+"Research: About this knowledge base" (the title, opening summary and reading guide); section 20 keeps the Conclusion
+and is "Consolidated gaps and conclusion". Copyright and text-and-data mining (12), web scraping (13), personal data
+(14) and Swedish ethics review (15): domain `compliance`, type `policy`, the only research documents of that type; the
+guardrails (18): domain `guardrails`, type `checklist`, the only research checklist. No `[HOUSE STYLE]` material (the
+source says so). `_eval.yaml`: 19 questions, offline 19/19 in the top 5. Managers (`agents/departments/research.md`)
+and workers (`research.workers.md`) apply law and compliance first, independent evidence second, the section 18 tiers
+(approval items behind `ask_owner`, prompt rules only: the policy gate has no department scope), `needs_verification`
+and `[GAP]` handling, legal content as orientation and the section 19 handoffs. The guardrails' three-tier table is
+696 words, kept whole.
+
 **Adding the next department.** Put the source unchanged under `knowledge/source/`, write
 `knowledge/seed/<department key>/` (the key in `config/departments.json`, not its display name) with `_taxonomy.yaml`,
 one Markdown file per document with front matter, and `_eval.yaml`; run `uv run python backend/scripts/seed_knowledge.py
 --validate`; add `agents/departments/<key>.md` guidance and `<key>.workers.md`; copy
-`backend/tests/test_infrastructure_knowledge.py` for the department. No code changes: the seeder, registry,
+`backend/tests/test_research_knowledge.py` for the department. No code changes: the seeder, registry,
 projections, record check and HUD card are department-generic.

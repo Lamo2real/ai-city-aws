@@ -1,0 +1,103 @@
+# The research department's knowledge taxonomy (docs/KNOWLEDGE.md section 17). Content: one document per numbered
+# section of knowledge/source/research-dept-research.md (the only source) plus "About this knowledge base" (the title,
+# opening summary and reading guide); the closing Conclusion stays with section 20. Seeded and scoped exactly like
+# marketing and sales (decision 231).
+department: research
+label: Research
+seed_version: 1
+
+domains:
+  - {id: overview, label: Overview, description: "The overall position, what each claim label means, the legal verification qualifiers and the caveats"}
+  - {id: design, label: Research design, description: "The Aqua Book specification, gates before new research, choosing a method, stopping rules"}
+  - {id: desk-research, label: Desk research, description: "Evaluating sources, lateral reading, tracing claims to origin, search strategy"}
+  - {id: data-sources, label: Public data sources, description: "Swedish, EU and international registers and statistics, access limits and reuse"}
+  - {id: market, label: Market analysis and forecasting, description: "Market sizing, industry structure, scenarios, forecasting from the reference class"}
+  - {id: competitive-intelligence, label: Competitive intelligence, description: "Ethical baseline, trade-secret and competition law, competitor profiles, win/loss"}
+  - {id: surveys, label: Surveys and interviews, description: "Questionnaire design, sampling, fraud and AI responses, disclosure, interviews, pricing research"}
+  - {id: analysis, label: Analysis, description: "Statistical inference, qualitative and mixed methods, assumptions and sensitivity"}
+  - {id: reporting, label: Reporting, description: "Probability language, confidence, report contents, charts, audit trail"}
+  - {id: academic-tech, label: Academic and technology research, description: "Systematic and rapid reviews, papers and preprints, technology readiness, patents"}
+  - {id: operations, label: Research operations, description: "The repository, roles, governance, intake, impact, sunset dates"}
+  - {id: ai-research, label: AI-assisted research, description: "Citation fidelity, failure modes, verification, multi-agent workflows, scholarly APIs, robots.txt"}
+  - {id: compliance, label: Compliance, description: "Copyright and text-and-data mining, web scraping, personal data, Swedish ethics review (orientation for a human to confirm)"}
+  - {id: integrity, label: Research integrity, description: "Disclosure of AI use, sources, limits and interests"}
+  - {id: security, label: Confidential information, description: "Queries are disclosures, fetched pages are untrusted"}
+  - {id: guardrails, label: Guardrails, description: "What the department's agents may do alone, what needs human approval, what they must never do"}
+  - {id: handoffs, label: Handoffs, description: "What Research receives from and hands to the other departments"}
+  - {id: gaps, label: Gaps, description: "What the knowledge base does not know, and the conclusion"}
+
+platforms:
+  - {id: web, label: Open web}
+  - {id: official-registers, label: Official registers and statistics}
+  - {id: scholarly-apis, label: Scholarly APIs}
+  - {id: survey-panels, label: Survey panels}
+
+objectives:
+  - {id: decision-quality, label: Decision quality}
+  - {id: evidence, label: Evidence}
+  - {id: communication, label: Communication}
+  - {id: compliance, label: Compliance}
+
+# The concept vocabulary (an entry MENTIONS a concept when one of its aliases appears in its text; all-capital
+# aliases match case-sensitively).
+concepts:
+  - {id: aqua-book, label: Aqua Book, kind: framework, aliases: [Aqua Book]}
+  - {id: specification, label: Research specification, kind: practice, aliases: [specification, commissioner]}
+  - {id: stopping-rule, label: Stopping rules, kind: practice, aliases: [stopping rule, stopping rules]}
+  - {id: lateral-reading, label: Lateral reading, kind: practice, aliases: [lateral reading, laterally]}
+  - {id: craap, label: CRAAP test, kind: framework, aliases: [CRAAP]}
+  - {id: bolagsverket, label: Bolagsverket, kind: source, aliases: [Bolagsverket]}
+  - {id: scb, label: SCB, kind: source, aliases: [SCB]}
+  - {id: vinnova, label: Vinnova, kind: source, aliases: [Vinnova]}
+  - {id: eurostat, label: Eurostat, kind: source, aliases: [Eurostat]}
+  - {id: espacenet, label: Espacenet, kind: source, aliases: [Espacenet, PATENTSCOPE]}
+  - {id: market-sizing, label: Market sizing, kind: practice, aliases: [market sizing, TAM, SAM, SOM]}
+  - {id: five-forces, label: Five forces, kind: framework, aliases: [five forces, Porter]}
+  - {id: scenarios, label: Scenarios, kind: practice, aliases: [scenario, scenarios, PESTLE, Futures Toolkit]}
+  - {id: reference-class, label: Reference class, kind: practice, aliases: [reference class, base rate]}
+  - {id: brier, label: Brier score, kind: metric, aliases: [Brier]}
+  - {id: superforecasting, label: Good Judgment Project, kind: evidence, aliases: [Good Judgment, Tetlock, superforecaster, superforecasters]}
+  - {id: trade-secrets, label: Trade secrets, kind: law, aliases: [trade secret, trade secrets, företagshemligheter]}
+  - {id: competition-law, label: Competition law, kind: law, aliases: [competition law, konkurrenslagen, information exchange]}
+  - {id: market-abuse, label: Inside information, kind: law, aliases: [inside information, MAR]}
+  - {id: scip, label: SCIP code, kind: standard, aliases: [SCIP]}
+  - {id: win-loss, label: Win/loss analysis, kind: practice, aliases: [win/loss, win-loss]}
+  - {id: battlecard, label: Battlecards, kind: artefact, aliases: [battlecard, battlecards]}
+  - {id: questionnaire, label: Questionnaire design, kind: practice, aliases: [questionnaire, question wording]}
+  - {id: margin-of-error, label: Margin of error, kind: metric, aliases: [margin of error, sample size]}
+  - {id: survey-fraud, label: Survey fraud, kind: risk, aliases: [fraud, bots, AI-generated responses]}
+  - {id: synthetic-respondents, label: Synthetic respondents, kind: risk, aliases: [synthetic respondents, synthetic respondent]}
+  - {id: aapor, label: AAPOR, kind: standard, aliases: [AAPOR]}
+  - {id: esomar, label: ICC/ESOMAR code, kind: standard, aliases: [ESOMAR]}
+  - {id: conjoint, label: Conjoint and MaxDiff, kind: practice, aliases: [conjoint, MaxDiff, Van Westendorp]}
+  - {id: effect-size, label: Effect size, kind: metric, aliases: [effect size, effect sizes, confidence interval]}
+  - {id: p-value, label: P-values, kind: metric, aliases: [p-value, p-values, statistical significance]}
+  - {id: causal, label: Causal claims, kind: practice, aliases: [causal, causation]}
+  - {id: thematic-analysis, label: Thematic analysis, kind: practice, aliases: [thematic analysis, saturation]}
+  - {id: sensitivity, label: Sensitivity analysis, kind: practice, aliases: [sensitivity analysis, assumptions log]}
+  - {id: probability-language, label: Probability language, kind: standard, aliases: [ICD 203, probability yardstick, likelihood scale, PHIA]}
+  - {id: confidence-statement, label: Confidence statement, kind: practice, aliases: [confidence statement, analytic confidence]}
+  - {id: audit-trail, label: Audit trail, kind: practice, aliases: [audit trail]}
+  - {id: systematic-review, label: Systematic review, kind: practice, aliases: [systematic review, rapid review, PRISMA]}
+  - {id: preprint, label: Preprints, kind: evidence, aliases: [preprint, preprints]}
+  - {id: trl, label: Technology readiness level, kind: framework, aliases: [TRL, technology readiness]}
+  - {id: repository, label: Research repository, kind: practice, aliases: [research repository, repository]}
+  - {id: sunset-date, label: Sunset date, kind: practice, aliases: [sunset date, sunset dates]}
+  - {id: citation-fidelity, label: Citation fidelity, kind: risk, aliases: [citation fidelity, hallucinated citation, fabricated]}
+  - {id: claim-ledger, label: Claim ledger, kind: practice, aliases: [claim ledger]}
+  - {id: verifier, label: Verifier agent, kind: practice, aliases: [verifier, verification pass]}
+  - {id: openalex, label: Scholarly APIs, kind: tool, aliases: [OpenAlex, Semantic Scholar, Crossref]}
+  - {id: robots-txt, label: robots.txt and AI preferences, kind: control, aliases: [robots.txt, AI Preferences, ai.txt]}
+  - {id: tdm, label: Text and data mining, kind: law, aliases: [text and data mining, text-and-data mining, TDM, Article 4]}
+  - {id: rights-reservation, label: Rights reservation, kind: law, aliases: [rights reservation, opt-out, reservation]}
+  - {id: c-250-25, label: CJEU C-250/25, kind: law, aliases: [C-250/25]}
+  - {id: copyright, label: Copyright, kind: law, aliases: [copyright, upphovsrättslagen]}
+  - {id: technical-barrier, label: Technical barrier, kind: control, aliases: [technical barrier, CAPTCHA, CAPTCHAs, login wall, paywall, rate limit]}
+  - {id: dataintrang, label: Unlawful access (dataintrång), kind: law, aliases: [dataintrång, brottsbalken]}
+  - {id: gdpr, label: GDPR, kind: law, aliases: [GDPR, legitimate interest, EDPB]}
+  - {id: dataskyddslagen, label: Swedish data-protection act, kind: law, aliases: [dataskyddslagen, offence data, criminal-offence data]}
+  - {id: special-category, label: Special-category data, kind: law, aliases: [special-category, sensitive personal data]}
+  - {id: ethics-review, label: Swedish ethics review, kind: law, aliases: [ethics review, etikprövning, Etikprövningsmyndigheten]}
+  - {id: ai-disclosure, label: AI-use disclosure, kind: practice, aliases: [AI-use disclosure, disclose AI, AI use]}
+  - {id: prompt-injection, label: Prompt injection, kind: risk, aliases: [prompt injection, prompt-injection, instructions embedded]}
+  - {id: human-approval, label: Human approval, kind: control, aliases: [human approval, Needs human approval, stop-and-escalate]}
