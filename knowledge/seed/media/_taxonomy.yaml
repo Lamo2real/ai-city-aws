@@ -1,0 +1,79 @@
+# The media department's knowledge taxonomy (docs/KNOWLEDGE.md section 17). Content: one document per numbered
+# section of knowledge/source/media-research.md (the only source), plus "About this knowledge base" (the opening
+# summary and reading guide); the closing conclusion stays with section 25 (consolidated gaps). Section 2 is the house
+# style (type and confidence house-style); sections 17 to 22 are the legal and compliance documents (type policy); section
+# 23 is the guardrails (type checklist). Seeded and scoped exactly like marketing, sales and application (decision 233).
+department: media
+label: Media
+seed_version: 1
+
+domains:
+  - {id: overview, label: Overview, description: "The opening summary, what each claim label means, the caveats and the department overview"}
+  - {id: house-style, label: House style, description: "The owner's chosen default content-production structure (Hormozi's published system); compliance overrides it"}
+  - {id: precedence, label: Precedence, description: "Rights and disclosure first, evidence and platform guidance second, house style third"}
+  - {id: production, label: Production, description: "Brief to delivery, recording, delivery masters and formats"}
+  - {id: short-form, label: Short-form video, description: "Hooks, pacing, testing, length, covers"}
+  - {id: long-form, label: Long-form and podcasts, description: "Openings, retention, chapters, cutting down, podcast audio, webinars"}
+  - {id: specs, label: Platform specs, description: "Dated organic and ad specs, bitrates, thumbnails, caption files and safe zones"}
+  - {id: audio, label: Loudness and audio, description: "Loudness normalisation and targets by destination"}
+  - {id: design, label: Images and design, description: "Image formats, alt text, contrast, editing licensed images, retouching"}
+  - {id: accessibility, label: Accessibility, description: "WCAG by media type, subtitle quality, the European and Swedish accessibility acts"}
+  - {id: assets, label: Assets and rights log, description: "Naming, rights-log fields, the winners register, expiry monitoring"}
+  - {id: measurement, label: Measurement, description: "Title and thumbnail tests, click-through rate, paired business metrics"}
+  - {id: team, label: Team and cadence, description: "Cadence model and operating rhythm"}
+  - {id: generative-tools, label: Generative tools, description: "The dated November 2026 tool landscape, selected by rights position first"}
+  - {id: generative-craft, label: Generative craft, description: "Prompting, storyboards, consistency, voice, mixing footage, QC"}
+  - {id: audience-response, label: Audience response, description: "How audiences and platforms respond to AI-generated media"}
+  - {id: compliance, label: Compliance, description: "Disclosure, copyright, licensing, likeness and voice, trade marks and Swedish media law (orientation, not legal advice)"}
+  - {id: guardrails, label: Guardrails, description: "What the department's agents may do alone, what needs human approval, what they must never do"}
+  - {id: handoffs, label: Handoffs, description: "Work to and from the other departments"}
+  - {id: gaps, label: Gaps, description: "What the knowledge base does not know"}
+
+platforms:
+  - {id: youtube, label: YouTube}
+  - {id: tiktok, label: TikTok}
+  - {id: instagram, label: Instagram}
+  - {id: facebook, label: Facebook}
+  - {id: linkedin, label: LinkedIn}
+  - {id: podcasts, label: Podcasts}
+  - {id: web, label: Web}
+
+objectives:
+  - {id: reach, label: Reach}
+  - {id: engagement, label: Engagement}
+  - {id: conversion, label: Conversion}
+  - {id: quality, label: Quality}
+  - {id: accessibility, label: Accessibility}
+  - {id: compliance, label: Compliance}
+
+# The concept vocabulary (an entry MENTIONS a concept when one of its aliases appears in its text; all-capital
+# aliases match case-sensitively).
+concepts:
+  - {id: loudness, label: Loudness, kind: metric, aliases: [LUFS, true peak, loudness normalisation]}
+  - {id: retention, label: Audience retention, kind: metric, aliases: [retention report, audience retention, typical retention]}
+  - {id: ctr, label: Click-through rate, kind: metric, aliases: [click-through rate]}
+  - {id: hook-retain-reward, label: Hook-retain-reward, kind: practice, aliases: [hook-retain-reward]}
+  - {id: proof-promise-plan, label: Proof-promise-plan, kind: practice, aliases: [proof-promise-plan]}
+  - {id: long-to-short, label: Long-form cut into short-form, kind: practice, aliases: [cut into many short, cutting long-form into short-form]}
+  - {id: safe-zones, label: Safe zones, kind: practice, aliases: [safe zone, safe zones]}
+  - {id: rights-log, label: Rights log, kind: artefact, aliases: [rights log, rights-log]}
+  - {id: winners-register, label: Winners register, kind: artefact, aliases: [winners register]}
+  - {id: captions, label: Captions and transcripts, kind: practice, aliases: [closed-caption, caption file, .vtt, SRT, transcript]}
+  - {id: alt-text, label: Alt text, kind: practice, aliases: [alt text]}
+  - {id: ebu-r128, label: EBU R 128, kind: standard, aliases: [EBU R 128]}
+  - {id: wcag, label: WCAG, kind: standard, aliases: [WCAG]}
+  - {id: c2pa, label: C2PA Content Credentials, kind: standard, aliases: [C2PA, Content Credentials]}
+  - {id: synthid, label: SynthID, kind: standard, aliases: [SynthID]}
+  - {id: ai-act-50, label: AI Act Article 50, kind: law, aliases: [Article 50]}
+  - {id: eaa, label: European Accessibility Act, kind: law, aliases: [European Accessibility Act, accessibility act]}
+  - {id: gdpr, label: GDPR, kind: law, aliases: [GDPR]}
+  - {id: name-and-picture-act, label: Name and picture in marketing act, kind: law, aliases: ["1978:800"]}
+  - {id: copyright-act, label: Swedish Copyright Act, kind: law, aliases: [upphovsrättslagen, "1960:729"]}
+  - {id: marketing-act, label: Swedish Marketing Act, kind: law, aliases: [Marknadsföringslagen]}
+  - {id: utgivningsbevis, label: Utgivningsbevis, kind: law, aliases: [utgivningsbevis]}
+  - {id: deepfake, label: Deepfake, kind: risk, aliases: [deepfake, deepfakes]}
+  - {id: likeness, label: Likeness and voice, kind: risk, aliases: [likeness, lookalike, soundalike, cloned voice]}
+  - {id: indemnity, label: Vendor indemnity, kind: control, aliases: [indemnity, indemnities]}
+  - {id: disclosure-label, label: AI disclosure label, kind: control, aliases: [AI label, AI-label, disclosure decision, EU icon]}
+  - {id: consent-record, label: Consent record, kind: control, aliases: [consent record, release]}
+  - {id: human-approval, label: Named human approval, kind: control, aliases: [named human, human approver]}

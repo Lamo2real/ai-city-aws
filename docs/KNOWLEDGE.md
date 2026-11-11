@@ -512,6 +512,18 @@ domain `agent-guardrails`, type `policy`. `_eval.yaml`: 17 questions, offline 17
 section 27's tiers with `ask_owner` before gated actions; hand self-harm disclosures, legal threats and vulnerable
 customers to the owner at once; use section 28 for handoffs. The approval tiers are prompt rules (no department scope
 in the policy gate); not built as for Application: Download, the versioned Replace, the shared scope.
+**Media (decision 233).** `knowledge/seed/media/`: 26 documents, one per numbered section of
+`knowledge/source/media-research.md` (verbatim, 28,866 words, SHA-256 pinned) plus "Media: About this knowledge base"
+(the opening summary and "How to read and split this document"); the conclusion stays with section 25, "Media:
+Consolidated gaps the knowledge base must not paper over", its own document. 20 domains. Section 2, the house style
+(Hormozi's published content-production system), is type and confidence `house-style` (domain `house-style`); the six
+legal and compliance sections (17 to 22: disclosure, copyright and vendor terms, licensing, likeness and voice, trade
+marks, Swedish media law) are type `policy` (domain `compliance`); the guardrails (23) are type `checklist` (domain
+`guardrails`). Sections 7 and 14 keep their dates and are `fast-moving` with a three-month review. `_eval.yaml`: 16
+questions, offline 16/16 in the top 5. Managers (`agents/departments/media.md`) and workers (`media.workers.md`) apply
+rights and disclosure first, evidence and platform guidance second, the house style third and by default in the brand's
+own voice, and put section 23's approval items behind `ask_owner` (prompt rules; the policy gate has no department
+scope).
 
 **Product (decision 230).** `knowledge/seed/product/`: 25 documents, one per numbered section of
 `knowledge/source/product-research.md` (verbatim, 35,947 words, SHA-256 pinned) plus "Product: About this knowledge

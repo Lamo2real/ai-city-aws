@@ -1,0 +1,48 @@
+# The retrieval evaluation for the media knowledge base (docs/KNOWLEDGE.md section 17): realistic questions a Media
+# agent asks, each with the documents that should appear in the top results. A question counts as a hit when any
+# expected document is in the top 5. The tests score it offline (keyword-only); the deploy scores it against the real
+# hybrid index and prints the hit rate. Files starting with "_" are never seeded as entries.
+department: media
+top_k: 5
+questions:
+  # platform specs and safe zones (dated)
+  - q: What resolution, aspect ratio and safe zone should a 9:16 TikTok in-feed ad use?
+    expect: [media.specs.platform-specs-and-safe-zones]
+  - q: Which bitrate and thumbnail size should we upload to YouTube?
+    expect: [media.specs.platform-specs-and-safe-zones]
+  # loudness
+  - q: What LUFS loudness and true peak should we master a podcast episode to?
+    expect: [media.audio.loudness-and-audio-standards]
+  # AI disclosure and labelling
+  - q: Do we have to label an AI-generated video under AI Act Article 50, and how do YouTube and TikTok want it labelled?
+    expect: [media.compliance.disclosure-and-labelling]
+  - q: Should we keep C2PA Content Credentials and SynthID on generated images?
+    expect: [media.compliance.disclosure-and-labelling, media.assets.asset-management-and-rights-log]
+  # copyright in AI output
+  - q: Do we own the copyright in a video we generated purely from prompts, and which vendor indemnities cover us?
+    expect: [media.compliance.copyright-ai-output-and-vendor-terms]
+  # likeness and voice
+  - q: Can we clone an employee's voice for a voice-over, and what consent do we need?
+    expect: [media.compliance.likeness-and-voice]
+  # short-form craft
+  - q: How should we write the hook and pacing for a short-form video, and how long should it be?
+    expect: [media.short-form.short-form-video-craft]
+  # house style and precedence
+  - q: How does the hook-retain-reward content unit work in our house style?
+    expect: [media.house-style.hormozi-content-system]
+  - q: The house style says post maximum volume but our review capacity is limited; which rule wins?
+    expect: [media.precedence.rights-evidence-house-style]
+  # accessibility, licensing, guardrails, handoffs, tools
+  - q: Which captions, transcripts and audio description does WCAG require for a published video?
+    expect: [media.accessibility.accessibility-of-media]
+  - q: Can we use stock music and fonts from a licence in a paid ad?
+    expect: [media.compliance.licensing-non-ai-assets]
+  - q: Which media actions need approval by a named human before an agent can do them?
+    expect: [media.guardrails.agent-guardrails]
+  - q: Which video generators are available now that the Veo 3.1 preview shut down and Sora is discontinued?
+    expect: [media.generative-tools.tool-landscape-november-2026]
+  - q: What should a brief from Marketing carry when it hands work to Media?
+    expect: [media.handoffs.handoffs-to-other-departments, media.production.brief-to-delivery]
+  # a gap: the knowledge base says it does not know
+  - q: Which official safe-zone values do Meta, LinkedIn and Snapchat publish, and was Spotify's podcast loudness spec read?
+    expect: [media.gaps.consolidated-gaps]
