@@ -1290,8 +1290,15 @@ async def vaic_call(call: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
     event = owner_api.to_event(method, path, call.get("body"))
     log("info", "api.vaic_call", method=method, path=owner_api.clean_path(path))
     try:
-        return await _route(event, d)
+        r = await _route(event, d)
+        if int(r.get("statusCode", 200)) >= 400:  # refused: log why, so a failed save from the chat can be traced
+            log("error", "api.vaic_refused", method=method, path=owner_api.clean_path(path),
+                status=r.get("statusCode"), detail=str(r.get("body") or "")[:300])  # fmt: skip
+        return r
     except BadRequest as e:
+        log(
+            "error", "api.vaic_refused", method=method, path=owner_api.clean_path(path), status=400, detail=str(e)[:300]
+        )
         return problem(400, str(e))
     except (AttributeError, TypeError, KeyError) as e:
         # A body in a shape the route doesn't take (a list where it reads an object, a missing key): say so, so

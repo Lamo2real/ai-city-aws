@@ -310,3 +310,25 @@ async def test_a_body_in_the_wrong_shape_is_a_plain_400_vaic_can_fix() -> None:
     assert r["statusCode"] == 400 and "ceo, coo, cfo and cto" in r["body"]
     r = await vaic_call({"method": "PUT", "path": "/executives", "body": {"reviews": "daily"}}, api)
     assert r["statusCode"] == 400 and "reviews takes" in r["body"]
+
+
+async def test_an_executives_change_is_checked_when_staged_and_takes_everyday_words() -> None:
+    # The owner, again on 2026-11-11: "Daily", Yes → "the save didn't go through". The change is now checked when
+    # VAIC stages it, so a body the save would refuse never reaches the owner's Yes (decision 215).
+    c, _, t = wired()
+    bad = {"reviews": {"coo-bottleneck": {"enabled": True}}}
+    out = await t["city_api"].handler({"method": "PUT", "path": "/executives", "body": bad})
+    assert out.startswith("Not staged") and "coo-bottleneck-review" in out
+    assert "Nothing is waiting" in await turn(c)["save_change"].handler({"answer": "yes"})
+    # Words and strings VAIC may use, and the GET's own fields (title, last_run_at, other ids) are fine.
+    got = json.loads((await t["city_api"].handler({"method": "GET", "path": "/executives"})).split(" ", 1)[1])
+    body = {
+        "executives": [*got["executives"], {"id": "chief-of-staff", "enabled": True}],
+        "reviews": {"coo-bottleneck-review": {"enabled": "on", "every_days": "daily", "last_run_at": None}},
+    }
+    out = await t["city_api"].handler({"method": "PUT", "path": "/executives", "body": body})
+    assert "Staged, NOT saved" in out and "COO bottleneck review: on, daily" in out, out
+    assert (await turn(c)["save_change"].handler({"answer": "yes"})).startswith("Saved")
+    after = json.loads((await t["city_api"].handler({"method": "GET", "path": "/executives"})).split(" ", 1)[1])
+    coo = next(r for r in after["reviews"] if r["id"] == "coo-bottleneck-review")
+    assert coo["enabled"] is True and coo["every_days"] == 1

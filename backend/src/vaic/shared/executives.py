@@ -247,29 +247,68 @@ def _keyed(body: Any) -> dict[str, dict[str, Any]]:
     return {"enabled": enabled, "reviews": reviews}
 
 
+_EVERY_WORDS: Final = {"daily": 1, "day": 1, "weekly": 7, "week": 7, "fortnightly": 14, "biweekly": 14, "monthly": 30}
+_BOOL_WORDS: Final = {"true": True, "on": True, "yes": True, "false": False, "off": False, "no": False}
+
+
+def _flag(v: Any) -> Any:
+    return _BOOL_WORDS.get(v.strip().lower(), v) if isinstance(v, str) else v
+
+
+def _every(v: Any) -> Any:
+    """1, 7, 14 or 30 as a number, a numeric string or a word (daily, weekly, fortnightly, monthly)."""
+    if isinstance(v, str):
+        w = v.strip().lower()
+        return int(w) if w.isdigit() else _EVERY_WORDS.get(w, v)
+    if isinstance(v, float) and v.is_integer():
+        return int(v)
+    return v
+
+
+def check_config(body: Any) -> dict[str, dict[str, Any]]:
+    """The change ``PUT /executives`` will make, checked and in its stored shape, without saving it. VAIC runs this
+    when it stages the change, so a body the save would refuse is caught before the owner's Yes (decision 215).
+    Fields the GET adds (``last_run_at``, ``title``…) and executive ids that aren't the four are ignored."""
+    keyed = _keyed(body)
+    enabled: dict[str, bool] = {}
+    for k, raw in keyed["enabled"].items():
+        v = _flag(raw)
+        if k not in EXECUTIVES:
+            continue  # a field the GET shows that isn't a switch
+        if not isinstance(v, bool):
+            raise Invalid("enabled takes ceo, coo, cfo and cto, each true or false.")
+        enabled[k] = v
+    reviews: dict[str, dict[str, Any]] = {}
+    for k, v in keyed["reviews"].items():
+        if k not in REVIEWS or not isinstance(v, dict):
+            raise Invalid(f"There is no review called {k}. The reviews are {', '.join(REVIEWS)}.")
+        row: dict[str, Any] = {}
+        if "enabled" in v:
+            on = _flag(v["enabled"])
+            if not isinstance(on, bool):
+                raise Invalid("A review is switched with true or false.")
+            row["enabled"] = on
+        if "every_days" in v:
+            every = _every(v["every_days"])
+            if every not in REVIEW_DAYS:
+                raise Invalid("A review runs every 1, 7, 14 or 30 days.")
+            row["every_days"] = every
+        reviews[k] = row
+    if not enabled and not any(reviews.values()):
+        raise Invalid("Nothing to change: send enabled and/or reviews.")
+    return {"enabled": enabled, "reviews": reviews}
+
+
 async def set_config(ledger: Ledger, body: dict[str, Any]) -> dict[str, Any]:
     """``PUT /executives``: ``enabled: {ceo: bool, …}`` and ``reviews: {id: {enabled, every_days}}``. Only the owner
-    calls this (the HUD's switches); no agent has a tool for it."""
+    calls this (the HUD's switches, or VAIC after the owner's Yes)."""
     cur = await ledger.table.get("EXEC", "config") or {}
     enabled = dict(cur.get("enabled") or {})
     reviews = {k: dict(v) for k, v in (cur.get("reviews") or {}).items()}
-    body = _keyed(body)
-    for k, v in body["enabled"].items():
-        if k not in EXECUTIVES or not isinstance(v, bool):
-            raise Invalid("enabled takes ceo, coo, cfo and cto, each true or false.")
-        enabled[k] = v
-    for k, v in body["reviews"].items():
-        if k not in REVIEWS or not isinstance(v, dict):
-            raise Invalid(f"There is no review called {k}.")
-        row = reviews.setdefault(k, {})
-        if "enabled" in v:
-            if not isinstance(v["enabled"], bool):
-                raise Invalid("A review is switched with true or false.")
-            row["enabled"] = v["enabled"]
-        if "every_days" in v:
-            if v["every_days"] not in REVIEW_DAYS:
-                raise Invalid("A review runs every 1, 7, 14 or 30 days.")
-            row["every_days"] = v["every_days"]
+    change = check_config(body)
+    enabled.update(change["enabled"])
+    for k, v in change["reviews"].items():
+        reviews.setdefault(k, {}).update(v)
     await ledger.table.update(
         "EXEC",
         "config",

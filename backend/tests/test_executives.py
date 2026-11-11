@@ -265,7 +265,7 @@ async def test_get_and_put_executives() -> None:
     assert {r["id"]: r["every_days"] for r in s["reviews"]} == {"cfo-cost-review": 7, "coo-bottleneck-review": 7}
     for bad in (
         {"enabled": {"cmo": True}},
-        {"enabled": {"ceo": "yes"}},
+        {"enabled": {"ceo": "maybe"}},
         {"reviews": {"nope": {"enabled": True}}},
         {"reviews": {"cfo-cost-review": {"every_days": 3}}},
     ):

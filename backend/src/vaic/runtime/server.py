@@ -228,7 +228,12 @@ def _owner_api(city: Any, e: Mapping[str, str]) -> Callable[[dict[str, Any]], Aw
         return out if isinstance(out, dict) else {"statusCode": 500, "body": "unreadable answer"}
 
     async def run(c: dict[str, Any]) -> dict[str, Any]:
-        return await asyncio.to_thread(call, c)
+        try:
+            return await asyncio.to_thread(call, c)
+        except Exception as err:  # the invoke itself failed (IAM, network): say so plainly, and log it (decision 215)
+            log("error", "vaic.owner_api_failed", error=type(err).__name__, detail=str(err)[:300])
+            why = f"Couldn't reach the city's API ({type(err).__name__})."
+            return {"statusCode": 502, "body": json.dumps({"error": why})}
 
     return run
 

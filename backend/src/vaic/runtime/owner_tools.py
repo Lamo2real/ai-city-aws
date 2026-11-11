@@ -17,10 +17,12 @@ import json
 import re
 from typing import Any
 
+from vaic.shared import executives as execs
 from vaic.shared import owner_api, skills_catalog
 from vaic.shared.caps import SETTING_KEYS, settings_patch
 from vaic.shared.events import now_iso
 from vaic.shared.hierarchy.actions import CityDeps
+from vaic.shared.log import log
 from vaic.shared.skills import PK as SKILLS_PK
 
 from .tools import ToolSpec, TurnCtx, _obj, _s
@@ -119,6 +121,20 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             body = {k: v for k, v in patch.items() if k not in same}
             page = "Limits & spending" if all(k in LIMIT_KEYS for k in body) else "General"
             title = summary or f"Settings → {page}"
+        elif method == "PUT" and p == "/executives":
+            # Checked now, so a body the save would refuse is fixed before the owner's Yes (decision 215).
+            try:
+                body = execs.check_config(body)
+            except execs.Invalid as why:
+                return f"Not staged, the city would refuse it: {why} Fix the body and call city_api again."
+            lines = [f"{execs.EXECUTIVES[k]['title']}: {'on' if v else 'off'}" for k, v in body["enabled"].items()]
+            for k, v in body["reviews"].items():
+                bits = [("on" if v["enabled"] else "off")] if "enabled" in v else []
+                if "every_days" in v:
+                    bits.append({1: "daily", 7: "weekly", 14: "every two weeks", 30: "monthly"}[v["every_days"]])
+                rv = execs.REVIEWS[k]
+                lines.append(f"{rv['executive'].upper()} {rv['title'].lower()}: {', '.join(bits)}")
+            title = summary or "Settings → Executives"
         elif method == "POST" and (m := re.fullmatch(r"/skills/catalog/([\w-]+)", p)):
             e = skills_catalog.find(m.group(1))
             if e is None:
@@ -221,6 +237,8 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             return f"Saved: {row['title']}. Applied on every screen the owner has open."
         r = await d.owner_api({"method": row["method"], "path": row["path"], "body": body})
         ok = 200 <= int(r.get("statusCode", 500)) < 300
+        log("info" if ok else "error", "vaic.save", method=row["method"], path=owner_api.clean_path(row["path"]),
+            status=int(r.get("statusCode", 500)), detail="" if ok else str(r.get("body") or "")[:300])  # fmt: skip
         await d.bus.put({"type": "vaic.change", "conversation": conv, "id": row["id"], "saved": ok})
         head = "Saved" if ok else "Not saved, the city refused it"
         return f"{head}: {row['title']}. " + owner_api.summarise(r, cap=1500)
