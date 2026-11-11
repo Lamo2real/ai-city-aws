@@ -17,6 +17,9 @@ import {
   roundaboutDetours,
   signalAt,
   stepTraffic,
+  taxiCall,
+  CALL_PX,
+  homeOf,
   type CityGuest,
   type CityRider,
   type CityRoutePoint,
@@ -136,5 +139,40 @@ describe("a commuter's cab", () => {
       expect(t).toBeGreaterThan(2500); // longer than the old two and a half seconds
     }
     expect(entries).toBeGreaterThan(3);
+  });
+});
+
+// Decision 207: a new hire's taxi is called to the kerb outside its apartment building before the worker comes out.
+describe("a taxi called for a new hire", () => {
+  it("waits at the kerb where the ride starts, having come along that same street the way it will set off", () => {
+    const w = city(4);
+    for (const b of w.buildings) for (const slot of [0, 3, 7]) {
+      const from = homeSpot(w, slot)!, desk = { ...doorOf(b), y: doorOf(b).y - 2 };
+      const route = commuteRoute(w, from, desk, { leaving: homeOf(w, slot), entering: b });
+      const ride = rideLegs(w, route, from);
+      const call = taxiCall(w, route, ride, from)!;
+      expect(call).not.toBeNull();
+      const i = ride.indexOf(true);
+      expect(call.leg).toBe(i);
+      expect(call.at).toEqual({ x: route[i - 1]!.x, y: route[i - 1]!.y }); // where the worker steps in
+      const next = route[i]!, dist = Math.hypot(call.at.x - call.start.x, call.at.y - call.start.y);
+      expect(dist).toBeGreaterThan(0);
+      expect(dist).toBeLessThanOrEqual(CALL_PX + 0.01);
+      // On the same road, behind the kerb: driving on from it continues the way the ride goes.
+      if (Math.abs(next.x - call.at.x) >= Math.abs(next.y - call.at.y)) {
+        expect(call.start.y).toBe(call.at.y);
+        expect(Math.sign(call.at.x - call.start.x)).toBe(Math.sign(next.x - call.at.x));
+        expect(call.start.x).toBeGreaterThanOrEqual(0);
+        expect(call.start.x).toBeLessThanOrEqual(w.width * 16);
+      } else {
+        expect(call.start.x).toBe(call.at.x);
+        expect(Math.sign(call.at.y - call.start.y)).toBe(Math.sign(next.y - call.at.y));
+      }
+    }
+  });
+
+  it("is not called when nothing is ridden", () => {
+    const w = city(2);
+    expect(taxiCall(w, [{ x: 1, y: 1 }], [false], { x: 0, y: 0 })).toBeNull();
   });
 });

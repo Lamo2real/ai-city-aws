@@ -1366,6 +1366,23 @@ export function rideLegs(world, route, from) {
   return route.map((p) => { const ride = onRoad(prev) && onRoad(p) && (p.x !== prev.x || p.y !== prev.y); prev = p; return ride; });
 }
 
+// A taxi called for a new hire (decision 207): before the worker leaves home, a cab drives along the street to the
+// kerb where the ride starts (the first ridden leg's start) and waits there. It comes from up to CALL_PX behind,
+// heading the way the ride will set off, kept on that street's own stretch of road. Null when nothing is ridden.
+export const CALL_PX = 150;
+export function taxiCall(world, route, ride, from) {
+  const i = ride.indexOf(true);
+  if (i < 0) return null;
+  const at = i === 0 ? from : route[i - 1], next = route[i], d = unit(at, next);
+  let x = at.x - d.x * CALL_PX, y = at.y - d.y * CALL_PX;
+  if (Math.abs(d.x) >= Math.abs(d.y)) {
+    const s = world.streets.find((t) => (t.y + STREET / 2) * TILE === at.y);
+    const lo = s && s.x0 > 0 ? s.x0 * TILE + 12 : 0, hi = s && s.x1 < world.width ? s.x1 * TILE - 12 : world.width * TILE;
+    x = Math.max(lo, Math.min(hi, x));
+  } else y = Math.max(0, Math.min(world.height * TILE, y));
+  return { at: { x: at.x, y: at.y }, start: { x, y }, leg: i };
+}
+
 // ---------- Connector signs (decision 173) ----------
 // The connected tools a department uses, in a steady order (those with a logo first, then by name), for the signs
 // by its tower's doors. A tool whose departments are not known yet hangs nowhere; "every department" ones everywhere.

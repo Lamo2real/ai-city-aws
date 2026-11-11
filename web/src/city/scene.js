@@ -4,7 +4,7 @@
 // Reviewer; each department's manager stands at its door; panels are React (see CityView.tsx).
 // The City View: a small game world of the agents, drawn pixel by pixel on a canvas from city-state.js.
 // All of the art is drawn here in code. Every person on screen is a real agent; only the scenery moves on its own.
-import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf } from "./city-state.js";
+import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf, taxiCall, RIDE_PX_S } from "./city-state.js";
 
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const INK = "#1d1c36";
@@ -272,6 +272,18 @@ function rareCabSprite(view) {
 }
 // A cab sprite: side on, or along the avenue nose on (coming down) / from behind (going up; the cab looks the same).
 const cabImg = (rare, view) => (rare ? rareCabSprite(view) : cab(view === "side" ? "side" : "front"));
+// A cab's yellow outline, two pixels wide, for the taxi taking a new hire to work (decision 207).
+const halos = new WeakMap();
+function haloOf(img) {
+  let h = halos.get(img);
+  if (!h) {
+    const [mask, m] = newCanvas(img.width, img.height); m.drawImage(img, 0, 0); m.globalCompositeOperation = "source-in"; m.fillStyle = "#ffd84a"; m.fillRect(0, 0, img.width, img.height);
+    const [out, o] = newCanvas(img.width + 4, img.height + 4);
+    for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) if (Math.abs(dx) + Math.abs(dy) <= 2) o.drawImage(mask, 2 + dx, 2 + dy);
+    h = out; halos.set(img, h);
+  }
+  return h;
+}
 const bikes = new Map();
 // The mailman on his bicycle, facing right: postal blue, a cap, a satchel, letters in the front basket.
 function bike(frame, carrying) {
@@ -773,7 +785,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   root._view = () => ({ x: cam.x, y: cam.y, zoom: cam.zoom }); // the camera, for tests that click a tower
   root._world = () => world; // the layout, for tests: towers keep one size whatever the headcount
   const winBox = document.createElement("div"); winBox.id = "citywindows"; winBox.hidden = true; winBox.setAttribute("aria-hidden", "true"); root.append(winBox);
-  let selected = null, hover = null, lastVisit = 0, hiddenHomes = 0;
+  let selected = null, hover = null, lastVisit = 0, hiddenHomes = 0, glowing = 0; // glowing: highlighted cabs drawn this frame
 
   const visible = () => root.offsetParent !== null && !document.hidden;
   const dpr = () => devicePixelRatio || 1;
@@ -836,6 +848,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       const fromKey = p.key;
       p.key = to.key;
       const walkHome = to.key === "home" && walksOut(state, id, walked);
+      p.call = null; p.toWork = false; // a new journey cancels a taxi still on its way
       if (still) { p.x = to.x; p.y = to.y; p.move = null; p.route = null; p.waitUntil = null; p.speed = null; p.homecoming = false; setInside(p, !!to.inside); continue; }
       if (walkHome) {
         // Checking out: stand up, say so, take a turn at the door, and walk the streets home.
@@ -867,7 +880,13 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
         p.route = commuteRoute(world, from, to, { leaving: homeOf(world, homes.get(id) ?? 0), entering: b });
         planRide(p, from); // to work by cab, hailed at the kerb by the building
         p.waitUntil = queueAt(`door:${b.dept}`, 700);
-        lightHouse(id, p.waitUntil - performance.now() + 500);
+        // The taxi is called (decision 207): it drives to the kerb outside the apartment building and waits there; the
+        // worker comes out once it has pulled up. It glows from the call until it drops the worker at the tower's door.
+        const call = traffic && taxiCall(world, p.route, p.ride, from);
+        p.toWork = true; p.call = null;
+        if (call) p.call = { x: call.start.x, y: call.start.y, route: roundaboutDetours(traffic.junctions, [call.at], [true], call.start).route, at: performance.now(), here: false, rare: arrive(traffic), rv: 0, flip: call.at.x < call.start.x };
+        const trip = call ? (Math.hypot(call.at.x - call.start.x, call.at.y - call.start.y) / RIDE_PX_S) * 1000 + 1500 : 0;
+        lightHouse(id, Math.max(p.waitUntil - performance.now(), trip) + 500);
       } else dashTo(p, to);
     }
     const lit = [];
@@ -1314,17 +1333,35 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   }
 
   // ---------- Drawing ----------
+  // A cab centred at (x, y) on screen: side on along a street, nose or tail on along the avenue. `glow`: it is taking
+  // a new hire to work (decision 207), so it gets a soft yellow light around it and a yellow outline, like a
+  // selected agent's marker; the light grows as the map zooms out so it still shows from far away.
+  function drawCab(x, y, along, up, flip, rare, glow, now) {
+    const img = cabImg(rare, along ? "side" : up ? "rear" : "front"), left = along ? x - 12 : x - 9, top = along ? y - 12 : y - 15;
+    const blit = (im, l, t) => { if (flip && along) { ctx.save(); ctx.scale(-1, 1); ctx.drawImage(im, -l - im.width, t); ctx.restore(); } else ctx.drawImage(im, l, t); };
+    if (glow) {
+      glowing += 1;
+      const pad = Math.max(3, Math.round(5 / cam.zoom)), k = reduced() ? 1 : 0.8 + 0.2 * Math.sin(now / 260), w = img.width, h = img.height;
+      ctx.fillStyle = `rgba(255,216,74,${(0.3 * k).toFixed(3)})`;
+      ctx.fillRect(left - pad, top - pad + 3, w + pad * 2, h + pad * 2 - 6); ctx.fillRect(left - pad + 3, top - pad, w + pad * 2 - 6, h + pad * 2);
+      ctx.fillStyle = `rgba(255,216,74,${(0.4 * k).toFixed(3)})`; ctx.fillRect(left - 2, y - 1, w + 4, 4); // the light on the road under it
+      blit(haloOf(img), left - 2, top - 2);
+    } else { ctx.fillStyle = "rgba(20,18,40,.3)"; ctx.fillRect(x - 9, y + 1, 18, 2); }
+    blit(img, left, top);
+    if (glow) {
+      // The selected agent's yellow arrow over it, bigger when the map is zoomed out so it reads from far away.
+      const k = Math.max(1, Math.round(1.6 / cam.zoom)), bob = reduced() ? 0 : [0, 1, 2, 1][Math.floor(now / 180) % 4] * k, ay = top - 9 * k - bob;
+      R(ctx, x - 4 * k, ay, 8 * k, 2 * k, INK); R(ctx, x - 3 * k, ay, 6 * k, 2 * k, "#ffd84a"); R(ctx, x - 3 * k, ay + 2 * k, 6 * k, 2 * k, INK); R(ctx, x - 2 * k, ay + 2 * k, 4 * k, k, "#ffd84a"); R(ctx, x - k, ay + 4 * k, 2 * k, 2 * k, INK);
+    }
+  }
   function drawPerson(p, now, f) {
     const a = state.agents[p.id];
     if (!a || p.inside) return;
     if (p.route && !p.waitUntil && p.ride?.[0]) {
       // Riding a cab: side on along a street, nose on along the avenue; the passenger is inside.
       const to = p.route[0], along = Math.abs(to.x - p.x) >= Math.abs(to.y - p.y), x = Math.round(p.x) - OX, y = Math.round(p.y) - OY;
-      ctx.fillStyle = "rgba(20,18,40,.3)"; ctx.fillRect(x - 9, y + 1, 18, 2);
       ctx.globalAlpha = Math.min(1, (now - (p.rideAt ?? 0)) / 260); // the cab pulls up rather than popping in
-      const rare = p.rareCab || root.dataset.rareCabs === "all";
-      if (!along) ctx.drawImage(cabImg(rare, to.y < p.y ? "rear" : "front"), x - 9, y - 15);
-      else if (p.flip) { ctx.save(); ctx.scale(-1, 1); ctx.drawImage(cabImg(rare, "side"), -x - 12, y - 12); ctx.restore(); } else ctx.drawImage(cabImg(rare, "side"), x - 12, y - 12);
+      drawCab(x, y, along, to.y < p.y, p.flip, p.rareCab || root.dataset.rareCabs === "all", p.toWork, now);
       ctx.globalAlpha = 1;
       return;
     }
@@ -1452,6 +1489,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     if (root.dataset.cabs !== String(cars.length)) root.dataset.cabs = String(cars.length); // for tests
     const allRare = root.dataset.rareCabs === "all"; // a test hook: every cab is the rare one, for its screenshot
     let rareShown = 0;
+    glowing = 0;
     for (const c of cars) {
       const x = Math.round(c.x) - 12 - ox, y = Math.round(c.y) - 12 - oy;
       if (c.alpha <= 0 || x < -30 || x > w + 30 || y < -20 || y > h + 20) continue;
@@ -1484,7 +1522,17 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     root.dataset.appSpot = first ? `${Math.round((first.x + CABINET_W / 2 - cam.x) * cam.zoom)},${Math.round((first.y + CABINET_H / 2 - cam.y) * cam.zoom)}` : "";
     // Everyone, back to front.
     const order = [...people.values()].sort((a, b) => a.y - b.y);
+    let calls = 0;
+    for (const p of order) if (p.call) { // the taxis called for new hires: on their way, or waiting at the kerb
+      const c = p.call;
+      calls += 1;
+      ctx.globalAlpha = Math.min(1, (now - c.at) / 400);
+      drawCab(Math.round(c.x) - OX, Math.round(c.y) - OY, c.along ?? true, !!c.up, c.flip, c.rare || allRare, true, now);
+      ctx.globalAlpha = 1;
+    }
     for (const p of order) drawPerson(p, now, f);
+    if (root.dataset.taxiCalls !== String(calls)) root.dataset.taxiCalls = String(calls); // for tests
+    if (root.dataset.glowingCabs !== String(glowing)) root.dataset.glowingCabs = String(glowing);
     drawMail(now);
     for (const p of parcels) {
       const tx = p.target.x, ty = p.target.y - 14, k = p.t, ax = p.from.x + (tx - p.from.x) * k, ay = p.from.y + (ty - p.from.y) * k;
@@ -1515,10 +1563,25 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     let busy = false;
     for (const p of people.values()) {
       if (p.hop > 0) { p.hop = Math.max(0, p.hop - dt * 2.6); busy = true; }
+      if (p.call) busy = true; // the glow breathes
+      if (p.call && !p.call.here) {
+        // The called taxi drives to the kerb with the traffic, slows and stops there (or gives up queueing after 25 s).
+        const c = p.call, to = c.route[0], dx = to.x - c.x, dy = to.y - c.y, d = Math.hypot(dx, dy);
+        let left = d, at = to;
+        for (const q of c.route.slice(1)) { left += Math.hypot(q.x - at.x, q.y - at.y); at = q; }
+        c.to = to;
+        let s = traffic ? rideStep(traffic, c, dt) : RIDE_PX_S * dt;
+        c.rv = Math.min(c.rv ?? RIDE_PX_S, Math.max(12, left * 2.2)); s = Math.min(s, c.rv * dt);
+        if (Math.abs(dx) > 0.5) c.flip = dx < 0;
+        if (d > 0.5) { c.along = Math.abs(dx) >= Math.abs(dy); c.up = dy < 0; }
+        if (d <= s) { c.x = to.x; c.y = to.y; c.route.shift(); } else { c.x += (dx / d) * s; c.y += (dy / d) * s; }
+        if (!c.route.length || now - c.at > 25_000) { const k = c.route.at(-1) ?? c; c.x = k.x; c.y = k.y; c.route = []; c.here = true; dust(c.x, c.y, 4, ["#f4c63c", "#fff6e0"], 18, 0.3); }
+      }
       if (p.waitUntil) {
         if (now < p.waitUntil) { busy = true; continue; }
         p.waitUntil = null;
       }
+      if (p.call && !p.call.here) continue; // the worker stays home until the taxi has pulled up
       if (p.inside && p.route) { setInside(p, false); dust(p.x, p.y - 6, 6, POOF, 20, 0.35); } // out through the doors
       if (p.move) {
         busy = true;
@@ -1539,7 +1602,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
           p.x = to.x; p.y = to.y; p.route.shift(); p.ride?.shift();
           if (to.ring && !p.route[0]?.ring) p.commit = null; // off the roundabout
           if (!p.route.length) {
-            p.route = null; p.speed = null; p.ride = null;
+            p.route = null; p.speed = null; p.ride = null; p.toWork = false; // dropped at the door: the glow goes out
             if (p.key.startsWith("desk:")) setInside(p, true); // in through the doors: out of sight, counted on the roof
             if (p.homecoming) { p.homecoming = false; lightHouse(p.id, 1500); dust(p.x, p.y - 8, 10, POOF, 28, 0.5); } // home: the light goes on, then out
           }
@@ -1547,7 +1610,8 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       }
       // Hailing a cab at the kerb, and its driving off after the drop.
       const riding = !!(p.route && !p.waitUntil && p.ride?.[0]);
-      if (riding && !p.wasRiding) { p.rideAt = now; p.rareCab = traffic ? arrive(traffic) : false; /* a hailed cab enters the road and takes the next number: 1 in 50 is the owner's car */ root.dataset.taxiRides = String(Number(root.dataset.taxiRides ?? 0) + 1); dust(p.x, p.y, 6, ["#f4c63c", "#fff6e0"], 24, 0.35); }
+      if (riding && !p.wasRiding && p.call) { p.rideAt = now - 1000; p.rareCab = p.call.rare; p.call = null; root.dataset.taxiRides = String(Number(root.dataset.taxiRides ?? 0) + 1); dust(p.x, p.y, 6, ["#f4c63c", "#fff6e0"], 24, 0.35); } // in: the called taxi becomes the ride
+      else if (riding && !p.wasRiding) { p.rideAt = now; p.rareCab = traffic ? arrive(traffic) : false; /* a hailed cab enters the road and takes the next number: 1 in 50 is the owner's car */ root.dataset.taxiRides = String(Number(root.dataset.taxiRides ?? 0) + 1); dust(p.x, p.y, 6, ["#f4c63c", "#fff6e0"], 24, 0.35); }
       if (!riding && p.wasRiding && !p.inside) leaving.push({ x: p.x, y: p.y, east: !p.flip, t: 0, rare: p.rareCab });
       p.wasRiding = riding;
     }
@@ -1555,6 +1619,8 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       // The commuters' cabs, as the traffic sees them: crossing a junction, waiting at a line, or on a roundabout.
       traffic.guests = [];
       for (const p of people.values()) {
+        const c = p.call;
+        if (c && !c.here && c.route[0]) { const to = c.route[0], j = ringOf(traffic, { x: c.x, y: c.y, to }); c.guest = { id: `${p.id}:call`, x: c.x, y: c.y, vertical: Math.abs(to.y - c.y) > Math.abs(to.x - c.x), commit: c.commit, ring: j ? { j, ang: Math.atan2(c.y - j.cy, c.x - j.cx) } : null }; traffic.guests.push(c.guest); }
         if (!(p.route && !p.waitUntil && p.ride?.[0])) { p.guest = null; continue; }
         const to = p.route[0], j = ringOf(traffic, { x: p.x, y: p.y, to });
         p.guest = { id: p.id, x: p.x, y: p.y, vertical: Math.abs(to.y - p.y) > Math.abs(to.x - p.x), commit: p.commit, ring: j ? { j, ang: Math.atan2(p.y - j.cy, p.x - j.cx) } : null };

@@ -11,12 +11,12 @@ const person = (page: Page, id: string) =>
     const el = document.querySelector("section.city") as unknown as {
       _people?: Map<
         string,
-        { x: number; y: number; key: string; route?: unknown; waitUntil?: number; visual?: string }
+        { x: number; y: number; key: string; route?: unknown; waitUntil?: number; visual?: string; call?: { here: boolean } | null }
       >;
     };
     const p = el?._people?.get(pid);
     return p
-      ? { x: p.x, y: p.y, key: p.key, walking: !!p.route, waiting: !!p.waitUntil, visual: p.visual ?? null }
+      ? { x: p.x, y: p.y, key: p.key, walking: !!p.route, waiting: !!p.waitUntil || !!(p.call && !p.call.here), visual: p.visual ?? null } // waiting at home for the taxi too (decision 207)
       : null;
   }, id);
 
@@ -41,7 +41,7 @@ test("hired workers commute in from their houses, and finished workers walk home
   expect(w1.waiting || w1.walking).toBe(true); // scheduled, not teleported
   await page.waitForTimeout(400);
   await page.screenshot({ path: `${SHOTS}/city-recruiting.png` }); // manager's hiring bubble, lit house
-  await expect.poll(() => person(page, "wkr-research-a1").then((p) => p!.walking && !p!.waiting)).toBe(true);
+  await expect.poll(() => person(page, "wkr-research-a1").then((p) => p!.walking && !p!.waiting), { timeout: 20_000 }).toBe(true); // after the taxi pulls up
   const mid1 = (await person(page, "wkr-research-a1"))!;
   await page.waitForTimeout(350);
   const mid2 = (await person(page, "wkr-research-a1"))!;
@@ -124,4 +124,83 @@ test("an executive lives at home, rides to HQ when called in, and goes home afte
   await expect
     .poll(() => person(page, "exec-cfo").then((p) => !p!.walking && !p!.waiting), { timeout: 60_000 })
     .toBe(true);
+});
+
+// Decision 207: the taxi to work. Hiring calls a taxi to the kerb outside the worker's apartment building; it pulls
+// up and waits, the worker steps in, it drives highlighted to the department's tower, stops at the door, the worker
+// walks in and the highlight is gone. Two hires at once get a taxi each.
+type Ride = {
+  x: number;
+  y: number;
+  key: string;
+  inside?: boolean;
+  toWork?: boolean;
+  route?: unknown;
+  ride?: boolean[] | null;
+  waitUntil?: number | null;
+  call?: { x: number; y: number; here: boolean; route: Array<{ x: number; y: number }> } | null;
+};
+const rideOf = (page: Page, id: string) =>
+  page.evaluate((pid) => {
+    const el = document.querySelector("section.city") as unknown as HTMLElement & { _people?: Map<string, Ride> };
+    const p = el._people?.get(pid);
+    if (!p) return null;
+    return {
+      x: p.x,
+      y: p.y,
+      inside: !!p.inside,
+      toWork: !!p.toWork,
+      riding: !!(p.route && !p.waitUntil && p.ride?.[0]),
+      walking: !!p.route,
+      call: p.call ? { x: p.call.x, y: p.call.y, here: p.call.here, kerb: p.call.route.at(-1) ?? { x: p.call.x, y: p.call.y } } : null,
+      calls: Number(el.dataset.taxiCalls ?? 0),
+      glowing: Number(el.dataset.glowingCabs ?? 0),
+    };
+  }, id);
+
+test("a hire's taxi is called to the apartment building, waits, and drives highlighted to the tower's door", async ({ page }) => {
+  test.slow();
+  const m = await mockBackend(page);
+  await page.goto("/#/city");
+  await expect(page.locator("section.city")).toHaveAttribute("data-city-ready", "1");
+  await expect(page.getByText(/No departments yet/)).toBeVisible();
+  await page.waitForTimeout(250);
+  m.send({ type: "department.created", name: "Research", mission: "Find things out.", manager_id: "mgr-research" });
+  m.send(hired("mgr-research", "Research", "manager"));
+  await page.waitForTimeout(400);
+  m.send(hired("wkr-research-a1", "Research"));
+  m.send(hired("wkr-research-b2", "Research"));
+
+  // Called: one taxi each, both glowing, on their way along the street to the kerb.
+  await expect.poll(() => rideOf(page, "wkr-research-a1").then((r) => r?.calls)).toBe(2);
+  const home = (await rideOf(page, "wkr-research-a1"))!;
+  expect(home.call).not.toBeNull();
+  const d0 = Math.hypot(home.call!.kerb.x - home.call!.x, home.call!.kerb.y - home.call!.y);
+  await page.waitForTimeout(600);
+  const on = (await rideOf(page, "wkr-research-a1"))!;
+  if (on.call && !on.call.here) expect(Math.hypot(on.call.kerb.x - on.call.x, on.call.kerb.y - on.call.y)).toBeLessThan(d0);
+  expect(on.glowing).toBeGreaterThanOrEqual(1);
+  // Until the taxi has pulled up the worker stays at home.
+  if (on.call && !on.call.here) expect(Math.hypot(on.x - home.x, on.y - home.y)).toBeLessThan(1);
+  await page.screenshot({ path: `${SHOTS}/city-taxi-called.png` });
+
+  // It stops in front of the building and waits; the worker comes out and gets in.
+  await expect.poll(() => rideOf(page, "wkr-research-a1").then((r) => !!r?.call?.here || !!r?.riding), { timeout: 20_000 }).toBe(true);
+  const waiting = (await rideOf(page, "wkr-research-a1"))!;
+  if (waiting.call?.here) expect(Math.hypot(waiting.call.kerb.x - waiting.call.x, waiting.call.kerb.y - waiting.call.y)).toBeLessThan(1);
+  await expect.poll(() => rideOf(page, "wkr-research-a1").then((r) => r?.riding), { timeout: 20_000 }).toBe(true);
+  const riding = (await rideOf(page, "wkr-research-a1"))!;
+  expect(riding.call).toBeNull(); // the called taxi is now the ride
+  expect(riding.toWork).toBe(true);
+  expect(riding.glowing).toBeGreaterThanOrEqual(1);
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: `${SHOTS}/city-taxi-to-work.png` });
+
+  // Dropped at the door: the glow goes out and the worker walks in.
+  for (const id of ["wkr-research-a1", "wkr-research-b2"])
+    await expect.poll(() => rideOf(page, id).then((r) => r?.inside), { timeout: 60_000 }).toBe(true);
+  const done = (await rideOf(page, "wkr-research-a1"))!;
+  expect(done.toWork).toBe(false);
+  expect(done.calls).toBe(0);
+  await expect.poll(() => rideOf(page, "wkr-research-a1").then((r) => r?.glowing)).toBe(0);
 });

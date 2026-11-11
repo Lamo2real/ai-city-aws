@@ -319,3 +319,6 @@ export function arrive(sim: CityTraffic): boolean;
 export const CAB_SHARE: number;
 export function cabsPerLane(spans: number[]): number[];
 export function rideLegs(world: CityWorld, route: CityPoint[], from: CityPoint): boolean[];
+export const CALL_PX: number;
+/** A taxi called for a new hire: it drives from `start` to the kerb `at`, where the ride's leg `leg` begins. */
+export function taxiCall(world: CityWorld, route: CityPoint[], ride: boolean[], from: CityPoint): { at: CityPoint; start: CityPoint; leg: number } | null;
