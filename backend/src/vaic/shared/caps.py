@@ -36,6 +36,8 @@ def default_settings() -> dict[str, Any]:
         "worker_idle_release_minutes": c["worker_idle_release_minutes"],
         "profile_prefix": "global",
         "notify_push": True,
+        # VAIC calls the owner's iPhone when it needs them (decision 245); off = only the message, no ringing.
+        "call_owner": True,
         "first_run_done": False,
         # The Chief of Staff decides Needs you items the moment they appear (decision 124); off = they wait.
         "chief_of_staff_enabled": True,
@@ -141,7 +143,7 @@ WHOLE_KEYS = (
     "max_new_sessions_per_second",
     "worker_idle_release_minutes",
 )
-SWITCH_KEYS = ("notify_push", "first_run_done", "chief_of_staff_enabled", "autopilot")
+SWITCH_KEYS = ("notify_push", "first_run_done", "chief_of_staff_enabled", "autopilot", "call_owner")
 SETTING_KEYS = (*CAP_KEYS, *WHOLE_KEYS, *SWITCH_KEYS, "profile_prefix", "mail_access", "department_caps")
 """Every key ``PUT /settings`` takes; anything else in a body is ignored by the route."""
 

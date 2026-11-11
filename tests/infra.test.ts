@@ -792,8 +792,22 @@ describe("notifications: no email, one iPhone push per finished job (decision 90
       "DELETE /devices/{id}",
       "GET /notifications/apns",
       "PUT /notifications/apns",
+      "GET /calls/{id}",
+      "POST /calls/{id}/answered",
+      "POST /calls/{id}/missed",
+      "POST /calls/{id}/ended",
     ])
       expect(api).toContain(`"${r}"`);
+  });
+
+  it("VAIC calls the owner's iPhone (decision 245): VoIP apps, the call rule, a notifier that can wait", () => {
+    expect(notifications).toMatch(/APNS_VOIP\s*=\s*"\$\{var\.name\}-apns-voip"/);
+    expect(notifications).toMatch(/APNS_VOIP_SANDBOX\s*=\s*"\$\{var\.name\}-apns-voip-sandbox"/);
+    expect(api).toMatch(/VAIC_APNS_VOIP_ARN\s*=\s*var\.apns_enabled/);
+    expect(api).toMatch(/resource "aws_cloudwatch_event_rule" "call"/);
+    expect(api).toMatch(/"detail-type" = \["approval\.requested"\], detail = \{ kind = \["ad\.spend"\] \}/);
+    expect(api).toMatch(/"detail-type" = \["call\.requested"\]/);
+    expect(api).toMatch(/notifier\s*=\s*\{[^}]*timeout = 90/);
   });
 });
 

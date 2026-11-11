@@ -246,4 +246,20 @@ final class PushTests: XCTestCase {
         XCTAssertFalse(PushController.profileIsDevelopment(prod))
         XCTAssertFalse(PushController.profileIsDevelopment(Data("no push here".utf8)))
     }
+
+    func testTheVoIPTokenRegistersForCallsAndSignOutRemovesIt() async {
+        let b = Backend(), sys = FakeSystem(), d = freshDefaults()
+        sys.status = .denied  // calls don't need the notification permission
+        let cfg = ConfigStore(defaults: UserDefaults(suiteName: "vaic.tests.\(UUID().uuidString)")!, http: b.http, bundleHost: "site.example.test")
+        let model = AppModel(configStore: cfg, hud: HudStore(archive: NoChatArchive()), http: b.http, makeAuth: { _ in FakeAuth() }, connectLive: false,
+                             push: PushController(system: sys, defaults: d, sandbox: true, bundle: "com.example.aicity"))
+        await model.push.received(voipToken: Data([0xAB, 0x01]))  // before sign-in: kept
+        await model.start()
+        let voip = b.posts.filter { $0.body["kind"] == "voip" }
+        XCTAssertEqual(voip.last?.body, ["token": "ab01", "platform": "ios", "sandbox": true, "kind": "voip", "bundle": "com.example.aicity"])
+        await model.push.received(voipToken: Data([0x02]))
+        XCTAssertEqual(b.devices.values.sorted(), ["02"], "the old VoIP device is removed when the token changes")
+        await model.signOut()
+        XCTAssertTrue(b.devices.isEmpty, "no calls after sign-out")
+    }
 }

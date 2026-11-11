@@ -83,6 +83,10 @@ def _money(r: dict[str, Any]) -> str:
     return f"{amount:,.2f}".rstrip("0").rstrip(".") + f" {r.get('currency') or ''}".rstrip()
 
 
+def _per(r: dict[str, Any]) -> str:
+    return "a day" if r.get("per") == "day" else "per campaign"
+
+
 def _norm(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
 
@@ -320,7 +324,7 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         if action == "get":
             cur = await store.get()
             head = (
-                f"The ad spend limit is {_money(cur)} per campaign (set {str(cur['set_at'])[:10]})."
+                f"The ad spend limit is {_money(cur)} {_per(cur)} (set {str(cur['set_at'])[:10]})."
                 if cur
                 else "There is no ad spend limit: every campaign starts without asking."
             )
@@ -332,7 +336,8 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             if not rows:
                 return "The ad spend limit has never been set."
             return "Changes, newest first: " + "; ".join(
-                f"{str(r['at'])[:10]} {'set to ' + _money(r) if r['action'] == 'set' else 'removed'}" for r in rows
+                f"{str(r['at'])[:10]} {'set to ' + _money(r) + ' ' + _per(r) if r['action'] == 'set' else 'removed'}"
+                for r in rows
             )
         if not c.from_owner:
             return NOT_OWNER
@@ -365,15 +370,28 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             return "Removed: there is no ad spend limit now." if gone else "There was no ad spend limit to remove."
         if action == "set":
             try:
-                rec = await store.set(float(a.get("amount") or 0), str(a.get("currency") or "USD"))
+                per = "day" if a.get("per") == "day" else "campaign"
+                rec = await store.set(float(a.get("amount") or 0), str(a.get("currency") or "USD"), per)
             except (TypeError, ValueError) as e:
                 return str(e) or "The limit must be an amount above zero."
-            log("info", "vaic.ad_limit", action="set", amount=rec["amount"], currency=rec["currency"])
+            log("info", "vaic.ad_limit", action="set", amount=rec["amount"], currency=rec["currency"], per=per)
             return (
-                f"Saved: the ad spend limit is now {_money(rec)} per campaign. Any campaign planned above it waits "
-                "for the owner's yes in the chat. Confirm the new value back in one sentence."
+                f"Saved: the ad spend limit is now {_money(rec)} {_per(rec)}. Any campaign planned above it waits "
+                "for the owner's yes, and you call the owner's iPhone about it (a message follows if they don't "
+                "answer). Confirm the new value back in one sentence."
             )
         return "action is set, get, remove, history, confirm or refuse."
+
+    async def call_owner(a: dict[str, Any]) -> str:
+        if not c.from_owner:
+            return NOT_OWNER
+        reason = " ".join(str(a.get("reason") or "").split())[:200] or "You asked me to call you."
+        await d.bus.put({"type": "call.requested", "reason": reason})
+        log("info", "vaic.call_owner")
+        return (
+            "Ringing the owner's iPhone now (the AI City app). If they don't pick up, one message follows. "
+            "Say so in one short sentence."
+        )
 
     return [
         ToolSpec(
@@ -447,9 +465,12 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             "ad_spend_limit",
             "The owner's ad spend limit, the one approval left (decision 240): a campaign whose total planned spend "
             "(daily budget times days, or the lifetime budget) is over it waits for the owner's yes before it starts "
-            "or its budget is raised; below it, it just starts. It covers every agent and every ad connector. action "
-            "set with amount (a number) and currency (USD, EUR, SEK...; what the owner said, USD when they gave $) "
-            'when the owner says e.g. "confirm with me before any campaign over $500" or "make it $1,000"; it '
+            'or its budget is raised; below it, it just starts. per day makes it a daily ceiling instead ("max 300 kr '
+            'a day", "a $30 daily ceiling"): a campaign planned above it a day, or a spent one raised above it, waits '
+            "for the owner. It covers every agent and every ad connector; the city calls the owner's iPhone when one "
+            "waits. action set with amount (a number), currency (USD, EUR, SEK...; what the owner said, USD when they "
+            'gave $, SEK for kr/kronor) and per (campaign, the default, or day) when the owner says e.g. "confirm '
+            'with me before any campaign over $500" or "make it $1,000"; it '
             "replaces the old value at once, no Yes/No card. action get for the current limit (and history for past "
             'changes), action remove to drop it. When the owner answers a waiting campaign in words ("yes, start '
             "it\"), action confirm or refuse with approval_id (the ad.spend approval). Only on the owner's own "
@@ -459,9 +480,10 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                     "action": {"type": "string", "enum": ["set", "get", "remove", "history", "confirm", "refuse"]},
                     "amount": {"type": "number", "minimum": 0.01},
                     "currency": _s(3, 8),
+                    "per": {"type": "string", "enum": ["campaign", "day"]},
                     "approval_id": _s(3, 64),
                 },
-                ("amount", "currency", "approval_id"),
+                ("amount", "currency", "per", "approval_id"),
             ),
             ad_limit,
             step=lambda a: (
@@ -469,5 +491,14 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 if a.get("action") in ("get", "history")
                 else "Saving your ad spend limit"
             ),
+        ),
+        ToolSpec(
+            "call_owner",
+            "Ring the owner's iPhone now: the AI City app rings like a phone call (also when locked); answered, they "
+            "talk to you by voice with the reason; not answered, one message follows. Only when the owner asks to "
+            'be called ("call me", "test the call"). reason: one short sentence they hear first.',
+            _obj({"reason": _s(1, 200)}, ()),
+            call_owner,
+            step=lambda a: "Calling your iPhone",
         ),
     ]

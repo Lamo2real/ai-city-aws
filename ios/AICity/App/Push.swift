@@ -5,6 +5,10 @@
 // app registers with APNs on every launch (Apple's advice: the token can change) and sends the token to the
 // backend; sign-out removes this iPhone from the backend first. The notification's text (job, outcome,
 // cost) is written by the backend; the app shows it as is, and a tap opens the app on VAIC.
+//
+// VAIC's calls (App/Calls.swift) come over a second channel, PushKit's VoIP pushes, with their own token.
+// It is registered the same way (`kind: "voip"`), on every launch and whenever it changes, and it does not
+// depend on the notification permission: a call is not a notification.
 import Foundation
 import Observation
 import UIKit
@@ -55,18 +59,23 @@ final class PushController {
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let sandbox: Bool
     @ObservationIgnored private var token: String?
+    @ObservationIgnored private var voipToken: String?
+    @ObservationIgnored private let bundle: String
 
     private enum Key {
         static let asked = "vaic.push.asked"
         static let device = "vaic.push.device"  // the backend's id for this iPhone
         static let token = "vaic.push.token"  // the token that id belongs to
         static let orphan = "vaic.push.orphan"  // an id sign-out couldn't remove (offline); removed later
+        static let voipDevice = "vaic.push.voip.device"  // the backend's id for this iPhone's VoIP token
     }
 
-    init(system: PushSystem? = nil, defaults: UserDefaults = .standard, sandbox: Bool = PushController.apnsSandbox()) {
+    init(system: PushSystem? = nil, defaults: UserDefaults = .standard, sandbox: Bool = PushController.apnsSandbox(),
+         bundle: String = Bundle.main.bundleIdentifier ?? "") {
         self.system = system ?? SystemPush()
         self.defaults = defaults
         self.sandbox = sandbox
+        self.bundle = bundle
     }
 
     /// The backend's id for this iPhone, if it has one.
@@ -114,6 +123,21 @@ final class PushController {
         await sync()
     }
 
+    /// PushKit gave this iPhone a VoIP token (every launch; it may change): VAIC can call it.
+    func received(voipToken data: Data) async {
+        voipToken = data.map { String(format: "%02x", $0) }.joined()
+        await syncVoIP()
+    }
+
+    /// Sends the VoIP token to the backend when signed in. Offline or refused: the next launch tries again.
+    func syncVoIP() async {
+        guard let api, let voipToken else { return }
+        let old = defaults.string(forKey: Key.voipDevice)
+        guard let id = try? await api.registerVoIPDevice(token: voipToken, sandbox: sandbox, bundle: bundle) else { return }
+        defaults.set(id, forKey: Key.voipDevice)
+        if let old, old != id { try? await api.unregisterDevice(old) }  // the token changed
+    }
+
     /// APNs refused to register this app, usually a build signed without the Push Notifications capability.
     func failed(_ error: Error) {
         registered = false
@@ -123,6 +147,7 @@ final class PushController {
     /// Sends the token to the backend when signed in and allowed. Called when a token arrives and after a
     /// sign-in; does nothing until both are there.
     func sync() async {
+        await syncVoIP()
         guard let api, let token, state == .on else { return }
         let old = deviceId
         do {
@@ -144,6 +169,10 @@ final class PushController {
     func signOut() async {
         await removeDevice()
         token = nil
+        if let id = defaults.string(forKey: Key.voipDevice) {  // no more calls either
+            defaults.removeObject(forKey: Key.voipDevice)
+            try? await api?.unregisterDevice(id)
+        }
     }
 
     private func removeDevice() async {
@@ -187,11 +216,16 @@ final class PushController {
 @MainActor
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     private weak var model: AppModel?
+    /// The model made at launch: a call or a notification's button can wake the app where no screen is drawn,
+    /// so `attach` from the screen may never come.
+    static var launched: AppModel?
     private var pendingToken: Data?
     private var pendingTap = false
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        Decide.register()
+        if let m = Self.launched { attach(m) }
         return true
     }
 
@@ -211,13 +245,20 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         model?.push.failed(error)
     }
 
+    private func decide(_ approval: String, _ approved: Bool) async {
+        await model?.decide(approval: approval, approved: approved)
+    }
+
     // A notification while the app is open: show it anyway, it's rare and it's the point.
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         [.banner, .list, .sound]
     }
 
-    // The owner tapped it: open VAIC.
+    // The owner tapped it: open VAIC. Or tapped "Yes, go ahead" / "No" on a missed call's message: answer it.
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        if let d = CallPush.decision(action: response.actionIdentifier, userInfo: response.notification.request.content.userInfo) {
+            return await decide(d.approval, d.approved)
+        }
         guard response.actionIdentifier == UNNotificationDefaultActionIdentifier else { return }
         await MainActor.run {
             if let model { model.openFromNotification() } else { pendingTap = true }

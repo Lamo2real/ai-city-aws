@@ -379,6 +379,14 @@ class VaicQuestion(_E):
     detail: str = ""
 
 
+class CallRequested(_E):
+    """The owner asked VAIC to call them ("Vice, call me"): the notifier rings their iPhone (decision 245)."""
+
+    type: Literal["call.requested"]
+    reason: str
+    approval: str = ""
+
+
 class VaicChange(_E):
     """A change VAIC staged in the chat was saved or discarded (decision 206): the HUD closes its Yes/No card."""
 
@@ -512,6 +520,7 @@ CityEventModel = Annotated[
     | VaicStopped
     | VaicQuestion
     | VaicChange
+    | CallRequested
     | HudAction
     | AppSubmitted
     | AppDraft

@@ -339,9 +339,19 @@ def _voice(host: TurnRunner, city: Any) -> VoiceFactory:
             }
             return await host.run_turn(inv)
 
+        async def call_brief(call_id: str) -> str | None:
+            from vaic.shared.calls import Calls
+
+            call = await Calls(city.ledger.table, city.ledger.now).get(call_id)
+            if not call or call.get("state") not in ("ringing", "answered"):
+                return None
+            about = f" It is about approval {call['approval']}." if call.get("approval") else ""
+            return f"[call] You called the owner and they just picked up. You called because: {call['reason']}.{about}"
+
         return SonicSession(
             send_client=send,
             ask_vaic=ask,
+            call_brief=call_brief,
             open_stream=opener,
             system_prompt=prompt,
             voice_id=str(cfg.get("voiceId") or "tiffany"),

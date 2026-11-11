@@ -4,6 +4,9 @@ The owner's words: "I don't want a thousand emails per agent… one per large fe
 EventBridge sends this Lambda only ``ticket.status`` events for top-level jobs (``kind: task``) reaching
 ``done``, ``failed`` or ``cancelled``; a ledger claim makes each job notify at most once. Parts, reviews, hires
 and partial results never notify. Without the owner's Apple key deployed, the push is skipped and logged.
+
+It also places VAIC's calls (decision 245, ``vaic.shared.calls``): an ``approval.requested`` of kind ``ad.spend`` or a
+``call.requested`` rings the owner's iPhone once, and sends one message only if the call isn't answered.
 """
 
 from __future__ import annotations
@@ -13,6 +16,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from vaic.shared import calls
 from vaic.shared.aws import aws_city
 from vaic.shared.caps import default_settings
 from vaic.shared.clients import client
@@ -76,9 +80,48 @@ async def notify(detail: Any, ledger: Ledger, store: DeviceStore, sns: Any, apps
     return {**counts, "reason": "sent"}
 
 
+async def call(detail: Any, ledger: Ledger, d: calls.CallDeps) -> dict[str, Any] | None:
+    """VAIC's call about this event; None when the event doesn't call the owner."""
+    try:
+        e = parse_event(detail)
+    except (ValidationError, TypeError):
+        return None
+    why = calls.reason_for(e)
+    if why is None:
+        return None
+    reason, approval = why
+    key = f"call:{approval or e['at']}"
+    if not await ledger.claim(key, 7 * 86_400):
+        return {"called": False, "reason": "already called"}
+    if not d.apps.configured:
+        log("info", "call.skipped", reason="apns not configured")
+        return {"called": False, "reason": "apns not configured"}
+    settings = await ledger.settings(default_settings())
+    if settings.get("call_owner") is False:  # the owner said not to ring: the message only
+        c = await calls.Calls(d.table, d.now).create(reason, approval)
+        await calls.missed(d, c["id"])
+        return {"called": False, "reason": "calls off", "messaged": True}
+    c = await calls.place(d, reason, approval)
+    return {"called": True, "state": c.get("state"), "call": c["id"]}
+
+
+def push_apps() -> PushApps:
+    env = os.environ.get
+    return PushApps(
+        env("VAIC_APNS_ARN", ""),
+        env("VAIC_APNS_SANDBOX_ARN", ""),
+        env("VAIC_APNS_VOIP_ARN", ""),
+        env("VAIC_APNS_VOIP_SANDBOX_ARN", ""),
+    )
+
+
 def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
     city = aws_city()
-    apps = PushApps(os.environ.get("VAIC_APNS_ARN", ""), os.environ.get("VAIC_APNS_SANDBOX_ARN", ""))
+    apps = push_apps()
     sns = client(city.session, "sns") if apps.configured else None
     store = DeviceStore(city.ledger.table, city.ledger.now)
-    return run(notify(event.get("detail"), city.ledger, store, sns, apps))
+    detail = event.get("detail")
+    if isinstance(detail, dict) and detail.get("type") in ("approval.requested", "call.requested"):
+        deps = calls.CallDeps(city.ledger.table, city.ledger.now, store, sns, apps)
+        return run(call(detail, city.ledger, deps)) or {"called": False, "reason": "not a call"}
+    return run(notify(detail, city.ledger, store, sns, apps))

@@ -126,7 +126,28 @@ final class APIClient: @unchecked Sendable {
         guard let id = r["device"]["id"].string ?? r["id"].string else { throw APIError(message: "Something went wrong.", status: 0, fix: nil) }
         return id
     }
+    /// Registers this iPhone for VAIC's calls (PushKit's VoIP token); `bundle` tells the backend the VoIP topic.
+    func registerVoIPDevice(token: String, sandbox: Bool, bundle: String) async throws -> String {
+        let r = try await request("/devices", method: "POST", body: ["token": .string(token), "platform": "ios", "sandbox": .bool(sandbox),
+                                                                     "kind": "voip", "bundle": .string(bundle)])
+        guard let id = r["device"]["id"].string ?? r["id"].string else { throw APIError(message: "Something went wrong.", status: 0, fix: nil) }
+        return id
+    }
     func unregisterDevice(_ id: String) async throws { try await request("/devices/\(Self.seg(id))", method: "DELETE") }
+
+    // MARK: VAIC's calls (App/Calls.swift)
+
+    func callAnswered(_ id: String) async throws { try await request("/calls/\(Self.seg(id))/answered", method: "POST", body: [:]) }
+    func callMissed(_ id: String) async throws { try await request("/calls/\(Self.seg(id))/missed", method: "POST", body: [:]) }
+    func callEnded(_ id: String) async throws { try await request("/calls/\(Self.seg(id))/ended", method: "POST", body: [:]) }
+    /// A presigned `wss://` address for VAIC's real-time voice, good for a few minutes.
+    func voiceSession() async throws -> URL {
+        let r = try await request("/voice/session", method: "POST", body: [:])
+        guard let s = r["url"].string, let url = URL(string: s), url.scheme == "wss" else {
+            throw APIError(message: "VAIC's voice could not start.", status: 0, fix: "Try again.")
+        }
+        return url
+    }
 
     /// IDs come from the server; keep them to one safe path segment anyway.
     static func seg(_ id: String) -> String {

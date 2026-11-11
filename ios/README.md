@@ -8,12 +8,12 @@ A native SwiftUI app that does what the web HUD (`web/`) does: sign in, talk to 
 |---|---|
 | `AICity.xcodeproj` | The Xcode project (folders are synced: a new `.swift` file in `AICity/` is in the app automatically) |
 | `Config/AICity.xcconfig` | The AI City's web address (built in; nobody types it), team ID and bundle ID prefix (public values only) |
-| `Config/Info.plist` | Microphone and speech-recognition wording, App Transport Security (HTTPS only) |
+| `Config/Info.plist` | Microphone and speech-recognition wording, background modes for calls, App Transport Security (HTTPS only) |
 | `AICity/Auth` | Cognito sign-in on the app's own screens: SRP, first-login password, authenticator app, forgot password, refresh, sign-out. Tokens in the Keychain |
 | `AICity/Core` | `config.json`, the HTTP API, the WebSocket, the store (chat, outbox, VAIC's steps), Markdown |
 | `AICity/City` | The City screen and its locked-down web view; the event reducer (a Swift port of `web/src/city/city-state.js`) for the native lists and sheets |
 | `AICity/CityWeb` | The web HUD's own City scene, built from `web/src/city/` (do not edit; rebuild it) |
-| `AICity/Voice` | Push-to-talk with Apple's Speech framework (on the iPhone when it can) and spoken replies |
+| `AICity/Voice` | Push-to-talk with Apple's Speech framework (on the iPhone when it can) and spoken replies; VAIC's real-time voice on calls (`SonicLink.swift`) |
 | `AICity/UI` | The screens |
 | `AICityTests` | XCTest unit tests with fakes only (no AWS) |
 | `scripts/` | `srp_vectors.py` (SRP test vectors from Python), `make_icon.swift` (the app icon: the owner's eye in white on black, from `web/public/eye.svg`), `make_tap_sound.py` (the tap click, `AICity/Sounds/tap.wav`) |
@@ -76,6 +76,16 @@ The app declares `ITSAppUsesNonExemptEncryption = false` (it uses only Apple's H
 After the first sign-in the app asks, in one sentence, whether this iPhone should get a notification when the city finishes a **large feature** (never small steps). Allow it and the app registers with Apple's push service on every launch and sends the token to the backend (`POST /devices`); the push itself is sent by the backend through SNS → APNs when a top-level job finishes, with the job, outcome and cost in the text. Tapping it opens VAIC. Sign-out removes this iPhone from the backend; so does turning notifications off in iOS Settings. "Not now" is never asked again — Settings → Notifications offers it later.
 
 Real pushes need the **Push Notifications capability**, which only Apple Developer Program teams have (option B above): set `VAIC_ENTITLEMENTS = Config/AICity-Push.entitlements` in `Config/AICity.xcconfig`. With a free personal team the app still builds and runs; Settings → Notifications explains that this build can't receive them. The simulator always has the entitlement and `xcrun simctl push booted <bundle-id> payload.json` shows a notification end to end, but a push from the real backend needs a real iPhone.
+
+## Calls from VAIC
+
+When VAIC needs a decision from you (a campaign that wants to spend over your daily ad ceiling, say), it calls this iPhone, once. It is an in-app call, not a phone number: the backend sends a PushKit **VoIP push**, and the app shows it through **CallKit**, so the phone rings full-screen with "Vice" calling, locked or not. Answer and you talk to VAIC's real-time voice (Amazon Nova Sonic on VAIC's runtime, the same WebSocket the web HUD uses; `Voice/SonicLink.swift`), and VAIC says first why it called. Let it ring 30 seconds or decline and it counts as missed: the backend sends a normal notification instead, with **Yes, go ahead** and **No** buttons that answer the approval after Face ID. Answer and no message follows. One call at a time. `App/Calls.swift` has the whole lifecycle.
+
+- The app registers its VoIP token with `POST /devices` (`kind: "voip"`, with the bundle id) on every launch and when it changes, whether or not notifications are allowed; sign-out removes it.
+- `Config/Info.plist` adds the background modes `voip` and `audio` (a call keeps talking with the screen locked).
+- VoIP pushes go through APNs with the **same Apple key** the notifications already use, to the topic `<bundle id>.voip`; nothing new to paste. Like notifications, they need the Push Notifications capability (Apple Developer Program, `VAIC_ENTITLEMENTS` above).
+- **Install a new build** on the iPhone to get calls; an older build never registers a VoIP token, so VAIC can't ring it and only the message comes.
+- The simulator can't receive VoIP pushes or ring through CallKit; the unit tests cover the lifecycle with fakes, and a real call needs a real iPhone.
 
 ## Voice
 

@@ -22,7 +22,13 @@ locals {
   tags        = { Component = "notifications" }
   secret_name = "vaic/prod/apns"
   # Deterministic names, so the api and notifier functions can be given their ARNs before the applications exist.
-  app_names = { APNS = "${var.name}-apns", APNS_SANDBOX = "${var.name}-apns-sandbox" }
+  # APNS_VOIP*: VAIC's calls (decision 245), PushKit VoIP pushes that ring the app; the same token key serves them.
+  app_names = {
+    APNS              = "${var.name}-apns"
+    APNS_SANDBOX      = "${var.name}-apns-sandbox"
+    APNS_VOIP         = "${var.name}-apns-voip"
+    APNS_VOIP_SANDBOX = "${var.name}-apns-voip-sandbox"
+  }
   app_arns  = { for k, n in local.app_names : k => "arn:aws:sns:${var.region}:${var.account_id}:app/${k}/${n}" }
   endpoints = [for k, n in local.app_names : "arn:aws:sns:${var.region}:${var.account_id}:endpoint/${k}/${n}/*"]
   key       = var.apns_enabled ? jsondecode(data.aws_secretsmanager_secret_version.apns[0].secret_string) : null

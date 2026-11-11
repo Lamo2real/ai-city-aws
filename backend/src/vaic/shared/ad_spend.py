@@ -1,7 +1,8 @@
 """The owner's ad spend limit (decision 240): the one approval gate left.
 
-The owner sets it by talking to VAIC ("confirm with me before any campaign over $500"). It is a total per campaign:
-the daily budget times the days it runs, or the lifetime budget. ``planned_spend`` reads that total from any tool
+The owner sets it by talking to VAIC ("confirm with me before any campaign over $500"). It is a total per campaign
+(the daily budget times the days it runs, or the lifetime budget) or, since decision 245, a daily ceiling ("300 kr a
+day": the campaign's spend per day; raising a spent budget above it asks again). ``planned_spend`` reads that total from any tool
 call that sets an ad budget (a connector tool, any MCP tool, or a shell call to an ads API), whoever makes it;
 ``spend_ask`` turns a call over the limit into an "ask" in ``policy.gate``, and only the owner can answer it (the
 Chief of Staff and Autopilot skip ``kind: "ad.spend"`` approvals). No limit set means no check.
@@ -27,6 +28,7 @@ PK = "CONFIG"
 SK = "ADLIMIT"
 HIST = "ADLIMIT#"
 KIND = "ad.spend"
+PERS = ("campaign", "day")
 
 _DAILY = {"dailybudget", "dailybudgetamount", "dailybudgetmicros", "dailybudgetcents", "budgetamountmicros"}
 _DAILY |= {"amountmicros", "dailyamount", "dailyspend", "budgetperday"}
@@ -113,6 +115,9 @@ class Spend:
     total: float | None
     """The planned total in the ad account's currency; None when a daily budget has no end date."""
     detail: str
+    per_day: float = 0.0
+    """The planned spend per day: the daily budgets, plus a lifetime budget spread over its days (all of it in one day
+    when it has no end date)."""
 
 
 def _walk(v: Any, out: list[tuple[str, Any]], depth: int = 0) -> None:
@@ -159,16 +164,16 @@ def planned_spend(tool_name: str, tool_input: Mapping[str, Any], now: datetime |
     start = next((d for k, v in pairs if k in _START and (d := _when(v))), None) or now or datetime.now(UTC)
     end = next((d for k, v in pairs if k in _END and (d := _when(v))), None)
     name = next((str(v)[:80] for want in _NAME for k, v in pairs if k == want and isinstance(v, str | int)), "")
+    days = max(1, math.ceil((end - start) / timedelta(days=1))) if end else 0
     total = sum(life)
+    per_day = sum(daily) + (total / days if days else total)
     parts = [f"lifetime budget {_fmt(total)}"] if life else []
     if daily:
-        per_day = sum(daily)
         if end is None:
-            return Spend(platform, name, None, f"{_fmt(per_day)} a day with no end date")
-        days = max(1, math.ceil((end - start) / timedelta(days=1)))
-        total += per_day * days
-        parts.append(f"{_fmt(per_day)} a day for {days} day{'s' if days != 1 else ''}")
-    return Spend(platform, name, total, " plus ".join(parts))
+            return Spend(platform, name, None, f"{_fmt(sum(daily))} a day with no end date", per_day)
+        total += sum(daily) * days
+        parts.append(f"{_fmt(sum(daily))} a day for {days} day{'s' if days != 1 else ''}")
+    return Spend(platform, name, total, " plus ".join(parts), per_day)
 
 
 # ---------- the owner's limit ----------
@@ -188,15 +193,17 @@ class AdLimitStore:
         n = len(await self.table.query(PK, HIST))  # orders changes made in the same instant
         await self.table.put({"pk": PK, "sk": f"{HIST}{row['at']}#{n:06d}#{new_id('lim')}", **row})
 
-    async def set(self, amount: float, currency: str) -> dict[str, Any]:
-        """Sets (or replaces) the limit; one history row per change."""
+    async def set(self, amount: float, currency: str, per: str = "campaign") -> dict[str, Any]:
+        """Sets (or replaces) the limit, per campaign or per day; one history row per change."""
         if not math.isfinite(amount) or amount <= 0:
             raise ValueError("The limit must be an amount above zero.")
+        if per not in PERS:
+            raise ValueError("The limit is per campaign or per day.")
         cur = (currency or "USD").strip().upper()[:8] or "USD"
         old = await self.get()
-        rec = {"amount": round(amount, 2), "currency": cur, "set_at": self._iso()}
+        rec = {"amount": round(amount, 2), "currency": cur, "per": per, "set_at": self._iso()}
         await self.table.put({"pk": PK, "sk": SK, **rec})
-        await self._log({"action": "set", "amount": rec["amount"], "currency": cur, "at": rec["set_at"],
+        await self._log({"action": "set", "amount": rec["amount"], "currency": cur, "per": per, "at": rec["set_at"],
                          "previous": old.get("amount") if old else None})  # fmt: skip
         return rec
 
@@ -217,9 +224,16 @@ def over_limit(spend: Spend, limit: Mapping[str, Any]) -> str | None:
     """The owner's words for a call over the limit; None when it is within it."""
     cap = float(limit["amount"])
     cur = str(limit.get("currency") or "")
+    what = f'{spend.platform} campaign "{spend.campaign}"' if spend.campaign else f"A {spend.platform} campaign"
+    if limit.get("per") == "day":
+        if spend.per_day <= cap:
+            return None
+        return (
+            f"{what} plans {_fmt(spend.per_day)} {cur} a day ({spend.detail}); your daily ad ceiling is "
+            f"{_fmt(cap)} {cur} a day. Confirm to go above it."
+        )
     if spend.total is not None and spend.total <= cap:
         return None
-    what = f'{spend.platform} campaign "{spend.campaign}"' if spend.campaign else f"A {spend.platform} campaign"
     plan = (
         f"plans {spend.detail}, so it has no total"
         if spend.total is None

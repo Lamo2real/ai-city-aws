@@ -82,6 +82,9 @@ final class AppModel {
     private(set) var lastAskedByVoice = false
     /// Notifications when a large feature is done.
     let push: PushController
+    /// VAIC's calls (App/Calls.swift); only the real app has them, never the tests or the demo.
+    @ObservationIgnored private(set) var calls: CallController?
+    @ObservationIgnored private var voipPushes: VoIPPushes?
     /// The City scene: one web view for the app's lifetime, fed by the store.
     @ObservationIgnored private(set) lazy var cityScene: CityWebController = {
         let c = CityWebController()
@@ -143,12 +146,7 @@ final class AppModel {
     /// The site address is built in (decision 111): a build without one fails with a plain sentence, never a form.
     func start() async {
         do {
-            let c = try await configStore.load()
-            config = c
-            let a = auth ?? makeAuth(c)
-            auth = a
-            api = APIClient(baseURL: c.apiUrl, http: http) { [weak a] fresh in try await a?.idToken(fresh: fresh) ?? nil }
-            push.api = api
+            let a = try await prepare()
             let token: String?
             do { token = try await a.idToken(fresh: false) } catch { token = a.hasSession ? "offline" : nil }
             guard token != nil else { boot = .signedOut; return }
@@ -197,6 +195,55 @@ final class AppModel {
     }
 
     func signedIn() async { await start() }
+
+    /// The config, the sign-in and the API client, without any screen: a call or a notification's button can wake
+    /// the app in the background, where no screen is ever drawn.
+    @discardableResult
+    private func prepare() async throws -> AuthClient {
+        let c = try await configStore.load()
+        config = c
+        let a = auth ?? makeAuth(c)
+        auth = a
+        api = APIClient(baseURL: c.apiUrl, http: http) { [weak a] fresh in try await a?.idToken(fresh: fresh) ?? nil }
+        push.api = api
+        return a
+    }
+
+    /// The API client, made first if the app woke in the background.
+    func backgroundAPI() async -> APIClient? {
+        if api == nil { _ = try? await prepare() }
+        return api
+    }
+
+    // MARK: VAIC's calls
+
+    /// PushKit and CallKit, once, at launch (App/Calls.swift).
+    func startCalls() {
+        guard calls == nil else { return }
+        let system = CallKitSystem()
+        let c = CallController(system: system, backend: APICallBackend { [weak self] in await self?.backgroundAPI() })
+        c.onAnswer = { [weak self] in
+            self?.voice.stop(send: false)
+            self?.voice.stopSpeaking()
+        }
+        system.controller = c
+        calls = c
+        let p = VoIPPushes()
+        p.onToken = { [weak self] t in Task { await self?.push.received(voipToken: t) } }
+        p.onCall = { payload, done in c.incoming(payload, completion: done) }
+        voipPushes = p
+        p.start()
+    }
+
+    /// "Yes, go ahead" or "No" on a missed call's message: the approval is answered, as on Needs you.
+    func decide(approval: String, approved: Bool) async {
+        guard let api = await backgroundAPI() else { return }
+        do {
+            try await api.decide(approval: approval, approved: approved)
+        } catch {
+            show(Self.plain(error), tone: .bad)
+        }
+    }
 
     /// The app came to the front (after launch, or after hours or weeks in the background): refresh the tokens
     /// if they are about to expire, reconnect the live connection at once instead of waiting out a back-off,

@@ -6,7 +6,9 @@ takes turns (it knows when the owner has finished), speaks, and stops the moment
 It never answers on its own: every real request goes to the one tool it has, ``ask_vaic``, which runs a normal VAIC turn
 in this same process (same model, tools, ledger and departments), and Sonic speaks the answer.
 
-Browser → relay (JSON text frames): ``{"type": "audio", "data": <base64 PCM16 16 kHz mono>}``, ``{"type": "stop"}``.
+Browser → relay (JSON text frames): ``{"type": "audio", "data": <base64 PCM16 16 kHz mono>}``, ``{"type": "stop"}``,
+and from the iPhone when the owner picks up a call from VAIC (decision 245) ``{"type": "call", "id": <call id>}``: Sonic
+speaks first and says why it called (``call_brief`` reads the call).
 Relay → browser: ``ready`` (model, region), ``audio`` (base64 PCM16 24 kHz), ``transcript`` (role, text),
 ``interrupted`` (stop playback now), ``thinking`` (on: VAIC is working), ``error`` (message), ``closed``.
 
@@ -86,6 +88,8 @@ class SonicSession:
     candidates: list[tuple[str, str]] = field(default_factory=list)
     """``(model_id, region)`` pairs, tried in order until one opens (and answers)."""
     clock: Callable[[], float] = time.monotonic
+    call_brief: Callable[[str], Awaitable[str | None]] | None = None
+    """The ``[call]`` line for a call id (decision 245); None when there is no such call."""
 
     stream: Duplex | None = None
     model: tuple[str, str] | None = None
@@ -224,6 +228,11 @@ class SonicSession:
             await self._send(
                 {"audioInput": {"promptName": self.prompt, "contentName": self.audio_name, "content": msg["data"]}}
             )
+        elif msg.get("type") == "call" and isinstance(msg.get("id"), str) and self.stream and self.call_brief:
+            brief = await self.call_brief(msg["id"][:100])
+            if brief:
+                self.history.append(("USER", brief))
+                await self._text("USER", brief, interactive=True)
         elif msg.get("type") == "stop":
             await self.close()
 

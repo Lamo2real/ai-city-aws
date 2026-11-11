@@ -53,3 +53,43 @@ All routes need the owner's Cognito ID token (`Authorization: Bearer …`), like
 
 The push payload: `aps.alert.title` ("Done" / "Stopped" / "Could not finish"), `aps.alert.body` (the job and its
 cost), `aps.sound: default`, plus `job` (the job id) and `status`, so the app can open that job.
+
+## Calls from VAIC (decision 245)
+
+The owner (2026-11-11): VAIC should call when it needs their input, "call once, and then send message if I don't
+answer. But if I answer, don't send a message", with every bill on AWS. So the call is an **in-app call**, not a phone
+number: no carrier, no Twilio, no WhatsApp, no Amazon Connect.
+
+- **What rings:** a PushKit VoIP push through SNS (`APNS_VOIP` / `APNS_VOIP_SANDBOX` platform applications, made from
+  the same Apple key) makes the AI City app report an incoming call to CallKit: the iPhone's own call screen, "Vice",
+  also when locked.
+- **Answered:** the app says so (`POST /calls/{id}/answered`), opens VAIC's real-time voice (`POST /voice/session`, the
+  same Nova Sonic relay as the web, decision 120) and sends `{"type":"call","id":…}`; the relay gives Sonic a `[call]`
+  line with the reason, so Vice speaks first, says why it called and asks. The owner's answer goes to VAIC
+  (`ask_vaic`), which acts on it (e.g. `ad_spend_limit` confirm or refuse). No message is sent.
+- **Not answered:** declined, or nothing after 30 s on the phone (`POST /calls/{id}/missed`), or nothing reported after
+  45 s (the notifier's own timeout, e.g. the phone is off) → one ordinary push, "Vice called you", with **Yes, go
+  ahead** / **No** buttons (category `VAIC_DECIDE`) that answer the approval (`POST /approvals/{id}`). Each state move
+  is a conditional write (`ringing → answered → ended`, `ringing → missed → messaged`), so whoever reports first wins
+  and the message goes out at most once.
+- **What calls:** an `ad.spend` approval (the owner's ad spend limit, decision 240; now also a daily ceiling, "300 kr a
+  day") and the owner's own "Vice, call me" (`call_owner` → `call.requested`). The rule `vaic-prod-call-owner` sends both
+  to the notifier (90 s timeout). Nothing else rings: with Autopilot on, nothing else waits for the owner.
+- **Switch:** "stop calling me" → VAIC sets `call_owner: false` (Settings): the message still comes, nothing rings.
+- **Cost:** only AWS: SNS mobile pushes (free tier: 1 million a month) and the Nova Sonic minutes of the call.
+- **Security:** no phone number exists anywhere. Only the owner's own registered app rings (VoIP tokens are registered
+  through the owner's Cognito login); every `/calls` route needs the owner's token; the call id only reads the
+  reason; the Yes / No buttons ask for Face ID before they answer (`authenticationRequired`).
+
+Calls need everything in "One-time setup" above, plus the new app build (UIBackgroundModes `voip` and `audio`).
+
+| Route                         | Body / answer                                                                                      |
+| ----------------------------- | -------------------------------------------------------------------------------------------------- |
+| `POST /devices`               | the VoIP token: `{ "token", "platform": "ios", "sandbox", "kind": "voip", "bundle": "<bundle id>" }` |
+| `GET /calls/{id}`             | `{ "call": { "id", "reason", "approval", "state", "created_at" } }`                                  |
+| `POST /calls/{id}/answered`   | `{ "call", "moved" }` (`moved: false` when it was already missed or answered)                        |
+| `POST /calls/{id}/missed`     | declined or unanswered on the phone: the message goes out once                                      |
+| `POST /calls/{id}/ended`      | the owner or Vice hung up                                                                           |
+
+The VoIP payload: `{"aps": {}, "vaic_call": {"id", "reason", "approval"}}`, sent with `apns-push-type: voip`,
+priority 10 and topic `<bundle>.voip`. The message: `aps.category: "VAIC_DECIDE"` and `vaic_call: {"id", "approval"}`.

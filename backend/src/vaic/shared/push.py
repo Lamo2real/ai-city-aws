@@ -4,6 +4,9 @@ The owner's phones register their APNs device tokens (``POST /devices``); each b
 endpoint under the city's APNs application (production, or the sandbox one for debug builds). One push goes
 out per finished job (see ``vaic.lambdas.notifier``). No email anywhere: the owner asked for exactly one
 notification per large feature, on the phone, and nothing else.
+
+Since decision 245 a phone can also register a PushKit VoIP token (``kind: "voip"``): that is how VAIC calls the
+owner (``vaic.shared.calls``). VoIP endpoints live under the VoIP platform applications and only ever get a call.
 """
 
 from __future__ import annotations
@@ -12,7 +15,7 @@ import asyncio
 import hashlib
 import json
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -33,12 +36,16 @@ class PushApps:
 
     production: str = ""
     sandbox: str = ""
+    voip: str = ""
+    voip_sandbox: str = ""
 
     @property
     def configured(self) -> bool:
         return bool(self.production or self.sandbox)
 
-    def for_build(self, sandbox: bool) -> str:
+    def for_build(self, sandbox: bool, kind: str = "alert") -> str:
+        if kind == "voip":
+            return self.voip_sandbox if sandbox else self.voip
         return self.sandbox if sandbox else self.production
 
 
@@ -57,10 +64,23 @@ def _error_code(e: Exception) -> str:
     return str((getattr(e, "response", None) or {}).get("Error", {}).get("Code", ""))
 
 
-def apns_payload(title: str, body: str, data: dict[str, Any] | None = None) -> str:
-    """The SNS message for an APNs push: one alert, default sound, the extra data beside ``aps``."""
-    alert = json.dumps({"aps": {"alert": {"title": title, "body": body}, "sound": "default"}, **(data or {})})
+def apns_payload(title: str, body: str, data: dict[str, Any] | None = None, category: str = "") -> str:
+    """The SNS message for an APNs push: one alert, default sound, the extra data beside ``aps``; ``category``
+    gives it the iPhone's action buttons (``VAIC_DECIDE``: Yes / No)."""
+    aps: dict[str, Any] = {"alert": {"title": title, "body": body}, "sound": "default"}
+    if category:
+        aps["category"] = category
+    alert = json.dumps({"aps": aps, **(data or {})})
     return json.dumps({"default": body, "APNS": alert, "APNS_SANDBOX": alert})
+
+
+def voip_payload(data: dict[str, Any]) -> str:
+    """The SNS message for a PushKit VoIP push: the app reports an incoming call the moment it arrives."""
+    voip = json.dumps({"aps": {}, **data})
+    return json.dumps({"default": "Vice is calling", "APNS_VOIP": voip, "APNS_VOIP_SANDBOX": voip})
+
+
+KINDS = ("alert", "voip")
 
 
 class DeviceStore:
@@ -74,15 +94,25 @@ class DeviceStore:
         rows = await self.table.query_index("gsi1", DEVICE_INDEX_PK)
         return [self._public(r) for r in rows]
 
+    async def voip_phones(self) -> Sequence[Item]:
+        return [r for r in await self.table.query_index("gsi1", DEVICE_INDEX_PK) if r.get("kind") == "voip"]
+
     async def get(self, id: str) -> Item | None:
         return await self.table.get(f"{DEVICE_PREFIX}{id}", "META")
 
-    async def register(self, sns: Any, apps: PushApps, token: str, platform: str, sandbox: bool) -> Item:
-        """Creates (or re-points) the SNS endpoint for this token and remembers it. Idempotent per token."""
+    async def register(
+        self, sns: Any, apps: PushApps, token: str, platform: str, sandbox: bool, kind: str = "alert", bundle: str = ""
+    ) -> Item:
+        """Creates (or re-points) the SNS endpoint for this token and remembers it. Idempotent per token. ``kind``
+        voip is the PushKit token VAIC calls (``bundle`` is the app's bundle id: VoIP pushes go to ``<bundle>.voip``)."""
         token = valid_token(token)
         if platform != "ios":
             raise ValueError("Only iPhone (ios) devices can be registered.")
-        app = apps.for_build(sandbox)
+        if kind not in KINDS:
+            raise ValueError("kind is alert or voip.")
+        if bundle and not _BUNDLE.fullmatch(bundle):
+            raise ValueError("The bundle id looks like com.example.aicity.")
+        app = apps.for_build(sandbox, kind)
         if not app:
             raise RuntimeError("push is not configured")
         id = device_id(token)
@@ -102,12 +132,15 @@ class DeviceStore:
             "id": id,
             "platform": platform,
             "sandbox": sandbox,
+            "kind": kind,
             "endpoint_arn": endpoint,
             "created_at": existing["created_at"] if existing else at,
             "updated_at": at,
         }
+        if bundle:
+            item["bundle"] = bundle
         await self.table.put(item)
-        log("info", "push.device_registered", device=id, sandbox=sandbox, new=existing is None)
+        log("info", "push.device_registered", device=id, sandbox=sandbox, kind=kind, new=existing is None)
         return self._public(item)
 
     async def remove(self, sns: Any, id: str) -> bool:
@@ -123,15 +156,34 @@ class DeviceStore:
         log("info", "push.device_removed", device=id)
         return True
 
-    async def push_all(self, sns: Any, title: str, body: str, data: dict[str, Any] | None = None) -> dict[str, int]:
+    async def push_all(
+        self, sns: Any, title: str, body: str, data: dict[str, Any] | None = None, category: str = ""
+    ) -> dict[str, int]:
         """Sends one push to every registered phone; phones whose endpoint APNs disabled are forgotten."""
+        message = apns_payload(title, body, data, category)
+        rows = [r for r in await self.table.query_index("gsi1", DEVICE_INDEX_PK) if r.get("kind", "alert") == "alert"]
+        return await self._publish(sns, rows, lambda _: {"MessageStructure": "json", "Message": message})
+
+    async def ring(self, sns: Any, data: dict[str, Any]) -> dict[str, int]:
+        """A VoIP push to every phone that registered one: each rings (CallKit) as an incoming call from Vice."""
+        message = voip_payload(data)
+
+        def args(item: Item) -> dict[str, Any]:
+            attrs = {
+                "AWS.SNS.MOBILE.APNS.PUSH_TYPE": {"DataType": "String", "StringValue": "voip"},
+                "AWS.SNS.MOBILE.APNS.PRIORITY": {"DataType": "String", "StringValue": "10"},
+            }
+            if item.get("bundle"):
+                attrs["AWS.SNS.MOBILE.APNS.TOPIC"] = {"DataType": "String", "StringValue": f"{item['bundle']}.voip"}
+            return {"MessageStructure": "json", "Message": message, "MessageAttributes": attrs}
+
+        return await self._publish(sns, await self.voip_phones(), args)
+
+    async def _publish(self, sns: Any, rows: Sequence[Item], args: Callable[[Item], dict[str, Any]]) -> dict[str, int]:
         counts = {"sent": 0, "removed": 0, "failed": 0}
-        message = apns_payload(title, body, data)
-        for item in await self.table.query_index("gsi1", DEVICE_INDEX_PK):
+        for item in rows:
             try:
-                await asyncio.to_thread(
-                    sns.publish, TargetArn=item["endpoint_arn"], MessageStructure="json", Message=message
-                )
+                await asyncio.to_thread(sns.publish, TargetArn=item["endpoint_arn"], **args(item))
                 counts["sent"] += 1
             except Exception as e:
                 if _error_code(e) in _GONE:
@@ -145,7 +197,7 @@ class DeviceStore:
 
     @staticmethod
     def _public(item: Item) -> Item:
-        return {k: item[k] for k in ("id", "platform", "sandbox", "created_at", "updated_at") if k in item}
+        return {k: item[k] for k in ("id", "platform", "sandbox", "kind", "created_at", "updated_at") if k in item}
 
 
 # ---------- the Apple key (what the owner pastes in Settings) ----------

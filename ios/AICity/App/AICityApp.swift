@@ -27,7 +27,10 @@ struct AICityApp: App {
         // Nothing of this is in a Release build.
         if ProcessInfo.processInfo.arguments.contains("-demo") { return Demo.model() }
         #endif
-        return AppModel()
+        let model = AppModel()
+        model.startCalls()  // PushKit wants its delegate during launch, before any screen
+        AppDelegate.launched = model
+        return model
     }
 }
 

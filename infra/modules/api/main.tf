@@ -113,7 +113,7 @@ locals {
     factory       = { bundle = "app", handler = "vaic.lambdas.factory.handler", timeout = 30, memory = 256, env = {} }
     ledger-writer = { bundle = "app", handler = "vaic.lambdas.ledger_writer.handler", timeout = 30, memory = 256, env = {} }
     scheduler     = { bundle = "app", handler = "vaic.lambdas.scheduler.handler", timeout = 120, memory = 256, env = merge({ VAIC_RUNTIME_ARN_VAIC = var.runtime_arns["vaic"], VAIC_RUNTIME_VERSION = var.runtime_version, VAIC_WS_ENDPOINT = "https://${aws_apigatewayv2_api.ws.id}.execute-api.${var.region}.amazonaws.com/prod", VAIC_CONNECTIONS_TABLE = var.connections_table }, local.scheduler_mail_env) }
-    notifier      = { bundle = "app", handler = "vaic.lambdas.notifier.handler", timeout = 30, memory = 256, env = local.apns_env }
+    notifier      = { bundle = "app", handler = "vaic.lambdas.notifier.handler", timeout = 90, memory = 256, env = local.apns_env } # 90 s: a call rings up to 45 s before the message
     approvals     = { bundle = "app", handler = "vaic.lambdas.approvals.handler", timeout = 30, memory = 256, env = {} }
     # The executives (decision 140): only the optional scheduled reviews the owner switched on (all off by default).
     executives = { bundle = "app", handler = "vaic.lambdas.executives.handler", timeout = 600, memory = 256, env = { VAIC_APP_PROFILE_EXECUTIVE = var.executive_profile_arn } }
@@ -268,6 +268,8 @@ locals {
     "GET /features", "PUT /features/{id}", "GET /calendar/events", "POST /calendar/refresh",
     # iPhone notifications (docs/NOTIFICATIONS.md): the owner's phones and the Apple key.
     "GET /devices", "POST /devices", "DELETE /devices/{id}", "GET /notifications/apns", "PUT /notifications/apns",
+    # VAIC calls the owner's iPhone (decision 245): the phone reports a call answered, missed or ended.
+    "GET /calls/{id}", "POST /calls/{id}/answered", "POST /calls/{id}/missed", "POST /calls/{id}/ended",
     # VAIC's voice through OpenAI text-to-speech (docs/VOICE.md): the key the owner pastes, and the speech itself.
     "POST /speech", "GET /voice/openai", "PUT /voice/openai-key",
     # The owner's GitHub token (docs/GITHUB_ACCESS.md): who it belongs to, store it, remove it.
@@ -288,7 +290,10 @@ locals {
   apns_env = {
     VAIC_APNS_ARN         = var.apns_enabled ? "arn:aws:sns:${var.region}:${var.account_id}:app/APNS/${var.name}-apns" : ""
     VAIC_APNS_SANDBOX_ARN = var.apns_enabled ? "arn:aws:sns:${var.region}:${var.account_id}:app/APNS_SANDBOX/${var.name}-apns-sandbox" : ""
-    VAIC_APNS_SECRET      = "vaic/prod/apns"
+    # VAIC's calls (decision 245): PushKit VoIP pushes ring the AI City app as an incoming call.
+    VAIC_APNS_VOIP_ARN         = var.apns_enabled ? "arn:aws:sns:${var.region}:${var.account_id}:app/APNS_VOIP/${var.name}-apns-voip" : ""
+    VAIC_APNS_VOIP_SANDBOX_ARN = var.apns_enabled ? "arn:aws:sns:${var.region}:${var.account_id}:app/APNS_VOIP_SANDBOX/${var.name}-apns-voip-sandbox" : ""
+    VAIC_APNS_SECRET           = "vaic/prod/apns"
   }
   jobs = {
     sweep       = { schedule = "rate(5 minutes)", fn = "scheduler", input = { job = "sweep" }, state = "ENABLED" }
@@ -620,6 +625,36 @@ resource "aws_cloudwatch_event_target" "notify" {
   event_bus_name = var.bus_name
   target_id      = "notifier"
   arn            = aws_lambda_function.fn["notifier"].arn
+}
+
+# VAIC calls the owner (decision 245): an ad spend approval (decision 240) or the owner's "call me" → the notifier
+# rings the iPhone once and sends one message only if the call isn't answered.
+resource "aws_cloudwatch_event_rule" "call" {
+  name           = "${var.name}-call-owner"
+  event_bus_name = var.bus_name
+  event_pattern = jsonencode({
+    source = ["vaic.city"]
+    "$or" = [
+      { "detail-type" = ["approval.requested"], detail = { kind = ["ad.spend"] } },
+      { "detail-type" = ["call.requested"] },
+    ]
+  })
+  tags = local.tags
+}
+
+resource "aws_cloudwatch_event_target" "call" {
+  rule           = aws_cloudwatch_event_rule.call.name
+  event_bus_name = var.bus_name
+  target_id      = "notifier"
+  arn            = aws_lambda_function.fn["notifier"].arn
+}
+
+resource "aws_lambda_permission" "call" {
+  statement_id  = "call-owner"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.fn["notifier"].function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.call.arn
 }
 
 # A worker's submit_app → the apps function (validate, stage drafts/, write the draft, put app.draft).

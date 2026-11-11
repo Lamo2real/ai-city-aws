@@ -213,6 +213,10 @@ ROUTES: list[tuple[str, str]] = [
     ("GET", "/devices"),
     ("POST", "/devices"),
     ("DELETE", "/devices/d-aaaaaaaaaaaaaaaaaaaaaaaa"),
+    ("GET", "/calls/call-1"),
+    ("POST", "/calls/call-1/answered"),
+    ("POST", "/calls/call-1/missed"),
+    ("POST", "/calls/call-1/ended"),
     ("GET", "/notifications/apns"),
     ("PUT", "/notifications/apns"),
     ("POST", "/speech"),
@@ -581,8 +585,43 @@ async def _github_routes(method: str, path: str, event: dict[str, Any], d: ApiDe
     return None
 
 
+async def _call_routes(method: str, path: str, d: ApiDeps) -> dict[str, Any] | None:
+    """VAIC's calls (decision 245): the iPhone reports a call answered, missed (declined or unanswered: the message
+    goes out once) or ended. Each move is conditional on the call's state, so a late or repeated report changes
+    nothing."""
+    m = re.fullmatch(r"/calls/(call-[\w-]{1,80})(?:/(answered|missed|ended))?", path)
+    if not m:
+        return None
+    from vaic.shared import calls
+
+    p = d.push
+    store = calls.Calls(d.ledger.table, d.ledger.now)
+    id, what = m.group(1), m.group(2)
+    call = await store.get(id)
+    if call is None:
+        return problem(404, "No such call.")
+    if method == "GET" and not what:
+        return reply(200, {"call": calls.public(call)})
+    if method != "POST" or not what:
+        return problem(404, "No such route.")
+    moved: bool
+    if what == "answered":
+        moved = await store.move(id, "ringing", "answered") is not None
+    elif what == "ended":
+        moved = await store.move(id, "answered", "ended") is not None
+    else:
+        if p is None:
+            return problem(503, "iPhone notifications aren't turned on yet.")
+        deps = calls.CallDeps(d.ledger.table, d.ledger.now, p.store, p.sns, p.apps)
+        moved = await calls.missed(deps, id)
+    log("info", "call.report", call=id, what=what, moved=moved)
+    return reply(200, {"call": calls.public(await store.get(id) or call), "moved": moved})
+
+
 async def _push_routes(method: str, path: str, event: dict[str, Any], d: ApiDeps) -> dict[str, Any] | None:
     """iPhone notifications: the owner's phones (``/devices``) and the Apple key (``/notifications/apns``)."""
+    if path.startswith("/calls/"):
+        return await _call_routes(method, path, d)
     if not (path == "/devices" or path.startswith("/devices/") or path == "/notifications/apns"):
         return None
     p = d.push
@@ -626,11 +665,18 @@ async def _push_routes(method: str, path: str, event: dict[str, Any], d: ApiDeps
             )
         b = _body(event)
         sandbox = bool(b.get("sandbox", False))
-        if not p.apps.for_build(sandbox):
+        kind = str(b.get("kind") or "alert")
+        if not p.apps.for_build(sandbox, kind):
             return problem(503, "That build's notifications aren't turned on.", "Deploy with the Apple key first.")
         try:
             device = await p.store.register(
-                p.sns, p.apps, str(b.get("token") or ""), str(b.get("platform") or "ios"), sandbox
+                p.sns,
+                p.apps,
+                str(b.get("token") or ""),
+                str(b.get("platform") or "ios"),
+                sandbox,
+                kind,
+                str(b.get("bundle") or ""),
             )
         except ValueError as e:
             return problem(400, str(e))
@@ -1660,7 +1706,13 @@ def _speech_from_env(city: Any) -> SpeechDeps:
 
 
 def _push_from_env(city: Any) -> PushDeps:
-    apps = PushApps(os.environ.get("VAIC_APNS_ARN", ""), os.environ.get("VAIC_APNS_SANDBOX_ARN", ""))
+    env = os.environ.get
+    apps = PushApps(
+        env("VAIC_APNS_ARN", ""),
+        env("VAIC_APNS_SANDBOX_ARN", ""),
+        env("VAIC_APNS_VOIP_ARN", ""),
+        env("VAIC_APNS_VOIP_SANDBOX_ARN", ""),
+    )
     return PushDeps(
         store=DeviceStore(city.ledger.table, city.ledger.now),
         sns=client(city.session, "sns"),
