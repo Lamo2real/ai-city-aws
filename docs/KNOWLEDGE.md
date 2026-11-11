@@ -511,7 +511,8 @@ knowledge base first; apply law first, evidence second, house style third and by
 own voice, never Hormozi's name, likeness, catchphrases or figures; follow section 19's three tiers (the approval tier
 through `ask_owner`); verify `needs_verification` facts; say `[GAP]` points are unknown; give bookkeeping, VAT, tax,
 payroll and other-regime content as orientation for a human to confirm; and hand work over by section 20. The section
-19 approval tier stays prompt rules (the policy gate's rules have no department scope; the owner's choice pending).
+19 approval tier stays prompt rules, not enforced in code (the owner chose prompts only; the policy gate's rules
+have no department scope, and decision 237 removed connectors' approval levels).
 
 **Customer support (decision 229).** `knowledge/seed/support/` (config key `support`, label "Customer support"): 30
 documents, one per numbered section of `knowledge/source/customer-support-research.md` (verbatim, 24,499 words, SHA-256
