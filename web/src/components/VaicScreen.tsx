@@ -14,7 +14,7 @@ import {
   sendable,
   type Lists,
 } from "../lib/attach.ts";
-import { addFiles, useKnowledge } from "../lib/knowledge.ts";
+import { MAX_CHAT_IMAGES, addFiles, capImages, isImageType, useKnowledge } from "../lib/knowledge.ts";
 import { placeCards, store, useHud } from "../lib/store.ts";
 import { awayStart, cameBack } from "../lib/away.ts";
 import { AwayPanel } from "./Away.tsx";
@@ -84,6 +84,8 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
   // knowledge items, so their live status comes from the knowledge store).
   const [lists, setLists] = useState<Lists | null>(null);
   const [attached, setAttached] = useState<string[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const dragDepth = useRef(0);
   const kn = useKnowledge((s) => s);
   const items = attached.flatMap((id) => kn.items.filter((x) => x.id === id));
   useEffect(() => {
@@ -220,6 +222,13 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
       ].filter(Boolean);
       if (notes.length) toast({ tone: "info", text: `${notes.join("; ")}.` });
     }
+    const capped = capImages(files, items.filter((x) => isImageType(x.content_type)).length);
+    files = capped.files;
+    if (capped.left)
+      toast({
+        tone: "info",
+        text: `Up to ${MAX_CHAT_IMAGES} images per message: ${capped.left} ${capped.left === 1 ? "image was" : "images were"} left out.`,
+      });
     if (!files.length) return;
     const problems = await addFiles(files, { onCreated: (item) => setAttached((a) => [...a, item.id]) });
     for (const p of problems) toast({ tone: "bad", text: p });
@@ -304,7 +313,40 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
       <h1 id="vaic-title" className="sr">
         Talk to VAIC
       </h1>
-      <div className="talk" role="region" aria-label="Chat with VAIC">
+      <div
+        className={`talk${dragging ? " is-dropping" : ""}`}
+        role="region"
+        aria-label="Chat with VAIC"
+        // Drag and drop images (up to 10 per message) or any other files onto the chat (decision 214).
+        onDragEnter={(e) => {
+          if (!e.dataTransfer.types.includes("Files")) return;
+          e.preventDefault();
+          dragDepth.current++;
+          setDragging(true);
+        }}
+        onDragOver={(e) => {
+          if (!e.dataTransfer.types.includes("Files")) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+        }}
+        onDragLeave={() => {
+          dragDepth.current = Math.max(0, dragDepth.current - 1);
+          if (!dragDepth.current) setDragging(false);
+        }}
+        onDrop={(e) => {
+          if (!e.dataTransfer.types.includes("Files")) return;
+          e.preventDefault();
+          dragDepth.current = 0;
+          setDragging(false);
+          const dropped = [...e.dataTransfer.files];
+          if (dropped.length) void onFiles(dropped, false);
+        }}
+      >
+        {dragging ? (
+          <div className="drop-hint" aria-hidden="true">
+            <span>Drop to attach · up to {MAX_CHAT_IMAGES} images</span>
+          </div>
+        ) : null}
         {/* No header: the panel runs up behind the top bar (decision 108); the clear button floats in its corner. */}
         {chat.length ? (
           <button

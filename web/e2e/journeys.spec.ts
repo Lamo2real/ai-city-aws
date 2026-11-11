@@ -1581,3 +1581,36 @@ test("on a phone the empty message box is one slim row, the hint on one line (de
   await box.fill("short");
   expect((await row.boundingBox())!.height).toBeLessThanOrEqual(54);
 });
+
+test("drag and drop images onto the chat: up to 10 per message, the rest left out with a note (decision 214)", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  await page.goto("/#/vaic");
+  const talk = page.getByRole("region", { name: "Chat with VAIC" });
+  await expect(talk).toBeVisible();
+  const drop = (n: number, type: string) =>
+    talk.evaluate(
+      (el, [count, mime]) => {
+        const dt = new DataTransfer();
+        for (let i = 0; i < (count as number); i++) dt.items.add(new File(["x"], `pic-${i}.png`, { type: mime as string }));
+        el.dispatchEvent(new DragEvent("dragenter", { dataTransfer: dt, bubbles: true, cancelable: true }));
+        el.dispatchEvent(new DragEvent("dragover", { dataTransfer: dt, bubbles: true, cancelable: true }));
+        return dt;
+      },
+      [n, type],
+    );
+  await drop(12, "image/png");
+  await expect(page.locator(".drop-hint")).toContainText("up to 10 images");
+  await talk.evaluate((el) => {
+    const dt = new DataTransfer();
+    for (let i = 0; i < 12; i++) dt.items.add(new File(["x"], `pic-${i}.png`, { type: "image/png" }));
+    dt.items.add(new File(["%PDF"], "brief.pdf", { type: "application/pdf" }));
+    el.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true }));
+  });
+  await expect(page.locator(".drop-hint")).toHaveCount(0);
+  const chips = page.getByRole("list", { name: "Attached to your message" });
+  await expect(chips.getByRole("listitem")).toHaveCount(11); // 10 images and the PDF
+  await expect(page.getByText("Up to 10 images per message: 2 images were left out.")).toBeVisible();
+  await expect.poll(() => m.knowledge.puts.length).toBe(11);
+});

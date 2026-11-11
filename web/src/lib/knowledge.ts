@@ -360,3 +360,21 @@ export function groupKnowledge(items: KnowledgeItem[]): KnowledgeGroup[] {
   if (loose.length) out.push({ key: "loose", label: "Not tied to a country", items: loose });
   return out;
 }
+
+/** The most images one chat message takes (the owner, 2026-11-11, decision 214). */
+export const MAX_CHAT_IMAGES = 10;
+export const isImageType = (type?: string | null) => !!type && type.startsWith("image/");
+/** Keeps every file that is not an image and the first images up to the cap, counting those already attached. */
+export function capImages(files: File[], alreadyImages: number, max = MAX_CHAT_IMAGES): { files: File[]; left: number } {
+  let room = Math.max(0, max - alreadyImages), left = 0;
+  const kept = files.filter((f) => {
+    if (!isImageType(f.type)) return true;
+    if (room > 0) {
+      room--;
+      return true;
+    }
+    left++;
+    return false;
+  });
+  return { files: kept, left };
+}
