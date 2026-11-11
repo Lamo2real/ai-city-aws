@@ -108,13 +108,21 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
     const cs = getComputedStyle(el);
     const max = parseFloat(cs.maxHeight) || Infinity;
     const border = el.offsetHeight - el.clientHeight;
+    const lineH = parseFloat(cs.lineHeight) || 23;
+    const oneLine = lineH + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    if (text === "") {
+      // Empty: one line, never the height of a placeholder that wraps on a narrow phone (decision 210).
+      el.style.height = `${oneLine + border}px`;
+      el.style.overflowY = "hidden";
+      setTall(false);
+      return;
+    }
     el.style.height = `${Math.min(el.scrollHeight + border, max)}px`;
     el.style.overflowY = el.scrollHeight + border > max ? "auto" : "hidden";
     // Like ChatGPT's box: the words use the whole width first; once they need a second line, the text takes the
     // full top row and the buttons move under it, and it stays that way until the box is empty again.
-    const oneLine = (parseFloat(cs.lineHeight) || 23) + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
     const wraps = el.scrollHeight > oneLine * 1.4;
-    setTall((was) => (text === "" ? false : was || wraps));
+    setTall((was) => was || wraps);
   }, [text]);
   useEffect(() => {
     try {
@@ -449,7 +457,7 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
               ref={input}
               rows={1}
               value={text}
-              placeholder={voice.dictating ? "Listening… your words appear here" : "Type your message…"}
+              placeholder={voice.dictating ? "Listening… your words appear here" : "Ask VAIC…"}
               onChange={(e) => setTyped(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {

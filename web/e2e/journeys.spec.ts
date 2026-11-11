@@ -1567,3 +1567,17 @@ test("sending shows no 'not sent' warning while the message is on its way, and V
     .poll(() => chat.evaluate((el) => Math.round(el.scrollHeight - el.scrollTop - el.clientHeight)), { timeout: 5000 })
     .toBeLessThan(4);
 });
+
+test("on a phone the empty message box is one slim row, the hint on one line (decision 210)", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await mockBackend(page);
+  await page.goto("/#/vaic");
+  const box = page.getByRole("textbox", { name: "Message to VAIC" });
+  await expect(box).toBeVisible();
+  const row = page.locator(".cbox");
+  expect((await row.boundingBox())!.height).toBeLessThanOrEqual(54);
+  expect((await box.boundingBox())!.height).toBeLessThanOrEqual(44);
+  await shot(page, "composer-phone");
+  await box.fill("short");
+  expect((await row.boundingBox())!.height).toBeLessThanOrEqual(54);
+});

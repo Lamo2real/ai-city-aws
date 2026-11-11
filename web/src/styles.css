@@ -6629,6 +6629,21 @@ a.btn-primary.chat-file-dl,
   height: var(--tap);
   border-radius: 50%;
 }
+/* One slim row (decision 210): the hint never wraps and an empty box is one line tall (VaicScreen); on a phone the
+   padding is a little tighter so the words get more width. Buttons stay 44px tap targets. */
+.cbox > textarea::placeholder {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 599px) {
+  .cbox {
+    padding: 3px;
+  }
+  .cbox > textarea {
+    padding: 8px 6px;
+  }
+}
 
 /* ---------- Inside a building (decision 166): a tower's floors as an isometric cutaway, one per project ----------
    Pixel art on canvases (lib/officeArt.ts) with the people as buttons over them. The floor in focus is whole;
