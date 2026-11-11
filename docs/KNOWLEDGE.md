@@ -172,14 +172,16 @@ links; re-ingest on a schedule for links that change.
 
 ## 14. Performance (v2, the owner's priority, 2026-11-07)
 **Retrieval path (one `search_knowledge` call):** Retrieve (hybrid; Bedrock embeds the query with Titan V2,
-OpenSearch runs BM25 + k-NN with the scope filter) → `BatchGetItem` of the hit items → one openCypher expansion
+OpenSearch runs BM25 + k-NN with the scope filter on `search_scope`) → `BatchGetItem` of the hit items → one openCypher expansion
 query. Expected tens of ms per store; the query embedding (~50–100 ms) dominates. No reranker (none in Stockholm).
 
 **OpenSearch index `items`** (created by Terraform before the KB): `index.knn: true`; `embedding` =
 `knn_vector`, 1024 dims, float32, engine `faiss`, method `hnsw`, space `innerproduct` (Titan V2 vectors are
 normalized, so this is cosine), `m: 16`, `ef_construction: 512`, `ef_search: 512`; `text` = `text` (the chunk;
 Bedrock's text field, searchable for hybrid); `metadata` = `text`, `index: false`; `item_id`, `scope`, `kind` =
-`keyword` (filters). 1024 dimensions kept: best recall, and at personal scale dimension barely changes latency.
+`text` with a `keyword` subfield (decision 242: Bedrock filters a string through `<key>.keyword`; the live index,
+created earlier, still has them as plain `keyword`, which Bedrock cannot filter, so the scope is filtered on
+`search_scope`, an attribute Bedrock maps itself, as `notIn` the hidden scopes). 1024 dimensions kept: best recall, and at personal scale dimension barely changes latency.
 
 **Neptune query** (expansion): parameters `$ids`, `$scopes`, `$lines`, `$items`:
 ```
@@ -426,9 +428,12 @@ entry becomes `user_modified`); `DELETE` (tombstone; out of index and graph; S3 
 
 **Isolation, enforced in `search.py`.** `search_knowledge` takes the department from the calling agent (managers and
 workers; `department` canonicalised to the config key), never from its arguments. Every hit is checked against its record (department, audience, domain, platforms, type),
-so isolation never depends on the index. Since decision 218 Retrieve carries only the scope filter (the first live
-evaluation found 0/22 with the department `notIn` filter sent to it) and a department caller fetches 30 hits;
-`RETRIEVE_ENTRY_FILTERS` in `search.py` turns the index-side filter back on once the index is shown to apply it. Since decision 221 an empty filtered Retrieve is retried once as a plain Retrieve (no filter, default search type, 30 results), the call the live index was shown to answer. VAIC, the Orchestrator and the executives see no department entries. The audience
+so isolation never depends on the index. Retrieve also carries the department `notIn` (other departments; `shared`
+too for a caller without a department), audience and entry filters (`RETRIEVE_ENTRY_FILTERS`, back on with decision
+242 once the probe of decision 236 showed the index applying filters on attributes Bedrock mapped; the empty results
+of decisions 218-221 came from the scope filter on the plain `keyword` field `scope`), and a department caller
+fetches 30 hits. Since decision 221 an empty filtered Retrieve is retried once as a plain Retrieve (no filter,
+default search type, 30 results), kept as a safety net; the deploy's evaluation prints how often it was used. VAIC, the Orchestrator and the executives see no department entries. The audience
 defaults to the caller's role (manager: manager + both; worker: worker + both), widened with `audience: "all"`;
 optional `domain`, `platforms`, `entry_type`; `related` (default on) adds up to 3 `REQUIRES`/`RELATED_TO`
 neighbours of the same department as summaries. Entries come back whole with `as_of`, `review_by`, `volatility`,

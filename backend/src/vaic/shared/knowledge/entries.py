@@ -542,6 +542,7 @@ def kb_entry_metadata(e: Entry, origin: str, part: int, version: int = 0) -> dic
     out: dict[str, Any] = {
         "item_id": e.item_id,
         "scope": "relevant",
+        "search_scope": "relevant",  # the scope the index can filter on (decision 242)
         "kind": "document",
         "department": e.department,
         "domain": e.domain,

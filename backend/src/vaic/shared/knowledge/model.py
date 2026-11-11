@@ -59,7 +59,8 @@ def kb_metadata(item_id: str, scope: str, kind: str, item: dict[str, Any] | None
     With the item, its jurisdiction fields too (§15): ``jurisdictions`` and ``countries`` (string lists), ``year``
     (number), ``topic``, ``doc_type``, ``language`` (strings). Empty values are left out: Bedrock has no null.
     """
-    out: dict[str, Any] = {"item_id": item_id, "scope": scope, "kind": kind}
+    # ``search_scope``: the copy of the scope the index can filter on (decision 242).
+    out: dict[str, Any] = {"item_id": item_id, "scope": scope, "search_scope": scope, "kind": kind}
     if item:
         from .jurisdiction import countries_attr
 

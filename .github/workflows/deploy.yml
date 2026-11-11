@@ -343,5 +343,5 @@ jobs:
             --cli-binary-format raw-in-base64-out --cli-read-timeout 900 eval.json || true
           jq -c '.probe // empty' eval.json || true
           head -c 4000 eval.json; echo
-          jq -r '.results[] | "Retrieval hit rate (\(.department), top \(.k)): \(.hits)/\(.total) = \(.hit_rate)"' eval.json \
+          jq -r '.results[] | "Retrieval hit rate (\(.department), top \(.k)): \(.hits)/\(.total) = \(.hit_rate), plain fallbacks \(.fallbacks // 0)"' eval.json \
             && jq -c '.results[].misses[]' eval.json || echo "retrieval evaluation skipped"

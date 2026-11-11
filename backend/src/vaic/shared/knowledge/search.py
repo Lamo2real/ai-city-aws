@@ -1,6 +1,6 @@
 """``search_knowledge`` (§7, §14) and the ``<owner-knowledge>`` block for every prompt (§2).
 
-Hybrid Retrieve with the scope filter → group by item → one openCypher expansion query (entities of the hit
+Hybrid Retrieve with the scope filter (on ``search_scope``, decision 242) → group by item → one openCypher expansion query (entities of the hit
 items → 1-hop related entities → ready items in the allowed scopes). The Retrieve hits and the expansion are
 cached per process (LRU, 256 entries, 60 s); the item records are re-read on every call with one
 BatchGetItem, so a scope change or a delete counts at once. Everything returned is marked as data.
@@ -45,8 +45,9 @@ CACHE_SIZE = 256
 CACHE_TTL_S = 60.0
 
 
-RETRIEVE_ENTRY_FILTERS = False
-"""Send the department/audience/entry filters to Retrieve too (off until the index is shown to apply them)."""
+RETRIEVE_ENTRY_FILTERS = True
+"""Send the department/audience/entry filters to Retrieve too: the live index applies them (attributes Bedrock
+mapped itself, decision 236's probe); the record check still re-checks every hit."""
 ENTRY_FETCH = 30
 """Hits fetched for a department caller, so its entries are found after other departments' are dropped."""
 ENTRY_CHARS = 6000
@@ -83,7 +84,8 @@ class Caller:
 def caller_filter(caller: Caller | None) -> dict[str, Any] | None:
     """The Retrieve filter: other departments out; the entry filters the caller asked for."""
     c = caller or Caller()
-    others = [d for d in all_departments() if d != c.department]
+    # As ``entry_visible``: the shared entries (not in ``all_departments``) only for a caller in a department.
+    others = [d for d in all_departments() if d != c.department] + ([] if c.department else [SHARED])
     parts: list[dict[str, Any]] = []
     if others:
         parts.append({"notIn": {"key": "department", "value": others}})
@@ -287,9 +289,8 @@ async def _retrieve(
     """With a market: Retrieve filtered to it. When the filter finds nothing or Bedrock refuses it (an index
     that can't filter on the attribute yet), a wider unfiltered Retrieve; ``search`` keeps only the items whose
     record holds in the market, so the answer is never mixed, only possibly shorter."""
-    # The department, audience and entry filters are applied to the records only (``entry_visible``): the live
-    # index returned nothing when they were sent to Retrieve (2026-11-11 deploy, 0/22), so Retrieve keeps the
-    # proven scope filter and fetches more, and isolation stays exactly as strict.
+    # The department, audience and entry filters go to Retrieve (decision 242) and are re-checked on every record
+    # (``entry_visible``), so a filter the index could not apply would only shorten an answer.
     who = caller_filter(caller) if RETRIEVE_ENTRY_FILTERS else None
     if caller is not None and caller.department:  # its own entries and the shared ones, after others are dropped
         n = max(n, ENTRY_FETCH)
@@ -316,12 +317,15 @@ async def _retrieve(
 
 
 PLAIN_FETCH = 30
+PLAIN_FALLBACKS = [0]
+"""How many searches in this process fell back to the plain call (the deploy's evaluation reports it)."""
 
 
 async def _plain(kb: KnowledgeBase, query: str, n: int) -> list[Hit]:
-    """The fallback when a filtered Retrieve finds nothing: no filter at all, so the record check alone decides
-    scope, market, brand and department. On 2026-11-11 the live index answered every filtered hybrid call with
-    nothing and the plain call with the right documents (decision 221)."""
+    """The safety net when a filtered Retrieve finds nothing: no filter at all, so the record check alone decides
+    scope, market, brand and department. Added when every filtered call came back empty (decision 221); the cause,
+    a scope filter on a field the index could not filter, is fixed by decision 242."""
+    PLAIN_FALLBACKS[0] += 1
     return await kb.retrieve(query, max(n, PLAIN_FETCH), [])
 
 

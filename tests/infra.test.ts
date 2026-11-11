@@ -217,9 +217,10 @@ describe("knowledge base (docs/KNOWLEDGE.md)", () => {
       'space_type = "innerproduct"',
       "m = 16, ef_construction = 512",
       'metadata = { type = "text", index = false }',
-      'item_id  = { type = "keyword" }',
-      'scope    = { type = "keyword" }',
-      'kind     = { type = "keyword" }',
+      // Filterable by Bedrock, which filters strings on "<key>.keyword" (decision 242).
+      'item_id = { type = "text", fields = { keyword = { type = "keyword", ignore_above = 256 } } }',
+      'scope   = { type = "text", fields = { keyword = { type = "keyword", ignore_above = 256 } } }',
+      'kind    = { type = "text", fields = { keyword = { type = "keyword", ignore_above = 256 } } }',
     ])
       expect(mapping).toContain(want);
     expect(tf).toMatch(/index_knn_algo_param_ef_search = "512"/);

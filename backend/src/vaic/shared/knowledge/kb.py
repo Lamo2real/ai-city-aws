@@ -1,4 +1,4 @@
-"""The Bedrock Knowledge Base: hybrid ``Retrieve`` with the scope filter, and direct ingestion (§9, §10, §14).
+"""The Bedrock Knowledge Base: hybrid ``Retrieve`` with the scope filter (on ``search_scope``, decision 242), and direct ingestion (§9, §10, §14).
 
 Documents are added, re-ingested and deleted one item at a time with ``IngestKnowledgeBaseDocuments``,
 ``GetKnowledgeBaseDocuments`` and ``DeleteKnowledgeBaseDocuments`` (at most 25 per call); there are no
@@ -48,22 +48,20 @@ class KnowledgeBase(Protocol):
     async def delete(self, uris: list[str]) -> None: ...
 
 
-def scope_filter(scopes: list[str], extra: dict[str, Any] | None = None) -> dict[str, Any]:
+def scope_filter(scopes: list[str], extra: dict[str, Any] | None = None) -> dict[str, Any] | None:
     return with_scopes(scopes, extra)
 
 
 def retrieval_config(max_results: int, scopes: list[str], extra: dict[str, Any] | None = None) -> dict[str, Any]:
-    """No scopes and no extra filter: the plain call (no filter, default search type), the one the live index was
-    shown to answer on 2026-11-11 when every filtered hybrid call came back empty (decision 221)."""
+    """Hybrid, with the scope filter (on ``search_scope``, decision 242) and any extra filter. No scopes and no
+    extra filter: the plain call (no filter, default search type), kept as the safety net of decision 221."""
     if not scopes and not extra:
         return {"vectorSearchConfiguration": {"numberOfResults": max_results}}
-    return {
-        "vectorSearchConfiguration": {
-            "numberOfResults": max_results,
-            "overrideSearchType": "HYBRID",
-            "filter": scope_filter(scopes, extra),
-        }
-    }
+    cfg: dict[str, Any] = {"numberOfResults": max_results, "overrideSearchType": "HYBRID"}
+    f = scope_filter(scopes, extra)
+    if f:
+        cfg["filter"] = f
+    return {"vectorSearchConfiguration": cfg}
 
 
 def attribute_value(v: Any) -> dict[str, Any]:
@@ -207,7 +205,9 @@ class FakeKnowledgeBase:
         if "filter" not in cfg:
             return self.hits[:max_results]
         f = cfg["filter"]
-        return [h for h in self.hits if matches_filter({**h.attributes, "scope": h.scope}, f)][:max_results]
+        return [h for h in self.hits if matches_filter({"search_scope": h.scope, **h.attributes, "scope": h.scope}, f)][
+            :max_results
+        ]
 
     async def ingest(self, docs: list[tuple[str, dict[str, Any]]]) -> None:
         for chunk in _chunks(docs):

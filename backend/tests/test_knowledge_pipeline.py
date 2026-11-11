@@ -102,7 +102,9 @@ async def test_a_text_document_goes_through_every_step_to_ready() -> None:
     assert await step(p, "prepare_document", i) == {"item_id": i, "normalized": True}
     key = f"normalized/{i}/notes.md"
     assert w.blobs.objects[key][0].startswith(b"# Ada")
-    assert meta(w, key) == {"metadataAttributes": {"item_id": i, "scope": "always", "kind": "text"}}
+    assert meta(w, key) == {
+        "metadataAttributes": {"item_id": i, "scope": "always", "search_scope": "always", "kind": "text"}
+    }
     await finish(p, i)
     item = await w.store.require_item(i)
     assert item["status"] == "ready" and item["normalized_keys"] == [key]
@@ -297,7 +299,7 @@ async def test_ingest_sends_the_items_documents_with_inline_metadata() -> None:
     await step(p, "prepare_document", i)
     assert await step(p, "ingest", i) == {"item_id": i, "documents": 1}
     uri = f"s3://{w.blobs.bucket}/normalized/{i}/a.txt"
-    assert w.kb.docs == {uri: {"item_id": i, "scope": "always", "kind": "text"}}
+    assert w.kb.docs == {uri: {"item_id": i, "scope": "always", "search_scope": "always", "kind": "text"}}
     assert (await w.store.require_item(i))["ingest_uris"] == [uri]
 
 

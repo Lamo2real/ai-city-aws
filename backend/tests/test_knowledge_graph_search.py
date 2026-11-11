@@ -2,6 +2,7 @@
 
 import io
 import json
+from typing import Any
 
 import pytest
 
@@ -183,12 +184,12 @@ async def test_search_filters_by_scope_unless_the_owner_asked_for_on_request_mat
     w.kb.hits = [Hit(rel["id"], "relevant text", 0.9, "relevant"), Hit(req["id"], "private text", 0.95, "on_request")]
     r = await search(w.kb, w.store, "anything")
     parts = filter_parts(w.kb.calls[-1]["filter"])
-    assert {"in": {"key": "scope", "value": ["always", "relevant"]}} in parts
+    assert {"notIn": {"key": "search_scope", "value": ["on_request"]}} in parts
     assert w.kb.calls[-1]["overrideSearchType"] == "HYBRID"
     assert [i["id"] for i, _ in r.items] == [rel["id"]]
     r = await search(w.kb, w.store, "anything", include_on_request=True)
-    scope = next(p for p in filter_parts(w.kb.calls[-1]["filter"]) if "in" in p)
-    assert scope["in"]["value"] == ["always", "relevant", "on_request"]
+    # Every scope allowed: no scope filter at all (decision 242).
+    assert not any("search_scope" in str(p) for p in filter_parts(w.kb.calls[-1].get("filter") or {}))
     assert [i["id"] for i, _ in r.items] == [req["id"], rel["id"]]
 
 
@@ -350,3 +351,74 @@ async def test_relationship_lines_from_items_the_agent_may_not_see_are_left_out(
     assert r.related_lines == [] and "Vault" not in r.text()
     r = await search(w.kb, w.store, "ada", include_on_request=True)
     assert len(r.related_lines) == 1 and "hid_in" in r.related_lines[0]
+
+
+# ---------- decision 242: the scope filter on a field the index can filter ----------
+class LiveLikeKB:
+    """Like the live index (decision 236's probe): a filter on ``scope`` or ``item_id`` (plain ``keyword`` fields,
+    no ``.keyword`` subfield) matches nothing; ``notIn`` on an attribute a document lacks passes it."""
+
+    def __init__(self, fake: Any) -> None:
+        self.fake = fake
+        self.calls: list[dict[str, Any]] = []
+
+    async def retrieve(self, query: str, max_results: int, scopes: list[str], extra: Any = None) -> list[Hit]:
+        from vaic.shared.knowledge.jurisdiction import matches_filter
+        from vaic.shared.knowledge.kb import retrieval_config
+
+        cfg = retrieval_config(max_results, scopes, extra)["vectorSearchConfiguration"]
+        self.calls.append(cfg)
+        f = cfg.get("filter")
+        if f is None:
+            return self.fake.hits[:max_results]
+        if any(p.get(op, {}).get("key") in ("scope", "item_id") for p in filter_parts(f) for op in p):
+            return []
+        return [h for h in self.fake.hits if matches_filter(dict(h.attributes), f)][:max_results]
+
+
+async def test_filtered_hybrid_search_finds_old_and_new_documents_without_the_plain_fallback() -> None:
+    from vaic.shared.knowledge import search as s
+
+    w = world()
+    old = await ready_item(w, "Indexed before search_scope", "relevant")
+    new = await ready_item(w, "Indexed with search_scope", "relevant")
+    private = await ready_item(w, "On request", "on_request")
+    w.kb.hits = [
+        Hit(old["id"], "old", 0.9, "relevant", attributes={"item_id": old["id"], "scope": "relevant"}),
+        Hit(new["id"], "new", 0.8, "relevant", attributes={"item_id": new["id"], "search_scope": "relevant"}),
+        Hit(private["id"], "p", 0.95, "on_request", attributes={"search_scope": "on_request"}),
+    ]
+    kb = LiveLikeKB(w.kb)
+    before = s.PLAIN_FALLBACKS[0]
+    r = await search(kb, w.store, "anything")  # type: ignore[arg-type]
+    assert [i["id"] for i, _ in r.items] == [old["id"], new["id"]]
+    assert s.PLAIN_FALLBACKS[0] == before  # answered by the filtered hybrid call
+    assert len(kb.calls) == 1 and kb.calls[0]["overrideSearchType"] == "HYBRID"
+    assert {"notIn": {"key": "search_scope", "value": ["on_request"]}} in filter_parts(kb.calls[0]["filter"])
+
+
+async def test_an_empty_filtered_call_still_falls_back_and_is_counted() -> None:
+    from vaic.shared.knowledge import search as s
+
+    w = world()
+    a = await ready_item(w, "A", "relevant")
+    w.kb.hits = [Hit(a["id"], "a", 0.9, "relevant", attributes={"search_scope": "on_request"})]  # stale index
+    before = s.PLAIN_FALLBACKS[0]
+    r = await search(w.kb, w.store, "anything")
+    assert [i["id"] for i, _ in r.items] == [a["id"]]  # the record says relevant
+    assert s.PLAIN_FALLBACKS[0] == before + 1
+
+
+def test_department_callers_keep_the_shared_entries_in_the_index_filter() -> None:
+    from vaic.shared.knowledge.search import Caller, caller_filter
+
+    def hidden(c: Caller) -> list[str]:
+        return next(
+            p["notIn"]["value"]
+            for p in filter_parts(caller_filter(c) or {})
+            if "notIn" in p and p["notIn"]["key"] == "department"
+        )
+
+    marketing = hidden(Caller(department="marketing", role="manager"))
+    assert "shared" not in marketing and "marketing" not in marketing and "sales" in marketing
+    assert "shared" in hidden(Caller())  # VAIC, the Orchestrator and the executives see no department entries

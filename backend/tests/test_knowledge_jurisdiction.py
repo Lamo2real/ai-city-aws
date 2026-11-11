@@ -127,10 +127,10 @@ def test_market_filters() -> None:
     assert market_filter("global") == {"listContains": {"key": "jurisdictions", "value": "global"}}
     cfg = retrieval_config(5, ["always", "relevant"], market_filter("US"))["vectorSearchConfiguration"]
     assert cfg["overrideSearchType"] == "HYBRID"
-    assert cfg["filter"]["andAll"][0] == {"in": {"key": "scope", "value": ["always", "relevant"]}}
+    assert cfg["filter"]["andAll"][0] == {"notIn": {"key": "search_scope", "value": ["on_request"]}}
     # No market: the plain scope filter, as before.
     assert retrieval_config(5, ["relevant"])["vectorSearchConfiguration"]["filter"] == {
-        "in": {"key": "scope", "value": ["relevant"]}
+        "notIn": {"key": "search_scope", "value": ["always", "on_request"]}
     }
 
 
@@ -160,9 +160,9 @@ def test_metadata_attributes_are_typed_for_bedrock() -> None:
         "type": "S3_LOCATION",
         "s3Location": {"uri": "s3://b/k.metadata.json"},
     }
-    # Nothing known: only the old three attributes (Bedrock has no null).
+    # Nothing known: only the old three attributes and the filterable scope (Bedrock has no null).
     assert set(item_metadata({"id": "k-aaaaaaaaaaaa", "scope": "relevant", "kind": "text"})) == {
-        "item_id", "scope", "kind"
+        "item_id", "scope", "search_scope", "kind"
     }  # fmt: skip
 
 

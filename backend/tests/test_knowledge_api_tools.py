@@ -141,7 +141,12 @@ async def test_list_get_scope_change_and_delete() -> None:
     assert js(r)["item"]["scope"] == "on_request"
     meta = json.loads(w.blobs.objects[f"normalized/{a['id']}/note.md.metadata.json"][0])
     assert meta["metadataAttributes"]["scope"] == "on_request"
-    assert w.kb.docs[uri] == {"item_id": a["id"], "scope": "on_request", "kind": "text"}  # re-ingested
+    assert w.kb.docs[uri] == {
+        "item_id": a["id"],
+        "scope": "on_request",
+        "search_scope": "on_request",
+        "kind": "text",
+    }  # re-ingested
     assert w.graph.items[a["id"]]["scope"] == "on_request"  # the Item node follows
     assert w.bus.of_type("knowledge.updated")[-1]["scope"] == "on_request"
     assert [i["id"] for i in await w.store.items_by_scope("on_request")] == [a["id"]]

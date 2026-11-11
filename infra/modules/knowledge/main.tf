@@ -247,9 +247,12 @@ resource "opensearch_index" "knowledge" {
       }
       text     = { type = "text" }
       metadata = { type = "text", index = false }
-      item_id  = { type = "keyword" }
-      scope    = { type = "keyword" }
-      kind     = { type = "keyword" }
+      # Bedrock filters a string with a term query on "<key>.keyword", so a filterable attribute is text with a
+      # keyword subfield, as Bedrock maps the ones it adds itself (decision 242). The live index still has these
+      # three as plain keyword fields (a field's type can't change in place): search filters on search_scope.
+      item_id = { type = "text", fields = { keyword = { type = "keyword", ignore_above = 256 } } }
+      scope   = { type = "text", fields = { keyword = { type = "keyword", ignore_above = 256 } } }
+      kind    = { type = "text", fields = { keyword = { type = "keyword", ignore_above = 256 } } }
     }
   })
   depends_on = [time_sleep.data_policy]

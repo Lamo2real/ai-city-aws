@@ -49,7 +49,7 @@ async def test_retrieve_is_hybrid_with_the_scope_filter_and_reads_item_metadata(
     assert kw["retrievalConfiguration"]["vectorSearchConfiguration"] == {
         "numberOfResults": 8,
         "overrideSearchType": "HYBRID",
-        "filter": {"in": {"key": "scope", "value": ["always", "relevant"]}},
+        "filter": {"notIn": {"key": "search_scope", "value": ["on_request"]}},
     }
 
 

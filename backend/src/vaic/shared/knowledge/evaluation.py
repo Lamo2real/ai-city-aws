@@ -36,6 +36,8 @@ class EvalResult:
     hits: int = 0
     total: int = 0
     misses: list[dict[str, Any]] = field(default_factory=list)
+    fallbacks: int = 0
+    """Searches answered by the plain safety-net call instead of the filtered hybrid one (decision 242)."""
 
     @property
     def hit_rate(self) -> float:
@@ -48,6 +50,7 @@ class EvalResult:
             "hits": self.hits,
             "total": self.total,
             "hit_rate": round(self.hit_rate, 3),
+            "fallbacks": self.fallbacks,
             "misses": self.misses,
         }
 
@@ -106,10 +109,11 @@ def offline_eval(seeds: SeedSet, department: str, root: Path | None = None) -> E
 
 async def live_eval(kb: Any, store: Any, department: str, root: Path | None = None) -> EvalResult:
     """The real thing: ``search`` as that department's manager would call it (audience widened to all)."""
-    from .search import Caller, search
+    from .search import PLAIN_FALLBACKS, Caller, search
 
     k, questions = load_eval(department, root)
     out = EvalResult(department, k)
+    before = PLAIN_FALLBACKS[0]
     who = Caller(department=department, role="manager", audience="all", related=False)
     for x in questions:
         r = await search(kb, store, x["q"], max_results=k, caller=who)
@@ -124,6 +128,7 @@ async def live_eval(kb: Any, store: Any, department: str, root: Path | None = No
             if not out.misses:  # once: the index with no filter at all, and what metadata its hits carry
                 miss["unfiltered"] = await _unfiltered(kb, x["q"])
             out.misses.append(miss)
+    out.fallbacks = PLAIN_FALLBACKS[0] - before
     return out
 
 
@@ -182,6 +187,10 @@ async def retrieve_probe(kb: Any, query: str, department: str) -> dict[str, Any]
         meta = [x.get("metadata") or {} for x in res[:2]]
         return {"hits": len(res), "ids": [m.get("item_id") for m in meta], "scopes": [m.get("scope") for m in meta]}
 
+    from .jurisdiction import with_scopes
+    from .search import Caller, caller_filter
+
+    who = Caller(department=department, role="manager", audience="all", related=False)
     plain = await call(None, None)
     first = plain["ids"][0] if isinstance(plain, dict) and plain["ids"] else "none"
     first_scope = plain["scopes"][0] if isinstance(plain, dict) and plain["scopes"] else "relevant"
@@ -200,6 +209,8 @@ async def retrieve_probe(kb: Any, query: str, department: str) -> dict[str, Any]
         ("hybrid_department", "HYBRID", dept),
         ("semantic_scope_in", "SEMANTIC", scope),
         ("hybrid_scope_in", "HYBRID", scope),
+        ("hybrid_search_scope", "HYBRID", with_scopes(["always", "relevant"], None)),
+        ("hybrid_search_filter", "HYBRID", with_scopes(["always", "relevant"], caller_filter(who))),
     ):
         out[name] = await call(st, f)
     return out

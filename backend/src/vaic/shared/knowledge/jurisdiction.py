@@ -291,9 +291,22 @@ def market_filter(market: str) -> dict[str, Any]:
     return _or(parts)
 
 
-def with_scopes(scopes: list[str], extra: dict[str, Any] | None) -> dict[str, Any]:
-    scope = {"in": {"key": "scope", "value": list(scopes)}}
-    return {"andAll": [scope, extra]} if extra else scope
+SCOPE_KEY = "search_scope"
+"""The scope as Bedrock filters it (decision 242). Bedrock filters a string on OpenSearch with a term query on
+``<key>.keyword``; the index maps ``scope`` (and ``item_id``, ``kind``) as plain ``keyword`` fields with no such
+subfield, so a filter on ``scope`` matches nothing. ``search_scope`` is mapped by Bedrock itself (``text`` with a
+``.keyword`` subfield), like ``department``, which the live index filters correctly."""
+ALL_SCOPES = ("always", "relevant", "on_request")
+
+
+def with_scopes(scopes: list[str], extra: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The scopes left out, as ``notIn``: a document indexed before ``search_scope`` existed has no such attribute
+    and passes (``must_not``), and the record check in ``search`` decides its scope, as before."""
+    hidden = [s for s in ALL_SCOPES if s not in scopes]
+    scope = {"notIn": {"key": SCOPE_KEY, "value": hidden}} if hidden else None
+    if scope and extra:
+        return {"andAll": [scope, extra]}
+    return scope or extra
 
 
 def matches_filter(meta: dict[str, Any], f: dict[str, Any]) -> bool:
