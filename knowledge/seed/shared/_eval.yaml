@@ -1,0 +1,39 @@
+# The retrieval evaluation for the shared cross-department documents (docs/KNOWLEDGE.md section 17, decision 238):
+# realistic handoff questions any department's agent asks, each with the documents that should appear in the top
+# results. A hit is any expected document in the top 5. The tests score it offline (keyword-only); the deploy scores
+# it on the live index.
+department: shared
+top_k: 5
+questions:
+  - q: Who owns the invoice for a new customer, Sales or Finance?
+    expect: [responsibilities.responsibility-map, handoffs.handoff-catalogue, processes.end-to-end-processes]
+  - q: How does Sales hand a closed deal to Customer support, and what goes in the post-sale transition packet?
+    expect: [handoffs.handoff-catalogue]
+  - q: Who approves a production deploy, and when does a change need human approval?
+    expect: [guardrails.company-wide-guardrails, handoffs.handoff-catalogue]
+  - q: What must a handoff message to another department contain?
+    expect: [routing.routing-rule-and-message-template]
+  - q: Can a worker ask a worker in another department directly, or must new work go manager-to-manager?
+    expect: [routing.routing-rule-and-message-template]
+  - q: What lead statuses and rejection reasons apply when Marketing passes a lead to Sales?
+    expect: [handoffs.handoff-catalogue]
+  - q: Who owns pricing and the website when two departments both claim them?
+    expect: [responsibilities.responsibility-map]
+  - q: What is the difference between RAPID, DACI and a directly responsible individual, and who decides?
+    expect: [decision-rights.decision-rights]
+  - q: During an incident who is the incident commander and how fast must customers be told?
+    expect: [handoffs.handoff-catalogue, processes.end-to-end-processes, decision-rights.decision-rights]
+  - q: Which actions always need a human approval, such as paying, signing a contract, publishing or granting access?
+    expect: [guardrails.company-wide-guardrails]
+  - q: A customer sent a GDPR data-subject request; which departments do which steps?
+    expect: [processes.end-to-end-processes, compliance.sweden-and-eu]
+  - q: When does a new use of personal data need a DPIA and Legal's review under Article 35?
+    expect: [handoffs.handoff-catalogue, compliance.sweden-and-eu]
+  - q: Who owns each company metric, and what happens in the weekly business review?
+    expect: [rhythms.rhythms-and-metrics]
+  - q: Should agents pass full context or artefact references, and why does centralised orchestration contain errors?
+    expect: [coordination.multi-agent-coordination, routing.routing-rule-and-message-template]
+  - q: How do we provision and retire an agent when a department hires or lets one go, and who approves its access?
+    expect: [processes.end-to-end-processes, guardrails.company-wide-guardrails]
+  - q: What has the research not verified about cross-department handoffs, and which decisions fall to the owner?
+    expect: [gaps.consolidated-gaps]

@@ -1,0 +1,70 @@
+# The shared knowledge taxonomy (docs/KNOWLEDGE.md section 17, decision 238). "shared" is not a department: it is
+# the scope every department's managers and workers can retrieve beside their own knowledge base (VAIC, the
+# Orchestrator and the executives see no department knowledge, shared included). Content: one document per numbered
+# section of knowledge/source/cross-department-handoffs.md (the only source), plus "About this knowledge base" (the
+# opening summary and reading guide); the closing conclusion stays with section 10, "Consolidated gaps".
+department: shared
+label: Shared
+seed_version: 1
+
+domains:
+  - {id: overview, label: Overview, description: "The opening summary, what each claim label means, and the caveats"}
+  - {id: responsibilities, label: Responsibility map, description: "One accountable owner per responsibility and per grey zone"}
+  - {id: handoffs, label: Handoff catalogue, description: "Named artefacts, statuses, rejection reasons and time targets between departments"}
+  - {id: decision-rights, label: Decision rights, description: "RAPID, DACI, DRI, interaction modes, incident command and escalation"}
+  - {id: processes, label: End-to-end processes, description: "Lead-to-cash, idea-to-launch, issue-to-resolution and the other company processes, step by step"}
+  - {id: rhythms, label: Rhythms and metrics, description: "The weekly business review, metric owners and one definition per metric"}
+  - {id: coordination, label: Multi-agent coordination, description: "Orchestration patterns, handoff messages, protocols, failure modes, audit, cost and evaluation"}
+  - {id: routing, label: Routing and message template, description: "Manager-to-manager versus worker-to-worker, and the handoff message fields"}
+  - {id: guardrails, label: Company-wide guardrails, description: "Human approval for pay, sign, publish, deploy and grant-access, and the three tiers"}
+  - {id: compliance, label: Sweden and EU, description: "The verified legal anchors and the unresearched Swedish layer"}
+  - {id: gaps, label: Gaps, description: "What the research did not verify or could not find, and the conclusion"}
+
+platforms: []
+
+objectives:
+  - {id: ownership, label: Clear ownership}
+  - {id: handoffs, label: Reliable handoffs}
+  - {id: safety, label: Safety and approval}
+  - {id: compliance, label: Compliance}
+
+# The concept vocabulary (an entry MENTIONS a concept when one of its aliases appears in its text; all-capital
+# aliases match case-sensitively).
+concepts:
+  - {id: raci, label: RACI, kind: framework, aliases: [RACI]}
+  - {id: rapid, label: RAPID, kind: framework, aliases: [RAPID]}
+  - {id: daci, label: DACI, kind: framework, aliases: [DACI]}
+  - {id: dri, label: Directly responsible individual, kind: concept, aliases: [DRI, directly responsible individual]}
+  - {id: accountable-owner, label: Accountable owner, kind: concept, aliases: [accountable owner, single owner, one accountable owner]}
+  - {id: grey-zone, label: Grey zone, kind: concept, aliases: [grey zone, grey zones]}
+  - {id: handoff, label: Handoff, kind: concept, aliases: [handoff, handoffs, hand-off, hand-offs]}
+  - {id: rejection-reason, label: Rejection reason, kind: concept, aliases: [rejection reason, reason code, reason codes]}
+  - {id: time-target, label: Time target, kind: metric, aliases: [time target, time targets, service level, SLA, SLAs]}
+  - {id: mql, label: Marketing qualified lead, kind: metric, aliases: [MQL, MQLs, marketing qualified lead]}
+  - {id: sql, label: Sales qualified lead, kind: metric, aliases: [SQL, SQLs, sales qualified lead], measured_by: [mql]}
+  - {id: deal-desk, label: Deal desk, kind: tactic, aliases: [deal desk]}
+  - {id: definition-of-ready, label: Definition of ready, kind: concept, aliases: [definition of ready]}
+  - {id: production-readiness, label: Production readiness, kind: tactic, aliases: [production readiness, production readiness review]}
+  - {id: change-approval, label: Change approval, kind: tactic, aliases: [change approval, change advisory board, CAB, change authority]}
+  - {id: launch-tier, label: Launch tier, kind: concept, aliases: [launch tier, launch tiers]}
+  - {id: incident-commander, label: Incident commander, kind: concept, aliases: [incident commander, incident command]}
+  - {id: severity, label: Severity levels, kind: concept, aliases: [severity, SEV1, SEV2]}
+  - {id: postmortem, label: Postmortem, kind: tactic, aliases: [postmortem, postmortems]}
+  - {id: dpia, label: Data protection impact assessment, kind: concept, aliases: [DPIA, Article 35, data protection impact assessment]}
+  - {id: dsr, label: Data-subject request, kind: concept, aliases: [data-subject request, data subject request, Article 15]}
+  - {id: lead-to-cash, label: Lead-to-cash, kind: concept, aliases: [lead-to-cash]}
+  - {id: procure-to-pay, label: Procure-to-pay, kind: concept, aliases: [procure-to-pay]}
+  - {id: record-to-report, label: Record-to-report, kind: concept, aliases: [record-to-report]}
+  - {id: hire-to-retire, label: Hire-to-retire, kind: concept, aliases: [hire-to-retire]}
+  - {id: wbr, label: Weekly business review, kind: tactic, aliases: [weekly business review, WBR]}
+  - {id: metric-owner, label: Metric owner, kind: concept, aliases: [metric owner, single source of truth]}
+  - {id: orchestrator, label: Orchestrator-worker pattern, kind: concept, aliases: [orchestrator, orchestrator-worker, centralised orchestration, centralised coordination]}
+  - {id: error-amplification, label: Error amplification, kind: metric, aliases: [error amplification, 17.2x]}
+  - {id: mcp, label: Model Context Protocol, kind: tool, aliases: [MCP, Model Context Protocol]}
+  - {id: a2a, label: Agent2Agent protocol, kind: tool, aliases: [A2A, Agent2Agent]}
+  - {id: context-id, label: Task and context ID, kind: concept, aliases: [context ID, task ID]}
+  - {id: human-approval, label: Human approval gate, kind: concept, aliases: [human approval, human gate, approval gate, approval class]}
+  - {id: least-privilege, label: Least privilege, kind: concept, aliases: [least privilege, least-privilege]}
+  - {id: audit-log, label: Audit log, kind: tactic, aliases: [audit log, audit trail, audit logs]}
+  - {id: gdpr, label: GDPR, kind: framework, aliases: [GDPR]}
+  - {id: ai-act, label: EU AI Act, kind: framework, aliases: [AI Act]}

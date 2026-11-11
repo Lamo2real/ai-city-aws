@@ -220,7 +220,7 @@ async def test_search_tool_passes_the_gate_and_returns_marked_data() -> None:
     audit = await w.ledger.tool_calls("worker-1")
     assert [c["tool"] for c in audit] == [mcp_name("search_knowledge")]
     assert audit[0]["decision"] == "allow"
-    assert w.kb.calls[-1]["max_results"] == 12
+    assert w.kb.calls[-1]["max_results"] == 30  # any department caller: room for its own and the shared entries
     assert "Invalid input" in await tools["search_knowledge"].handler({"query": "x"})
     assert "Invalid input" in await tools["search_knowledge"].handler({"query": "plan", "max_results": 11})
     assert "Invalid input" in await tools["search_knowledge"].handler({"query": "plan", "include_on_request": "yes"})

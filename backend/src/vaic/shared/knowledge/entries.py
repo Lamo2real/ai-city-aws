@@ -29,6 +29,9 @@ CONFIDENCES = ("established", "vendor", "platform-claim", "contested", "inferenc
 """``house-style``: the owner's chosen default style, not evidence (decision 222)."""
 VOLATILITIES = ("evergreen", "annual", "fast-moving")
 ORIGINS = ("system", "user")
+SHARED = "shared"
+"""Not a department: the scope of the cross-department documents in ``knowledge/seed/shared/`` that every department's
+managers and workers retrieve beside their own (decision 238). Never in ``all_departments``."""
 ITEM_PREFIX = "kn-"
 """An entry's record and index id is ``kn-`` + its entry id (the built-in guide, ``kn-builtin-guide``, is not one)."""
 _SLUG = r"[a-z0-9]+(?:-[a-z0-9]+)*"
@@ -175,8 +178,8 @@ def canonical_department(name: str | None) -> str | None:
 
 
 def all_departments() -> list[str]:
-    """Every known department key: the presets and the seeded folders (for the isolation filter)."""
-    return sorted(set(_department_aliases().values()) | set(seed_departments()))
+    """Every known department key: the presets and the seeded folders (for the isolation filter); not ``shared``."""
+    return sorted((set(_department_aliases().values()) | set(seed_departments())) - {SHARED})
 
 
 # ---------- parsing ----------
@@ -535,7 +538,7 @@ def index_parts(e: Entry, department_label: str, words: int = PART_WORDS) -> lis
 
 def kb_entry_metadata(e: Entry, origin: str, part: int, version: int = 0) -> dict[str, Any]:
     """The filterable attributes on every part (``department`` is what isolation filters on; ``version`` tells
-    search which version of the entry a part belongs to, decision 235)."""
+    search which version of the entry a part belongs to, decision 238)."""
     out: dict[str, Any] = {
         "item_id": e.item_id,
         "scope": "relevant",

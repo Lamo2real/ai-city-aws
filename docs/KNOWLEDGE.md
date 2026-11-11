@@ -548,11 +548,24 @@ handoffs, Sweden and the EU) are 539 to 877 words, kept whole. Managers (`agents
 voice), section 21's three lists with `ask_owner` before gated actions, section 22's handoffs, and the same
 `needs_verification`, `[GAP]` and legal-orientation rules. Approval gates stay prompt rules.
 
-**A "shared" scope (planned, not built).** A cross-department document would live in `knowledge/seed/shared/` with its
-own `_taxonomy.yaml` (`department: shared`); `entry_visible` and `caller_filter` in `search.py` would let every
-department caller (never VAIC) see `department == "shared"` records beside its own; the HUD shows it as its own card;
-a test checks every department sees it and none sees another department's.
-
+**Shared cross-department documents (decision 238).** `knowledge/seed/shared/`: 11 documents, one per numbered
+section of `knowledge/source/cross-department-handoffs.md` (verbatim, 15,708 words, SHA-256 pinned) plus "Shared: About
+this knowledge base"; the conclusion stays with section 10, "Shared: Consolidated gaps and conclusion". `shared` is not a
+department: its `_taxonomy.yaml` says `department: shared`, label "Shared", and the seeder, registry, S3 versioning,
+Bedrock/OpenSearch and Neptune projections, Replace (edit), Reset, Delete and Re-index treat it like any department
+folder (no seeder change was needed: the folder only has to match the taxonomy's `department`). Scope: `SHARED` in
+`entries.py`; `all_departments()` leaves it out (so the index filter never filters shared out of a department's
+search); `entry_visible` lets a caller with a department (managers and workers of every department, including one the
+owner builds on demand) see `department == "shared"` beside its own, and nobody else (VAIC, the Orchestrator, the
+executives see no department knowledge, shared included); audience, domain, type and platform filters apply to shared
+documents like any other; a department caller fetches 30 hits whether or not its own folder exists; graph neighbours of
+a shared hit come from the shared documents. Every other department's isolation is unchanged and tested
+(`backend/tests/test_shared_knowledge.py`). HUD: the "Shared knowledge" card comes after the departments under Built
+in, tagged Built in and Shared, "Every department's agents use it", with the same entry actions. Types: section 8
+(guardrails) and 9 (Sweden and EU) `policy`; 7 (routing and message template) and 10 (gaps) `checklist`.
+`_eval.yaml`: 16 handoff questions; offline 16/16 in the top 5, alone and ranked together with each seeded department's
+own documents. The departments' manager and worker prompts are pointed to it as each department's knowledge base
+lands. Download is not built (no department has it; the owner said skip it for Sales).
 **IT infrastructure (decision 226).** `knowledge/seed/infrastructure/` (the folder is the department key; the card
 says "IT infrastructure"): 21 documents, one per numbered section of
 `knowledge/source/it-infrastructure-research.md` (verbatim) plus "IT infrastructure: About this knowledge base" (the

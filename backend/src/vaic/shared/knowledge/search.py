@@ -6,7 +6,8 @@ cached per process (LRU, 256 entries, 60 s); the item records are re-read on eve
 BatchGetItem, so a scope change or a delete counts at once. Everything returned is marked as data.
 
 Department knowledge entries (§17) are isolated here, server-side: a caller sees an entry only when the entry's
-department is the caller's own department. The Retrieve filter keeps other departments out of the hits, and the
+department is the caller's own department, or ``shared`` (the cross-department documents, decision 238) when the
+caller belongs to a department. The Retrieve filter keeps other departments out of the hits, and the
 re-read record is checked again, so a filter the index cannot apply only shortens an answer, never widens it.
 """
 
@@ -21,7 +22,7 @@ from datetime import date
 from typing import Any
 
 from ..log import log
-from .entries import AUDIENCES, all_departments
+from .entries import AUDIENCES, SHARED, all_departments
 from .graph import Expansion
 from .jurisdiction import (
     item_holds_in,
@@ -102,10 +103,11 @@ def caller_filter(caller: Caller | None) -> dict[str, Any] | None:
 
 
 def entry_visible(item: dict[str, Any], caller: Caller | None) -> bool:
-    """The record decides: an item of a department is visible only to that department's agents."""
+    """The record decides: an item of a department is visible only to that department's agents; a ``shared`` entry
+    to every department's agents (never to VAIC, the Orchestrator or the executives, who have no department)."""
     c = caller or Caller()
     dept = item.get("department")
-    if dept and dept != c.department:
+    if dept and dept != c.department and not (dept == SHARED and c.department):
         return False
     if not item.get("entry_id"):
         return not c.has_entry_filters()  # the owner's own items carry no domain, platform or type
@@ -289,7 +291,7 @@ async def _retrieve(
     # index returned nothing when they were sent to Retrieve (2026-11-11 deploy, 0/22), so Retrieve keeps the
     # proven scope filter and fetches more, and isolation stays exactly as strict.
     who = caller_filter(caller) if RETRIEVE_ENTRY_FILTERS else None
-    if caller is not None and caller.department in all_departments():
+    if caller is not None and caller.department:  # its own entries and the shared ones, after others are dropped
         n = max(n, ENTRY_FETCH)
     parts = [
         *([market_filter(market)] if market else []),
@@ -398,7 +400,11 @@ async def search(
     c = caller or Caller()
     entry_hits = [i for i in hit_ids if records.get(i, {}).get("entry_id")]
     if c.related and c.department and entry_hits:
-        near = await store.graph.entry_neighbours(entry_hits, c.department)
+        # Neighbours come from the hit's own scope: the caller's department, or the shared documents.
+        near: list[str] = []
+        for scope in (c.department, SHARED):
+            mine = [i for i in entry_hits if records[i].get("department") == scope]
+            near += await store.graph.entry_neighbours(mine, scope) if mine else []
         extra = await store.get_items([i for i in near if i not in hit_ids][: MAX_RELATED_ENTRIES * 3])
         added = 0
         for i in near:
@@ -412,7 +418,7 @@ async def search(
 
 
 def _same_version(h: Hit, item: dict[str, Any]) -> bool:
-    """A part of the version being read (decision 235); parts written before versions existed carry none."""
+    """A part of the version being read (decision 238); parts written before versions existed carry none."""
     v = h.attributes.get("version")
     try:
         return v is None or int(float(v)) == int(item.get("version") or 0)

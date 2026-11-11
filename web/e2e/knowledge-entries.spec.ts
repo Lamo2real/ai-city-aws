@@ -68,3 +68,34 @@ test("knowledge: the built-in Marketing knowledge base can be read, edited, dele
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(1);
 });
+
+test("knowledge: the shared cross-department documents sit under Built in with a Shared label and the same actions", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  await page.goto("/#/knowledge");
+  const cards = page.locator("section.kdept");
+  await expect(cards.last()).toHaveAttribute("aria-label", "Shared knowledge base"); // after the departments
+  const card = page.getByRole("region", { name: "Shared knowledge base" });
+  await expect(card).toContainText("Built in");
+  await expect(card.locator(".tag-dept")).toHaveText("Shared");
+  await expect(card).toContainText("2 entries");
+  await expect(card).toContainText("Every department's agents use it.");
+  await card.getByRole("button", { name: "Show the Shared entries" }).click();
+  await card.getByRole("button", { name: /^Shared: Routing rule/ }).click();
+  await card.getByRole("button", { name: /^Edit “Shared: Routing rule/ }).click();
+  await card.getByLabel("Title").fill("Our routing rule");
+  await card.getByRole("button", { name: "Save" }).click();
+  await expect(card.getByRole("button", { name: /^Our routing rule/ })).toContainText("Edited");
+  expect(m.entries.find((e) => e.entry_id === "shared.routing.routing-rule-and-message-template")?.user_modified).toBe(
+    true,
+  );
+  await card.getByRole("button", { name: "Reset to default" }).click();
+  await expect(card.getByRole("button", { name: /^Shared: Routing rule/ })).not.toContainText("Edited");
+  await card.getByRole("button", { name: /^Delete “Shared: Routing rule/ }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await expect(card.getByRole("button", { name: /^Shared: Routing rule/ })).toContainText("Deleted");
+  // The Marketing card still counts only its own entries.
+  await expect(page.getByRole("region", { name: "Marketing knowledge base" })).toContainText("4 entries");
+  await noSeriousA11y(page, "shared");
+});

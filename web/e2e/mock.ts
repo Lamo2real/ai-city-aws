@@ -931,7 +931,7 @@ export async function mockBackend(
           ...e,
           has_newer_default: Boolean(newer_default),
         })),
-        taxonomies: { marketing: MOCK_TAXONOMY },
+        taxonomies: { shared: MOCK_SHARED_TAXONOMY, marketing: MOCK_TAXONOMY },
         choices: {
           type: ["principle", "playbook", "checklist", "benchmark", "policy", "glossary"],
           audience: ["manager", "worker", "both"],
@@ -940,7 +940,9 @@ export async function mockBackend(
         },
       });
     if (path === "/knowledge/entries" && req.method() === "POST") {
-      const id = `marketing.${body?.domain}.${String(body?.title).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+      const id = `marketing.${body?.domain}.${String(body?.title)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")}`;
       const e = {
         ...body,
         id: `kn-${id}`,
@@ -965,13 +967,17 @@ export async function mockBackend(
       if (req.method() === "PUT") Object.assign(e, body, { user_modified: e.origin === "system", updated_at: at() });
       if (req.method() === "DELETE") Object.assign(e, { deleted: true, status: "deleted", updated_at: at() });
       if (verb === "reset")
-        Object.assign(e, MOCK_ENTRIES.find((x) => x.entry_id === e.entry_id), {
-          user_modified: false,
-          deleted: false,
-          status: "ready",
-          newer_default: null,
-          updated_at: at(),
-        });
+        Object.assign(
+          e,
+          MOCK_ENTRIES.find((x) => x.entry_id === e.entry_id),
+          {
+            user_modified: false,
+            deleted: false,
+            status: "ready",
+            newer_default: null,
+            updated_at: at(),
+          },
+        );
       if (verb === "reindex") Object.assign(e, { sync: "done", status: "ready", error: null, updated_at: at() });
       return ok({ entry: e });
     }
@@ -1369,6 +1375,13 @@ const MOCK_TAXONOMY = {
   platforms: { meta: "Meta", "google-ads": "Google Ads", instagram: "Instagram" },
   objectives: { awareness: "Awareness", sales: "Sales", leads: "Leads" },
 };
+/** The shared cross-department documents (decision 238): not a department, every department's agents use them. */
+const MOCK_SHARED_TAXONOMY = {
+  label: "Shared",
+  domains: { routing: "Routing and message template", guardrails: "Company-wide guardrails" },
+  platforms: {},
+  objectives: { handoffs: "Reliable handoffs" },
+};
 const mockEntry = (domain: string, slug: string, title: string, extra: Record<string, unknown> = {}) => ({
   id: `kn-marketing.${domain}.${slug}`,
   entry_id: `marketing.${domain}.${slug}`,
@@ -1409,4 +1422,16 @@ const MOCK_ENTRIES: Array<Record<string, unknown>> = [
     platforms: ["google-ads"],
   }),
   mockEntry("compliance", "sweden-ad-disclosure", "Sweden: advertising must be recognisable", { type: "policy" }),
+  ...[
+    ["routing", "routing-rule-and-message-template", "Shared: Routing rule and handoff message template"],
+    ["guardrails", "company-wide-guardrails", "Shared: Company-wide guardrails"],
+  ].map(([domain = "", slug = "", title = ""]) =>
+    mockEntry(domain, slug, title, {
+      id: `kn-shared.${domain}.${slug}`,
+      entry_id: `shared.${domain}.${slug}`,
+      department: "shared",
+      confidence: "inference",
+      objectives: ["handoffs"],
+    }),
+  ),
 ];

@@ -1,5 +1,6 @@
 // The built-in department knowledge bases (docs/KNOWLEDGE.md §17), shown under "Built in" on the Knowledge tab:
-// one card per department (Marketing first), which opens into its entries by domain. The owner reads, edits,
+// one card per department (Marketing first), which opens into its entries by domain, and last the "Shared" card:
+// the cross-department documents every department's agents use (decision 238). The owner reads, edits,
 // deletes, resets to the shipped default, re-indexes and adds entries; a deploy never undoes those choices.
 import { useEffect, useState } from "react";
 import {
@@ -27,6 +28,13 @@ const FLAG_TONE: Record<string, string> = {
   "House style": "dept",
 };
 
+/** The scope of the cross-department documents: not a department, so its card comes after the departments'. */
+const SHARED = "shared";
+
+function sharedLast<T>(rows: [string, T][]): [string, T][] {
+  return [...rows.filter(([d]) => d !== SHARED), ...rows.filter(([d]) => d === SHARED)];
+}
+
 export function DepartmentKnowledge() {
   const [list, setList] = useState<EntryList | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,11 +51,13 @@ export function DepartmentKnowledge() {
     void reload();
   }, []);
 
-  if (error && !list) return <Banner tone="warn">{`The department knowledge bases could not be loaded: ${error}`}</Banner>;
+  if (error && !list)
+    return <Banner tone="warn">{`The department knowledge bases could not be loaded: ${error}`}</Banner>;
   if (!list) return null;
   return (
     <>
-      {Object.entries(list.taxonomies).map(([dept, tax]) => {
+      {sharedLast(Object.entries(list.taxonomies)).map(([dept, tax]) => {
+        const shared = dept === SHARED;
         const all = list.entries.filter((e) => e.department === dept);
         const live = all.filter((e) => !e.deleted && !e.retired);
         return (
@@ -61,7 +71,7 @@ export function DepartmentKnowledge() {
                 <span className="mute">{` · ${live.length} entries`}</span>
               </span>
               <span className="tag tag-builtin">Built in</span>
-              <span className="tag tag-dept">{tax.label}</span>
+              <span className="tag tag-dept">{shared ? "Shared" : tax.label}</span>
               <Button
                 variant="quiet"
                 onClick={() => setOpen(open === dept ? null : dept)}
@@ -71,7 +81,9 @@ export function DepartmentKnowledge() {
               </Button>
             </div>
             <p className="mute">
-              {`Researched strategy and platform practice. Only the ${tax.label} department's agents use it. Your edits and deletions stay when AI City updates.`}
+              {shared
+                ? "Who owns what and how work passes between departments. Every department's agents use it. Your edits and deletions stay when AI City updates."
+                : `Researched strategy and platform practice. Only the ${tax.label} department's agents use it. Your edits and deletions stay when AI City updates.`}
             </p>
             {open === dept ? <DepartmentEntries list={list} department={dept} reload={reload} /> : null}
           </section>
@@ -183,7 +195,10 @@ function EntryView(p: { row: EntryRow; list: EntryList; reload: () => Promise<vo
     try {
       const r = await run();
       setEntry(r.entry);
-      toast({ text: r.entry.error ? `${what}, but: ${r.entry.error}` : `${what}.`, tone: r.entry.error ? "info" : "good" });
+      toast({
+        text: r.entry.error ? `${what}, but: ${r.entry.error}` : `${what}.`,
+        tone: r.entry.error ? "info" : "good",
+      });
       await p.reload();
     } catch (e) {
       setError((e as Error).message);
@@ -287,7 +302,9 @@ function EntryView(p: { row: EntryRow; list: EntryList; reload: () => Promise<vo
           <summary>History</summary>
           <ul className="mute">
             {history.slice(0, 20).map((h) => (
-              <li key={`${h.at}-${h.action}`}>{`${h.at.slice(0, 16).replace("T", " ")} · ${h.action} · ${h.by}${h.detail ? ` · ${h.detail}` : ""}`}</li>
+              <li
+                key={`${h.at}-${h.action}`}
+              >{`${h.at.slice(0, 16).replace("T", " ")} · ${h.action} · ${h.by}${h.detail ? ` · ${h.detail}` : ""}`}</li>
             ))}
           </ul>
         </details>
@@ -349,7 +366,10 @@ function EntryEditor(p: {
       const r = e
         ? await entriesApi.update(e.entry_id, { ...body, domain: undefined })
         : await entriesApi.create({ ...body, department: p.department });
-      toast({ text: r.entry.error ? `Saved, but: ${r.entry.error}` : "Saved. The agents use it from now on.", tone: "good" });
+      toast({
+        text: r.entry.error ? `Saved, but: ${r.entry.error}` : "Saved. The agents use it from now on.",
+        tone: "good",
+      });
       await p.onDone(r.entry);
     } catch (err) {
       setError((err as Error).message);
@@ -395,7 +415,13 @@ function EntryEditor(p: {
       </label>
       <label className="field">
         Summary (one or two sentences)
-        <textarea value={f.summary} onChange={(x) => set("summary")(x.target.value)} required rows={2} maxLength={500} />
+        <textarea
+          value={f.summary}
+          onChange={(x) => set("summary")(x.target.value)}
+          required
+          rows={2}
+          maxLength={500}
+        />
       </label>
       <label className="field">
         The entry (Markdown; ## headings split it for search)
