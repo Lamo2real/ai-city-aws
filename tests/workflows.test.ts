@@ -24,8 +24,8 @@ function triggers(text: string): string[] {
 }
 
 describe("GitHub workflows", () => {
-  it("exist: ci.yml, deploy.yml and the iPhone app's ios-testflight.yml", () => {
-    expect(files.sort()).toEqual(["ci.yml", "deploy.yml", "ios-testflight.yml"]);
+  it("exist: ci.yml, deploy.yml, the desktop app's desktop.yml and the iPhone app's ios-testflight.yml", () => {
+    expect(files.sort()).toEqual(["ci.yml", "deploy.yml", "desktop.yml", "ios-testflight.yml"]);
   });
   it("ios-testflight.yml builds only the iPhone app: pushes to main touching ios/, never AWS", () => {
     const text = readFileSync(join(WF, "ios-testflight.yml"), "utf8");
