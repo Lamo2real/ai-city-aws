@@ -484,6 +484,7 @@ document. 22 domains. Type `policy`: privacy (6), AI governance and law (16), re
 Section 8 (Neptune, OpenSearch) is knowledge for the agents' work, not a change to this pipeline. Managers
 (`agents/departments/data.md`) and workers (`data.workers.md`) follow the same order and handling as Application, with
 section 19's approval rows behind `ask_owner` (prompt rules; the policy gate has no department scope).
+
 **Finance (decision 228).** `knowledge/seed/finance/`: 23 documents, one per numbered section of
 `knowledge/source/finance-research.md` (verbatim, 31,585 words, last heading "Corrections applied in this document",
 SHA-256 pinned) plus "Finance: About this knowledge base" (the opening summary and the reading guide); section 22 (the
@@ -500,10 +501,23 @@ through `ask_owner`); verify `needs_verification` facts; say `[GAP]` points are 
 payroll and other-regime content as orientation for a human to confirm; and hand work over by section 20. The section
 19 approval tier stays prompt rules (the policy gate's rules have no department scope; the owner's choice pending).
 
+**Customer support (decision 229).** `knowledge/seed/support/` (config key `support`, label "Customer support"): 30
+documents, one per numbered section of `knowledge/source/customer-support-research.md` (verbatim, 24,499 words, SHA-256
+pinned) plus "Customer support: About this knowledge base" (the opening summary and the reading guide); the conclusion
+stays with section 29, "Customer support: Consolidated gaps". 18 domains. House style (2 to 9): domain, type and
+confidence `house-style`. Legal and compliance (21 to 26: consumer law, B2B, GDPR, accessibility and language, AI
+disclosure and liability, vulnerable customers and self-harm): domain `compliance`, type `policy`. Guardrails (27):
+domain `agent-guardrails`, type `policy`. `_eval.yaml`: 17 questions, offline 17/17 in the top 5. Managers
+(`agents/departments/support.md`) and workers (`support.workers.md`) apply compliance, evidence, house style; follow
+section 27's tiers with `ask_owner` before gated actions; hand self-harm disclosures, legal threats and vulnerable
+customers to the owner at once; use section 28 for handoffs. The approval tiers are prompt rules (no department scope
+in the policy gate); not built as for Application: Download, the versioned Replace, the shared scope.
+
 **A "shared" scope (planned, not built).** A cross-department document would live in `knowledge/seed/shared/` with its
 own `_taxonomy.yaml` (`department: shared`); `entry_visible` and `caller_filter` in `search.py` would let every
 department caller (never VAIC) see `department == "shared"` records beside its own; the HUD shows it as its own card;
 a test checks every department sees it and none sees another department's.
+
 **IT infrastructure (decision 226).** `knowledge/seed/infrastructure/` (the folder is the department key; the card
 says "IT infrastructure"): 21 documents, one per numbered section of
 `knowledge/source/it-infrastructure-research.md` (verbatim) plus "IT infrastructure: About this knowledge base" (the

@@ -1,0 +1,91 @@
+# The customer support department's knowledge taxonomy (docs/KNOWLEDGE.md section 17). Content: one document per
+# numbered section of knowledge/source/customer-support-research.md (the only source) plus "About this knowledge
+# base", seeded and scoped exactly like marketing and sales (decision 229).
+department: support
+label: Customer support
+seed_version: 1
+
+domains:
+  - {id: overview, label: Overview, description: "About this knowledge base: the three-layer stack, the claim labels and the caveats"}
+  - {id: precedence, label: Precedence, description: "Compliance first, evidence second, house style third, conflict by conflict"}
+  - {id: house-style, label: House style, description: "The owner's chosen default style (not evidence): retention, onboarding, usage, cancellation saves, complaints and refunds, price raises, referrals, upsells"}
+  - {id: support-model, label: Support model, description: "Channels, tiers and swarming, the help centre"}
+  - {id: tickets, label: Tickets, description: "Intake, severity, SLAs, escalation and incidents"}
+  - {id: communication, label: Communication, description: "Writing replies, apologies, saying no, abusive contacts"}
+  - {id: metrics, label: Metrics, description: "Response and resolution times, CSAT, FCR, cost per contact"}
+  - {id: quality, label: Quality, description: "QA scorecards, calibration, grading AI agents"}
+  - {id: knowledge-management, label: Knowledge management, description: "KCS, article structure, validation and publishing"}
+  - {id: ai-support, label: AI-led support, description: "What AI agents handle, its limits and failure cases"}
+  - {id: voice-of-customer, label: Voice of the customer, description: "Support signals, at-risk accounts, feedback to Product"}
+  - {id: workforce, label: Workforce, description: "Forecasting, staffing and reviewer capacity"}
+  - {id: security, label: Security, description: "Account recovery, identity verification, social engineering"}
+  - {id: customer-success, label: Customer success, description: "Retention benchmarks, dunning, health scores, renewals, win-back"}
+  - {id: compliance, label: Compliance, description: "Swedish and EU consumer law, B2B obligations, GDPR, accessibility and language, AI disclosure and liability, vulnerable customers and self-harm"}
+  - {id: agent-guardrails, label: Agent guardrails, description: "What the department's AI agents may do alone, what needs human approval, what they must never do"}
+  - {id: handoffs, label: Handoffs, description: "What support hands to and receives from the other departments"}
+  - {id: gaps, label: Gaps, description: "What the knowledge base does not know"}
+
+platforms:
+  - {id: email, label: Email}
+  - {id: chat, label: Chat}
+  - {id: phone, label: Phone}
+  - {id: help-center, label: Help centre}
+  - {id: social, label: Social media}
+
+objectives:
+  - {id: onboarding, label: Onboarding}
+  - {id: resolution, label: Resolution}
+  - {id: recovery, label: Recovery}
+  - {id: retention, label: Retention}
+  - {id: cancellation, label: Cancellation}
+  - {id: expansion, label: Expansion}
+  - {id: advocacy, label: Advocacy}
+  - {id: security, label: Security}
+  - {id: compliance, label: Compliance}
+  - {id: safeguarding, label: Safeguarding}
+
+# The concept vocabulary (an entry MENTIONS a concept when one of its aliases appears in its text; all-capital
+# aliases match case-sensitively).
+concepts:
+  - {id: churn, label: Churn, kind: metric, aliases: [churn, cancellation rate]}
+  - {id: csat, label: CSAT, kind: metric, aliases: [CSAT, customer satisfaction]}
+  - {id: nps, label: NPS, kind: metric, aliases: [NPS, net promoter]}
+  - {id: ces, label: Customer effort, kind: metric, aliases: [customer effort, CES]}
+  - {id: fcr, label: First contact resolution, kind: metric, aliases: [FCR, first contact resolution]}
+  - {id: first-response-time, label: First response time, kind: metric, aliases: [first response time, first response]}
+  - {id: resolution-time, label: Resolution time, kind: metric, aliases: [resolution time, time to resolution]}
+  - {id: cost-per-contact, label: Cost per contact, kind: metric, aliases: [cost per contact, cost per ticket]}
+  - {id: nrr, label: Net revenue retention, kind: metric, aliases: [NRR, net revenue retention]}
+  - {id: grr, label: Gross revenue retention, kind: metric, aliases: [GRR, gross revenue retention]}
+  - {id: health-score, label: Health score, kind: metric, aliases: [health score, health scores, health scoring]}
+  - {id: activation, label: Activation, kind: concept, aliases: [activation, activation point, activation event, quick win], measured_by: [churn]}
+  - {id: bamfam, label: BAMFAM, kind: tactic, aliases: [BAMFAM]}
+  - {id: unlockables, label: Unlockables, kind: tactic, aliases: [unlockables, unlockable]}
+  - {id: exit-conversation, label: Exit conversation, kind: tactic, aliases: [exit conversation, exit interview, exit interviews, save offer, saves team]}
+  - {id: downgrade, label: Downgrade, kind: tactic, aliases: [downgrade, downgrades, downsell, pause]}
+  - {id: make-good-menu, label: Make-good menu, kind: tactic, aliases: [make-good, make-goods, make-good menu]}
+  - {id: price-raise-letter, label: Price-raise letter, kind: tactic, aliases: [price-raise letter, price raise, price rise]}
+  - {id: referrals, label: Referrals, kind: tactic, aliases: [referral, referrals, testimonial, testimonials, review request]}
+  - {id: menu-upsell, label: Menu upsell, kind: tactic, aliases: [menu upsell, upsell, continuity bonus, annual billing]}
+  - {id: severity, label: Severity, kind: concept, aliases: [severity, Severity 1, priority]}
+  - {id: sla, label: SLA, kind: concept, aliases: [SLA, SLAs, SLO, SLI, service level]}
+  - {id: incident, label: Incident, kind: concept, aliases: [incident, incidents, status page, outage]}
+  - {id: swarming, label: Swarming, kind: framework, aliases: [swarming, tiered support]}
+  - {id: kcs, label: KCS, kind: framework, aliases: [KCS, Knowledge-Centered Service, Evolve Loop]}
+  - {id: qa-scorecard, label: QA scorecard, kind: tactic, aliases: [scorecard, calibration]}
+  - {id: erlang-c, label: Erlang C, kind: framework, aliases: [Erlang C]}
+  - {id: account-recovery, label: Account recovery, kind: tactic, aliases: [account recovery, verification, identity check, social engineering]}
+  - {id: dunning, label: Dunning, kind: tactic, aliases: [dunning, failed payment, failed payments, involuntary churn]}
+  - {id: withdrawal-right, label: Withdrawal right, kind: regulation, aliases: [withdrawal right, right of withdrawal, withdrawal function, ångerrätt]}
+  - {id: arn, label: ARN, kind: regulation, aliases: [ARN, Allmänna reklamationsnämnden]}
+  - {id: consumer-complaint, label: Consumer complaint, kind: regulation, aliases: [complaint, complaints, reklamation, non-conforming]}
+  - {id: gdpr, label: GDPR, kind: regulation, aliases: [GDPR, data subject request, data subject requests, erasure, portability]}
+  - {id: nis2, label: NIS2, kind: regulation, aliases: [NIS2, Cybersäkerhetslagen]}
+  - {id: accessibility-act, label: Accessibility act, kind: regulation, aliases: [accessibility act, European Accessibility Act, tillgänglighet]}
+  - {id: ai-act-article-50, label: AI Act Article 50, kind: regulation, aliases: [Article 50, AI Act]}
+  - {id: chatbot-liability, label: Chatbot liability, kind: regulation, aliases: [Moffatt, Air Canada, OLG Hamm]}
+  - {id: vulnerable-customer, label: Vulnerable customer, kind: concept, aliases: [vulnerable customer, vulnerable customers, vulnerability, TEXAS, BRUCE, CARERS]}
+  - {id: self-harm, label: Self-harm disclosure, kind: concept, aliases: [self-harm, suicidal, suicide, BLAKE, 90101, Självmordslinjen]}
+  - {id: threats, label: Threats and abuse, kind: concept, aliases: [threat, threats, abusive, abuse]}
+  - {id: human-handoff, label: Human handoff, kind: tactic, aliases: [hand off, handoff, handover, human approval, route to a human]}
+  - {id: ai-disclosure, label: AI disclosure, kind: regulation, aliases: [AI disclosure, disclose, AI notice]}

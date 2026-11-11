@@ -1,0 +1,40 @@
+# The retrieval evaluation for the customer support knowledge base (docs/KNOWLEDGE.md section 17, decision 229):
+# realistic questions a support agent asks, each with the documents that should appear in the top results. A hit is
+# any expected document in the top 5. The tests score it offline (keyword-only); the deploy scores it on the live index.
+department: support
+top_k: 5
+questions:
+  - q: A customer wants to cancel their subscription by email. Do I have to process it, and can I offer them something to stay?
+    expect: [house-style.cancellation-saves-and-exit-interviews, compliance.swedish-and-eu-consumer-law, precedence.compliance-evidence-house-style]
+  - q: A Swedish consumer says the service did not work as promised and wants a refund. What are their rights and how fast must we refund?
+    expect: [compliance.swedish-and-eu-consumer-law, house-style.complaints-mistakes-and-refunds]
+  - q: A customer asks us to send them all the personal data we hold about them and then delete their account.
+    expect: [compliance.gdpr-in-support]
+  - q: How do I set ticket severity and priority, and what response time can we promise in the SLA?
+    expect: [tickets.intake-severity-sla-escalation]
+  - q: An angry customer is shouting at us in chat because we made a mistake. How should I reply?
+    expect: [house-style.complaints-mistakes-and-refunds, communication.communication-craft]
+  - q: A customer wrote that they are thinking about suicide and want to end their life. What do I do?
+    expect: [compliance.vulnerable-customers-self-harm-threats]
+  - q: What is the Swedish regulator's guidance on call recording and how long we may keep tickets?
+    expect: [gaps.consolidated-gaps, compliance.gdpr-in-support]
+  - q: Do I have to tell the customer that they are chatting with an AI, and are we liable for what the chatbot says?
+    expect: [compliance.ai-disclosure-and-liability]
+  - q: Which actions need human approval before an AI agent does them, and what must it never do?
+    expect: [agent-guardrails.ai-agent-guardrails]
+  - q: We are raising prices next month. How do we write the price-raise letter to customers?
+    expect: [house-style.price-raise-communication]
+  - q: Someone asks us to change the login email on an account over chat. Can we verify them and do it?
+    expect: [security.security-in-support]
+  - q: How do we onboard a new customer so they reach the activation point quickly?
+    expect: [house-style.onboarding-and-activation]
+  - q: A business customer claims service credits after an outage. How do we handle the claim?
+    expect: [compliance.b2b-support-obligations]
+  - q: We are rejecting a consumer's complaint. What must the rejection say?
+    expect: [compliance.swedish-and-eu-consumer-law]
+  - q: What CSAT and first contact resolution should we aim for?
+    expect: [metrics.metrics-and-benchmarks]
+  - q: A customer's usage has dropped a lot this month. Is that a churn risk and what do we do?
+    expect: [house-style.usage-tracking-and-belonging, voice-of-customer.voice-of-the-customer]
+  - q: A bug is blocking customers. What must the report to engineering contain and who gets it?
+    expect: [tickets.intake-severity-sla-escalation, handoffs.cross-department-handoffs]
