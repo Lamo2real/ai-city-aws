@@ -16,7 +16,6 @@ from typing import Any
 
 from vaic.shared import connector_packages
 from vaic.shared.connectors import (
-    APPROVALS,
     DEFAULT_ROLES,
     GITHUB_MCP_URL,
     ConnectorStore,
@@ -222,7 +221,6 @@ async def _add_direct(c: ConnectorsApi, b: dict[str, Any]) -> Answer:
         "auth": None,
         "status": "provisioning",
         "roles": roles,
-        "approval": "destructive",
         "tools": [],
         "target_id": None,
         "provider_name": f"vaic-conn-{id}",
@@ -239,10 +237,7 @@ async def _edit(c: ConnectorsApi, rec: Record, b: dict[str, Any]) -> Answer:
     patch: dict[str, Any] = {}
     if "roles" in b:
         patch["roles"] = _roles(b["roles"])
-    if "approval" in b:
-        if b["approval"] not in APPROVALS:
-            raise ValueError("Approval must be destructive, writes or none.")
-        patch["approval"] = b["approval"]
+    # "approval" (a per-connector approval level) was removed in decision 237; an old client's value is ignored.
     if "label" in b:
         patch["label"] = _owner_secret(b["label"], "The label", 1, 40)
     if not patch:

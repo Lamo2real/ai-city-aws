@@ -23,7 +23,6 @@ export interface Connector {
   needs?: string;
   error?: string | null;
   roles?: Partial<Record<Role, "read" | "all">>;
-  approval?: "destructive" | "writes" | "none";
   tools?: Array<{ name: string; read_only?: boolean; destructive?: boolean }>;
   package?: { name: string; version: string; secrets?: Array<{ name: string; description?: string }> };
   oauth?: { authorization_server?: string };
@@ -84,7 +83,7 @@ export const sameServer = (a?: string, b?: string) =>
 
 export const addConnectorByUrl = (url: string, label?: string) =>
   api<{ connector: Connector }>("/connectors", { method: "POST", body: { url, ...(label ? { label } : {}) } });
-export const editConnector = (id: string, patch: Partial<Pick<Connector, "roles" | "approval" | "label">>) =>
+export const editConnector = (id: string, patch: Partial<Pick<Connector, "roles" | "label">>) =>
   api<{ connector: Connector }>(`/connectors/${id}`, { method: "PUT", body: patch });
 export const removeConnector = (id: string) => api(`/connectors/${id}`, { method: "DELETE" });
 export const refreshConnector = (id: string) => api(`/connectors/${id}/refresh`, { method: "POST" });

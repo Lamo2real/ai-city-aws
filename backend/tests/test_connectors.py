@@ -656,6 +656,7 @@ async def test_settings_edits_roles_and_a_role_change_rewrites_cedar() -> None:
         ev("PUT", "/connectors/gh", {"roles": {"vaic": "read", "worker": "all"}, "approval": "writes"}), d
     )
     assert js(r)["connector"]["roles"] == {"vaic": "read", "worker": "all"}
+    assert "approval" not in js(r)["connector"]  # an old client's approval level is ignored (decision 237)
     assert invoked == [{"action": "refresh", "id": "gh"}]
     bad = await handle_http(ev("PUT", "/connectors/gh", {"roles": {"vaic": "admin"}}), d)
     assert bad["statusCode"] == 400

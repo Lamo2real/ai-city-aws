@@ -1,5 +1,5 @@
 // Settings → Connectors → Mail & calendar (MAIL_CALENDAR.md §7): an account's details (a row in the Mine table),
-// adding one, which roles may read mail, and the owner's standing rules. Sign-in and app passwords use the same
+// adding one, which roles may use mail, and the owner's standing rules. Sign-in and app passwords use the same
 // cards as the chat.
 import { useEffect, useState } from "react";
 import { saveSettings } from "../lib/actions.ts";
@@ -151,7 +151,7 @@ export function AddMailAccount(p: { onAdded: () => void; onCancel: () => void })
   );
 }
 
-/** Who may read mail (VAIC always, workers never) and the owner's standing rules. */
+/** Who may use mail (VAIC always, workers never) and the owner's standing rules. */
 export function MailSettings(p: {
   accounts: MailAccount[];
   access: Record<string, string>;
@@ -173,21 +173,24 @@ export function MailSettings(p: {
   };
   return (
     <div className="mail-accounts">
-      <h4>Who may read mail</h4>
+      <h4>Who may use mail</h4>
       <p className="mute">VAIC always can. Workers never can, by design.</p>
       {(["orchestrator", "manager"] as const).map((role) => (
         <label key={role} className="field">
           {role === "orchestrator" ? "Orchestrator" : "Managers"}
-          <Select value={p.access[role] ?? "none"} onChange={(e) => void access(role, e.target.value)}>
+          <Select
+            value={p.access[role] === "none" ? "none" : "all"}
+            onChange={(e) => void access(role, e.target.value)}
+          >
+            <option value="all">Full access</option>
             <option value="none">No access</option>
-            <option value="read">Can read</option>
           </Select>
         </label>
       ))}
       <h4>Standing rules</h4>
       <p className="mute">
-        Exceptions you trust: VAIC may send to these people, or accept invitations from them when nothing clashes,
-        without asking each time. Everything else still waits for you.
+        Nothing waits for you now: agents send mail and answer invitations on their own, so these rules change nothing
+        today.
       </p>
       {rules.map((r) => (
         <p key={r.id} className="row">

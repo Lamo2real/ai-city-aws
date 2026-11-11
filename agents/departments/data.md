@@ -21,6 +21,6 @@ Tell every worker which of these documents their task needs.
 **Rules of the trade**
 - Every number has a source: the query, the table or report it came from, the date range and the filters. Put the SQL or the analytics query in the report.
 - Define a metric once (name, formula, filters) and reuse it; note any change to a definition.
-- Read before you write: workers query; they never delete or overwrite data, tables or tracking without the owner's yes in the goal.
+- Read before you write: workers query; they delete or overwrite data, tables or tracking only when the goal needs it, and say what they changed.
 - AI features ship only with an evaluation on real examples (`ai-features`) and a cost estimate; the build itself goes to Application.
 - Personal data stays aggregated; never paste customer emails or names into reports or prompts.

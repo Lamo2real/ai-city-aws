@@ -415,7 +415,6 @@ async def _add(
         "auth": "env" if secrets else "none",
         "status": "pending_approval",
         "roles": dict(roles),
-        "approval": "destructive",
         "tools": [],
         "target_id": None,
         "provider_name": None,

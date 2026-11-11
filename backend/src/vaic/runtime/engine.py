@@ -242,7 +242,6 @@ def _options(req: EngineRequest, b: _Binding) -> Any:
             r_.ctx.role,
             r_.ctx.agent_id,
             consume_approval=r_.ledger.consume_approval,
-            extra_ask=spec.ask if spec else None,
         )
         await r_.ledger.audit_tool(r_.ctx.agent_id, name, r.decision, r.reason)
         if r.needs_approval and r_.on_needs_approval:

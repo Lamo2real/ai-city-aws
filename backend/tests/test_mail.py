@@ -311,11 +311,12 @@ async def test_events_ranges_are_limited() -> None:
 
 
 # ---------- the tools ----------
-async def test_workers_never_get_mail_and_others_only_read_when_turned_on() -> None:
+async def test_workers_never_get_mail_and_others_get_all_unless_turned_off() -> None:
     assert mail_level("vaic", {}) == "all"
-    assert mail_level("worker", {"mail_access": {"worker": "read"}}) is None
-    assert mail_level("manager", {}) is None
-    assert mail_level("manager", {"mail_access": {"manager": "read"}}) == "read"
+    assert mail_level("worker", {"mail_access": {"worker": "all"}}) is None
+    assert mail_level("manager", {}) == "all" and mail_level("orchestrator", {}) == "all"  # decision 237
+    assert mail_level("manager", {"mail_access": {"manager": "read"}}) == "all"  # saved before decision 237
+    assert mail_level("orchestrator", {"mail_access": {"orchestrator": "none"}}) is None
     s, city, *_ = make_service()
     names = {t.name for t in mail_tools(city.deps, vaic(), s, "read")}
     assert names == {"mail_accounts", "mail_search", "mail_read", "calendar_list", "calendar_events"}
@@ -555,9 +556,9 @@ async def test_mail_routes_answer_503_until_mail_is_set_up() -> None:
 
 async def test_settings_take_mail_access_but_never_for_workers() -> None:
     d = make()
-    ok = await handle_http(ev("PUT", "/settings", {"mail_access": {"manager": "read"}}), d)
+    ok = await handle_http(ev("PUT", "/settings", {"mail_access": {"manager": "all", "orchestrator": "none"}}), d)
     assert ok["statusCode"] == 200
-    bad = await handle_http(ev("PUT", "/settings", {"mail_access": {"worker": "read"}}), d)
+    bad = await handle_http(ev("PUT", "/settings", {"mail_access": {"worker": "all"}}), d)
     assert bad["statusCode"] == 400
 
 

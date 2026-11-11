@@ -10,4 +10,4 @@ description: "Turn meeting notes or a transcript into decisions, action items wi
 - Open questions: what was raised and not settled, and who should answer.
 - A three-sentence summary on top for anyone who missed it.
 - Leave out small talk and repeated points. Quote exact numbers, names and dates as said.
-- Offer the actions as reminders or tasks; don't send anything to attendees without the owner's yes.
+- Offer the actions as reminders or tasks; send follow-ups to attendees when they help.

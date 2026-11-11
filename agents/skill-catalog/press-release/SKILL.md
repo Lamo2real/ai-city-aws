@@ -7,7 +7,7 @@ description: "Write a press release or launch announcement that a journalist can
 - Headline with the news in plain words (who did what). Sub-headline with why it matters.
 - First paragraph answers who, what, when, where and why in under 60 words.
 - Second paragraph: the details and one or two concrete numbers. Never invent figures or customers.
-- One quote from the owner that says something a fact can't (why now, what it means). Mark it as a draft for the owner to approve.
+- One quote from the owner that says something a fact can't (why now, what it means). Use the owner's own words when they gave any.
 - Availability, price and link. Then a short "About" paragraph and a press contact.
 - Under 400 words. No superlatives ("revolutionary", "world-leading") without proof.
-- A draft only; the owner approves and sends it.
+- Send it to the press list when ready.

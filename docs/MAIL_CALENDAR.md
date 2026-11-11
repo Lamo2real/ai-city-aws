@@ -97,7 +97,7 @@ Ids are the provider's own ids. A global id is `<account_id>:<provider id>` in t
 | `PUT /mail/accounts/<id>` | `{label?, color?, mail?, calendar?, calendars?: [{id, color?, hidden?}]}` → `{account}` |
 | `DELETE /mail/accounts/<id>` | → `{ok: true}` |
 | `GET /mail/rules` · `POST /mail/rules` · `DELETE /mail/rules/<id>` | standing rules (§5.3), owner only; no agent tool can create or change them |
-| `PUT /settings` (existing) | adds `mail_access: {orchestrator, manager}`, each `"none"|"read"` (§5.1) |
+| `PUT /settings` (existing) | adds `mail_access: {orchestrator, manager}`, each `"none"|"all"` (§5.1; `"read"` from before decision 237 means all) |
 
 The combined Calendar (City → Features) has its own read-only routes, §12. Apps still read through §11 and propose writes as approvals.
 
@@ -105,11 +105,13 @@ The combined Calendar (City → Features) has its own read-only routes, §12. Ap
 
 ### 5.1 Who gets which tools
 - **VAIC:** all of them, plus `add_connector` (which covers mail accounts).
-- **Orchestrator and managers:** none by default. The owner can turn on `"read"` in Settings → Mail & calendar (`mail_access`), which gives `mail_accounts`, `mail_search`, `mail_read`, `calendar_list`, `calendar_events`.
+- **Orchestrator and managers:** since decision 237 (2026-11-11), every mail and calendar tool by default; the owner can set `"none"` in Settings → Mail & calendar. Before it: none by default. The owner can turn on `"read"` in Settings → Mail & calendar (`mail_access`), which gives `mail_accounts`, `mail_search`, `mail_read`, `calendar_list`, `calendar_events`.
 - **Workers: never** (no tools, and no IAM on the worker role). A manager that needs mail content quotes it into the task text. The worker runtime role is shared by every hire and can run shell commands, so a token reachable from it would be a token for every worker (decision 79).
 - A role's runtime gets the tools only when at least one account is `connected` (one ledger Query at turn start).
 
 ### 5.2 Tools (`backend/src/vaic/runtime/tools.py`, `_mail_tools(d, c, level)`, wrapped by `gate_tools`)
+Since decision 100 (and again decision 237) `config/policy.json` has none of the **ask** rows below, so every mail and calendar tool is allowed; the table records the original design.
+
 | Tool | Input | Gate | Notes |
 |---|---|---|---|
 | `mail_accounts` | — | allow | id, label, address, provider, status, mail/calendar |
@@ -139,6 +141,8 @@ New rules in `config/policy.json`:
 `test_policy.py` gets one case per row, plus the allow cases.
 
 ### 5.3 Standing rules (the owner's exceptions for specific safe cases)
+Since nothing asks any more (decisions 100 and 237), standing rules change nothing today; they are kept for a future ask rule.
+
 Rows: `pk = "MAIL"`, `sk = "RULE#<id>"`, `{id, kind, account_id, match, created_at, expires_at?}`. Only the API writes them (owner group). The runtime roles get read-only IAM on them.
 - `kind = "send_to"`: `mail_send` from `account_id` is approved when **every** recipient (to, cc and bcc) is in `match.addresses` or under `match.domains`.
 - `kind = "accept_from"`: `calendar_respond` with `response = "accept"` is approved when the organizer's address or domain matches, and the event has no conflict in the merged calendar.

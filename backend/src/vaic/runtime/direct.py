@@ -202,9 +202,7 @@ async def _run_tool(req: EngineRequest, tools: dict[str, Any], use: dict[str, An
         except Exception as e:
             return await finished(f"The tool failed: {type(e).__name__}: {str(e)[:300]}", True)
         return await finished(out)
-    r = await gate(
-        full, args, req.ctx.role, req.ctx.agent_id, consume_approval=req.ledger.consume_approval, extra_ask=spec.ask
-    )
+    r = await gate(full, args, req.ctx.role, req.ctx.agent_id, consume_approval=req.ledger.consume_approval)
     await req.ledger.audit_tool(req.ctx.agent_id, full, r.decision, r.reason)
     if r.needs_approval and req.on_needs_approval:
         await req.on_needs_approval(full, args, r.needs_approval.hash, r.needs_approval.reason)

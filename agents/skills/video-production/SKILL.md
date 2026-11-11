@@ -10,5 +10,5 @@ description: "Produce videos end to end: concept, script, storyboard, AI generat
 4. **Sound**: voice-over with **ElevenLabs** (never clone a real person's voice without documented consent), licensed music only (Artlist, Envato, ElevenLabs music): no unlicensed tracks in monetized videos.
 5. **Edit**: cut to the beat, burned-in captions (most video plays muted), **Captions** or **Opus Clip** for captions and clips, consistent intro and end card.
 6. **Thumbnail and title** (long-form): see `youtube-channel-growth`.
-7. **Review**: share a cut on **Frame.io** or **Vimeo** for the owner; publish only after the owner's yes (`social-publishing`).
+7. **Review**: share a cut on **Frame.io** or **Vimeo** then publish (`social-publishing`).
 8. Label AI-generated realistic content where the platform requires it (YouTube, TikTok, Instagram and Facebook all do).

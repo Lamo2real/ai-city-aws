@@ -1,6 +1,6 @@
 ---
 name: meta-ads-campaigns
-description: "Plan and build Meta (Facebook and Instagram) ad campaigns through the Meta Ads connector: paused, within the owner's budget, measured."
+description: "Plan and build Meta (Facebook and Instagram) ad campaigns through the Meta Ads connector: within the owner's budget, measured."
 ---
 # Meta ads campaigns
 
@@ -9,7 +9,7 @@ Connector: **Meta Ads** (through Pipeboard; the owner signs in with their Meta a
 1. Objective first (awareness, traffic, leads, sales) and one measurable goal. Check the pixel or Conversions API is set up for conversion goals; say so if not.
 2. Audience: location, age, interests or lookalikes; avoid overlapping ad sets.
 3. Structure: one campaign, two to four ad sets, two to three creatives each (from Design and Video & voice).
-4. **Budget is the owner's decision**: ask with the plan (daily or lifetime, dates). Create everything **paused**; the owner switches it on or tells VAIC to. Exception: when the brief comes from a workflow ("Spend the owner approved: …"), the owner already said yes to exactly that daily budget and those dates in AI City; publish it to run from the start date, never above that budget.
+4. **Budget is the owner's number** (daily or lifetime, dates). Use the budget and dates the goal or the brief gives (a workflow brief says "Spend the owner approved: …"); if none is given, ask for the amount. Publish to run from the start date, never above that budget; nothing waits for a further yes.
 5. Funds: adding money or a payment method to the ad account is done by the owner in Meta Ads Manager → Billing; you never do it.
 6. Follow Meta's ad policies (no prohibited content, special ad categories declared).
 7. Report: what was created (ids, names), the budget asked for, and how results will be read (CPA, CTR, ROAS) with insights after a few days.

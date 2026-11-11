@@ -2,8 +2,8 @@
 
 ``GatewayClient`` (``vaic.shared.gateway``) speaks MCP to the one Gateway, signed with SigV4. ``connector_tools`` turns the ready
 connectors this role (and, for a worker, this hire) may use into ``ToolSpec``s on the ``gateway`` server. The
-engines gate and audit each call as ``mcp__gateway__<id>___<tool>``, with the connector's approval level as an
-extra "ask". Output is untrusted data and is wrapped as such.
+engines gate and audit each call as ``mcp__gateway__<id>___<tool>``; nothing waits for the owner (decision 237).
+Output is untrusted data and is wrapped as such.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ from vaic.shared.connectors import (
     GATEWAY_SERVER,
     ConnectorStore,
     Record,
-    approval_reason,
     connectors_for,
     event,
     gateway_name,
@@ -99,7 +98,6 @@ def connector_tools(
                     with_brand_arg(schema, label) if branded is not None else schema,
                     _handler(client, store, bus, rec, gname, label, branded, schema),
                     server=GATEWAY_SERVER,
-                    ask=approval_reason(rec, t),
                 )
             )
     return specs

@@ -34,7 +34,7 @@ def rec(**kw: Any) -> dict[str, Any]:
         "url": "https://mcp.higgsfield.ai/mcp",
         "status": "ready",
         "roles": {"vaic": "all", "worker": "all"},
-        "approval": "destructive",
+        "approval": "destructive",  # a level saved before decision 237: ignored now
         "tools": [READ, WRITE, DESTROY],
         **kw,
     }
@@ -58,18 +58,11 @@ def gateway_listing(names: list[str], call: Any = None) -> tuple[GatewayClient, 
 ALL = ["higgsfield___search_videos", "higgsfield___create_video", "higgsfield___delete_video"]
 
 
-async def test_tools_come_from_the_gateway_listing_filtered_by_role_with_approval_levels() -> None:
+async def test_tools_come_from_the_gateway_listing_filtered_by_role() -> None:
     client, net = gateway_listing(ALL)
     listed = await client.list_tools("s1")
     specs = connector_tools([rec()], "vaic", None, client, listed, ConnectorStore(MemoryTable()), MemoryBus())
     assert [s.full_name for s in specs] == [f"mcp__gateway__{n}" for n in ALL]
-    asks = {s.name: s.ask for s in specs}
-    assert asks["higgsfield___search_videos"] is None and asks["higgsfield___create_video"] is None
-    assert "delete or overwrite" in (asks["higgsfield___delete_video"] or "")
-    writes = connector_tools(
-        [rec(approval="writes")], "vaic", None, client, listed, ConnectorStore(MemoryTable()), MemoryBus()
-    )
-    assert [s.name for s in writes if s.ask] == ["higgsfield___create_video", "higgsfield___delete_video"]
     assert all(h.get("authorization", "").startswith("AWS4") for _, h, _ in net.calls)  # every request is signed
 
 
@@ -133,18 +126,19 @@ async def test_a_worker_gets_only_the_connectors_on_its_hire() -> None:
 
 
 # ---------- gating on VAIC's direct path ----------
-def gw_spec(name: str, ask: str | None, ran: list[str]) -> ToolSpec:
+def gw_spec(name: str, ran: list[str]) -> ToolSpec:
     async def run(args: dict[str, Any]) -> str:
         ran.append(name)
         return "done"
 
-    return ToolSpec(name, "d", {"type": "object", "properties": {}}, run, server="gateway", ask=ask)
+    return ToolSpec(name, "d", {"type": "object", "properties": {}}, run, server="gateway")
 
 
-async def test_direct_path_gates_connector_tools_by_their_gateway_name_and_asks_for_destructive_ones() -> None:
+async def test_direct_path_gates_connector_tools_by_their_gateway_name_and_asks_for_nothing() -> None:
+    # Decision 237: a destructive connector call runs without waiting for the owner.
     ran: list[str] = []
     approvals: list[tuple[str, str]] = []
-    specs = [gw_spec("higgsfield___search_videos", None, ran), gw_spec("higgsfield___delete_video", "may delete", ran)]
+    specs = [gw_spec("higgsfield___search_videos", ran), gw_spec("higgsfield___delete_video", ran)]
     req = request(specs, [])
 
     async def on_needs(tool: str, args: dict[str, Any], h: str, reason: str) -> None:
@@ -159,12 +153,12 @@ async def test_direct_path_gates_connector_tools_by_their_gateway_name_and_asks_
         ]
     )
     await direct_engine(req, fake)
-    assert ran == ["higgsfield___search_videos"]
+    assert ran == ["higgsfield___search_videos", "higgsfield___delete_video"]
     assert req.ledger.audit == [
         ("mcp__gateway__higgsfield___search_videos", "allow"),
-        ("mcp__gateway__higgsfield___delete_video", "deny"),
+        ("mcp__gateway__higgsfield___delete_video", "allow"),
     ]
-    assert approvals == [("mcp__gateway__higgsfield___delete_video", "may delete")]
+    assert approvals == []
 
 
 async def test_a_connector_tool_not_given_to_this_turn_is_refused() -> None:
@@ -193,15 +187,13 @@ async def test_sdk_path_serves_connector_tools_from_an_in_process_gateway_server
     from claude_agent_sdk import PermissionResultAllow, PermissionResultDeny
 
     ran: list[str] = []
-    o, req = sdk(
-        [gw_spec("higgsfield___search_videos", None, ran), gw_spec("higgsfield___delete_video", "may delete", ran)]
-    )
+    o, req = sdk([gw_spec("higgsfield___search_videos", ran), gw_spec("higgsfield___delete_video", ran)])
     assert set(o.mcp_servers) == {"city", "gateway"}
     assert o.allowed_tools == [] and o.setting_sources == []
     allow = await o.can_use_tool("mcp__gateway__higgsfield___search_videos", {"q": "a"}, None)
     assert isinstance(allow, PermissionResultAllow)
-    ask = await o.can_use_tool("mcp__gateway__higgsfield___delete_video", {"id": "1"}, None)
-    assert isinstance(ask, PermissionResultDeny) and "approval" in ask.message
+    delete = await o.can_use_tool("mcp__gateway__higgsfield___delete_video", {"id": "1"}, None)
+    assert isinstance(delete, PermissionResultAllow)  # no approval level any more (decision 237)
     other = await o.can_use_tool("mcp__gateway__bank___transfer", {}, None)
     assert isinstance(other, PermissionResultDeny) and "not one of your tools" in other.message
     assert ("mcp__gateway__bank___transfer", "allow") not in req.ledger.audit
@@ -245,18 +237,20 @@ def test_the_policy_denies_only_secrets_on_a_connector_the_owner_merges_and_dele
     assert d == want and (want == "allow" or "Secrets Manager" in reason)
 
 
-async def test_a_connectors_approval_level_turns_an_allow_into_an_ask_but_never_softens_a_deny() -> None:
-    r = await gate("mcp__gateway__x___delete_file", {}, "worker", "w1", extra_ask="may delete")
-    assert r.decision == "deny" and r.needs_approval and r.needs_approval.reason == "may delete"
-    d = await gate("mcp__gateway__vault___get_secret_value", {}, "vaic", "vaic", extra_ask="reads")
+async def test_nothing_asks_today_but_an_ask_rule_in_the_policy_file_still_waits_for_the_owner() -> None:
+    # Decision 237: no connector approval levels, so a destructive call is allowed; a deny stays a deny.
+    r = await gate("mcp__gateway__x___delete_file", {}, "worker", "w1")
+    assert r.decision == "allow" and r.needs_approval is None
+    d = await gate("mcp__gateway__vault___get_secret_value", {}, "vaic", "vaic")
     assert d.decision == "deny" and d.needs_approval is None
+    pol = {"rules": [{"tool": "^mcp__gateway__", "match": ".*", "decision": "ask", "reason": "check"}]}
+    held = await gate("mcp__gateway__x___delete_file", {}, "worker", "w1", policy=pol)
+    assert held.decision == "deny" and held.needs_approval and held.needs_approval.reason == "check"
 
     async def approved(_: str) -> bool:
         return True
 
-    ok = await gate(
-        "mcp__gateway__x___delete_file", {}, "worker", "w1", consume_approval=approved, extra_ask="may delete"
-    )
+    ok = await gate("mcp__gateway__x___delete_file", {}, "worker", "w1", consume_approval=approved, policy=pol)
     assert ok.decision == "allow"
 
 
@@ -320,7 +314,6 @@ async def test_app_call_treats_a_policy_ask_as_a_deny(monkeypatch: pytest.Monkey
 
     pol = {
         "policy_applies_to_workers": True,
-        "caps": {"ad_daily_budget_cents": 1},
         "rules": [{"tool": "^mcp__gateway__", "match": ".*", "decision": "ask", "reason": "check"}],
     }
 

@@ -1,6 +1,6 @@
 ---
 name: social-publishing
-description: "Publish and schedule to YouTube, TikTok, Instagram and Facebook through Metricool, Buffer or Ayrshare: the right format, caption and time per platform, only after the owner's yes."
+description: "Publish and schedule to YouTube, TikTok, Instagram and Facebook through Metricool, Buffer or Ayrshare: the right format, caption and time per platform."
 ---
 # Social publishing
 
@@ -16,7 +16,7 @@ Two ways to publish, both signed in by the owner once with the platform's own si
 | Facebook | Reels 9:16, feed video 4:5 or 1:1 | short caption with a question |
 
 - Post when the audience is online (the tool's best-time data).
-- Organic posts from the "Organic content" workflow go live as soon as they pass review: the owner's request is the go-ahead (decision 132). Anything else is scheduled as a draft or queued post unless the goal says to publish.
+- Organic posts from the "Organic content" workflow go live as soon as they pass review: the owner's request is the go-ahead (decision 132). Anything else is published or scheduled too; nothing waits for the owner's yes (decision 237).
 - Never boost, promote or spend: paid reach is the ads workflows' job, with the owner's own budget (decision 126).
 - Disclose AI-generated realistic content and paid partnerships using each platform's label.
 - Report what was scheduled, when and where, and the links once live.

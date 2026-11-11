@@ -123,8 +123,6 @@ class ToolSpec:
     handler: Handler
     server: str = CITY_SERVER
     """``city`` (gated by ``gate_tools``) or ``gateway`` (connector tools, gated by the engine)."""
-    ask: str | None = None
-    """An extra reason to ask the owner first (a connector's approval level)."""
     self_gated: bool = False
     """The handler runs the gate itself (the mail tools: standing rules and previews come before it)."""
     step: Callable[[dict[str, Any]], str] | None = None

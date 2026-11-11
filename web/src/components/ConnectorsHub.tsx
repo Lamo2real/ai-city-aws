@@ -52,11 +52,6 @@ import { Select } from "./Select.tsx";
 
 const ALL = "All departments";
 type View = "connected" | "browse";
-const APPROVAL: Record<NonNullable<Connector["approval"]>, string> = {
-  destructive: "Ask me before anything destructive",
-  writes: "Ask me before any change",
-  none: "Don't ask",
-};
 const MAIL_STATUS: Record<MailAccount["status"], string> = {
   connected: "Connected",
   signing_in: "Sign in",
@@ -817,19 +812,6 @@ function ConnectorDetail(p: {
           </label>
         ))}
       </fieldset>
-      <label className="field">
-        Approvals
-        <Select
-          value={c.approval ?? "destructive"}
-          onChange={(e) => void p.onChange({ approval: e.target.value as Connector["approval"] })}
-        >
-          {Object.entries(APPROVAL).map(([k, v]) => (
-            <option key={k} value={k}>
-              {v}
-            </option>
-          ))}
-        </Select>
-      </label>
       <div className="row-end">
         {c.status === "ready" ? (
           <Button

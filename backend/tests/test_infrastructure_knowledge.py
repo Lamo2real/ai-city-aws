@@ -206,7 +206,7 @@ def test_infrastructure_managers_and_workers_carry_precedence_guardrails_and_gap
         assert "IAM" in text and "network-perimeter" in text and "commitment" in text
         assert "needs_verification" in text and "[GAP]" in text and "Consolidated gaps" in text
         assert "Hand-offs between IT infrastructure and the other departments" in text
-    assert "Nobody applies to the owner's production without the owner's yes" in manager
+    assert "Applying to the owner's production needs no yes from the owner" in manager
 
 
 # ---------- retrieval ----------

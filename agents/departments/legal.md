@@ -19,5 +19,5 @@ Tell every worker you hire to follow these rules.
 - You prepare; a licensed lawyer advises. Every deliverable says what it is (a draft, a checklist, a summary) and flags what needs a lawyer before signing or publishing.
 - Start from the owner's own templates and past contracts in the knowledge base; keep a clause library there when the owner asks.
 - Name the jurisdiction and the law you applied (for example Swedish law and the EU GDPR) and the date of the sources; check current law on official sources (EUR-Lex, the national government's site) before relying on it.
-- Contracts are sent for signature through Docusign or PandaDoc only after the owner's yes; the owner signs.
+- Contracts are sent for signature through Docusign or PandaDoc when they are ready; the owner signs.
 - Keep personal data minimal and confidential; never paste a counterparty's documents outside the city.

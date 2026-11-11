@@ -1,8 +1,7 @@
 """Connector records and the rules every part of the city shares (``docs/CONNECTORS_SKILLS.md`` §1).
 
 A connector is one account on one remote MCP server, stored in the ledger as ``CONNECTORS`` / ``CONN#<id>``.
-This module holds the record store, the URL and registry checks used when one is added, the per-role filter
-and the approval levels. No credentials ever pass through here.
+This module holds the record store, the URL and registry checks used when one is added, the per-role filter. No credentials ever pass through here.
 """
 
 from __future__ import annotations
@@ -24,7 +23,6 @@ from .table import Table, UpdateOptions
 PK = "CONNECTORS"
 ROLES = ("vaic", "orchestrator", "manager", "worker")
 LEVELS = ("read", "all")
-APPROVALS = ("destructive", "writes", "none")
 DEFAULT_ROLES: dict[str, str] = {"vaic": "all", "manager": "all", "worker": "all"}
 ID_RE = re.compile(r"^(?=.{2,31}$)[a-z][a-z0-9]*(-[a-z0-9]+)*$")
 """The contract's ``^[a-z][a-z0-9-]{1,30}$``, without double or trailing dashes (Gateway target names forbid them)."""
@@ -328,7 +326,7 @@ async def registry_search(name: str, transport: Transport = urllib_transport) ->
     return out
 
 
-# ---------- tools: annotations, per-role filter, approval levels ----------
+# ---------- tools: annotations, per-role filter ----------
 def tool_entry(t: Mapping[str, Any]) -> Record:
     """A record tool from an MCP tool. Unknown counts as a write and destructive."""
     ann = t.get("annotations") or {}
@@ -360,19 +358,6 @@ def connectors_for(records: Iterable[Record], role: str, hire: Iterable[str] | N
         if tools:
             out.append({**r, "tools": tools})
     return out
-
-
-def approval_reason(rec: Mapping[str, Any], tool: Mapping[str, Any]) -> str | None:
-    """Why this call needs the owner, by the connector's ``approval`` setting; None when it doesn't."""
-    level = rec.get("approval") or "destructive"
-    label = rec.get("label") or rec.get("id")
-    if level == "none":
-        return None
-    if level == "writes" and not is_read_only(tool):
-        return f"{label}: {tool['name']} changes something outside the city."
-    if tool.get("destructive") is not False and not is_read_only(tool):
-        return f"{label}: {tool['name']} may delete or overwrite something outside the city."
-    return None
 
 
 def record_tool(rec: Mapping[str, Any], tool: str) -> Record | None:

@@ -170,10 +170,11 @@ def settings_patch(b: dict[str, Any], cur: dict[str, Any]) -> tuple[dict[str, An
         if isinstance(b.get(k), bool):
             patch[k] = b[k]
     if isinstance(b.get("mail_access"), dict):
-        # Orchestrator and managers may read mail when the owner turns it on; workers never (decision 79).
+        # Orchestrator and managers have full mail unless the owner turns it off (decision 237); workers never
+        # (decision 79). "read" is an older client's word for access and means all.
         ma = b["mail_access"]
-        if any(k not in ("orchestrator", "manager") or v not in ("none", "read") for k, v in ma.items()):
-            return patch, "mail_access takes orchestrator and manager, each none or read."
+        if any(k not in ("orchestrator", "manager") or v not in ("none", "read", "all") for k, v in ma.items()):
+            return patch, "mail_access takes orchestrator and manager, each none or all."
         patch["mail_access"] = dict(ma)
     # "integrations" (four dead switches, removed 2026-11-08) is ignored when an old client still sends it.
     if isinstance(b.get("department_caps"), dict):

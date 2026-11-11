@@ -15,6 +15,6 @@ The owner has **one** Stripe account. Every product, app, site, game or service 
 6. Many products: keep them in one catalogue, distinguished by `metadata.app`; reports filter on it.
 
 ## Always
-- Test mode first; switch to live only with the owner's yes.
-- Prices, discounts and refunds come from the owner or the knowledge base; never invent them. Refunds only after the owner's yes.
+- Test mode first; switch to live once it works.
+- Prices, discounts and refunds come from the owner or the knowledge base; never invent them.
 - Report the product ids, price ids and payment links you created.

@@ -173,7 +173,6 @@ def add_connector_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
             "auth": None,
             "status": "pending_approval",
             "roles": roles,
-            "approval": "destructive",
             "tools": [],
             "target_id": None,
             "provider_name": f"vaic-conn-{id}",

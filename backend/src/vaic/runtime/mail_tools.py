@@ -61,7 +61,7 @@ SPECS: dict[str, tuple[str, dict[str, Any]]] = {
         ),
     ),
     "mail_send": (
-        "Send an email (a saved draft_id, or the draft fields). Needs the owner's approval unless a standing rule covers it.",
+        "Send an email (a saved draft_id, or the draft fields).",
         _obj(
             {
                 "draft_id": _s(),
@@ -83,7 +83,7 @@ SPECS: dict[str, tuple[str, dict[str, Any]]] = {
             ("add", "remove", "archive", "read"),
         ),
     ),
-    "mail_trash": ("Move messages to Trash (needs the owner). There is no permanent delete.", _obj({"ids": _IDS})),
+    "mail_trash": ("Move messages to Trash. There is no permanent delete.", _obj({"ids": _IDS})),
     "calendar_list": ("The owner's calendars across accounts.", _obj({})),
     "calendar_events": (
         "Events between from and to (ISO, at most 62 days), optionally some calendar_ids or a query. Descriptions "
@@ -91,7 +91,7 @@ SPECS: dict[str, tuple[str, dict[str, Any]]] = {
         _obj({"from": _ISO, "to": _ISO, "calendar_ids": _STRS, "query": _s(0, 200)}, ("calendar_ids", "query")),
     ),
     "calendar_create": (
-        "Create an event. With attendees it invites people, which needs the owner.",
+        "Create an event. With attendees it invites them.",
         _obj(
             {
                 "calendar_id": _s(4),
@@ -107,7 +107,7 @@ SPECS: dict[str, tuple[str, dict[str, Any]]] = {
         ),
     ),
     "calendar_update": (
-        "Change an event. Needs the owner when the event has attendees or the change adds any.",
+        "Change an event.",
         _obj(
             {
                 "id": _s(4),
@@ -122,7 +122,7 @@ SPECS: dict[str, tuple[str, dict[str, Any]]] = {
         ),
     ),
     "calendar_respond": (
-        "Answer an invitation (needs the owner unless a standing rule covers accepting from that organizer).",
+        "Answer an invitation.",
         _obj(
             {
                 "id": _s(4),
@@ -132,7 +132,7 @@ SPECS: dict[str, tuple[str, dict[str, Any]]] = {
             ("comment",),
         ),
     ),
-    "calendar_delete": ("Delete an event (needs the owner).", _obj({"id": _s(4)})),
+    "calendar_delete": ("Delete an event.", _obj({"id": _s(4)})),
 }
 
 
@@ -164,7 +164,7 @@ async def _rule_for(s: MailService, rules: RuleStore, name: str, args: dict[str,
 
 
 def mail_tools(d: CityDeps, c: TurnCtx, s: MailService, level: str) -> list[ToolSpec]:
-    """``level`` is ``all`` (VAIC) or ``read`` (the Orchestrator and managers, when the owner turned it on)."""
+    """``level`` is ``all`` (VAIC, and the Orchestrator and managers unless the owner turned it off) or ``read``."""
     rules = RuleStore(d.ledger.table, d.ledger.now)
     names = list(SPECS) if level == "all" else list(READ_TOOLS)
 
@@ -216,12 +216,13 @@ def mail_tools(d: CityDeps, c: TurnCtx, s: MailService, level: str) -> list[Tool
 
 
 def mail_level(role: str, settings: dict[str, Any]) -> str | None:
-    """Which mail tools a role gets: VAIC all, the Orchestrator and managers read when the owner turned it on,
-    workers never (decision 79)."""
+    """Which mail tools a role gets: VAIC all; the Orchestrator and managers all unless the owner set them to
+    ``none`` (decision 237; a ``read`` saved before it counts as all); workers never (decision 79: their runtime
+    role can run shell commands, so IAM keeps mail tokens away from it)."""
     if role == "vaic":
         return "all"
     if role in ("orchestrator", "manager"):
-        return "read" if (settings.get("mail_access") or {}).get(role) == "read" else None
+        return None if (settings.get("mail_access") or {}).get(role) == "none" else "all"
     return None
 
 

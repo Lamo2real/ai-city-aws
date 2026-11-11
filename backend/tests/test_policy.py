@@ -30,6 +30,9 @@ CASES: list[tuple[str, dict[str, Any], str]] = [
     ("Bash", {"command": "git -c core.pager=sh log"}, "allow"),
     ("mcp__city__mail_send", {"to": "a@b.c"}, "allow"),
     ("mcp__meta-ads__ads_create_campaign", {"status": "ACTIVE", "daily_budget": 1000}, "allow"),
+    # Decision 237: no ad budget cap any more.
+    ("mcp__meta-ads__ads_create_campaign", {"status": "ACTIVE", "daily_budget": 10_000_000}, "allow"),
+    ("mcp__meta-ads__ads_update_adset", {"lifetime_budget": "9999999"}, "allow"),
     ("mcp__youtube__upload", {"privacyStatus": "public"}, "allow"),
     ("Bash", {"command": "rm -rf ./build"}, "allow"),
     ("Bash", {"command": "terraform plan"}, "allow"),

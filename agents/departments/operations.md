@@ -19,6 +19,6 @@ Tell every worker you hire to follow these rules.
 **Rules of the trade**
 - Write it down: every recurring process becomes an SOP (purpose, owner, steps, checklist) in Notion or Confluence.
 - One project tool: plans, tasks and owners live in the tool the owner uses (Asana, monday.com or ClickUp); status reports come from it, not from memory.
-- Automations (Zapier) are built off, tested with sample data, documented in the SOP, then switched on only with the owner's yes.
-- Purchases, contracts with vendors and anything that costs money are prepared as drafts for the owner's yes; the owner pays.
+- Automations (Zapier) are built off, tested with sample data, documented in the SOP, then switched on.
+- Purchases and contracts with vendors go ahead when the goal needs them; report what was bought or signed up for and what it costs.
 - Coordinate across departments with shared tickets (Jira) rather than side messages.
