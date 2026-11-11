@@ -513,6 +513,17 @@ section 27's tiers with `ask_owner` before gated actions; hand self-harm disclos
 customers to the owner at once; use section 28 for handoffs. The approval tiers are prompt rules (no department scope
 in the policy gate); not built as for Application: Download, the versioned Replace, the shared scope.
 
+**Product (decision 230).** `knowledge/seed/product/`: 25 documents, one per numbered section of
+`knowledge/source/product-research.md` (verbatim, 35,947 words, SHA-256 pinned) plus "Product: About this knowledge
+base"; the conclusion stays with section 24, "Product: Consolidated gaps the knowledge base must not paper over". 19
+domains. House style (sections 2 and 3): domain, type and confidence `house-style`. Legal and compliance (sections 17
+accessibility, 18 compliance by design, 23 Sweden and the EU): type `policy`, fast-moving. Guardrails (section 21):
+type `checklist`. `_eval.yaml`: 18 questions, offline 18/18 in the top 5. Four tables (guardrails, precedence,
+handoffs, Sweden and the EU) are 539 to 877 words, kept whole. Managers (`agents/departments/product.md`) and workers
+(`product.workers.md`) follow section 4's order (compliance, evidence, house style by default in the brand's own
+voice), section 21's three lists with `ask_owner` before gated actions, section 22's handoffs, and the same
+`needs_verification`, `[GAP]` and legal-orientation rules. Approval gates stay prompt rules.
+
 **A "shared" scope (planned, not built).** A cross-department document would live in `knowledge/seed/shared/` with its
 own `_taxonomy.yaml` (`department: shared`); `entry_visible` and `caller_filter` in `search.py` would let every
 department caller (never VAIC) see `department == "shared"` records beside its own; the HUD shows it as its own card;

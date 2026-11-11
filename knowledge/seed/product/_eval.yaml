@@ -1,0 +1,52 @@
+# The retrieval evaluation for the product knowledge base (docs/KNOWLEDGE.md section 17): realistic questions a
+# Product agent asks, each with the documents that should appear in the top results. A question counts as a hit
+# when any expected document is in the top 5. The tests score it offline (keyword-only); the deploy scores it against
+# the real hybrid index and prints the hit rate. Files starting with "_" are never seeded as entries.
+department: product
+top_k: 5
+questions:
+  # prioritisation and roadmaps
+  - q: Should we rank the backlog with RICE, ICE or cost of delay, and how do we put it on a now-next-later roadmap?
+    expect: [product.prioritisation.prioritisation-and-roadmaps]
+  # discovery and interviews
+  - q: How do we run customer interviews that ask about specific past events and record them in an interview snapshot?
+    expect: [product.discovery.discovery]
+  - q: How do we build an opportunity solution tree and test the riskiest assumptions before we build?
+    expect: [product.discovery.discovery]
+  # pricing and packaging
+  - q: How should we price and package a new AI feature, with seats, usage or hybrid pricing?
+    expect: [product.go-to-market.go-to-market-pricing-and-packaging]
+  - q: Should we offer a free trial or freemium, and how do we define a product-qualified lead?
+    expect: [product.go-to-market.go-to-market-pricing-and-packaging]
+  # accessibility (the answer must carry the date label)
+  - q: Which WCAG 2.2 AA requirements apply, and since when does the Swedish accessibility act cover our e-commerce service?
+    expect: [product.accessibility.accessibility]
+  # designing an AI feature
+  - q: How do we write an eval suite and acceptance criteria for an AI feature before we build it?
+    expect: [product.ai-products.building-ai-products, product.delivery.specification-and-delivery]
+  - q: How should an agent that acts on a user's behalf show confidence, ask for approval and let them recover?
+    expect: [product.ai-products.designing-ai-and-agent-experiences]
+  # metrics and experimentation
+  - q: How many users do we need per arm for an A/B test, and when should we not A/B test at all?
+    expect: [product.metrics.metrics-and-experimentation]
+  - q: How do we choose an activation milestone and a north-star metric that predict retention?
+    expect: [product.metrics.metrics-and-experimentation]
+  # house style and precedence
+  - q: How do we apply the value equation and the delivery cube to a software feature?
+    expect: [product.house-style.house-style-hormozi-product-models, product.house-style.adapting-the-house-style-to-software]
+  - q: Can we use a countdown timer or scarcity urgency on the pricing page under EU rules?
+    expect: [product.precedence.precedence-compliance-evidence-house-style, product.compliance.compliance-by-design]
+  # compliance, guardrails, handoffs, research, UX
+  - q: What must the online withdrawal function do and when did it start to apply in Sweden?
+    expect: [product.compliance.compliance-by-design, product.compliance.sweden-and-the-eu]
+  - q: Can a product agent change prices or release a feature to customers without human approval?
+    expect: [product.guardrails.agent-guardrails]
+  - q: What do we hand to Legal and when do we escalate a consent or cancellation flow?
+    expect: [product.handoffs.handoffs-with-other-departments, product.guardrails.agent-guardrails]
+  - q: How many users do we need for a usability test, and can we use synthetic users instead of real ones?
+    expect: [product.research.user-research]
+  - q: How do we score the System Usability Scale and what is a good SUS score?
+    expect: [product.ux.measuring-ux]
+  # a question the document marks as a gap: the agent must say it does not know
+  - q: How long should a beta programme run, how big should it be and what are its exit criteria?
+    expect: [product.gaps.consolidated-gaps]

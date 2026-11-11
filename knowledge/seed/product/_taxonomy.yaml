@@ -1,0 +1,91 @@
+# The product department's knowledge taxonomy (docs/KNOWLEDGE.md section 17). Content: one document per numbered
+# section of knowledge/source/product-research.md (the only source), plus "About this knowledge base" (the opening
+# summary and reading guide); the closing conclusion stays with section 24 (consolidated gaps). Seeded and scoped
+# exactly like marketing, sales and application (decision 230).
+department: product
+label: Product
+seed_version: 1
+
+domains:
+  - {id: overview, label: Overview, description: "The opening summary, the labels and caveats, and how the department decides and works"}
+  - {id: house-style, label: House style, description: "Hormozi's product-relevant models and their adaptation to software (the owner's default, not evidence)"}
+  - {id: precedence, label: Precedence, description: "Compliance first, evidence second, house style third, and the known collisions"}
+  - {id: strategy, label: Strategy, description: "Strategy, segments, positioning, competition, build or buy, product-market fit"}
+  - {id: discovery, label: Discovery, description: "Opportunity solution trees, jobs-to-be-done, interviews, assumption tests, prototypes"}
+  - {id: prioritisation, label: Prioritisation and roadmaps, description: "Scoring models, opportunity assessment, now-next-later, saying no, stakeholders"}
+  - {id: delivery, label: Specification and delivery, description: "One-pagers, user stories, acceptance criteria, feature flags, betas and rollouts"}
+  - {id: metrics, label: Metrics and experimentation, description: "North star, metric trees, HEART, activation, retention, adoption, A/B tests"}
+  - {id: go-to-market, label: Go-to-market and pricing, description: "Launch tiers, pricing models, AI pricing, packaging, trials, product-qualified leads"}
+  - {id: operating-model, label: Operating model, description: "Team models, OKRs, product ops and the product role after agentic AI"}
+  - {id: ai-products, label: AI products, description: "Building and evaluating AI features and designing AI and agent experiences"}
+  - {id: ux, label: UX and design, description: "Usability heuristics, forms, design process, design systems and measuring UX"}
+  - {id: research, label: User research, description: "Methods, sample sizes, synthetic users, AI-moderated interviews, synthesis"}
+  - {id: accessibility, label: Accessibility, description: "WCAG 2.2 AA, EN 301 549, the European Accessibility Act and the Swedish act (orientation, not legal advice)"}
+  - {id: compliance, label: Compliance, description: "Compliance by design and the Swedish and EU rules in one place (orientation, not legal advice)"}
+  - {id: localisation, label: Localisation and content, description: "Internationalisation, Swedish formats, content design and mandated wording"}
+  - {id: guardrails, label: Guardrails, description: "What the department's agents may do alone, what needs human approval, what they must never do"}
+  - {id: handoffs, label: Handoffs, description: "Work to and from the other departments, and escalation to Legal"}
+  - {id: gaps, label: Gaps, description: "What the knowledge base does not know"}
+
+platforms:
+  - {id: web, label: Web}
+  - {id: ios, label: iOS}
+  - {id: android, label: Android}
+  - {id: figma, label: Figma}
+
+objectives:
+  - {id: discover, label: Discover}
+  - {id: prioritise, label: Prioritise}
+  - {id: launch, label: Launch}
+  - {id: grow, label: Grow}
+  - {id: retain, label: Retain}
+  - {id: compliance, label: Compliance}
+  - {id: measurement, label: Measurement}
+
+# The concept vocabulary (an entry MENTIONS a concept when one of its aliases appears in its text; all-capital
+# aliases match case-sensitively).
+concepts:
+  - {id: activation, label: Activation, kind: metric, aliases: [activation, aha moment]}
+  - {id: retention, label: Retention, kind: metric, aliases: [retention curve, cohort retention, net revenue retention]}
+  - {id: churn, label: Churn, kind: metric, aliases: [churn]}
+  - {id: feature-adoption, label: Feature adoption, kind: metric, aliases: [feature adoption]}
+  - {id: north-star, label: North-star metric, kind: metric, aliases: [north-star metric, north star]}
+  - {id: sus, label: System Usability Scale, kind: metric, aliases: [System Usability Scale, SUS, UMUX-Lite]}
+  - {id: nps, label: Net Promoter Score, kind: metric, aliases: [Net Promoter Score, NPS]}
+  - {id: heart, label: HEART, kind: framework, aliases: [HEART, Goals-Signals-Metrics], measured_by: [activation, retention, feature-adoption]}
+  - {id: value-equation, label: Value equation, kind: framework, aliases: [value equation]}
+  - {id: delivery-cube, label: Delivery cube, kind: framework, aliases: [delivery cube]}
+  - {id: offer-ladder, label: Offer ladder, kind: framework, aliases: [offer ladder, money model, attraction offer, continuity offer]}
+  - {id: four-risks, label: Four risks, kind: framework, aliases: [four risks]}
+  - {id: opportunity-solution-tree, label: Opportunity solution tree, kind: practice, aliases: [opportunity solution tree]}
+  - {id: jtbd, label: Jobs-to-be-done, kind: practice, aliases: [jobs-to-be-done, jobs to be done]}
+  - {id: assumption-testing, label: Assumption testing, kind: practice, aliases: [assumption test, assumption testing, assumption tests]}
+  - {id: rice, label: RICE, kind: practice, aliases: [RICE]}
+  - {id: ice, label: ICE, kind: practice, aliases: [ICE]}
+  - {id: kano, label: Kano, kind: practice, aliases: [Kano]}
+  - {id: wsjf, label: Cost of delay and WSJF, kind: practice, aliases: [WSJF, cost of delay]}
+  - {id: now-next-later, label: Now-next-later roadmap, kind: practice, aliases: [now-next-later]}
+  - {id: okr, label: OKRs, kind: practice, aliases: [OKR, OKRs]}
+  - {id: positioning, label: Positioning, kind: practice, aliases: [positioning]}
+  - {id: product-market-fit, label: Product-market fit, kind: practice, aliases: [product-market fit, Sean Ellis]}
+  - {id: ab-testing, label: A/B testing, kind: practice, aliases: [A/B test, A/B tests, A/B testing, controlled experiment]}
+  - {id: feature-flags, label: Feature flags, kind: practice, aliases: [feature flag, feature flags, feature toggles]}
+  - {id: evals, label: Eval suites, kind: practice, aliases: [eval suite, eval tasks, evals, pass@k]}
+  - {id: launch-tiers, label: Launch tiers, kind: practice, aliases: [launch tier, launch tiers]}
+  - {id: hybrid-pricing, label: Hybrid pricing, kind: practice, aliases: [hybrid pricing, usage-based, outcome pricing, outcome-based]}
+  - {id: freemium, label: Free trial and freemium, kind: practice, aliases: [freemium, free trial]}
+  - {id: pql, label: Product-qualified lead, kind: practice, aliases: [product-qualified lead, product-qualified leads, PQL]}
+  - {id: synthetic-users, label: Synthetic users, kind: practice, aliases: [synthetic users, synthetic user]}
+  - {id: design-tokens, label: Design tokens, kind: practice, aliases: [design tokens, design token]}
+  - {id: heuristics, label: Usability heuristics, kind: practice, aliases: [usability heuristics, heuristics]}
+  - {id: design-sprint, label: Design sprint, kind: practice, aliases: [design sprint, Double Diamond]}
+  - {id: wcag, label: WCAG, kind: standard, aliases: [WCAG, EN 301 549]}
+  - {id: eaa, label: European Accessibility Act, kind: law, aliases: [European Accessibility Act, 2023:254]}
+  - {id: gdpr, label: GDPR, kind: law, aliases: [GDPR]}
+  - {id: ai-act, label: AI Act, kind: law, aliases: [AI Act, Article 50]}
+  - {id: dsa, label: Digital Services Act, kind: law, aliases: [Digital Services Act]}
+  - {id: data-act, label: Data Act, kind: law, aliases: [Data Act]}
+  - {id: dfa, label: Digital Fairness Act, kind: law, aliases: [Digital Fairness Act]}
+  - {id: withdrawal-function, label: Withdrawal function, kind: law, aliases: [withdrawal function, withdrawal right, ångerknapp]}
+  - {id: cookie-consent, label: Cookie consent, kind: law, aliases: [cookie, cookies, consent banner]}
+  - {id: deceptive-design, label: Deceptive design, kind: risk, aliases: [deceptive design, dark pattern, dark patterns]}
