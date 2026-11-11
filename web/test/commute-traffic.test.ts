@@ -19,6 +19,8 @@ import {
   stepTraffic,
   taxiCall,
   CALL_PX,
+  RIDE_PX_S,
+  TO_WORK_BOOST,
   homeOf,
   type CityGuest,
   type CityRider,
@@ -174,5 +176,22 @@ describe("a taxi called for a new hire", () => {
   it("is not called when nothing is ridden", () => {
     const w = city(2);
     expect(taxiCall(w, [{ x: 1, y: 1 }], [false], { x: 0, y: 0 })).toBeNull();
+  });
+});
+
+describe("a cab taking a new hire to work (decision 211)", () => {
+  it("drives 2.5x the pace of an ordinary ride on an open road", () => {
+    const sim = { ...createTraffic(city(2)), junctions: [], cars: [], guests: [] } as CityTraffic;
+    const drive = (boost?: number) => {
+      const r: CityRider & { boost?: number } = { x: 0, y: 0, to: { x: 10_000, y: 0 }, boost };
+      let x = 0;
+      for (let i = 0; i < 200; i++) x += rideStep(sim, r, 0.05);
+      return { x, top: r.rv! };
+    };
+    const plain = drive(), fast = drive(TO_WORK_BOOST);
+    expect(TO_WORK_BOOST).toBe(2.5);
+    expect(plain.top).toBeCloseTo(RIDE_PX_S, 5);
+    expect(fast.top).toBeCloseTo(RIDE_PX_S * 2.5, 5);
+    expect(fast.x / plain.x).toBeCloseTo(2.5, 5);
   });
 });

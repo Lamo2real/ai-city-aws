@@ -4,7 +4,7 @@
 // Reviewer; each department's manager stands at its door; panels are React (see CityView.tsx).
 // The City View: a small game world of the agents, drawn pixel by pixel on a canvas from city-state.js.
 // All of the art is drawn here in code. Every person on screen is a real agent; only the scenery moves on its own.
-import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf, taxiCall, RIDE_PX_S } from "./city-state.js";
+import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf, taxiCall, RIDE_PX_S, TO_WORK_BOOST } from "./city-state.js";
 
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const INK = "#1d1c36";
@@ -1595,7 +1595,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
         busy = true;
         const to = p.route[0], dx = to.x - p.x, dy = to.y - p.y, d = Math.hypot(dx, dy);
         let s;
-        if (p.ride?.[0] && traffic) { p.to = to; p.rare = !!p.rareCab || root.dataset.rareCabs === "all"; s = rideStep(traffic, p, dt); } // a cab in the traffic
+        if (p.ride?.[0] && traffic) { p.to = to; p.rare = !!p.rareCab || root.dataset.rareCabs === "all"; p.boost = p.toWork ? TO_WORK_BOOST : 1; s = rideStep(traffic, p, dt); } // a cab in the traffic
         else s = eased(p, (p.speed ?? WALK_SPEED) * dt, d);
         if (Math.abs(dx) > 0.5) p.flip = dx < 0;
         if (d <= s) {
@@ -1678,11 +1678,11 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   function load(snap) {
     state = applySnapshot(state, snap ?? { agents: [], tickets: [], questions: [] });
     parcels = []; effects = [];
-    // The people stay: a later snapshot (a reconnect, or one racing live events) converges by walking anyone
-    // whose place changed in the meantime, instead of clearing the town and teleporting everyone. Only the
-    // very first load, before there is a world, places people instantly.
+    // A snapshot (opening or reloading the page, a reconnect) places everyone where they are now, at once: someone
+    // already working is in its lit window, not riding in from home again (the owner, decision 211). Only a live
+    // event while the City is open plays the walk, the taxi and the ride.
     if (ctx) {
-      sync(!world);
+      sync(true);
       // The page opens with every tower rising out of the ground in turn: once, on the first snapshot that has
       // towers (not with reduced motion or a hidden tab).
       if (!entered && world.buildings.length) {

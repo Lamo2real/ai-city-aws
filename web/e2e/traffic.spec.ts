@@ -114,7 +114,7 @@ test("cabs circle the roundabouts and run at highway pace out in the countryside
   await page.screenshot({ path: info.outputPath("city-roundabout.png") });
 });
 
-test("a commuter's cab drives in the traffic: the lights and the other cabs see it, at cab pace", async ({ page }) => {
+test("a commuter's cab drives in the traffic: the lights and the other cabs see it, at 2.5x cab pace on the way to work", async ({ page }) => {
   test.slow();
   const m = await mockBackend(page);
   await page.goto("/#/city");
@@ -142,6 +142,7 @@ test("a commuter's cab drives in the traffic: the lights and the other cabs see 
     )
     .toBe(true);
   expect(seen.length).toBeGreaterThan(5); // a real ride, not a jump
-  expect(Math.max(...seen)).toBeLessThanOrEqual(56.01); // cab pace (RIDE_PX_S)
+  expect(Math.max(...seen)).toBeLessThanOrEqual(56 * 2.5 + 0.01); // a hire on the way to work: 2.5x cab pace (decision 211)
+  expect(Math.max(...seen)).toBeGreaterThan(56.01);
   expect(Date.now() - started).toBeGreaterThan(2500); // longer than the old 2.5 s commute
 });

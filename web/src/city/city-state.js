@@ -1268,11 +1268,14 @@ export function ringOf(sim, r) {
 }
 // How far a commuter's cab moves this frame (`r` is the rider: x, y, its next route point `to`, and its own speed
 // `rv`, stop memory and roundabout commitment, kept on it between frames).
+// `r.boost` (default 1) multiplies its pace and pick-up: a cab taking a new hire to work drives TO_WORK_BOOST times as
+// fast (decision 211), still stopping for lights and the car ahead.
+export const TO_WORK_BOOST = 2.5;
 export function rideStep(sim, r, dt) {
-  const hold = rideHold(sim, r), onRing = ringOf(sim, r) !== null;
-  const cap = Math.min(onRing ? RING_PX_S : RIDE_PX_S, hold === Infinity ? Infinity : hold < 0.5 ? 0 : reach(0, hold));
-  r.rv = cap < (r.rv ?? 0) ? cap : Math.min(cap, (r.rv ?? 0) + ACCEL_PX_S2 * 1.4 * dt);
-  r.braking = cap < RIDE_PX_S * 0.5;
+  const hold = rideHold(sim, r), onRing = ringOf(sim, r) !== null, k = r.boost ?? 1;
+  const cap = Math.min((onRing ? RING_PX_S : RIDE_PX_S) * k, hold === Infinity ? Infinity : hold < 0.5 ? 0 : reach(0, hold) * k);
+  r.rv = cap < (r.rv ?? 0) ? cap : Math.min(cap, (r.rv ?? 0) + ACCEL_PX_S2 * 1.4 * k * dt);
+  r.braking = cap < RIDE_PX_S * k * 0.5;
   return Math.max(0, Math.min(r.rv * dt, hold));
 }
 export function rideHold(sim, r) {

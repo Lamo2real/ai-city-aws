@@ -204,3 +204,23 @@ test("a hire's taxi is called to the apartment building, waits, and drives highl
   expect(done.calls).toBe(0);
   await expect.poll(() => rideOf(page, "wkr-research-a1").then((r) => r?.glowing)).toBe(0);
 });
+
+test("reloading the City puts people who are already working in their lit windows, no taxi ride (decision 211)", async ({ page }) => {
+  const worker = { ...hired("wkr-research-a1", "Research").agent, worker_state: "working" };
+  const m = await mockBackend(page, {
+    snapshot: {
+      departments: [{ key: "research", name: "Research", mission: "x", manager_id: "mgr-research", state: "active", created_at: "2026-11-11T00:00:00Z" }],
+      agents: [hired("mgr-research", "Research", "manager").agent, worker],
+      tickets: [{ id: "t1", from: "mgr-research", to: "wkr-research-a1", status: "in_progress", title: "Build it" }],
+    },
+  });
+  await page.goto("/#/city");
+  await expect(page.locator("section.city")).toHaveAttribute("data-city-ready", "1");
+  await expect.poll(() => person(page, "wkr-research-a1")).toMatchObject({ key: /^desk:Research/, walking: false, waiting: false });
+  await page.waitForTimeout(1500);
+  expect(await person(page, "wkr-research-a1")).toMatchObject({ walking: false, waiting: false });
+  expect(Number((await page.locator("section.city").getAttribute("data-taxi-calls")) ?? 0)).toBe(0);
+  // A new hire while the page is open still gets the taxi and the ride.
+  m.send(hired("wkr-research-b2", "Research"));
+  await expect.poll(() => person(page, "wkr-research-b2").then((p) => !!p && (p.waiting || p.walking))).toBe(true);
+});
