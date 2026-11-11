@@ -201,6 +201,7 @@ jobs:
       hud_bucket: ${{ steps.out.outputs.hud_bucket }}
       distribution_id: ${{ steps.out.outputs.distribution_id }}
       hud_url: ${{ steps.out.outputs.hud_url }}
+      knowledge_function: ${{ steps.out.outputs.knowledge_function }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v4
@@ -248,6 +249,7 @@ jobs:
           echo "hud_bucket=$(terraform output -raw hud_bucket)" >> "$GITHUB_OUTPUT"
           echo "distribution_id=$(terraform output -raw cloudfront_distribution_id)" >> "$GITHUB_OUTPUT"
           echo "hud_url=$(terraform output -raw hud_url)" >> "$GITHUB_OUTPUT"
+          echo "knowledge_function=$(terraform output -json knowledge_function_names | jq -r '.knowledge // empty')" >> "$GITHUB_OUTPUT"
       - name: mail sign-in redirect URIs (register them in Google Cloud / Microsoft Entra)
         working-directory: infra/envs/prod
         run: |
@@ -282,3 +284,51 @@ jobs:
           aws s3 cp web/dist/index.html "s3://${BUCKET}/index.html" --cache-control "no-cache"
           aws cloudfront create-invalidation --distribution-id "${DIST}" --paths "/index.html" "/"
           echo "## AI City is deployed: ${URL}" >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------- stage 5: the department knowledge bases (docs/KNOWLEDGE.md section 17) ----------
+  # Its own job beside the HUD upload: a seeding failure turns the deploy red without holding the HUD back.
+  knowledge:
+    needs: apply
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.VAIC_DEPLOY_ROLE_ARN || vars.AIC_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: seed the department knowledge bases (docs/KNOWLEDGE.md section 17)
+        env:
+          FN: ${{ needs.apply.outputs.knowledge_function }}
+        run: |
+          fn="${FN:-vaic-prod-knowledge}"
+          aws lambda invoke --function-name "$fn" --payload '{"action":"seed_knowledge"}' \
+            --cli-binary-format raw-in-base64-out --cli-read-timeout 900 seed.json > invoke.json
+          cat seed.json; echo
+          if jq -e 'has("FunctionError")' invoke.json > /dev/null || ! jq -e '.ok == true' seed.json > /dev/null; then
+            echo "::error::Seeding the knowledge bases failed; the report above says why."
+            exit 1
+          fi
+          # Indexing is asynchronous: wait (up to 20 minutes) until no entry is still processing.
+          for i in $(seq 1 40); do
+            aws lambda invoke --function-name "$fn" --payload '{"action":"seed_status"}' \
+              --cli-binary-format raw-in-base64-out status.json > /dev/null
+            cat status.json; echo
+            if jq -e '.failed > 0' status.json > /dev/null; then
+              echo "::error::Some knowledge entries failed to index; the Knowledge tab shows why."
+              exit 1
+            fi
+            if jq -e '.processing == 0' status.json > /dev/null; then break; fi
+            if [ "$i" = 40 ]; then
+              echo "::error::Knowledge entries were still indexing after 20 minutes."
+              exit 1
+            fi
+            sleep 30
+          done
+          # The retrieval evaluation on the live hybrid index: printed for the owner, never blocking.
+          aws lambda invoke --function-name "$fn" --payload '{"action":"knowledge_eval"}' \
+            --cli-binary-format raw-in-base64-out --cli-read-timeout 900 eval.json > /dev/null \
+            && jq -r '.results[] | "Retrieval hit rate (\(.department), top \(.k)): \(.hits)/\(.total) = \(.hit_rate)"' eval.json \
+            && jq -c '.results[].misses[]' eval.json || echo "retrieval evaluation skipped"

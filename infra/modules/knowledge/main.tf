@@ -497,6 +497,8 @@ resource "aws_iam_role_policy" "fn" {
       # StartIngestionJob; without it Bedrock answered AccessDenied and every item failed (2026-11-09).
       { Sid = "Ingest", Effect = "Allow", Action = ["bedrock:StartIngestionJob", "bedrock:IngestKnowledgeBaseDocuments", "bedrock:GetKnowledgeBaseDocuments", "bedrock:ListKnowledgeBaseDocuments", "bedrock:DeleteKnowledgeBaseDocuments"], Resource = [aws_bedrockagent_knowledge_base.this.arn] },
       { Sid = "Graph", Effect = "Allow", Action = ["neptune-graph:ReadDataViaQuery", "neptune-graph:WriteDataViaQuery", "neptune-graph:DeleteDataViaQuery"], Resource = [aws_neptunegraph_graph.this.arn] },
+      # The retrieval evaluation the deploy runs after seeding (docs/KNOWLEDGE.md section 17): read-only searches.
+      { Sid = "EvaluateRetrieval", Effect = "Allow", Action = ["bedrock:Retrieve"], Resource = [aws_bedrockagent_knowledge_base.this.arn] },
       { Sid = "Events", Effect = "Allow", Action = ["events:PutEvents"], Resource = [var.bus_arn] },
       { Sid = "Ledger", Effect = "Allow", Action = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query"], Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] },
       # EventBridge cannot name an execution, so the `start` action names it after the item (one run per item).

@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from knowledge_support import World, ready_item, world
+from knowledge_support import World, filter_parts, ready_item, world
 from test_knowledge_pipeline import pipeline, step, upload
 from vaic.shared.knowledge.jurisdiction import (
     clean_detected,
@@ -297,8 +297,9 @@ async def test_us_and_sweden_task_retrieves_each_market_separately_and_never_app
     assert "Never carry one market's rules into another market's answer" in out
     # One filtered Retrieve per market.
     filters = [c["filter"] for c in w.kb.calls]
-    assert {"listContains": {"key": "countries", "value": "US"}} in filters[0]["andAll"][1]["orAll"]
-    assert {"listContains": {"key": "countries", "value": "SE"}} in filters[1]["andAll"][1]["orAll"]
+    markets = [next(p for p in filter_parts(f) if "orAll" in p)["orAll"] for f in filters]
+    assert {"listContains": {"key": "countries", "value": "US"}} in markets[0]
+    assert {"listContains": {"key": "countries", "value": "SE"}} in markets[1]
 
 
 async def test_switzerland_gets_neither_gdpr_nor_swedish_law_and_a_named_year_changes_the_status() -> None:

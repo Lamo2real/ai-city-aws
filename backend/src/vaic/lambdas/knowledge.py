@@ -6,6 +6,11 @@ start_transcribe, check_transcribe, transcript_to_text, enrich, ingest, check_in
 mark_unsupported. The S3 ``raw/`` rule calls it with ``{"action": "start", "bucket", "key"}``, which starts the
 run named after the item (EventBridge cannot name a run). Errors propagate by class name so the state machine can retry ``ThrottlingException`` and
 send everything else to ``fail``, which stores plain words and tells the HUD.
+
+The deploy pipeline also calls it after Terraform (§17): ``{"action": "seed_knowledge", "dry_run": false}``
+reconciles the department knowledge seeds and answers the report (``ok`` false fails the deploy), and
+``{"action": "seed_status"}`` answers how many entries are still being indexed, and
+``{"action": "knowledge_eval"}`` runs each department's retrieval evaluation against the live index.
 """
 
 from __future__ import annotations
@@ -17,9 +22,13 @@ from typing import Any
 from vaic.shared.aws import aws_city, require_env
 from vaic.shared.caps import default_settings
 from vaic.shared.clients import client
+from vaic.shared.knowledge.entries import embedding_model, load_seeds
 from vaic.shared.knowledge.fetch import Fetched, fetch_link
 from vaic.shared.knowledge.haiku import KnowledgeModel
 from vaic.shared.knowledge.pipeline import MediaClients, Pipeline
+from vaic.shared.knowledge.projection import EntryProjector
+from vaic.shared.knowledge.registry import EntryRegistry
+from vaic.shared.knowledge.seeder import refresh_status, run_seed
 from vaic.shared.knowledge.wiring import knowledge_from_env
 from vaic.shared.utility import UtilityDeps, bedrock_converse_runner
 
@@ -91,7 +100,29 @@ async def _handle(event: dict[str, Any]) -> dict[str, Any]:
     return await _pipeline.run(event)
 
 
+async def _seed(event: dict[str, Any]) -> dict[str, Any]:
+    k = knowledge_from_env(aws_city().session)
+    if not k or not k.blobs or not k.kb:
+        return {"ok": False, "errors": ["the knowledge base is not configured on this function"]}
+    registry = EntryRegistry(k.store.table)
+    projector = EntryProjector(k.blobs, k.kb, k.store.graph)
+    seeds = load_seeds()
+    if event.get("action") == "seed_status":
+        return {"ok": True, **(await refresh_status(registry, projector, list(seeds.taxonomies)))}
+    if event.get("action") == "knowledge_eval":
+        from vaic.shared.knowledge.evaluation import live_eval
+
+        results = [(await live_eval(k.kb, k.store, d)).as_json() for d in seeds.taxonomies]
+        return {"ok": True, "results": results}
+    report = await run_seed(
+        seeds, registry, projector, embedding_model(), dry_run=bool(event.get("dry_run")), by="deploy"
+    )
+    return report.as_json()
+
+
 def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
+    if event.get("action") in ("seed_knowledge", "seed_status", "knowledge_eval"):
+        return run(_seed(event))
     if event.get("action") == "start":
         global _sfn
         if _sfn is None:

@@ -57,7 +57,8 @@ test("knowledge: laws are grouped by country, year and topic, filterable, and th
   await page.getByRole("option", { name: "2026" }).click();
   await expect(page.locator(".kgroup-title")).toHaveText([/Sweden · 2026 · Tax/]);
   await page.getByRole("button", { name: "Show everything" }).click();
-  await expect(page.locator(".kgroup-title")).toHaveCount(5);
+  // Five place groups, plus "Built in" (the department knowledge bases, docs/KNOWLEDGE.md §17).
+  await expect(page.locator(".kgroup-title")).toHaveCount(6);
   await noSeriousA11y(page, "Knowledge by place");
   await page.screenshot({ path: `${SHOTS}/knowledge-places.png`, fullPage: true });
 

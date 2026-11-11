@@ -26,7 +26,7 @@ def api(w: World | None = None) -> tuple[Any, World]:
 def test_every_knowledge_route_is_in_the_owner_check_list() -> None:
     k = {(m, p.split("?")[0]) for m, p in ROUTES if p.startswith("/knowledge")}
     assert {m for m, _ in k} == {"GET", "POST", "PUT", "DELETE"}
-    assert len(k) == 8
+    assert len(k) == 15
 
 
 async def test_knowledge_routes_answer_503_until_the_knowledge_base_is_deployed() -> None:

@@ -249,6 +249,9 @@ locals {
     "POST /apps/{id}/bridge", "POST /apps/{id}/proposals", "POST /apps/{id}/rollback", "GET /apps/{id}/activity",
     "GET /knowledge", "GET /knowledge/{id}", "POST /knowledge/uploads", "POST /knowledge/uploads/{id}/complete", "POST /knowledge/links",
     "POST /knowledge/text", "PUT /knowledge/{id}", "DELETE /knowledge/{id}",
+    # Department knowledge entries (docs/KNOWLEDGE.md section 17).
+    "GET /knowledge/entries", "POST /knowledge/entries", "GET /knowledge/entries/{entry}", "PUT /knowledge/entries/{entry}",
+    "DELETE /knowledge/entries/{entry}", "POST /knowledge/entries/{entry}/{verb}",
     # Files (docs/FILES.md §7): the owner's storage; uploads and downloads go straight to S3, presigned.
     "GET /files", "GET /files/{id}", "POST /files/uploads", "POST /files/uploads/{id}/complete", "PUT /files/{id}",
     "DELETE /files/{id}", "POST /files/{id}/retry",

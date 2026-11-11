@@ -4,6 +4,10 @@ Hybrid Retrieve with the scope filter → group by item → one openCypher expan
 items → 1-hop related entities → ready items in the allowed scopes). The Retrieve hits and the expansion are
 cached per process (LRU, 256 entries, 60 s); the item records are re-read on every call with one
 BatchGetItem, so a scope change or a delete counts at once. Everything returned is marked as data.
+
+Department knowledge entries (§17) are isolated here, server-side: a caller sees an entry only when the entry's
+department is the caller's own department. The Retrieve filter keeps other departments out of the hits, and the
+re-read record is checked again, so a filter the index cannot apply only shortens an answer, never widens it.
 """
 
 from __future__ import annotations
@@ -13,9 +17,11 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any
 
 from ..log import log
+from .entries import AUDIENCES, all_departments
 from .graph import Expansion
 from .jurisdiction import (
     item_holds_in,
@@ -35,6 +41,98 @@ SNIPPETS_PER_ITEM = 2
 SNIPPET_CHARS = 1500
 CACHE_SIZE = 256
 CACHE_TTL_S = 60.0
+
+
+ENTRY_CHARS = 6000
+"""An entry is returned whole (they are written to stand alone), up to this many characters."""
+MAX_RELATED_ENTRIES = 3
+
+
+@dataclass(frozen=True)
+class Caller:
+    """Who is searching: their department sees its own entries; nobody sees another department's."""
+
+    department: str | None = None
+    """The department key (``marketing``), or None for VAIC, the Orchestrator and the executives."""
+    role: str = ""
+    audience: str = "mine"
+    """``mine`` (a manager gets manager and both entries, a worker worker and both) or ``all``."""
+    domain: str | None = None
+    platforms: tuple[str, ...] = ()
+    entry_type: str | None = None
+    related: bool = True
+
+    def audiences(self) -> tuple[str, ...]:
+        if self.audience == "all" or self.role not in ("manager", "worker"):
+            return AUDIENCES
+        return (self.role, "both")
+
+    def key(self) -> tuple[object, ...]:
+        return (self.department, self.audiences(), self.domain, self.platforms, self.entry_type, self.related)
+
+    def has_entry_filters(self) -> bool:
+        return bool(self.domain or self.platforms or self.entry_type)
+
+
+def caller_filter(caller: Caller | None) -> dict[str, Any] | None:
+    """The Retrieve filter: other departments out; the entry filters the caller asked for."""
+    c = caller or Caller()
+    others = [d for d in all_departments() if d != c.department]
+    parts: list[dict[str, Any]] = []
+    if others:
+        parts.append({"notIn": {"key": "department", "value": others}})
+    hidden = [a for a in AUDIENCES if a not in c.audiences()]
+    if hidden:
+        parts.append({"notIn": {"key": "audience", "value": hidden}})
+    if c.domain:
+        parts.append({"equals": {"key": "domain", "value": c.domain}})
+    if c.entry_type:
+        parts.append({"equals": {"key": "entry_type", "value": c.entry_type}})
+    if c.platforms:
+        ps = [{"listContains": {"key": "platforms", "value": p}} for p in c.platforms]
+        parts.append(ps[0] if len(ps) == 1 else {"orAll": ps})
+    if not parts:
+        return None
+    return parts[0] if len(parts) == 1 else {"andAll": parts}
+
+
+def entry_visible(item: dict[str, Any], caller: Caller | None) -> bool:
+    """The record decides: an item of a department is visible only to that department's agents."""
+    c = caller or Caller()
+    dept = item.get("department")
+    if dept and dept != c.department:
+        return False
+    if not item.get("entry_id"):
+        return not c.has_entry_filters()  # the owner's own items carry no domain, platform or type
+    if item.get("deleted") or item.get("retired") or item.get("audience") not in c.audiences():
+        return False
+    if c.domain and item.get("domain") != c.domain:
+        return False
+    if c.entry_type and item.get("type") != c.entry_type:
+        return False
+    return not c.platforms or bool(set(c.platforms) & set(item.get("platforms") or []))
+
+
+def entry_block(item: dict[str, Any], today: date | None = None) -> str:
+    """A whole entry with what an agent needs to hedge: dates, volatility, confidence and sources."""
+    stale = (
+        item.get("volatility") == "fast-moving"
+        and str(item.get("review_by") or "9999") < (today or date.today()).isoformat()
+    )
+    attrs = "".join(
+        f' {k}="{_attr(item.get(k))}"'
+        for k in ("department", "domain", "type", "as_of", "review_by", "volatility", "confidence", "origin")
+        if item.get(k)
+    )
+    body = str(item.get("content") or "")[:ENTRY_CHARS]
+    sources = "\n".join(f"- {s}" for s in (item.get("sources") or [])[:20])
+    return (
+        f'<knowledge entry="{_attr(item.get("entry_id"))}" title="{_attr(item.get("title"))}"{attrs}'
+        f"{' needs_verification="past review date"' if stale else ''}>"
+        f"\nSummary: {_body(str(item.get('summary') or ''))}\n\n{_body(body)}"
+        + (f"\n\nSources:\n{_body(sources)}" if sources else "")
+        + "\n</knowledge>"
+    )
 
 
 def allowed_scopes(include_on_request: bool) -> list[Scope]:
@@ -118,8 +216,16 @@ class SearchResult:
     def blocks(self) -> list[str]:
         parts: list[str] = []
         for item, snippets in self.items:
+            if item.get("entry_id"):
+                parts.append(entry_block(item))
+                continue
             parts.append(knowledge_block(item, "\n…\n".join(snippets), self.statuses.get(item["id"])))
         for item in self.related_items:
+            if item.get("entry_id"):
+                parts.append(
+                    entry_block({**item, "content": "(related entry, summary only; search for it by title to read it)"})
+                )
+                continue
             parts.append(
                 knowledge_block(item, f"(related, summary) {item.get('summary', '')}", self.statuses.get(item["id"]))
             )
@@ -137,9 +243,15 @@ def brand_filter(brand: str) -> dict[str, Any]:
 
 
 def _usable(
-    item: dict[str, Any] | None, scopes: list[Scope], market: str | None = None, brand: str | None = None
+    item: dict[str, Any] | None,
+    scopes: list[Scope],
+    market: str | None = None,
+    brand: str | None = None,
+    caller: Caller | None = None,
 ) -> bool:
     if item is None or item.get("status") != "ready" or item.get("scope") not in scopes:
+        return False
+    if not entry_visible(item, caller):
         return False
     if brand is not None and item.get("brand") != brand:
         return False
@@ -148,23 +260,36 @@ def _usable(
 
 
 async def _retrieve(
-    kb: KnowledgeBase, query: str, n: int, scopes: list[Scope], market: str | None, brand: str | None = None
+    kb: KnowledgeBase,
+    query: str,
+    n: int,
+    scopes: list[Scope],
+    market: str | None,
+    brand: str | None = None,
+    caller: Caller | None = None,
 ) -> list[Hit]:
     """With a market: Retrieve filtered to it. When the filter finds nothing or Bedrock refuses it (an index
     that can't filter on the attribute yet), a wider unfiltered Retrieve; ``search`` keeps only the items whose
     record holds in the market, so the answer is never mixed, only possibly shorter."""
-    if market is None and brand is None:
+    who = caller_filter(caller)
+    parts = [
+        *([market_filter(market)] if market else []),
+        *([brand_filter(brand)] if brand else []),
+        *([who] if who else []),
+    ]
+    if not parts:
         return await kb.retrieve(query, n, list(scopes))
-    parts = [*([market_filter(market)] if market else []), *([brand_filter(brand)] if brand else [])]
     extra = parts[0] if len(parts) == 1 else {"andAll": parts}
+    refused = False
     try:
         hits = await kb.retrieve(query, n, list(scopes), extra)
     except Exception as e:
         if type(e).__name__ not in ("ValidationException", "ClientError"):
             raise
         log("warn", "knowledge.filter_refused", market=market, brand=brand, error=type(e).__name__)
-        hits = []
-    if hits:
+        # The record check in ``search`` still keeps other departments' entries out of the answer.
+        refused, hits = True, []
+    if hits or not (refused or market or brand):
         return hits
     return await kb.retrieve(query, 30, list(scopes))
 
@@ -177,8 +302,9 @@ async def _fetch(
     scopes: list[Scope],
     market: str | None = None,
     brand: str | None = None,
+    caller: Caller | None = None,
 ) -> _Cached:
-    hits = await _retrieve(kb, query, min(30, max_results * 4), scopes, market, brand)
+    hits = await _retrieve(kb, query, min(30, max_results * 4), scopes, market, brand, caller)
     grouped: dict[str, list[Hit]] = {}
     for h in sorted(hits, key=lambda h: h.score, reverse=True):
         grouped.setdefault(h.item_id, []).append(h)
@@ -196,14 +322,16 @@ async def search(
     cache: SearchCache | None = None,
     market: str | None = None,
     brand: str | None = None,
+    caller: Caller | None = None,
 ) -> SearchResult:
     """``market``: only items that hold there (§15): the market, its parent regions and ``global``.
-    ``brand``: only that brand's items (§16), its site profile and pages."""
+    ``brand``: only that brand's items (§16), its site profile and pages.
+    ``caller``: who asks; department entries (§17) only reach their own department (None sees none)."""
     scopes = allowed_scopes(include_on_request)
-    key = (query.strip(), include_on_request, max_results, market, brand)
+    key = (query.strip(), include_on_request, max_results, market, brand, (caller or Caller()).key())
     cached = cache.get(key) if cache is not None else None
     if cached is None:
-        cached = await _fetch(kb, store, query, max_results, scopes, market, brand)
+        cached = await _fetch(kb, store, query, max_results, scopes, market, brand, caller)
         if cache is not None:
             cache.put(key, cached)
     ex = cached.expansion
@@ -213,7 +341,7 @@ async def search(
     out = SearchResult()
     for item_id, hs in cached.groups:
         item = records.get(item_id)
-        if _usable(item, scopes, market, brand):
+        if _usable(item, scopes, market, brand, caller):
             assert item is not None
             out.items.append((item, [h.text[:SNIPPET_CHARS] for h in hs[:SNIPPETS_PER_ITEM]]))
             if len(out.items) >= max_results:
@@ -221,20 +349,33 @@ async def search(
     hit_ids = {item["id"] for item, _ in out.items}
     for i in candidates:
         item = records.get(i)
-        if i not in hit_ids and _usable(item, scopes, market, brand) and item and item.get("summary"):
+        if i not in hit_ids and _usable(item, scopes, market, brand, caller) and item and item.get("summary"):
             out.related_items.append(item)
             if len(out.related_items) >= MAX_RELATED_ITEMS:
                 break
     if hit_ids:
         for r in ex.rels:
             # A relationship is shown only when the item it came from may be shown now.
-            if not _usable(records.get(r["item"]), scopes, market, brand):
+            if not _usable(records.get(r["item"]), scopes, market, brand, caller):
                 continue
             line = f"related: {_attr(r['from'])} —{_attr(r['rel'])}→ {_attr(r['to'])} (item {_attr(r['item'])})"
             if line not in out.related_lines:
                 out.related_lines.append(line)
             if len(out.related_lines) >= MAX_RELATED_LINES:
                 break
+    c = caller or Caller()
+    entry_hits = [i for i in hit_ids if records.get(i, {}).get("entry_id")]
+    if c.related and c.department and entry_hits:
+        near = await store.graph.entry_neighbours(entry_hits, c.department)
+        extra = await store.get_items([i for i in near if i not in hit_ids][: MAX_RELATED_ENTRIES * 3])
+        added = 0
+        for i in near:
+            item = extra.get(i)
+            if item and i not in hit_ids and _usable(item, scopes, market, brand, caller):
+                out.related_items.append(item)
+                added += 1
+                if added >= MAX_RELATED_ENTRIES:
+                    break
     return out
 
 
@@ -274,10 +415,13 @@ async def search_markets(
     include_on_request: bool = False,
     cache: SearchCache | None = None,
     brand: str | None = None,
+    caller: Caller | None = None,
 ) -> str:
     """One filtered search per market, returned as separate ``<market>`` sections (§15)."""
     results = [
-        await search(kb, store, query, max_results, include_on_request, cache=cache, market=m, brand=brand)
+        await search(
+            kb, store, query, max_results, include_on_request, cache=cache, market=m, brand=brand, caller=caller
+        )
         for m in markets
     ]
     await label_status(store, results, year)

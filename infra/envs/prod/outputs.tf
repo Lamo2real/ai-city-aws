@@ -20,3 +20,4 @@ output "knowledge_state_machine_arn" { value = module.knowledge.state_machine_ar
 
 # The deploy warms VAIC right after apply (deploy.yml), so the first message after a release is fast too.
 output "scheduler_function_name" { value = module.api.function_names["scheduler"] }
+output "knowledge_function_names" { value = module.knowledge.function_names }

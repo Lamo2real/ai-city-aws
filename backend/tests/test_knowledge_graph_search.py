@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from knowledge_support import ready_item, world
+from knowledge_support import filter_parts, ready_item, world
 from vaic.shared.knowledge.extract import parse_extraction
 from vaic.shared.knowledge.graph import (
     Q_DELETE_ITEM,
@@ -182,11 +182,14 @@ async def test_search_filters_by_scope_unless_the_owner_asked_for_on_request_mat
     req = await ready_item(w, "Private", "on_request")
     w.kb.hits = [Hit(rel["id"], "relevant text", 0.9, "relevant"), Hit(req["id"], "private text", 0.95, "on_request")]
     r = await search(w.kb, w.store, "anything")
-    assert w.kb.calls[-1]["filter"] == {"in": {"key": "scope", "value": ["always", "relevant"]}}
+    parts = filter_parts(w.kb.calls[-1]["filter"])
+    assert {"in": {"key": "scope", "value": ["always", "relevant"]}} in parts
+    assert any(p.get("notIn", {}).get("key") == "department" for p in parts)  # department knowledge (§17)
     assert w.kb.calls[-1]["overrideSearchType"] == "HYBRID"
     assert [i["id"] for i, _ in r.items] == [rel["id"]]
     r = await search(w.kb, w.store, "anything", include_on_request=True)
-    assert w.kb.calls[-1]["filter"]["in"]["value"] == ["always", "relevant", "on_request"]
+    scope = next(p for p in filter_parts(w.kb.calls[-1]["filter"]) if "in" in p)
+    assert scope["in"]["value"] == ["always", "relevant", "on_request"]
     assert [i["id"] for i, _ in r.items] == [req["id"], rel["id"]]
 
 

@@ -71,10 +71,11 @@ from vaic.shared.hierarchy.tasks import (
     which_one,
 )
 from vaic.shared.ids import department_key, manager_id
+from vaic.shared.knowledge.entries import canonical_department
 from vaic.shared.knowledge.jurisdiction import UTC_TZ
 from vaic.shared.knowledge.jurisdiction import normalize as normalize_jurisdiction
 from vaic.shared.knowledge.model import SCOPES
-from vaic.shared.knowledge.search import label_status, search, search_markets
+from vaic.shared.knowledge.search import Caller, label_status, search, search_markets
 from vaic.shared.knowledge.service import KnowledgeError
 from vaic.shared.knowledge.site_profile import brand_key
 from vaic.shared.log import log
@@ -1576,7 +1577,7 @@ def _collect_app(home: Path, rel: str) -> list[tuple[str, bytes]]:
 _NOT_SET_UP = "The knowledge base is not set up yet."
 
 
-def _search_tool(d: CityDeps) -> ToolSpec:
+def _search_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
     async def run(a: dict[str, Any]) -> str:
         k = d.knowledge
         if not k or not k.kb:
@@ -1597,9 +1598,21 @@ def _search_tool(d: CityDeps) -> ToolSpec:
         year = int(a.get("year") or datetime.now(UTC_TZ).year)
         query, n, on_request = str(a["query"]), int(a.get("max_results") or 5), bool(a.get("include_on_request"))
         brand = brand_key(str(a["brand"])) if a.get("brand") else None
+        # The department comes from who is calling, never from the arguments (§17).
+        who = Caller(
+            department=canonical_department(c.department) if c.role in ("manager", "worker") else None,
+            role=c.role,
+            audience="all" if a.get("audience") == "all" else "mine",
+            domain=str(a["domain"]) if a.get("domain") else None,
+            platforms=tuple(str(p) for p in a.get("platforms") or []),
+            entry_type=str(a["entry_type"]) if a.get("entry_type") else None,
+            related=a.get("related", True) is not False,
+        )
         if markets:
-            return await search_markets(k.kb, k.store, query, markets, year, n, on_request, cache=k.cache, brand=brand)
-        r = await search(k.kb, k.store, query, n, on_request, cache=k.cache, brand=brand)
+            return await search_markets(
+                k.kb, k.store, query, markets, year, n, on_request, cache=k.cache, brand=brand, caller=who
+            )
+        r = await search(k.kb, k.store, query, n, on_request, cache=k.cache, brand=brand, caller=who)
         await label_status(k.store, [r], year)
         return r.text()
 
@@ -1612,7 +1625,11 @@ def _search_tool(d: CityDeps) -> ToolSpec:
         "section. Pass year only when the task names a period; otherwise the newest rules in force are marked. "
         "Before making anything for a company, project or site (designs, apps, posts, copy), search for its "
         "'brand and site profile' and pass brand (its web domain, e.g. example.com) to keep to that one brand's "
-        "colours, fonts, logo, tone and facts; never mix two brands.",
+        "colours, fonts, logo, tone and facts; never mix two brands. Department managers and workers also get "
+        "their own department's knowledge base (strategies and best practices, each entry with as_of, review_by, "
+        "volatility, confidence and sources); filter it with domain, platforms or entry_type, and set "
+        "audience 'all' to see entries written for the other role. Related entries come along unless related is "
+        "false.",
         _obj(
             {
                 "query": _s(3, 1000),
@@ -1630,8 +1647,31 @@ def _search_tool(d: CityDeps) -> ToolSpec:
                     **_s(3, 253),
                     "description": "One brand's items only: its web domain (example.com) or its link.",
                 },
+                "domain": {
+                    **_s(2, 40),
+                    "description": "Your department's knowledge only, one domain (marketing: strategy, meta-ads, "
+                    "google-ads, seo, geo, measurement, compliance, market-sweden, ...).",
+                },
+                "platforms": {"type": "array", "items": _s(1, 40), "maxItems": 10},
+                "entry_type": {
+                    "type": "string",
+                    "enum": ["principle", "playbook", "checklist", "benchmark", "policy", "glossary"],
+                },
+                "audience": {"type": "string", "enum": ["mine", "all"]},
+                "related": {"type": "boolean"},
             },
-            ("max_results", "include_on_request", "jurisdictions", "year", "brand"),
+            (
+                "max_results",
+                "include_on_request",
+                "jurisdictions",
+                "year",
+                "brand",
+                "domain",
+                "platforms",
+                "entry_type",
+                "audience",
+                "related",
+            ),
         ),
         run,
     )
@@ -1808,7 +1848,7 @@ def tools_for(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
     from .file_tools import file_tools  # late: built on this module's ToolSpec (decision 147)
     from .owner_tools import owner_tools  # late: built on this module's ToolSpec (decision 143)
 
-    return [*own, _search_tool(d), *extra, *file_tools(d, c), *executive_tools(d, c), *owner_tools(d, c)]
+    return [*own, _search_tool(d, c), *extra, *file_tools(d, c), *executive_tools(d, c), *owner_tools(d, c)]
 
 
 # ---------- standing orders (decision 125) ----------

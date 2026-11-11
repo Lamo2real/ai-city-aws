@@ -1,0 +1,51 @@
+# The retrieval evaluation for the marketing knowledge base (docs/KNOWLEDGE.md section 17): realistic questions a
+# marketing agent asks, each with the entries that should appear in the top results. A question counts as a hit
+# when any expected entry is in the top 5. The tests score it offline (keyword-only); the deploy scores it against
+# the real hybrid index and prints the hit rate. Files starting with "_" are never seeded as entries.
+department: marketing
+top_k: 5
+questions:
+  - q: How should I structure a Meta account for a new ecommerce brand?
+    expect: [meta-ads.delivery-and-account-structure, meta-ads.playbooks-ecommerce-local-apps]
+  - q: What do I need in place before launching Performance Max?
+    expect: [google-ads.performance-max-and-feeds, google-ads.conversion-tracking-and-consent]
+  - q: How do we get cited in AI answers like ChatGPT and Perplexity?
+    expect: [geo.levers-and-what-to-avoid, geo.how-engines-pick-sources, geo.cited-sources-and-mentions]
+  - q: How much budget does a Meta ad set need to get out of the learning phase?
+    expect: [meta-ads.learning-phase-and-budgets]
+  - q: Should we split our budget 60/40 between brand building and performance?
+    expect: [strategy.brand-and-activation-split]
+  - q: What makes a good creative brief?
+    expect: [campaign-planning.briefs]
+  - q: What are Gmail's bulk sender requirements for marketing email?
+    expect: [lifecycle.sender-requirements, lifecycle.deliverability-operating-rules]
+  - q: How must an influencer label a paid post in Sweden?
+    expect: [compliance.sweden-ad-disclosure]
+  - q: Which reference price must we show when a Black Week price is reduced?
+    expect: [compliance.sweden-misleading-claims-and-prices]
+  - q: Do we have to label AI-generated images in our ads in the EU?
+    expect: [compliance.ai-act-article-50, agent-guardrails.ai-labelling, meta-ads.ai-info-labels]
+  - q: How can a small account measure incrementality?
+    expect: [measurement.lift-tests-and-mmm-tools, measurement.triangulation]
+  - q: What is a healthy LTV to CAC ratio and CAC payback for B2B SaaS?
+    expect: [measurement.ltv-cac-benchmarks, measurement.unit-economics-formulas]
+  - q: When are LinkedIn ads worth it for B2B lead generation?
+    expect: [linkedin.when-linkedin-fits, linkedin.thought-leader-ads, linkedin.structure-audiences-and-bidding]
+  - q: Which payment and delivery options do Swedish shoppers expect at checkout?
+    expect: [market-sweden.ecommerce-payment-and-delivery]
+  - q: How big should tROAS or target CPA changes be in Google Ads?
+    expect: [google-ads.bidding]
+  - q: Should we turn on AI Max for Search?
+    expect: [google-ads.ai-max-and-ai-overviews]
+  - q: How many creatives should we run on TikTok and how often should we refresh them?
+    expect: [tiktok-ads.creative-and-ai-disclosure, tiktok-ads.smart-plus-and-learning]
+  - q: Which automated email flows should an online store build first?
+    expect: [lifecycle.automated-flows]
+  - q: What approvals should an agent need before it spends money or publishes an ad?
+    expect: [agent-guardrails.guardrail-design, agent-guardrails.ad-platform-mcp-servers]
+  - q: How does a cookie banner have to work for a Swedish website?
+    expect: [compliance.sweden-cookies-and-meta-pixel]
+  - q: What are the Core Web Vitals thresholds for a good page?
+    expect: [seo.technical-and-content-basics]
+  - q: Should we use a seasonality adjustment for a three-day sale?
+    expect: [google-ads.seasonality-and-data-exclusions]

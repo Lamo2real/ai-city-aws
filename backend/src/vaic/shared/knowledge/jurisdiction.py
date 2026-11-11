@@ -306,6 +306,9 @@ def matches_filter(meta: dict[str, Any], f: dict[str, Any]) -> bool:
         return meta.get(f["in"]["key"]) in f["in"]["value"]
     if "equals" in f:
         return bool(meta.get(f["equals"]["key"]) == f["equals"]["value"])
+    if "notIn" in f:  # an attribute the document does not have passes, as in OpenSearch's must_not
+        v = meta.get(f["notIn"]["key"])
+        return v is None or v not in f["notIn"]["value"]
     if "listContains" in f:
         v = meta.get(f["listContains"]["key"])
         return isinstance(v, list) and f["listContains"]["value"] in v

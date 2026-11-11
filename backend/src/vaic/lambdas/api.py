@@ -54,6 +54,10 @@ from vaic.shared.hierarchy.queue import Queue, WorkMessage
 from vaic.shared.hierarchy.tasks import DONE_OR_GONE, cancel_task, job_rows
 from vaic.shared.ids import new_id
 from vaic.shared.knowledge.builtin import ensure_builtin_guide, remove_legacy_copies
+from vaic.shared.knowledge.entries import EntryError
+from vaic.shared.knowledge.entry_service import EntryNotFound, EntryService
+from vaic.shared.knowledge.projection import EntryProjector
+from vaic.shared.knowledge.registry import EntryRegistry
 from vaic.shared.knowledge.service import KnowledgeError, KnowledgeService, NotFound
 from vaic.shared.knowledge.wiring import knowledge_from_env
 from vaic.shared.ledger import Ledger, Record
@@ -186,6 +190,13 @@ ROUTES: list[tuple[str, str]] = [
     ("POST", "/knowledge/text"),
     ("PUT", "/knowledge/k-aaaaaaaaaaaa"),
     ("DELETE", "/knowledge/k-aaaaaaaaaaaa"),
+    ("GET", "/knowledge/entries"),
+    ("POST", "/knowledge/entries"),
+    ("GET", "/knowledge/entries/marketing.seo.local-seo"),
+    ("PUT", "/knowledge/entries/marketing.seo.local-seo"),
+    ("DELETE", "/knowledge/entries/marketing.seo.local-seo"),
+    ("POST", "/knowledge/entries/marketing.seo.local-seo/reset"),
+    ("POST", "/knowledge/entries/marketing.seo.local-seo/reindex"),
     ("GET", "/files"),
     ("GET", "/files/f-aaaaaaaaaaaa"),
     ("POST", "/files/uploads"),
@@ -1132,6 +1143,8 @@ async def _knowledge(event: dict[str, Any], method: str, path: str, d: ApiDeps) 
     def is_(m: str, pattern: str) -> bool:
         return method == m and re.fullmatch(pattern, path) is not None
 
+    if path == "/knowledge/entries" or path.startswith("/knowledge/entries/"):
+        return await _entries(event, method, path, d)
     item_id = path.rsplit("/", maxsplit=1)[-1] if re.fullmatch(rf"/knowledge/{_ITEM}", path) else ""
     try:
         if is_("GET", r"/knowledge"):
@@ -1158,6 +1171,51 @@ async def _knowledge(event: dict[str, Any], method: str, path: str, d: ApiDeps) 
     except NotFound as e:
         return problem(404, str(e))
     except KnowledgeError as e:
+        return problem(400, str(e))
+    return problem(404, "There is nothing here.")
+
+
+_ENTRY = r"[a-z0-9-]+\.[a-z0-9-]+\.[a-z0-9-]+"
+_entry_service: EntryService | None = None
+
+
+def entry_service(d: ApiDeps) -> EntryService:
+    """One per process (it caches the seed files read from the package)."""
+    global _entry_service
+    k = d.knowledge
+    assert k is not None
+    if _entry_service is None or _entry_service.registry.table is not k.store.table:
+        _entry_service = EntryService(EntryRegistry(k.store.table), EntryProjector(k.blobs, k.kb, k.store.graph))
+    return _entry_service
+
+
+async def _entries(event: dict[str, Any], method: str, path: str, d: ApiDeps) -> dict[str, Any]:
+    """Department knowledge entries (``docs/KNOWLEDGE.md`` §17): owner-only like every route."""
+    s = entry_service(d)
+    m = re.fullmatch(rf"/knowledge/entries(?:/({_ENTRY}))?(?:/(reset|reindex))?", path)
+    if not m:
+        return problem(404, "There is nothing here.")
+    eid, verb = m.group(1), m.group(2)
+    try:
+        if method == "GET" and not eid:
+            q = {k: str(v) for k, v in (event.get("queryStringParameters") or {}).items() if v}
+            return reply(200, await s.list(q))
+        if method == "POST" and not eid:
+            return reply(201, {"entry": await s.create(_body(event, 200_000))})
+        if eid and not verb:
+            if method == "GET":
+                return reply(200, await s.get(eid))
+            if method == "PUT":
+                return reply(200, {"entry": await s.update(eid, _body(event, 200_000))})
+            if method == "DELETE":
+                return reply(200, {"entry": await s.delete(eid)})
+        if eid and method == "POST" and verb == "reset":
+            return reply(200, {"entry": await s.reset(eid)})
+        if eid and method == "POST" and verb == "reindex":
+            return reply(200, {"entry": await s.reindex(eid)})
+    except EntryNotFound as e:
+        return problem(404, str(e))
+    except EntryError as e:
         return problem(400, str(e))
     return problem(404, "There is nothing here.")
 

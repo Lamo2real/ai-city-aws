@@ -66,6 +66,9 @@ def main() -> int:
     # Every prompt (small): Lambdas read utility prompts, bundled skills, the Chief of Staff, the executives, the AI City
     # guide and the GPT-Live voice prompt; a subset once left the executives' and the guide's files out.
     shutil.copytree(ROOT / "agents", OUT / "vaic" / "_agents")
+    # The department knowledge seeds (docs/KNOWLEDGE.md section 17): the knowledge Lambda seeds them on every
+    # deploy, and the api reads them for "reset to default". The research sources stay out (they are not read).
+    shutil.copytree(ROOT / "knowledge" / "seed", OUT / "vaic" / "_knowledge" / "seed")
     for junk in OUT.rglob("__pycache__"):
         shutil.rmtree(junk, ignore_errors=True)
     size = sum(p.stat().st_size for p in OUT.rglob("*") if p.is_file())

@@ -1,0 +1,196 @@
+# The marketing department's knowledge taxonomy. The seeder reads it to validate every entry under this folder
+# and to build the graph (Department, Domain, Platform, Objective and Concept vertices). Adding another department
+# means adding knowledge/seed/<department>/_taxonomy.yaml and its entries; no code changes.
+department: marketing
+label: Marketing
+seed_version: 1
+
+domains:
+  - {id: strategy, label: Strategy, description: "Positioning, audience and ICP, growth, brand versus performance, budgeting"}
+  - {id: campaign-planning, label: Campaign planning, description: "Plans, briefs, objectives and KPIs"}
+  - {id: measurement, label: Measurement, description: "Unit economics, attribution, incrementality, MMM, experiments, tracking"}
+  - {id: meta-ads, label: Meta ads, description: "Facebook and Instagram advertising"}
+  - {id: instagram-organic, label: Instagram organic, description: "Organic Instagram"}
+  - {id: facebook-organic, label: Facebook organic, description: "Organic Facebook and Groups"}
+  - {id: google-ads, label: Google Ads, description: "Search, Performance Max, Demand Gen, Shopping, App"}
+  - {id: youtube-ads, label: YouTube ads, description: "YouTube video, Shorts and connected TV advertising"}
+  - {id: seo, label: SEO, description: "Technical, content, local, ecommerce and YouTube search"}
+  - {id: geo, label: GEO, description: "Visibility in AI answer engines"}
+  - {id: tiktok-ads, label: TikTok ads, description: "Paid TikTok"}
+  - {id: tiktok-organic, label: TikTok organic, description: "Organic TikTok"}
+  - {id: linkedin, label: LinkedIn, description: "LinkedIn paid and organic"}
+  - {id: other-platforms, label: Other platforms, description: "Pinterest, Snapchat, Reddit, X and platform choice"}
+  - {id: creative, label: Creative, description: "Creative effectiveness, rules, testing and AI creative"}
+  - {id: conversion, label: Conversion, description: "Landing pages and conversion rate optimisation"}
+  - {id: lifecycle, label: Lifecycle, description: "Email, SMS, messaging, deliverability, flows, loyalty"}
+  - {id: content-marketing, label: Content marketing, description: "Content, events, community and digital PR"}
+  - {id: creator-marketing, label: Creator marketing, description: "Creators, influencers and UGC"}
+  - {id: brand-safety, label: Brand safety, description: "Suitability policy and supply quality"}
+  - {id: compliance, label: Compliance, description: "Consent, privacy, ad law, disclosure and AI labelling (EU, Sweden, UK, US)"}
+  - {id: market-sweden, label: Sweden, description: "Swedish market data, calendar, payment, delivery and copy norms"}
+  - {id: agent-guardrails, label: Agent guardrails, description: "Approval gates and limits for the marketing agents"}
+
+platforms:
+  - {id: meta, label: Meta}
+  - {id: facebook, label: Facebook}
+  - {id: instagram, label: Instagram}
+  - {id: whatsapp, label: WhatsApp}
+  - {id: google-ads, label: Google Ads}
+  - {id: google-search, label: Google Search}
+  - {id: ga4, label: Google Analytics 4}
+  - {id: youtube, label: YouTube}
+  - {id: ctv, label: Connected TV}
+  - {id: tiktok, label: TikTok}
+  - {id: linkedin, label: LinkedIn}
+  - {id: pinterest, label: Pinterest}
+  - {id: snapchat, label: Snapchat}
+  - {id: reddit, label: Reddit}
+  - {id: x, label: X}
+  - {id: email, label: Email}
+  - {id: sms, label: SMS}
+  - {id: ai-answer-engines, label: AI answer engines}
+
+objectives:
+  - {id: awareness, label: Awareness}
+  - {id: consideration, label: Consideration}
+  - {id: leads, label: Leads}
+  - {id: sales, label: Sales}
+  - {id: app-installs, label: App installs}
+  - {id: retention, label: Retention}
+
+# The concept vocabulary: the only concepts the graph knows. An entry MENTIONS a concept when one of its aliases
+# appears in the entry's text (all-capital aliases match case-sensitively, the others ignore case).
+# measured_by: concept MEASURED_BY concept (always a metric).
+concepts:
+  # metrics
+  - {id: roas, label: ROAS, kind: metric, aliases: [ROAS, return on ad spend]}
+  - {id: incremental-roas, label: Incremental ROAS, kind: metric, aliases: [incremental ROAS, iROAS]}
+  - {id: break-even-roas, label: Break-even ROAS, kind: metric, aliases: [break-even ROAS]}
+  - {id: mer, label: MER, kind: metric, aliases: [MER, marketing efficiency ratio, blended ROAS]}
+  - {id: cpa, label: CPA, kind: metric, aliases: [CPA, cost per acquisition, cost per conversion]}
+  - {id: cac, label: CAC, kind: metric, aliases: [CAC, customer acquisition cost]}
+  - {id: ltv, label: LTV, kind: metric, aliases: [LTV, lifetime value]}
+  - {id: ltv-cac-ratio, label: "LTV:CAC", kind: metric, aliases: ["LTV:CAC"]}
+  - {id: cac-payback, label: CAC payback, kind: metric, aliases: [CAC payback, payback period]}
+  - {id: contribution-margin, label: Contribution margin, kind: metric, aliases: [contribution margin]}
+  - {id: marginal-roi, label: Marginal ROI, kind: metric, aliases: [marginal ROI]}
+  - {id: ctr, label: CTR, kind: metric, aliases: [CTR, click-through rate]}
+  - {id: cpc, label: CPC, kind: metric, aliases: [CPC, cost per click]}
+  - {id: cpm, label: CPM, kind: metric, aliases: [CPM]}
+  - {id: conversion-rate, label: Conversion rate, kind: metric, aliases: [conversion rate]}
+  - {id: cost-per-lead, label: Cost per lead, kind: metric, aliases: [cost per lead, CPL]}
+  - {id: quality-score, label: Quality Score, kind: metric, aliases: [Quality Score]}
+  - {id: ad-strength, label: Ad Strength, kind: metric, aliases: [Ad Strength]}
+  - {id: event-match-quality, label: Event Match Quality, kind: metric, aliases: [Event Match Quality, EMQ]}
+  - {id: spam-rate, label: Spam rate, kind: metric, aliases: [spam rate]}
+  - {id: open-rate, label: Open rate, kind: metric, aliases: [open rate]}
+  - {id: click-rate, label: Click rate, kind: metric, aliases: [click rate]}
+  - {id: revenue-per-recipient, label: Revenue per recipient, kind: metric, aliases: [revenue per recipient]}
+  - {id: share-of-voice, label: Share of voice, kind: metric, aliases: [share of voice]}
+  - {id: mental-market-share, label: Mental market share, kind: metric, aliases: [Mental Market Share, mental availability]}
+  - {id: core-web-vitals, label: Core Web Vitals, kind: metric, aliases: [Core Web Vitals, Largest Contentful Paint, Interaction to Next Paint, Cumulative Layout Shift]}
+  - {id: watch-time, label: Watch time, kind: metric, aliases: [watch time, completion rate]}
+  - {id: frequency, label: Frequency, kind: metric, aliases: [target frequency, frequency]}
+  - {id: pipeline, label: Pipeline, kind: metric, aliases: [pipeline]}
+  - {id: north-star-metric, label: North Star metric, kind: metric, aliases: [North Star]}
+  # strategy and planning
+  - {id: positioning, label: Positioning, kind: tactic, aliases: [positioning]}
+  - {id: category-entry-points, label: Category entry points, kind: tactic, aliases: [category entry points, CEP, CEPs], measured_by: [mental-market-share]}
+  - {id: distinctive-brand-assets, label: Distinctive brand assets, kind: tactic, aliases: [distinctive brand assets, distinctive assets]}
+  - {id: ideal-customer-profile, label: Ideal customer profile, kind: tactic, aliases: [ideal customer profile, ICP]}
+  - {id: jobs-to-be-done, label: Jobs to be done, kind: tactic, aliases: [jobs-to-be-done, jobs to be done, four forces]}
+  - {id: buying-group, label: Buying group, kind: tactic, aliases: [buying group, buying committee, buying jobs]}
+  - {id: brand-building, label: Brand building, kind: tactic, aliases: [brand building, brand-building], measured_by: [share-of-voice, mental-market-share]}
+  - {id: activation, label: Activation, kind: tactic, aliases: [activation], measured_by: [roas, cpa]}
+  - {id: penetration, label: Penetration, kind: tactic, aliases: [penetration, Double Jeopardy]}
+  - {id: brief, label: Brief, kind: tactic, aliases: [brief, briefs]}
+  - {id: okrs, label: OKRs, kind: tactic, aliases: [OKR, OKRs, SMART]}
+  # measurement
+  - {id: lift-test, label: Lift test, kind: tactic, aliases: [Conversion Lift, Brand Lift, Search Lift, lift test, lift tests, lift study], measured_by: [incremental-roas]}
+  - {id: geo-experiment, label: Geo experiment, kind: tactic, aliases: [geo test, geo tests, geo experiment, geo holdout, geo holdouts, GeoLift, GeoX], measured_by: [incremental-roas]}
+  - {id: holdout, label: Holdout, kind: tactic, aliases: [holdout, holdouts, holdback]}
+  - {id: media-mix-model, label: Media mix model, kind: tool, aliases: [MMM, media mix model, marketing mix model, Meridian], measured_by: [marginal-roi]}
+  - {id: attribution, label: Attribution, kind: tactic, aliases: [attribution]}
+  - {id: ab-test, label: A/B test, kind: tactic, aliases: [A/B test, A/B tests, split test, split testing], measured_by: [conversion-rate]}
+  - {id: utm-tagging, label: UTM tagging, kind: tactic, aliases: [UTM, utm_source, utm_medium, utm_campaign]}
+  - {id: consent-mode, label: Consent Mode, kind: tool, aliases: [Consent Mode, consent mode]}
+  - {id: conversions-api, label: Conversions API, kind: tool, aliases: [Conversions API, Events API, server-side]}
+  - {id: enhanced-conversions, label: Enhanced conversions, kind: tool, aliases: [enhanced conversions, offline conversion]}
+  - {id: ga4, label: GA4, kind: tool, aliases: [GA4, Google Analytics]}
+  - {id: bigquery, label: BigQuery, kind: tool, aliases: [BigQuery]}
+  - {id: crm, label: CRM, kind: tool, aliases: [CRM]}
+  # paid media mechanics
+  - {id: advantage-plus, label: Advantage+, kind: ad-format, aliases: [Advantage+], measured_by: [roas, cpa]}
+  - {id: learning-phase, label: Learning phase, kind: tactic, aliases: [learning phase, learning limited]}
+  - {id: broad-targeting, label: Broad targeting, kind: tactic, aliases: [broad targeting, broad match]}
+  - {id: smart-bidding, label: Smart Bidding, kind: tactic, aliases: [Smart Bidding, target CPA, target ROAS, tCPA, tROAS, value-based bidding], measured_by: [cpa, roas]}
+  - {id: creative-diversification, label: Creative diversification, kind: tactic, aliases: [creative diversity, diversification, distinct concepts]}
+  - {id: partnership-ads, label: Partnership ads, kind: ad-format, aliases: [partnership ads, partnership ad], measured_by: [incremental-roas]}
+  - {id: spark-ads, label: Spark Ads, kind: ad-format, aliases: [Spark Ads]}
+  - {id: thought-leader-ads, label: Thought Leader Ads, kind: ad-format, aliases: [Thought Leader Ads]}
+  - {id: performance-max, label: Performance Max, kind: ad-format, aliases: [Performance Max, PMax], measured_by: [roas, conversion-rate]}
+  - {id: ai-max, label: AI Max, kind: ad-format, aliases: [AI Max], measured_by: [cpa, roas]}
+  - {id: demand-gen, label: Demand Gen, kind: ad-format, aliases: [Demand Gen]}
+  - {id: responsive-search-ads, label: Responsive search ads, kind: ad-format, aliases: [responsive search ad, responsive search ads, RSA, RSAs], measured_by: [ctr, ad-strength]}
+  - {id: shopping-ads, label: Shopping ads, kind: ad-format, aliases: [Shopping, Merchant Center, product feed, feed]}
+  - {id: dynamic-search-ads, label: Dynamic Search Ads, kind: ad-format, aliases: [Dynamic Search Ads]}
+  - {id: app-campaigns, label: App campaigns, kind: ad-format, aliases: [App campaigns, app campaigns, SKAdNetwork]}
+  - {id: smart-plus, label: Smart+, kind: ad-format, aliases: [Smart+]}
+  - {id: gmv-max, label: GMV Max, kind: ad-format, aliases: [GMV Max, TikTok Shop]}
+  - {id: instant-forms, label: Instant forms, kind: ad-format, aliases: [instant form, instant forms, Instant Forms, Lead Gen Forms]}
+  - {id: click-to-message, label: Click-to-message ads, kind: ad-format, aliases: [click-to-message, click to WhatsApp, click-to-WhatsApp]}
+  - {id: reels, label: Reels, kind: ad-format, aliases: [Reels]}
+  - {id: carousels, label: Carousels, kind: ad-format, aliases: [carousel, carousels]}
+  - {id: shorts, label: Shorts, kind: ad-format, aliases: [Shorts]}
+  - {id: connected-tv, label: Connected TV, kind: ad-format, aliases: [connected TV, CTV]}
+  - {id: video-ad-sequence, label: Video ad sequence, kind: ad-format, aliases: [sequence, sequencing]}
+  - {id: message-ads, label: Message ads, kind: ad-format, aliases: [message ads, Message Ads, Sponsored Messaging, conversation ads]}
+  - {id: document-ads, label: Document ads, kind: ad-format, aliases: [Document ads, document ads]}
+  - {id: retargeting, label: Retargeting, kind: tactic, aliases: [retargeting, remarketing]}
+  - {id: brand-exclusions, label: Brand exclusions, kind: tactic, aliases: [brand exclusions, brand exclusion]}
+  - {id: negative-keywords, label: Negative keywords, kind: tactic, aliases: [negative keywords, negatives]}
+  - {id: seasonality-adjustment, label: Seasonality adjustment, kind: tactic, aliases: [seasonality adjustment, seasonality adjustments, data exclusion, data exclusions]}
+  # search and AI answers
+  - {id: structured-data, label: Structured data, kind: tactic, aliases: [structured data, schema, JSON-LD, Product markup]}
+  - {id: core-update, label: Core update, kind: tactic, aliases: [core update, core updates, spam update]}
+  - {id: ai-overviews, label: AI Overviews, kind: ad-format, aliases: [AI Overviews, AI Overview, AI Mode]}
+  - {id: ai-answer-visibility, label: AI answer visibility, kind: tactic, aliases: [GEO, AI visibility, citations, cited], measured_by: [share-of-voice]}
+  - {id: llms-txt, label: llms.txt, kind: tool, aliases: [llms.txt]}
+  - {id: local-seo, label: Local SEO, kind: tactic, aliases: [Google Business Profile, local pack]}
+  # creative and content
+  - {id: hook, label: Hook, kind: tactic, aliases: [hook, hooks]}
+  - {id: abcd, label: ABCD, kind: tactic, aliases: [ABCD]}
+  - {id: ugc, label: UGC, kind: tactic, aliases: [UGC]}
+  - {id: creator-content, label: Creator content, kind: tactic, aliases: [creator, creators, influencer, influencers], measured_by: [incremental-roas]}
+  - {id: ai-generated-creative, label: AI-generated creative, kind: tactic, aliases: [AI-generated, generative AI, Symphony, Advantage+ creative]}
+  - {id: original-research, label: Original research, kind: tactic, aliases: [original research]}
+  - {id: thought-leadership, label: Thought leadership, kind: tactic, aliases: [thought leadership], measured_by: [pipeline]}
+  - {id: webinars, label: Webinars, kind: tactic, aliases: [webinar, webinars]}
+  - {id: landing-page, label: Landing page, kind: tactic, aliases: [landing page, landing pages, message match], measured_by: [conversion-rate]}
+  - {id: checkout, label: Checkout, kind: tactic, aliases: [checkout, cart abandonment], measured_by: [conversion-rate]}
+  # lifecycle
+  - {id: email-authentication, label: Email authentication, kind: tactic, aliases: [SPF, DKIM, DMARC, BIMI], measured_by: [spam-rate]}
+  - {id: one-click-unsubscribe, label: One-click unsubscribe, kind: tactic, aliases: [one-click unsubscribe, List-Unsubscribe]}
+  - {id: automated-flows, label: Automated flows, kind: tactic, aliases: [flows, abandoned cart, welcome series, win-back, browse abandonment], measured_by: [revenue-per-recipient, click-rate]}
+  - {id: sunsetting, label: Sunsetting, kind: tactic, aliases: [sunset, sunsetting, warm-up, re-engagement]}
+  - {id: loyalty-programme, label: Loyalty programme, kind: tactic, aliases: [loyalty programme, loyalty program, referral]}
+  # compliance and governance
+  - {id: consent, label: Consent, kind: regulation, aliases: [consent, opt-in, soft opt-in]}
+  - {id: gdpr, label: GDPR, kind: regulation, aliases: [GDPR, ePrivacy]}
+  - {id: dma, label: Digital Markets Act, kind: regulation, aliases: [Digital Markets Act, DMA]}
+  - {id: dsa, label: Digital Services Act, kind: regulation, aliases: [Digital Services Act, DSA]}
+  - {id: ai-act, label: AI Act, kind: regulation, aliases: [AI Act, Article 50]}
+  - {id: marketing-act-se, label: Swedish Marketing Act, kind: regulation, aliases: [Marketing Act, Marknadsföringslagen]}
+  - {id: can-spam, label: CAN-SPAM, kind: regulation, aliases: [CAN-SPAM]}
+  - {id: tcpa, label: TCPA, kind: regulation, aliases: [TCPA]}
+  - {id: accessibility-act, label: European Accessibility Act, kind: regulation, aliases: [European Accessibility Act, WCAG]}
+  - {id: ad-disclosure, label: Ad disclosure, kind: regulation, aliases: [disclosure, "#ad", "#samarbete", Reklam från]}
+  - {id: lowest-prior-price, label: Lowest prior price rule, kind: regulation, aliases: [30 days, 30-day]}
+  - {id: green-claims, label: Green claims, kind: regulation, aliases: [environmental claims, green claims, miljövänlig]}
+  - {id: special-ad-categories, label: Special ad categories, kind: regulation, aliases: [special ad category, special ad categories]}
+  - {id: political-ads, label: Political ads, kind: regulation, aliases: [political ads, political advertising, social issue]}
+  - {id: ai-labelling, label: AI labelling, kind: regulation, aliases: [AI label, AI labelling, AI disclosure, C2PA, "AI info"]}
+  - {id: brand-suitability, label: Brand suitability, kind: tactic, aliases: [brand safety, suitability, inclusion lists, exclusion lists, adjacency]}
+  - {id: human-approval, label: Human approval, kind: tactic, aliases: [human approval, approval gate, approval gates, sign-off]}
+  - {id: prompt-injection, label: Prompt injection, kind: tactic, aliases: [prompt injection, Rule of Two]}
+  - {id: mcp-server, label: MCP server, kind: tool, aliases: [MCP server, MCP]}

@@ -154,6 +154,8 @@ export interface Mock {
   apps: Array<Record<string, unknown>>;
   /** The knowledge base: stored items (newest first) and the S3 PUTs the HUD made. */
   knowledge: { items: Array<Record<string, unknown>>; puts: string[] };
+  /** The built-in department knowledge entries (docs/KNOWLEDGE.md §17), by entry id. */
+  entries: Array<Record<string, unknown>>;
   /** Files (docs/FILES.md): stored files (newest first) and the S3 PUTs the HUD made. */
   files: { items: Array<Record<string, unknown>>; puts: string[] };
   /** v3 per-app state, `<app_id>/<key>` → value. */
@@ -329,6 +331,7 @@ export async function mockBackend(
       first_run_done: opts.firstRunDone ?? true,
     },
     knowledge: { items: [], puts: [] },
+    entries: MOCK_ENTRIES.map((e) => ({ ...e })),
     files: { items: [], puts: [] },
   };
   let fn = 0;
@@ -921,6 +924,57 @@ export async function mockBackend(
       pipeline(i);
       return ok({ item: i });
     }
+    // ---------- Department knowledge entries (docs/KNOWLEDGE.md §17) ----------
+    if (path === "/knowledge/entries" && req.method() === "GET")
+      return ok({
+        entries: m.entries.map(({ content: _c, sources: _s, newer_default, ...e }) => ({
+          ...e,
+          has_newer_default: Boolean(newer_default),
+        })),
+        taxonomies: { marketing: MOCK_TAXONOMY },
+        choices: {
+          type: ["principle", "playbook", "checklist", "benchmark", "policy", "glossary"],
+          audience: ["manager", "worker", "both"],
+          confidence: ["established", "vendor", "platform-claim", "contested", "inference"],
+          volatility: ["evergreen", "annual", "fast-moving"],
+        },
+      });
+    if (path === "/knowledge/entries" && req.method() === "POST") {
+      const id = `marketing.${body?.domain}.${String(body?.title).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+      const e = {
+        ...body,
+        id: `kn-${id}`,
+        entry_id: id,
+        department: "marketing",
+        origin: "user",
+        status: "ready",
+        sync: "done",
+        as_of: "2026-11-11",
+        review_by: body?.review_by ?? "2027-11-11",
+        updated_at: at(),
+      };
+      m.entries.push(e);
+      return ok({ entry: e }, 201);
+    }
+    const entry = /^\/knowledge\/entries\/([a-z0-9.-]+)(?:\/(reset|reindex))?$/.exec(path);
+    if (entry) {
+      const e = m.entries.find((x) => x.entry_id === entry[1]);
+      if (!e) return ok({ error: "That knowledge entry does not exist." }, 404);
+      const verb = entry[2];
+      if (req.method() === "GET" && !verb) return ok({ entry: e, history: [] });
+      if (req.method() === "PUT") Object.assign(e, body, { user_modified: e.origin === "system", updated_at: at() });
+      if (req.method() === "DELETE") Object.assign(e, { deleted: true, status: "deleted", updated_at: at() });
+      if (verb === "reset")
+        Object.assign(e, MOCK_ENTRIES.find((x) => x.entry_id === e.entry_id), {
+          user_modified: false,
+          deleted: false,
+          status: "ready",
+          newer_default: null,
+          updated_at: at(),
+        });
+      if (verb === "reindex") Object.assign(e, { sync: "done", status: "ready", error: null, updated_at: at() });
+      return ok({ entry: e });
+    }
     const one = /^\/knowledge\/(k-[\w-]+)$/.exec(path);
     if (one) {
       const i = kItem(one[1]!);
@@ -1307,3 +1361,52 @@ export const hired = (id: string, dept: string, kind: "manager" | "worker" = "wo
     total_cost_usd: 0,
   },
 });
+
+/** A few built-in marketing entries, shaped like the registry records the API returns (docs/KNOWLEDGE.md §17). */
+const MOCK_TAXONOMY = {
+  label: "Marketing",
+  domains: { strategy: "Strategy", "meta-ads": "Meta ads", "google-ads": "Google Ads", compliance: "Compliance" },
+  platforms: { meta: "Meta", "google-ads": "Google Ads", instagram: "Instagram" },
+  objectives: { awareness: "Awareness", sales: "Sales", leads: "Leads" },
+};
+const mockEntry = (domain: string, slug: string, title: string, extra: Record<string, unknown> = {}) => ({
+  id: `kn-marketing.${domain}.${slug}`,
+  entry_id: `marketing.${domain}.${slug}`,
+  department: "marketing",
+  domain,
+  title,
+  summary: `${title}: what to do and why.`,
+  content: `**When to use this:** when planning.\n\n## ${title}\n\n**[DURABLE]** The guidance itself.`,
+  type: "playbook",
+  audience: "both",
+  platforms: [],
+  objectives: ["sales"],
+  confidence: "established",
+  volatility: "evergreen",
+  as_of: "2026-11-11",
+  review_by: "2028-11-11",
+  sources: ["https://example.com/source"],
+  origin: "system",
+  builtin: true,
+  status: "ready",
+  sync: "done",
+  user_modified: false,
+  deleted: false,
+  updated_at: "2026-11-11T10:00:00Z",
+  ...extra,
+});
+const MOCK_ENTRIES: Array<Record<string, unknown>> = [
+  mockEntry("strategy", "positioning", "Build positioning bottom-up, then compress it into one sentence"),
+  mockEntry("meta-ads", "learning-phase-and-budgets", "Size Meta budgets to about 50 results per ad set per week", {
+    type: "playbook",
+    audience: "worker",
+    platforms: ["meta"],
+    volatility: "fast-moving",
+    review_by: "2027-02-11",
+    newer_default: { title: "Size Meta budgets (newer default)", content: "The newer default text." },
+  }),
+  mockEntry("google-ads", "performance-max-and-feeds", "Performance Max: inputs matter more than controls", {
+    platforms: ["google-ads"],
+  }),
+  mockEntry("compliance", "sweden-ad-disclosure", "Sweden: advertising must be recognisable", { type: "policy" }),
+];

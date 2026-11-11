@@ -3237,6 +3237,64 @@ a.pin:hover {
 .kitem-old {
   border-style: dashed;
 }
+/* The built-in department knowledge bases (docs/KNOWLEDGE.md §17) */
+.kdept {
+  margin-top: var(--s2);
+}
+.tag-dept {
+  background: rgba(120, 170, 255, 0.14);
+  border-color: rgba(120, 170, 255, 0.5);
+}
+.kdept-body .list {
+  margin: 0;
+}
+.kentry + .kentry {
+  border-top: 1px solid var(--edge);
+}
+.kentry-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s1) var(--s2);
+  width: 100%;
+  min-height: var(--tap);
+  padding: var(--s1) 0;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.kentry-row:focus-visible {
+  outline: 3px solid var(--gfocus);
+  outline-offset: 2px;
+}
+.kentry-view {
+  padding: var(--s2) 0 var(--s3);
+  overflow-wrap: anywhere;
+}
+.kentry-text {
+  white-space: pre-wrap;
+  font: inherit;
+  max-height: 420px;
+  overflow: auto;
+  margin: var(--s2) 0;
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--edge);
+  border-radius: var(--rg-s);
+  background: var(--glass-deep);
+}
+.kentry-newer {
+  margin-top: var(--s2);
+}
+.kedit .field:has(textarea),
+.kedit .banner {
+  grid-column: 1 / -1;
+}
+.kedit textarea {
+  width: 100%;
+}
 /* A link's brand and site profile (docs/KNOWLEDGE.md §16) */
 .siteprofile {
   margin-top: var(--s2);

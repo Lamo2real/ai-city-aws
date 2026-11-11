@@ -350,3 +350,85 @@ right either way, as for §15); real sites' CSS (only the four sample sites in `
   - Only validated values pass: `#rrggbb` colours, short text with no markup.
   - Brands are read from the knowledge table only on turns that have a creative connector.
 
+
+## 17. Department knowledge bases (2026-11-11, decision 217)
+The owner: every department gets a foundational knowledge base of strategies and best practices its agents draw
+on, segmented by department; marketing first, built so the other eleven are added by adding a folder. Shipped
+with the deploy, then the owner's to edit; a deploy never undoes the owner's edits or deletions.
+
+**Seed files (version control).** `knowledge/seed/<department>/_taxonomy.yaml` (domains, platforms, objectives, the
+concept vocabulary with `measured_by`) and one entry per file at `knowledge/seed/<department>/<domain>/<slug>.md`:
+YAML front matter `id` (`department.domain.slug`, never changes), `department`, `domain`, `platforms`, `title`,
+`summary`, `type` (principle, playbook, checklist, benchmark, policy, glossary), `audience` (manager, worker, both),
+`objectives`, `confidence` (established, vendor, platform-claim, contested, inference), `volatility` (evergreen,
+annual, fast-moving), `as_of`, `review_by`, `sources`, `related`, `requires`, `supersedes` (ids, the department
+may be left out), `seed_version`; then the Markdown body. Files whose name starts with `_` are not entries
+(`_eval.yaml`: the retrieval evaluation). The schema lives in `backend/src/vaic/shared/knowledge/entries.py` and
+validates seed files and the owner's entries alike. Marketing: 131 entries in 23 domains, restructured from
+`knowledge/source/marketing-research.md` (the only source; labels kept inline on every claim); its `[GAP]`
+passages are listed in `knowledge/gaps/marketing.md`, never stored as knowledge.
+
+**Registry (system of record).** The knowledge table, one record per entry: `ITEM#kn-<entry id>` / `META`, gsi1
+`ENTRY#<department>` / entry id (so entries never appear in `GET /knowledge`), with the schema fields, `content`,
+`origin` (`system` | `user`), `builtin`, `seed_hash`, `seed_version`, `content_hash`, `user_modified`, `deleted`
+(tombstone), `retired`, `seed_removed`, `newer_default` (the newer shipped version, when the owner edited or deleted
+one), `embed_model`, `status` (processing, ready, failed, deleted, retired), `sync` (pending, done, failed) and
+`error`, `ingest_uris`, `changed_by`, timestamps; plus audit rows `AUDIT#<time>#<n>` {action, by, at, detail,
+content_hash}. The vector store and the graph are projections, rebuildable from the records.
+
+**Vector store.** The same knowledge base and OpenSearch Serverless index `items` (one shared index; a collection
+per department would cost about $186/month each). Each entry is indexed as parts: `normalized/builtin/<department>/
+<entry id>/<n>.md` (+ `.metadata.json`), `<n>` = 0 for the card (title, department, domain, type, audience, platforms,
+as_of, review_by, volatility, confidence, summary, when to use) and one per heading section, split at sentence ends
+to stay under Bedrock's default 300-token chunk, each starting `<title> › <heading>`. Deterministic URIs, so a
+re-index replaces, and parts an edit no longer has are deleted. Metadata: `item_id`, `scope` (relevant), `kind`,
+`department`, `domain`, `entry_type`, `audience`, `volatility`, `confidence`, `origin`, `part`, `platforms`. The
+embedding model and its 1024 dimensions stay as configured (`embeddings.knowledge`; the index is Terraform's); the
+model id is stored on every record, and a change re-embeds every entry on the next deploy.
+
+**Graph (Neptune, openCypher, parameters only, MERGE everywhere).** `(:Department {id})`, `(:Domain)-[:PART_OF]->`,
+`(:Platform)`, `(:Objective)`, `(:Concept {kind})-[:MEASURED_BY]->(:Concept)` from the taxonomy (ids
+`<department>/<kind>/<id>`); `(:KnowledgeEntry {id: kn-…, entry_id, title, status, audience, type})` with `IN_DOMAIN`,
+`APPLIES_TO`, `SERVES`, `MENTIONS` (only concepts whose aliases appear in the entry), `RELATED_TO`, `REQUIRES`,
+`SUPERSEDES`. `department` on every vertex. Kept apart from the owner items' `Item`/`Entity` graph.
+
+**Seeder** (`seeder.py`; knowledge Lambda `{"action": "seed_knowledge", "dry_run"?}`, `{"action": "seed_status"}`,
+`{"action": "knowledge_eval"}`; locally `backend/scripts/seed_knowledge.py --validate | --dry-run | --status |
+--eval [--live]`). The deploy's `knowledge` job (after apply, beside the HUD upload) seeds, waits up to 20 minutes for
+indexing, fails red on a validation error, a partial write or a failed document, then prints the live retrieval hit
+rate. Rules per seed entry: new → create; untouched system entry → update on a new content hash, re-embed on a new
+model, re-project when `sync` is not done; edited or deleted by the owner → left alone, a changed seed recorded as
+`newer_default`, a deletion never resurrected; the owner's own entry with the same id → untouched (`keep_user`). A
+seed file removed → its entry retired (out of index and graph, record kept) unless the owner edited it
+(`seed_removed`). Any record whose projections are behind is repaired (the seeder is also the outbox). A second run
+plans nothing.
+
+**API** (owner-only like every route): `GET /knowledge/entries` (`department`, `domain`, `platform`, `type`,
+`origin`, `q`) → `{entries (no content), taxonomies, choices}`; `POST /knowledge/entries` (an owner's entry, same
+schema; the id is made from domain and title); `GET /knowledge/entries/<id>` → `{entry, history}`; `PUT` (a system
+entry becomes `user_modified`); `DELETE` (tombstone; out of index and graph; S3 keeps old versions 30 days);
+`POST …/<id>/reset` (back to the shipped default, also for a deleted one, taking a newer default); `POST …/<id>/reindex`
+(repair). Every write goes to the registry first, then the projections; a failure is stored on the record
+(`sync: failed`, `error`) and shown on the card.
+
+**Isolation, enforced in `search.py`.** `search_knowledge` takes the department from the calling agent (managers and
+workers; `department` canonicalised to the config key), never from its arguments. The Retrieve filter excludes
+every other department (`notIn`), and every hit is re-checked against its record, so an index that ignores a filter
+can only shorten an answer. VAIC, the Orchestrator and the executives see no department entries. The audience
+defaults to the caller's role (manager: manager + both; worker: worker + both), widened with `audience: "all"`;
+optional `domain`, `platforms`, `entry_type`; `related` (default on) adds up to 3 `REQUIRES`/`RELATED_TO`
+neighbours of the same department as summaries. Entries come back whole with `as_of`, `review_by`, `volatility`,
+`confidence`, `origin` and sources; a fast-moving entry past `review_by` is marked `needs_verification`.
+
+**HUD.** Knowledge → "Built in": a card per department ("Marketing knowledge · 131 entries", tags Built in and
+Marketing) that opens into the entries by domain with search; each entry shows its text, facts, sources and history,
+with Edit, Delete, Reset to default, View newer default and Re-index; "Add an entry". Hidden while place filters are
+on or grouping is off.
+
+**Retrieval evaluation.** `_eval.yaml`: 22 marketing questions → the entry ids that should be in the top 5. Offline
+(BM25 over the parts, keywords only) in the tests: 22/22. The live hybrid number is printed by every deploy.
+
+**Adding a department.** Create `knowledge/seed/<key>/_taxonomy.yaml` (`department` = the key in
+`config/departments.json`), its entries under `<key>/<domain>/<slug>.md`, optionally `_eval.yaml`; run
+`uv run python backend/scripts/seed_knowledge.py --validate`; add a paragraph to `agents/departments/<key>.md` on
+when to consult it; merge. No code changes.

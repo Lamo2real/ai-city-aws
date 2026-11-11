@@ -24,6 +24,7 @@ import { DOC_TYPES, placeCode, placeName, TOPICS, topicWord } from "../lib/place
 import { Banner, Button, Confirm, Loading, toast, UNDO_MS } from "./ui.tsx";
 import { Select } from "./Select.tsx";
 import { SiteProfileView } from "./SiteProfile.tsx";
+import { DepartmentKnowledge } from "./DepartmentKnowledge.tsx";
 
 export const SCOPES: Array<{ value: Scope; label: string }> = [
   { value: "always", label: "Always include" },
@@ -255,6 +256,12 @@ export function KnowledgeScreen() {
         <p className="empty">Nothing matches what you picked. Choose “Show everything” to see it all.</p>
       ) : null}
 
+      {filtered || !grouped || groups.some((g) => g.key === "builtin") ? null : (
+        <section className="kgroup" aria-label="Built in">
+          <h2 className="kgroup-title">Built in</h2>
+          <DepartmentKnowledge />
+        </section>
+      )}
       {groups.map((g) => (
         <section key={g.key} className="kgroup" aria-label={g.label || "Stored knowledge"}>
           {g.label ? (
@@ -339,6 +346,7 @@ export function KnowledgeScreen() {
               );
             })}
           </ul>
+          {g.key === "builtin" && !filtered ? <DepartmentKnowledge /> : null}
         </section>
       ))}
 

@@ -188,3 +188,10 @@ def png(width: int = 10, height: int = 10, color: tuple[int, int, int] = (200, 3
 
 
 Resolver = Callable[[str, int], list[str]]
+
+
+def filter_parts(f: dict[str, Any]) -> list[dict[str, Any]]:
+    """A Retrieve filter's parts with every ``andAll`` flattened (search adds the department filter, §17)."""
+    if "andAll" in f:
+        return [p for x in f["andAll"] for p in filter_parts(x)]
+    return [f]

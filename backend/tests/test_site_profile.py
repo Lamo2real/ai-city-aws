@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from knowledge_support import World, world
+from knowledge_support import World, filter_parts, world
 from vaic.shared.knowledge.fetch import Fetched, LinkRefused, RawResponse, fetch_link, html_to_text
 from vaic.shared.knowledge.kb import FakeKnowledgeBase, Hit
 from vaic.shared.knowledge.pipeline import Pipeline
@@ -392,7 +392,7 @@ async def test_a_brand_search_keeps_brands_apart() -> None:
     ]
     r = await search(w.kb, w.store, "brand colours", brand="acme.example")
     assert [i["id"] for i, _ in r.items] == [a]
-    assert {"equals": {"key": "brand", "value": "acme.example"}} in w.kb.calls[-1]["filter"]["andAll"]
+    assert {"equals": {"key": "brand", "value": "acme.example"}} in filter_parts(w.kb.calls[-1]["filter"])
     both = await search(w.kb, w.store, "brand colours")
     assert {i["id"] for i, _ in both.items} == {a, b}
 

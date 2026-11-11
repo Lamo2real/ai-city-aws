@@ -6,6 +6,13 @@ templates below and every value travels as a **parameter**: nothing read from an
 
 Model: ``(:Item {id, scope, status})``, ``(:Entity {key, name, type, description})``,
 ``(:Item)-[:MENTIONS]->(:Entity)``, ``(:Entity)-[:REL {relation, item_id}]->(:Entity)``.
+
+Department knowledge entries (§17) live beside them, never mixed: ``(:Department)``, ``(:Domain)-[:PART_OF]->``,
+``(:Platform)``, ``(:Objective)``, ``(:Concept)-[:MEASURED_BY]->(:Concept)`` from the taxonomy, and
+``(:KnowledgeEntry)`` with ``IN_DOMAIN``, ``APPLIES_TO``, ``SERVES``, ``MENTIONS`` (concepts only),
+``RELATED_TO``, ``REQUIRES`` and ``SUPERSEDES``. Every one of these vertices carries ``department``; ids are
+deterministic (``<department>/<kind>/<id>``, entries by their item id), and every write is a MERGE, so the seeder
+can run on every deploy.
 """
 
 from __future__ import annotations
@@ -37,6 +44,47 @@ class Graph(Protocol):
     async def delete_item(self, item_id: str) -> None: ...
     async def entities_of(self, item_id: str) -> list[dict[str, str]]: ...
     async def expand(self, ids: list[str], scopes: list[str]) -> Expansion: ...
+    async def upsert_taxonomy(self, tax: TaxonomyRows) -> None: ...
+    async def upsert_entries(self, rows: list[EntryRow]) -> None:
+        """Entry vertices first, then their outgoing edges are replaced (targets that do not exist are skipped)."""
+        ...
+
+    async def delete_entries(self, ids: list[str]) -> None: ...
+    async def entry_neighbours(self, ids: list[str], department: str) -> list[str]:
+        """Entries of the same department that the given ones REQUIRE or are RELATED_TO, most linked first."""
+        ...
+
+
+@dataclass(frozen=True)
+class TaxonomyRows:
+    department: str
+    name: str
+    domains: list[dict[str, str]]
+    platforms: list[dict[str, str]]
+    objectives: list[dict[str, str]]
+    concepts: list[dict[str, str]]
+    measured_by: list[dict[str, str]]
+    """``{a, b}`` concept ids."""
+
+
+@dataclass(frozen=True)
+class EntryRow:
+    id: str
+    entry_id: str
+    department: str
+    domain: str
+    """The Domain vertex id."""
+    title: str
+    status: str
+    audience: str
+    type: str
+    edges: dict[str, list[str]] = field(default_factory=dict)
+    """Edge type → target vertex ids (``IN_DOMAIN``, ``APPLIES_TO``, ``SERVES``, ``MENTIONS``, ``RELATED_TO``,
+    ``REQUIRES``, ``SUPERSEDES``)."""
+
+
+def taxonomy_vertex_id(department: str, kind: str, ident: str) -> str:
+    return department if kind == "department" else f"{department}/{kind}/{ident}"
 
 
 def graph_rows(ex: Extraction) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
@@ -87,7 +135,55 @@ Q_EXPAND = (
     "WITH rels, j.id AS id, count(j) AS votes "
     "RETURN rels, collect(CASE WHEN id IS NULL THEN null ELSE {id: id, votes: votes} END) AS items"
 )
+# Department knowledge (§17). Labels cannot be parameters, so each vertex and edge kind has its own template.
+Q_TAX_DEPARTMENT = "MERGE (d:Department {id: $dept}) SET d.name = $name, d.department = $dept"
+Q_TAX_DOMAINS = (
+    "MATCH (d:Department {id: $dept}) UNWIND $rows AS r MERGE (n:Domain {id: r.id}) "
+    "SET n.name = r.name, n.department = $dept MERGE (n)-[:PART_OF]->(d)"
+)
+Q_TAX_PLATFORMS = "UNWIND $rows AS r MERGE (n:Platform {id: r.id}) SET n.name = r.name, n.department = $dept"
+Q_TAX_OBJECTIVES = "UNWIND $rows AS r MERGE (n:Objective {id: r.id}) SET n.name = r.name, n.department = $dept"
+Q_TAX_CONCEPTS = (
+    "UNWIND $rows AS r MERGE (n:Concept {id: r.id}) SET n.name = r.name, n.kind = r.kind, n.department = $dept"
+)
+Q_TAX_MEASURED_BY = "UNWIND $rows AS r MATCH (a:Concept {id: r.a}), (b:Concept {id: r.b}) MERGE (a)-[:MEASURED_BY]->(b)"
+Q_ENTRIES_UPSERT = (
+    "UNWIND $rows AS r MERGE (e:KnowledgeEntry {id: r.id}) SET e.entry_id = r.entry_id, "
+    "e.department = r.department, e.domain = r.domain, e.title = r.title, e.status = r.status, "
+    "e.audience = r.audience, e.type = r.type"
+)
+Q_ENTRIES_CLEAR = "UNWIND $ids AS x MATCH (e:KnowledgeEntry {id: x})-[r]->() DELETE r"
+Q_ENTRIES_DELETE = "UNWIND $ids AS x MATCH (e:KnowledgeEntry {id: x}) DETACH DELETE e"
+_EDGE_TARGET = {
+    "IN_DOMAIN": "Domain",
+    "APPLIES_TO": "Platform",
+    "SERVES": "Objective",
+    "MENTIONS": "Concept",
+    "RELATED_TO": "KnowledgeEntry",
+    "REQUIRES": "KnowledgeEntry",
+    "SUPERSEDES": "KnowledgeEntry",
+}
+Q_ENTRY_EDGES = {
+    rel: f"UNWIND $rows AS r MATCH (e:KnowledgeEntry {{id: r.id}}), (t:{label} {{id: r.to}}) MERGE (e)-[:{rel}]->(t)"
+    for rel, label in _EDGE_TARGET.items()
+}
+Q_ENTRY_NEIGHBOURS = (
+    "MATCH (e:KnowledgeEntry)-[:REQUIRES|RELATED_TO]->(o:KnowledgeEntry) "
+    "WHERE e.id IN $ids AND NOT o.id IN $ids AND o.department = $dept "
+    "RETURN o.id AS id, count(*) AS votes ORDER BY votes DESC"
+)
 QUERIES = (
+    Q_TAX_DEPARTMENT,
+    Q_TAX_DOMAINS,
+    Q_TAX_PLATFORMS,
+    Q_TAX_OBJECTIVES,
+    Q_TAX_CONCEPTS,
+    Q_TAX_MEASURED_BY,
+    Q_ENTRIES_UPSERT,
+    Q_ENTRIES_CLEAR,
+    Q_ENTRIES_DELETE,
+    *Q_ENTRY_EDGES.values(),
+    Q_ENTRY_NEIGHBOURS,
     Q_UPSERT_ITEM,
     Q_ENSURE_ITEM,
     Q_DELETE_RELS,
@@ -170,6 +266,52 @@ class NeptuneGraph:
                     votes[str(it["id"])] += int(it.get("votes") or 1)
         return Expansion(rels=rels, items=votes.most_common())
 
+    async def upsert_taxonomy(self, tax: TaxonomyRows) -> None:
+        d = {"dept": tax.department}
+        await self._q(Q_TAX_DEPARTMENT, {**d, "name": tax.name})
+        for q, rows in (
+            (Q_TAX_DOMAINS, tax.domains),
+            (Q_TAX_PLATFORMS, tax.platforms),
+            (Q_TAX_OBJECTIVES, tax.objectives),
+            (Q_TAX_CONCEPTS, tax.concepts),
+        ):
+            if rows:
+                await self._q(q, {**d, "rows": rows})
+        if tax.measured_by:
+            await self._q(Q_TAX_MEASURED_BY, {"rows": tax.measured_by})
+
+    async def upsert_entries(self, rows: list[EntryRow]) -> None:
+        for batch in _batches(rows, GRAPH_BATCH):
+            nodes = [
+                {
+                    k: getattr(r, k)
+                    for k in ("id", "entry_id", "department", "domain", "title", "status", "audience", "type")
+                }
+                for r in batch
+            ]
+            await self._q(Q_ENTRIES_UPSERT, {"rows": nodes})
+            await self._q(Q_ENTRIES_CLEAR, {"ids": [r.id for r in batch]})
+        for rel, q in Q_ENTRY_EDGES.items():
+            pairs = [{"id": r.id, "to": t} for r in rows for t in r.edges.get(rel, [])]
+            for batch in _batches(pairs, GRAPH_BATCH * 4):
+                await self._q(q, {"rows": batch})
+
+    async def delete_entries(self, ids: list[str]) -> None:
+        for batch in _batches(ids, GRAPH_BATCH):
+            await self._q(Q_ENTRIES_DELETE, {"ids": batch})
+
+    async def entry_neighbours(self, ids: list[str], department: str) -> list[str]:
+        if not ids:
+            return []
+        return [str(r["id"]) for r in await self._q(Q_ENTRY_NEIGHBOURS, {"ids": ids, "dept": department})]
+
+
+GRAPH_BATCH = 50
+
+
+def _batches(xs: list[Any], n: int) -> list[list[Any]]:
+    return [xs[i : i + n] for i in range(0, len(xs), n)]
+
 
 class MemoryGraph:
     """The same graph in memory, for tests and local runs."""
@@ -181,6 +323,10 @@ class MemoryGraph:
         """(item id, entity key)"""
         self.rels: list[dict[str, str]] = []
         """{a, b, relation, item_id}"""
+        self.vertices: dict[tuple[str, str], dict[str, Any]] = {}
+        """(label, id) → properties: the department knowledge vertices (§17)."""
+        self.edges: set[tuple[str, str, str]] = set()
+        """(type, from id, to id)"""
 
     async def upsert_item(self, item_id: str, scope: str, status: str) -> None:
         self.items[item_id] = {"id": item_id, "scope": scope, "status": status}
@@ -238,6 +384,57 @@ class MemoryGraph:
                 votes[i] += 1
         return Expansion(rels=rels, items=votes.most_common())
 
+    async def upsert_taxonomy(self, tax: TaxonomyRows) -> None:
+        dept = tax.department
+        self.vertices[("Department", dept)] = {"id": dept, "name": tax.name, "department": dept}
+        for label, rows in (
+            ("Domain", tax.domains),
+            ("Platform", tax.platforms),
+            ("Objective", tax.objectives),
+            ("Concept", tax.concepts),
+        ):
+            for r in rows:
+                self.vertices[(label, r["id"])] = {**r, "department": dept}
+                if label == "Domain":
+                    self.edges.add(("PART_OF", r["id"], dept))
+        for m in tax.measured_by:
+            if ("Concept", m["a"]) in self.vertices and ("Concept", m["b"]) in self.vertices:
+                self.edges.add(("MEASURED_BY", m["a"], m["b"]))
+
+    async def upsert_entries(self, rows: list[EntryRow]) -> None:
+        for r in rows:
+            props = {
+                k: getattr(r, k)
+                for k in ("id", "entry_id", "department", "domain", "title", "status", "audience", "type")
+            }
+            self.vertices[("KnowledgeEntry", r.id)] = props
+            self.edges = {e for e in self.edges if not (e[1] == r.id and e[0] in _EDGE_TARGET)}
+        for r in rows:
+            for rel, targets in r.edges.items():
+                for t in targets:
+                    if (_EDGE_TARGET[rel], t) in self.vertices:
+                        self.edges.add((rel, r.id, t))
+
+    async def delete_entries(self, ids: list[str]) -> None:
+        gone = set(ids)
+        for i in gone:
+            self.vertices.pop(("KnowledgeEntry", i), None)
+        self.edges = {e for e in self.edges if e[1] not in gone and e[2] not in gone}
+
+    async def entry_neighbours(self, ids: list[str], department: str) -> list[str]:
+        votes: Counter[str] = Counter()
+        for rel, a, b in self.edges:
+            node = self.vertices.get(("KnowledgeEntry", b))
+            if (
+                rel in ("REQUIRES", "RELATED_TO")
+                and a in ids
+                and b not in ids
+                and node
+                and node["department"] == department
+            ):
+                votes[b] += 1
+        return [i for i, _ in votes.most_common()]
+
 
 class NoGraph:
     """When no graph is configured: writes do nothing, reads find nothing."""
@@ -256,3 +453,15 @@ class NoGraph:
 
     async def expand(self, ids: list[str], scopes: list[str]) -> Expansion:
         return Expansion()
+
+    async def upsert_taxonomy(self, tax: TaxonomyRows) -> None:
+        return None
+
+    async def upsert_entries(self, rows: list[EntryRow]) -> None:
+        return None
+
+    async def delete_entries(self, ids: list[str]) -> None:
+        return None
+
+    async def entry_neighbours(self, ids: list[str], department: str) -> list[str]:
+        return []
