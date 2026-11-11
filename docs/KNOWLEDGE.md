@@ -629,9 +629,10 @@ domain `guardrails`, type `checklist`, the only one. "sections 13 to 23" is read
 "section 2" points to both house-style parts. `_eval.yaml`: 17 questions, offline 17/17 in the top 5. The precedence
 collision table is 926 words, kept whole (Bedrock splits it). Managers (`agents/departments/operations.md`) and workers
 (`operations.workers.md`) apply section 3 (law first, evidence second, house style third), the house style by default
-in the brand's own voice (never Alex or Leila Hormozi's name, likeness, catchphrases or figures), section 24's three
-lists with `ask_owner` before every approval item, `needs_verification` and `[GAP]` handling, legal content as
-orientation, and section 25's handoffs. Approval gates stay prompt rules (the policy gate has no department scope).
+in the brand's own voice (never Alex or Leila Hormozi's name, likeness, catchphrases or figures),
+`needs_verification` and `[GAP]` handling, legal content as orientation, and section 25's handoffs. Since decision 243 the Operations prompts carry no approval list, limit or
+"ask the owner" step: agents have full access and act without asking unless the owner tells them to hold back in VAIC,
+and the section 24 guardrails document is reference material only.
 
 **Adding the next department.** Put the source unchanged under `knowledge/source/`, write
 `knowledge/seed/<department key>/` (the key in `config/departments.json`, not its display name) with `_taxonomy.yaml`,

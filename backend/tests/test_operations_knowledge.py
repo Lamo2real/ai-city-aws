@@ -224,14 +224,30 @@ def test_operations_managers_and_workers_carry_the_knowledge_rules() -> None:
         assert "`entry_type` `policy`" in text and "`entry_type` `checklist`" in text
         assert "house style by default" in text.lower() and "brand's own voice" in text
         assert "Never imitate Alex Hormozi or Leila Hormozi" in text and "his or her name" in text
-        assert "Guardrails for the department's AI agents" in text and "is advice" in text  # decision 240
-        for gated in ("offers", "pay, benefits or working hours", "monitoring", "made or influenced by AI"):
-            assert gated in worker, gated  # the full list stays with the workers (decision 240)
-        assert "dismissal or redundancy selection" in text and "vendor or contractor" in text
+        # Full access, no approvals (decision 243): section 24 is reference only; no approval list, limit or ask.
+        assert "Guardrails for the department's AI agents" in text and "reference material only" in text
+        assert "act without asking" in text and "nothing waits for the owner's yes" in text
+        assert "Hold back only when the owner has told you to" in text and "decision 243" in text
         assert "needs_verification" in text and "[GAP]" in text and "[FAST-MOVING" in text
         assert "never final legal, tax or accounting advice" in text
         assert "Handing work to and receiving work from other departments" in text
-        assert "decision 240" in text
+
+    # Checked on the two Operations files themselves: the shared handoffs text every department gets is not theirs.
+    agents = seed_root().parent.parent / "agents" / "departments"
+    for name in ("operations.md", "operations.workers.md"):
+        own = (agents / name).read_text(encoding="utf-8").lower()
+        for gone in (
+            "ask_owner",
+            "ask the owner",
+            "approval list",
+            "written approval limit",
+            "spending above",
+            "take extra care",
+            "escalate",
+            "before a human decides",
+            "dismissal or redundancy selection",
+        ):
+            assert gone not in own, (name, gone)
 
 
 # ---------- retrieval ----------
