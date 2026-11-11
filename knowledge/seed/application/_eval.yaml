@@ -1,0 +1,49 @@
+# The retrieval evaluation for the application knowledge base (docs/KNOWLEDGE.md section 17): realistic questions an
+# Application agent asks, each with the documents that should appear in the top results. A question counts as a hit
+# when any expected document is in the top 5. The tests score it offline (keyword-only); the deploy scores it against
+# the real hybrid index and prints the hit rate. Files starting with "_" are never seeded as entries.
+department: application
+top_k: 5
+questions:
+  # security: OWASP, authentication, supply chain
+  - q: Which OWASP Top 10 2025 categories should our web app's security review cover?
+    expect: [application.security.application-security]
+  - q: What password and session lifetime rules does NIST SP 800-63B-4 set for authentication?
+    expect: [application.security.application-security]
+  - q: What minimum supply-chain controls should we have after the Shai-Hulud npm worm?
+    expect: [application.supply-chain.software-supply-chain]
+  # CI/CD and release
+  - q: How should a pipeline roll out a release with one-box, waves and bake times, and when do we roll back automatically?
+    expect: [application.ci-cd.ci-cd-and-release]
+  - q: How do we release an iOS build with phased release and an Android build with a staged rollout?
+    expect: [application.frontend-mobile.web-front-end-and-mobile-release]
+  # EU regulation dates (the answer must carry the date label)
+  - q: When does Cyber Resilience Act vulnerability reporting apply and how fast must we report?
+    expect: [application.compliance.eu-regulation]
+  - q: When do Data Act switching charges have to end for our SaaS customers?
+    expect: [application.compliance.eu-regulation]
+  - q: Is our SaaS covered by the Swedish NIS2 law Cybersäkerhetslag and who supervises it?
+    expect: [application.compliance.sweden]
+  # AI coding agent controls
+  - q: What sandbox, permission and MCP controls should our AI coding agents run under?
+    expect: [application.ai-agents.ai-coding-agent-controls, application.guardrails.agent-guardrails]
+  - q: Can an AI agent merge its own pull request to main or deploy to production without human approval?
+    expect: [application.guardrails.agent-guardrails]
+  - q: How do coding agents fail with hallucinated packages and slopsquatting?
+    expect: [application.ai-agents.ai-coding-agents-evidence-and-failure-modes, application.supply-chain.software-supply-chain]
+  # delivery, architecture, quality, metrics
+  - q: How big should a pull request be and how fast should code review answer?
+    expect: [application.delivery.delivery-lifecycle]
+  - q: How do we isolate tenants in a pooled PostgreSQL database with row-level security?
+    expect: [application.architecture.architecture]
+  - q: Which DORA metrics should we track for delivery performance?
+    expect: [application.metrics.engineering-metrics-and-ai-evidence]
+  - q: How should we use mutation testing now that agents write tests?
+    expect: [application.quality.quality-and-testing]
+  - q: What evidence pack should we hand customers who send a security questionnaire, and do we need SOC 2?
+    expect: [application.compliance.customer-trust]
+  - q: How do we hand a scope decision on the Cyber Resilience Act to Legal?
+    expect: [application.handoffs.handoffs-to-other-departments, application.guardrails.agent-guardrails]
+  # a question the document marks as a gap: the agent must say it does not know
+  - q: How often must we run a penetration test to satisfy auditors?
+    expect: [application.gaps.consolidated-gaps]

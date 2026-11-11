@@ -458,3 +458,25 @@ characters (sections 11, 15 and 24 are longer than the old 20,000). Sales manage
 workers (`sales.workers.md`) apply compliance first, evidence second (larger multi-stakeholder deals, hesitant
 buyers), house style third and by default, in the brand's own voice, never Hormozi's name, likeness, catchphrases or
 figures; `needs_verification` facts are verified, `[GAP]` points are said to be unknown.
+
+**Application (decision 225).** `knowledge/seed/application/`: 19 documents, one per numbered section of
+`knowledge/source/application-research.md` (verbatim, 27,172 words, SHA-256 pinned) plus "Application: About this
+knowledge base" (the opening summary and the reading guide with the labels and caveats); the closing conclusion stays
+with section 18, "Application: Consolidated gaps", its own document. 16 domains. Legal and compliance (sections 11 EU
+regulation, 12 Sweden, 13 customer trust): domain `compliance`, type `policy` (the only application documents of that
+type). Guardrails (section 16): domain `guardrails`, type `checklist` (the only one). The source has no `[HOUSE STYLE]`
+material, so no document is `house-style`. `_eval.yaml`: 18 questions, offline 17/18 in the top 5. The guardrails' two
+tables are 553 and 527 words, kept whole (Bedrock splits them). Managers (`agents/departments/application.md`) and
+workers (`application.workers.md`) consult the knowledge base before planning, advising or acting; apply law and
+compliance first, independent evidence second, the rest after (the source states no precedence; this is the owner's
+order); follow section 16's three lists and section 17's handoffs; verify `needs_verification` and stale
+`[FAST-MOVING]` facts; say `[GAP]` points are unknown; and give legal content as orientation for a human to confirm.
+Not built (shared code, every department): Download of a document's original, and a versioned Replace that keeps the
+last ready version searchable while a new one indexes and after a failed index (today an edit, reset or re-index hides
+the entry until it is indexed again; its test is an expected failure). The section 16 approval gates stay prompt rules:
+the policy gate's rules have no department scope.
+
+**A "shared" scope (planned, not built).** A cross-department document would live in `knowledge/seed/shared/` with its
+own `_taxonomy.yaml` (`department: shared`); `entry_visible` and `caller_filter` in `search.py` would let every
+department caller (never VAIC) see `department == "shared"` records beside its own; the HUD shows it as its own card;
+a test checks every department sees it and none sees another department's.

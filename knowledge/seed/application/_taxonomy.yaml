@@ -1,0 +1,79 @@
+# The application department's knowledge taxonomy (docs/KNOWLEDGE.md section 17). Content: one document per numbered
+# section of knowledge/source/application-research.md (the only source), plus "About this knowledge base" (the
+# opening summary and reading guide); the closing conclusion stays with section 18. Seeded and scoped exactly like
+# marketing and sales (decision 225).
+department: application
+label: Application
+seed_version: 1
+
+domains:
+  - {id: overview, label: Overview, description: "The opening summary, what each claim label means, and the caveats"}
+  - {id: delivery, label: Delivery, description: "ADRs, trunk-based development, pull requests, code review and the definition of done"}
+  - {id: architecture, label: Architecture, description: "Monolith first, APIs, events, schema change, multi-tenancy, hosting"}
+  - {id: frontend-mobile, label: Front end and mobile, description: "Core Web Vitals, iOS and Google Play release"}
+  - {id: quality, label: Quality and testing, description: "Tests, mutation testing, static analysis, feature flags, observability"}
+  - {id: ci-cd, label: CI/CD, description: "Pipelines, progressive delivery, rollback, delivery benchmarks"}
+  - {id: metrics, label: Metrics, description: "DORA, SPACE, DevEx and the evidence on AI in engineering"}
+  - {id: maintenance, label: Maintenance, description: "Debt, dependencies, documentation, on-call, postmortems, planning"}
+  - {id: team-practices, label: Team practices, description: "Internal platforms, golden paths, standards, onboarding"}
+  - {id: security, label: Security, description: "OWASP, authentication and sessions, threat modelling, SSDF, vulnerabilities, secrets"}
+  - {id: supply-chain, label: Supply chain, description: "Registry and pipeline attacks, SLSA, SBOMs, licences"}
+  - {id: compliance, label: Compliance, description: "EU regulation, Sweden and customer-trust evidence (orientation, not legal advice)"}
+  - {id: ai-agents, label: AI coding agents, description: "What is measured, how agents fail, and the controls guidance agrees on"}
+  - {id: guardrails, label: Guardrails, description: "What the department's agents may do alone, what needs human approval, what they must never do"}
+  - {id: handoffs, label: Handoffs, description: "Work to and from the other departments"}
+  - {id: gaps, label: Gaps, description: "What the knowledge base does not know"}
+
+platforms:
+  - {id: web, label: Web}
+  - {id: ios, label: iOS}
+  - {id: android, label: Android}
+  - {id: github, label: GitHub}
+  - {id: aws, label: AWS}
+
+objectives:
+  - {id: ship, label: Ship}
+  - {id: quality, label: Quality}
+  - {id: reliability, label: Reliability}
+  - {id: security, label: Security}
+  - {id: compliance, label: Compliance}
+  - {id: measurement, label: Measurement}
+
+# The concept vocabulary (an entry MENTIONS a concept when one of its aliases appears in its text; all-capital
+# aliases match case-sensitively).
+concepts:
+  - {id: deployment-frequency, label: Deployment frequency, kind: metric, aliases: [deployment frequency]}
+  - {id: lead-time, label: Lead time for changes, kind: metric, aliases: [lead time for changes, change lead time]}
+  - {id: change-fail-rate, label: Change fail rate, kind: metric, aliases: [change fail rate, change failure rate]}
+  - {id: recovery-time, label: Failed deployment recovery time, kind: metric, aliases: [failed deployment recovery time, time to restore]}
+  - {id: rework-rate, label: Rework rate, kind: metric, aliases: [rework rate]}
+  - {id: main-branch-success, label: Main-branch success rate, kind: metric, aliases: [main-branch success, success rate on the main branch]}
+  - {id: core-web-vitals, label: Core Web Vitals, kind: metric, aliases: [Core Web Vitals, LCP, INP, CLS]}
+  - {id: error-budget, label: Error budget, kind: metric, aliases: [error budget, error budgets]}
+  - {id: dora, label: DORA, kind: framework, aliases: [DORA], measured_by: [deployment-frequency, lead-time, change-fail-rate, recovery-time, rework-rate]}
+  - {id: space, label: SPACE, kind: framework, aliases: [SPACE]}
+  - {id: trunk-based, label: Trunk-based development, kind: practice, aliases: [trunk-based development, trunk]}
+  - {id: code-review, label: Code review, kind: practice, aliases: [code review, pull request, pull requests]}
+  - {id: feature-flags, label: Feature flags, kind: practice, aliases: [feature flag, feature flags, toggle]}
+  - {id: progressive-delivery, label: Progressive delivery, kind: practice, aliases: [progressive delivery, canary, one-box, bake time], measured_by: [change-fail-rate]}
+  - {id: expand-contract, label: Expand, migrate, contract, kind: practice, aliases: [expand, migrate and contract, expand and contract, parallel change]}
+  - {id: mutation-testing, label: Mutation testing, kind: practice, aliases: [mutation testing]}
+  - {id: threat-modelling, label: Threat modelling, kind: practice, aliases: [threat modelling, STRIDE]}
+  - {id: multi-tenancy, label: Multi-tenancy, kind: practice, aliases: [multi-tenancy, tenant isolation, row-level security]}
+  - {id: owasp, label: OWASP, kind: standard, aliases: [OWASP, ASVS]}
+  - {id: ssdf, label: NIST SSDF, kind: standard, aliases: [SSDF]}
+  - {id: slsa, label: SLSA, kind: standard, aliases: [SLSA]}
+  - {id: sbom, label: SBOM, kind: artefact, aliases: [SBOM, SBOMs]}
+  - {id: soc2, label: SOC 2, kind: standard, aliases: [SOC 2]}
+  - {id: wcag, label: WCAG, kind: standard, aliases: [WCAG, EN 301 549]}
+  - {id: cra, label: Cyber Resilience Act, kind: law, aliases: [Cyber Resilience Act]}
+  - {id: pld, label: Product Liability Directive, kind: law, aliases: [Product Liability Directive]}
+  - {id: data-act, label: Data Act, kind: law, aliases: [Data Act]}
+  - {id: gdpr, label: GDPR, kind: law, aliases: [GDPR]}
+  - {id: nis2, label: NIS2, kind: law, aliases: [NIS2, Cybersäkerhetslag]}
+  - {id: supply-chain-attack, label: Supply-chain attack, kind: risk, aliases: [Shai-Hulud, slopsquatting, GlassWorm, s1ngularity]}
+  - {id: prompt-injection, label: Prompt injection, kind: risk, aliases: [prompt injection]}
+  - {id: sandbox, label: Agent sandbox, kind: control, aliases: [sandbox, sandboxing]}
+  - {id: branch-protection, label: Branch protection, kind: control, aliases: [branch protection, rulesets, CODEOWNERS]}
+  - {id: secrets, label: Secrets management, kind: control, aliases: [secrets, secret scanning]}
+  - {id: mcp, label: MCP, kind: protocol, aliases: [MCP]}
