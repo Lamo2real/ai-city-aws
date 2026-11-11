@@ -1,0 +1,45 @@
+# The retrieval evaluation for the IT infrastructure knowledge base (docs/KNOWLEDGE.md section 17, decision 226):
+# realistic questions an IT infrastructure agent asks, each with the documents that should appear in the top results.
+# A hit is any expected document in the top 5. The tests score it offline (keyword-only); the deploy scores it on the
+# live index.
+department: infrastructure
+top_k: 5
+questions:
+  - q: How should we structure our AWS accounts and organisational units, and how do we roll out service control policies?
+    expect: [aws.cloud-architecture]
+  - q: Which Region should be primary and how do we keep us-east-1 off our recovery path?
+    expect: [aws.cloud-architecture, reliability.backup-and-disaster-recovery]
+  - q: How do we make backups that no workload or agent credential can delete, and which disaster-recovery strategy fits a small SaaS company?
+    expect: [reliability.backup-and-disaster-recovery, guardrails.agent-guardrails]
+  - q: What severity levels should we use, who plays which role in an incident, and when do we write a postmortem?
+    expect: [incidents.incident-management]
+  - q: Is a 30-minute outage of our cloud service a reportable significant incident under NIS2 in Sweden, and who do we notify within 24 hours?
+    expect: [compliance.eu-and-swedish-regulation]
+  - q: Does GDPR breach notification to IMY run alongside the NIS2 early warning?
+    expect: [compliance.eu-and-swedish-regulation]
+  - q: Can an AI agent delete a production database or change IAM permissions on its own?
+    expect: [guardrails.agent-guardrails, ai-agents.published-guidance-and-incidents]
+  - q: What happened in the Kiro and PocketOS agent incidents and what controls would have prevented them?
+    expect: [ai-agents.published-guidance-and-incidents, guardrails.agent-guardrails]
+  - q: Our EKS clusters run version 1.31; when are they force-upgraded?
+    expect: [compute.kubernetes-containers-serverless]
+  - q: Should we use Terraform or OpenTofu, and where do we store and lock the state?
+    expect: [iac.infrastructure-as-code]
+  - q: Should we alert on CPU thresholds or on SLO burn rate?
+    expect: [observability.observability, reliability.backup-and-disaster-recovery]
+  - q: Do change approval boards reduce failures, and what does a change policy with progressive deployment and bake times look like?
+    expect: [change.change-management]
+  - q: Should we buy a Savings Plan, and how do we tag and allocate cloud and AI spend?
+    expect: [finops.cost-management]
+  - q: Should we get ISO 27001 or SOC 2 first?
+    expect: [compliance.security-frameworks-and-certifications]
+  - q: How should we prioritise patching, by CVSS severity or by exploitation?
+    expect: [security.security-architecture]
+  - q: When must we migrate to post-quantum key exchange?
+    expect: [security.post-quantum-cryptography]
+  - q: What does Finance need from IT infrastructure, and what do we hand to Legal when an incident might be reportable?
+    expect: [handoffs.cross-department]
+  - q: What is a good autoscaling policy and chaos-engineering practice for our services?
+    expect: [gaps.consolidated-gaps]
+  - q: What do the [FAST-MOVING] and [INFERENCE] labels mean and can I rely on legal points marked secondary source only?
+    expect: [overview.about-this-knowledge-base]

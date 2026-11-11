@@ -480,3 +480,19 @@ the policy gate's rules have no department scope.
 own `_taxonomy.yaml` (`department: shared`); `entry_visible` and `caller_filter` in `search.py` would let every
 department caller (never VAIC) see `department == "shared"` records beside its own; the HUD shows it as its own card;
 a test checks every department sees it and none sees another department's.
+**IT infrastructure (decision 226).** `knowledge/seed/infrastructure/` (the folder is the department key; the card
+says "IT infrastructure"): 21 documents, one per numbered section of
+`knowledge/source/it-infrastructure-research.md` (verbatim) plus "IT infrastructure: About this knowledge base" (the
+title, opening summary and reading guide); section 20 keeps the Conclusion and is "Consolidated gaps and conclusion".
+Regulation (13) and frameworks (12): domain `compliance`, type `policy`; guardrails (18): domain `guardrails`, type
+`policy`; no other infrastructure document is `policy`. No `[HOUSE STYLE]` material exists in the source.
+`_eval.yaml`: 19 questions, offline 19/19 in the top 5. Managers (`agents/departments/infrastructure.md`) and workers
+(`infrastructure.workers.md`) apply law and compliance first, independent evidence second, the section 18 guardrails,
+`needs_verification` and `[GAP]` handling and the section 19 hand-offs.
+
+**Adding the next department.** Put the source unchanged under `knowledge/source/`, write
+`knowledge/seed/<department key>/` (the key in `config/departments.json`, not its display name) with `_taxonomy.yaml`,
+one Markdown file per document with front matter, and `_eval.yaml`; run `uv run python backend/scripts/seed_knowledge.py
+--validate`; add `agents/departments/<key>.md` guidance and `<key>.workers.md`; copy
+`backend/tests/test_infrastructure_knowledge.py` for the department. No code changes: the seeder, registry,
+projections, record check and HUD card are department-generic.

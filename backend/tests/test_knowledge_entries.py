@@ -162,7 +162,8 @@ def test_every_indexed_part_starts_with_the_title_and_stays_small() -> None:
         for p in parts[1:]:
             assert p.startswith(f"{e.title} › "), (e.id, p[:80])
             # Tables are kept whole; four sales tables are longer (each row repeats its source link, decision 224),
-            # and the application guardrails' approval and "never" tables are 553 and 527 words (decision 225).
+            # and the application guardrails' approval and "never" tables are 553 and 527 words (decision 225),
+            # and the IT infrastructure hand-offs table is 455 (decision 226).
             table = p.split("\n\n", 1)[1].startswith("|")
             assert len(p.split()) <= (600 if table else 260), (e.id, len(p.split()))
 
@@ -387,7 +388,12 @@ async def test_the_graph_has_the_taxonomy_and_the_entries_with_departments_on_ev
     await run_seed(SEEDS, r.registry, r.projector, MODEL)
     labels = {label for label, _ in r.graph.vertices}
     assert labels == {"Department", "Domain", "Platform", "Objective", "Concept", "KnowledgeEntry"}
-    assert {v["department"] for v in r.graph.vertices.values()} == {"marketing", "sales", "application"}
+    assert {v["department"] for v in r.graph.vertices.values()} == {
+        "marketing",
+        "sales",
+        "application",
+        "infrastructure",
+    }
     for (label, vid), v in r.graph.vertices.items():
         if label == "KnowledgeEntry":
             assert vid.removeprefix("kn-").split(".")[0] == v["department"]

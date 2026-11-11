@@ -1,0 +1,99 @@
+# The IT infrastructure department's knowledge taxonomy (docs/KNOWLEDGE.md section 17). Content: one document per
+# numbered section of knowledge/source/it-infrastructure-research.md (the only source) plus "About this knowledge
+# base", seeded and scoped exactly like marketing and sales (decision 226). The folder is the department key,
+# `infrastructure` (shown as IT Infrastructure).
+department: infrastructure
+label: IT infrastructure
+seed_version: 1
+
+domains:
+  - {id: overview, label: Overview, description: "The overall position, what each claim label means, the legal-source qualifiers and the caveats"}
+  - {id: operating-model, label: Operating model, description: "The department as a platform team with hard gates"}
+  - {id: aws, label: AWS architecture, description: "Accounts, SCPs, Control Tower, networking, compute, databases, OpenSearch, Neptune, EU Regions, sovereign cloud"}
+  - {id: iac, label: Infrastructure as code, description: "Terraform or OpenTofu, state, CDK, pipelines, configuration as change, GitOps and drift"}
+  - {id: platform, label: Platform engineering, description: "The internal platform as a product"}
+  - {id: compute, label: Kubernetes and serverless, description: "Kubernetes, EKS versions and data planes, Lambda limits"}
+  - {id: reliability, label: Reliability and recovery, description: "Error budgets, disaster recovery, failover, recovery tiers, immutable backups, the 2025 and 2026 outages"}
+  - {id: incidents, label: Incident management, description: "On-call, roles, severity, postmortems, communication, runbooks"}
+  - {id: observability, label: Observability, description: "Burn-rate alerting, OpenTelemetry, deployment-safety alarms, telemetry cost"}
+  - {id: change, label: Change management, description: "Approval models, delivery metrics, progressive deployment, the change policy"}
+  - {id: finops, label: Cost management, description: "FinOps, Savings Plans, tagging, AI and GPU cost"}
+  - {id: security, label: Security, description: "Security architecture and post-quantum cryptography"}
+  - {id: compliance, label: Compliance, description: "Security frameworks and certifications; EU and Swedish regulation (orientation for a human to confirm)"}
+  - {id: itsm, label: IT service management, description: "ITIL, ownership roles, service desk, configuration records"}
+  - {id: corporate-it, label: Corporate IT, description: "Workforce identity, devices, joiner-mover-leaver, SaaS, email authentication, continuity"}
+  - {id: ai-agents, label: AI agents, description: "Published guidance and incidents for agents that operate infrastructure"}
+  - {id: guardrails, label: Guardrails, description: "What the department's agents may do alone, with a named human's approval, and never"}
+  - {id: handoffs, label: Hand-offs, description: "What IT infrastructure receives from and hands to the other departments"}
+  - {id: gaps, label: Gaps, description: "What the knowledge base does not know, and the conclusion"}
+
+platforms:
+  - {id: aws, label: AWS}
+  - {id: terraform, label: Terraform and OpenTofu}
+  - {id: kubernetes, label: Kubernetes}
+
+objectives:
+  - {id: reliability, label: Reliability}
+  - {id: security, label: Security}
+  - {id: cost, label: Cost}
+  - {id: compliance, label: Compliance}
+  - {id: delivery, label: Delivery}
+
+# The concept vocabulary (an entry MENTIONS a concept when one of its aliases appears in its text; all-capital
+# aliases match case-sensitively).
+concepts:
+  - {id: slo, label: Service level objective, kind: metric, aliases: [SLO, SLOs, service level objective]}
+  - {id: error-budget, label: Error budget, kind: metric, aliases: [error budget, error budgets], measured_by: [slo]}
+  - {id: burn-rate, label: Burn rate, kind: metric, aliases: [burn rate, burn-rate], measured_by: [slo]}
+  - {id: rto-rpo, label: Recovery objectives, kind: metric, aliases: [RTO, RPO, recovery time objective, recovery point objective]}
+  - {id: dora-metrics, label: Delivery metrics, kind: metric, aliases: [change failure rate, deployment frequency, lead time for changes]}
+  - {id: well-architected, label: Well-Architected Framework, kind: framework, aliases: [Well-Architected]}
+  - {id: scp, label: Service control policy, kind: tool, aliases: [SCP, SCPs, service control policy, service control policies]}
+  - {id: control-tower, label: Control Tower, kind: tool, aliases: [Control Tower]}
+  - {id: multi-account, label: Multi-account organisation, kind: concept, aliases: [multi-account, organisational unit, organisational units]}
+  - {id: us-east-1, label: us-east-1 dependency, kind: concept, aliases: [us-east-1]}
+  - {id: sovereign-cloud, label: AWS European Sovereign Cloud, kind: concept, aliases: [European Sovereign Cloud]}
+  - {id: opensearch, label: OpenSearch, kind: tool, aliases: [OpenSearch]}
+  - {id: neptune, label: Neptune, kind: tool, aliases: [Neptune]}
+  - {id: terraform, label: Terraform, kind: tool, aliases: [Terraform, OpenTofu]}
+  - {id: cdk, label: AWS CDK, kind: tool, aliases: [CDK]}
+  - {id: gitops, label: GitOps, kind: tactic, aliases: [GitOps, drift]}
+  - {id: eks, label: EKS, kind: tool, aliases: [EKS, Kubernetes]}
+  - {id: lambda, label: Lambda, kind: tool, aliases: [Lambda]}
+  - {id: vault-lock, label: AWS Backup Vault Lock, kind: tool, aliases: [Vault Lock, AWS Backup, immutable backup, immutable backups]}
+  - {id: disaster-recovery, label: Disaster recovery, kind: tactic, aliases: [disaster recovery, failover, pilot light, warm standby]}
+  - {id: on-call, label: On-call, kind: tactic, aliases: [on-call]}
+  - {id: postmortem, label: Postmortem, kind: tactic, aliases: [postmortem, postmortems]}
+  - {id: severity, label: Severity levels, kind: concept, aliases: [severity level, severity levels, SEV1, SEV2]}
+  - {id: runbook, label: Runbook, kind: tactic, aliases: [runbook, runbooks]}
+  - {id: opentelemetry, label: OpenTelemetry, kind: tool, aliases: [OpenTelemetry, Prometheus]}
+  - {id: progressive-deployment, label: Progressive deployment, kind: tactic, aliases: [progressive deployment, canary, bake time, bake times]}
+  - {id: change-freeze, label: Change freeze, kind: tactic, aliases: [freeze, change freeze]}
+  - {id: finops, label: FinOps, kind: framework, aliases: [FinOps]}
+  - {id: savings-plans, label: Savings Plans, kind: tool, aliases: [Savings Plan, Savings Plans, commitment purchase]}
+  - {id: tagging, label: Tagging and allocation, kind: tactic, aliases: [tagging, cost allocation]}
+  - {id: zero-trust, label: Zero trust, kind: framework, aliases: [zero trust]}
+  - {id: mfa, label: MFA, kind: tactic, aliases: [MFA, phishing-resistant, passkey, passkeys]}
+  - {id: least-privilege, label: Least privilege, kind: tactic, aliases: [least privilege, least-privilege, permission boundary, permission boundaries]}
+  - {id: patching, label: Patching, kind: tactic, aliases: [patching, KEV, BOD 26-04]}
+  - {id: iso-27001, label: ISO/IEC 27001, kind: framework, aliases: [ISO 27001, ISO/IEC 27001]}
+  - {id: soc-2, label: SOC 2, kind: framework, aliases: [SOC 2]}
+  - {id: nist-csf, label: NIST CSF, kind: framework, aliases: [NIST CSF, CSF 2.0]}
+  - {id: cis-controls, label: CIS Controls, kind: framework, aliases: [CIS Controls]}
+  - {id: nis2, label: NIS2 and Cybersäkerhetslagen, kind: regulation, aliases: [NIS2, Cybersäkerhetslagen, significant incident]}
+  - {id: reg-2024-2690, label: Implementing Regulation (EU) 2024/2690, kind: regulation, aliases: [2024/2690]}
+  - {id: gdpr, label: GDPR, kind: regulation, aliases: [GDPR, IMY]}
+  - {id: dora-act, label: DORA (Digital Operational Resilience Act), kind: regulation, aliases: [Digital Operational Resilience Act, DORA-bound]}
+  - {id: cra, label: Cyber Resilience Act, kind: regulation, aliases: [Cyber Resilience Act, CRA]}
+  - {id: data-act, label: EU Data Act, kind: regulation, aliases: [Data Act, switching charges]}
+  - {id: itil, label: ITIL, kind: framework, aliases: [ITIL]}
+  - {id: joiner-mover-leaver, label: Joiner, mover, leaver, kind: tactic, aliases: [joiner, leaver, offboarding]}
+  - {id: email-authentication, label: Email authentication, kind: tactic, aliases: [DMARC, DKIM, SPF]}
+  - {id: post-quantum, label: Post-quantum cryptography, kind: concept, aliases: [post-quantum, ML-KEM]}
+  - {id: agent-scopes, label: Scopes of agency, kind: framework, aliases: [scopes of agency, scope 1, scope 2]}
+  - {id: owasp-agentic, label: OWASP agentic Top 10, kind: framework, aliases: [OWASP]}
+  - {id: prompt-injection, label: Prompt injection, kind: concept, aliases: [prompt injection, injection]}
+  - {id: break-glass, label: Break-glass and kill switch, kind: tactic, aliases: [break-glass, kill switch]}
+  - {id: human-approval, label: Human approval, kind: tactic, aliases: [human approval, recorded approval, second approver, approver]}
+  - {id: kiro, label: Kiro incident, kind: concept, aliases: [Kiro]}
+  - {id: pocketos, label: PocketOS incident, kind: concept, aliases: [PocketOS]}
