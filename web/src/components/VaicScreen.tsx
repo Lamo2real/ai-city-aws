@@ -123,13 +123,39 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
       /* storage blocked: the draft lives as long as the page */
     }
   }, [text]);
+  // The chat stays pinned to the newest line while anything below grows (VAIC's reply being revealed, its steps,
+  // a Yes/No card), unless the owner scrolled up to read. A new message from the owner or a new reply from VAIC
+  // always brings the chat down to it (the owner, 2026-11-11: "I'm not left above where there is more messages").
+  const stick = useRef(true);
+  const lastVaic = chat.filter((l) => l.who === "vaic").length;
+  const lastOwner = chat.filter((l) => l.who === "owner").length;
   useEffect(() => {
+    stick.current = true;
     log.current?.scrollTo({ top: log.current.scrollHeight });
-  }, [chat]);
-  // While VAIC's reply is being revealed, keep it in view unless the owner has scrolled up to read.
+  }, [lastVaic, lastOwner]);
+  useEffect(() => {
+    const el = log.current;
+    if (!el) return;
+    const onScroll = () => {
+      stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    };
+    const keep = () => {
+      if (stick.current) el.scrollTop = el.scrollHeight;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    const mo = new MutationObserver(keep);
+    mo.observe(el, { childList: true, subtree: true, characterData: true });
+    const ro = new ResizeObserver(keep);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      mo.disconnect();
+      ro.disconnect();
+    };
+  }, []);
   const follow = () => {
     const el = log.current;
-    if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 120) el.scrollTop = el.scrollHeight;
+    if (el && stick.current) el.scrollTop = el.scrollHeight;
   };
 
   // The box before dictation started, so × puts it back exactly as it was.
@@ -261,7 +287,9 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
   // Right after the owner sends, VAIC's status row (eye, current step, seconds) shows until its first words.
   const waitingForVaic = presence === "thinking" && lastLine?.who === "owner" && lastLine.state !== "failed";
 
-  const unsent = chat.filter((l) => l.who === "owner" && (l.state === "failed" || l.state === "queued")).length;
+  // A message on its way is not a problem: only one that failed, or that waits while the connection is down, is
+  // shown as unsent (the owner, 2026-11-11: no warning flashing on every send).
+  const unsent = chat.filter((l) => l.who === "owner" && l.state === "failed").length;
 
   return (
     <section className={`vaic${voice.conversation ? " voice-live" : ""}`} aria-labelledby="vaic-title">
@@ -345,7 +373,7 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
                         Edit and send again
                       </button>
                     </span>
-                  ) : l.state === "failed" || l.state === "queued" ? (
+                  ) : l.state === "failed" || (l.state === "queued" && live !== "online") ? (
                     <span className="note">Not sent yet. It will send when the connection is back.</span>
                   ) : null}
                 </div>

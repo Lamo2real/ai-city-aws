@@ -1535,3 +1535,35 @@ test("the top menu's glass highlight sits under the open tab and follows the nex
   await page.locator(".brand").click(); // the City has no tab: the highlight fades away
   await expect(thumb).toHaveCSS("opacity", "0");
 });
+
+test("sending shows no 'not sent' warning while the message is on its way, and VAIC's new reply is scrolled into view", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  // The server takes a moment to accept the message: nothing alarming shows meanwhile (the owner, 2026-11-11).
+  await page.route(/\/messages$/, async (route) => {
+    await new Promise((r) => setTimeout(r, 1200));
+    await route.fallback();
+  });
+  await page.goto("/#/vaic");
+  const box = page.getByRole("textbox", { name: "Message to VAIC" });
+  // A long conversation first, so there is something to scroll.
+  for (let i = 0; i < 12; i++)
+    m.send({ type: "vaic.reply", conversation: "main", text: `Line ${i}\n\n${"Some words. ".repeat(30)}`, done: true });
+  await box.fill("can you turn on the COO bottleneck review");
+  await page.keyboard.press("Enter");
+  const warn = page.getByText(/Not sent yet|waiting to send/);
+  for (let t = 0; t < 5; t++) {
+    await expect(warn).toHaveCount(0);
+    await page.waitForTimeout(200);
+  }
+  await expect.poll(() => m.calls.filter((c) => c.path === "/messages").length).toBe(1);
+  // The owner scrolls up to read; VAIC's answer arrives and grows: the chat comes down to it and stays there.
+  const chat = page.getByLabel("Conversation with VAIC");
+  await chat.evaluate((el) => (el.scrollTop = 0));
+  m.send({ type: "vaic.reply", conversation: "main", text: `Sure, Sir. ${"It runs once a week. ".repeat(60)}`, done: true });
+  await expect(page.getByText(/^Sure, Sir\./)).toBeVisible();
+  await expect
+    .poll(() => chat.evaluate((el) => Math.round(el.scrollHeight - el.scrollTop - el.clientHeight)), { timeout: 5000 })
+    .toBeLessThan(4);
+});
