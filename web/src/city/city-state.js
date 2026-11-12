@@ -1063,21 +1063,26 @@ export const CAB_FADE_PX = 6 * TILE;
 export function edgeAlpha(pos, from, to) {
   return Math.max(0, Math.min(1, Math.min(pos - from, to - pos) / CAB_FADE_PX));
 }
-// One car in every 50 that enters the road is the owner's car (the owner, 2026-11-10, decision 191; was one in a
-// thousand by chance): a black pixel sports car with chrome rims, otherwise a cab (same lanes, fade, roof light and
-// passengers). Counted, not rolled: every car that enters takes the next number from the traffic's counter
-// (`arrive`), a cruising cab each time it comes round again and a commuter's cab when it is hailed, and every 50th is
-// the owner's car, so the share is exactly 1 in 50.
+// The owner's two rare cars (the owner, 2026-11-12; decision 191 had counted every 50th car): each car that enters
+// the road rolls once, on its own: 1 in 50 it is the owner's Porsche-style coupé (black, chrome rims), 1 in 50 it is
+// the Lamborghini-style supercar (a matte black wedge, a big wing, red Y tail lights), never both, otherwise a cab
+// (same lanes, fade, roof light and passengers). The roll is seedable (`sim.rareRand`, its own stream so the traffic
+// itself never changes) so a test can force either car; a cruising cab rolls each time it comes round again and a
+// commuter's cab when it is hailed. `rareCar(u)` maps one draw in [0, 1) to the car.
 export const RARE_CAB_ODDS = 50;
+export const RARE_CARS = ["porsche", "lambo"];
+export function rareCar(u) {
+  const k = Math.floor(u * RARE_CAB_ODDS);
+  return k < RARE_CARS.length ? RARE_CARS[k] : false;
+}
 export function arrive(sim) {
-  const n = sim.arrivals ?? 0;
-  sim.arrivals = n + 1;
-  return (n + (sim.rareOffset ?? 0)) % RARE_CAB_ODDS === RARE_CAB_ODDS - 1;
+  sim.arrivals = (sim.arrivals ?? 0) + 1;
+  return rareCar((sim.rareRand ?? Math.random)());
 }
 // ---------- Traffic (decision 176): signals at some junctions, give way at the rest, a couple of roundabouts, and
 // the open road outside the town driven at highway speed. A small simulation stepped by the scene's clock: every
 // cab follows the one in front, brakes for red and amber at the stop line, gives way, circles a roundabout and
-// takes its exit. The owner's sports car (the rare cab) runs the lights; it still never drives into anyone.
+// takes its exit. The owner's rare cars (either one) run the lights; it still never drives into anyone.
 // How many cabs cruise each lane: one per 44 tiles of road (decision 180, the first halving; was 22), then halved
 // again across the whole map (decision 191): exactly half of that total, at least one per lane, the rest going to
 // the lanes that had the most.
@@ -1145,7 +1150,7 @@ const lanePoint = (lane, d) => (lane.axis === "x" ? { x: posOf(lane, d), y: lane
 const reach = (vEnd, dist) => Math.sqrt(Math.max(0, vEnd) ** 2 + 2 * BRAKE_PX_S2 * Math.max(0, dist)); // the fastest one can go and still slow to vEnd in dist
 const ringArc = (from, to) => (((from - to) % TAU) + TAU) % TAU * RING_R; // along the ring (angle decreasing: anticlockwise on screen)
 
-export function createTraffic(world, seed = "traffic") {
+export function createTraffic(world, seed = "traffic", rareSeed) {
   const M = MAP_MARGIN * TILE, W = world.width * TILE, H = world.height * TILE, lanes = [];
   streetLanes(world).forEach((l, i) => {
     lanes.push({ id: `e${i}`, axis: "x", dir: 1, at: l.y1, from: l.x0, to: l.x1, street: i });
@@ -1172,7 +1177,7 @@ export function createTraffic(world, seed = "traffic") {
     lane.controls.sort((p, q) => p.dc - q.dc);
   }
   const cars = [], counts = cabsPerLane(lanes.map((l) => l.span));
-  const sim = { world, lanes, junctions: js, cars, guests: [], t: 0, rand: rngOf(seed), margin: M, arrivals: 0, rareOffset: hashOf(`rare:${seed}`) % RARE_CAB_ODDS };
+  const sim = { world, lanes, junctions: js, cars, guests: [], t: 0, rand: rngOf(seed), margin: M, arrivals: 0, rareRand: rngOf(`rare:${seed}:${rareSeed ?? Math.floor(Math.random() * 2 ** 31)}`) };
   for (const [li, lane] of lanes.entries()) {
     const n = counts[li];
     for (let k = 0; k < n; k++) {

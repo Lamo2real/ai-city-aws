@@ -206,7 +206,7 @@ test("the map runs on: zoomed out and panned to a corner, the roads go on and fa
   await expect.poll(() => towers(page)).toEqual(["Research", "Sales", "Legal", "Media"]);
 });
 
-test("the rare cab: forced for a look, it drives the same lanes as every cab, black with chrome rims", async ({
+test("the rare cars: forced for a look, the Porsche and the Lamborghini drive the same lanes as every cab", async ({
   page,
 }) => {
   const created_at = new Date(Date.now() - 86_400_000).toISOString();
@@ -226,7 +226,28 @@ test("the rare cab: forced for a look, it drives the same lanes as every cab, bl
   expect(Number(await hooks(page, (h) => h.dataset.cabs))).toBe(before); // the same traffic, only the car differs
   for (let i = 0; i < 3; i++) await page.getByRole("button", { name: "Zoom in", exact: true }).click();
   await page.waitForTimeout(600);
-  await page.screenshot({ path: `${SHOTS}/city-rare-cab.png` });
+  await page.screenshot({ path: `${SHOTS}/city-rare-cab.png` }); // "all": half Porsches, half Lamborghinis
+  // The Lamborghini alone: every car is the matte black supercar, same lanes, same count.
+  await page.getByRole("button", { name: "Fit the whole map" }).click();
+  await page.evaluate(() => ((document.querySelector("section.city") as HTMLElement).dataset.rareCabs = "lambo"));
+  await expect.poll(() => hooks(page, (h) => Number(h.dataset.lamboShown ?? 0)), { timeout: 15_000 }).toBeGreaterThan(0);
+  expect(Number(await hooks(page, (h) => h.dataset.cabs))).toBe(before);
+  for (let i = 0; i < 4; i++) await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+  await expect.poll(() => hooks(page, (h) => Number(h.dataset.lamboShown ?? 0)), { timeout: 20_000 }).toBeGreaterThan(0);
+  await page.screenshot({ path: `${SHOTS}/city-lambo.png` });
+  // A close-up of the three cars, eight times their size: the cab, the Porsche and the Lamborghini, side, front, rear.
+  await page.evaluate(() => {
+    const root = document.querySelector("section.city") as unknown as { _carSprite: (r: unknown, v: string) => HTMLCanvasElement };
+    const c = document.createElement("canvas"), k = 8, cell = 28 * k;
+    c.width = cell * 3; c.height = cell * 3; c.id = "car-sheet";
+    Object.assign(c.style, { position: "fixed", left: "0", top: "0", zIndex: "99", background: "#3b3d5c", imageRendering: "pixelated" });
+    const g = c.getContext("2d")!; g.imageSmoothingEnabled = false;
+    [false, "porsche", "lambo"].forEach((r, row) => ["side", "front", "rear"].forEach((v, col) => {
+      const im = root._carSprite(r, v); g.drawImage(im, col * cell + 8, row * cell + 8, im.width * k, im.height * k);
+    }));
+    document.body.append(c);
+  });
+  await page.locator("#car-sheet").screenshot({ path: `${SHOTS}/city-rare-cars-close.png` });
 });
 
 test("zoom is smooth from far out to close up", async ({ page }) => {

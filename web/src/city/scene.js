@@ -236,7 +236,7 @@ function cab(view) {
   }));
   return cabs.get(view);
 }
-// The rare one (1 in every RARE_CAB_ODDS cars on the road, the owner's wish): a low, wide black sports coupé with chrome rims, a
+// The rare one (1 in RARE_CAB_ODDS cars that enter the road, by a roll, the owner's wish): a low, wide black sports coupé with chrome rims, a
 // tall swan-neck wing and a full-width rear light bar, still wearing the cab's roof light. An original drawing:
 // no badges or marks. Side on, nose on (coming down the avenue) and tail on (going up it).
 const GT_BODY = "#17171d", GT_DARK = "#0b0b10", GT_SHINE = "#3d3f50", GT_GLASS = "#283450", CHROME = "#d6dce8", CHROME_D = "#8f97a8";
@@ -275,8 +275,53 @@ function rareCabSprite(view) {
   cabs.set(key, img);
   return img;
 }
+// The second rare one (1 in RARE_CAB_ODDS too, the owner's wish, 2026-11-12): a matte black supercar, a low sharp
+// wedge with a big rear wing on two pylons, red Y-shaped tail lights, dark wheels with a flash of green caliper, and
+// the cab's roof light like every car that carries a passenger. An original drawing inspired by the owner's photos:
+// no badges, names or plates. Side on, nose on and tail on.
+const LB_BODY = "#1d1e25", LB_DARK = "#08080c", LB_EDGE = "#3a3c4a", LB_GLASS = "#222b40", LB_GLINT = "#4a5a78", LB_RED = "#ff2f22", LB_RED2 = "#b3140f";
+function lamboSprite(view) {
+  const key = `lambo-${view}`;
+  if (cabs.has(key)) return cabs.get(key);
+  const wheel = (g, x, y, w) => { R(g, x, y, w, 3, INK); R(g, x + 1, y, w - 2, 3, "#2a2b33"); R(g, x + Math.floor(w / 2), y + 1, 1, 1, "#5a5d6a"); };
+  const img = view === "side" ? outlined(24, 14, (g) => {
+    g.translate(1, 1);
+    R(g, 1, 7, 21, 2, LB_BODY); R(g, 1, 6, 20, 1, LB_BODY); R(g, 2, 5, 16, 1, LB_BODY); // the wedge, low at the nose
+    R(g, 4, 4, 12, 1, LB_BODY); R(g, 6, 3, 8, 1, LB_BODY); R(g, 8, 2, 5, 1, LB_BODY); // the cab-forward canopy
+    R(g, 9, 3, 4, 1, LB_GLASS); R(g, 8, 4, 7, 1, LB_GLASS); R(g, 12, 3, 1, 1, LB_GLINT); R(g, 14, 4, 1, 1, LB_GLINT); // glass
+    R(g, 10, 5, 8, 1, LB_EDGE); R(g, 18, 6, 2, 1, LB_EDGE); R(g, 9, 2, 3, 1, LB_EDGE); // sharp creases catching the light
+    R(g, 5, 6, 4, 1, LB_DARK); R(g, 4, 5, 3, 1, LB_DARK); // the side intake behind the door
+    R(g, 0, 1, 7, 1, LB_BODY); R(g, 0, 0, 1, 3, LB_BODY); R(g, 3, 2, 1, 3, LB_BODY); R(g, 5, 2, 1, 2, LB_BODY); R(g, 1, 1, 5, 1, LB_EDGE); // the big wing on its pylons
+    R(g, 9, 1, 3, 1, "#fff3b0"); R(g, 10, 1, 1, 1, "#e6a53c"); // the cab's roof light, as on every cab
+    R(g, 19, 6, 2, 1, "#e8eef8"); R(g, 1, 6, 1, 2, LB_RED); R(g, 2, 6, 1, 1, LB_RED2); // headlight slit, the Y tail light
+    R(g, 2, 9, 18, 1, LB_DARK); // the sill
+    wheel(g, 3, 9, 5); wheel(g, 15, 9, 5); R(g, 5, 9, 1, 1, "#7ed321"); R(g, 17, 9, 1, 1, "#7ed321"); // a flash of green caliper
+  }) : view === "front" ? outlined(18, 17, (g) => {
+    g.translate(1, 1);
+    R(g, 0, 7, 16, 5, LB_BODY); R(g, 1, 5, 14, 2, LB_BODY); R(g, 3, 2, 10, 3, LB_BODY); R(g, 4, 1, 8, 1, LB_BODY);
+    R(g, 4, 2, 8, 2, LB_GLASS); R(g, 5, 2, 6, 1, LB_GLINT); R(g, 1, 5, 14, 1, LB_EDGE); // windscreen, the bonnet's edge
+    R(g, 6, 0, 4, 1, "#fff3b0"); // roof light
+    R(g, 1, 7, 4, 1, "#e8eef8"); R(g, 4, 6, 1, 1, "#e8eef8"); R(g, 11, 7, 4, 1, "#e8eef8"); R(g, 11, 6, 1, 1, "#e8eef8"); // the sharp headlight slits
+    R(g, 1, 9, 4, 2, LB_DARK); R(g, 11, 9, 4, 2, LB_DARK); R(g, 6, 9, 4, 1, LB_DARK); // the big intakes
+    R(g, 0, 11, 16, 1, LB_EDGE); // the splitter
+    wheel(g, 0, 12, 3); wheel(g, 13, 12, 3);
+  }) : outlined(18, 17, (g) => {
+    g.translate(1, 1);
+    R(g, 0, 0, 16, 1, LB_BODY); R(g, 1, 0, 14, 1, LB_EDGE); R(g, 0, 0, 1, 3, LB_BODY); R(g, 15, 0, 1, 3, LB_BODY); R(g, 5, 1, 1, 3, LB_BODY); R(g, 10, 1, 1, 3, LB_BODY); // the wing
+    R(g, 7, 1, 2, 1, "#fff3b0"); // roof light, between the wing's pylons
+    R(g, 3, 3, 10, 2, LB_BODY); for (let x = 4; x < 12; x += 2) R(g, x, 3, 1, 2, LB_EDGE); // the louvred engine cover
+    R(g, 1, 5, 14, 7, LB_BODY); R(g, 0, 6, 16, 5, LB_BODY);
+    for (const [a, b, c] of [[1, 3, 2], [12, 14, 13]]) { R(g, a, 6, 1, 1, LB_RED); R(g, b, 6, 1, 1, LB_RED); R(g, c, 7, 1, 2, LB_RED); R(g, c, 6, 1, 1, LB_RED2); } // the Y tail lights
+    R(g, 6, 7, 4, 2, LB_DARK); R(g, 7, 7, 2, 1, "#8f97a8"); // the high centre exhaust
+    R(g, 2, 10, 12, 2, LB_DARK); for (let x = 3; x < 13; x += 3) R(g, x, 10, 1, 2, LB_EDGE); // the diffuser
+    wheel(g, 0, 12, 3); wheel(g, 13, 12, 3);
+  });
+  cabs.set(key, img);
+  return img;
+}
 // A cab sprite: side on, or along the avenue nose on (coming down) / from behind (going up; the cab looks the same).
-const cabImg = (rare, view) => (rare ? rareCabSprite(view) : cab(view === "side" ? "side" : "front"));
+// `rare` is false, "porsche" or "lambo" (any other truthy value is the Porsche, as before).
+const cabImg = (rare, view) => (rare === "lambo" ? lamboSprite(view) : rare ? rareCabSprite(view) : cab(view === "side" ? "side" : "front"));
 // A cab's yellow outline, two pixels wide, for the taxi taking a new hire to work (decision 207).
 const halos = new WeakMap();
 function haloOf(img) {
@@ -787,6 +832,12 @@ const ZOOM_MIN = 0.35, ZOOM_MAX = 8, ZOOM_STEP = 1.5;
 
 // `insets()` says how much of the root the HUD's own bars cover, so the map is fitted into the free part.
 export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0, r: 0, b: 0 }), onSelectAgent = () => {}, onSelectBuilding = () => {}, onOpenApp = () => {}, onState = () => {} } = {}) {
+  // A test hook for the rare cars' screenshots: data-rare-cabs="all" makes every car one of the two rare ones (half
+  // each, by the car's id), "porsche" or "lambo" makes every car that one.
+  const forcedRare = (id) => {
+    const m = root.dataset.rareCabs;
+    return m === "porsche" || m === "lambo" ? m : m === "all" ? (hashOf(`rare:${id}`) % 2 ? "lambo" : "porsche") : false;
+  };
   const canvas = canvasEl ?? root.querySelector("canvas");
   const ctx = canvas.getContext("2d", { alpha: false });
   const el = (tag) => document.createElement(tag);
@@ -817,6 +868,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   root._doors = doors;
   root._view = () => ({ x: cam.x, y: cam.y, zoom: cam.zoom }); // the camera, for tests that click a tower
   root._world = () => world; // the layout, for tests: towers keep one size whatever the headcount
+  root._carSprite = cabImg; // the car sprites (false, "porsche", "lambo"; side, front, rear), for the rare cars' close-up screenshot
   const winBox = document.createElement("div"); winBox.id = "citywindows"; winBox.hidden = true; winBox.setAttribute("aria-hidden", "true"); root.append(winBox);
   let selected = null, hover = null, lastVisit = 0, hiddenHomes = 0, glowing = 0; // glowing: highlighted cabs drawn this frame
 
@@ -1408,7 +1460,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       // Riding a cab: side on along a street, nose on along the avenue; the passenger is inside.
       const to = p.route[0], along = Math.abs(to.x - p.x) >= Math.abs(to.y - p.y), x = Math.round(p.x) - OX, y = Math.round(p.y) - OY;
       ctx.globalAlpha = Math.min(1, (now - (p.rideAt ?? 0)) / 260); // the cab pulls up rather than popping in
-      drawCab(x, y, along, to.y < p.y, p.flip, p.rareCab || root.dataset.rareCabs === "all", p.toWork, now);
+      drawCab(x, y, along, to.y < p.y, p.flip, p.rareCab || forcedRare(p.id), p.toWork, now);
       ctx.globalAlpha = 1;
       return;
     }
@@ -1547,14 +1599,13 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     trafficAt = now;
     const cars = trafficCars(traffic);
     if (root.dataset.cabs !== String(cars.length)) root.dataset.cabs = String(cars.length); // for tests
-    const allRare = root.dataset.rareCabs === "all"; // a test hook: every cab is the rare one, for its screenshot
-    let rareShown = 0;
+    let rareShown = 0, lamboShown = 0;
     glowing = 0;
     for (const c of cars) {
       const x = Math.round(c.x) - 12 - ox, y = Math.round(c.y) - 12 - oy;
       if (c.alpha <= 0 || x < -30 || x > w + 30 || y < -20 || y > h + 20) continue;
       ctx.globalAlpha = c.alpha; // fading in from beyond the map's edge, or out past it
-      const rare = c.rare || allRare, img = cabImg(rare, c.vertical ? (c.east ? "rear" : "front") : "side"), brake = c.braking && !rare ? "#ff3a2a" : null;
+      const rare = c.rare || forcedRare(c.id), img = cabImg(rare, c.vertical ? (c.east ? "rear" : "front") : "side"), brake = c.braking && !rare ? "#ff3a2a" : null;
       if (c.vertical) { R(ctx, x + 4, y + 18, 14, 2, "rgba(20,18,40,.3)"); ctx.drawImage(img, x + 3, y + 3); if (brake && c.east) { R(ctx, x + 6, y + 13, 3, 2, brake); R(ctx, x + 15, y + 13, 3, 2, brake); } }
       else {
         R(ctx, x + 3, y + 12, 18, 2, "rgba(20,18,40,.3)");
@@ -1562,6 +1613,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
         if (brake) R(ctx, c.east ? x + 1 : x + 21, y + 6, 2, 2, brake); // brake lights
       }
       if (rare) rareShown += 1;
+      if (rare === "lambo") lamboShown += 1;
     }
     ctx.globalAlpha = 1;
     // The traffic lights, one at the kerb before the stop line on each approach.
@@ -1574,7 +1626,8 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       }
     }
     if (root.dataset.rareShown !== String(rareShown)) root.dataset.rareShown = String(rareShown); // for tests
-    for (const c of leaving) { const x = Math.round(c.x) - 12 - ox, y = Math.round(c.y) - 12 - oy, img = cabImg(c.rare || allRare, "side"); ctx.globalAlpha = Math.max(0, 1 - c.t / 1.4); if (c.east) ctx.drawImage(img, x, y); else { ctx.save(); ctx.scale(-1, 1); ctx.drawImage(img, -x - 24, y); ctx.restore(); } ctx.globalAlpha = 1; }
+    if (root.dataset.lamboShown !== String(lamboShown)) root.dataset.lamboShown = String(lamboShown);
+    for (const c of leaving) { const x = Math.round(c.x) - 12 - ox, y = Math.round(c.y) - 12 - oy, img = cabImg(c.rare || forcedRare(c.id), "side"); ctx.globalAlpha = Math.max(0, 1 - c.t / 1.4); if (c.east) ctx.drawImage(img, x, y); else { ctx.save(); ctx.scale(-1, 1); ctx.drawImage(img, -x - 24, y); ctx.restore(); } ctx.globalAlpha = 1; }
     // The apps' cabinets stand in front of the Apps building; the people walk in front of them.
     const marks = appMarkers();
     for (const m of marks) { if (m.app) { ctx.drawImage(cabinet(m.tint), Math.round(m.x) - OX, Math.round(m.y) - OY); } else label(`+${m.more}`, m.x + 10, m.y, INK, "#ffd84a"); }
@@ -1587,7 +1640,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       const c = p.call;
       calls += 1;
       ctx.globalAlpha = Math.min(1, (now - c.at) / 400);
-      drawCab(Math.round(c.x) - OX, Math.round(c.y) - OY, c.along ?? true, !!c.up, c.flip, c.rare || allRare, true, now);
+      drawCab(Math.round(c.x) - OX, Math.round(c.y) - OY, c.along ?? true, !!c.up, c.flip, c.rare || forcedRare(p.id), true, now);
       ctx.globalAlpha = 1;
     }
     for (const p of order) drawPerson(p, now, f);
@@ -1655,7 +1708,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
         busy = true;
         const to = p.route[0], dx = to.x - p.x, dy = to.y - p.y, d = Math.hypot(dx, dy);
         let s;
-        if (p.ride?.[0] && traffic) { p.to = to; p.rare = !!p.rareCab || root.dataset.rareCabs === "all"; p.boost = p.toWork ? TO_WORK_BOOST : 1; s = rideStep(traffic, p, dt); } // a cab in the traffic
+        if (p.ride?.[0] && traffic) { p.to = to; p.rare = p.rareCab || forcedRare(p.id); p.boost = p.toWork ? TO_WORK_BOOST : 1; s = rideStep(traffic, p, dt); } // a cab in the traffic
         else s = eased(p, (p.speed ?? WALK_SPEED) * dt, d);
         if (Math.abs(dx) > 0.5) p.flip = dx < 0;
         if (d <= s) {
@@ -1671,8 +1724,8 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       // Hailing a cab at the kerb, and its driving off after the drop.
       const riding = !!(p.route && !p.waitUntil && p.ride?.[0]);
       if (riding && !p.wasRiding && p.call) { p.rideAt = now - 1000; p.rareCab = p.call.rare; p.call = null; root.dataset.taxiRides = String(Number(root.dataset.taxiRides ?? 0) + 1); dust(p.x, p.y, 6, ["#f4c63c", "#fff6e0"], 24, 0.35); } // in: the called taxi becomes the ride
-      else if (riding && !p.wasRiding) { p.rideAt = now; p.rareCab = traffic ? arrive(traffic) : false; /* a hailed cab enters the road and takes the next number: 1 in 50 is the owner's car */ root.dataset.taxiRides = String(Number(root.dataset.taxiRides ?? 0) + 1); dust(p.x, p.y, 6, ["#f4c63c", "#fff6e0"], 24, 0.35); }
-      if (!riding && p.wasRiding && !p.inside) leaving.push({ x: p.x, y: p.y, east: !p.flip, t: 0, rare: p.rareCab });
+      else if (riding && !p.wasRiding) { p.rideAt = now; p.rareCab = traffic ? arrive(traffic) : false; /* a hailed cab enters the road and takes the next number: 1 in 50 is the Porsche, 1 in 50 the Lamborghini */ root.dataset.taxiRides = String(Number(root.dataset.taxiRides ?? 0) + 1); dust(p.x, p.y, 6, ["#f4c63c", "#fff6e0"], 24, 0.35); }
+      if (!riding && p.wasRiding && !p.inside) leaving.push({ id: p.id, x: p.x, y: p.y, east: !p.flip, t: 0, rare: p.rareCab });
       p.wasRiding = riding;
     }
     if (traffic) {

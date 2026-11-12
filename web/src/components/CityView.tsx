@@ -2,7 +2,7 @@
 // status bar on top, departments / records / activity on the right, zoom and actions at the bottom.
 // Driven entirely by WebSocket events through the store.
 import { CityTabs } from "./Features.tsx";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import {
   MODEL_NAME,
   VISUALS,
@@ -531,7 +531,7 @@ export function CityPanel({
   onVisit?: (dept: string) => void;
   onBuilt?: (dept: string) => void;
 }) {
-  const ref = useRef<HTMLElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
   // onClose is a new function on every render of the city; read through a ref so this effect runs only when
   // the panel opens for something else. Otherwise every city update moved the focus to Close mid-typing.
   const close = useRef(onClose);
@@ -553,7 +553,7 @@ export function CityPanel({
             : `${open.dept} department`
           : { workforce: "Workforce", health: "Health", parked: "On hold", legend: "What the marks mean" }[open.record];
   return (
-    <aside className="cityui citypanel" role="dialog" aria-label={title} ref={ref}>
+    <div className="cityui citypanel" role="dialog" aria-label={title} ref={ref}>
       <header>
         <h3 className="pixel">{title}</h3>
         <button type="button" className="closer" onClick={onClose} aria-label="Close">
@@ -565,13 +565,12 @@ export function CityPanel({
       {"dept" in open ? (
         <DeptPanel name={open.dept} city={city} onZoom={onZoom} onVisit={onVisit} onGone={onClose} />
       ) : null}
-      {"dept" in open ? <DeptApps name={open.dept} city={city} /> : null}
       {"record" in open && open.record === "legend" ? <Legend /> : null}
       {"record" in open && open.record === "parked" ? <Parked city={city} /> : null}
       {"record" in open && (open.record === "workforce" || open.record === "health") ? (
         <Remote what={open.record} />
       ) : null}
-    </aside>
+    </div>
   );
 }
 
@@ -700,37 +699,93 @@ function DeptPanel({
   onVisit?: (d: string) => void;
   onGone: () => void;
 }) {
+  const workId = useId();
   const d = city.departments[name];
   if (d?.state === "demolished") return <p className="doing">{`${name} was demolished. Its lot stands empty.`}</p>;
+  const hq = name === "HQ";
   const members = Object.values(city.agents).filter(
-    (a) => (name === "HQ" ? a.kind === "core" : a.department === name) && a.state !== "retired",
+    (a) => (hq ? a.kind === "core" : a.department === name) && a.state !== "retired",
   );
   const workers = members.filter((a) => a.kind === "worker");
   const open = Object.values(city.tickets).filter((t) => members.some((m) => m.id === t.to));
+  const facts: Array<[string, string]> = hq
+    ? [["Team", members.map((a) => a.role || a.id).join(" · ") || "VAIC · Orchestrator"]]
+    : [
+        ["Manager", d?.manager_id ? `${d.manager_id} · Fable 5.1` : "—"],
+        [
+          "Workers",
+          `${workers.length ? `${workers.length} at their desks` : "None hired"} · ${d?.worker_model === "fable-5-1" ? "Fable 5.1" : workerModel(name)}`,
+        ],
+      ];
+  const tone = (s: string) => (s === "failed" ? "bad" : s === "waiting_on_owner" ? "warn" : s === "done" ? "good" : "");
   return (
-    <div>
-      <p className="doing">
-        {name === "HQ"
-          ? "VAIC and the team lead work here."
-          : `${workers.length ? `${workers.length} workers at their desks.` : "Nobody hired right now."} ${d?.mission ?? ""}`}
-      </p>
-      {name !== "HQ" ? <Row k="Manager" v={d?.manager_id ? `${d.manager_id} · Fable 5.1` : "—"} /> : null}
-      {name !== "HQ" ? (
-        <Row k="Workers run on" v={d?.worker_model === "fable-5-1" ? "Fable 5.1" : workerModel(name)} />
-      ) : null}
-      <h4>{`Work in progress (${open.length})`}</h4>
-      <ul className="recent">
-        {open.length ? (
-          open.map((t) => <li key={t.id}>{`${t.to}: ${ticketWords(t.status)} — ${plainText(t.goal, 90).short}`}</li>)
-        ) : (
-          <li className="mute">None right now.</li>
-        )}
-      </ul>
-      {name !== "HQ" && onVisit ? <Button onClick={() => onVisit(name)}>Go inside</Button> : null}
-      <Button variant="secondary" onClick={() => onZoom(name)}>
-        Zoom in
-      </Button>
-      {name !== "HQ" && d ? <DemolishDepartment name={name} city={city} onDone={onGone} /> : null}
+    <div className="bp">
+      <div className="bp-body" role="group" aria-label="Details" tabIndex={0}>
+        <p className="bp-lede">
+          {hq
+            ? "VAIC and the team lead work here."
+            : `${workers.length ? `${workers.length} workers at their desks.` : "Nobody hired right now."} ${d?.mission ?? ""}`}
+        </p>
+        <dl className="bp-facts">
+          {facts.map(([k, v]) => (
+            <div key={k}>
+              <dt>{k}</dt>
+              <dd>{v}</dd>
+            </div>
+          ))}
+        </dl>
+        <section className="bp-work" aria-labelledby={workId}>
+          <h4 id={workId} className="bp-h">
+            <span>Work in progress</span>
+            <span
+              className="bp-count"
+              data-zero={open.length ? undefined : ""}
+              aria-label={`, ${open.length} ${open.length === 1 ? "item" : "items"}`}
+            >
+              {open.length}
+            </span>
+          </h4>
+          {open.length ? (
+            <ul className="bp-list">
+              {open.map((t) => (
+                <li key={t.id}>
+                  <span className="bp-goal">{plainText(t.goal, 90).short}</span>
+                  <span className="bp-meta">
+                    <span className="bp-chip" data-tone={tone(t.status) || undefined}>
+                      {ticketWords(t.status)}
+                    </span>
+                    <span className="bp-who">{t.to}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="bp-empty">
+              <span className="bp-empty-mark" aria-hidden="true" />
+              <p>
+                <strong>All quiet</strong>
+                <span>
+                  {hq
+                    ? "Nothing in flight. Ask VAIC and work starts here."
+                    : "Nothing in flight. New work shows up here the moment it starts."}
+                </span>
+              </p>
+            </div>
+          )}
+        </section>
+        <DeptApps name={name} city={city} />
+        {!hq && d ? <DemolishDepartment name={name} city={city} onDone={onGone} /> : null}
+      </div>
+      <footer className="bp-foot">
+        {!hq && onVisit ? (
+          <Button variant="primary" onClick={() => onVisit(name)}>
+            Go inside
+          </Button>
+        ) : null}
+        <Button variant="secondary" onClick={() => onZoom(name)}>
+          Zoom in
+        </Button>
+      </footer>
     </div>
   );
 }

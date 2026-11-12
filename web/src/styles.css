@@ -2456,7 +2456,7 @@ table.costs tr:last-child td {
   width: min(360px, calc(100% - 24px));
   max-height: calc(100% - 160px);
   overflow-y: auto;
-  padding: 12px;
+  padding: 14px 16px 16px;
   z-index: 3;
 }
 .citypanel header {
@@ -2494,6 +2494,211 @@ table.costs tr:last-child td {
 .recent {
   padding-left: 18px;
   margin: 0;
+}
+/* A building's panel (the owner, 2026-11-12): a lede, the facts, the work in progress with its count as a badge
+   and a friendly empty state, and the actions in their own footer row. Every block is a thinner pane of the same
+   glass, so the town still shows through. */
+/* The panel is a column: the header, a body that scrolls, and the footer row that is always in reach. */
+.citypanel:has(> .bp) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 0;
+}
+.bp {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--s2);
+}
+.bp-body {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding-bottom: var(--s3);
+  margin: 0 -16px;
+  padding-inline: 16px;
+}
+.bp-body > * {
+  flex-shrink: 0; /* the body scrolls; nothing in it squeezes */
+}
+.bp-lede {
+  margin: 0;
+  line-height: 1.45;
+  color: var(--text);
+}
+.bp-facts {
+  margin: 0;
+  display: grid;
+  gap: 1px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.35); /* the hairlines between the rows */
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+.bp-facts > div {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  gap: var(--s2);
+  padding: 8px 12px;
+  background: var(--city-glass-2);
+}
+.bp-facts dt {
+  color: var(--soft);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  align-self: center;
+}
+.bp-facts dd {
+  margin: 0;
+  font-size: var(--fs-s);
+  overflow-wrap: anywhere;
+}
+.bp-work {
+  display: grid;
+  gap: var(--s2);
+}
+.bp-h {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin: 0;
+  font-size: var(--fs-s);
+  font-weight: 700;
+  color: var(--text);
+}
+.bp-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #5a3219;
+  background: var(--amber);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 0 0 1px rgba(90, 50, 25, 0.25);
+}
+.bp-count[data-zero] {
+  background: rgba(255, 255, 255, 0.45);
+  color: var(--soft);
+}
+.bp-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.bp-list > li {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--city-glass-2);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+.bp-goal {
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.bp-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  font-size: var(--fs-xs);
+  color: var(--soft);
+}
+.bp-chip {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--text);
+}
+.bp-chip[data-tone="good"] {
+  background: var(--good-bg);
+  color: var(--good);
+}
+.bp-chip[data-tone="bad"] {
+  background: var(--bad-bg);
+  color: var(--bad);
+}
+.bp-chip[data-tone="warn"] {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+.bp-who {
+  overflow-wrap: anywhere;
+}
+.bp-empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--city-glass-2);
+  border: 1px dashed rgba(90, 50, 25, 0.28);
+}
+.bp-empty p {
+  margin: 0;
+  display: grid;
+  gap: 2px;
+}
+.bp-empty strong {
+  font-size: var(--fs-s);
+}
+.bp-empty span {
+  color: var(--soft);
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+}
+.bp-empty-mark {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 50%, var(--good) 0 4px, transparent 5px),
+    radial-gradient(circle at 50% 50%, rgba(31, 107, 64, 0.18) 0 16px, transparent 17px);
+  box-shadow: inset 0 0 0 1px rgba(31, 107, 64, 0.3);
+}
+.bp-foot {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin: 0 -16px;
+  padding: var(--s3) 16px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.55);
+  background: rgba(255, 250, 238, 0.28); /* a slightly brighter pane of the same glass */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.bp-foot .btn {
+  flex: 1 1 120px;
+}
+.bp .demolish {
+  margin-top: var(--s1);
+}
+.bp .demolish > .btn-secondary {
+  background: transparent;
+  box-shadow: none;
+  color: var(--bad);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding: 0;
+  min-height: var(--tap);
+  justify-self: start;
 }
 .legend {
   list-style: none;
