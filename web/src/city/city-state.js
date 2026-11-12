@@ -1108,6 +1108,7 @@ export function cabsPerLane(spans) {
   for (let k = 0, sum = out.reduce((a, b) => a + b, 0); sum < total; k = (k + 1) % order.length, sum++) out[order[k][1]] += 1;
   return out;
 }
+export const CAB_KEEP = 0.75; // the share of those that drive (decision 269)
 export const TOWN_PX_S = CAB_PX_S, HIGHWAY_PX_S = 96, RING_PX_S = 22, ACCEL_PX_S2 = 44, BRAKE_PX_S2 = 50, CAR_GAP_PX = 6;
 export const JUNCTION_HALF = 24, STOP_AT = 36, RING_R = 40; // a roundabout twice the size it was, so the circling shows (decision 252)
 const CAR_LEN = { x: 24, y: 18 }, RING_LEN = 20, LOOKAHEAD = 420, TAU = Math.PI * 2;
@@ -1186,6 +1187,45 @@ export function junctions(world) {
   return list;
 }
 
+// The yellow centre lines (decision 269): one run per stretch of road between junctions, ending at the junction's
+// edge (a roundabout's ring), except that the road which runs on through a T keeps its line through it; and at a
+// corner, where both roads end, a quarter-circle joining the two lines, so the line bends round the turn. In pixels:
+// `runs` [{ axis, at, from, to, cap0, cap1 }] (`cap`: that end meets a junction, "bend" a corner's bend, or false) and `bends` [{ cx, cy, r, from, to }]
+// (`from`/`to` the points where the bend meets each road's run).
+export const BEND_R = 24;
+export function centreLines(world) {
+  const js = junctions(world), runs = [], bends = [], H = BEND_R;
+  const M = MAP_MARGIN, L = world.left ?? 0;
+  const cut = (axis, at, from, to, stops) => {
+    let a = from, capA = false;
+    for (const st of stops.sort((p, q) => p.c - q.c)) {
+      if (st.c + st.half <= a || st.c - st.half >= to) continue;
+      if (st.c - st.half - a >= 1) runs.push({ axis, at, from: a, to: st.c - st.half, cap0: capA, cap1: st.cap });
+      a = Math.max(a, st.c + st.half); capA = st.cap;
+    }
+    if (to - a >= 1) runs.push({ axis, at, from: a, to, cap0: capA, cap1: false });
+  };
+  const half = (j) => (j.kind === "roundabout" ? 56 : H);
+  const corner = (j) => [j.arms.w, j.arms.e, j.arms.n, j.arms.s].filter(Boolean).length === 2 && !(j.arms.w && j.arms.e) && !(j.arms.n && j.arms.s);
+  const stop = (j, c) => ({ c, half: half(j), cap: corner(j) ? "bend" : "junction" });
+  world.streets.forEach((st, i) => {
+    const off = st.y === world.hqStreet, x0 = (off ? L - M : st.x0) * TILE, x1 = (off ? world.width + M : st.x1) * TILE;
+    const through = (j) => j.arms.w && j.arms.e && !(j.arms.n && j.arms.s) && j.kind !== "roundabout";
+    cut("x", (st.y + STREET / 2) * TILE, x0, x1, js.filter((j) => j.street === i && !through(j)).map((j) => stop(j, j.cx)));
+  });
+  throughRoads(world).forEach((r, i) => {
+    const through = (j) => j.arms.n && j.arms.s && !(j.arms.w && j.arms.e) && j.kind !== "roundabout";
+    cut("y", (r.x + STREET / 2) * TILE, r.y0 * TILE, r.y1 * TILE, js.filter((j) => j.road === i && !through(j)).map((j) => stop(j, j.cy)));
+  });
+  for (const j of js) {
+    if (!corner(j)) continue; // a corner: one road each way
+    const a = j.arms;
+    const h = a.w ? -1 : 1, v = a.n ? -1 : 1;
+    bends.push({ cx: j.cx + h * H, cy: j.cy + v * H, r: H, from: { x: j.cx + h * H, y: j.cy }, to: { x: j.cx, y: j.cy + v * H }, j: j.id });
+  }
+  return { runs, bends };
+}
+
 // Footbridges (the owner, 2026-11-12, decision 262): a few places where the sidewalk arches over the road and the
 // cabs drive under it. Only ever halfway along a block (never at a junction, so lights, roundabouts and giving way
 // are untouched), only inside the town, and only where the town's seed says so (about one block side in eleven), so
@@ -1260,7 +1300,9 @@ export function createTraffic(world, seed = "traffic", rareSeed, { warmMs = 0 } 
   sim.entries = lanes.filter((l) => l.startOff);
   // Every cab starts beyond the map's edge, queued on the roads that come in from it.
   let k = 0;
-  for (const [li, lane] of lanes.entries()) for (let n = 0; n < counts[li]; n++, k++) {
+  // Three in four of them (the owner, 2026-11-12, decision 269: "way too many cabs… 75% of what we have").
+  const keep = Math.round(counts.reduce((a, b) => a + b, 0) * CAB_KEEP);
+  for (const [li, lane] of lanes.entries()) for (let n = 0; n < counts[li] && k < keep; n++, k++) {
     const id = `${lane.id}:${n}`, f = 0.88 + (hashOf(`pace:${id}`) % 25) / 100;
     const car = { id, lane: null, d: 0, v: HIGHWAY_PX_S * f, f, lap: 0, rare: false, commit: null, stopFor: null, ring: null, braking: false };
     cars.push(car);

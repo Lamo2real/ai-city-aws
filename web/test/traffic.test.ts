@@ -4,6 +4,8 @@
 import { describe, expect, it } from "vitest";
 import {
   CAB_GAP_PX,
+  CAB_KEEP,
+  cabsPerLane,
   HIGHWAY_PX_S,
   TILE,
   JUNCTION_HALF,
@@ -123,18 +125,22 @@ describe("traffic lights", () => {
 });
 
 describe("the traffic as a whole", () => {
-  it("has a quarter of the original cabs: halved twice (decisions 180 and 191), every one starting beyond the map's edge (decision 267)", () => {
+  it("has three sixteenths of the original cabs: halved twice (decisions 180 and 191), then cut by a quarter (decision 269), every one starting beyond the map's edge (decision 267)", () => {
     expect(CAB_GAP_PX).toBe(44 * TILE);
     for (const [n, portrait] of [[2, false], [4, false], [8, false], [12, false], [6, true]] as const) {
       const sim = createTraffic(city(n, portrait));
       const before = sim.lanes.map((l) => Math.max(1, Math.round(l.span / CAB_GAP_PX))); // after decision 180
       const total = before.reduce((a, b) => a + b, 0);
       // Half again, but every lane keeps at least one (the town's short roads too, decision 259).
-      expect(sim.cars.length).toBeGreaterThanOrEqual(Math.max(sim.lanes.length, Math.round(total / 2)));
-      expect(sim.cars.length).toBeLessThanOrEqual(Math.round(total / 2) + sim.lanes.length);
+      // Then three in four of those (decision 269).
+      const was = cabsPerLane(sim.lanes.map((l) => l.span)).reduce((a, b) => a + b, 0);
+      expect(was).toBeGreaterThanOrEqual(Math.max(sim.lanes.length, Math.round(total / 2)));
+      expect(was).toBeLessThanOrEqual(Math.round(total / 2) + sim.lanes.length);
+      expect(sim.cars.length).toBe(Math.round(was * 0.75));
+      expect(CAB_KEEP).toBe(0.75);
       for (const c of sim.cars) expect(c.lane!.startOff && c.d <= 0).toBe(true); // queued on a road in from the edge
       const first = sim.lanes.reduce((k, l) => k + Math.max(1, Math.round(l.span / (22 * TILE))), 0); // before any halving
-      expect(sim.cars.length / first).toBeLessThan(0.5); // about a quarter; the town's short roads keep one each
+      expect(sim.cars.length / first).toBeLessThan(0.4); // about three sixteenths
     }
   });
 

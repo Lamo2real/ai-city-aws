@@ -4,7 +4,7 @@
 // Reviewer; each department's manager stands at its door; panels are React (see CityView.tsx).
 // The City View: a small game world of the agents, drawn pixel by pixel on a canvas from city-state.js.
 // All of the art is drawn here in code. Every person on screen is a real agent; only the scenery moves on its own.
-import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, lotsMemory, readLotsMemory, footbridges, PITCH_X, PITCH_Y, BLOCK_W, BLOCK_H, blockOf, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, carryTraffic, WARM_MS, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf, taxiCall, RIDE_PX_S, TO_WORK_BOOST, HOMES_PER_BLOCK } from "./city-state.js";
+import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, lotsMemory, readLotsMemory, footbridges, PITCH_X, PITCH_Y, BLOCK_W, BLOCK_H, blockOf, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, carryTraffic, centreLines, WARM_MS, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf, taxiCall, RIDE_PX_S, TO_WORK_BOOST, HOMES_PER_BLOCK } from "./city-state.js";
 
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const INK = "#1d1c36";
@@ -387,18 +387,27 @@ function roadH(g, x, y, w, h, seed) {
 // A footbridge over the road (decision 262): a stone deck from kerb to kerb with railings and lamp posts, a few steps
 // down at each end, and its shadow on the road; drawn above the cabs, which drive on underneath.
 function footbridge(g, b, ox, oy) {
+  // Seen from above (decision 269): a raised stone deck with heavy parapets, a crisp shadow falling across the road
+  // below, and a landing with steps on the pavement at each end, so it reads as a bridge, not a stripe.
   const along = b.across === "y"; // spans a street: the deck runs north–south
-  const cx = Math.round(b.x - ox), cy = Math.round(b.y - oy), half = 34, wide = 9;
+  const cx = Math.round(b.x - ox), cy = Math.round(b.y - oy), half = 30, wide = 10, land = 14;
   const box = (u0, v0, u1, v1, c) => (along ? R(g, cx + u0, cy + v0, u1 - u0, v1 - v0, c) : R(g, cx + v0, cy + u0, v1 - v0, u1 - u0, c));
-  box(-wide + 4, -16, wide + 7, 16, "rgba(20,18,40,.32)"); // its shadow across the carriageway
-  box(-wide - 1, -half - 1, wide + 1, half + 1, INK);
-  box(-wide, -half, wide, half, "#b8a98a");
-  box(-wide + 2, -half, wide - 2, half, "#d8cbab"); // the deck, warm stone
-  for (let v = -half + 3; v < half - 2; v += 6) box(-wide + 4, v, wide - 4, v + 1, "#c2b393"); // its slabs
-  box(-wide, -half, -wide + 2, half, "#5b4a3c"); box(wide - 2, -half, wide, half, "#5b4a3c"); // the railings
-  box(-wide - 1, -14, wide + 1, -12, "#8a7a62"); box(-wide - 1, 12, wide + 1, 14, "#8a7a62"); // where it springs from each kerb
-  for (let v = -half + 2; v <= half - 4; v += 8) { box(-wide - 1, v, -wide + 2, v + 2, INK); box(wide - 2, v, wide + 1, v + 2, INK); } // their posts
-  for (const e of [-1, 1]) for (let k = 0; k < 3; k++) box(-wide + 1, e * (half - 2 - k * 3) - 1, wide - 1, e * (half - 2 - k * 3), "#8f88a4"); // the steps down
+  box(-wide + 6, -16, wide + 8, 16, "rgba(12,10,32,.5)"); // its shadow on the carriageway, cast down-right
+  for (const e of [-1, 1]) { // the landings on each pavement, a little wider than the deck, with steps down
+    const v0 = e < 0 ? -half - land : half, v1 = e < 0 ? -half : half + land;
+    box(-wide - 3, v0 - (e < 0 ? 1 : 0), wide + 3, v1 + (e > 0 ? 1 : 0), INK);
+    box(-wide - 2, v0, wide + 2, v1, "#a99a7e");
+    for (let k = 0; k < 4; k++) { const v = e < 0 ? v0 + 2 + k * 3 : v1 - 3 - k * 3; box(-wide - 1, v, wide + 1, v + 1, "#7d7062"); }
+  }
+  box(-wide - 1, -half, wide + 1, half, INK); // the deck's outline
+  box(-wide + 3, -half, wide - 3, half, "#e3d6b6"); // the walkway, pale stone
+  for (let v = -half + 4; v < half - 2; v += 6) box(-wide + 3, v, wide - 3, v + 1, "#cbbd9b"); // its slabs
+  for (const side of [-1, 1]) { // the parapets: dark stone walls with a lit top edge
+    const u0 = side < 0 ? -wide : wide - 3;
+    box(u0, -half, u0 + 3, half, "#4f4458");
+    box(side < 0 ? u0 + 2 : u0, -half, side < 0 ? u0 + 3 : u0 + 1, half, "#a497b4");
+  }
+  for (const v of [-half + 2, half - 4]) { box(-wide - 1, v, -wide + 3, v + 3, "#2f2838"); box(wide - 3, v, wide + 1, v + 3, "#2f2838"); } // pillars at its ends
 }
 // A sidewalk along a street, open where an avenue joins it from that side (decision 262): the avenue's carriageway
 // runs into the street, never under the pavement.
@@ -419,17 +428,42 @@ function street(g, x0, x1, y, seed, avenues, joins = [], ends = { w: false, e: f
   sidewalk(g, X, Y, W, joins.filter((j) => j.north).map(gap), `${seed}n`);
   sidewalk(g, X, Y + H - 8, W, joins.filter((j) => j.south).map(gap), `${seed}s`);
   roadH(g, X, Y + 8, W, H - 16, seed);
-  for (let dx = 4; dx < W; dx += 20) R(g, X + dx, Y + H / 2 - 1, 10, 2, "#b9a45a");
   for (const a of avenues) if (a >= x0 && a < x1) for (let k = 0; k < 4; k++) R(g, (a + 3) * TILE + 2, Y + 11 + k * 7, 8, 4, "#cfcfd6"); // a crossing beside each junction
   if (ends.w) paving(g, X, Y, 8, H, WALK, "#65617c", `${seed}cw`);
   if (ends.e) paving(g, X + W - 8, Y, 8, H, WALK, "#65617c", `${seed}ce`);
+}
+// The centre lines (decision 269): dashes evenly spaced along each run between junctions, ending clear of the
+// junction's crossing and stop lines, running right up to a corner's bend, which bends the line round the turn.
+const LINE_Y = "#b9a45a", DASH = 10, DASH_GAP = 10;
+function centreLinePaint(g, { runs, bends }) {
+  for (const r of runs) {
+    const in0 = r.cap0 === "junction" ? 12 : 0, in1 = r.cap1 === "junction" ? 12 : 0, a = r.from + in0, b = r.to - in1, len = b - a;
+    if (len < DASH) continue;
+    // Whole dashes only, centred in the run (so both ends look the same); a run ending at a bend starts its dash there.
+    const n = Math.floor((len + DASH_GAP) / (DASH + DASH_GAP)), used = n * (DASH + DASH_GAP) - DASH_GAP;
+    const start = r.cap0 === "bend" ? a : r.cap1 === "bend" ? b - used : a + Math.floor((len - used) / 2);
+    for (let k = 0; k < n; k++) {
+      const p = start + k * (DASH + DASH_GAP);
+      if (r.axis === "x") R(g, p, r.at - 1, DASH, 2, LINE_Y); else R(g, r.at - 1, p, 2, DASH, LINE_Y);
+    }
+  }
+  for (const bd of bends) {
+    // A quarter circle from one road's line to the other's, in 2-pixel dabs.
+    const a0 = Math.atan2(bd.from.y - bd.cy, bd.from.x - bd.cx), a1 = Math.atan2(bd.to.y - bd.cy, bd.to.x - bd.cx);
+    let sweep = a1 - a0; if (sweep > Math.PI) sweep -= 2 * Math.PI; if (sweep < -Math.PI) sweep += 2 * Math.PI;
+    const arc = Math.abs(sweep) * bd.r;
+    for (let d = 0; d <= arc; d += 1) {
+      if (d < 4 || d > arc - 4) continue; // one curved stroke, clear of the dashes it joins
+      const t = a0 + (sweep * d) / arc;
+      R(g, Math.round(bd.cx + bd.r * Math.cos(t) - 1), Math.round(bd.cy + bd.r * Math.sin(t) - 1), 2, 2, LINE_Y);
+    }
+  }
 }
 function avenue(g, x, y0, y1, seed) { // tiles
   const X = x * TILE, Y = y0 * TILE, H = (y1 - y0) * TILE, W = 3 * TILE;
   paving(g, X, Y, 8, H, WALK, "#65617c", `${seed}w`);
   paving(g, X + W - 8, Y, 8, H, WALK, "#65617c", `${seed}e`);
   roadH(g, X + 8, Y, W - 16, H, seed);
-  for (let dy = 4; dy < H; dy += 20) R(g, X + W / 2 - 1, Y + dy, 2, 10, "#b9a45a");
 }
 
 // A junction's paint (decision 173): a stop line on each approach where there are lights, give-way teeth on the
@@ -831,6 +865,7 @@ function bake(world, skip = new Map(), { now = Date.now(), grow = true } = {}) {
   const crossings = (s) => verticals.filter((v) => v.y0 <= s.y - 1 && v.y1 >= s.y + 4 && v.x >= s.x0 && v.x + 3 <= s.x1).map((v) => v.x);
   const joins = (s) => verticals.filter((v) => v.y0 <= s.y + 3 && v.y1 >= s.y && v.x >= s.x0 && v.x + 3 <= s.x1).map((v) => ({ x: v.x, north: v.y0 < s.y, south: v.y1 > s.y + 3 }));
   for (const s of roads) street(g, s.x0, s.x1, s.y, `st${s.y}`, crossings(s).filter((a) => !round.has(`${(a + 1.5) * TILE},${(s.y + 1.5) * TILE}`)), joins(s), { w: !s.off, e: !s.off });
+  centreLinePaint(g, centreLines(world));
   for (const j of js) junctionMarks(g, j);
   // Trees wherever nothing else stands, far to near.
   // An empty lot is forest (decision 259); only one whose tower is coming down right now keeps clear for the wrecking ball.

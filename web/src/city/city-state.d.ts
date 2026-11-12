@@ -374,3 +374,6 @@ export function rideLegs(world: CityWorld, route: CityPoint[], from: CityPoint):
 export const CALL_PX: number;
 /** A taxi called for a new hire: it drives from `start` to the kerb `at`, where the ride's leg `leg` begins. */
 export function taxiCall(world: CityWorld, route: CityPoint[], ride: boolean[], from: CityPoint): { at: CityPoint; start: CityPoint; leg: number } | null;
+export const BEND_R: number;
+export function centreLines(world: CityWorld): { runs: Array<{ axis: "x" | "y"; at: number; from: number; to: number; cap0: false | "bend" | "junction"; cap1: false | "bend" | "junction" }>; bends: Array<{ cx: number; cy: number; r: number; from: CityPoint; to: CityPoint; j: string }> };
+export const CAB_KEEP: number;
