@@ -135,7 +135,7 @@ async def test_a_medium_job_is_planned_on_the_board_and_each_part_starts_as_soon
     every = await city.ledger.list_tickets(ALL_STATUSES)
     models = workers_by_goal(every, agents)
     assert models["Cards"] == ["sonnet-5-5"] and models["Score"] == ["sonnet-5-5"]
-    assert models["Title"] == ["haiku-5-5"]  # trivial: Haiku
+    assert models["Title"] == ["sonnet-5-5"]  # trivial or not, every worker is Sonnet (decision 300)
     check = next(t for t in every if t.get("check"))
     assert models[check["goal"]] == ["opus-5-5"]  # the whole-app check, on the reviewer's model
     # Score started only after Cards was done; the check after everything.
@@ -209,12 +209,18 @@ async def test_bigger_planners_and_reviewers_by_size(
         assert len(prompts) == 2  # every part reviewed on extreme
 
 
-async def test_a_trivial_part_that_fails_once_moves_up_to_sonnet() -> None:
+async def test_every_worker_is_sonnet_until_a_part_fails_twice() -> None:
+    """Decision 300: no Haiku path and no upgrade. A trivial part fails once and stays on Sonnet; only after a second
+    failure does a fresh Opus worker take it over."""
+
     async def worker(req: EngineRequest, call: Call) -> str:
         assert req.cwd
-        haiku = req.ledger and (await req.ledger.get_agent(req.ctx.agent_id) or {}).get("model") == "haiku-5-5"
-        Path(req.cwd, "out.json").write_text("{broken" if haiku else "{}")
-        return await call("report_to_manager", {"summary": "done", "artifacts": [], "checks": "-"})
+        me = (await req.ledger.get_agent(req.ctx.agent_id) or {}).get("model")
+        Path(req.cwd, "out.json").write_text("{}" if me == "opus-5-5" else "{broken")
+        first = await call("report_to_manager", {"summary": "done", "artifacts": [], "checks": "-"})
+        if first.startswith("Not reported"):
+            return await call("report_to_manager", {"summary": "done again", "artifacts": [], "checks": "-"})
+        return first
 
     parts = [{"name": "Title", "goal": "Title", "acceptance": "Says Memory", "department": "Builders", "trivial": True}]
     city = city_with(planner(parts, {}), worker=worker)
@@ -224,9 +230,21 @@ async def test_a_trivial_part_that_fails_once_moves_up_to_sonnet() -> None:
         (t for t in await city.ledger.list_tickets(ALL_STATUSES) if t["goal"] == "Title"), key=lambda t: t["created_at"]
     )
     agents = {a["id"]: a for a in await city.ledger.list_agents()}
-    assert [agents[t["to"]]["model"] for t in title] == ["haiku-5-5", "sonnet-5-5"]
-    assert title[0]["status"] == "cancelled" and title[1]["status"] == "done"
-    assert "Tests failed" in title[1]["review_reasons"][0]
+    assert [agents[t["to"]]["model"] for t in title] == ["sonnet-5-5", "opus-5-5"]
+    hired = [e["agent"] for e in city.bus.of_type("agent.hired") if e["agent"]["kind"] == "worker"]
+    assert {h["model"] for h in hired} == {"sonnet-5-5", "opus-5-5"}  # never Haiku or Fable on a medium job
+
+
+async def test_no_code_path_hires_a_worker_on_haiku() -> None:
+    from vaic.shared.hierarchy.factory import Factory, HireRefused
+
+    city = make_city(scripted_engine({}))
+    mgr = await make_department(city, "Builders")
+    f = Factory(city.ledger, city.bus, city.deps.settings)
+    spec = {"specialty": "Writer", "instructions": "Write the piece.", "tools": ["Read"]}
+    assert (await f.hire(spec, mgr, "Builders"))["model"] == "sonnet-5-5"  # no model named: the map's worker
+    with pytest.raises(HireRefused):
+        await f.hire(spec, mgr, "Builders", "haiku-5-5")
 
 
 async def test_a_single_worker_that_finds_the_job_bigger_hands_it_to_a_planner() -> None:

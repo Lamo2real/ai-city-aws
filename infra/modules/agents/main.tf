@@ -66,20 +66,12 @@ locals {
   all_roles = concat(local.roles, ["utility", "chief_of_staff", "executive"])
   # The runtimes that consult the executives may call the executives' models through their profile.
   consults = ["vaic", "orchestrator"]
-  # Plain model names each role may call: its own and its fallback, plus, for the roles named in departmentModels,
-  # the model the owner's chosen departments run on (decision 129: Fable for the workers of Media, Research, Legal).
-  dept_models = try(compact([local.models.departmentModels.model, local.models.departmentModels.fallback]), [])
-  dept_roles  = try(local.models.departmentModels.roles, ["manager", "worker"])
-  # The build map (decision 289): the Orchestrator's runtime (the planners), managers (reviewers) and workers may
-  # call every build model.
-  build_models = distinct(compact(concat(
-    [local.models.build.trivialWorker],
-    flatten([for s in values(local.models.build.sizes) : [s.planner, s.worker, s.reviewer, s.takeover]]),
-  )))
+  # The build map (decisions 289, 300): one map for every agent. The planner's runtime ("orchestrator" inside),
+  # the reviewers and the workers may call every model it names.
+  build_models = distinct(compact(flatten([for s in values(local.models.build.sizes) : [s.planner, s.worker, s.reviewer, s.takeover]])))
   role_models = {
     for r in local.all_roles : r => distinct(compact(concat(
       [local.models.roles[r].model, local.models.roles[r].fallback],
-      contains(local.dept_roles, r) ? local.dept_models : [],
       contains(["orchestrator", "manager", "worker"], r) ? local.build_models : [],
     )))
   }
@@ -125,13 +117,18 @@ resource "aws_ecr_lifecycle_policy" "runtime" {
 # bill splits model cost by role (AgentRole tag). Off: the runtimes call the global profiles.
 resource "aws_bedrock_inference_profile" "role" {
   for_each = var.use_application_inference_profiles ? toset(local.all_roles) : toset([])
-  name     = "vaic-${each.key}"
+  # The model is in the name, so a role whose model changes (decision 300) gets its new profile before the old one
+  # goes: the runtimes switch over in the same apply with no moment without a profile.
+  name = "vaic-${each.key}-${local.models.roles[each.key].model}"
   # Bedrock allows only letters, digits, ":" and "." separated by single spaces, "_" or "-" here.
   description = "AI City ${each.key} ${local.models.roles[each.key].model}"
   model_source {
     copy_from = local.system_profile_arn[local.models.roles[each.key].model]
   }
   tags = merge(local.tags, { AgentRole = each.key })
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_bedrockagentcore_memory" "role" {

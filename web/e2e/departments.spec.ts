@@ -45,12 +45,14 @@ test("build a department from the City: the tower goes up; demolish it: it comes
   const form = page.getByRole("form", { name: "Build a department" });
   await form.getByLabel("Name").fill("Customer Success");
   await form.getByLabel(/What it does/).fill("Keeps customers happy and renewing");
-  await expect(form.getByText("Its manager runs on Fable 5.1")).toBeVisible();
+  // One model map (decision 300): a read-only line, no model choice.
+  await expect(form.getByText(/Its workers run on Sonnet 5\.5 and its reviewer on Opus 5\.5/)).toBeVisible();
+  await expect(form.getByRole("checkbox")).toHaveCount(0);
   await form.getByRole("button", { name: "Build it" }).click();
   expect(m.calls.find((c) => c.method === "POST" && c.path === "/departments")?.body).toEqual({
     name: "Customer Success",
     mission: "Keeps customers happy and renewing",
-  }); // no worker_model: Opus 5.5 unless the owner ticks Fable
+  }); // no worker_model: every worker is Sonnet 5.5
 
   // The tower is on the map at once, under construction (scaffolding and a crane), then it stands.
   await expect.poll(() => towers(page)).toContain("Customer Success");
@@ -59,7 +61,8 @@ test("build a department from the City: the tower goes up; demolish it: it comes
   await page.screenshot({ path: `${SHOTS}/city-construction.png` });
   await expect.poll(() => anim(page, "Customer Success"), { timeout: 8000 }).toBeNull();
   const panel = page.getByRole("dialog", { name: "Customer Success department" });
-  await expect(panel.getByText("Opus 5.5")).toBeVisible();
+  await expect(panel.getByText(/Opus 5\.5 \(Fable 5\.1 on extreme jobs\)/)).toBeVisible(); // its reviewer
+  await expect(panel.getByText(/None hired · Sonnet 5\.5/)).toBeVisible(); // every worker (decision 300)
 
   // Demolish: one plain question, then the wrecking ball.
   await panel.getByRole("button", { name: "Demolish this department" }).click();

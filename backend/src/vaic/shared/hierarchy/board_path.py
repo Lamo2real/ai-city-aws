@@ -434,10 +434,8 @@ async def draft_verdict(d: CityDeps, ticket_id: str) -> str | None:
 
 
 def fails_allowed(part: Record) -> int:
-    """Failures before a part changes hands: one for a trivial part on Haiku (it moves up to Sonnet), else the
-    size's takeover count (2)."""
-    m = models_for(str(part.get("size") or "small"))
-    return m.trivial_fails_before_upgrade if part.get("model") == m.trivial_worker else m.fails_before_takeover
+    """Failures before a part changes hands: the size's takeover count (2; decision 300 removed Haiku workers)."""
+    return models_for(str(part.get("size") or "small")).fails_before_takeover
 
 
 # ---------- medium, large and extreme jobs: a planner writes parts to the board (stage 3) ----------
@@ -472,7 +470,7 @@ def planner_brief(task: Record, app: Record | None, departments: list[str], note
         "that start the work first. Each part: a name, the goal, the acceptance, its department "
         f"({', '.join(departments)}), after (the names of parts it needs first; none when it can start now), files "
         "(the files it alone owns: no two parts own the same file) and trivial=true for a one-line or config change "
-        "(it runs on Haiku). Then call finish_plan once. A whole-app check runs after every part, automatically, and "
+        "(it skips the reviewer when its tests pass). Then call finish_plan once. A whole-app check runs after every part, automatically, and "
         "makes the parts fit together; don't add one.",
         "Few, independent parts beat many small ones: one worker per part, no limit on how many.",
     ]

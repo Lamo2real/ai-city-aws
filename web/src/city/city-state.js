@@ -66,7 +66,7 @@ export function applySnapshot(state, snap, now = Date.now()) {
   // Saved specialists who are not hired right now live in the apartment buildings.
   for (const sp of snap.specialists ?? []) {
     const id = `spec-${sp.id}`;
-    if (!next.agents[id]) next.agents[id] = { id, kind: "specialist", role: sp.specialty, department: sp.department, model: "opus-5-5", parent: null, state: "retired", worker_state: "released", last_active_at: sp.created_at };
+    if (!next.agents[id]) next.agents[id] = { id, kind: "specialist", role: sp.specialty, department: sp.department, model: "sonnet-5-5", parent: null, state: "retired", worker_state: "released", last_active_at: sp.created_at };
   }
   next.activities = snap.activities ?? {};
   for (const t of snap.tickets ?? []) next.tickets[t.id] = t;
@@ -107,7 +107,7 @@ export function staffed(state) {
     if (have && have.standin && have.department === d.name && have.state !== "retired") continue;
     if (have && !have.standin && have.state !== "retired") continue;
     agents ??= { ...state.agents };
-    agents[id] = { id, kind: "manager", role: `${d.name} Reviewer`, department: d.name, model: "fable-5-1", parent: "orchestrator", state: "dormant", worker_state: null, total_cost_usd: 0, standin: true };
+    agents[id] = { id, kind: "manager", role: `${d.name} Reviewer`, department: d.name, model: "opus-5-5", parent: "orchestrator", state: "dormant", worker_state: null, total_cost_usd: 0, standin: true };
   }
   return agents ? { ...state, agents } : state;
 }

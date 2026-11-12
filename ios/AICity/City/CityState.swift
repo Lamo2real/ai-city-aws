@@ -242,7 +242,7 @@ enum City {
             let id = "spec-\(sid)"
             if next.agents[id] == nil {
                 next.agents[id] = Agent(id: id, kind: "specialist", role: sp["specialty"].string ?? "Specialist", department: sp["department"].string,
-                                        model: "opus-5-5", state: "retired", workerState: "released", lastActiveAt: sp["created_at"].string)
+                                        model: "sonnet-5-5", state: "retired", workerState: "released", lastActiveAt: sp["created_at"].string)
             }
         }
         for (id, a) in snap["activities"].object {

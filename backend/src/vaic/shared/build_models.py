@@ -2,7 +2,8 @@
 (``build``), so the map lives in one place like every other model rule.
 
 Sizes: ``small`` (one worker, no planner), ``medium`` (Sonnet planner), ``large`` (Opus planner), ``extreme`` (a
-Fable architect for a whole app with AWS infrastructure). Nothing here calls a model.
+Fable architect for a whole app with AWS infrastructure). Every worker is Sonnet 5.5 (decision 300). Nothing here calls a
+model.
 """
 
 from __future__ import annotations
@@ -32,8 +33,6 @@ class SizeModels:
     whole_app_check: bool
     aws_checks: bool
     """The AWS setup gets security and cost checks (extreme jobs)."""
-    trivial_worker: str
-    trivial_fails_before_upgrade: int
     fails_before_takeover: int
 
 
@@ -55,21 +54,15 @@ def models_for(size: str, config: Mapping[str, Any] | None = None) -> SizeModels
         takeover=str(r["takeover"]),
         whole_app_check=bool(r.get("wholeAppCheck")),
         aws_checks=bool(r.get("awsChecks")),
-        trivial_worker=str(b["trivialWorker"]),
-        trivial_fails_before_upgrade=int(b.get("trivialFailsBeforeUpgrade", 1)),
         fails_before_takeover=int(b.get("failsBeforeTakeover", 2)),
     )
 
 
 def worker_model(size: str, trivial: bool = False, fails: int = 0, config: Mapping[str, Any] | None = None) -> str:
-    """The model for one part: Haiku for a trivial part until it has failed once, then the size's worker model;
-    after ``fails_before_takeover`` failures, the size's takeover model."""
+    """The model for one part: Sonnet 5.5 for every worker (decision 300; ``trivial`` changes nothing any more), and
+    after ``fails_before_takeover`` failures the size's takeover model (Opus 5.5, Fable 5.1 on extreme)."""
     m = models_for(size, config)
-    if fails >= m.fails_before_takeover:
-        return m.takeover
-    if trivial and fails < m.trivial_fails_before_upgrade:
-        return m.trivial_worker
-    return m.worker
+    return m.takeover if fails >= m.fails_before_takeover else m.worker
 
 
 def needs_review(size: str, trivial: bool, risky: bool, config: Mapping[str, Any] | None = None) -> bool:
@@ -85,7 +78,7 @@ def needs_review(size: str, trivial: bool, risky: bool, config: Mapping[str, Any
 def build_model_names(config: Mapping[str, Any] | None = None) -> set[str]:
     """Every model a build may call (for IAM and checks)."""
     b = _cfg(config)
-    names = {str(b["trivialWorker"])}
+    names: set[str] = set()
     for r in b["sizes"].values():
         names |= {str(v) for k, v in r.items() if k in ("planner", "worker", "reviewer", "takeover") and v}
     return names

@@ -185,16 +185,16 @@ async def test_does_not_retry_other_errors() -> None:
     assert calls == 1
 
 
-# ---------- Fable → Opus fallback ----------
+# ---------- Fable → Opus fallback (the executives and the Chief of Staff keep it; decision 300) ----------
 async def test_a_refusal_triggers_exactly_one_fallback_turn_on_opus_marked_in_the_ledger() -> None:
     runner = Runner(
         lambda i: reply("I can't help with that.", "refusal") if i.model.name == "fable-5-1" else reply("Plan ready.")
     )
     ledger, _, deps = setup(runner)
-    r = await run_gated_turn(turn("orchestrator"), deps)
+    r = await run_gated_turn(turn("executive"), deps)
     assert [c.model.name for c in runner.calls] == ["fable-5-1", "opus-5-5"]
     assert r.fallback
-    turns = await ledger.turns_of("orchestrator-1")
+    turns = await ledger.turns_of("executive-1")
     assert [(t["model"], t["fallback"], t["outcome"]) for t in turns] == [
         ("fable-5-1", False, "refused"),
         ("opus-5-5", True, "ok"),
@@ -204,7 +204,7 @@ async def test_a_refusal_triggers_exactly_one_fallback_turn_on_opus_marked_in_th
 async def test_a_refusal_on_the_fallback_is_final_no_loop() -> None:
     runner = Runner(lambda _: reply("no", "refusal"))
     _, _, deps = setup(runner)
-    r = await run_gated_turn(turn("manager"), deps)
+    r = await run_gated_turn(turn("executive"), deps)
     assert len(runner.calls) == 2
     assert r.output.stop_reason == "refusal"
 
@@ -218,7 +218,7 @@ async def test_a_review_with_no_verdict_falls_back_once() -> None:
         )
     )
     _, _, deps = setup(runner)
-    r = await run_gated_turn(turn("manager", "manager", needs_verdict=True), deps)
+    r = await run_gated_turn(turn("executive", "manager", needs_verdict=True), deps)
     assert r.verdict == "FAIL"
     assert r.fallback
 
@@ -230,7 +230,7 @@ async def test_fable_unavailable_falls_back_to_opus() -> None:
         return reply("ok")
 
     _, _, deps = setup(fn)
-    assert (await run_gated_turn(turn("orchestrator"), deps)).model.name == "opus-5-5"
+    assert (await run_gated_turn(turn("executive"), deps)).model.name == "opus-5-5"
 
 
 async def test_a_model_bedrock_refuses_through_claude_code_falls_back_to_opus() -> None:
@@ -248,7 +248,7 @@ async def test_a_model_bedrock_refuses_through_claude_code_falls_back_to_opus() 
             return reply("ok")
 
         _, _, deps = setup(fn)
-        assert (await run_gated_turn(turn("orchestrator"), deps)).model.name == "opus-5-5"
+        assert (await run_gated_turn(turn("executive"), deps)).model.name == "opus-5-5"
 
 
 async def test_roles_without_a_fallback_never_retry_on_another_model() -> None:
@@ -265,9 +265,9 @@ async def test_records_cost_rows_with_role_department_ticket_model_tokens_and_us
     assert t["role"] == "worker"
     assert t["department"] == "Engineering"
     assert t["ticket_id"] == "t-1"
-    assert t["model"] == "opus-5-5"
+    assert t["model"] == "sonnet-5-5"
     assert (t["input"], t["output"], t["cache_read"], t["cache_write_1h"]) == (1000, 500, 2000, 100)
-    assert t["usd"] == pytest.approx(estimate_usd("opus-5-5", USAGE))
+    assert t["usd"] == pytest.approx(estimate_usd("sonnet-5-5", USAGE))
     assert (await ledger.spend("day", "DEPT#engineering"))["turns"] == 1
     assert len(bus.of_type("cost.update")) == 1
 

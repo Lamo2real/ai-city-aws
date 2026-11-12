@@ -8,8 +8,8 @@ from test_api import ev, js, make
 from test_task_control import SPEC, city, job, vaic_tools
 from vaic.lambdas.api import handle_http
 from vaic.shared.hierarchy.board_path import add_part, plan_items
-from vaic.shared.hierarchy.departments import DepartmentError, clean_name, worker_model_choice
-from vaic.shared.models import department_override, model_name_for, resolve_role
+from vaic.shared.hierarchy.departments import DepartmentError, clean_name
+from vaic.shared.models import model_name_for, resolve_role
 from vaic.shared.presets import ensure_presets, orchestrator_note
 
 
@@ -19,38 +19,28 @@ def test_names_and_model_choices_are_plain() -> None:
     for bad in ("", "x", "1234", "a" * 41, "HQ"):
         with pytest.raises(DepartmentError):
             clean_name(bad)
-    assert worker_model_choice(None) is None and worker_model_choice("") is None
-    assert worker_model_choice("fable") == "fable-5-1" and worker_model_choice("Fable 5.1") == "fable-5-1"
-    assert worker_model_choice(True) == "fable-5-1" and worker_model_choice("opus") == "opus-5-5"
-    with pytest.raises(DepartmentError):
-        worker_model_choice("gpt-5")
 
 
-def test_a_departments_own_worker_model_wins_for_workers_only() -> None:
-    fable = {"name": "Customer Success", "worker_model": "fable-5-1"}
-    assert model_name_for("worker", "Customer Success") == "opus-5-5"
-    assert model_name_for("worker", "Customer Success", fable) == "fable-5-1"
-    assert model_name_for("manager", "Customer Success", fable) == "fable-5-1"  # every manager is Fable anyway
-    r = resolve_role("worker", department="Customer Success", dept=fable, application_profiles={"worker": "arn:w"})
-    assert r.primary.name == "fable-5-1" and r.fallback is not None and r.fallback.name == "opus-5-5"
-    assert r.primary.invoke_id == r.primary.profile_id  # the worker's app profile copies Opus, so Fable goes direct
-    # Opus chosen for a department whose config says Fable: the owner's choice wins; no override needed elsewhere.
-    assert department_override("worker", "Media", dept={"worker_model": "opus-5-5"}) is None
-    assert model_name_for("worker", "Media") == "fable-5-1"
-    assert model_name_for("worker", "Media", {"worker_model": ""}) == "fable-5-1"
+def test_no_department_has_its_own_worker_model_any_more() -> None:
+    """Decision 300 replaces decisions 129 and 134: every worker is Sonnet 5.5, every reviewer Opus 5.5."""
+    for rec in ({"name": "Customer Success", "worker_model": "fable-5-1"}, {"name": "Media"}, None):
+        name = rec["name"] if rec else "Sales"
+        assert model_name_for("worker", name, rec) == "sonnet-5-5"
+        assert model_name_for("manager", name, rec) == "opus-5-5"
+        assert resolve_role("worker", department=name, dept=rec).primary.name == "sonnet-5-5"
 
 
-async def test_vaic_builds_a_department_with_opus_workers_and_a_tower_event() -> None:
+async def test_vaic_builds_a_department_with_sonnet_workers_and_a_tower_event() -> None:
     c = await city()
     said = await vaic_tools(c)["build_department"].handler(
         {"name": "Customer Success", "mission": "Keep customers happy and renewing."}
     )
-    assert said.startswith("Built Customer Success") and "Claude Fable 5.1" in said and "Claude Opus 5.5" in said
+    assert said.startswith("Built Customer Success") and "Sonnet 5.5" in said and "Opus 5.5" in said
     dept = await c.ledger.get_department("Customer Success")
     assert dept and dept["state"] == "active" and dept["built_by"] == "owner" and not dept.get("worker_model")
     (e,) = c.bus.of_type("department.created")
     assert e["name"] == "Customer Success" and "worker_model" not in e
-    # Its manager is Fable (hired with its first goal); its workers are Opus.
+    # Its reviewer is Opus (hired with its first part); its workers are Sonnet.
     task = await c.ledger.create_ticket(
         {"goal": "Write a renewal email", "from": "vaic", "to": "orchestrator", "department": None,
          "parent_id": None, "kind": "task", "status": "in_progress", "planned": True, "path": "board",
@@ -59,22 +49,21 @@ async def test_vaic_builds_a_department_with_opus_workers_and_a_tower_event() ->
     await add_part(c.host.d, task["id"], {"name": "Email", "goal": "A renewal email", "acceptance": "One email",
                                           "department": "Customer Success"})  # fmt: skip
     mgr = await c.ledger.get_agent(dept["manager_id"])
-    assert mgr and mgr["model"] == "fable-5-1"
+    assert mgr and mgr["model"] == "opus-5-5"
     w = await c.factory.hire(SPEC, dept["manager_id"], "Customer Success")
-    assert w["model"] == "opus-5-5"
+    assert w["model"] == "sonnet-5-5"
     again = await vaic_tools(c)["build_department"].handler({"name": "customer success"})
     assert "already standing" in again and len(c.bus.of_type("department.created")) == 1
 
 
-async def test_fable_workers_only_when_the_owner_asks() -> None:
+async def test_an_old_request_for_fable_workers_still_builds_sonnet_workers() -> None:
     c = await city()
     said = await vaic_tools(c)["build_department"].handler({"name": "Partnerships", "worker_model": "fable-5-1"})
-    assert "workers run on Claude Fable 5.1" in said
+    assert said.startswith("Built Partnerships") and "Sonnet 5.5" in said
     dept = await c.ledger.get_department("Partnerships")
-    assert dept and dept["worker_model"] == "fable-5-1"
-    assert c.bus.of_type("department.created")[0]["worker_model"] == "fable-5-1"
+    assert dept and not dept.get("worker_model")
     w = await c.factory.hire(SPEC, dept["manager_id"], "Partnerships")
-    assert w["model"] == "fable-5-1"
+    assert w["model"] == "sonnet-5-5"
 
 
 async def test_the_ceiling_counts_only_the_owners_own_departments() -> None:
@@ -105,7 +94,9 @@ async def test_demolish_asks_first_then_sends_workers_home_hands_work_back_and_k
     assert (await c.ledger.get_department("Writing"))["state"] == "active"  # not yet
 
     said = await tools["demolish_department"].handler({"name": "Writing", "confirm": True})
-    assert said.startswith("Demolished Writing: 2 workers went home, 3 unfinished parts went to the department that took over, or were dropped.")
+    assert said.startswith(
+        "Demolished Writing: 2 workers went home, 3 unfinished parts went to the department that took over, or were dropped."
+    )
     dept = await c.ledger.get_department("Writing")
     assert dept and dept["state"] == "demolished" and dept.get("demolished_at")  # the record stays: history
     assert "Writing" not in [x["name"] for x in await c.ledger.list_departments()]
@@ -148,7 +139,7 @@ async def test_a_demolished_preset_is_not_put_back_and_leaves_the_orchestrators_
 async def test_the_http_api_builds_and_demolishes() -> None:
     d = make()
     r = await handle_http(ev("POST", "/departments", {"name": "Customer Success", "worker_model": "fable"}), d)
-    assert r["statusCode"] == 201 and js(r)["department"]["worker_model"] == "fable-5-1"
+    assert r["statusCode"] == 201 and not js(r)["department"].get("worker_model")  # one map (decision 300)
     assert js(r)["outcome"] == "created"
     assert (await handle_http(ev("POST", "/departments", {"name": "customer success"}), d))["statusCode"] == 409
     assert (await handle_http(ev("POST", "/departments", {"name": ""}), d))["statusCode"] == 400

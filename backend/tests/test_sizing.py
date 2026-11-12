@@ -73,13 +73,16 @@ def test_the_model_map() -> None:
     )
     assert models_for("nonsense").size == "small"
     assert not small.whole_app_check and models_for("medium").whole_app_check
-    # Haiku for trivial parts, Sonnet after one failure, the takeover model after two.
-    assert worker_model("medium", trivial=True) == "haiku-5-5"
+    # Every worker is Sonnet, trivial or not (decision 300); the takeover model after two failures.
+    assert worker_model("medium", trivial=True) == "sonnet-5-5"
     assert worker_model("medium", trivial=True, fails=1) == "sonnet-5-5"
+    assert all(
+        worker_model(s, t) == "sonnet-5-5" for s in ("small", "medium", "large", "extreme") for t in (True, False)
+    )
     assert worker_model("medium", fails=2) == "opus-5-5"
     assert worker_model("extreme", fails=2) == "fable-5-1"
     assert not needs_review("small", trivial=False, risky=False) and needs_review("small", False, True)
     assert needs_review("medium", trivial=False, risky=False) and not needs_review("medium", True, False)
     assert needs_review("extreme", trivial=True, risky=False)
-    assert build_model_names() == {"haiku-5-5", "sonnet-5-5", "opus-5-5", "fable-5-1"}
+    assert build_model_names() == {"sonnet-5-5", "opus-5-5", "fable-5-1"}  # no Haiku in the build
     assert "global" in inference_note()

@@ -55,7 +55,9 @@ describe("IAM", () => {
     const w = rolePolicies("worker") as Stmt[];
     expect(actions(w).some((a) => a.startsWith("iam:"))).toBe(false);
     const invoke = w.filter((s) => actions([s]).some((a) => a.startsWith("bedrock:Invoke"))).flatMap((s) => s.Resource);
-    expect(invoke.every((r) => /opus-5-5|vaic-worker/.test(r))).toBe(true);
+    // Decision 300: workers run on Sonnet 5.5; a takeover worker on Opus 5.5 or Fable 5.1 (extreme). Never Haiku.
+    expect(invoke.every((r) => /sonnet-5-5|opus-5-5|fable-5-1|vaic-worker/.test(r))).toBe(true);
+    expect(invoke.some((r) => /haiku/.test(r))).toBe(false);
   });
   it("only the manager can call the Agent Factory, and only coordinators can send to every queue", () => {
     const can = (role: string, a: string) => actions(rolePolicies(role) as Stmt[]).includes(a);
@@ -66,12 +68,13 @@ describe("IAM", () => {
       .flatMap((s) => s.Resource);
     expect(workerQueues).toEqual([expect.stringMatching(/vaic-prod-manager$/)]);
   });
-  it("Fable roles may invoke their Opus fallback; VAIC only its own model (Haiku)", () => {
+  it("the planner may invoke every planner model (Sonnet, Opus, Fable); VAIC only its own model (Haiku)", () => {
     const models = (role: string) =>
       (rolePolicies(role) as Stmt[])
         .filter((s) => actions([s]).includes("bedrock:InvokeModel"))
         .flatMap((s) => s.Resource)
         .join(" ");
+    expect(models("orchestrator")).toMatch(/sonnet-5-5/);
     expect(models("orchestrator")).toMatch(/fable-5-1/);
     expect(models("orchestrator")).toMatch(/opus-5-5/);
     expect(models("vaic")).toMatch(/haiku-5-5/);
@@ -961,14 +964,11 @@ describe("the Chief of Staff (decision 124)", () => {
   const routes = api.slice(api.indexOf("routes = ["), api.indexOf("]", api.indexOf("routes = [")));
   it("is Fable 5.1 with Opus 5.5 behind it, with its own tagged application inference profile", () => {
     expect(models.roles.chief_of_staff).toMatchObject({ model: "fable-5-1", fallback: "opus-5-5" });
-    // Decision 129: every manager on Fable; workers may call the departments' model too.
-    expect(models.roles.manager).toMatchObject({ model: "fable-5-1", fallback: "opus-5-5" });
-    expect(models.departmentModels).toMatchObject({
-      roles: ["worker"],
-      departments: ["Media", "Research", "Legal"],
-      model: "fable-5-1",
-    });
-    expect(agents).toMatch(/contains\(local\.dept_roles, r\) \? local\.dept_models : \[\]/);
+    // Decision 300 (replacing 129 and 134): one map; reviewers on Opus, every worker on Sonnet, no Fable departments.
+    expect(models.roles.manager).toMatchObject({ model: "opus-5-5", fallback: null });
+    expect(models.roles.worker).toMatchObject({ model: "sonnet-5-5", fallback: null });
+    expect(models.departmentModels).toBeUndefined();
+    expect(agents).toMatch(/contains\(\["orchestrator", "manager", "worker"\], r\) \? local\.build_models : \[\]/);
     expect(agents).toMatch(/all_roles = concat\(local\.roles, \["utility", "chief_of_staff", "executive"\]\)/);
     expect(prod).toMatch(/chief_of_staff_profile_arn = module\.agents\.chief_of_staff_profile_arn/);
   });

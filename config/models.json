@@ -44,17 +44,17 @@
       "cacheTtl": "5m"
     },
     "orchestrator": {
-      "model": "fable-5-1",
-      "fallback": "opus-5-5",
+      "model": "sonnet-5-5",
+      "fallback": null,
       "cacheTtl": "1h"
     },
     "manager": {
-      "model": "fable-5-1",
-      "fallback": "opus-5-5",
+      "model": "opus-5-5",
+      "fallback": null,
       "cacheTtl": "1h"
     },
     "worker": {
-      "model": "opus-5-5",
+      "model": "sonnet-5-5",
       "fallback": null,
       "cacheTtl": "5m"
     },
@@ -75,23 +75,14 @@
       "cacheTtl": "5m"
     }
   },
-  "departmentModels": {
-    "$comment": "The owner's rules (2026-11-09, decision 129): Claude Fable 5.1 for the Orchestrator and every Department Manager (roles above), and for the workers of the Media, Research and Legal departments (here); the Chief of Staff is on Fable too; every other worker uses Opus 5.5. Department names as in config/departments.json. A department the owner builds on demand carries its own worker_model on its ledger record (opus-5-5 unless the owner explicitly asks for fable-5-1, decision 134), which wins for its workers.",
-    "roles": ["worker"],
-    "departments": ["Media", "Research", "Legal"],
-    "model": "fable-5-1",
-    "fallback": "opus-5-5"
-  },
   "build": {
-    "$comment": "How the city builds (the owner's approved re-architecture, decision 289). VAIC sizes each job in code (vaic.shared.sizing); the size picks the planner, the workers, the reviewer and who takes over a stuck part. The owner's words always win on size. Workers run on Sonnet 5.5; a part the planner marks trivial runs on Haiku 5.5 and moves up to Sonnet after one failure. Every call goes through the global cross-region inference profiles (profilePrefix); Bedrock's latency-optimised inference is not used (not offered for these models in eu-north-1 as far as this repository knows; unverified on the account). Read only by vaic.shared.build_models.",
+    "$comment": "How the city builds (the owner's approved re-architecture, decision 289). VAIC sizes each job in code (vaic.shared.sizing); the size picks the planner, the workers, the reviewer and who takes over a stuck part. The owner's words always win on size. Every worker runs on Sonnet 5.5, in every department and job size, never Haiku, Opus or Fable (the owner, decision 300); department reviewers on Opus 5.5 (Fable 5.1 on extreme jobs); the role defaults above match this map, so an agent outside a board job resolves the same way. Every call goes through the global cross-region inference profiles (profilePrefix); Bedrock's latency-optimised inference is not used (not offered for these models in eu-north-1 as far as this repository knows; unverified on the account). Read only by vaic.shared.build_models.",
     "sizes": {
       "small": {"planner": null, "worker": "sonnet-5-5", "reviewer": "opus-5-5", "review": "risky", "takeover": "opus-5-5", "wholeAppCheck": false, "awsChecks": false},
       "medium": {"planner": "sonnet-5-5", "worker": "sonnet-5-5", "reviewer": "opus-5-5", "review": "nontrivial", "takeover": "opus-5-5", "wholeAppCheck": true, "awsChecks": false},
       "large": {"planner": "opus-5-5", "worker": "sonnet-5-5", "reviewer": "opus-5-5", "review": "nontrivial", "takeover": "opus-5-5", "wholeAppCheck": true, "awsChecks": false},
       "extreme": {"planner": "fable-5-1", "worker": "sonnet-5-5", "reviewer": "fable-5-1", "review": "every", "takeover": "fable-5-1", "wholeAppCheck": true, "awsChecks": true}
     },
-    "trivialWorker": "haiku-5-5",
-    "trivialFailsBeforeUpgrade": 1,
     "failsBeforeTakeover": 2
   },
   "prices": {

@@ -10,7 +10,7 @@ import { Button, toast } from "./ui.tsx";
 type Built = { department: { name: string; worker_model?: string }; outcome: "created" | "rebuilt" };
 type Demolished = { name: string; workers: number; parts: number };
 
-export const buildDepartment = (body: { name: string; mission?: string; worker_model?: string }) =>
+export const buildDepartment = (body: { name: string; mission?: string }) =>
   api<Built>("/departments", { method: "POST", body });
 export const demolishDepartment = (name: string) =>
   api<Demolished>(`/departments/${encodeURIComponent(departmentKey(name))}`, {
@@ -26,13 +26,15 @@ export const departmentKey = (name: string) =>
     .replace(/^-+|-+$/g, "")
     .slice(0, 40) || "x";
 
+/** The one model map (decision 300), read-only: no per-department model choice. */
+export const MODEL_MAP_LINE = "Its workers run on Sonnet 5.5 and its reviewer on Opus 5.5 (Fable 5.1 on extreme jobs).";
+
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 
-/** Name, what it does, and one plain choice: its workers on Opus 5.5 (the rule) or Fable 5.1 (only when asked). */
+/** Name and what it does; its models follow the one map (decision 300), shown as a plain line. */
 export function BuildDepartment({ onDone, compact = false }: { onDone?: (name: string) => void; compact?: boolean }) {
   const [name, setName] = useState("");
   const [mission, setMission] = useState("");
-  const [fable, setFable] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const submit = async (e: FormEvent) => {
@@ -45,15 +47,13 @@ export function BuildDepartment({ onDone, compact = false }: { onDone?: (name: s
       const r = await buildDepartment({
         name: name.trim(),
         ...(mission.trim() ? { mission: mission.trim() } : {}),
-        ...(fable ? { worker_model: "fable-5-1" } : {}),
       });
       toast({
-        text: `${r.department.name} is going up in the City. Its manager runs on Fable 5.1, its workers on ${fable ? "Fable 5.1" : "Opus 5.5"}.`,
+        text: `${r.department.name} is going up in the City. ${MODEL_MAP_LINE}`,
         tone: "good",
       });
       setName("");
       setMission("");
-      setFable(false);
       onDone?.(r.department.name);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Couldn't build it right now. Try again.");
@@ -82,11 +82,7 @@ export function BuildDepartment({ onDone, compact = false }: { onDone?: (name: s
           maxLength={400}
         />
       </label>
-      <label className="checkrow">
-        <input type="checkbox" checked={fable} onChange={(e) => setFable(e.target.checked)} />
-        <span>Workers on Fable 5.1 instead of Opus 5.5 (more capable, costs more)</span>
-      </label>
-      <p className="mute">Its manager runs on Fable 5.1, like every manager. It stands empty until work arrives.</p>
+      <p className="mute">{MODEL_MAP_LINE} It stands empty until work arrives.</p>
       {error ? (
         <p className="field-error" role="alert">
           {error}
@@ -177,7 +173,6 @@ export function YourDepartments() {
                 aria-expanded={open === n}
               >
                 {n}
-                {city.departments[n]?.worker_model === "fable-5-1" ? " · Fable workers" : ""}
               </button>
               {open === n ? <DemolishDepartment name={n} city={city} onDone={() => setOpen(null)} /> : null}
             </li>

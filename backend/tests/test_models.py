@@ -6,60 +6,53 @@ from vaic.shared.models import ROLES, model_name_for, resolve_role, resolve_role
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_maps_every_role_to_its_pinned_model_on_global_profiles() -> None:
+def test_maps_every_role_to_the_one_model_map_on_global_profiles() -> None:
+    """Decision 300: one map for every agent. Planner turns and reviews name their model on the message (by size);
+    these are the role defaults an agent resolves to otherwise."""
     want = {
         "vaic": "haiku-5-5",
-        "orchestrator": "fable-5-1",
-        "manager": "fable-5-1",
-        "worker": "opus-5-5",
+        "orchestrator": "sonnet-5-5",  # the planner's runtime (decision 298), medium by default
+        "manager": "opus-5-5",  # the department's reviewer
+        "worker": "sonnet-5-5",  # every worker, always
         "utility": "haiku-5-5",
-        "chief_of_staff": "fable-5-1",
-        "executive": "fable-5-1",  # decision 140
+        "chief_of_staff": "fable-5-1",  # not in the diagram: unchanged (decision 300)
+        "executive": "fable-5-1",  # decision 140, not in the diagram: unchanged
     }
     for role in ROLES:
         r = resolve_role(role)
-        assert r.primary.name == want[role]
+        assert r.primary.name == want[role], role
         assert r.primary.profile_id.startswith("global.")
         assert r.primary.invoke_id == r.primary.profile_id
         assert not r.degraded
 
 
-def test_only_fable_roles_fall_back_to_opus_others_have_none() -> None:
-    assert resolve_role("orchestrator").fallback.name == "opus-5-5"  # type: ignore[union-attr]
-    assert resolve_role("manager").fallback.name == "opus-5-5"  # type: ignore[union-attr]
+def test_only_the_fable_roles_left_fall_back_to_opus() -> None:
     assert resolve_role("chief_of_staff").fallback.name == "opus-5-5"  # type: ignore[union-attr]
     assert resolve_role("executive").fallback.name == "opus-5-5"  # type: ignore[union-attr]
-    for r in ("vaic", "worker", "utility"):
+    for r in ("vaic", "orchestrator", "manager", "worker", "utility"):
         assert resolve_role(r).fallback is None  # type: ignore[arg-type]
 
 
-def test_fable_for_the_orchestrator_every_manager_and_media_research_legal_workers() -> None:
-    """The owner's rules (2026-11-09): every other worker is on Opus 5.5."""
-    for dept in ("Media", "Research", "Legal", "legal"):
-        r = resolve_role("worker", department=dept, application_profiles={"worker": "arn:x"})
-        assert r.primary.name == "fable-5-1" and r.fallback.name == "opus-5-5"  # type: ignore[union-attr]
-        assert r.primary.invoke_id == r.primary.profile_id  # the worker profile copies Opus
-        assert model_name_for("worker", dept) == "fable-5-1"
-    for dept in ("Sales", "Marketing", "Application", "Customer Support", None):
-        assert resolve_role("worker", department=dept).primary.name == "opus-5-5"
-        assert model_name_for("worker", dept) == "opus-5-5"
-    for dept in ("Sales", "Media", None):
-        r = resolve_role("manager", department=dept, application_profiles={"manager": "arn:m"})
-        assert r.primary.name == "fable-5-1" and r.primary.invoke_id == "arn:m"  # its own tagged profile
-        assert model_name_for("manager", dept) == "fable-5-1"
-    assert resolve_role("orchestrator", department="Sales").primary.name == "fable-5-1"
-    assert resolve_role("chief_of_staff", department="Sales").primary.name == "fable-5-1"
+def test_every_worker_in_every_department_is_sonnet() -> None:
+    """The owner (decision 300): workers are Sonnet 5.5 in every department, never Haiku, Opus or Fable; the old
+    Fable departments (decision 129) and a department's own worker model (decision 134) are gone."""
+    for dept in ("Media", "Research", "Legal", "Sales", "Application", None):
+        assert resolve_role("worker", department=dept).primary.name == "sonnet-5-5"
+        assert model_name_for("worker", dept) == "sonnet-5-5"
+    for old in ("opus-5-5", "fable-5-1", "fable-5-2"):
+        assert resolve_role("worker", department="Design", dept={"worker_model": old}).primary.name == "sonnet-5-5"
+        assert model_name_for("worker", "Design", {"worker_model": old}) == "sonnet-5-5"
 
 
 def test_uses_the_roles_application_inference_profile_when_configured() -> None:
     arn = "arn:aws:bedrock:eu-north-1:111122223333:application-inference-profile/abc"
     r = resolve_role("worker", application_profiles={"worker": arn})
     assert r.primary.invoke_id == arn
-    assert r.primary.profile_id == "global.anthropic.claude-opus-5-5"
+    assert r.primary.profile_id == "global.anthropic.claude-sonnet-5-5"
 
 
 def test_on_eu_profiles_fable_roles_fall_back_to_opus_as_primary() -> None:
-    r = resolve_role("manager", prefix="eu")
+    r = resolve_role("executive", prefix="eu")
     assert r.degraded
     assert r.primary.name == "opus-5-5"
     assert r.primary.profile_id == "eu.anthropic.claude-opus-5-5"
@@ -106,14 +99,9 @@ def test_model_ids_live_only_in_config_models_json() -> None:
     assert offenders == []
 
 
-def test_records_saved_with_fable_5_2_resolve_to_fable_5_1() -> None:
-    """Decision 182: agents and departments saved with fable-5-2 (decision 154) run on Fable 5.1 again."""
-    from vaic.shared.hierarchy.departments import worker_model_choice
-    from vaic.shared.models import current_name, department_override, model_label
+def test_records_saved_with_fable_5_2_still_read_as_fable_5_1() -> None:
+    """Decision 182: an old record's fable-5-2 reads as Fable 5.1 (labels, history); a worker never runs on it."""
+    from vaic.shared.models import current_name, model_label
 
     assert current_name("fable-5-2") == "fable-5-1"
     assert model_label("fable-5-2") == "Claude Fable 5.1"
-    assert worker_model_choice("fable-5-2") == "fable-5-1"
-    assert worker_model_choice("Fable") == "fable-5-1"
-    over = department_override("worker", "Design", dept={"worker_model": "fable-5-2"})
-    assert over and over["model"] == "fable-5-1"

@@ -12,7 +12,6 @@ from ..events import now_iso
 from ..ids import department_key, manager_id
 from ..ledger import Record
 from ..log import log
-from ..models import WORKER_MODELS, current_name
 from ..presets import preset_for, replaced_by
 from .actions import OPEN_ASSIGNMENT, CityDeps, _walk_home, move
 
@@ -68,29 +67,14 @@ def clean_name(raw: Any) -> str:
     return name[:1].upper() + name[1:]
 
 
-def worker_model_choice(v: Any) -> str | None:
-    """``None``/"" = the department's usual workers (Opus 5.5, or the config's Fable for Media, Research and
-    Legal); "fable" / "fable-5-1" / ``True`` = Fable 5.1; "opus" / "opus-5-5" = Opus 5.5."""
-    if v is None or v == "" or v is False:
-        return None
-    if v is True:
-        return "fable-5-1"
-    s = current_name(str(v).strip().lower().replace(" ", "-").replace(".", "-"))
-    for m in WORKER_MODELS:
-        if s == m or m.startswith(s):
-            return m
-    raise DepartmentError("Workers run on Opus 5.5 or, when you say so, Fable 5.1.")
-
-
 async def build_department(
     d: CityDeps, raw_name: Any, mission: Any = "", worker_model: Any = None
 ) -> tuple[Record, str]:
     """Builds a department the owner asked for. Returns the record and what happened: ``created``, ``rebuilt``
-    (a demolished one stands again) or ``exists`` (already standing; nothing changed). Its manager is hired with
-    its first goal, as for the presets, and runs on the managers' model (Fable 5.1); its workers run on Opus 5.5
-    unless the owner chose Fable 5.1 for them."""
+    (a demolished one stands again) or ``exists`` (already standing; nothing changed). Its reviewer (its manager) is
+    hired with its first part. Every agent follows the one model map (decision 300): workers on Sonnet 5.5,
+    reviewers on Opus 5.5; ``worker_model`` from an older client is accepted and ignored."""
     name = clean_name(raw_name)
-    model = worker_model_choice(worker_model)
     # Only a preset's own name or key is that preset: the owner asking for "Customer Success" wants a new
     # department, even though the Orchestrator's aliases would send that word to Customer Support.
     preset = preset_named(name)
@@ -98,7 +82,7 @@ async def build_department(
         name = preset["name"]
     why = " ".join(str(mission or "").split())[:400]
     why = why or (preset["mission"] if preset else f"Everything the business needs from {name}.")
-    extra: Record = {"built_by": "owner", **({"worker_model": model} if model else {})}
+    extra: Record = {"built_by": "owner"}
     every = await d.ledger.list_departments(include_demolished=True)
     current = next((x for x in every if x.get("key") == department_key(name)), None)
     if current and current.get("state") != "demolished":
@@ -127,10 +111,9 @@ async def build_department(
             "manager_id": dept["manager_id"],
             "slot": dept.get("slot"),
             "lot": dept.get("lot", ""),
-            **({"worker_model": model} if model else {}),
         }
     )
-    log("info", "department.built", name=dept["name"], outcome=outcome, worker_model=model or "default")
+    log("info", "department.built", name=dept["name"], outcome=outcome)
     return dept, outcome
 
 

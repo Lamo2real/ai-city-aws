@@ -81,7 +81,6 @@ from vaic.shared.knowledge.search import EVERY_DEPARTMENT, Caller, label_status,
 from vaic.shared.knowledge.service import KnowledgeError
 from vaic.shared.knowledge.site_profile import brand_key
 from vaic.shared.log import log
-from vaic.shared.models import model_label, model_name_for
 from vaic.shared.part_checks import run_checks
 from vaic.shared.policy import decide, gate
 from vaic.shared.presets import overlapping, preset_for, replaced_by
@@ -298,6 +297,10 @@ def _run_command_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
         run_command,
         step=lambda a: f"Running: {str(a.get('command', ''))[:80]}",
     )
+
+
+MAP_LINE = "Sonnet 5.5 (its reviewer on Opus 5.5)"
+"""Every department's models in one line (decision 300: one map for every agent)."""
 
 
 # ---------- VAIC ----------
@@ -612,15 +615,14 @@ def _vaic_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
 
     async def build(a: dict[str, Any]) -> str:
         try:
-            dept, outcome = await build_department(d, a.get("name"), a.get("mission"), a.get("worker_model"))
+            dept, outcome = await build_department(d, a.get("name"), a.get("mission"))
         except DepartmentError as e:
             return f"Not built: {e}"
-        workers = model_label(model_name_for("worker", dept["name"], dept))
         if outcome == "exists":
-            return f"{dept['name']} is already standing; nothing changed. Its workers run on {workers}."
+            return f"{dept['name']} is already standing; nothing changed. Its workers run on {MAP_LINE}."
         return (
             f"{'Rebuilt' if outcome == 'rebuilt' else 'Built'} {dept['name']}: the tower is going up in the City. "
-            f"Its manager runs on Claude Fable 5.1 and is hired with its first job; its workers run on {workers}."
+            f"Its reviewer is hired with its first job; its workers run on {MAP_LINE}."
         )
 
     async def demolish(a: dict[str, Any]) -> str:
@@ -653,17 +655,9 @@ def _vaic_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             "build_department",
             "Build a new department now, when the owner asks for one ('make a Customer Success department'). "
             "name: its name; mission: one sentence on what it does (from the owner's words, or a sensible one). "
-            "Its manager runs on Fable 5.1 like every manager. worker_model: leave it out (workers run on Opus "
-            "5.5) unless the owner explicitly asked for Fable workers in it, then 'fable-5-1'. No confirmation "
-            "needed: building is what they asked for.",
-            _obj(
-                {
-                    "name": _s(2, 60),
-                    "mission": _s(0, 400),
-                    "worker_model": {"type": "string", "enum": ["opus-5-5", "fable-5-1"]},
-                },
-                ("mission", "worker_model"),
-            ),
+            "Every department follows the one model map (workers Sonnet 5.5, its reviewer Opus 5.5). No "
+            "confirmation needed: building is what they asked for.",
+            _obj({"name": _s(2, 60), "mission": _s(0, 400)}, ("mission",)),
             build,
         ),
         ToolSpec(

@@ -749,10 +749,10 @@ function DeptPanel({
   const facts: Array<[string, string]> = hq
     ? [["Team", members.map((a) => roleOf(a) || a.id).join(" · ") || "VAIC · Planner"]]
     : [
-        ["Reviewer", d?.manager_id ? `${d.manager_id} · Fable 5.1` : "—"], // the manager, the department's reviewer (decision 295)
+        ["Reviewer", d?.manager_id ? "Opus 5.5 (Fable 5.1 on extreme jobs)" : "—"], // the manager (decisions 295, 300)
         [
           "Workers",
-          `${workers.length ? `${workers.length} at their desks` : "None hired"} · ${d?.worker_model === "fable-5-1" ? "Fable 5.1" : workerModel(name)}`,
+          `${workers.length ? `${workers.length} at their desks` : "None hired"} · Sonnet 5.5`, // every worker (decision 300)
         ],
       ];
   const tone = (s: string) => (s === "failed" ? "bad" : s === "waiting_on_owner" ? "warn" : s === "done" ? "good" : "");
@@ -827,9 +827,6 @@ function DeptPanel({
     </div>
   );
 }
-// The presets whose workers run on Fable 5.1 (decision 129, `departmentModels` in config/models.json).
-const FABLE_WORKERS = new Set(["media", "research", "legal"]);
-const workerModel = (name: string) => (FABLE_WORKERS.has(name.trim().toLowerCase()) ? "Fable 5.1" : "Opus 5.5");
 
 // The Apps building's own part of its panel: what waits for the owner, and every app it built (the
 // same as the cabinets on the map, for keyboards and screen readers).

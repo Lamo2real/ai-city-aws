@@ -22,7 +22,12 @@ const REGION = "eu-north-1";
 const profile = (m) => `arn:aws:bedrock:${REGION}:${ACCOUNT}:inference-profile/global.${models.models[m].modelId}`;
 const fm = (m) => `arn:aws:bedrock:*::foundation-model/${models.models[m].modelId}`;
 const app = (r) => `arn:aws:bedrock:${REGION}:${ACCOUNT}:application-inference-profile/vaic-${r}`;
-const roleModels = (r) => [models.roles[r].model, models.roles[r].fallback].filter(Boolean);
+// Mirrors infra/modules/agents/main.tf role_models: a role's own model and fallback, plus every model of the build map for
+// the planner ("orchestrator" inside), the reviewers and the workers (decisions 289, 300).
+const buildModels = [...new Set(Object.values(models.build.sizes).flatMap((s) => [s.planner, s.worker, s.reviewer, s.takeover]).filter(Boolean))];
+const roleModels = (r) => [
+  ...new Set([models.roles[r].model, models.roles[r].fallback, ...(["orchestrator", "manager", "worker"].includes(r) ? buildModels : [])].filter(Boolean)),
+];
 
 export function render(file, vars) {
   const text = readFileSync(join(POLICIES, file), "utf8");

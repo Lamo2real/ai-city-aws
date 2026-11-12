@@ -101,7 +101,7 @@ Links like `#/settings/connectors` open that page in the app.
 - **…get advice from the executives?** Ask VAIC: "what does the CFO think about this?" or "ask the CTO to review
   the architecture". They come to HQ, advise, and go home.
 - **…build or remove a department?** Ask VAIC ("make a Customer Success department") or use Settings → Departments
-  & tools. Its manager runs on Fable 5.1 and its workers on Opus 5.5, unless you ask for Fable workers.
+  & tools. Its workers run on Sonnet 5.5 and its reviewer on Opus 5.5, like every department.
 - **…see what something costs, or cap spending?** Costs shows today and this month. Settings → Limits & spending
   sets optional caps.
 - **…build an app and see it?** Ask VAIC ("make me a game where…"). It is built while you're away and asks your

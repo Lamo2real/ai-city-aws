@@ -126,7 +126,12 @@ async def _setup(settings: dict[str, Any] | None = None) -> tuple[Ledger, Memory
 async def test_hires_with_a_valid_spec_and_refuses_bad_tools_wrong_managers_and_missing_departments() -> None:
     _, bus, factory = await _setup()
     w = await factory.hire(SPEC, "mgr-engineering", "Engineering")
-    assert (w["kind"], w["parent"], w["worker_state"], w["model"]) == ("worker", "mgr-engineering", "hired", "opus-5-5")
+    assert (w["kind"], w["parent"], w["worker_state"], w["model"]) == (
+        "worker",
+        "mgr-engineering",
+        "hired",
+        "sonnet-5-5",
+    )
     assert len(bus.of_type("agent.hired")) == 1
     with pytest.raises(HireRefused):
         await factory.hire({**SPEC, "tools": ["Bash", "aws_cli"]}, "mgr-engineering", "Engineering")

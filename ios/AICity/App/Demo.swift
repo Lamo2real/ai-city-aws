@@ -65,13 +65,13 @@ enum Demo {
         [
             "agents": [
                 ["id": "vaic", "kind": "core", "role": "VAIC", "department": nil, "model": "haiku-5-5", "parent": nil, "state": "active"],
-                ["id": "orchestrator", "kind": "core", "role": "Planner", "department": nil, "model": "fable-5-1", "parent": "vaic", "state": "active"],
-                ["id": "mgr-app", "kind": "manager", "role": "App manager", "department": "App", "model": "fable-5-1", "parent": "orchestrator", "state": "active"],
-                ["id": "wkr-ios-1", "kind": "worker", "role": "iOS developer", "department": "App", "model": "opus-5-5", "parent": "mgr-app", "state": "active", "worker_state": "working", "total_cost_usd": 1.42],
-                ["id": "wkr-qa-1", "kind": "worker", "role": "QA tester", "department": "App", "model": "opus-5-5", "parent": "mgr-app", "state": "active", "worker_state": "review"],
-                ["id": "mgr-mkt", "kind": "manager", "role": "Marketing manager", "department": "Marketing", "model": "fable-5-1", "parent": "orchestrator", "state": "active"],
-                ["id": "wkr-copy-1", "kind": "worker", "role": "Copywriter", "department": "Marketing", "model": "opus-5-5", "parent": "mgr-mkt", "state": "active", "worker_state": "waiting"],
-                ["id": "wkr-old-1", "kind": "worker", "role": "Researcher", "department": "Marketing", "model": "opus-5-5", "parent": "mgr-mkt", "state": "retired", "worker_state": "released", "last_active_at": iso(120)],
+                ["id": "orchestrator", "kind": "core", "role": "Planner", "department": nil, "model": "sonnet-5-5", "parent": "vaic", "state": "active"],
+                ["id": "mgr-app", "kind": "manager", "role": "App manager", "department": "App", "model": "opus-5-5", "parent": "orchestrator", "state": "active"],
+                ["id": "wkr-ios-1", "kind": "worker", "role": "iOS developer", "department": "App", "model": "sonnet-5-5", "parent": "mgr-app", "state": "active", "worker_state": "working", "total_cost_usd": 1.42],
+                ["id": "wkr-qa-1", "kind": "worker", "role": "QA tester", "department": "App", "model": "sonnet-5-5", "parent": "mgr-app", "state": "active", "worker_state": "review"],
+                ["id": "mgr-mkt", "kind": "manager", "role": "Marketing manager", "department": "Marketing", "model": "opus-5-5", "parent": "orchestrator", "state": "active"],
+                ["id": "wkr-copy-1", "kind": "worker", "role": "Copywriter", "department": "Marketing", "model": "sonnet-5-5", "parent": "mgr-mkt", "state": "active", "worker_state": "waiting"],
+                ["id": "wkr-old-1", "kind": "worker", "role": "Researcher", "department": "Marketing", "model": "sonnet-5-5", "parent": "mgr-mkt", "state": "retired", "worker_state": "released", "last_active_at": iso(120)],
             ],
             "departments": [
                 ["name": "App", "key": "app", "mission": "Build and ship the owner's apps.", "manager_id": "mgr-app", "state": "active", "created_at": iso(3000)],
@@ -142,7 +142,7 @@ enum Demo {
             "today": s(3.2, 41), "month": s(48.6, 610),
             "by_department": ["App": s(30.1, 400), "Marketing": s(18.5, 210)],
             "by_role": ["worker": s(31, 380), "manager": s(12, 150), "vaic": s(5.6, 80)],
-            "by_model": ["Opus 5.5": s(31, 380), "Fable 5.1": s(12, 150), "Haiku 5.5": s(5.6, 80)],
+            "by_model": ["Sonnet 5.5": s(31, 380), "Opus 5.5": s(12, 150), "Haiku 5.5": s(5.6, 80)],
             "caps": ["daily_global_usd": 10, "monthly_budget_usd": nil, "daily_department_usd": nil],
             "cost_explorer_url": "https://console.aws.amazon.com/costmanagement/home#/cost-explorer",
         ]
