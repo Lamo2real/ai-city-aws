@@ -2366,6 +2366,7 @@ table.costs tr:last-child td {
 }
 .citytop {
   align-items: center;
+  align-content: flex-start; /* the (i) line wraps below; the first row (stats, City | Features, i) never moves */
   flex-wrap: wrap;
   row-gap: 4px;
 }
@@ -2401,6 +2402,7 @@ table.costs tr:last-child td {
   }
 }
 .citytop .healthline {
+  order: 11; /* after the (i): it opens on its own row below, never between the stats and the switch */
   flex: 0 0 100%;
   margin: 0;
   font-size: var(--fs-s);
