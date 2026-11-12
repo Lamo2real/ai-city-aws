@@ -41,3 +41,19 @@ test("buildings stand in front of a footbridge's ends", async ({ page }) => {
   await page.getByRole("button", { name: "Fit the whole map" }).click();
   await expect.poll(() => page.evaluate(() => (document.querySelector("section.city") as unknown as { _bridgeCovers?: number })._bridgeCovers ?? 0)).toBeGreaterThan(0);
 });
+
+// Decision 291: every lamppost stands in front of the buildings: its lamp's bright core is on top wherever it stands.
+test("every lamppost's lamp is in front of the buildings", async ({ page }) => {
+  const departments = NAMES.map((name, i) => ({ key: name.toLowerCase().replace(/[^a-z0-9]+/g, "-"), name, mission: "x", manager_id: `mgr-${i}`, state: "active", created_at: new Date(Date.UTC(2026, 10, 1, 0, 0, i)).toISOString() }));
+  await mockBackend(page, { snapshot: { departments } });
+  await page.goto("/#/city");
+  await expect(page.locator("section.city")).toHaveAttribute("data-city-ready", "1");
+  await expect.poll(() => page.evaluate(() => (document.querySelector("section.city") as unknown as { _world: () => { buildings: unknown[] } })._world().buildings.length)).toBe(13);
+  await page.waitForTimeout(500);
+  const heads = await page.evaluate(() => {
+    const h = document.querySelector("section.city") as unknown as { _lamps: () => number[][]; _groundAt: (x: number, y: number) => number[] | null };
+    return h._lamps().flatMap(([x, y]) => [h._groundAt(x! - 1, y! - 23), h._groundAt(x! + 1, y! - 23)]); // both sides of the lamp's bright head, where a wall's edge would fall
+  });
+  expect(heads.length).toBeGreaterThan(20);
+  for (const c of heads) expect(c![0]! > 200 && c![1]! > 180, `lamp head ${c}`).toBe(true); // lit, never hidden behind a wall
+});

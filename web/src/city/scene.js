@@ -574,7 +574,11 @@ function glow(g, cx, cy, big = 1) {
   oval(g, cx, cy, 20 * big, 9 * big, "rgba(255,206,130,.14)");
   oval(g, cx, cy, 11 * big, 5 * big, "rgba(255,218,160,.2)");
 }
+// Every lamppost stands in front of the buildings (decision 291, the owner: "they should all be in front of the
+// building, no matter where they are"): while the town's picture is drawn they wait in `lampQueue`, and go up last.
+let lampQueue = null, bakedLamps = [];
 function lamp(g, x, y) {
+  if (lampQueue) { lampQueue.push([g, x, y]); return; }
   glow(g, x, y + 1);
   R(g, x - 3, y - 1, 7, 2, INK); R(g, x - 2, y - 2, 5, 1, "#3a3d5a");
   R(g, x - 1, y - 20, 2, 18, "#2a2d4a"); R(g, x, y - 20, 1, 18, "#3f4368");
@@ -1014,6 +1018,7 @@ function bake(world, skip = new Map(), { now = Date.now(), grow = true } = {}) {
   // The map spans [L, W] × [T, H] in pixels (west and north of HQ are negative, decision 250), plus the countryside.
   const L = (world.left ?? 0) * TILE, T = (world.top ?? 0) * TILE, W = world.width * TILE, H = world.height * TILE, M = MARGIN * TILE, r = rng("world");
   const [c, g] = newCanvas(W - L + M * 2, H - T + M * 2);
+  lampQueue = []; // the lampposts go up last (decision 291)
   g.translate(M - L, M - T);
   lawn(g, L - M, T - M, W - L + M * 2, H - T + M * 2, "lawn");
   const top = (world.top ?? 0) - MARGIN, bottom = world.height + MARGIN; // every avenue runs on off the map
@@ -1076,6 +1081,9 @@ function bake(world, skip = new Map(), { now = Date.now(), grow = true } = {}) {
   }
   for (const a of homesOf(world)) near.push([(a.y + a.h) * TILE, () => apartment(g, a)]);
   near.sort((p, q) => p[0] - q[0]).forEach(([, draw]) => draw());
+  const lamps = lampQueue ?? []; lampQueue = null;
+  for (const [lg, x, y] of lamps) lamp(lg, x, y); // the lampposts, over every building
+  bakedLamps = lamps.map(([, x, y]) => [x, y]);
   const FW = W - L + M * 2, FH = H - T + M * 2, X0 = L - M, Y0 = T - M;
   g.fillStyle = "rgba(38,30,78,.14)"; g.fillRect(X0, Y0, FW, FH); // the dusk wash over all of it
   // (The world's border, now far out past this picture, fades into the night live: `worldEdge`, decision 279.)
@@ -1183,6 +1191,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   root._counts = counts; // and the roof counters (e2e/towers.spec.ts)
   root._doors = doors;
   root._view = () => ({ x: cam.x, y: cam.y, zoom: cam.zoom }); // the camera, for tests that click a tower
+  root._lamps = () => bakedLamps; // where the lampposts stand, for tests (decision 291)
   // The baked ground's colour at an art pixel (for tests: grass round a tower, pavement only in front, decision 282).
   root._groundAt = (x, y) => { const M = MARGIN * TILE, d = ground?.getContext("2d")?.getImageData(Math.round(x - (world.left ?? 0) * TILE + M), Math.round(y - (world.top ?? 0) * TILE + M), 1, 1).data; return d ? [d[0], d[1], d[2]] : null; };
   root._entrances = () => entrances; // how often the towers' entrance has played this page (e2e/features.spec.ts)
