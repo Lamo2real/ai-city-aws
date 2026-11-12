@@ -24,7 +24,7 @@ test("a much bigger world to drag around, only departments' towers, dark windows
     const h = document.querySelector("section.city") as unknown as { _world: () => { buildings: Array<{ x: number; y: number; w: number; h: number }> }; _groundAt: (x: number, y: number) => number[] | null };
     return h._world().buildings.map((b) => ({ side: h._groundAt(b.x * 16 - 5, (b.y + b.h) * 16 - 70), front: h._groundAt((b.x + b.w / 2) * 16 + 30, (b.y + b.h) * 16 - 4) }));
   });
-  const green = (c: number[] | null) => !!c && c[1] > c[0] + 10 && c[1] > c[2];
+  const green = (c: number[] | null) => !!c && c[1]! > c[0]! + 10 && c[1]! > c[2]!;
   for (const g of ground) { expect(green(g.side), `beside a tower ${g.side}`).toBe(true); expect(green(g.front), `in front of its door ${g.front}`).toBe(false); }
   // Nobody working: every department dark.
   await expect.poll(() => city.getAttribute("data-lit")).toBe("");
