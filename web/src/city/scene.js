@@ -479,16 +479,51 @@ function junctionMarks(g, j) {
     // Teeth where traffic gives way: the street's two approaches, or at a T where the street runs on, the avenue's one.
     if (arm.w && arm.e && !(arm.n && arm.s)) { if (arm.n) teeth(cx - 16, cy - s - 2, 16, 2); if (arm.s) teeth(cx, cy + s, 16, 2); }
     else { if (arm.w) teeth(cx - s - 2, cy, 2, 16); if (arm.e) teeth(cx + s, cy - 16, 2, 16); }
-  } else if (j.kind === "roundabout") {
-    // Twice the old size (decision 252): the ring road around RING_R (40), a kerb outside it, a planted island inside.
-    const O = 52, I = 26;
-    oval(g, cx, cy, O + 2, O + 2, "#65617c"); oval(g, cx, cy, O, O, "#3f4168");
-    R(g, cx - O - 4, cy - 16, 2 * O + 8, 32, "#3f4168"); R(g, cx - 16, cy - O - 4, 32, 2 * O + 8, "#3f4168");
-    for (let a = 0; a < 40; a++) { const t = (a / 40) * Math.PI * 2; if (a % 2) R(g, cx + Math.cos(t) * (O - 3) - 1, cy + Math.sin(t) * (O - 3) - 1, 2, 2, "#56587e"); }
-    teeth(cx - O, cy, 2, 16); teeth(cx + O - 2, cy - 16, 2, 16); teeth(cx - 16, cy - O, 16, 2); teeth(cx, cy + O - 2, 16, 2);
-    oval(g, cx, cy, I, I, "#cfcfd6"); oval(g, cx, cy, I - 2, I - 2, "#387a5c");
-    for (const [dx, dy, c] of [[-10, 4, "#f4c63c"], [8, 8, "#e0625a"], [-4, 12, "#fff6e0"], [12, -2, "#f4c63c"], [-14, -6, "#e0625a"], [2, -14, "#fff6e0"]]) R(g, cx + dx, cy + dy, 2, 2, c);
-    R(g, cx - 1, cy - 6, 2, 7, "#6b4226"); oval(g, cx, cy - 10, 7, 6, "#2f7a52"); oval(g, cx - 1, cy - 12, 4, 3, "#4f9a6a");
+  } else if (j.kind === "roundabout") roundabout(g, j);
+}
+// A roundabout (decision 272, the owner: "more elegant… edges on the sidewalk… something in the middle like a
+// statue"): the ring road (RING_R 40 for the cabs, drawn out to 52) inside a kerbed pavement that runs into each
+// street's, a dashed lane line round it, give-way marks at each entry, and a raised island with a stone kerb, grass,
+// flowers and a monument picked by the junction's seed: a statue on a plinth, a fountain, an obelisk or a clock.
+const MONUMENTS = ["statue", "fountain", "obelisk", "clock"];
+function roundabout(g, j) {
+  const { cx, cy } = j, O = 52, I = 26, LINE = "#e8e6f0", r = rng(`ring:${j.id}`);
+  const teeth = (x, y, w, h) => { for (let k = 0; k < Math.max(w, h); k += 4) R(g, x + (w > h ? k : 0), y + (w > h ? 0 : k), w > h ? 2 : w, w > h ? h : 2, LINE); };
+  // The pavement round the ring, with a kerb on both edges; the streets' pavements run into it.
+  oval(g, cx, cy, O + 11, O + 11, INK); oval(g, cx, cy, O + 10, O + 10, "#7a7690");
+  for (let a = 0; a < 64; a++) { const t = (a / 64) * Math.PI * 2; R(g, cx + Math.cos(t) * (O + 6) - 1, cy + Math.sin(t) * (O + 6), 2, 1, "#65617c"); } // its paving joints
+  oval(g, cx, cy, O + 2, O + 2, "#a8a3bd"); // the kerb's lit edge
+  oval(g, cx, cy, O, O, "#3f4168"); // the ring road
+  R(g, cx - O - 12, cy - 16, 2 * O + 24, 32, "#3f4168"); R(g, cx - 16, cy - O - 12, 32, 2 * O + 24, "#3f4168"); // where the streets come in
+  for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { // the kerb rounding each corner between two streets
+    for (let a = 0; a < 12; a++) { const t = Math.atan2(dy, dx) + ((a - 5.5) / 12) * 0.9; R(g, cx + Math.cos(t) * (O + 1) - 1, cy + Math.sin(t) * (O + 1) - 1, 2, 2, "#a8a3bd"); }
+  }
+  for (let a = 0; a < 48; a++) { if (a % 3 === 2) continue; const t = (a / 48) * Math.PI * 2; R(g, cx + Math.cos(t) * (I + 13) - 1, cy + Math.sin(t) * (I + 13) - 1, 2, 2, "#cfcfd6"); } // the dashed lane line
+  teeth(cx - O - 10, cy, 2, 16); teeth(cx + O + 8, cy - 16, 2, 16); teeth(cx - 16, cy - O - 10, 16, 2); teeth(cx, cy + O + 8, 16, 2); // give way to the ring
+  // The island: a raised stone kerb, grass, a ring of flowers.
+  oval(g, cx + 2, cy + 3, I + 2, I + 2, "rgba(20,18,40,.35)"); // its shadow on the road
+  oval(g, cx, cy, I + 2, I + 2, INK); oval(g, cx, cy, I + 1, I + 1, "#d8d2c4"); oval(g, cx, cy, I - 2, I - 2, "#2f6a52"); oval(g, cx, cy, I - 6, I - 6, "#387a5c");
+  const flowers = ["#f4c63c", "#e0625a", "#fff6e0", "#d2699e"];
+  for (let a = 0; a < 18; a++) { const t = (a / 18) * Math.PI * 2 + r() * 0.2; R(g, cx + Math.cos(t) * (I - 5) - 1, cy + Math.sin(t) * (I - 5) - 1, 2, 2, flowers[a % flowers.length]); }
+  // The monument, with a soft shadow at its foot.
+  const kind = MONUMENTS[hashOf(`${j.id}:monument`) % MONUMENTS.length];
+  oval(g, cx + 3, cy + 6, 11, 5, "rgba(20,18,40,.3)");
+  if (kind === "statue") {
+    R(g, cx - 8, cy - 1, 16, 9, INK); R(g, cx - 7, cy, 14, 7, "#c9c2b0"); R(g, cx - 7, cy, 14, 2, "#e4ddc9"); // the plinth
+    R(g, cx - 3, cy - 15, 6, 15, INK); R(g, cx - 2, cy - 14, 4, 13, "#6f8f86"); R(g, cx - 2, cy - 18, 4, 4, "#6f8f86"); R(g, cx - 2, cy - 18, 4, 1, "#9fc2b6"); // a bronze figure, green with age
+    R(g, cx + 2, cy - 14, 4, 2, "#6f8f86"); R(g, cx + 5, cy - 18, 2, 5, "#6f8f86"); // its raised arm
+  } else if (kind === "fountain") {
+    oval(g, cx, cy + 1, 11, 7, INK); oval(g, cx, cy + 1, 10, 6, "#c9c2b0"); oval(g, cx, cy + 1, 8, 4, "#4f8fd6"); oval(g, cx - 2, cy, 3, 1, "#9fd0ff"); // the basin
+    R(g, cx - 2, cy - 8, 4, 9, INK); R(g, cx - 1, cy - 7, 2, 8, "#c9c2b0"); oval(g, cx, cy - 9, 4, 2, "#c9c2b0"); // the column and its bowl
+    R(g, cx - 1, cy - 15, 2, 6, "#9fd0ff"); R(g, cx - 4, cy - 11, 1, 3, "#9fd0ff"); R(g, cx + 3, cy - 11, 1, 3, "#9fd0ff"); // the spray
+  } else if (kind === "obelisk") {
+    R(g, cx - 6, cy + 1, 12, 6, INK); R(g, cx - 5, cy + 2, 10, 4, "#c9c2b0");
+    for (let k = 0; k < 22; k++) { const w = Math.max(2, 6 - Math.floor(k / 5)); R(g, cx - w / 2 - 1, cy + 1 - k, w + 2, 1, INK); R(g, cx - w / 2, cy + 1 - k, w, 1, k % 2 ? "#e4ddc9" : "#d8d0bc"); }
+    R(g, cx - 1, cy - 22, 2, 2, "#f4c63c"); // its gilded tip
+  } else {
+    R(g, cx - 2, cy - 10, 4, 17, INK); R(g, cx - 1, cy - 9, 2, 15, "#3a4058"); // the lamp-post clock's column
+    oval(g, cx, cy - 15, 7, 7, INK); oval(g, cx, cy - 15, 6, 6, "#fff6e0"); R(g, cx, cy - 19, 1, 4, INK); R(g, cx, cy - 15, 3, 1, INK); // its face
+    R(g, cx - 5, cy + 5, 10, 3, INK); R(g, cx - 4, cy + 5, 8, 2, "#3a4058");
   }
 }
 // A traffic light on its pole at the kerb, facing the traffic it holds: red, amber and green, one of them lit.
@@ -875,7 +910,7 @@ function bake(world, skip = new Map(), { now = Date.now(), grow = true } = {}) {
   // Trees wherever nothing else stands, far to near.
   // An empty lot is forest (decision 259); only one whose tower is coming down right now keeps clear for the wrecking ball.
   const wrecking = world.lots.filter((l) => l.demolished && skip.has(l.demolished));
-  const rings = js.filter((j) => j.kind === "roundabout").map((j) => ({ x: j.cx / TILE - 3.5, y: j.cy / TILE - 3.5, w: 7, h: 7 })); // no tree on a ring
+  const rings = js.filter((j) => j.kind === "roundabout").map((j) => ({ x: j.cx / TILE - 4, y: j.cy / TILE - 4, w: 8, h: 8 })); // no tree on a ring or its pavement
   const taken = [world.hq, ...world.buildings, ...wrecking, ...paved, ...rings, world.homes, ...roads.map((s) => ({ x: s.x0, y: s.y, w: s.x1 - s.x0, h: 3 })), ...verticals.map((v) => ({ x: v.x, y: v.y0, w: 3, h: v.y1 - v.y0 }))];
   const clear = (x, y) => taken.every((t) => x < (t.x * TILE) - 12 || x > (t.x + t.w) * TILE + 12 || y < t.y * TILE - 2 || y > (t.y + t.h) * TILE + 34);
   // Each tree has its own spot on a fixed grid, the same on every map whatever its size (decision 248): a new tower or
