@@ -14,6 +14,7 @@ from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from typing import Any, Literal
 
+from .chat_text import no_ids
 from .events import now_iso
 from .ids import department_key, new_id
 from .table import ABSENT, AddLimit, Item, Table, UpdateOptions
@@ -747,7 +748,7 @@ class Ledger:
                 "pk": f"CONV#{conversation}",
                 "sk": f"{at}#{_seq()}",
                 "who": who,
-                "text": text[:4000],
+                "text": (no_ids(text) if who == "vaic" else text)[:4000],
                 "at": at,
                 "ttl": self.now_ms() // 1000 + 30 * 86_400,
             }

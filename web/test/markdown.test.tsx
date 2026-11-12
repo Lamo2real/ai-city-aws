@@ -47,6 +47,15 @@ describe("VAIC's replies render Markdown", () => {
     expect(links[0]?.getAttribute("rel")).toBe("noopener noreferrer");
     expect(container.textContent).toContain("bad");
   });
+  it("links a HUD screen in place (the Chief of Staff's digest), nothing else without http(s)", () => {
+    const { container } = render(
+      <Markdown text={"[See every call and why](#/tickets/decided) [x](#javascript:alert(1)) [y](//evil.example)"} />,
+    );
+    const links = container.querySelectorAll("a");
+    expect(links).toHaveLength(1);
+    expect(links[0]?.getAttribute("href")).toBe("#/tickets/decided");
+    expect(links[0]?.getAttribute("target")).toBeNull();
+  });
   it("keeps line breaks inside a paragraph and copes with a reply still streaming", () => {
     const { container } = render(<Markdown text={"line one\nline two\n```\nhalf a code blo"} />);
     expect(container.querySelector("p br")).not.toBeNull();

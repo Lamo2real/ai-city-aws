@@ -1,6 +1,7 @@
 // A small Markdown renderer for VAIC's replies: headings, paragraphs, bullet and numbered lists, tables,
 // code blocks and inline **bold**, *italic*, `code` and [links](https://…). It builds React elements only
-// (never raw HTML), so a reply cannot inject markup or scripts. Links open only for http(s) addresses.
+// (never raw HTML), so a reply cannot inject markup or scripts. Links open only for http(s) addresses, or a
+// screen of the HUD itself (`#/tickets/decided`), which opens in place.
 import type { ReactNode } from "react";
 
 const INLINE = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)\s]+\)|\*[^*\s][^*]*\*|_[^_\s][^_]*_)/g;
@@ -16,6 +17,10 @@ export function inline(text: string, key = "i"): ReactNode[] {
       const [, label = "", href = ""] = link;
       return /^https?:\/\//i.test(href) ? (
         <a key={k} href={href} target="_blank" rel="noopener noreferrer">
+          {label}
+        </a>
+      ) : /^#\/[\w/-]*$/.test(href) ? (
+        <a key={k} href={href}>
           {label}
         </a>
       ) : (

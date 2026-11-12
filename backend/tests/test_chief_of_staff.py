@@ -212,12 +212,12 @@ async def test_lambda_reviews_the_item_an_event_is_about() -> None:
     assert out["reviewed"] == 1
 
 
-async def test_daily_digest_is_one_paragraph_in_aics_conversation_once() -> None:
+async def test_daily_digest_is_one_short_update_in_vaics_conversation_once() -> None:
     d = make()
     await _stuck_research(d)
     await review(chief(d, Model({"decision": "answer", "answer": "Wait", "reason": "r"})))
     assert (await digest(d.ledger, d.bus))["digest"] == "sent"
     assert (await digest(d.ledger, d.bus))["digest"] == "already sent"
     line = (await d.ledger.recent_conversation("main"))[-1]
-    assert line["who"] == "vaic" and "decided 1 item" in line["text"]
+    assert line["who"] == "vaic" and "made one call" in line["text"]
     assert d.bus.of_type("vaic.reply")[0]["done"] is True

@@ -34,7 +34,8 @@ from vaic.shared.apps import (
     validate_files,
     version_files,
 )
-from vaic.shared.chief_of_staff import autopilot
+from vaic.shared.chat_text import worker_name
+from vaic.shared.chief_of_staff import autopilot, review_reason
 from vaic.shared.events import now_iso
 from vaic.shared.files.service import chat_card
 from vaic.shared.github import redact
@@ -783,6 +784,14 @@ def _vaic_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
 
 
 # ---------- shared ----------
+def _review_limit_text(worker: dict[str, Any] | None, worker_id: str, rounds: int, reasons: str) -> str:
+    """The owner-facing question when a worker's work keeps failing review: a plain name, the real reason."""
+    name = worker_name(worker, worker_id)
+    reason = review_reason(f"Latest reasons: {reasons}")
+    why = f" Latest reason: {' '.join(reason.split()).rstrip('.')}." if reason else " It didn't pass review."
+    return f"{name[:1].upper()}{name[1:]}'s work failed review {rounds} times.{why} What should happen?"
+
+
 def _ask_owner(d: CityDeps, c: TurnCtx) -> ToolSpec:
     async def ask(a: dict[str, Any]) -> str:
         agent = await d.ledger.get_agent(c.agent_id)
@@ -1341,6 +1350,9 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         if t["status"] != "in_review":
             return "That assignment has not been reported yet."
         verdict = a["verdict"]
+        if verdict == "FAIL" and not review_reason(f"Latest reasons: {a['reasons']}"):
+            # A bare "FAIL" tells the worker nothing to fix, so it fails again and again (2026-11-12).
+            return "Not recorded: say exactly what is wrong in plain words (what to change), not just FAIL."
         rnd = int(t.get("review_rounds", 0)) + 1
         await d.bus.put(
             {
@@ -1370,7 +1382,7 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                     "asked_by": c.agent_id,
                     "path": c.agent_id,
                     "ticket_id": t["id"],
-                    "text": f"{t['to']}'s work failed review {rnd} times. Latest reasons: {a['reasons']}. What should happen?",
+                    "text": _review_limit_text(await d.ledger.get_agent(t["to"]), t["to"], rnd, str(a["reasons"])),
                     "options": ["Try once more", "Stop this assignment"],
                     "default_answer": "Stop this assignment",
                 }

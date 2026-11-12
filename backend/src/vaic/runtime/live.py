@@ -11,6 +11,8 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from vaic.shared.chat_text import no_ids
+
 Send = Callable[[dict[str, Any]], Awaitable[None]]
 
 FLUSH_SECONDS = 0.08
@@ -39,14 +41,14 @@ class LiveReply:
         text, self._buf = self._buf, ""
         self._last = self._clock()
         await self._send(
-            {"type": "vaic.reply", "conversation": self._conversation, "text": text, "done": False, **self._id}
+            {"type": "vaic.reply", "conversation": self._conversation, "text": no_ids(text), "done": False, **self._id}
         )
 
     async def done(self, text: str) -> None:
         """The whole reply: it replaces what was streamed (which may include text written before a tool call)."""
         self._buf = ""
         await self._send(
-            {"type": "vaic.reply", "conversation": self._conversation, "text": text, "done": True, **self._id}
+            {"type": "vaic.reply", "conversation": self._conversation, "text": no_ids(text), "done": True, **self._id}
         )
 
 

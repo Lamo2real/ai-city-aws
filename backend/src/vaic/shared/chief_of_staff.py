@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, Final, Literal
 
+from .chat_text import clip, no_ids, worker_name
 from .events import EventBus, now_iso
 from .ledger import Ledger, Record
 from .log import log
@@ -438,24 +439,113 @@ async def review(d: ChiefDeps, only: str | None = None) -> dict[str, Any]:
 
 
 # ---------- the daily digest ----------
-def digest_text(rows: list[Record]) -> str:
-    n = len(rows)
-    picks = "; ".join(f"{r.get('title', '')[:80]} → {str(r.get('choice', ''))[:60]}" for r in rows[:6])
-    more = f", and {n - 6} more" if n > 6 else ""
-    return (
-        f"Quick one, bro: the Chief of Staff decided {n} item{'s' if n != 1 else ''} in Needs you in the last 24 "
-        f"hours so the work kept moving: {picks}{more}. Needs you has each one and why."
+# Short and scannable (the owner, 2026-11-12: "always idiot-proof and very simple to read"): a one-line
+# headline, at most five bullets grouped by job, repeats folded together, no ids, nothing cut mid-word.
+MAX_BULLETS = 5
+DECIDED_LINK = "[See every call and why](#/tickets/decided)"
+_REVIEW = re.compile(r"failed review (\d+) times?", re.I)
+_REASON = re.compile(r"Latest reasons?:\s*(.*?)\s*(?:What should happen\?)?\s*$", re.I | re.S)
+_NO_REASON = {"", "fail", "failed", "none", "n/a", "no"}
+_NUM = ("no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten")
+
+
+def _num(n: int) -> str:
+    return _NUM[n] if n < len(_NUM) else str(n)
+
+
+def review_reason(text: str) -> str:
+    """The reviewer's reason in a review-limit question; "" when there is none (or it only says FAIL)."""
+    m = _REASON.search(text or "")
+    r = (m.group(1) if m else "").strip(" .")
+    return "" if r.lower() in _NO_REASON else r
+
+
+def _who(title: str) -> str:
+    m = re.search(r"wkr-[a-z0-9-]+?-[0-9a-f]{12}", title)
+    if m:
+        return m.group(0)
+    head = title.split("'s work", 1)[0].strip()
+    return head if 0 < len(head) <= 60 else "a worker"
+
+
+def _review_bullet(rows: list[Record]) -> str:
+    latest: dict[str, str] = {}  # each worker's newest decision (rows are newest first)
+    for r in rows:
+        latest.setdefault(_who(str(r.get("title", ""))), str(r.get("choice", "")).lower())
+    stopped = sum("stop" in c for c in latest.values())
+    retried = len(latest) - stopped
+    reason = next((x for x in (review_reason(str(r.get("title", ""))) for r in rows) if x), "")
+    why = f" Main reason: {clip(no_ids(reason), 90)}" if reason else ""
+    if len(latest) == 1:
+        who = next(iter(latest))
+        name = worker_name(None, who) if who.startswith("wkr-") else no_ids(who)
+        did = "stopped that part" if stopped else "gave it another try"
+        return f"{name[:1].upper()}{name[1:]}'s work didn't pass review, so I {did}.{why}"
+    dept = {str(r.get("department") or "") for r in rows}
+    kind = f"{next(iter(dept))} workers'" if len(dept) == 1 and "" not in dept else "workers'"
+    did = " and ".join(
+        x
+        for x in (f"gave {_num(retried)} another try" if retried else "", f"stopped {_num(stopped)}" if stopped else "")
+        if x
     )
+    return f"{_num(len(latest)).capitalize()} {kind} work didn't pass review: I {did}.{why}"
+
+
+def _other_bullet(r: Record) -> str:
+    topic = clip(no_ids(str(r.get("title", ""))).rstrip("?. "), 60)
+    choice = clip(no_ids(str(r.get("choice", ""))), 80)
+    if choice and not choice.endswith((".", "!", "?", "…")):
+        choice += "."
+    return " — I said: ".join(x for x in (topic, choice) if x)
+
+
+def digest_text(rows: list[Record], jobs: dict[str, str] | None = None) -> str:
+    """The digest message. ``jobs`` names each job id (its goal, short), so bullets group under it."""
+    jobs = jobs or {}
+    n = len(rows)
+    groups: dict[str, list[Record]] = {}
+    for r in rows:
+        groups.setdefault(str(r.get("job_id") or ""), []).append(r)
+    named = [clip(jobs.get(j, ""), 50) for j in groups]
+    bullets: list[str] = []
+    for j, rs in groups.items():
+        label = f"**{clip(jobs.get(j, ''), 40)}:** " if len(groups) > 1 and jobs.get(j) else ""
+        reviews = [r for r in rs if _REVIEW.search(str(r.get("title", "")))]
+        lines = [_review_bullet(reviews)] if reviews else []
+        seen: set[str] = set()
+        for r in rs:
+            if r in reviews:
+                continue
+            key = " ".join(str(r.get("choice", "")).lower().split())[:60]
+            if key in seen:
+                continue
+            seen.add(key)
+            lines.append(_other_bullet(r))
+        bullets += [label + b for b in lines if b]
+    if len(bullets) > MAX_BULLETS:
+        rest = len(bullets) - (MAX_BULLETS - 1)
+        bullets = [*bullets[: MAX_BULLETS - 1], f"And {_num(rest)} more small call{'s' if rest != 1 else ''}."]
+    calls = f"{_num(n) if n <= 10 else n} call{'s' if n != 1 else ''}"
+    what = f"“{named[0]}”" if len(groups) == 1 and named[0] else "the work"
+    head = f"Quick one, bro: while you were away I made {calls} so {what} kept moving:"
+    return no_ids("\n".join([head, "", *(f"- {b}" for b in bullets), "", DECIDED_LINK]))
 
 
 async def digest(ledger: Ledger, bus: EventBus) -> dict[str, Any]:
-    """One paragraph to VAIC's conversation (``main``) about what was decided in the last day; nothing if nothing."""
+    """A short update to VAIC's conversation (``main``) about what was decided in the last day; nothing if nothing."""
+    from .hierarchy.tasks import short_name
+
     rows = await recent_decisions(ledger, days=1)
     if not rows:
         return {"digest": "nothing decided"}
     if not await ledger.claim(f"chief-digest:{now_iso(ledger.now())[:10]}", 2 * 86_400):
         return {"digest": "already sent"}
-    text = digest_text(rows)
+    jobs: dict[str, str] = {}
+    for j in {str(r.get("job_id") or "") for r in rows} - {""}:
+        t = await ledger.get_ticket(j)
+        if t:
+            jobs[j] = short_name(t)
+    text = digest_text(rows, jobs)
     await ledger.add_conversation_line("main", "vaic", text)
     await bus.put({"type": "vaic.reply", "conversation": "main", "text": text, "done": True})
     return {"digest": "sent", "decided": len(rows)}

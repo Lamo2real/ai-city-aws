@@ -11,7 +11,9 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, TypeAdapter
+
+from .chat_text import no_ids
 
 TicketStatus = Literal["open", "in_progress", "in_review", "waiting_on_owner", "parked", "done", "failed", "cancelled"]
 TERMINAL: tuple[str, ...] = ("done", "failed", "cancelled")
@@ -377,7 +379,8 @@ class SpendCapReachedEvent(_E):
 class VaicReply(_E):
     type: Literal["vaic.reply"]
     conversation: str
-    text: str
+    text: Annotated[str, AfterValidator(no_ids)]
+    """No record id ever reaches the chat: worker and manager ids become plain names (``chat_text.no_ids``)."""
     done: bool
     message_id: str | None = None
     """The owner's message this answers, so a HUD that pressed Stop on it drops anything still in flight."""
