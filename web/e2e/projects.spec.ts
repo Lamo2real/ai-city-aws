@@ -267,8 +267,24 @@ test("while the builders work, the project chat shows their steps like Claude: g
   await expect(page).toHaveURL(/#\/apps\/new-[a-z0-9]+$/);
   const conv = `app-${page.url().split("/apps/")[1]}`;
   // The job comes from this project's conversation; a worker gets a part of it.
-  const root = { id: "t-mem", from: "vaic", to: "orchestrator", goal: "Memory game", kind: "task", department: null, conversation: conv };
-  const part = { id: "t-mem-1", parent_id: "t-mem", from: "mgr-apps", to: "wkr-dev", goal: "Build it", kind: "task", department: "Apps" };
+  const root = {
+    id: "t-mem",
+    from: "vaic",
+    to: "orchestrator",
+    goal: "Memory game",
+    kind: "task",
+    department: null,
+    conversation: conv,
+  };
+  const part = {
+    id: "t-mem-1",
+    parent_id: "t-mem",
+    from: "mgr-apps",
+    to: "wkr-dev",
+    goal: "Build it",
+    kind: "task",
+    department: "Apps",
+  };
   m.send({ type: "ticket.status", previous: null, ticket: { ...root, status: "open" } });
   m.send({ type: "ticket.status", previous: null, ticket: { ...part, status: "in_progress" } });
   const say = (activity: string, detail: string) => m.send({ type: "activity", id: "wkr-dev", activity, detail });
@@ -302,4 +318,122 @@ test("while the builders work, the project chat shows their steps like Claude: g
   await expect(ring).toHaveCount(0);
   await page.reload();
   await expect(log.getByText("Searched your knowledge: animal pictures")).toBeVisible();
+});
+
+test("while the builders work, the right side shows the app live, with who is editing what, then the finished version", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  // The live copy on the apps origin, with the city's real live helper (pointers inside the frame).
+  const helper = await import("node:fs").then((fs) =>
+    fs.readFileSync(`${import.meta.dirname}/../../backend/src/vaic/assets/vaic-live.js`, "utf8"),
+  );
+  const pid = "prv-0123456789abcdef0123456789abcdef";
+  const loads: string[] = [];
+  let version = 1;
+  await page.route(`https://apps.vaic.test/drafts/${pid}/**`, (r) => {
+    const url = r.request().url();
+    if (url.includes("vaic-live.js"))
+      return r.fulfill({
+        contentType: "text/javascript",
+        body: helper,
+        headers: { "access-control-allow-origin": "*" },
+      });
+    loads.push(url);
+    return r.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><html><body style="height:2000px;margin:0;font:16px sans-serif"><h1 id="title">Memory Zoo v${version}</h1><div id="board" style="margin-top:40px;width:200px;height:120px;background:#ddd"></div><script src="vaic-live.js"></script></body></html>`,
+    });
+  });
+  await page.goto("/#/apps");
+  await page.getByRole("button", { name: /New project/ }).click();
+  const dialog = page.getByRole("dialog", { name: "What should your app do?" });
+  await dialog.getByPlaceholder("Describe your app in one sentence").fill("A memory game with animal cards");
+  await dialog.getByRole("button", { name: "Start building" }).click();
+  await expect(page).toHaveURL(/#\/apps\/new-[a-z0-9]+$/);
+  const conv = `app-${page.url().split("/apps/")[1]}`;
+  const preview = page.locator(".studio-preview");
+  await expect(preview.getByText("Your app appears here as soon as its first version is ready.")).toBeVisible();
+
+  const root = {
+    id: "t-zoo",
+    from: "vaic",
+    to: "orchestrator",
+    goal: "Memory game",
+    kind: "task",
+    department: null,
+    conversation: conv,
+  };
+  const part = {
+    id: "t-zoo-1",
+    parent_id: "t-zoo",
+    from: "mgr-apps",
+    to: "wkr-front",
+    goal: "Build it",
+    kind: "task",
+    department: "Application",
+  };
+  m.send({
+    type: "agent.hired",
+    agent: { id: "wkr-front", kind: "worker", role: "frontend-dev", department: "Application", size: 1 },
+  });
+  m.send({ type: "ticket.status", previous: null, ticket: { ...root, status: "open" } });
+  m.send({ type: "ticket.status", previous: null, ticket: { ...part, status: "in_progress" } });
+  m.send({ type: "activity", id: "wkr-front", activity: "coding", detail: "Created app/game.js" });
+  const url = `https://apps.vaic.test/drafts/${pid}/index.html`;
+  // The first edit with an index.html: the frame appears, live.
+  m.send({
+    type: "app.preview",
+    task_id: "t-zoo",
+    hire_id: "wkr-front",
+    preview_url: url,
+    seq: 1,
+    paths: ["index.html", "game.js"],
+    hints: [{ path: "game.js", selector: null }],
+  });
+  await expect(preview.getByRole("status").filter({ hasText: "Building… live" })).toBeVisible();
+  const frame = page.frameLocator(".studio-preview iframe");
+  await expect(frame.getByRole("heading", { name: "Memory Zoo v1" })).toBeVisible();
+  const iframe = preview.locator("iframe");
+  await expect(iframe).toHaveAttribute("sandbox", "allow-scripts");
+  const editors = page.getByRole("list", { name: "Who is changing the app" });
+  await expect(editors).toContainText("Frontend dev");
+  await expect(editors).toContainText("now editing app/game.js");
+  await expect(preview.locator(".lv-badge")).toHaveText("Frontend dev · game.js"); // no element to point at: a corner badge
+
+  // A later edit reloads the frame (keeping its scroll) and points at the element it changed.
+  await frame.locator("body").evaluate(() => window.scrollTo(0, 60));
+  await page.waitForTimeout(200);
+  version = 2;
+  m.send({
+    type: "app.preview",
+    task_id: "t-zoo",
+    hire_id: "wkr-front",
+    preview_url: url,
+    seq: 2,
+    paths: ["index.html"],
+    hints: [{ path: "index.html", selector: "#board" }],
+  });
+  await expect(frame.getByRole("heading", { name: "Memory Zoo v2" })).toBeAttached();
+  await expect(iframe).toHaveAttribute("src", /live=2/);
+  await expect(editors).toContainText("now editing app/index.html");
+  await expect(frame.locator("[data-vaic-live] >> text=Frontend dev")).toBeVisible();
+  expect(await frame.locator("body").evaluate(() => window.scrollY)).toBe(60);
+  expect(loads.length).toBe(2);
+  await page.screenshot({ path: `${SHOTS}/project-live-preview.png` });
+
+  // "In the log" goes to the build log.
+  await editors.getByRole("button", { name: "Frontend dev: show in the build log" }).click();
+  await expect(page.getByRole("region", { name: "What the builders are doing" })).toBeInViewport();
+
+  // The version is done and published: the studio shows that version, the live copy is put away.
+  m.send({ type: "ticket.status", previous: "in_progress", ticket: { ...part, status: "done" } });
+  m.send({ type: "ticket.status", previous: "open", ticket: { ...root, status: "done" } });
+  await expect(preview.getByText("Latest build, not published yet")).toBeVisible();
+  const zoo = appRecord("app-zoo000000001", "memory-zoo", "Memory Zoo", { conversation: conv });
+  m.apps.unshift(zoo);
+  m.send({ type: "app.published", ...zoo });
+  await expect(page).toHaveURL(/#\/apps\/memory-zoo$/);
+  await expect(page.getByRole("list", { name: "Who is changing the app" })).toHaveCount(0);
+  await expect(page.locator(".studio-preview iframe")).toHaveAttribute("src", zoo.url);
 });

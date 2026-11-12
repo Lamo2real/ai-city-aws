@@ -516,7 +516,7 @@ describe("apps origin (docs/APPS.md)", () => {
   it("the apps Lambda: EventBridge on app.submitted, drafts/ only, APPDRAFTS only; only the API writes live/", async () => {
     const api = await read("infra/modules/api/main.tf");
     expect(api).toMatch(/apps\s+= \{ bundle = "app", handler = "vaic\.lambdas\.apps\.handler"/);
-    expect(api).toMatch(/"detail-type" = \["app\.submitted"\]/);
+    expect(api).toMatch(/"detail-type" = \["app\.submitted", "app\.preview\.files"\]/);
     const appsPerms = api.slice(api.indexOf("    apps = ["), api.indexOf("    ]", api.indexOf("    apps = [")));
     expect(appsPerms).toContain('"${var.apps_bucket_arn}/drafts/*"');
     expect(appsPerms).not.toContain("live/");

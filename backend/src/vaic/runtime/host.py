@@ -18,6 +18,7 @@ from vaic.mail.service import MailService
 from vaic.shared import company
 from vaic.shared import workflows as wf
 from vaic.shared.app_guide import app_guide
+from vaic.shared.app_preview import LivePreview
 from vaic.shared.apps import drafts_of_ticket, get_app
 from vaic.shared.connectors import ConnectorStore
 from vaic.shared.events import now_iso
@@ -299,9 +300,15 @@ class AgentHost:
             # A worker's own folder. It must exist before Claude starts there: the SDK refuses a missing working
             # directory, and every worker turn failed on it while its card said "Understanding" (decision 205).
             workdir = None
+            preview: LivePreview | None = None
             if agent.get("kind") == "worker":
                 workdir = f"/tmp/work/{agent['id']}"  # noqa: S108
                 await asyncio.to_thread(Path(workdir).mkdir, parents=True, exist_ok=True)
+                ws = self.d.workspace
+                if ws is not None:  # the owner watches an app being built, change by change (decision 278)
+                    preview = LivePreview(
+                        bus, ws.s3_for, ws.bucket, ws.root, agent["id"], inv["ticketId"], inv["taskId"]
+                    )
 
             async def runner(turn: TurnInput) -> TurnOutput:
                 return await self.o.engine(
@@ -316,6 +323,7 @@ class AgentHost:
                         on_needs_approval=on_needs_approval,
                         on_activity=on_activity,
                         on_tool_done=on_tool_done,
+                        on_tool_allowed=preview.touched if preview else None,
                         on_text=on_text if is_vaic and conversation else None,
                         skills_dir=str(skills_dir) if skills_dir else None,
                         skill_names=frozenset(r["name"] for r in skill_rows) if skills_dir else frozenset(),
@@ -345,7 +353,11 @@ class AgentHost:
                 GateDeps(ledger=ledger, bus=bus, settings=settings, backoff=self.o.backoff, runner=runner),
             )
             if not is_vaic:
-                result = await gated
+                try:
+                    result = await gated
+                finally:
+                    if preview is not None:
+                        await preview.close()
             else:
                 try:
                     done, stopped = await unless_stopped(gated, lambda: ledger.turn_stopped(inv["id"]))

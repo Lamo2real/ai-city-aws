@@ -41,6 +41,9 @@ class EngineRequest:
     on_tool_done: Callable[[str, dict[str, Any], str, bool], Awaitable[None]] | None = None
     """Called once a tool call has finished (tool name, its input, what it returned, whether it failed): VAIC writes
     its actions into the conversation as they happen (decision 192)."""
+    on_tool_allowed: Callable[[str, dict[str, Any]], None] | None = None
+    """Called when the gate lets a tool call run (name, input): a worker's file edits feed the app's live preview
+    (decision 278). Must not block."""
     cwd: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
     skills_dir: str | None = None
@@ -251,6 +254,9 @@ def _options(req: EngineRequest, b: _Binding) -> Any:
         if r.decision == "allow":
             if r_.on_activity:
                 await r_.on_activity(activity_for(name), step_detail(name, input))
+            allowed_hook = getattr(r_, "on_tool_allowed", None)
+            if allowed_hook:
+                allowed_hook(name, input)
             return PermissionResultAllow(updated_input=input)
         return PermissionResultDeny(message=r.reason)
 

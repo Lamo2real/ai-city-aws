@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { flushOutbox, loadCity, saveSettings } from "./lib/actions.ts";
 import { api } from "./lib/api.ts";
 import { bootAuth } from "./lib/auth.ts";
-import { loadConfig } from "./lib/config.ts";
+import { config, loadConfig } from "./lib/config.ts";
 import { store } from "./lib/store.ts";
 import { trackSeen } from "./lib/away.ts";
 import { chief } from "./lib/chief.ts";
@@ -22,6 +22,7 @@ import { KnowledgeScreen } from "./components/Knowledge.tsx";
 import { FilesScreen } from "./components/Files.tsx";
 import { files } from "./lib/files.ts";
 import { buildSteps } from "./lib/buildSteps.ts";
+import { livePreview } from "./lib/livePreview.ts";
 import { knowledge } from "./lib/knowledge.ts";
 import { projects } from "./lib/projects.ts";
 import { workflows } from "./lib/workflows.ts";
@@ -104,6 +105,7 @@ export function App() {
         buildSteps.event(e, store.get().city); // after the store, so the step's job is known
         if (e.type === "app.published" && typeof e.app_id === "string" && typeof e.conversation === "string")
           buildSteps.move(e.conversation, `app-${e.app_id}`);
+        livePreview.event(e, store.get().city, config().appsUrl ?? null); // after the store, like the steps
         knowledge.event(e);
         files.event(e);
         projects.event(e);

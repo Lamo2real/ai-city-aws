@@ -262,6 +262,35 @@ class AppSubmitted(_E):
     files: list[AppFile]
 
 
+class PreviewHint(_M):
+    path: str
+    selector: str | None = None
+    """A CSS selector the edit most likely touched (from the edit itself), or None: the HUD then names the file."""
+
+
+class AppPreviewFiles(_E):
+    """A worker's runtime → the apps Lambda: these files of its app/ folder changed (live preview, decision 278)."""
+
+    type: Literal["app.preview.files"]
+    hire_id: str
+    ticket_id: str
+    task_id: str
+    paths: list[str]
+    hints: list[PreviewHint] = []
+
+
+class AppPreview(_E):
+    """The apps Lambda → the HUD: the job's live working copy changed; reload the frame."""
+
+    type: Literal["app.preview"]
+    task_id: str
+    hire_id: str
+    preview_url: str
+    seq: int
+    paths: list[str]
+    hints: list[PreviewHint] = []
+
+
 class AppDraft(_E):
     type: Literal["app.draft"]
     draft_id: str
@@ -571,6 +600,8 @@ CityEventModel = Annotated[
     | CallRequested
     | HudAction
     | AppSubmitted
+    | AppPreviewFiles
+    | AppPreview
     | AppDraft
     | AppPublished
     | AppUpdated

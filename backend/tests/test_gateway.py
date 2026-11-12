@@ -197,6 +197,12 @@ async def test_sdk_path_serves_connector_tools_from_an_in_process_gateway_server
     other = await o.can_use_tool("mcp__gateway__bank___transfer", {}, None)
     assert isinstance(other, PermissionResultDeny) and "not one of your tools" in other.message
     assert ("mcp__gateway__bank___transfer", "allow") not in req.ledger.audit
+    # A call the gate lets through also reaches the worker's live app preview (decision 278); a denied one doesn't.
+    seen: list[str] = []
+    req.on_tool_allowed = lambda name, _args: seen.append(name)
+    await o.can_use_tool("mcp__gateway__higgsfield___search_videos", {"q": "a"}, None)
+    await o.can_use_tool("mcp__gateway__bank___transfer", {}, None)
+    assert seen == ["mcp__gateway__higgsfield___search_videos"]
 
 
 async def test_a_skill_cannot_be_pre_approved_and_only_this_turns_plugin_skills_pass() -> None:

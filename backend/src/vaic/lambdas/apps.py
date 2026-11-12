@@ -1,9 +1,10 @@
-"""EventBridge rule (``detail.type = app.submitted``) → this Lambda (``vaic-prod-apps``).
+"""EventBridge rule (``detail.type`` = ``app.submitted`` or ``app.preview.files``) → this Lambda (``vaic-prod-apps``).
 
 Reads the worker's ``hires/<hire_id>/app/`` from the workspaces bucket, checks it again (never the worker's own
 file list), copies it to ``drafts/<draft_id>/`` in the apps bucket with content types set by the city, records
 the draft (``ready`` or ``rejected``) and puts ``app.draft``. It never touches ``live/``: only the owner
-publishes, through the API.
+publishes, through the API. ``app.preview.files`` updates the job's live working copy instead
+(``shared/app_preview.py``, decision 278): never a draft or a version.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from vaic.shared.app_preview import stage_preview
 from vaic.shared.apps import AppsOrigin, stage_submission
 from vaic.shared.aws import aws_city, require_env
 from vaic.shared.events import EventBus, parse_event
@@ -28,6 +30,10 @@ async def on_submitted(
         e = parse_event(raw.get("detail") or {})
     except ValidationError:
         log("warn", "apps.bad_event")
+        return None
+    if e["type"] == "app.preview.files":
+        live = await stage_preview(e, ledger, bus, origin, workspace_s3, workspaces_bucket)
+        log("info", "apps.preview", task=e["task_id"], files=len(e["paths"]), staged=bool(live))
         return None
     if e["type"] != "app.submitted":
         return None

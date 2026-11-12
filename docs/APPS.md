@@ -436,6 +436,39 @@ trace (review and sign-off verdicts, drafts handed in or refused, questions to t
 instructions), its versions going live, publish approvals and the app's own proposals. Text never carries ids,
 links or code (`plain`). Route added to `ROUTES`, `infra/modules/api/main.tf` and `tests/infra.test.ts`.
 
+## Live preview while the builders work (2026-11-12, decision 278)
+The owner wants to watch an app being built on the right of the studio, change by change, with pointers showing
+where the builders are editing, instead of "Your app appears here as soon as its first version is ready".
+```
+worker Write/Edit/MultiEdit/Bash allowed by the gate → LivePreview.touched (runtime/host.py, shared/app_preview.py)
+   ~1 s later (calls in between share one scan; once more at the end of the turn): scan /tmp/work/<hire>/app/,
+   put changed files in s3://<workspaces>/hires/<hire>/app/ (submit_app's prefix: no new permission),
+   bus app.preview.files {hire_id, ticket_id, task_id, paths ≤ 40, hints [{path, selector?}]}   (nothing until index.html)
+EventBridge rule app_submitted (now also app.preview.files) → apps Lambda → stage_preview
+   PREVIEW#<task_id> in APPDRAFTS (one per job, preview_id prv-<32 hex>), copies only those paths to
+   s3://<apps>/drafts/<preview_id>/ (city content types, Cache-Control no-cache; HTML gets <script src=vaic-live.js>),
+   adds vaic-bridge.js and vaic-live.js the first time, puts app.preview {task_id, hire_id, preview_url, seq, paths, hints}
+HUD: livePreview (web/src/lib/livePreview.ts) files it under the builder's project conversation (as the build steps),
+   the studio frames <preview_url>?live=<seq>&marks=[{label, selector, color}] (reload at most about once a second)
+```
+- **Same sandbox, no data, owner only.** The copy is on the apps origin under `drafts/` (same CSP, sandbox
+  attributes, content-type rules and 30-day expiry as every draft). The HUD frames it with no app id, so the bridge
+  answers `preview` to every request; `vaic-bridge.js` already treats `/drafts/` as a preview. The address carries 128
+  random bits and reaches only the owner's HUD in `app.preview` (the owner-only event stream); no route lists it. The
+  HUD accepts only `<appsUrl>/drafts/prv-<32 hex>/index.html`. The city's own files are never taken from the worker.
+- **Never a draft or a version.** No `DRAFT#` record, no approval, no `live/` write, no `app.draft`; publishing is
+  unchanged (`submit_app` → draft → sign-off → Needs you).
+- **Where they edit.** The runtime reads a plain selector from what the edit wrote (an `id`/`class`/landmark tag in
+  HTML, the first rule's selector in CSS, `getElementById`/`querySelector` in JS; letters, digits, `-`, `_` only).
+  `vaic-live.js`, inside the frame, draws a labelled pointer and a soft pulse on that element and keeps the scroll
+  position across reloads (in `window.name`); a change it can't point at shows a corner badge naming the file. Above
+  the frame: who is changing what ("Frontend dev now editing app/game.js") with "In the log" to the build log, a
+  "Building… live" pill, and a pulse round the frame on each reload.
+- **Done.** When the job finishes the studio shows the published version again (an app being changed), or keeps the
+  last copy with "Latest build, not published yet" (a new app); `app.published` / `app.updated` put the copy away.
+- **Cost.** One scan and at most one event per second per builder, only changed files put (≤ 40 per event), one small
+  Lambda run per event; nothing while a builder only reads.
+
 ## Not in v1 (suggested later)
 A custom domain for exact `frame-ancestors`.
 

@@ -23,6 +23,7 @@ import {
 } from "../lib/projects.ts";
 import { useHud } from "../lib/store.ts";
 import { building, groupLabel, groupSteps, useBuildSteps, type StepKind } from "../lib/buildSteps.ts";
+import { frameSrc, useLiveCopy, type LiveCopy } from "../lib/livePreview.ts";
 import { AppFrame, AppIcon, GrantList, PinButton, problem } from "./Apps.tsx";
 import { Banner, Button, Confirm, SendIcon, toast } from "./ui.tsx";
 import { Select } from "./Select.tsx";
@@ -368,7 +369,13 @@ export function ProjectPage({ slug, go }: { slug: string; go: (view: string) => 
             <ProjectChat project={project} />
           )}
         </div>
-        <Preview project={project} />
+        <Preview
+          project={project}
+          onShowLog={() => {
+            setTab("chat");
+            requestAnimationFrame(() => document.getElementById("buildlog")?.scrollIntoView({ block: "end" }));
+          }}
+        />
       </div>
       {removing && app ? (
         <Confirm
@@ -633,8 +640,27 @@ function Versions({ app, onError }: { app: CityApp | null; onError: (e: string |
   );
 }
 
-function Preview({ project }: { project: Project }) {
+/** The frame's address for the live copy, at most about once a second, so a busy builder doesn't make it flicker. */
+function useCopySrc(copy: LiveCopy | undefined): string | null {
+  const [src, setSrc] = useState(() => (copy ? frameSrc(copy) : null));
+  const next = copy ? frameSrc(copy) : null;
+  useEffect(() => {
+    if (next === src) return;
+    if (!src || !next) return setSrc(next);
+    const t = setTimeout(() => setSrc(next), 900);
+    return () => clearTimeout(t);
+  }, [next, src]);
+  return src;
+}
+
+function Preview({ project, onShowLog }: { project: Project; onShowLog: () => void }) {
   const app = project.app;
+  const copy = useLiveCopy(project.conversation);
+  const active = useHud((s) => building(s.city, project.conversation));
+  // While the builders work (or before the first version), the right side shows their working copy, change by
+  // change; once the version is done it shows that version again (decision 278).
+  const live = copy && (!app || active) ? copy : undefined;
+  const liveSrc = useCopySrc(live);
   const [device, setDevice] = useState<Device>("fill");
   const [zoom, setZoom] = useState<number | "fit">("fit");
   const [custom, setCustom] = useState({ w: 1024, h: 768 });
@@ -652,6 +678,11 @@ function Preview({ project }: { project: Project }) {
   }, []);
   const size = device === "fill" ? null : device === "custom" ? custom : DEVICES[device];
   const scale = size ? (zoom === "fit" ? fitScale(size.w, size.h, box.w, box.h) : zoom) : 1;
+  const frame = live ? (
+    <AppFrame src={liveSrc ?? frameSrc(live)} title={`${project.title} (being built, live)`} />
+  ) : app ? (
+    <AppFrame src={app.url} title={`${project.title} (app built by the city)`} appId={app.app_id} />
+  ) : null;
   const chips: Array<{ id: Device; label: string }> = [
     { id: "fill", label: "Full size" },
     ...(Object.keys(DEVICES) as Array<keyof typeof DEVICES>).map((k) => ({ id: k, label: DEVICES[k].label })),
@@ -659,7 +690,7 @@ function Preview({ project }: { project: Project }) {
   ];
   return (
     <div className="studio-preview" aria-label="Preview">
-      <div className="pv-bar" hidden={!app}>
+      <div className="pv-bar" hidden={!app && !live}>
         <div className="pv-chips" role="radiogroup" aria-label="Preview size">
           {chips.map((c) => (
             <button
@@ -719,8 +750,10 @@ function Preview({ project }: { project: Project }) {
           </label>
         ) : null}
       </div>
+      {live ? <Editors copy={live} active={active} onShowLog={onShowLog} /> : null}
       <div className={`pv-stage${size ? " is-device" : ""}`} ref={stage} data-device={device}>
-        {!app ? (
+        {live ? <LiveLayer copy={live} active={active} /> : null}
+        {!app && !live ? (
           <div className="pv-waiting">
             <span className="proj-blueprint big" aria-hidden="true" />
             <p>Your app appears here as soon as its first version is ready.</p>
@@ -736,13 +769,65 @@ function Preview({ project }: { project: Project }) {
               className="pv-scaled"
               style={{ width: clampSize(size.w), height: clampSize(size.h), transform: `scale(${scale})` }}
             >
-              <AppFrame src={app.url} title={`${project.title} (app built by the city)`} appId={app.app_id} />
+              {frame}
             </div>
           </div>
         ) : (
-          <AppFrame src={app.url} title={`${project.title} (app built by the city)`} appId={app.app_id} />
+          frame
         )}
       </div>
+    </div>
+  );
+}
+
+/** Who is changing what right now, each linked to the build log. */
+function Editors({ copy, active, onShowLog }: { copy: LiveCopy; active: boolean; onShowLog: () => void }) {
+  const list = Object.values(copy.editors).sort((a, b) => b.at - a.at);
+  return (
+    <ul className="lv-editors" aria-label="Who is changing the app">
+      {list.map((e) => (
+        <li key={e.agent} style={{ "--c": e.color } as CSSProperties}>
+          <span className="lv-dot" aria-hidden="true" />
+          <b>{e.label}</b>
+          <span className="mute">{`${active ? "now editing" : "last edited"} app/${e.path}`}</span>
+          <button type="button" className="lv-log" onClick={onShowLog} aria-label={`${e.label}: show in the build log`}>
+            In the log
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Over the frame: the "Building… live" pill, a corner badge for a change the frame can't point at, and a pulse
+ * round the frame each time it reloads. Pointers on elements are drawn inside the frame by its own helper. */
+function LiveLayer({ copy, active }: { copy: LiveCopy; active: boolean }) {
+  const badges = Object.values(copy.editors).filter((e) => !e.selector);
+  return (
+    <div className="lv-layer">
+      <span className={`lv-pill${active ? " is-on" : ""}`} role="status">
+        {active ? (
+          <>
+            <span className="lv-rec" aria-hidden="true" />
+            Building… live
+          </>
+        ) : (
+          "Latest build, not published yet"
+        )}
+      </span>
+      <span key={copy.seq} className="lv-flash" aria-hidden="true" />
+      {badges.length ? (
+        <div className="lv-badges">
+          {badges.map((e) => (
+            <span key={e.agent} className="lv-badge" style={{ "--c": e.color } as CSSProperties}>
+              <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                <path d="M2 1l11 6-5 1.5L6 14z" fill="currentColor" />
+              </svg>
+              {`${e.label} · ${e.path}`}
+            </span>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -793,7 +878,8 @@ function DeviceGlyph({ d }: { d: Device }) {
 
 const STEP_ICON: Record<StepKind, string> = {
   command: "M5 7l4 4-4 4M11 16h8",
-  github: "M6 4v12M18 8v8M6 16a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM18 4a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM18 16a2 2 0 1 0 0 4M6 12c6 0 12-1 12-4",
+  github:
+    "M6 4v12M18 8v8M6 16a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM18 4a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM18 16a2 2 0 1 0 0 4M6 12c6 0 12-1 12-4",
   edit: "M4 20h4L19 9l-4-4L4 16zM14 6l4 4",
   image: "M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15 9h.01",
   read: "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5",
@@ -817,7 +903,7 @@ function BuildLog({ conv }: { conv: string }) {
   if (!list?.length && !active) return null;
   const groups = groupSteps(list ?? []);
   return (
-    <section className="buildlog" aria-label="What the builders are doing">
+    <section className="buildlog" id="buildlog" aria-label="What the builders are doing">
       {groups.map((g, i) =>
         g.steps.length === 1 ? (
           <p key={`${g.steps[0]!.at}-${i}`} className="bl-step">

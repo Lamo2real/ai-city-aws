@@ -745,11 +745,12 @@ resource "aws_lambda_permission" "call" {
   source_arn    = aws_cloudwatch_event_rule.call.arn
 }
 
-# A worker's submit_app → the apps function (validate, stage drafts/, write the draft, put app.draft).
+# A worker's submit_app → the apps function (validate, stage drafts/, write the draft, put app.draft); and a
+# worker's file edits → the job's live working copy under drafts/ (app.preview.files → app.preview, decision 278).
 resource "aws_cloudwatch_event_rule" "app_submitted" {
   name           = "${var.name}-app-submitted"
   event_bus_name = var.bus_name
-  event_pattern  = jsonencode({ source = ["vaic.city"], "detail-type" = ["app.submitted"] })
+  event_pattern  = jsonencode({ source = ["vaic.city"], "detail-type" = ["app.submitted", "app.preview.files"] })
   tags           = { Component = "apps" }
 }
 
