@@ -2474,6 +2474,29 @@ table.costs tr:last-child td {
 .dept:hover {
   background: var(--city-glass-2);
 }
+/* The hover (and focus) highlight follows the box's own curve, inset by its 10px padding (14px box radius). */
+.dept {
+  border-radius: 10px;
+}
+.deptlist {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.deptlist[hidden] {
+  display: none;
+}
+.deptlist h3 {
+  margin-top: 8px;
+}
+.cityui.depts.closed {
+  flex: none;
+  max-height: none;
+  overflow: hidden;
+}
+.depts.closed h3 {
+  margin: 0;
+}
 .feed {
   padding: 10px;
   flex: 1 1 0;

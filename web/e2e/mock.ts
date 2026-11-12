@@ -283,6 +283,8 @@ export async function mockBackend(
     apps?: Array<Record<string, unknown>>;
     /** Use the real browser voice (getUserMedia, AudioContext, the AWS SDKs) instead of the fake one. */
     realVoice?: boolean;
+    /** The City's Departments and Activity boxes start closed for the owner; most tests want them open. */
+    foldsClosed?: boolean;
   } = {},
 ): Promise<Mock> {
   // Events sent before the page's WebSocket connects are held and delivered on connect.
@@ -514,6 +516,11 @@ export async function mockBackend(
     m.knowledge.items.unshift(i);
     return i;
   };
+  if (!opts.foldsClosed)
+    await page.addInitScript(() => {
+      // Open unless the test (or the page, on a reload) already chose: tests click departments and read Activity.
+      for (const k of ["vaic.departments", "vaic.activity"]) if (localStorage.getItem(k) === null) localStorage.setItem(k, "open");
+    });
   await page.addInitScript(
     ({ signedIn, realVoice }) => {
       // Like Amplify now: the sign-in lives in localStorage, so it survives closing the tab. "revoked" keeps the

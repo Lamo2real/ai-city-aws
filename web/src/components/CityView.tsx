@@ -95,23 +95,10 @@ export function CityView({
   const [open, setOpen] = useState<Open>(null);
   const [now, setNow] = useState(Date.now());
   const [earlier, setEarlier] = useState(false);
-  // The owner can fold Activity away (2026-11-10); remembered on this device.
-  const [feedOpen, setFeedOpen] = useState(() => {
-    try {
-      return localStorage.getItem("vaic.activity") !== "closed";
-    } catch {
-      return true;
-    }
-  });
-  const toggleFeed = () =>
-    setFeedOpen((o) => {
-      try {
-        localStorage.setItem("vaic.activity", o ? "closed" : "open");
-      } catch {
-        // private window: it just isn't remembered
-      }
-      return !o;
-    });
+  // Activity and Departments fold to their title bars; both start closed, and whatever the owner leaves them as is
+  // remembered on this device, sign-out and restarts included (the owner, 2026-11-12).
+  const [feedOpen, toggleFeed] = useFold("vaic.activity");
+  const [deptsOpen, toggleDepts] = useFold("vaic.departments");
   const [health, setHealth] = useState<string | null>(null);
   const voice = useVoice();
   const speaker = speakerOf(useHud((s) => s.presence));
@@ -312,8 +299,23 @@ export function CityView({
         ) : null}
       </div>
       <aside className="cityside">
-        <nav className="cityui depts" aria-label="Departments">
-          <h3 className="pixel">Departments</h3>
+        <nav className={`cityui depts${deptsOpen ? "" : " closed"}`} aria-label="Departments">
+          <h3 className="pixel">
+            <button
+              type="button"
+              className="feedtoggle"
+              aria-expanded={deptsOpen}
+              aria-controls="city-departments"
+              onClick={toggleDepts}
+              title={deptsOpen ? "Hide departments" : "Show departments"}
+            >
+              Departments
+              <span className="chev" aria-hidden="true">
+                {deptsOpen ? "▾" : "▸"}
+              </span>
+            </button>
+          </h3>
+          <div id="city-departments" className="deptlist" hidden={!deptsOpen}>
           <button
             type="button"
             className="dept"
@@ -360,6 +362,7 @@ export function CityView({
           <button type="button" className="dept rec" onClick={() => setOpen({ record: "legend" })}>
             What the marks mean
           </button>
+          </div>
         </nav>
         <div
           className={`cityui feed${feedOpen ? "" : " closed"}`}
@@ -960,3 +963,24 @@ const Row = ({ k, v }: { k: string; v: string }) => (
     <span className="v">{v}</span>
   </div>
 );
+
+/** A box that folds to its title bar: closed until the owner opens it, then remembered on this device. */
+function useFold(key: string): [boolean, () => void] {
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem(key) === "open";
+    } catch {
+      return false;
+    }
+  });
+  const toggle = () =>
+    setOpen((o) => {
+      try {
+        localStorage.setItem(key, o ? "closed" : "open");
+      } catch {
+        // private window: it just isn't remembered
+      }
+      return !o;
+    });
+  return [open, toggle];
+}

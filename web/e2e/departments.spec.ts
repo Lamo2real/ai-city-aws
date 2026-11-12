@@ -322,3 +322,24 @@ test("Activity folds away and stays folded after a reload", async ({ page }) => 
   await page.getByRole("button", { name: "Activity" }).click();
   await expect(page.getByText("Quiet.")).toBeVisible();
 });
+
+test("Departments and Activity start closed, fold open with a tap and stay as left after a reload (the owner, 2026-11-12)", async ({
+  page,
+}) => {
+  await mockBackend(page, { foldsClosed: true });
+  await page.goto("/#/city");
+  const depts = page.getByRole("button", { name: "Departments" });
+  const activity = page.getByRole("button", { name: "Activity" });
+  await expect(depts).toHaveAttribute("aria-expanded", "false");
+  await expect(activity).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("navigation", { name: "Departments" }).getByRole("button", { name: "HQ" })).toBeHidden();
+  await depts.click();
+  await expect(depts).toHaveAttribute("aria-expanded", "true");
+  const hq = page.getByRole("navigation", { name: "Departments" }).getByRole("button", { name: "HQ" });
+  await expect(hq).toBeVisible();
+  // The hover highlight is rounded like the box.
+  expect(await hq.evaluate((el) => getComputedStyle(el).borderRadius)).toBe("10px");
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Departments" })).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("button", { name: "Activity" })).toHaveAttribute("aria-expanded", "false");
+});
