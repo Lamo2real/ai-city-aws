@@ -90,7 +90,13 @@ async def test_rejects_malformed_invocations_and_hides_error_details() -> None:
 # ---------- prompts ----------
 def test_every_role_prompt_exists_and_lists_its_tools() -> None:
     assert "start_job" in load_prompt("vaic.md").tools
-    assert load_prompt("planner.md").tools == ["add_part", "finish_plan", "search_knowledge", "ask_executives"]
+    assert load_prompt("planner.md").tools == [
+        "write_contract",
+        "add_part",
+        "finish_plan",
+        "search_knowledge",
+        "ask_executives",
+    ]
     assert "review" in load_prompt("manager.md", {"department": "Eng"}).tools
 
 
@@ -102,13 +108,14 @@ def test_the_reviewer_only_reviews_and_the_planner_writes_few_independent_parts(
     assert "plan_team" not in manager and "hire_worker" not in manager
     planner = load_prompt("planner.md").body
     assert "add_part" in planner and "finish_plan" in planner
-    assert "Few, independent parts beat many small ones" in planner
+    assert "Contract first" in planner and "Split by independent unit" in planner and "over-split" in planner
     assert "Orchestrator" not in planner
     assert load_prompt("worker.md").tools == [
         "ask_manager",
         "ask_taste",
         "report_to_manager",
         "needs_a_team",
+        "amend_contract",
         "submit_app",
         "search_knowledge",
         "load_app",

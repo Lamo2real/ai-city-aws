@@ -41,6 +41,7 @@ async def vaic(req: EngineRequest, call: Call) -> str:
 async def orchestrator(req: EngineRequest, call: Call) -> str:
     """The board's planner, for a job whose department isn't standing yet (decision 298)."""
     dept = re.search(r"Give every part to the (.+?) department", req.turn.prompt).group(1)  # type: ignore[union-attr]
+    await call("write_contract", {"summary": "The shared contract for this job."})
     await call("add_part", {"name": "The job", "goal": await _goal(req), "acceptance": "done", "department": dept})
     await call("finish_plan", {})
     return "Planned."

@@ -16,7 +16,7 @@ from vaic.lambdas.scheduler import run_job
 from vaic.runtime.tools import TurnCtx, tools_for
 from vaic.shared import utility
 from vaic.shared.apps import APPS_PK, DRAFTS_PK, home_department
-from vaic.shared.hierarchy.board_path import add_part, plan_items
+from vaic.shared.hierarchy.board_path import add_part, plan_items, write_contract
 from vaic.shared.hierarchy.departments import (
     MERGES_PK,
     merge_replaced_departments,
@@ -46,7 +46,7 @@ async def test_nothing_builds_an_apps_department_again() -> None:
     assert said.startswith("Application is already standing")
     task = await c.ledger.create_ticket(
         {"goal": "a game", "from": "vaic", "to": "orchestrator", "department": None, "parent_id": None,
-         "kind": "task", "status": "in_progress", "planned": True, "path": "board", "size": "medium"}
+         "kind": "task", "status": "in_progress", "planned": True, "contract_version": 1, "path": "board", "size": "medium"}
     )  # fmt: skip
     planner = TurnCtx(agent_id="orchestrator", role="orchestrator", department=None, ticket_id=task["id"],
                       task_id=task["id"])  # fmt: skip
@@ -71,7 +71,7 @@ async def test_the_old_apps_department_is_folded_into_application_once() -> None
     await c.ledger.table.put({"pk": DRAFTS_PK, "sk": "DRAFT#drf-1", "draft_id": "drf-1", "department": "Apps"})
     planned = await c.ledger.create_ticket(
         {"goal": "a game", "from": "vaic", "to": "orchestrator", "department": None, "parent_id": None,
-         "kind": "task", "status": "in_progress", "planned": True, "path": "board", "size": "medium"}
+         "kind": "task", "status": "in_progress", "planned": True, "contract_version": 1, "path": "board", "size": "medium"}
     )  # fmt: skip
     await c.ledger.table.put({"pk": f"TICKET#{planned['id']}", "sk": "PLAN#0000#levels", "name": "Levels",
                               "goal": "levels", "acceptance": "ok", "department": "Apps", "after": ["Engine"],
@@ -191,6 +191,7 @@ async def test_the_owners_pick_reaches_the_board() -> None:
     assert "Give every part to the Application department" in body
     assert await c.ledger.get_department("Game Studio") is None
     # Several existing departments can still share the project.
+    await write_contract(c.deps, task["id"], {"summary": "The shared contract."})
     for dept in ("Application", "Marketing"):
         said = await add_part(c.deps, task["id"], {"name": f"{dept} part", "goal": "part", "acceptance": "ok",
                                                     "department": dept})  # fmt: skip

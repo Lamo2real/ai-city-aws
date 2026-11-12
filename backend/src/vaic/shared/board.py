@@ -172,6 +172,7 @@ class Board:
             if tk.get("path") is None and previous is not None:
                 meta.pop("path")  # an event without the field never turns a board job back into a chain one
             for k in ("size", "size_reason", "size_by_owner", "workers", "pace", "conversation", "app_id", "result",
+                      "contract_version", "critical_path",
                       "acceptance", "standing_order"):  # fmt: skip
                 if tk.get(k) is not None:
                     meta[k] = tk[k]

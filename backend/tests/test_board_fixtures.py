@@ -112,6 +112,7 @@ async def vaic(req: EngineRequest, call: Call) -> str:
 
 async def orchestrator(req: EngineRequest, call: Call) -> str:
     if "Board planning" in req.turn.prompt:
+        await call("write_contract", {"summary": "The shared contract for this job."})
         for name, files in (("Cards", ["cards.js"]), ("Score", ["score.js"])):
             await call(
                 "add_part",

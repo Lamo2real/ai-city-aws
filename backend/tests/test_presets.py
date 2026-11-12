@@ -96,7 +96,7 @@ async def test_bundled_skills_join_the_plugin_folder_without_s3(tmp_path: Path) 
 
 async def planned_task(d: Any) -> None:
     await d.ledger.create_ticket({"id": "t-task", "goal": "an API", "from": "vaic", "to": "orchestrator",
-                                  "department": None, "parent_id": None, "status": "in_progress", "planned": True,
+                                  "department": None, "parent_id": None, "status": "in_progress", "planned": True, "contract_version": 1,
                                   "path": "board", "size": "medium"})  # fmt: skip
 
 

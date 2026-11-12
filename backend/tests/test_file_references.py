@@ -51,6 +51,7 @@ async def vaic(req: EngineRequest, call: Call) -> str:
 
 
 async def planner(req: EngineRequest, call: Call) -> str:
+    await call("write_contract", {"summary": "The shared contract for this job."})
     if "Board planning" in req.turn.prompt:
         SEEN["planner"] = req.turn.prompt
         await call("add_part", {"name": "UI", "goal": "build the UI", "acceptance": "matches the references",

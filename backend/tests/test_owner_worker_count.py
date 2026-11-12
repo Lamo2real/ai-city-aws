@@ -35,6 +35,7 @@ async def test_the_owners_exact_worker_count_reaches_the_planner_and_every_part_
     planner = TurnCtx(
         agent_id="orchestrator", role="orchestrator", department=None, ticket_id=task["id"], task_id=task["id"]
     )
+    await tool(d, planner, "write_contract")({"summary": "Five one-page competitor profiles, same headings."})
     add = tool(d, planner, "add_part")
     for i in range(5):  # no ceiling (decision 288): every part that waits for nothing gets its worker now
         said = await add(

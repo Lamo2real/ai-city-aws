@@ -70,6 +70,10 @@ class TicketRecord(_M):
     size_reason: str | None = None
     size_by_owner: bool | None = None
     sizing_ms: float | None = None
+    contract_version: float | None = None
+    """The job's shared contract version (decision 301): every part builds against it."""
+    critical_path: float | None = None
+    """The longest chain of waits among the job's parts (decision 301)."""
     path: str | None = None
     """``board`` for a job, goal or part on the board path (decision 289); None = the chain."""
     vaic_ms: float | None = None

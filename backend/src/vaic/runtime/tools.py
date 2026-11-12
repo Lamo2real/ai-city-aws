@@ -827,8 +827,34 @@ def _planner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
     async def finish_plan(_: dict[str, Any]) -> str:
         return await board.finish_plan(d, c.task_id)
 
+    async def write_contract(a: dict[str, Any]) -> str:
+        return await board.write_contract(d, c.task_id, a)
+
     _bool = {"type": "boolean"}
+    _text_or_list = {"anyOf": [{"type": "string"}, _STRS]}
     return [
+        ToolSpec(
+            "write_contract",
+            "First, before any part: the job's shared contract every part builds against. summary (one line), "
+            "endpoints (each: method, path, request and response shapes), data_model (entities and the DB schema), "
+            "events (messages between services), shared_types, routes (each frontend route with its page's props), "
+            "components (shared components and their props), env (env and config names). Leave out what doesn't "
+            "apply; for work that isn't software, the deliverable's structure and shared terms.",
+            _obj(
+                {
+                    "summary": _s(3, 600),
+                    "endpoints": _text_or_list,
+                    "data_model": _text_or_list,
+                    "events": _text_or_list,
+                    "shared_types": _text_or_list,
+                    "routes": _text_or_list,
+                    "components": _text_or_list,
+                    "env": _text_or_list,
+                },
+                ("endpoints", "data_model", "events", "shared_types", "routes", "components", "env"),
+            ),
+            write_contract,
+        ),
         ToolSpec(
             "add_part",
             "Write one part of the job to the board. It starts at once when the parts in `after` are done (or it has "
@@ -1093,6 +1119,31 @@ def _worker_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         )
         return "Reported to your manager. End your turn."
 
+    async def amend_contract(a: dict[str, Any]) -> str:
+        import json
+
+        job = await d.ledger.get_ticket(c.ticket_id)
+        task = await d.ledger.get_ticket(c.task_id)
+        if not job or not (task or {}).get("contract_version"):
+            return "This job has no contract to amend."
+        await send(
+            d,
+            {
+                "role": "manager",
+                "agentId": str(job.get("from")),
+                "department": c.department,
+                "ticketId": c.ticket_id,
+                "taskId": c.task_id,
+                "kind": "report",
+                "from": c.agent_id,
+                "body": json.dumps(
+                    {"change": hide_token(str(a["change"]))[:2000], "affects": [str(x) for x in a.get("affects") or []]}
+                ),
+                "board": "amend",
+            },
+        )
+        return "Amendment sent: the contract gets its next version and the affected parts are told. Carry on with it."
+
     async def needs_a_team(a: dict[str, Any]) -> str:
         job = await d.ledger.get_ticket(c.ticket_id)
         task = await d.ledger.get_ticket(c.task_id)
@@ -1188,6 +1239,13 @@ def _worker_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             "Ask your manager a question. Keep working on a sensible default meanwhile.",
             _obj({"question": _s(3)}),
             ask_manager,
+        ),
+        ToolSpec(
+            "amend_contract",
+            "Only when your part truly needs the job's contract changed: the change in one or two sentences and the "
+            "names of the parts it affects. It becomes the contract's next version and those parts' workers are told.",
+            _obj({"change": _s(10, 2000), "affects": _STRS}, ("affects",)),
+            amend_contract,
         ),
         ToolSpec(
             "needs_a_team",

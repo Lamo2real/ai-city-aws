@@ -756,6 +756,7 @@ def test_the_prompts_carry_the_connector_and_skill_rules() -> None:
         "ask_taste",
         "report_to_manager",
         "needs_a_team",
+        "amend_contract",
         "submit_app",
         "search_knowledge",
         "load_app",

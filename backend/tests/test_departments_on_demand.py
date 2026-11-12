@@ -43,7 +43,7 @@ async def test_vaic_builds_a_department_with_sonnet_workers_and_a_tower_event() 
     # Its reviewer is Opus (hired with its first part); its workers are Sonnet.
     task = await c.ledger.create_ticket(
         {"goal": "Write a renewal email", "from": "vaic", "to": "orchestrator", "department": None,
-         "parent_id": None, "kind": "task", "status": "in_progress", "planned": True, "path": "board",
+         "parent_id": None, "kind": "task", "status": "in_progress", "planned": True, "contract_version": 1, "path": "board",
          "size": "medium"}
     )  # fmt: skip
     await add_part(c.host.d, task["id"], {"name": "Email", "goal": "A renewal email", "acceptance": "One email",
@@ -84,7 +84,7 @@ async def test_demolish_asks_first_then_sends_workers_home_hands_work_back_and_k
     tools = vaic_tools(c)
     planned = await c.ledger.create_ticket(
         {"goal": "More sentences", "from": "vaic", "to": "orchestrator", "department": None, "parent_id": None,
-         "kind": "task", "status": "in_progress", "planned": True, "path": "board", "size": "medium"}
+         "kind": "task", "status": "in_progress", "planned": True, "contract_version": 1, "path": "board", "size": "medium"}
     )  # fmt: skip
     await c.ledger.table.put({"pk": f"TICKET#{planned['id']}", "sk": "PLAN#0000#more", "name": "More",
                               "goal": "more", "acceptance": "ok", "department": "Writing", "after": ["First"],
@@ -115,7 +115,7 @@ async def test_demolish_asks_first_then_sends_workers_home_hands_work_back_and_k
     # The planner can't give it work.
     again = await c.ledger.create_ticket(
         {"goal": "x", "from": "vaic", "to": "orchestrator", "department": None, "parent_id": None, "kind": "task",
-         "status": "in_progress", "planned": True, "path": "board", "size": "medium"}
+         "status": "in_progress", "planned": True, "contract_version": 1, "path": "board", "size": "medium"}
     )  # fmt: skip
     said_no = await add_part(c.host.d, again["id"], {"name": "Words", "goal": "x", "acceptance": "y",
                                                      "department": "Writing"})  # fmt: skip

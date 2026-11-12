@@ -70,6 +70,7 @@ async def test_find_me_two_leads_walks_to_sales_and_comes_back_as_a_table_and_a_
         return "Here are your two leads."
 
     async def orchestrator(req: EngineRequest, call: Call) -> str:  # the board's planner (decision 298)
+        await call("write_contract", {"summary": "The shared contract for this job."})
         await call("add_part", {"name": "Lead research", "department": "Business Development", "goal": ASK,
                                 "acceptance": "2 leads with every field or 'not found publicly'"})  # fmt: skip
         await call("finish_plan", {})

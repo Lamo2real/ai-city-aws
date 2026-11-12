@@ -253,7 +253,8 @@ async def after_tests(d: CityDeps, part: Record, summary: str, checked: bool) ->
                 "from": str(part["to"]),
                 "body": (
                     "Board review (decision 289): you are this department's reviewer for one part. Its tests passed. "
-                    "Read the result, check it against the acceptance, then call review once on this assignment: "
+                    "Read the result, check it against the acceptance and the job's contract, then call review once on "
+                    "this assignment: "
                     "PASS, or FAIL with exactly what to change. Do nothing else: no hires, no reports.\n"
                     f"Assignment {part['id']}: {part.get('goal')}\nAcceptance: {part.get('acceptance')}\n"
                     + (AWS_REVIEW if part.get("aws") else "")
@@ -410,6 +411,12 @@ async def board_step(d: CityDeps, m: dict[str, Any]) -> None:
     step = m.get("board")
     if step == "finish":
         await finish_part(d, str(m["ticketId"]), "The tests passed.")
+    elif step == "amend":
+        import json
+
+        body = json.loads(str(m.get("body") or "{}"))
+        await amend_contract(d, str(m["taskId"]), str(m["ticketId"]), str(body.get("change") or ""),
+                             [str(x) for x in body.get("affects") or []])  # fmt: skip
     elif step == "escalate":
         await escalate(d, str(m["ticketId"]), str(m.get("body") or ""))
     elif step == "takeover":
@@ -465,14 +472,25 @@ def planner_brief(task: Record, app: Record | None, departments: list[str], note
         f"Board planning: you are the planner of a {size} job.",
         f"The job: {task.get('goal')}",
         f"The owner's words: {task.get('owner_words') or task.get('goal')}",
-        "Split it into parts that can run at the same time. Call add_part for each part the moment you have written it: "
+        "Contract first (decision 301): call write_contract once, before any part: the short shared contract every "
+        "part builds against (API endpoints with request and response shapes, the data model and DB schema, events "
+        "between services, shared types, frontend routes with each page's and shared component's props, env and "
+        "config names; for work that isn't software, the deliverable's structure and shared terms). It is the only "
+        "thing every part waits on.",
+        "Then split it as finely as is useful into independent units that build against the contract, not each "
+        "other: one part per backend service or module, per endpoint group, per third-party integration, the DB "
+        "migrations; one per frontend page or route, plus the shared components; infrastructure per resource group; "
+        "tests and seed data as their own parts. Keep `after` rare (only what truly needs another part's finished "
+        "code): the board records the critical path, the longest chain of waits; keep it at 1. A one-line change "
+        "never gets its own worker: mark it trivial and it rides with a neighbouring part of its department.",
+        "Call add_part for each part the moment you have written it: "
         "it starts at once when it waits for nothing (the board hires its worker straight away), so write the parts "
         "that start the work first. Each part: a name, the goal, the acceptance, its department "
         f"({', '.join(departments)}), after (the names of parts it needs first; none when it can start now), files "
         "(the files it alone owns: no two parts own the same file) and trivial=true for a one-line or config change "
         "(it skips the reviewer when its tests pass). Then call finish_plan once. A whole-app check runs after every part, automatically, and "
         "makes the parts fit together; don't add one.",
-        "Few, independent parts beat many small ones: one worker per part, no limit on how many.",
+        "Many independent parts, finished fast: one Sonnet worker per part, no limit on how many.",
     ]
     if task.get("workers"):
         lines.append(f"The owner asked for exactly {task['workers']} agents: write that many parts that run at once.")
@@ -485,7 +503,8 @@ def planner_brief(task: Record, app: Record | None, departments: list[str], note
         lines.append("If this is an app, every part builds into one shared app folder; split it by files.")
     if m.aws_checks:
         lines.append(
-            "Extreme job: investigate first (search the knowledge base, read what exists), then hand parallel specialist "
+            "Extreme job: investigate first (search the knowledge base, read what exists), write the contract, then hand "
+            "parallel specialist "
             "leads to the departments that own them: Application (the app), IT Infrastructure (the AWS setup, in "
             "Terraform), Data & AI (data and models) and a security part. Mark every part that creates or changes AWS "
             "resources aws=true: its review adds security and cost checks."
@@ -540,6 +559,11 @@ async def add_part(d: CityDeps, task_id: str, a: dict[str, Any]) -> str:
         return "This job is not planned on the board."
     if task.get("plan_done"):
         return "The plan is finished; no more parts."
+    if not task.get("contract_version"):
+        return (
+            "Write the contract first with write_contract: the API, data model, events, shared types, routes and props "
+            "and env names every part builds against. It is the one thing every part waits on."
+        )
     name = " ".join(str(a.get("name") or "").split())[:80]
     if not name or name.lower() == CHECK_NAME.lower():
         return "Give the part a name (not the whole-app check, which runs by itself)."
@@ -576,9 +600,31 @@ async def add_part(d: CityDeps, task_id: str, a: dict[str, Any]) -> str:
         "order": len(items),
         "status": "waiting",
     }
+    rider = bool(a.get("trivial")) and not item["after"]
+    if rider:
+        # Too small to be worth a worker (decision 301): it rides with the next part of its department, or joins its
+        # department's other small changes when the plan is finished.
+        item["status"] = "rider"
+    else:
+        riders = [i for i in items if i.get("status") == "rider" and i.get("department") == dept["name"]]
+        if riders:
+            item["goal"] = (str(item["goal"]) + "\nAlso, small changes that ride with this part: "
+                            + "; ".join(str(r["goal"]) for r in riders))[:4000]  # fmt: skip
+            item["files"] = sorted({*item["files"], *(f for r in riders for f in r.get("files") or [])})
     if not await d.ledger.table.put(item, if_not_exists=True):
         return f"There is already a part called {name}."
+    if rider:
+        await _record_path(d, task_id)
+        return (
+            f"Added {name}: a one-line change, so it rides with the next {dept['name']} part instead of its own worker."
+        )
+    for r in [i for i in items if i.get("status") == "rider" and i.get("department") == dept["name"]]:
+        await d.ledger.table.update(
+            f"TICKET#{task_id}", str(r["sk"]), UpdateOptions(set={"status": "done", "merged_into": name,
+                                                                   "result": f"Done as part of {name}."})
+        )  # fmt: skip
     started = await advance(d, task_id)
+    await _record_path(d, task_id)
     await stage(d, task_id, "plan", "dur", _key(name), 0)
     if name in started:
         return f"Added {name}: its worker starts now."
@@ -596,6 +642,39 @@ async def finish_plan(d: CityDeps, task_id: str) -> str:
         return "The plan is already finished."
     from collections import Counter
 
+    # Small changes still waiting for a neighbour: one worker per department takes all of them (decision 301).
+    for dept_name in sorted({str(i["department"]) for i in items if i.get("status") == "rider"}):
+        riders = [i for i in items if i.get("status") == "rider" and i.get("department") == dept_name]
+        if len(riders) == 1:
+            await d.ledger.table.update(
+                f"TICKET#{task_id}", str(riders[0]["sk"]), UpdateOptions(set={"status": "waiting"})
+            )
+            continue
+        name = f"Small changes in {dept_name}"
+        await d.ledger.table.put(
+            {
+                "pk": f"TICKET#{task_id}",
+                "sk": f"{PLAN}{len(items):04d}#{_key(name)}",
+                "name": name,
+                "goal": "Make these small changes: " + "; ".join(str(r["goal"]) for r in riders),
+                "acceptance": "; ".join(str(r["acceptance"]) for r in riders)[:2000],
+                "department": dept_name,
+                "after": [],
+                "files": sorted({f for r in riders for f in r.get("files") or []}),
+                "trivial": True,
+                "risky": False,
+                "aws": False,
+                "check": False,
+                "order": len(items),
+                "status": "waiting",
+            }
+        )
+        for r in riders:
+            await d.ledger.table.update(
+                f"TICKET#{task_id}", str(r["sk"]), UpdateOptions(set={"status": "done", "merged_into": name})
+            )
+        items = await plan_items(d, task_id)
+    items = [i for i in await plan_items(d, task_id) if not i.get("merged_into")]
     home = None
     if task.get("app_id"):
         from ..apps import home_department
@@ -610,7 +689,7 @@ async def finish_plan(d: CityDeps, task_id: str) -> str:
         "goal": "Check that every part fits together as one finished whole, fix what doesn't, and deliver it.",
         "acceptance": "Everything the owner asked works together; nothing a part did breaks another.",
         "department": dept,
-        "after": [str(i["name"]) for i in items],
+        "after": [str(i["name"]) for i in items if not i.get("merged_into")],
         "files": [],
         "trivial": False,
         "risky": False,
@@ -623,9 +702,11 @@ async def finish_plan(d: CityDeps, task_id: str) -> str:
     await d.ledger.set_ticket_status(task_id, task["status"], "plan written", {"plan_done": True})
     await stage(d, task_id, "planning", "end")
     started = await advance(d, task_id)
-    log("info", "board.plan_done", task=task_id, parts=len(items), size=size)
+    path = await _record_path(d, task_id)
+    log("info", "board.plan_done", task=task_id, parts=len(items), size=size, critical_path=path)
     return (
-        f"Plan finished: {len(items)} part{'s' if len(items) != 1 else ''} and the whole-app check. "
+        f"Plan finished: {len(items)} part{'s' if len(items) != 1 else ''} and the whole-app check; the critical path "
+        f"is {path} part{'s' if path != 1 else ''} long before the check. "
         + (f"Starting now: {', '.join(started)}. " if started else "")
         + "End your turn; the board runs the rest."
     )
@@ -714,6 +795,21 @@ async def _start_item(d: CityDeps, task: Record, item: Record, items: list[Recor
 
         app = await get_app(d.ledger, str(task["app_id"]))
     extra: list[str] = []
+    contract = await get_contract(d, task["id"])
+    if contract:
+        extra.append(
+            (
+                "The whole-app check: swap every part's stubs for the real parts and run the end-to-end tests against "
+                "the contract below."
+                if item.get("check")
+                else "Build and test your part against the contract below, not against the other parts: stub or mock "
+                "what they provide, and write contract tests for your part (does it honour the contract?). If your "
+                "part truly needs the contract changed, call amend_contract once with the change and the parts it "
+                "affects; never change it silently."
+            )
+            + "\n"
+            + contract_text(contract)
+        )
     if item.get("files"):
         extra.append(f"Your files (no one else edits them): {', '.join(item['files'])}.")
     is_app = bool(app) or str(task.get("conversation") or "").startswith("app-new-")
@@ -903,3 +999,115 @@ async def instruct_job(d: CityDeps, task: Record, text: str) -> str:
         if told
         else "Nobody is working on it right now."
     )
+
+
+# ---------- contract-first planning (decision 301) ----------
+CONTRACT = "CONTRACT"
+CONTRACT_FIELDS = ("summary", "endpoints", "data_model", "events", "shared_types", "routes", "components", "env")
+
+
+async def get_contract(d: CityDeps, task_id: str) -> Record | None:
+    it = await d.ledger.table.get(f"TICKET#{task_id}", CONTRACT)
+    return {k: v for k, v in it.items() if k not in ("pk", "sk")} if it else None
+
+
+def contract_text(c: Record, cap: int = 6000) -> str:
+    """The contract as every brief carries it, amendments last."""
+    lines = [f"Contract (version {c.get('version', 1)}):"]
+    for k in CONTRACT_FIELDS:
+        v = c.get(k)
+        if v:
+            lines.append(f"- {k.replace('_', ' ')}: {v if isinstance(v, str) else '; '.join(map(str, v))}")
+    for a in c.get("amendments") or []:
+        lines.append(f"- amendment v{a.get('version')}: {a.get('change')}")
+    return "\n".join(lines)[:cap]
+
+
+async def write_contract(d: CityDeps, task_id: str, a: dict[str, Any]) -> str:
+    """The planner's first step on a planned job: the shared contract. Rewriting it is allowed only before a part
+    starts; after that a change is an amendment, so no part is silently broken."""
+    task = await d.ledger.get_ticket(task_id)
+    if not task or not task.get("planned"):
+        return "This job is not planned on the board."
+    if any(i.get("status") not in ("waiting", "rider") for i in await plan_items(d, task_id)):
+        return "Parts have started: change the contract with an amendment, not a rewrite."
+    c: Record = {"version": 1, "amendments": [], "at": now_iso(d.ledger.now())}
+    for k in CONTRACT_FIELDS:
+        v = a.get(k)
+        if isinstance(v, list):
+            v = [str(x)[:500] for x in v][:200]
+        elif v is not None:
+            v = str(v)[:6000]
+        if v:
+            c[k] = v
+    if not c.get("summary"):
+        return "Give the contract a one-line summary at least."
+    await d.ledger.table.put({"pk": f"TICKET#{task_id}", "sk": CONTRACT, **c})
+    await d.ledger.set_ticket_status(task_id, task["status"], "contract written", {"contract_version": 1})
+    await stage(d, task_id, "contract", "dur", "job", 0)
+    log("info", "board.contract", task=task_id, fields=",".join(k for k in CONTRACT_FIELDS if k in c))
+    return "Contract written (version 1). Now add the parts; each starts at once against it."
+
+
+async def amend_contract(d: CityDeps, task_id: str, by_part: str, change: str, affects: list[str]) -> str:
+    """One quick amendment on the board: the contract's next version, and every affected part's worker is told (all
+    unfinished parts when none are named). Waiting parts get it in their brief when they start."""
+    c = await get_contract(d, task_id)
+    if not c:
+        return "This job has no contract."
+    from .actions import instruct_agent
+
+    version = int(c.get("version") or 1) + 1
+    amendments = [*(c.get("amendments") or []), {"version": version, "change": change[:2000], "by": by_part,
+                                                 "affects": affects}]  # fmt: skip
+    await d.ledger.table.put({"pk": f"TICKET#{task_id}", "sk": CONTRACT, **c, "version": version,
+                              "amendments": amendments})  # fmt: skip
+    task = await d.ledger.get_ticket(task_id)
+    if task:
+        await d.ledger.set_ticket_status(task_id, task["status"], "contract amended", {"contract_version": version})
+    wanted = {x.lower() for x in affects}
+    told = 0
+    for i in await plan_items(d, task_id):
+        if i.get("status") != "started" or not i.get("ticket_id") or i.get("ticket_id") == by_part:
+            continue
+        if wanted and str(i["name"]).lower() not in wanted:
+            continue
+        t = await d.ledger.get_ticket(str(i["ticket_id"]))
+        if t and str(t.get("to") or "").startswith("wkr-") and t.get("status") not in FINAL:
+            await instruct_agent(
+                d,
+                str(t["to"]),
+                f"Contract amendment v{version} (your part is affected): {change[:2000]} Adjust your part to it.",
+            )
+            told += 1
+    log("info", "board.contract_amended", task=task_id, version=version, told=told)
+    return f"Amendment recorded as contract version {version}; {told} part{'s' if told != 1 else ''} told."
+
+
+def critical_path(items: list[Record]) -> int:
+    """The longest chain of waits among the parts (the whole-app check and merged small changes left out): 1 when every
+    part can start once the contract is written."""
+    real = {
+        str(i["name"]): i
+        for i in items
+        if not i.get("check") and not i.get("merged_into") and i.get("status") != "rider"
+    }
+    depth: dict[str, int] = {}
+
+    def of(n: str, seen: frozenset[str] = frozenset()) -> int:
+        if n in depth:
+            return depth[n]
+        if n in seen or n not in real:
+            return 0
+        depth[n] = 1 + max((of(a, seen | {n}) for a in real[n].get("after") or []), default=0)
+        return depth[n]
+
+    return max((of(n) for n in real), default=0)
+
+
+async def _record_path(d: CityDeps, task_id: str) -> int:
+    path = critical_path(await plan_items(d, task_id))
+    task = await d.ledger.get_ticket(task_id)
+    if task and task.get("critical_path") != path:
+        await d.ledger.set_ticket_status(task_id, task["status"], "critical path", {"critical_path": path})
+    return path

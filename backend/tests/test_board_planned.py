@@ -50,6 +50,7 @@ def planner(parts: list[dict[str, Any]], seen: dict[str, Any]) -> Any:
     async def plan(req: EngineRequest, call: Call) -> str:
         assert "Board planning" in req.turn.prompt
         seen["prompt"] = req.turn.prompt
+        await call("write_contract", {"summary": "The shared contract for this job."})
         for p in parts:
             seen.setdefault("answers", []).append(await call("add_part", p))
             # Streaming: a part that waits for nothing has its worker before the plan is even finished.
@@ -128,8 +129,11 @@ async def test_a_medium_job_is_planned_on_the_board_and_each_part_starts_as_soon
     (plan_inv,) = [i for i in city.invocations if i["role"] == "orchestrator"]
     assert plan_inv["model"] == "sonnet-5-5"  # the medium planner
     assert (await city.ledger.turns_of("orchestrator"))[0]["model"] == "sonnet-5-5"
-    # Streaming: Cards and Title had workers while the planner was still writing; Score waited for Cards.
-    assert seen["workers_while_planning"] == [1, 2, 2]
+    # Streaming: Cards had its worker while the planner was still writing; Title is a one-line change, so it waits
+    # to ride with a neighbour (decision 301) and, alone in Designers, gets its worker when the plan is finished;
+    # Score waited for Cards.
+    assert seen["workers_while_planning"] == [1, 1, 1]
+    assert "rides with the next Designers part" in seen["answers"][1]
     assert "starts now" in seen["answers"][0] and "starts when Cards is done" in seen["answers"][2]
     agents = {a["id"]: a for a in await city.ledger.list_agents()}
     every = await city.ledger.list_tickets(ALL_STATUSES)
@@ -273,6 +277,7 @@ async def test_the_plan_keeps_one_owner_per_file_known_departments_and_known_par
     answers: list[str] = []
 
     async def plan(req: EngineRequest, call: Call) -> str:
+        await call("write_contract", {"summary": "The shared contract for this job."})
         answers.append(
             await call("add_part", {"name": "Alpha", "goal": "part a", "acceptance": "done a", "department": "Nowhere"})
         )
@@ -349,6 +354,7 @@ async def test_parts_of_one_app_share_a_copy_and_save_only_their_own_changes(tmp
             "conversation": "app-new-x1",
             "size": "medium",
             "planned": True,
+            "contract_version": 1,
             "path": "board",
         }
     )

@@ -34,6 +34,7 @@ async def orchestrator(req: EngineRequest, call: Call) -> str:
     """The board's planner (it runs on the runtime still called "orchestrator" inside)."""
     if "Board planning" not in req.turn.prompt:
         return "Nothing to plan."
+    await call("write_contract", {"summary": "The shared contract for this job."})
     for part in PARTS:
         await call(
             "add_part",
@@ -169,6 +170,7 @@ async def test_a_crash_mid_turn_resumes_from_the_ledger_without_duplicate_parts(
     async def crashing(req: EngineRequest, call: Call) -> str:
         nonlocal crashed
         if not crashed and "Board planning" in req.turn.prompt:
+            await call("write_contract", {"summary": "The shared contract for this job."})
             await call(
                 "add_part",
                 {"name": PARTS[0], "goal": PARTS[0], "acceptance": "done", "department": "Builders"},
