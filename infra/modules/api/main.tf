@@ -328,6 +328,84 @@ data "archive_file" "bundle" {
   output_path = "${path.root}/.build/${each.key}.zip"
 }
 
+# The bundle goes to S3 once and every function's code points at that object. With a local `filename` the AWS
+# provider updates one function at a time (it holds a lock while it uploads each zip): ~12 s per function, three
+# minutes a deploy. From S3 they all update in parallel. The repository is public, so S3-managed keys suffice.
+resource "aws_s3_bucket" "code" {
+  #checkov:skip=CKV_AWS_145:The Lambda package is built from this public repository; S3-managed encryption is enough.
+  #checkov:skip=CKV_AWS_144:Rebuilt by every deploy; a replica is not needed.
+  #checkov:skip=CKV_AWS_18:Access logging would need another bucket; only the deploy role writes here.
+  #checkov:skip=CKV2_AWS_62:No event notifications are needed.
+  bucket        = "${var.name}-lambda-code-${var.account_id}"
+  force_destroy = true # nothing but rebuildable packages
+  tags          = local.tags
+}
+
+resource "aws_s3_bucket_versioning" "code" {
+  bucket = aws_s3_bucket.code.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "code" {
+  bucket = aws_s3_bucket.code.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "code" {
+  bucket                  = aws_s3_bucket.code.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "code" {
+  bucket     = aws_s3_bucket.code.id
+  depends_on = [aws_s3_bucket_versioning.code]
+  rule {
+    id     = "old-packages"
+    status = "Enabled"
+    filter {}
+    noncurrent_version_expiration {
+      noncurrent_days = 14
+    }
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "code" {
+  bucket = aws_s3_bucket.code.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "TlsOnly"
+      Effect    = "Deny"
+      Principal = "*"
+      Action    = "s3:*"
+      Resource  = [aws_s3_bucket.code.arn, "${aws_s3_bucket.code.arn}/*"]
+      Condition = { Bool = { "aws:SecureTransport" = "false" } }
+    }]
+  })
+}
+
+resource "aws_s3_object" "bundle" {
+  for_each    = data.archive_file.bundle
+  bucket      = aws_s3_bucket.code.id
+  key         = "lambda/${each.key}.zip"
+  source      = each.value.output_path
+  source_hash = each.value.output_base64sha256
+  depends_on  = [aws_s3_bucket_versioning.code, aws_s3_bucket_server_side_encryption_configuration.code, aws_s3_bucket_policy.code]
+  tags        = local.tags
+}
+
 resource "aws_cloudwatch_log_group" "fn" {
   #checkov:skip=CKV_AWS_338:Retention is the log_retention_days variable (30 days by default) to keep cost low; the ledger keeps the durable record.
   for_each          = local.functions
@@ -369,16 +447,18 @@ resource "aws_lambda_function" "fn" {
   #checkov:skip=CKV_AWS_117:No VPC: the functions call only AWS APIs, and a VPC would add NAT cost.
   #checkov:skip=CKV_AWS_272:Code signing is not set up for a single-owner project; deploys run from the owner's approved workflow.
   #checkov:skip=CKV_AWS_116:Synchronous and SQS/EventBridge-invoked functions; failed SQS work goes to the queues' DLQs.
-  for_each         = local.functions
-  function_name    = "${var.name}-${each.key}"
-  role             = aws_iam_role.fn[each.key].arn
-  runtime          = "python3.13"
-  architectures    = ["arm64"]
-  handler          = each.value.handler
-  filename         = data.archive_file.bundle[each.value.bundle].output_path
-  source_code_hash = data.archive_file.bundle[each.value.bundle].output_base64sha256
-  timeout          = each.value.timeout
-  memory_size      = each.value.memory
+  for_each          = local.functions
+  function_name     = "${var.name}-${each.key}"
+  role              = aws_iam_role.fn[each.key].arn
+  runtime           = "python3.13"
+  architectures     = ["arm64"]
+  handler           = each.value.handler
+  s3_bucket         = aws_s3_object.bundle[each.value.bundle].bucket
+  s3_key            = aws_s3_object.bundle[each.value.bundle].key
+  s3_object_version = aws_s3_object.bundle[each.value.bundle].version_id
+  source_code_hash  = data.archive_file.bundle[each.value.bundle].output_base64sha256
+  timeout           = each.value.timeout
+  memory_size       = each.value.memory
   # SnapStart (api only, docs/KNOWLEDGE.md section 14): each deploy publishes a version and snapshots its init;
   # API Gateway calls the `live` alias. Python 3.12+ SnapStart supports arm64.
   # The dispatcher and ws-broadcast are always on instead (provisioned concurrency on a `live` alias, below), so
@@ -887,9 +967,15 @@ resource "aws_lambda_permission" "job" {
   source_arn    = aws_cloudwatch_event_rule.job[each.key].arn
 }
 
-# The one Lambda bundle, reused by the knowledge module's function.
-output "lambda_zip_path" { value = data.archive_file.bundle["app"].output_path }
-output "lambda_zip_hash" { value = data.archive_file.bundle["app"].output_base64sha256 }
+# The one Lambda bundle in S3, reused by the knowledge, files and connectors functions.
+output "code" {
+  value = {
+    bucket  = aws_s3_object.bundle["app"].bucket
+    key     = aws_s3_object.bundle["app"].key
+    version = aws_s3_object.bundle["app"].version_id
+    hash    = data.archive_file.bundle["app"].output_base64sha256
+  }
+}
 
 # VAIC streams its reply straight to the open HUDs (no EventBridge → Lambda hop per piece): it reads the
 # connection list and posts to those connections, the same two things ws-broadcast may do.
@@ -912,6 +998,3 @@ output "function_names" { value = { for k, f in aws_lambda_function.fn : k => f.
 output "apps_dlq_name" { value = aws_sqs_queue.apps_dlq.name }
 output "event_source_mapping_uuids" { value = { for k, m in aws_lambda_event_source_mapping.queue : k => m.uuid } }
 output "role_names" { value = { for k, r in aws_iam_role.fn : k => r.name } }
-# The one Python package, shared with the connectors Lambdas (infra/modules/connectors).
-output "bundle_path" { value = data.archive_file.bundle["app"].output_path }
-output "bundle_hash" { value = data.archive_file.bundle["app"].output_base64sha256 }

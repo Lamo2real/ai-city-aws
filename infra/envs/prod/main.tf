@@ -263,8 +263,7 @@ module "knowledge" {
   kms_key_arn         = module.security.kms_key_arn
   boundary_arn        = module.security.boundary_arn
   app_origin          = module.frontend.url
-  lambda_zip_path     = module.api.lambda_zip_path
-  lambda_zip_hash     = module.api.lambda_zip_hash
+  code                = module.api.code
   ledger_table        = module.ledger.ledger_table
   ledger_arn          = module.ledger.ledger_arn
   bus_name            = module.bus.bus_name
@@ -287,8 +286,7 @@ module "files" {
   kms_key_arn            = module.security.kms_key_arn
   boundary_arn           = module.security.boundary_arn
   app_origin             = module.frontend.url
-  lambda_zip_path        = module.api.lambda_zip_path
-  lambda_zip_hash        = module.api.lambda_zip_hash
+  code                   = module.api.code
   ledger_table           = module.ledger.ledger_table
   ledger_arn             = module.ledger.ledger_arn
   bus_name               = module.bus.bus_name
@@ -319,8 +317,7 @@ module "connectors" {
   bus_arn              = module.bus.bus_arn
   bus_name             = module.bus.bus_name
   hud_origin           = module.frontend.url
-  bundle_path          = module.api.bundle_path
-  bundle_hash          = module.api.bundle_hash
+  code                 = module.api.code
   agent_role_names     = module.agents.role_names
   api_role_name        = module.api.role_names["api"]
   app_bridge_role_name = module.api.role_names["app-bridge"]

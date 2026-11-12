@@ -6,14 +6,18 @@
 # Optional variables: VAIC_REGION (default eu-north-1), VAIC_MONTHLY_BUDGET_USD (alert amount, default 10000),
 # VAIC_STATE_BUCKET (default lamo-labs-state-bucket; state key ai-city-aws/prod/terraform.tfstate).
 #
-# One run deploys from nothing:
-#   web      - web tests and the HUD build                         } in parallel
-#   backend  - Python lint, types and tests; the Lambda package    }
-#   plan     - creates the Terraform state bucket if it is missing, plans.
-#   apply    - applies exactly that plan (no approval). The plan builds and pushes the agent image
-#              (scripts/push-image.sh) after the ECR repository exists and before the runtimes. The image
-#              tag is a hash of the runtime's sources, so pushes that don't touch them don't rebuild it.
+# One run deploys from nothing (decision 263: checks, image and plan run side by side):
+#   web      - web tests and the HUD build                                    }
+#   backend  - Python lint, types and tests (pytest-xdist, every core)        } in parallel
+#   build    - the Lambda package and the image tags (seconds), then:         }
+#     image  - builds each ARM64 image on a native ARM runner and pushes it to ECR, only when its tag is new
+#     plan   - creates the Terraform state bucket if it is missing, plans.
+#   apply    - needs all of the above: nothing changes in AWS unless every check passed. Applies exactly that
+#              plan (no approval). Terraform still runs scripts/push-image.sh before the runtimes; it finds the
+#              image already in ECR (it builds it itself, under QEMU, only on a first deploy). Image tags are
+#              hashes of the sources, so pushes that don't touch them don't rebuild anything.
 #   frontend - uploads the HUD to its bucket and refreshes CloudFront, using Terraform's outputs.
+#   knowledge - seeds the department knowledge bases, beside the HUD upload.
 # A push whose commit message contains [skip ci] does not deploy.
 name: deploy
 on:
@@ -40,9 +44,10 @@ env:
   TF_STATE_BUCKET: ${{ vars.VAIC_STATE_BUCKET || vars.AIC_STATE_BUCKET || 'lamo-labs-state-bucket' }}
   TF_STATE_KEY: ai-city-aws/prod/terraform.tfstate
   TF_IN_AUTOMATION: "1"
+  TF_PLUGIN_CACHE_DIR: /home/runner/.terraform.d/plugin-cache # restored and saved by actions/cache in plan and apply
 
 jobs:
-  # ---------- stage 1, in parallel: the web app and the backend are tested and built ----------
+  # ---------- in parallel: the web app and the backend are tested; the Lambda package and the images are built ----------
   web:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
@@ -70,8 +75,6 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
-    outputs:
-      image_tag: ${{ steps.image.outputs.tag }}
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v6
@@ -79,29 +82,115 @@ jobs:
           version: "0.13.6"
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
-      - name: lint, types and tests (Python)
+      - name: install (Python)
+        working-directory: backend
+        run: uv sync --frozen --all-extras
+      - name: lint and types (Python)
         working-directory: backend
         run: |
-          uv sync --frozen --all-extras
           uv run ruff check
           uv run mypy
-          uv run pytest -q
+      - name: tests (Python, in parallel on every core)
+        working-directory: backend
+        run: uv run pytest -q -n auto
+
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      image_tag: ${{ steps.tags.outputs.agent }}
+      mcp_host_tag: ${{ steps.tags.outputs.mcp_host }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.6"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
       - name: build the Lambda package (Python 3.13, arm64)
         run: python3 backend/scripts/build_lambdas.py
-      - name: agent image tag (changes only when the runtime's sources change)
-        id: image
+      - name: image tags (each changes only when its image's sources change)
+        id: tags
         run: |
           h="${{ hashFiles('services/agent-runtime/**', 'backend/src/**', 'backend/pyproject.toml', 'backend/uv.lock', 'agents/**', 'config/**') }}"
-          echo "tag=rt-${h:0:16}" >> "$GITHUB_OUTPUT"
+          echo "agent=rt-${h:0:16}" >> "$GITHUB_OUTPUT"
+          # The same hash Terraform computes for the MCP host (local.host_tag in infra/modules/connectors):
+          # sha256 of the files' sha256 hex digests, joined in sorted path order.
+          m="$(cd services/mcp-host && find . -type f | sed 's|^\./||' | LC_ALL=C sort | while read -r f; do sha256sum "$f" | cut -c1-64; done | tr -d '\n' | sha256sum | cut -c1-16)"
+          echo "mcp_host=mh-${m}" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
           name: lambda-package
           path: backend/dist/lambda
           retention-days: 3
 
-  # ---------- stage 2: plan the infrastructure (Lambdas, runtimes, API, HUD hosting) ----------
+  # Native ARM64 builds (no QEMU), beside the tests and the plan. Skipped when ECR already has the tag. Only the
+  # image repositories are touched; nothing runs the new image until apply points the runtimes at it.
+  image:
+    needs: build
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      matrix:
+        include:
+          - repo: vaic-prod-agent-runtime
+            tag: ${{ needs.build.outputs.image_tag }}
+            context: .
+            dockerfile: services/agent-runtime/Dockerfile
+          - repo: vaic-prod-mcp-host
+            tag: ${{ needs.build.outputs.mcp_host_tag }}
+            context: services/mcp-host
+            dockerfile: services/mcp-host/Dockerfile
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.VAIC_DEPLOY_ROLE_ARN || vars.AIC_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: is ${{ matrix.repo }}:${{ matrix.tag }} already in ECR?
+        id: check
+        env:
+          REPO: ${{ matrix.repo }}
+          TAG: ${{ matrix.tag }}
+        run: |
+          if ! aws ecr describe-repositories --repository-names "$REPO" > /dev/null 2>&1; then
+            echo "::notice::${REPO} does not exist yet (a first deploy): terraform apply builds the image."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          elif aws ecr describe-images --repository-name "$REPO" --image-ids "imageTag=${TAG}" > /dev/null 2>&1; then
+            echo "${REPO}:${TAG} is already in ECR."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            uri="$(aws ecr describe-repositories --repository-names "$REPO" --query 'repositories[0].repositoryUri' --output text)"
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "uri=${uri}" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.check.outputs.build == 'true'
+        uses: actions/checkout@v5
+      - if: steps.check.outputs.build == 'true'
+        uses: aws-actions/amazon-ecr-login@v2
+      - if: steps.check.outputs.build == 'true'
+        uses: docker/setup-buildx-action@v3
+      - if: steps.check.outputs.build == 'true'
+        name: build and push (linux/arm64, native)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/arm64
+          provenance: false
+          push: true
+          tags: ${{ steps.check.outputs.uri }}:${{ matrix.tag }}
+          cache-from: type=gha,scope=${{ matrix.repo }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.repo }}
+
+  # ---------- plan the infrastructure (Lambdas, runtimes, API, HUD hosting), beside the checks ----------
   plan:
-    needs: [web, backend]
+    needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -143,6 +232,11 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.15.8
+      - name: Terraform providers cache
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.terraform.d/plugin-cache
+          key: terraform-providers-${{ runner.os }}-${{ hashFiles('infra/envs/prod/.terraform.lock.hcl') }}
       - name: terraform plan
         working-directory: infra/envs/prod
         env:
@@ -150,13 +244,14 @@ jobs:
           STATE_REGION: ${{ steps.state.outputs.region }}
           OWNER_EMAIL: ${{ secrets.VAIC_OWNER_EMAIL || secrets.AIC_OWNER_EMAIL }}
           BUDGET: ${{ vars.VAIC_MONTHLY_BUDGET_USD || vars.AIC_MONTHLY_BUDGET_USD || '10000' }}
-          IMAGE_TAG: ${{ needs.backend.outputs.image_tag }}
+          IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
           QUEUES_ENABLED: ${{ vars.VAIC_QUEUES_ENABLED || vars.AIC_QUEUES_ENABLED || 'true' }}
           # Optional JSON, e.g. {"google":{"enabled":true,"client_id":"…"},"microsoft":{"enabled":false,"client_id":"","tenant_id":"common"}}
           MAIL_PROVIDERS: ${{ vars.VAIC_MAIL_PROVIDERS || vars.AIC_MAIL_PROVIDERS }}
           # "true" once the owner has pasted the Apple APNs key in Settings (docs/NOTIFICATIONS.md).
           APNS_ENABLED: ${{ vars.VAIC_APNS_ENABLED || vars.AIC_APNS_ENABLED || 'false' }}
         run: |
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
           terraform init -input=false \
             -backend-config="bucket=${STATE_BUCKET}" \
             -backend-config="key=${TF_STATE_KEY}" \
@@ -190,9 +285,9 @@ jobs:
             infra/envs/prod/.build
           retention-days: 3
 
-  # ---------- stage 3: apply exactly that plan (builds and pushes the agent image too) ----------
+  # ---------- apply exactly that plan, once every check passed and the images are in ECR ----------
   apply:
-    needs: [backend, plan]
+    needs: [web, backend, build, image, plan]
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     environment: production # deployment history only; no required reviewers (the owner's choice)
@@ -215,22 +310,44 @@ jobs:
         with:
           role-to-assume: ${{ vars.VAIC_DEPLOY_ROLE_ARN || vars.AIC_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-          role-duration-seconds: 7200 # the first apply builds the image under QEMU; the role allows 2 h
-      # The plan builds the ARM64 agent image while it applies (scripts/push-image.sh).
-      - uses: docker/setup-qemu-action@v3
+          role-duration-seconds: 7200 # a first deploy builds the images under QEMU here; the role allows 2 h
+      # The image job pushed both images natively. Only if one is still missing (a first deploy, before the ECR
+      # repositories existed) does Terraform build it here (scripts/push-image.sh), which needs QEMU and Buildx.
+      - name: are both images in ECR?
+        id: images
+        env:
+          AGENT_TAG: ${{ needs.build.outputs.image_tag }}
+          HOST_TAG: ${{ needs.build.outputs.mcp_host_tag }}
+        run: |
+          if aws ecr describe-images --repository-name vaic-prod-agent-runtime --image-ids "imageTag=${AGENT_TAG}" > /dev/null 2>&1 \
+            && aws ecr describe-images --repository-name vaic-prod-mcp-host --image-ids "imageTag=${HOST_TAG}" > /dev/null 2>&1; then
+            echo "missing=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::An image is not in ECR yet: terraform apply builds it under QEMU."
+            echo "missing=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.images.outputs.missing == 'true'
+        uses: docker/setup-qemu-action@v3
         with:
           platforms: arm64
-      - uses: docker/setup-buildx-action@v3
+      - if: steps.images.outputs.missing == 'true'
+        uses: docker/setup-buildx-action@v3
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.15.8
           terraform_wrapper: false
+      - name: Terraform providers cache
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.terraform.d/plugin-cache
+          key: terraform-providers-${{ runner.os }}-${{ hashFiles('infra/envs/prod/.terraform.lock.hcl') }}
       - name: terraform apply (the reviewed plan, exactly)
         working-directory: infra/envs/prod
         env:
           STATE_BUCKET: ${{ needs.plan.outputs.state_bucket }}
           STATE_REGION: ${{ needs.plan.outputs.state_region }}
         run: |
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
           terraform init -input=false \
             -backend-config="bucket=${STATE_BUCKET}" \
             -backend-config="key=${TF_STATE_KEY}" \
@@ -270,7 +387,7 @@ jobs:
           echo "Mail callback URLs: ${urls}"
           { echo "## Mail sign-in redirect URIs"; echo '```'; echo "${urls}"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
-  # ---------- stage 4: the HUD ----------
+  # ---------- after apply: the HUD ----------
   frontend:
     needs: apply
     runs-on: ubuntu-24.04
@@ -300,7 +417,7 @@ jobs:
           aws cloudfront create-invalidation --distribution-id "${DIST}" --paths "/index.html" "/" "/version.json"
           echo "## AI City is deployed: ${URL}" >> "$GITHUB_STEP_SUMMARY"
 
-  # ---------- stage 5: the department knowledge bases (docs/KNOWLEDGE.md section 17) ----------
+  # ---------- after apply, beside it: the department knowledge bases (docs/KNOWLEDGE.md section 17) ----------
   # Its own job beside the HUD upload: a seeding failure turns the deploy red without holding the HUD back.
   knowledge:
     needs: apply

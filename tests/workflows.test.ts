@@ -101,6 +101,22 @@ describe("GitHub workflows", () => {
     expect(tf).toMatch(/scripts\/push-image\.sh/);
     expect(tf).toMatch(/depends_on\s+= \[terraform_data\.image\]/);
   });
+  it("checks, images and plan run side by side; apply waits for all of them (decision 263)", () => {
+    const text = readFileSync(join(WF, "deploy.yml"), "utf8");
+    expect(text).toMatch(/\n {2}apply:\n {4}needs: \[web, backend, build, image, plan\]\n/);
+    expect(text).toMatch(/\n {2}plan:\n {4}needs: build\n/);
+    expect(text).toMatch(/\n {2}image:\n {4}needs: build\n {4}runs-on: ubuntu-24\.04-arm\n/); // native ARM64, no QEMU
+    expect(text).toMatch(/uv run pytest -q -n auto/);
+    // The deploy queue is kept: one run at a time, never cancelled half-way.
+    expect(text).toMatch(/concurrency:\n {2}group: deploy-prod\n {2}cancel-in-progress: false\n/);
+  });
+  it("Lambda code comes from S3, so the AWS provider updates every function in parallel", () => {
+    const tf = ["api", "files", "knowledge", "connectors"]
+      .map((m) => readFileSync(join(ROOT, "infra", "modules", m, "main.tf"), "utf8"))
+      .join("\n");
+    expect(tf).not.toMatch(/^\s+filename\s+=/m); // a local zip makes the provider upload one function at a time
+    expect(tf).toMatch(/resource "aws_s3_object" "bundle"/);
+  });
   it("version.json is never cached for a year: uploaded no-cache after index.html and invalidated", () => {
     const text = readFileSync(join(WF, "deploy.yml"), "utf8");
     expect(text).toMatch(/s3 sync web\/dist[^\n]*--exclude version\.json/);

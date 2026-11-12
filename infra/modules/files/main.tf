@@ -19,8 +19,10 @@ variable "app_origin" {
   type        = string
   description = "The HUD's origin: the only one allowed to PUT uploads and read previews (CORS)."
 }
-variable "lambda_zip_path" { type = string }
-variable "lambda_zip_hash" { type = string }
+variable "code" {
+  type        = object({ bucket = string, key = string, version = string, hash = string })
+  description = "The one Python Lambda package in S3 (the api module's output `code`)."
+}
 variable "ledger_table" { type = string }
 variable "ledger_arn" { type = string }
 variable "bus_name" { type = string }
@@ -303,8 +305,10 @@ resource "aws_lambda_function" "fn" {
   runtime                        = "python3.13"
   architectures                  = ["arm64"]
   handler                        = "vaic.lambdas.files.handler"
-  filename                       = var.lambda_zip_path
-  source_code_hash               = var.lambda_zip_hash
+  s3_bucket                      = var.code.bucket
+  s3_key                         = var.code.key
+  s3_object_version              = var.code.version
+  source_code_hash               = var.code.hash
   timeout                        = 900
   memory_size                    = 2048 # images and PDFs are CPU-bound; CPU scales with memory
   kms_key_arn                    = var.kms_key_arn
@@ -575,16 +579,18 @@ resource "aws_lambda_function" "signing" {
   #checkov:skip=CKV_AWS_116:Invoked synchronously by Terraform only.
   #checkov:skip=CKV_AWS_115:Runs once per apply at most; no concurrency limit needed.
   #checkov:skip=CKV_AWS_50:X-Ray adds nothing to a one-call function.
-  function_name    = "${local.base}-signing-key"
-  role             = aws_iam_role.signing.arn
-  runtime          = "python3.13"
-  architectures    = ["arm64"]
-  handler          = "vaic.lambdas.files.signing_key_handler"
-  filename         = var.lambda_zip_path
-  source_code_hash = var.lambda_zip_hash
-  timeout          = 30
-  memory_size      = 256
-  kms_key_arn      = var.kms_key_arn
+  function_name     = "${local.base}-signing-key"
+  role              = aws_iam_role.signing.arn
+  runtime           = "python3.13"
+  architectures     = ["arm64"]
+  handler           = "vaic.lambdas.files.signing_key_handler"
+  s3_bucket         = var.code.bucket
+  s3_key            = var.code.key
+  s3_object_version = var.code.version
+  source_code_hash  = var.code.hash
+  timeout           = 30
+  memory_size       = 256
+  kms_key_arn       = var.kms_key_arn
   logging_config {
     log_format = "JSON"
     log_group  = aws_cloudwatch_log_group.signing.name

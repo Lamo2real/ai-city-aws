@@ -24,11 +24,10 @@ variable "deployer_arn" {
   type        = string
   description = "The IAM role (not the session) that runs terraform apply: it alone may create the OpenSearch index."
 }
-variable "lambda_zip_path" {
-  type        = string
-  description = "The same Lambda bundle the api module builds (backend/dist/lambda/app)."
+variable "code" {
+  type        = object({ bucket = string, key = string, version = string, hash = string })
+  description = "The one Python Lambda package in S3 (the api module's output `code`)."
 }
-variable "lambda_zip_hash" { type = string }
 variable "ledger_table" {
   type        = string
   description = "The ledger: the knowledge Lambda records the cost of its Haiku calls and checks pause and spend caps first."
@@ -534,8 +533,10 @@ resource "aws_lambda_function" "fn" {
   runtime                        = "python3.13"
   architectures                  = ["arm64"]
   handler                        = "vaic.lambdas.knowledge.handler"
-  filename                       = var.lambda_zip_path
-  source_code_hash               = var.lambda_zip_hash
+  s3_bucket                      = var.code.bucket
+  s3_key                         = var.code.key
+  s3_object_version              = var.code.version
+  source_code_hash               = var.code.hash
   timeout                        = 900
   memory_size                    = 2048 # PDF and image work is CPU-bound; CPU scales with memory
   kms_key_arn                    = var.kms_key_arn

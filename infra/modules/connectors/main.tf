@@ -23,11 +23,10 @@ variable "hud_origin" {
   type        = string
   description = "The HUD's origin (https://…). The sign-in return address is <origin>/?connect=return."
 }
-variable "bundle_path" {
-  type        = string
-  description = "The Python Lambda package zip, built by the api module (one package for every function)."
+variable "code" {
+  type        = object({ bucket = string, key = string, version = string, hash = string })
+  description = "The one Python Lambda package in S3 (the api module's output `code`)."
 }
-variable "bundle_hash" { type = string }
 variable "agent_role_names" {
   type        = map(string)
   description = "The four runtime roles (vaic, orchestrator, manager, worker): they get InvokeGateway and nothing else here."
@@ -414,8 +413,10 @@ resource "aws_lambda_function" "fn" {
   runtime                        = "python3.13"
   architectures                  = ["arm64"]
   handler                        = each.value.handler
-  filename                       = var.bundle_path
-  source_code_hash               = var.bundle_hash
+  s3_bucket                      = var.code.bucket
+  s3_key                         = var.code.key
+  s3_object_version              = var.code.version
+  source_code_hash               = var.code.hash
   timeout                        = each.value.timeout
   memory_size                    = each.value.memory
   kms_key_arn                    = var.kms_key_arn

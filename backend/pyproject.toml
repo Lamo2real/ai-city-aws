@@ -35,6 +35,7 @@ dev = [
   "pytest-asyncio>=1.1",
   "ruff>=0.12",
   "mypy>=1.17",
+  "pytest-xdist>=3.8.0",
 ]
 
 [build-system]
