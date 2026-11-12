@@ -260,8 +260,9 @@ say when a market has nothing stored, use items in force unless the task names t
 
 **HUD:** the drop zone takes many files and a whole folder (the folder name is a hint); items are grouped as
 "Sweden · 2026 · Tax" (place, then topic, then year newest first; "Being read now" first, "Not tied to a country"
-last), with filters for country or region, year and topic, "Show everything", a switch to turn grouping off, a
-"found automatically" note, "Change" (countries, year, topic, type) and an "Older: 2026 replaces it" tag.
+last), a "found automatically" note, "Change" (countries, year, topic, type) and an "Older: 2026 replaces it" tag. The
+country, year and topic menus and the grouping switch were replaced by a name search, a department and built in or
+mine (decision 270, §18); the place fields stay on every item and agents still search by them.
 
 **Not verified against the real Bedrock KB:** that OpenSearch Serverless (index `items`, Bedrock-managed dynamic
 fields) filters `listContains` on the new `jurisdictions`/`countries` attributes. The index mapping is
@@ -691,6 +692,24 @@ projections, record check and HUD card are department-generic.
   (`docs/CONNECTORS_SKILLS.md` §2.7). No technical words reach the owner.
 - The Knowledge page shows "For every department" or "For Finance and Data & AI" on each of the owner's documents, with
   Change opening the same chips. The built-in department knowledge bases are unchanged.
+- **Chosen before it is stored (decision 270).** On the Knowledge page a dropped or chosen file (several share one
+  choice), a folder, a pasted link or text first shows "Adding …" with the same chips, nothing ticked: the departments
+  it seems to be for are marked Recommended (`POST /departments/recommend {text}` → `{recommended: [{key, why}]}`:
+  decision 266's `recommend` on the file names and the first 4,000 characters of small text files, or the pasted
+  text), with "Use recommended". With none ticked it says "No departments chosen: every department can use it" and the
+  button is "Add for every department"; ticking some makes it "Add for Finance" and "Only Finance can use it". Cancel
+  stores nothing. `POST /knowledge/uploads`, `/links` and `/text` take `departments` (`"all"`, none or `[]` is every
+  department, stored as no list; a list is stored as keys), so the item is never visible to all for a moment. The
+  card's "For …" line and Change work as before. Chat attachments are unchanged.
+- **Filters (decision 270).** Search (as you type; a title matches when one of its words starts with the typed
+  letters, any case: "a" finds "AI City guide" and "Application knowledge"; a department card matches by its name or
+  by an entry's title, showing "· 3 match “x”" and opening with its entry search filled), Department (All or one: the
+  owner's documents it can use, every-department ones included; the department's own card and Shared, which every
+  department uses) and Built in (All, Built in, Mine). Remembered on the device (`localStorage`
+  `vaic.knowledge.filters`); "Show everything" clears them.
+- Found with decision 270: `GET /departments/choices` (decision 266) was missing from the API Gateway routes, so the
+  chips never loaded in prod and every document just said "For every department" with no Change. It is routed now,
+  and `backend/tests/test_api.py` checks that every route in `ROUTES` has an API Gateway route.
 - Later (suggestion, not built): a file attached in the chat is still readable by every department until the owner
   picks; the owner may want attachments kept to VAIC and the Orchestrator until they say where they go.
 

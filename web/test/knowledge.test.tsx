@@ -253,7 +253,9 @@ describe("the Knowledge screen", () => {
     const box = screen.getByLabelText("Paste a link or text");
     fireEvent.change(box, { target: { value: "https://example.com" } });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
-    await waitFor(() => expect(addLink).toHaveBeenCalledWith("https://example.com"));
+    // Who can use it is asked first (decision 270); with nothing ticked, every department.
+    fireEvent.click(await screen.findByRole("button", { name: "Add for every department" }));
+    await waitFor(() => expect(addLink).toHaveBeenCalledWith("https://example.com", undefined, "all"));
     expect(await screen.findByText("Reading the page")).toBeTruthy();
     expect((box as HTMLTextAreaElement).value).toBe("");
   });

@@ -13,6 +13,7 @@ test("knowledge: Download is on each document card and saves the original", asyn
   await page
     .locator(".drop input[type=file]")
     .setInputFiles([{ name: "Q3 report.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.7 Q3") }]);
+  await page.getByRole("button", { name: "Add for every department" }).click();
   const card = page.locator("li.kitem", { hasText: "Q3 report.pdf" });
   const button = card.getByRole("button", { name: "Download “Q3 report.pdf”" });
   await expect(button).toBeVisible({ timeout: 10_000 });
@@ -23,6 +24,7 @@ test("knowledge: Download is on each document card and saves the original", asyn
   // A link has no file: no Download on its card.
   await page.getByLabel(/paste/i).first().fill("https://example.com/pricing");
   await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByRole("button", { name: "Add for every department" }).click();
   const link = page.locator("li.kitem", { hasText: "example.com" });
   await expect(link).toBeVisible();
   await expect(link.getByRole("button", { name: /^Download/ })).toHaveCount(0);

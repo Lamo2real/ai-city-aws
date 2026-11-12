@@ -15,6 +15,7 @@ import {
   type HistoryRow,
 } from "../lib/entries.ts";
 import { startDownload } from "../lib/api.ts";
+import { NO_FILTERS, wordStart, type KnowledgeFilters } from "../lib/knowledge.ts";
 import { Banner, Button, Confirm, Loading, toast } from "./ui.tsx";
 import { Select } from "./Select.tsx";
 
@@ -36,7 +37,19 @@ function sharedLast<T>(rows: [string, T][]): [string, T][] {
   return [...rows.filter(([d]) => d !== SHARED), ...rows.filter(([d]) => d === SHARED)];
 }
 
-export function DepartmentKnowledge() {
+/** The cards the Knowledge page's filters let through (decision 270): a department matches its own department (Shared
+ * matches every one, as every department's agents use it); the search matches the card's name or an entry's title. */
+export function DepartmentKnowledge({
+  filters = NO_FILTERS,
+  onShown,
+  heading = false,
+}: {
+  filters?: KnowledgeFilters;
+  /** How many cards are shown, so the page knows whether anything matches. */
+  onShown?: (n: number) => void;
+  /** Under its own "Built in" heading (when the AI City guide is filtered out). */
+  heading?: boolean;
+}) {
   const [list, setList] = useState<EntryList | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -60,15 +73,33 @@ export function DepartmentKnowledge() {
     }
   };
 
+  const rows = list ? sharedLast(Object.entries(list.taxonomies)) : [];
+  const q = filters.show === "mine" ? null : filters.q.trim();
+  const cards = rows
+    .map(([dept, tax]) => {
+      const live = list!.entries.filter((e) => e.department === dept && !e.deleted && !e.retired);
+      const byName = wordStart(`${tax.label} knowledge`, q ?? "");
+      const hits = byName ? live.length : live.filter((e) => wordStart(e.title, q ?? "")).length;
+      return { dept, tax, live, byName, hits };
+    })
+    .filter(
+      (c) =>
+        q !== null &&
+        (!filters.dept || c.dept === filters.dept || c.dept === SHARED) &&
+        (c.byName || c.hits > 0),
+    );
+  const shown = cards.length;
+  useEffect(() => {
+    onShown?.(shown);
+  }, [shown, onShown]);
+
   if (error && !list)
     return <Banner tone="warn">{`The department knowledge bases could not be loaded: ${error}`}</Banner>;
-  if (!list) return null;
-  return (
+  if (!list || !cards.length) return null;
+  const body = (
     <>
-      {sharedLast(Object.entries(list.taxonomies)).map(([dept, tax]) => {
+      {cards.map(({ dept, tax, live, byName, hits }) => {
         const shared = dept === SHARED;
-        const all = list.entries.filter((e) => e.department === dept);
-        const live = all.filter((e) => !e.deleted && !e.retired);
         return (
           <section key={dept} className="kitem kdept" aria-label={`${tax.label} knowledge base`}>
             <div className="kitem-head">
@@ -78,6 +109,7 @@ export function DepartmentKnowledge() {
               <span className="grow">
                 <b className="ktitle">{`${tax.label} knowledge`}</b>
                 <span className="mute">{` · ${live.length} entries`}</span>
+                {byName ? null : <span className="mute">{` · ${hits} match “${q}”`}</span>}
               </span>
               <span className="tag tag-builtin">Built in</span>
               <span className="tag tag-dept">{shared ? "Shared" : tax.label}</span>
@@ -103,17 +135,27 @@ export function DepartmentKnowledge() {
                 Download
               </Button>
             </div>
-            {open === dept ? <DepartmentEntries list={list} department={dept} reload={reload} /> : null}
+            {open === dept ? (
+              <DepartmentEntries list={list} department={dept} reload={reload} words={byName ? "" : (q ?? "")} />
+            ) : null}
           </section>
         );
       })}
     </>
   );
+  return heading ? (
+    <section className="kgroup" aria-label="Built in">
+      <h2 className="kgroup-title">Built in</h2>
+      {body}
+    </section>
+  ) : (
+    body
+  );
 }
 
-function DepartmentEntries(p: { list: EntryList; department: string; reload: () => Promise<void> }) {
+function DepartmentEntries(p: { list: EntryList; department: string; reload: () => Promise<void>; words?: string }) {
   const tax = p.list.taxonomies[p.department] ?? { label: p.department, domains: {}, platforms: {}, objectives: {} };
-  const [words, setWords] = useState("");
+  const [words, setWords] = useState(p.words ?? "");
   const [domain, setDomain] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);

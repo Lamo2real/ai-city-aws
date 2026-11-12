@@ -1092,6 +1092,9 @@ test("knowledge: add files, paste a link, change how it's used, delete with Undo
     { name: "notes.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.7 hello") },
     { name: "photo.png", mimeType: "image/png", buffer: Buffer.from("png") },
   ]);
+  // Nothing is stored until the owner says who can use it; with no department ticked, every department can.
+  await expect(page.getByText("No departments chosen: every department can use it.")).toBeVisible();
+  await page.getByRole("button", { name: "Add for every department" }).click();
   const row = (title: string) => page.getByRole("listitem").filter({ hasText: title });
   await expect(row("notes.pdf").getByRole("status")).toHaveText("Ready");
   await expect(row("photo.png").getByRole("status")).toHaveText("Ready");
@@ -1100,9 +1103,13 @@ test("knowledge: add files, paste a link, change how it's used, delete with Undo
   // A pasted link.
   await page.getByLabel("Paste a link or text").fill("https://example.com/article");
   await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByRole("button", { name: "Add for every department" }).click();
   await expect(row("https://example.com/article").getByRole("status")).toHaveText(/Reading the page|Ready/);
   await expect(row("https://example.com/article").getByRole("status")).toHaveText("Ready");
-  expect(m.calls.find((c) => c.path === "/knowledge/links")?.body).toEqual({ url: "https://example.com/article" });
+  expect(m.calls.find((c) => c.path === "/knowledge/links")?.body).toEqual({
+    url: "https://example.com/article",
+    departments: "all",
+  });
   await expect(page.getByLabel("Paste a link or text")).toHaveValue("");
 
   // How the agents use it: three choices, saved at once; the budget follows.

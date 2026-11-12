@@ -3647,6 +3647,23 @@ a.pin:hover {
   min-width: 140px;
   flex: 1 1 140px;
 }
+.kfilters .kfilter-q {
+  flex: 2 1 220px;
+}
+/* What is being added and which departments can use it (decision 270) */
+.kadd {
+  margin: var(--s3) 0;
+  display: grid;
+  gap: var(--s2);
+}
+/* Here no department ticked is a choice (every department), not a warning. */
+.kadd .dept-none {
+  color: var(--gtext);
+}
+.kadd-what {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
 .kfilters .check {
   display: inline-flex;
   align-items: center;

@@ -179,7 +179,7 @@ function refreshSoon() {
 /** Uploads every file; resolves with plain sentences for the ones that could not start or finish. */
 export async function addFiles(
   files: File[],
-  o: Pick<UploadOptions, "put" | "retryDelayMs" | "onCreated"> & {
+  o: Pick<UploadOptions, "put" | "retryDelayMs" | "onCreated" | "departments"> & {
     /** Like onCreated, with the file the item was made from (the chat keeps a local preview of images). */
     onFile?: (item: KnowledgeItem, file: File) => void;
   } = {},
@@ -226,8 +226,8 @@ export const titleFrom = (text: string) => {
   return line.length > 80 ? `${line.slice(0, 77)}…` : line;
 };
 
-/** A link or a piece of text from the paste field. */
-export async function addPasted(value: string) {
+/** A link or a piece of text from the paste field, for the departments chosen ("all" when none were). */
+export async function addPasted(value: string, departments?: string[] | "all") {
   const v = value.trim();
   if (!v) return;
   if (v.length > 200_000)
@@ -236,7 +236,9 @@ export async function addPasted(value: string) {
       400,
       "Split it into parts or save it as a file and drop the file.",
     );
-  const { item } = isLink(v) ? await knowledgeApi.addLink(v) : await knowledgeApi.addText(v, titleFrom(v));
+  const { item } = isLink(v)
+    ? await knowledgeApi.addLink(v, undefined, departments)
+    : await knowledgeApi.addText(v, titleFrom(v), undefined, departments);
   knowledge.dispatch({ type: "upsert", item });
 }
 
@@ -298,13 +300,53 @@ export async function setDepartments(id: string, keys: string[], every: boolean)
   }
 }
 
-// ---------- grouping by place, year and topic (§15) ----------
+// ---------- what the page shows (decision 270): a name search, a department and built in or mine ----------
+export type KnowledgeShow = "" | "builtin" | "mine";
 export interface KnowledgeFilters {
-  place: string;
-  year: string;
-  topic: string;
+  /** Typed words: a title matches when one of its words starts with them ("a" → "AI City guide"). */
+  q: string;
+  /** A department key: the documents it can use (including every-department ones). */
+  dept: string;
+  show: KnowledgeShow;
 }
-export const NO_FILTERS: KnowledgeFilters = { place: "", year: "", topic: "" };
+export const NO_FILTERS: KnowledgeFilters = { q: "", dept: "", show: "" };
+const FILTERS_KEY = "vaic.knowledge.filters";
+
+/** The filters this device used last (the page remembers them); none when they can't be read. */
+export function savedFilters(): KnowledgeFilters {
+  try {
+    const v = JSON.parse(localStorage.getItem(FILTERS_KEY) ?? "null") as Partial<KnowledgeFilters> | null;
+    const show = v?.show === "builtin" || v?.show === "mine" ? v.show : "";
+    return { q: typeof v?.q === "string" ? v.q : "", dept: typeof v?.dept === "string" ? v.dept : "", show };
+  } catch {
+    return NO_FILTERS;
+  }
+}
+export function saveFilters(f: KnowledgeFilters) {
+  try {
+    localStorage.setItem(FILTERS_KEY, JSON.stringify(f));
+  } catch {
+    // private window: not remembered
+  }
+}
+
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** Whether ``q`` starts one of the words of ``text``, ignoring case: "a" finds "AI City guide", "city" too. */
+export function wordStart(text: string, q: string): boolean {
+  const t = q.trim();
+  if (!t) return true;
+  return new RegExp(`(^|[^\\p{L}\\p{N}])${escape(t)}`, "iu").test(text);
+}
+
+export const anyFilter = (f: KnowledgeFilters) => Boolean(f.q.trim() || f.dept || f.show);
+
+export function matchesFilters(i: KnowledgeItem, f: KnowledgeFilters): boolean {
+  if (f.show === "builtin" && !i.builtin) return false;
+  if (f.show === "mine" && i.builtin) return false;
+  if (f.dept && i.departments?.length && !i.departments.includes(f.dept)) return false;
+  return wordStart(i.title, f.q);
+}
+
 export interface KnowledgeGroup {
   key: string;
   label: string;
@@ -318,25 +360,6 @@ export const placeLabel = (i: KnowledgeItem) => (i.jurisdictions ?? []).map(plac
 export function groupLabel(i: KnowledgeItem): string {
   const parts = [placeLabel(i), i.year ? String(i.year) : "", i.topic ? topicWord(i.topic) : ""].filter(Boolean);
   return parts.join(" · ");
-}
-
-export function matchesFilters(i: KnowledgeItem, f: KnowledgeFilters): boolean {
-  if (f.place && !(i.jurisdictions ?? []).includes(f.place)) return false;
-  if (f.year && String(i.year ?? "") !== f.year) return false;
-  if (f.topic && (i.topic ?? "") !== f.topic) return false;
-  return true;
-}
-
-/** What the filter menus offer: only values some item has, places by name, years newest first. */
-export function filterChoices(items: KnowledgeItem[]) {
-  const places = [...new Set(items.flatMap((i) => i.jurisdictions ?? []))].sort((a, b) =>
-    placeName(a).localeCompare(placeName(b)),
-  );
-  const years = [...new Set(items.map((i) => i.year).filter((y): y is number => typeof y === "number"))].sort(
-    (a, b) => b - a,
-  );
-  const topics = [...new Set(items.map((i) => i.topic).filter((t): t is string => Boolean(t)))].sort();
-  return { places, years, topics };
 }
 
 /**

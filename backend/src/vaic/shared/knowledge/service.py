@@ -76,6 +76,14 @@ def check_departments(v: Any) -> list[str]:
     return list(dict.fromkeys(canonical(x)[:64] for x in v))
 
 
+def departments_at_add(v: Any) -> list[str]:
+    """The departments chosen when a document is added (decision 270): none, ``"all"`` or an empty list is every
+    department (stored as no list), otherwise exactly those, so it is never visible to all for a moment."""
+    if v is None or v in ("all", []):
+        return []
+    return check_departments(v)
+
+
 def check_folder(v: Any) -> str:
     """The folder a dropped file came from ("tax/Sweden"), a hint for detecting where it holds."""
     if not isinstance(v, str):
@@ -117,6 +125,7 @@ class KnowledgeService:
         scope: str,
         raw_key_name: str,
         folder: str = "",
+        departments: list[str] | None = None,
     ) -> dict[str, Any]:
         item_id = new_item_id()
         rec: dict[str, Any] = {
@@ -131,9 +140,12 @@ class KnowledgeService:
         }
         if folder:
             rec["folder"] = folder
+        if departments:
+            rec["departments"] = departments
         return await self.store.create_item(rec)
 
-    async def add_link(self, url: Any, title: Any = None, scope: Any = None) -> dict[str, Any]:
+    async def add_link(self, url: Any, title: Any = None, scope: Any = None, departments: Any = None) -> dict[str, Any]:
+        depts = departments_at_add(departments)
         if not isinstance(url, str):
             raise KnowledgeError("The link is missing.")
         try:
@@ -154,20 +166,23 @@ class KnowledgeService:
                     scope = old.get("scope")
                     break
         item = await self._new(
-            "link", check_title(title, url), url, "text/uri-list", len(url), check_scope(scope), "link.json"
-        )
+            "link", check_title(title, url), url, "text/uri-list", len(url), check_scope(scope), "link.json",
+            departments=depts,
+        )  # fmt: skip
         await self.blobs.put(item["raw_key"], json.dumps({"url": url}).encode(), "application/json")
         return item_json(item)
 
-    async def add_text(self, text: Any, title: Any, scope: Any = None) -> dict[str, Any]:
+    async def add_text(self, text: Any, title: Any, scope: Any = None, departments: Any = None) -> dict[str, Any]:
+        depts = departments_at_add(departments)
         if not isinstance(text, str) or not text.strip():
             raise KnowledgeError("The text is missing.")
         if len(text) > MAX_TEXT_CHARS:
             raise KnowledgeError("That text is longer than 200,000 characters. Upload it as a file instead.")
         body = text.encode()
         item = await self._new(
-            "text", check_title(title), "pasted text", "text/markdown", len(body), check_scope(scope), "note.md"
-        )
+            "text", check_title(title), "pasted text", "text/markdown", len(body), check_scope(scope), "note.md",
+            departments=depts,
+        )  # fmt: skip
         await self.blobs.put(item["raw_key"], body, "text/markdown; charset=utf-8")
         return item_json(item)
 
@@ -207,6 +222,7 @@ class KnowledgeService:
             check_scope(b.get("scope")),
             safe,
             check_folder(b.get("folder")),
+            departments_at_add(b.get("departments")),
         )
         key = item["raw_key"]
         upload: dict[str, Any]

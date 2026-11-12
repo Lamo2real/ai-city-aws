@@ -1,26 +1,33 @@
 // Knowledge: the owner drops files or pastes a link or text; each item shows its live status, how the
 // agents may use it (always / when relevant / only when asked) and Delete with Undo (docs/KNOWLEDGE.md §11).
-// Items are grouped by where and when they hold ("Sweden · 2026 · Tax"), filterable, and the owner can correct
-// what was found automatically (§15). Download saves a document's original (a link has none: it opens instead).
+// Items are grouped by where and when they hold ("Sweden · 2026 · Tax") and the owner can correct what was found
+// automatically (§15). Download saves a document's original (a link has none: it opens instead). Before anything
+// is stored the owner picks which departments can use it, none meaning every department (decision 270). The page
+// filters by name as you type, by department and by built in or mine (decision 270), remembered on this device.
 import { useEffect, useState, type DragEvent } from "react";
 import { knowledgeApi, startDownload, type KnowledgeItem, type KnowledgeKind, type Scope } from "../lib/api.ts";
 import {
   addFiles,
   addPasted,
-  filterChoices,
+  anyFilter,
   groupKnowledge,
   isLink,
   loadKnowledge,
   matchesFilters,
   NO_FILTERS,
   placeLabel,
+  savedFilters,
+  saveFilters,
   scheduleDelete,
   setDepartments,
   setPlace,
   setScope,
   useKnowledge,
   type KnowledgeFilters,
+  type KnowledgeShow,
 } from "../lib/knowledge.ts";
+import { loadDeptChoices, type DeptChoice } from "../lib/deptPick.ts";
+import { AddFor, type Adding } from "./AddFor.tsx";
 import { DOC_TYPES, placeCode, placeName, TOPICS, topicWord } from "../lib/places.ts";
 import { Banner, Button, Confirm, Loading, toast, UNDO_MS } from "./ui.tsx";
 import { Select } from "./Select.tsx";
@@ -71,18 +78,35 @@ export function KnowledgeScreen() {
   const [pasted, setPasted] = useState("");
   const [dragging, setDragging] = useState(false);
   const [confirming, setConfirming] = useState<KnowledgeItem | null>(null);
-  const [filters, setFilters] = useState<KnowledgeFilters>(NO_FILTERS);
-  const [grouped, setGrouped] = useState(true);
+  const [filters, setFiltersState] = useState<KnowledgeFilters>(savedFilters);
   const [editing, setEditing] = useState<string | null>(null);
+  const [adding, setAdding] = useState<Adding | null>(null);
+  const [depts, setDepts] = useState<DeptChoice[]>([]);
+  const [builtInShown, setBuiltInShown] = useState(0);
+  const setFilters = (f: KnowledgeFilters) => {
+    setFiltersState(f);
+    saveFilters(f);
+  };
 
   useEffect(() => {
     void loadKnowledge();
+    let on = true;
+    void loadDeptChoices().then((c) => on && setDepts(c));
+    return () => {
+      on = false;
+    };
   }, []);
 
-  const add = async (files: File[]) => {
+  // Dropped or chosen files wait for the department choice; more files dropped meanwhile join them.
+  const add = (files: File[]) => {
     if (!files.length) return;
     setError(null);
-    const problems = await addFiles(files);
+    setAdding((a) => ({ files: [...(a && "files" in a ? a.files : []), ...files] }));
+  };
+  const store = async (a: Adding, departments: string[] | "all") => {
+    setAdding(null);
+    if ("text" in a) return void submitPaste(a.text, departments);
+    const problems = await addFiles(a.files, { departments });
     if (problems.length) setError(problems.join(" "));
   };
   const onDrop = (e: DragEvent) => {
@@ -90,12 +114,10 @@ export function KnowledgeScreen() {
     setDragging(false);
     void add([...e.dataTransfer.files]);
   };
-  const submitPaste = async () => {
-    const v = pasted.trim();
-    if (!v) return;
+  const submitPaste = async (v: string, departments: string[] | "all") => {
     setError(null);
     try {
-      await addPasted(v);
+      await addPasted(v, departments);
       setPasted("");
       toast({ text: isLink(v) ? "Link added. It is being read now." : "Text added.", tone: "good" });
     } catch (e) {
@@ -126,10 +148,9 @@ export function KnowledgeScreen() {
 
   const all = s.items.filter((x) => !s.hidden.includes(x.id));
   const visible = all.filter((x) => matchesFilters(x, filters));
-  const choices = filterChoices(all);
-  const hasPlaces = choices.places.length + choices.years.length + choices.topics.length > 0;
-  const filtered = filters.place || filters.year || filters.topic;
-  const groups = grouped ? groupKnowledge(visible) : [{ key: "all", label: "", items: visible }];
+  const filtered = anyFilter(filters);
+  const groups = groupKnowledge(visible);
+  const deptCards = filters.show !== "mine";
   const yearOf = (id: string) => s.items.find((x) => x.id === id)?.year;
   const over = s.alwaysTokens > s.alwaysBudget;
 
@@ -159,7 +180,7 @@ export function KnowledgeScreen() {
           onChange={(e) => {
             const files = [...(e.target.files ?? [])];
             e.target.value = "";
-            void add(files);
+            add(files);
           }}
         />
       </label>
@@ -174,7 +195,7 @@ export function KnowledgeScreen() {
           onChange={(e) => {
             const files = [...(e.target.files ?? [])];
             e.target.value = "";
-            void add(files);
+            add(files);
           }}
         />
       </label>
@@ -183,7 +204,7 @@ export function KnowledgeScreen() {
         className="paste"
         onSubmit={(e) => {
           e.preventDefault();
-          void submitPaste();
+          if (pasted.trim()) setAdding({ text: pasted.trim() });
         }}
       >
         <label className="field">
@@ -195,6 +216,9 @@ export function KnowledgeScreen() {
         </Button>
       </form>
 
+      {adding ? (
+        <AddFor adding={adding} onAdd={(d) => void store(adding, d)} onCancel={() => setAdding(null)} />
+      ) : null}
       {error ? <Banner tone="bad">{error}</Banner> : null}
 
       <p className="budget" aria-live="polite">
@@ -216,61 +240,51 @@ export function KnowledgeScreen() {
       {!s.loaded && !s.loadError ? <Loading what="your knowledge" /> : null}
       {s.loaded && !all.length ? <p className="empty">Nothing stored yet. Drop a file or paste a link above.</p> : null}
 
-      {hasPlaces ? (
-        <div className="kfilters" role="group" aria-label="Show">
-          <label className="field">
-            Country or region
-            <Select value={filters.place} onChange={(e) => setFilters({ ...filters, place: e.target.value })}>
-              <option value="">All</option>
-              {choices.places.map((p) => (
-                <option key={p} value={p}>
-                  {placeName(p)}
-                </option>
-              ))}
-            </Select>
-          </label>
-          <label className="field">
-            Year
-            <Select value={filters.year} onChange={(e) => setFilters({ ...filters, year: e.target.value })}>
-              <option value="">All</option>
-              {choices.years.map((y) => (
-                <option key={y} value={String(y)}>
-                  {y}
-                </option>
-              ))}
-            </Select>
-          </label>
-          <label className="field">
-            Topic
-            <Select value={filters.topic} onChange={(e) => setFilters({ ...filters, topic: e.target.value })}>
-              <option value="">All</option>
-              {choices.topics.map((t) => (
-                <option key={t} value={t}>
-                  {topicWord(t)}
-                </option>
-              ))}
-            </Select>
-          </label>
-          <label className="check">
-            <input type="checkbox" checked={grouped} onChange={(e) => setGrouped(e.target.checked)} />
-            Group by country, year and topic
-          </label>
-          {filtered ? (
-            <Button variant="quiet" onClick={() => setFilters(NO_FILTERS)}>
-              Show everything
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-      {s.loaded && all.length && !visible.length ? (
-        <p className="empty">Nothing matches what you picked. Choose “Show everything” to see it all.</p>
+      <div className="kfilters" role="group" aria-label="Show">
+        <label className="field kfilter-q">
+          Search
+          <input
+            type="search"
+            value={filters.q}
+            onChange={(e) => setFilters({ ...filters, q: e.target.value })}
+            placeholder="Type a name"
+            autoComplete="off"
+          />
+        </label>
+        <label className="field">
+          Department
+          <Select value={filters.dept} onChange={(e) => setFilters({ ...filters, dept: e.target.value })}>
+            <option value="">All</option>
+            {depts.map((d) => (
+              <option key={d.key} value={d.key}>
+                {d.name}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label className="field">
+          Built in
+          <Select
+            value={filters.show}
+            onChange={(e) => setFilters({ ...filters, show: e.target.value as KnowledgeShow })}
+          >
+            <option value="">All</option>
+            <option value="builtin">Built in</option>
+            <option value="mine">Mine</option>
+          </Select>
+        </label>
+        {filtered ? (
+          <Button variant="quiet" onClick={() => setFilters(NO_FILTERS)}>
+            Show everything
+          </Button>
+        ) : null}
+      </div>
+      {s.loaded && filtered && !visible.length && !(deptCards && builtInShown) ? (
+        <p className="empty">Nothing matches. Choose “Show everything” to see it all.</p>
       ) : null}
 
-      {filtered || !grouped || groups.some((g) => g.key === "builtin") ? null : (
-        <section className="kgroup" aria-label="Built in">
-          <h2 className="kgroup-title">Built in</h2>
-          <DepartmentKnowledge />
-        </section>
+      {!deptCards || groups.some((g) => g.key === "builtin") ? null : (
+        <DepartmentKnowledge filters={filters} onShown={setBuiltInShown} heading />
       )}
       {groups.map((g) => (
         <section key={g.key} className="kgroup" aria-label={g.label || "Stored knowledge"}>
@@ -364,7 +378,9 @@ export function KnowledgeScreen() {
               );
             })}
           </ul>
-          {g.key === "builtin" && !filtered ? <DepartmentKnowledge /> : null}
+          {g.key === "builtin" && deptCards ? (
+            <DepartmentKnowledge filters={filters} onShown={setBuiltInShown} />
+          ) : null}
         </section>
       ))}
 

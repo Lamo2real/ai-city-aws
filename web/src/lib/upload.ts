@@ -41,6 +41,8 @@ export const xhrPut: PutFn = (url, body, headers, onProgress) =>
 export interface UploadOptions {
   scope?: Scope;
   title?: string;
+  /** Who may use it from the start (decision 270): "all" or department keys. */
+  departments?: string[] | "all";
   /** Called as soon as the server has created the item, before any bytes are sent. */
   onCreated?: (item: KnowledgeItem) => void;
   onProgress?: (percent: number) => void;
@@ -130,6 +132,7 @@ export async function uploadFile(file: File, o: UploadOptions = {}): Promise<Kno
     ...(o.title ? { title: o.title } : {}),
     ...(o.scope ? { scope: o.scope } : {}),
     ...(folderOf(file) ? { folder: folderOf(file) } : {}),
+    ...(o.departments ? { departments: o.departments } : {}),
   });
   o.onCreated?.(item);
 

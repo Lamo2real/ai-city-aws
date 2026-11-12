@@ -479,3 +479,19 @@ async def test_post_agents_home_never_claims_a_worker_went_home_when_the_release
     r = await handle_http(ev("POST", f"/agents/{w1}/home"), d)
     assert r["statusCode"] == 500 and "could not be sent home" in js(r)["error"]
     assert (await d.ledger.get_agent(w1))["state"] == "active"
+
+
+def test_every_route_the_api_answers_is_routed_by_api_gateway() -> None:
+    """A route missing from ``infra/modules/api/main.tf`` is answered 404 by API Gateway before the Lambda runs
+    (decisions 268 and 270: the download and department-choice routes were missing)."""
+    import re
+    from pathlib import Path
+
+    tf = (Path(__file__).parents[2] / "infra/modules/api/main.tf").read_text()
+    keys = re.findall(r'"((?:GET|POST|PUT|DELETE|PATCH) /[^"]*)"', tf)
+    pats = [
+        (k.split(" ", 1)[0], re.compile("^" + re.sub(r"\\\{[^/]+?\\\}", "[^/]+", re.escape(k.split(" ", 1)[1])) + "$"))
+        for k in keys
+    ]
+    missing = [(m, p) for m, p in ROUTES if not any(m == pm and r.match(p.split("?")[0]) for pm, r in pats)]
+    assert not missing

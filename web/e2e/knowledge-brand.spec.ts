@@ -16,9 +16,10 @@ async function addAcme(page: Page) {
   await page.goto("/#/knowledge");
   await page.getByLabel("Paste a link or text").fill("https://acme.example/");
   await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByRole("button", { name: "Add for every department" }).click();
   await expect
     .poll(() => m.calls.find((c) => c.method === "POST" && c.path === "/knowledge/links")?.body)
-    .toEqual({ url: "https://acme.example/" });
+    .toEqual({ url: "https://acme.example/", departments: "all" });
   const profile = page.getByText(/Brand and site profile: Acme Rockets/);
   await expect(profile).toBeVisible({ timeout: 10_000 });
   await profile.click();

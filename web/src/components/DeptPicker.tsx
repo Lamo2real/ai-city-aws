@@ -17,11 +17,14 @@ export function DeptPicker({
   onChange,
   label = "Which departments?",
   disabled,
+  noneText = "Pick at least one department.",
 }: {
   p: Picker;
   onChange: (keys: string[]) => void;
   label?: string;
   disabled?: boolean;
+  /** What the picker says while nothing is ticked. */
+  noneText?: string;
 }) {
   const id = useId();
   const rec = new Map(p.recommended.map((r) => [r.key, r.why]));
@@ -88,7 +91,7 @@ export function DeptPicker({
       ) : null}
       {!p.selected.length ? (
         <p className="dept-none" role="status">
-          Pick at least one department.
+          {noneText}
         </p>
       ) : null}
     </div>

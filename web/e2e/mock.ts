@@ -922,6 +922,9 @@ export async function mockBackend(
       });
     if (path === "/knowledge" && req.method() === "GET")
       return ok({ items: withSuperseded(), always_tokens: alwaysTokens(), always_budget: 8000 });
+    // Who may use it from the start (decision 270): "all" or none is every department, stored as no list.
+    const chosen = (): { departments?: string[] } =>
+      Array.isArray(body?.departments) && body.departments.length ? { departments: body.departments as string[] } : {};
     if (path === "/knowledge/uploads" && req.method() === "POST") {
       const name = String(body?.file_name);
       const size = Number(body?.size_bytes);
@@ -931,6 +934,7 @@ export async function mockBackend(
         content_type: body?.content_type,
         size_bytes: size,
         ...(body?.folder ? { folder: body.folder } : {}),
+        ...chosen(),
       });
       const partSize = 16 * 1024 * 1024;
       const upload =
@@ -961,12 +965,13 @@ export async function mockBackend(
     if (path === "/knowledge/links" && req.method() === "POST") {
       const i = newItem("link", (body?.title as string) ?? String(body?.url), body?.scope, "processing", {
         source: body?.url,
+        ...chosen(),
       });
       pipeline(i);
       return ok({ item: i });
     }
     if (path === "/knowledge/text" && req.method() === "POST") {
-      const i = newItem("text", String(body?.title), body?.scope, "processing");
+      const i = newItem("text", String(body?.title), body?.scope, "processing", chosen());
       pipeline(i);
       return ok({ item: i });
     }
@@ -1214,6 +1219,18 @@ export async function mockBackend(
     const method = req.method();
     if (path === "/connectors" && method === "GET") return ok({ connectors: m.connectors });
     if (path === "/departments/presets") return ok(PRESETS);
+    if (path === "/departments/recommend" && method === "POST") {
+      // The fallback words of decision 266, cut down: enough to mark a department from a file's name.
+      const t = String(body?.text ?? "").toLowerCase();
+      const words: Array<[string, RegExp]> = [
+        ["finance", /\b(budget|invoices?|tax|revenue|costs?)\b/],
+        ["legal", /\b(contracts?|gdpr|laws?|nda)\b/],
+        ["marketing", /\b(campaigns?|brand|newsletter)\b/],
+      ];
+      return ok({
+        recommended: words.filter(([, r]) => r.test(t)).map(([key, r]) => ({ key, why: `it's about ${r.exec(t)![1]}` })),
+      });
+    }
     if (path === "/departments/choices")
       return ok({ departments: PRESETS_FILE.departments.map((d) => ({ key: d.key, name: d.name })) });
     // Departments on demand (decision 134): the server answers and tells the city, as the real one does.

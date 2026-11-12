@@ -117,6 +117,10 @@ ROUTES: list[tuple[str, str]] = [
     ("DELETE", "/departments/customer-success"),
     ("GET", "/departments/presets"),
     ("GET", "/departments/choices"),
+    ("POST", "/departments/recommend"),
+    ("GET", "/knowledge/k-aaaaaaaaaaaa/download"),
+    ("GET", "/knowledge/entries/marketing.seo.local-seo/download"),
+    ("GET", "/knowledge/departments/marketing/download"),
     ("GET", "/agents"),
     ("GET", "/workforce"),
     ("GET", "/costs"),
@@ -935,6 +939,12 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         # What the department chips list (decision 266): the pre-configured departments, then the owner's own.
         own = dept_pick.choices(await d.ledger.list_departments())
         return reply(200, {"departments": [{"key": x.key, "name": x.name} for x in own]})
+    if is_("POST", r"/departments/recommend"):
+        # The departments a document being added seems to be for (decision 270): marked, never ticked.
+        text = str(_body(event).get("text") or "")[:20_000]
+        own = dept_pick.choices(await d.ledger.list_departments())
+        recs = dept_pick.recommend(text, own)
+        return reply(200, {"recommended": [{"key": k, "why": w} for k, w in recs]})
     if is_("GET", r"/departments"):
         return reply(200, {"departments": await d.ledger.list_departments()})
     if is_("POST", r"/departments"):
@@ -1246,10 +1256,14 @@ async def _knowledge(event: dict[str, Any], method: str, path: str, d: ApiDeps) 
             return reply(200, {"item": await k.complete_upload(path.split("/")[3], _body(event))})
         if is_("POST", r"/knowledge/links"):
             b = _body(event)
-            return reply(201, {"item": await k.add_link(b.get("url"), b.get("title"), b.get("scope"))})
+            return reply(
+                201, {"item": await k.add_link(b.get("url"), b.get("title"), b.get("scope"), b.get("departments"))}
+            )
         if is_("POST", r"/knowledge/text"):
             b = _body(event, 1_200_000)
-            return reply(201, {"item": await k.add_text(b.get("text"), b.get("title"), b.get("scope"))})
+            return reply(
+                201, {"item": await k.add_text(b.get("text"), b.get("title"), b.get("scope"), b.get("departments"))}
+            )
         if is_("PUT", rf"/knowledge/{_ITEM}"):
             return reply(200, {"item": await k.update(item_id, _body(event))})
         if is_("DELETE", rf"/knowledge/{_ITEM}"):

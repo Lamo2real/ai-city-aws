@@ -75,3 +75,29 @@ export function forWhom(choices: DeptChoice[], keys: string[] | undefined): stri
   if (!keys?.length) return "every department";
   return namesOf({ choices, recommended: [], selected: keys }, keys);
 }
+
+/** The departments a document being added seems to be for (decision 270), from its names and the start of its
+ * text: marked "Recommended", never ticked. Empty when it can't be worked out. */
+export function recommendFor(text: string): Promise<{ key: string; why: string }[]> {
+  if (!text.trim()) return Promise.resolve([]);
+  return api<{ recommended: { key: string; why: string }[] }>("/departments/recommend", {
+    method: "POST",
+    body: { text: text.slice(0, 20_000) },
+  }).then(
+    (r) => r.recommended,
+    () => [],
+  );
+}
+
+const TEXTY = /\.(md|markdown|txt|csv|json|ya?ml|html?)$/i;
+/** File names (as words) and the first few thousand characters of small text files: read in a moment. */
+export async function describeFiles(files: File[]): Promise<string> {
+  const names = files.map((f) => f.name.replace(/\.[^.]+$/, "").replace(/[_\-.]+/g, " "));
+  const heads = await Promise.all(
+    files
+      .filter((f) => (f.type.startsWith("text/") || TEXTY.test(f.name)) && f.size <= 5_000_000)
+      .slice(0, 10)
+      .map((f) => f.slice(0, 4000).text().catch(() => "")),
+  );
+  return [...names, ...heads].join("\n");
+}

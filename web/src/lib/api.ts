@@ -158,13 +158,21 @@ export const knowledgeApi = {
     title?: string;
     scope?: Scope;
     folder?: string;
+    /** Who may use it from the start (decision 270): "all" or department keys. */
+    departments?: string[] | "all";
   }) => api<{ item: KnowledgeItem; upload: UploadTicket }>("/knowledge/uploads", { method: "POST", body }),
   completeUpload: (id: string, body: { upload_id: string; parts: Array<{ part_number: number; etag: string }> }) =>
     api<{ item: KnowledgeItem }>(`/knowledge/uploads/${id}/complete`, { method: "POST", body }),
-  addLink: (url: string, scope?: Scope) =>
-    api<{ item: KnowledgeItem }>("/knowledge/links", { method: "POST", body: { url, scope } }),
-  addText: (text: string, title: string, scope?: Scope) =>
-    api<{ item: KnowledgeItem }>("/knowledge/text", { method: "POST", body: { text, title, scope } }),
+  addLink: (url: string, scope?: Scope, departments?: string[] | "all") =>
+    api<{ item: KnowledgeItem }>("/knowledge/links", {
+      method: "POST",
+      body: departments ? { url, scope, departments } : { url, scope },
+    }),
+  addText: (text: string, title: string, scope?: Scope, departments?: string[] | "all") =>
+    api<{ item: KnowledgeItem }>("/knowledge/text", {
+      method: "POST",
+      body: departments ? { text, title, scope, departments } : { text, title, scope },
+    }),
   update: (id: string, patch: { scope?: Scope; title?: string; departments?: string[] | "all" } & KnowledgePlace) =>
     api<{ item: KnowledgeItem }>(`/knowledge/${id}`, { method: "PUT", body: patch }),
   remove: (id: string) => api<{ ok: true }>(`/knowledge/${id}`, { method: "DELETE" }),
