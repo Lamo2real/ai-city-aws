@@ -237,8 +237,6 @@ struct SettingsForm: Equatable {
     var dailyGlobal = ""
     var dailyDepartment = ""
     var monthly = ""
-    var perDepartment = ""
-    var global = ""
     var perSecond = ""
     var profilePrefix = "global"
     var notifyEmail = true
@@ -250,8 +248,6 @@ struct SettingsForm: Equatable {
         dailyGlobal = s["daily_global_usd"].double.map(City.fmtNumber) ?? ""
         dailyDepartment = s["daily_department_usd"].double.map(City.fmtNumber) ?? ""
         monthly = s["monthly_budget_usd"].double.map(City.fmtNumber) ?? ""
-        perDepartment = s["max_concurrent_workers_per_department"].double.map(City.fmtNumber) ?? ""
-        global = s["max_concurrent_workers_global"].double.map(City.fmtNumber) ?? ""
         perSecond = s["max_new_sessions_per_second"].double.map(City.fmtNumber) ?? ""
         profilePrefix = s["profile_prefix"].string ?? "global"
         notifyEmail = s["notify_email"].bool ?? true
@@ -277,9 +273,7 @@ struct SettingsForm: Equatable {
             "notify_email": .bool(notifyEmail),
             "integrations": .object(integrations.mapValues { .bool($0) }),
         ]
-        for (k, v) in [("max_concurrent_workers_per_department", perDepartment), ("max_concurrent_workers_global", global), ("max_new_sessions_per_second", perSecond)] {
-            if let n = Double(v.trimmingCharacters(in: .whitespaces)) { o[k] = .number(n) }
-        }
+        if let n = Double(perSecond.trimmingCharacters(in: .whitespaces)) { o["max_new_sessions_per_second"] = .number(n) }
         return .object(o)
     }
 }
@@ -358,10 +352,10 @@ struct SettingsScreen: View {
         } header: { Text("Spend caps (optional)") } footer: {
             Text("No limit by default. Leave a field empty for no limit, or enter dollars to stop new work there.")
         }
-        Section("How many workers at once") {
-            NumberField(label: "Per department", text: $form.perDepartment)
-            NumberField(label: "In total", text: $form.global)
+        Section {
             NumberField(label: "New workers per second (max 25)", text: $form.perSecond)
+        } header: { Text("Work at once") } footer: {
+            Text("No limit on agents: each build gets as many workers as its parts can run at the same time.")
         }
         Section("Where Claude runs") {
             Picker("Model location", selection: $form.profilePrefix) {

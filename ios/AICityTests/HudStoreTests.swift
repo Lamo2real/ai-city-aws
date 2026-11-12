@@ -131,7 +131,6 @@ final class HudStoreTests: XCTestCase {
 
     func testSettingsFormMatchesTheAPI() {
         var f = SettingsForm(["paused": false, "daily_global_usd": 10, "monthly_budget_usd": nil, "daily_department_usd": nil,
-                              "max_concurrent_workers_per_department": 100, "max_concurrent_workers_global": 2450,
                               "max_new_sessions_per_second": 20, "profile_prefix": "eu", "notify_email": true, "integrations": ["github": false]])
         XCTAssertEqual(f.dailyGlobal, "10")
         XCTAssertEqual(f.monthly, "")
@@ -143,7 +142,9 @@ final class HudStoreTests: XCTestCase {
         let p = f.patch
         XCTAssertEqual(p["daily_global_usd"], .null, "empty = no limit")
         XCTAssertEqual(p["profile_prefix"], "eu")
-        XCTAssertEqual(p["max_concurrent_workers_global"], 2450)
+        XCTAssertEqual(p["max_new_sessions_per_second"], 20)
+        XCTAssertTrue(p["max_concurrent_workers_global"].isNull, "no agent-count limits (decision 288)")
+        XCTAssertTrue(p["max_concurrent_workers_per_department"].isNull)
         XCTAssertEqual(p["integrations"], ["github": false])
         XCTAssertTrue(p["paused"].isNull, "pausing has its own route")
     }

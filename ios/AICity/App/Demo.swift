@@ -130,7 +130,7 @@ enum Demo {
     static var settings: JSONValue {
         ["settings": [
             "paused": false, "daily_global_usd": 10, "monthly_budget_usd": nil, "daily_department_usd": nil,
-            "max_concurrent_workers_per_department": 100, "max_concurrent_workers_global": 2450, "max_new_sessions_per_second": 20,
+            "max_new_sessions_per_second": 20,
             "profile_prefix": "global", "notify_email": true, "first_run_done": true,
             "integrations": ["github": false, "google_calendar": false],
         ]]
