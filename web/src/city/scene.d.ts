@@ -29,6 +29,8 @@ export function mountCity(
     /** A published app's arcade cabinet was clicked. */
     onOpenApp?: (slug: string) => void;
     onState?: (state: CityState) => void;
+    /** How many agents are inside the departments' towers right now: "Agents working now" (decision 284). */
+    onWorking?: (n: number) => void;
   },
 ): CityScene;
 

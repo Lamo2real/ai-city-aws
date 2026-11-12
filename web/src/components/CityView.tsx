@@ -94,6 +94,8 @@ export function CityView({
   const live = useHud((s) => s.live);
   const [open, setOpen] = useState<Open>(null);
   const [now, setNow] = useState(Date.now());
+  // "Agents working now": the agents inside the departments' towers in the scene (decision 284), once it has counted.
+  const [atWork, setAtWork] = useState<number | null>(null);
   const [earlier, setEarlier] = useState(false);
   // Activity and Departments fold to their title bars; both start closed, and whatever the owner leaves them as is
   // remembered on this device, sign-out and restarts included (the owner, 2026-11-12).
@@ -177,6 +179,7 @@ export function CityView({
       // A department's tower: go and stand in front of it. HQ keeps its card.
       onSelectBuilding: (dept) => (dept === "HQ" ? setOpen({ dept }) : enter(dept)),
       onOpenApp: (slug) => go(`apps/${encodeURIComponent(slug)}`),
+      onWorking: (n) => setAtWork(n), // who is inside the towers, as the City shows them (decision 284)
     });
     scene.current = s;
     // Already loaded (another tab of the HUD was open first): the city at once. Otherwise the fixed city and
@@ -247,7 +250,7 @@ export function CityView({
       />
       <div className="cityui citytop" role="status" aria-label="The city right now">
         <CityTabs on="city" />
-        <Stat k="Agents working now" v={String(t.agentsActive)} />
+        <Stat k="Agents working now" v={String(atWork ?? t.agentsActive)} />
         <Stat k="Jobs running" v={String(jobsRunning)} />
         <Stat k={REGION_CITY[region] ?? region} v={stockholmTime(now)} className="clock" />
         <button

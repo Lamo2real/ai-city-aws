@@ -27,7 +27,7 @@ test("a much bigger world to drag around, only departments' towers, dark windows
   const green = (c: number[] | null) => !!c && c[1]! > c[0]! + 10 && c[1]! > c[2]!;
   for (const g of ground) { expect(green(g.side), `beside a tower ${g.side}`).toBe(true); expect(green(g.front), `in front of its door ${g.front}`).toBe(false); }
   // Nobody working: every department dark.
-  await expect.poll(() => city.getAttribute("data-lit")).toBe("");
+  await expect.poll(() => city.getAttribute("data-at-work")).toBe("0"); // one lit window per agent inside (decision 284)
   // Drag far west and north: the camera goes well past where the old map ended (48 tiles of countryside).
   const box = (await city.boundingBox())!;
   for (let i = 0; i < 12; i++) {

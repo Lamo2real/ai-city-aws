@@ -723,6 +723,11 @@ const towerSprites = new Map();
 // A tower's picture has SPRITE_PAD pixels of sky above its lot for the crown and spire (decision 271): the tower
 // rises over the street behind its block, so it is drawn SPRITE_PAD higher than its lot's top.
 const SPRITE_PAD = 48, STREET_PX = 3 * TILE;
+// A hire (decision 284, the owner: "from the building, into the taxi, into the workplace… should only take about 10
+// seconds, 15 at most"): the whole of it within HIRE_MS, hires at the same door HIRE_STAGGER_MS apart, the called
+// taxi done queueing after CALL_PATIENCE_MS, the last HIRE_RUSH_MS of the ride past the lines, and HIRE_WALK_IN_MS
+// kept for the walk in through the doors.
+export const HIRE_MS = 12_000, HIRE_STAGGER_MS = 150, CALL_PATIENCE_MS = 3500, HIRE_RUSH_MS = 2500, HIRE_WALK_IN_MS = 1200;
 function towerSprite(b) {
   const key = `${b.dept}|${b.slot}|${b.x},${b.y},${b.w},${b.h}`;
   let c = towerSprites.get(key);
@@ -1132,7 +1137,8 @@ const ZOOM_MIN = 0.35, ZOOM_MAX = 8, ZOOM_STEP = 1.5;
  *  Coming back to the City (from Features or another screen) never plays it again. */
 let entrances = 0, entranceHad = false;
 // `insets()` says how much of the root the HUD's own bars cover, so the map is fitted into the free part.
-export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0, r: 0, b: 0 }), onSelectAgent = () => {}, onSelectBuilding = () => {}, onOpenApp = () => {}, onState = () => {} } = {}) {
+export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0, r: 0, b: 0 }), onSelectAgent = () => {}, onSelectBuilding = () => {}, onOpenApp = () => {}, onState = () => {}, onWorking = () => {} } = {}) {
+  let lastAtWork = -1;
   // A test hook for the rare cars' screenshots: data-rare-cabs="all" makes every car one of the two rare ones (half
   // each, by the car's id), "porsche" or "lambo" makes every car that one.
   const forcedRare = (id) => {
@@ -1276,7 +1282,9 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
         p.move = null;
         p.route = commuteRoute(world, from, to, { leaving: homeOf(world, homes.get(id) ?? 0), entering: b });
         planRide(p, from); // to work by cab, hailed at the kerb by the building
-        p.waitUntil = queueAt(`door:${b.dept}`, 700);
+        p.waitUntil = queueAt(`door:${b.dept}`, 700, HIRE_STAGGER_MS);
+        // The whole hire, from the lit window at home to inside the tower, fits in HIRE_MS (decision 284).
+        p.hireBy = performance.now() + HIRE_MS;
         // The taxi is called (decision 207): it drives to the kerb outside the apartment building and waits there; the
         // worker comes out once it has pulled up. It glows from the call until it drops the worker at the tower's door.
         const call = traffic && taxiCall(world, p.route, p.ride, from);
@@ -1307,9 +1315,9 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     return m ? world.buildings.find((b) => b.dept === m[1]) : null;
   };
   /** A turn at a door: at the earliest `lead` ms from now, later if someone else just took it. */
-  function queueAt(key, lead) {
+  function queueAt(key, lead, gap = staggerMs(1)) {
     const at = Math.max(performance.now() + lead, doorQueue.get(key) ?? 0);
-    doorQueue.set(key, at + staggerMs(1));
+    doorQueue.set(key, at + gap);
     return at;
   }
   /** Lights the worker's own window at home for a while (about to leave, or just home). */
@@ -1718,8 +1726,8 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
         const bd = next ? null : pickBuilding(ev);
         canvas.style.cursor = next || pickApp(ev) || bd ? "pointer" : "grab";
         // Hovering a lit tower says who is at work in it and on what (decision 279).
-        const on = bd && bd !== "HQ" ? workingNow(bd) : [];
-        const tip = on.length ? `${bd}: ${on.length} working${on.some((w) => w.what) ? ` on ${[...new Set(on.map((w) => w.what).filter(Boolean))].slice(0, 3).join(", ")}` : ""}` : "";
+        const n = bd && bd !== "HQ" ? counts.get(bd)?.n ?? 0 : 0, on = n ? workingNow(bd) : [];
+        const tip = n ? `${bd}: ${n} working${on.some((w) => w.what) ? ` on ${[...new Set(on.map((w) => w.what).filter(Boolean))].slice(0, 3).join(", ")}` : ""}` : "";
         if (canvas.title !== tip) canvas.title = tip;
       }
       return;
@@ -1926,7 +1934,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   let workingState = null, working = {};
   const workingNow = (dept) => { if (state !== workingState) { workingState = state; working = workingIn(state); root.dataset.lit = Object.entries(working).map(([d, l]) => `${d}:${l.length}`).sort().join(","); } return working[dept] ?? []; };
   const litWindows = (b, ox, oy, below = Infinity) => {
-    const n = workingNow(b.dept).length, lit = litOrder(b).slice(0, Math.min(litOrder(b).length, n)); // one per agent working there (decision 279)
+    const n = counts.get(b.dept)?.n ?? 0, lit = litOrder(b).slice(0, Math.min(litOrder(b).length, n)); // one per agent inside, at work (decisions 279, 284)
     for (const w of lit) if (w.y < below) { R(ctx, w.x - ox, w.y - oy, w.w, w.h, "#ffdf94"); R(ctx, w.x - ox, w.y - oy, w.w, 1, "#fff3cf"); }
   };
   // The part of a tower that rises over the street behind its block (decision 271), drawn again after the cabs and
@@ -2047,7 +2055,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       athome += n;
       const order = wins.map((_, i) => i).sort((x, y) => hashOf(`home:${ai}:${x}`) - hashOf(`home:${ai}:${y}`));
       for (const i of order.slice(0, n)) { const win = wins[i]; R(ctx, win.x - ox, win.y - oy, win.w, win.h, LIT); R(ctx, win.x - ox, win.y - oy, win.w, 1, LIT_TOP); R(ctx, win.x - ox, win.y + 4 - oy, win.w, 1, INK); }
-      label(String(n), cx, top - 22, INK, n ? "#ffd84a" : "#d9d1bf");
+      void top; void cx; // no number over a home (decision 284): how many are in is shown by its lit windows alone
     });
     if (root.dataset.atHome !== String(athome)) root.dataset.atHome = String(athome); // for tests
     const lastBlock = world.homes.blocks.at(-1); // the sign hangs over the last block's courtyard
@@ -2149,8 +2157,10 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
         let left = d, at = to;
         for (const q of c.route.slice(1)) { left += Math.hypot(q.x - at.x, q.y - at.y); at = q; }
         c.to = to;
-        let s = traffic ? rideStep(traffic, c, dt) : RIDE_PX_S * dt;
-        c.rv = Math.min(c.rv ?? RIDE_PX_S, Math.max(12, left * 2.2)); s = Math.min(s, c.rv * dt);
+        c.boost = TO_WORK_BOOST; // a hire's taxi hurries (decision 284)
+        const late = now - c.at > CALL_PATIENCE_MS; // queueing too long: it pulls round the queue to the kerb
+        let s = traffic && !late ? rideStep(traffic, c, dt) : RIDE_PX_S * TO_WORK_BOOST * dt;
+        c.rv = Math.min(c.rv ?? RIDE_PX_S, Math.max(12, left * 2.2)); s = Math.min(s, Math.max(c.rv, late ? RIDE_PX_S : 0) * dt);
         if (Math.abs(dx) > 0.5) c.flip = dx < 0;
         if (d > 0.5) { c.along = Math.abs(dx) >= Math.abs(dy); c.up = dy < 0; }
         if (d <= s) { c.x = to.x; c.y = to.y; c.route.shift(); } else { c.x += (dx / d) * s; c.y += (dy / d) * s; }
@@ -2174,14 +2184,24 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
         busy = true;
         const to = p.route[0], dx = to.x - p.x, dy = to.y - p.y, d = Math.hypot(dx, dy);
         let s;
-        if (p.ride?.[0] && traffic) { p.to = to; p.rare = p.rareCab || forcedRare(p.id); p.boost = p.toWork ? TO_WORK_BOOST : 1; s = rideStep(traffic, p, dt); } // a cab in the traffic
+        if (p.ride?.[0] && traffic) {
+          p.to = to; p.rare = p.rareCab || forcedRare(p.id); p.boost = p.toWork ? TO_WORK_BOOST : 1;
+          // A hire keeps to HIRE_MS (decision 284): the cab goes as fast as the ride left needs to reach the door in time,
+          // and in the last stretch it no longer waits at a line.
+          if (p.toWork && p.hireBy) {
+            let left = d, at = to; for (const [i, q] of p.route.entries()) { if (i && p.ride[i]) left += Math.hypot(q.x - at.x, q.y - at.y); at = q; }
+            const time = Math.max(0.6, (p.hireBy - HIRE_WALK_IN_MS - now) / 1000);
+            p.boost = Math.max(p.boost, left / time / RIDE_PX_S);
+          }
+          s = p.toWork && p.hireBy && now > p.hireBy - HIRE_RUSH_MS ? RIDE_PX_S * p.boost * dt : rideStep(traffic, p, dt);
+        } // a cab in the traffic
         else s = eased(p, (p.speed ?? WALK_SPEED) * dt, d);
         if (Math.abs(dx) > 0.5) p.flip = dx < 0;
         if (d <= s) {
           p.x = to.x; p.y = to.y; p.route.shift(); p.ride?.shift();
           if (to.ring && !p.route[0]?.ring) p.commit = null; // off the roundabout
           if (!p.route.length) {
-            p.route = null; p.speed = null; p.ride = null; p.toWork = false; // dropped at the door: the glow goes out
+            p.route = null; p.speed = null; p.ride = null; p.toWork = false; p.hireBy = null; // dropped at the door: the glow goes out
             if (p.key.startsWith("desk:") || p.key === "home") setInside(p, true); // in through the doors: out of sight, counted on the roof
             if (p.homecoming) { p.homecoming = false; lightHouse(p.id, 1500); dust(p.x, p.y - 8, 10, POOF, 28, 0.5); } // home: the light goes on, then out
           }
@@ -2217,6 +2237,9 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     // The roof counters follow who is really inside; the doors open for anyone at them, and shut behind.
     const inside = new Map();
     for (const p of people.values()) if (p.inside && p.insideOf) inside.set(p.insideOf, (inside.get(p.insideOf) ?? 0) + 1);
+    // "Agents working now" is who is inside the departments' towers (decision 284): it ticks up as each one walks in.
+    const atWork = world.buildings.reduce((k, b) => k + (inside.get(b.dept) ?? 0), 0);
+    if (atWork !== lastAtWork) { lastAtWork = atWork; root.dataset.atWork = String(atWork); onWorking(atWork); }
     for (const b of world.buildings) {
       const n = inside.get(b.dept) ?? 0, c = counts.get(b.dept);
       if (!c) counts.set(b.dept, { n, delta: 0, at: 0 });
