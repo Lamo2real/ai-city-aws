@@ -146,9 +146,11 @@ async def turn_connector_tools(
     role: str,
     hire: list[str] | None,
     brand_loader: BrandLoader | None = None,
+    seen: dict[str, Any] | None = None,
 ) -> list[ToolSpec]:
     """Read the connectors at turn start (no redeploy) and build the tools. If the Gateway can't be reached
-    the turn continues without connectors."""
+    the turn continues without connectors. ``seen`` gets the records and the Gateway's tool list (VAIC's permission
+    card, decision 265)."""
     if client is None:
         return []
     try:
@@ -159,6 +161,8 @@ async def turn_connector_tools(
     except Exception as e:
         log("warn", "vaic.gateway", error=type(e).__name__)
         return []
+    if seen is not None:
+        seen.update(records=records, listed=listed)
     brands: BrandContext | None = None
     if brand_loader is not None and any(is_creative(r) for r in connectors_for(records, role, hire)):
         try:

@@ -754,6 +754,15 @@ function AddByLink(p: { onDone: () => void; reload: () => Promise<unknown> }) {
 }
 
 // ---------- details ----------
+/** "transcribe_audio_video" → "Transcribe audio video". */
+const toolWords = (t: string) => {
+  const w = t
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .trim();
+  return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+};
+
 function ConnectorDetail(p: {
   c: Connector;
   onChange: (patch: Parameters<typeof editConnector>[1]) => Promise<void>;
@@ -811,6 +820,31 @@ function ConnectorDetail(p: {
             </Select>
           </label>
         ))}
+      </fieldset>
+      <fieldset className="always-allow">
+        <legend>Vice uses without asking</legend>
+        {c.always_allow?.length ? (
+          <ul className="chips">
+            {c.always_allow.map((t) => (
+              <li key={t} className="chip">
+                {toolWords(t)}
+                <button
+                  type="button"
+                  className="chip-x"
+                  aria-label={`Ask again before using ${toolWords(t)}`}
+                  onClick={() => void p.onChange({ always_allow: (c.always_allow ?? []).filter((x) => x !== t) })}
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mute">
+            Nothing: Vice asks in the chat before it uses one of these tools for you. “Always allow” on that card adds
+            the tool here.
+          </p>
+        )}
       </fieldset>
       <div className="row-end">
         {c.status === "ready" ? (

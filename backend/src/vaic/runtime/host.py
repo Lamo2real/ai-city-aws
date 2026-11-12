@@ -35,6 +35,8 @@ from vaic.shared.turn import BackoffOptions, GateDeps, GatedTurn, TurnInput, Tur
 from vaic.shared.utility import vaic_voice
 
 from .brand_context import BrandContext, BrandLoader, brands_from_items, is_bare_link
+from .browser import BrowseFactory
+from .connector_permission import no_connectors, owner_connector_tools
 from .connector_tool import add_connector_tool
 from .engine import AgentEngine, EngineRequest, clean_text
 from .gateway import GatewayClient, turn_connector_tools
@@ -89,6 +91,8 @@ class HostOptions:
     """Mail and calendar accounts (``VAIC_MAIL_WORKLOAD``), or None: no mail tools."""
     git_auth: GitAuth | None = None
     """git and gh signed in with the owner's GitHub token (VAIC and workers), or None."""
+    browser: BrowseFactory | None = None
+    """VAIC's browser (AgentCore Browser, decision 265), or None: no ``browse`` tool."""
 
 
 class AgentHost:
@@ -196,6 +200,7 @@ class AgentHost:
                     city_tools += mail_tools(self.d, ctx, self.o.mail, level)
             tools: list[ToolSpec] = gate_tools(self.d, ctx, city_tools)
             hire = await self._hire_connectors(agent) if ctx.role == "worker" else None
+            seen: dict[str, Any] = {}
             tools += await turn_connector_tools(
                 self.o.gateway,
                 ConnectorStore(ledger.table, ledger.now),
@@ -203,7 +208,13 @@ class AgentHost:
                 ctx.role,
                 hire,
                 self._brand_loader(inv, ticket),
+                seen,
             )
+            if ctx.role == "vaic" and seen.get("records"):
+                # The owner's permission card for connector calls, and "don't use connectors" (decision 265).
+                said = str(inv.get("body") or "") if ctx.from_owner else ""
+                avoid = await no_connectors(self.d, conversation or "main", said, seen["records"])
+                tools = owner_connector_tools(self.d, ctx, tools, seen["records"], seen["listed"], avoid)
             skills_dir = None
             if ctx.role != "vaic" and skill_rows and self.o.skills:
                 skills_dir = await self.o.skills.materialize(skill_rows)
@@ -262,6 +273,10 @@ class AgentHost:
                 await bus.put(event)
 
             live = LiveReply(send, conversation or "", message_id=inv["id"] if is_vaic else None)
+            # VAIC's browser, one session per turn, shown live in the chat (decision 265).
+            browsing = self.o.browser(send, conversation or "main", inv["id"]) if is_vaic and self.o.browser else None
+            if browsing is not None:
+                tools.append(browsing.spec(ctx))
 
             streamed: list[str] = []  # what VAIC had written so far, kept in the history if the owner presses Stop
 
@@ -328,7 +343,11 @@ class AgentHost:
             if not is_vaic:
                 result = await gated
             else:
-                done, stopped = await unless_stopped(gated, lambda: ledger.turn_stopped(inv["id"]))
+                try:
+                    done, stopped = await unless_stopped(gated, lambda: ledger.turn_stopped(inv["id"]))
+                finally:
+                    if browsing is not None:
+                        await browsing.close()
                 if stopped or done is None:
                     await self._stopped(inv, "".join(streamed), started, send)
                     return ""

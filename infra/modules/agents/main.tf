@@ -219,6 +219,25 @@ resource "aws_iam_role_policy" "voice" {
   })
 }
 
+# VAIC's browser (decision 265): one AgentCore Browser session per turn, driven over its automation stream. The
+# AWS-managed browser only; VAIC never creates browsers or touches anyone else's.
+resource "aws_iam_role_policy" "browser" {
+  name = "browser"
+  role = aws_iam_role.agent["vaic"].id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid    = "BrowseForTheOwner"
+      Effect = "Allow"
+      Action = [
+        "bedrock-agentcore:StartBrowserSession", "bedrock-agentcore:StopBrowserSession", "bedrock-agentcore:GetBrowserSession",
+        "bedrock-agentcore:ConnectBrowserAutomationStream",
+      ]
+      Resource = ["arn:aws:bedrock-agentcore:${var.region}:aws:browser/aws.browser.v1"]
+    }]
+  })
+}
+
 # Only VAIC may run HUD routes as the owner (decision 143); the API refuses secret-taking routes on this path.
 resource "aws_iam_role_policy" "owner_api" {
   count = var.api_function_arn == "" ? 0 : 1

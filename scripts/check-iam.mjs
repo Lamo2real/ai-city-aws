@@ -454,7 +454,10 @@ export function checkFiles({ statements = filesStatements(), text } = {}) {
       if (s.policy === "workspace" && /^s3:Delete/.test(a)) problems.push(`${where}: hires may not delete files`);
       if (s.policy === "workspace" && a === "s3:GetObject" && !s.resource.endsWith('/files/*"]'))
         problems.push(`${where}: hires read only files/`);
-      if (s.policy === "vaic" && a !== "s3:GetObject") problems.push(`${where}: VAIC only reads files to show them`);
+      // VAIC only reads files to show them; it writes only its browser's screenshots under browser/ (decision 265).
+      const shots = s.policy === "vaic" && a === "s3:PutObject" && s.resource === '["${aws_s3_bucket.this.arn}/browser/*"]';
+      if (s.policy === "vaic" && a !== "s3:GetObject" && !shots)
+        problems.push(`${where}: VAIC only reads files to show them (and writes browser/ screenshots)`);
       if (s.policy === "mediaconvert" && /^s3:/.test(a) && !/\/(files|work)\/\*/.test(s.resource))
         problems.push(`${where}: MediaConvert may only read files/ and write work/`);
     }

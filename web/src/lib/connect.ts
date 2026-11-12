@@ -26,6 +26,8 @@ export interface Connector {
   tools?: Array<{ name: string; read_only?: boolean; destructive?: boolean }>;
   package?: { name: string; version: string; secrets?: Array<{ name: string; description?: string }> };
   oauth?: { authorization_server?: string };
+  /** Tools VAIC uses without showing its permission card ("Always allow", decision 265). */
+  always_allow?: string[];
 }
 /** True when the connector's sign-in would be at github.com, so a GitHub token can stand in for it. */
 export function githubSignIn(c: Connector): boolean {
@@ -83,7 +85,7 @@ export const sameServer = (a?: string, b?: string) =>
 
 export const addConnectorByUrl = (url: string, label?: string) =>
   api<{ connector: Connector }>("/connectors", { method: "POST", body: { url, ...(label ? { label } : {}) } });
-export const editConnector = (id: string, patch: Partial<Pick<Connector, "roles" | "label">>) =>
+export const editConnector = (id: string, patch: Partial<Pick<Connector, "roles" | "label" | "always_allow">>) =>
   api<{ connector: Connector }>(`/connectors/${id}`, { method: "PUT", body: patch });
 export const removeConnector = (id: string) => api(`/connectors/${id}`, { method: "DELETE" });
 export const refreshConnector = (id: string) => api(`/connectors/${id}/refresh`, { method: "POST" });

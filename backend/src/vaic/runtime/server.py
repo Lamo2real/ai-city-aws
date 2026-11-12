@@ -293,6 +293,7 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
             skills=_skills(city, e),
             mail=_mail(city, e, role),
             git_auth=git_auth,
+            browser=_browser(city, e) if role == "vaic" else None,
         ),
     )
     warmer = _warmer(city, e) if role == "vaic" else None
@@ -416,6 +417,15 @@ def _files(session: Any, bus: Any, role: str, env: Mapping[str, str]) -> FilesAc
         return None
     service = FilesService(store=f.store, blobs=f.blobs, bus=bus, embedder=f.embedder)
     return FilesAccess(service=service, bucket=f.blobs.bucket)
+
+
+def _browser(city: Any, e: Mapping[str, str]) -> Any:
+    """VAIC's browser (decision 265): AgentCore Browser, screenshots in the files bucket under browser/."""
+    if not e.get("FILES_BUCKET") or e.get("VAIC_BROWSER", "on") == "off":
+        return None
+    from .browser import BROWSER_ID, browse_factory
+
+    return browse_factory(city.session, city.region, e["FILES_BUCKET"], e.get("VAIC_BROWSER_ID") or BROWSER_ID)
 
 
 def _mail(city: Any, e: Mapping[str, str], role: str | None) -> Any:

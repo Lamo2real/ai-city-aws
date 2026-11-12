@@ -1,16 +1,17 @@
 // The connect cards under VAIC's chat, shared by connectors and mail accounts (MAIL_CALENDAR.md §7):
 // a sign-in button, a secure key field, the app-password form, and the add-connector approval.
 // Keys and passwords go straight to the API in their own request; they never enter the chat or the store.
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { decideApproval, sendMessage } from "../lib/actions.ts";
 import { api, ApiError } from "../lib/api.ts";
 import { APP_PASSWORD_HOWTO, IMAP_PRESETS, sendConnectorKey, sendImapForm, type ImapForm } from "../lib/connect.ts";
 import { rememberConnect } from "../lib/connectReturn.ts";
 import { serviceFor, useCatalog } from "../lib/catalog.ts";
-import { store, type ConnectCardState } from "../lib/store.ts";
+import { store, type ConnectCardState, type ConnectorAsk } from "../lib/store.ts";
 import { Button, errorText, LiveDot } from "./ui.tsx";
 import { Select } from "./Select.tsx";
 import { SkillExcerpt } from "./SkillDraft.tsx";
+import { Chevron } from "./BrowserRun.tsx";
 
 /** "No account yet?": the service's own sign-up page, checked by scripts/check-signup-links.mjs, in a new tab. */
 export function SignupLink(p: { href?: string; service: string }) {
@@ -369,6 +370,7 @@ const SETTLED = { saved: "Saved.", discarded: "Not saved: nothing changed.", fai
 /** VAIC's question with tappable answers; for a staged change, what will change and Yes / No (decision 206). A tap
  * is sent as the owner's message, so typing or saying the answer works the same. */
 export function AskCard(p: AskProps) {
+  if (p.permission) return <PermissionCard {...p} permission={p.permission} />;
   return (
     <div className="connect-card ask-card" role="group" aria-label={p.title ?? p.question}>
       {p.title ? <p className="ask-title">{p.title}</p> : null}
@@ -440,4 +442,161 @@ export function ChatCards({ cards }: { cards: ConnectCardState[] }) {
       })}
     </div>
   );
+}
+
+const IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+const DESCRIPTION_CLAMP = 180;
+
+/** Only the newest open permission card takes the keyboard shortcuts. */
+let shortcutsOwner = "";
+
+/** "Vice wants to use <tool> from <service ▾>" (decision 265), like Claude's: the call's inputs, the tool's
+ * description, and Decline (Esc) / Allow once (⌘↵) / Always allow (⇧⌘↵). Each answer goes as the owner's message,
+ * so saying or typing it works the same. The list picks another connected service with the same kind of tool. */
+function PermissionCard(p: AskProps & { permission: ConnectorAsk }) {
+  const ask = p.permission;
+  const [pick, setPick] = useState(ask.connector);
+  const [more, setMore] = useState(false);
+  const [inputsOpen, setInputsOpen] = useState(false);
+  const [schemaOpen, setSchemaOpen] = useState(false);
+  const chosen = ask.choices.find((c) => c.id === pick) ?? ask.choices[0];
+  const open = !p.result && !p.answered;
+  const answer = (o: "Allow once" | "Always allow" | "Decline") => {
+    const other = o !== "Decline" && chosen && chosen.id !== ask.connector ? ` (use ${chosen.label})` : "";
+    void sendMessage(`${o}${other}`, { answer: o });
+  };
+  const answerRef = useRef(answer);
+  answerRef.current = answer;
+  useEffect(() => {
+    if (!open) return;
+    shortcutsOwner = p.id;
+    const key = (e: KeyboardEvent) => {
+      if (shortcutsOwner !== p.id || e.defaultPrevented) return;
+      if (document.querySelector("[role=dialog], [role=menu], [role=listbox], .slash-pop, .plus-pop")) return;
+      // Typing in the box keeps its own keys: the shortcuts work while it is empty.
+      const box = document.activeElement;
+      if (box instanceof HTMLTextAreaElement || box instanceof HTMLInputElement) {
+        if (box.value.trim()) return;
+      }
+      const mod = IS_MAC ? e.metaKey : e.ctrlKey;
+      let o: "Allow once" | "Always allow" | "Decline" | null = null;
+      if (e.key === "Escape" && !mod && !e.shiftKey) o = "Decline";
+      else if (e.key === "Enter" && mod) o = e.shiftKey ? "Always allow" : "Allow once";
+      if (!o) return;
+      e.preventDefault();
+      e.stopPropagation();
+      answerRef.current(o);
+    };
+    window.addEventListener("keydown", key, true);
+    return () => {
+      window.removeEventListener("keydown", key, true);
+      if (shortcutsOwner === p.id) shortcutsOwner = "";
+    };
+  }, [open, p.id]);
+  const mod = IS_MAC ? "⌘" : "Ctrl";
+  const long = ask.description.length > DESCRIPTION_CLAMP;
+  const shown =
+    more || !long ? ask.description : `${ask.description.slice(0, DESCRIPTION_CLAMP).replace(/\s+\S*$/, "")}…`;
+  const listed = ask.params.slice(0, 3).join(", ");
+  const rest = ask.params.length - 3;
+  return (
+    <div className="connect-card ask-card perm-card" role="group" aria-label={`Vice wants to use ${ask.title}`}>
+      <p className="perm-head">
+        Vice wants to use <span className="perm-chip">{ask.title}</span> from{" "}
+        {ask.choices.length > 1 && open ? (
+          <label className="perm-from">
+            <span className="sr">Which service</span>
+            <Select value={pick} onChange={(e) => setPick(e.target.value)} className="perm-select">
+              {ask.choices.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </Select>
+          </label>
+        ) : (
+          <span className="perm-chip">{chosen?.label ?? ask.label}</span>
+        )}
+      </p>
+      {ask.inputs.length ? (
+        <dl className="perm-inputs">
+          {ask.inputs.map(([k, v]) => (
+            <div key={k}>
+              <dt>{k}</dt>
+              <dd>{v}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+      <div className="perm-about">
+        <p className="perm-tool">{ask.title}</p>
+        {ask.description ? <p className="mute">{shown}</p> : null}
+        {long ? (
+          <button type="button" className="linkish" onClick={() => setMore(!more)}>
+            {more ? "Show less" : "Show more"}
+          </button>
+        ) : null}
+        {ask.params.length ? (
+          <>
+            <button
+              type="button"
+              className="perm-toggle"
+              aria-expanded={inputsOpen}
+              onClick={() => setInputsOpen(!inputsOpen)}
+            >
+              <Chevron open={inputsOpen} />{" "}
+              {`Takes ${ask.params.length} ${ask.params.length === 1 ? "input" : "inputs"}: `}
+              <code>{listed}</code>
+              {rest > 0 ? `, and ${rest} more` : ""}
+            </button>
+            {inputsOpen ? (
+              <div className="perm-schema-wrap">
+                <button
+                  type="button"
+                  className="perm-toggle"
+                  aria-expanded={schemaOpen}
+                  onClick={() => setSchemaOpen(!schemaOpen)}
+                >
+                  <Chevron open={schemaOpen} /> The whole schema
+                </button>
+                {schemaOpen ? (
+                  <pre className="perm-schema">{pretty(ask.schema)}</pre>
+                ) : (
+                  <code className="mute">{ask.params.join(", ")}</code>
+                )}
+              </div>
+            ) : null}
+          </>
+        ) : null}
+      </div>
+      {p.result ? (
+        <p className={p.result === "saved" ? "ask-done" : "mute"} role="status">
+          {p.result === "saved" ? `Allowed (${p.answered ?? "Allow once"}).` : "Declined: Vice does it another way."}
+        </p>
+      ) : p.answered ? (
+        <p className="mute" role="status">{`${p.answered}…`}</p>
+      ) : (
+        <div className="perm-actions">
+          <button type="button" className="choice" onClick={() => answer("Decline")}>
+            Decline <kbd>Esc</kbd>
+          </button>
+          <span className="perm-gap" />
+          <button type="button" className="choice" onClick={() => answer("Allow once")}>
+            Allow once <kbd>{`${mod} ↵`}</kbd>
+          </button>
+          <button type="button" className="choice choice-yes" onClick={() => answer("Always allow")}>
+            Always allow <kbd>{`⇧ ${mod} ↵`}</kbd>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function pretty(schema: string): string {
+  try {
+    return JSON.stringify(JSON.parse(schema), null, 2);
+  } catch {
+    return schema;
+  }
 }

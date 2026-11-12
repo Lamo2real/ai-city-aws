@@ -384,6 +384,26 @@ class VaicQuestion(_E):
     skill: dict[str, Any] | None = None
     """A skill VAIC drafted (decision 257): ``name``, ``description``, ``markdown`` (the SKILL.md that Yes saves,
     exactly), ``files`` (its other paths) and ``replacing``. The HUD shows it beside the chat to read before Add."""
+    permission: dict[str, Any] | None = None
+    """VAIC asks to use a connector tool (decision 265): ``title``, ``label``, ``connector``, ``tool``, ``inputs`` (pairs),
+    ``description``, ``params``, ``schema`` and ``choices`` (the services that offer the same kind of tool). The HUD
+    draws Claude's "wants to use … from …" card; Allow once / Always allow / Decline come back as the owner's message."""
+
+
+class VaicBrowser(_E):
+    """VAIC's browser, live in the chat (decision 265): one per step (``step``: ``n``, ``label``, ``url``, ``title``,
+    ``shot`` a short-lived link to the screenshot, ``pointer`` where it clicked), and ``done`` when the turn ends."""
+
+    type: Literal["vaic.browser"]
+    conversation: str
+    message_id: str
+    actions: int
+    started: str = ""
+    seconds: float = 0
+    width: int = 1280
+    height: int = 800
+    done: bool = False
+    step: dict[str, Any] | None = None
 
 
 class CallRequested(_E):
@@ -526,6 +546,7 @@ CityEventModel = Annotated[
     | VaicReply
     | VaicStopped
     | VaicQuestion
+    | VaicBrowser
     | VaicChange
     | CallRequested
     | HudAction

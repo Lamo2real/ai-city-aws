@@ -7956,3 +7956,286 @@ a.btn-primary.chat-file-dl,
     animation: none;
   }
 }
+
+/* ---------- VAIC asks before using a connector (decision 265): Claude's "wants to use … from …" card ---------- */
+.perm-card {
+  max-width: min(40rem, 100%);
+  gap: var(--s3);
+}
+.perm-head {
+  margin: 0;
+  font-weight: 700;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+}
+.perm-chip {
+  background: var(--glass-2);
+  border: 1px solid var(--edge-2);
+  border-radius: 8px;
+  padding: 2px var(--s2);
+  font-weight: 600;
+}
+.perm-from {
+  display: inline-flex;
+}
+.perm-card .perm-from .aselect,
+.perm-card .perm-select {
+  width: auto;
+  min-width: 9rem;
+}
+.perm-inputs {
+  margin: 0;
+  background: var(--glass-deep);
+  border-radius: 12px;
+  padding: var(--s2) var(--s3);
+  display: grid;
+  gap: var(--s1);
+  font-size: var(--fs-s);
+}
+.perm-inputs > div {
+  display: grid;
+  grid-template-columns: minmax(6rem, 30%) minmax(0, 1fr);
+  gap: var(--s3);
+}
+.perm-inputs dt {
+  color: var(--gmute);
+}
+.perm-inputs dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.perm-about {
+  display: grid;
+  gap: var(--s1);
+  justify-items: start;
+}
+.perm-about p {
+  margin: 0;
+}
+.perm-tool {
+  font-weight: 700;
+}
+.perm-toggle {
+  background: none;
+  border: 0;
+  color: var(--gmute);
+  font: inherit;
+  font-size: var(--fs-s);
+  padding: 2px 0;
+  cursor: pointer;
+  text-align: left;
+}
+.perm-toggle:hover {
+  color: var(--gtext);
+}
+.perm-schema-wrap {
+  padding-left: var(--s4);
+  display: grid;
+  gap: var(--s1);
+  max-width: 100%;
+}
+.perm-schema {
+  margin: 0;
+  max-height: 16rem;
+  overflow: auto;
+  background: var(--glass-deep);
+  border-radius: 10px;
+  padding: var(--s2);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+.perm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  align-items: center;
+}
+.perm-gap {
+  flex: 1;
+}
+.perm-actions .choice {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: 40px;
+  font-weight: 700;
+}
+.perm-card kbd,
+.perm-actions kbd {
+  font: inherit;
+  font-size: 12px;
+  border: 1px solid currentColor;
+  border-radius: 5px;
+  padding: 0 4px;
+}
+.bchev {
+  display: inline-block;
+  vertical-align: -2px;
+  flex: none;
+  transition: transform var(--dur-xs) var(--ease);
+}
+.bchev.is-open {
+  transform: rotate(90deg);
+}
+@media (hover: none) {
+  .perm-actions kbd {
+    display: none; /* no keyboard on a phone */
+  }
+}
+
+/* ---------- VAIC's browser in the chat (decision 265) ---------- */
+.brun {
+  margin: var(--s2) 0 var(--s3);
+  max-width: min(40rem, 100%);
+  color: var(--gmute);
+  font-size: var(--fs-s);
+}
+.brow {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+}
+.brow-main {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  padding: 4px 0;
+  cursor: pointer;
+  min-height: 32px;
+}
+.brow-main:hover {
+  color: var(--gtext);
+}
+.bthumbs {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.bthumb {
+  width: 44px;
+  aspect-ratio: 16 / 10;
+  padding: 0;
+  border: 1px solid var(--edge-2);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--glass-deep);
+  cursor: zoom-in;
+}
+.bshot {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: var(--glass-deep);
+}
+.bshot img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.bshot-gone {
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  text-align: center;
+}
+.bpointer {
+  position: absolute;
+  transform: translate(-3px, -2px);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+  transition: left var(--dur-m) var(--ease-out), top var(--dur-m) var(--ease-out);
+}
+.bsteps {
+  list-style: none;
+  margin: var(--s1) 0 var(--s2);
+  padding: 0;
+  display: grid;
+  gap: var(--s1);
+}
+.bstep {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  width: 100%;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 2px 0;
+  cursor: zoom-in;
+}
+.bstep:hover {
+  color: var(--gtext);
+}
+.bstep .bstep-shot {
+  width: 64px;
+  flex: none;
+  border-radius: 5px;
+  border: 1px solid var(--edge-2);
+}
+.blive {
+  margin-top: var(--s2);
+  border: 1px solid var(--edge-2);
+  border-radius: var(--rg);
+  overflow: hidden;
+  background: var(--glass);
+  box-shadow: var(--glow);
+}
+.bbar {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s2) var(--s3);
+  font-size: var(--fs-s);
+  min-width: 0;
+}
+.bhost {
+  color: var(--gtext);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.bbar .mute {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bexpand {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--edge-2);
+  background: var(--glass-2);
+  color: var(--gtext);
+  cursor: pointer;
+}
+.bviewer {
+  width: min(1100px, 96vw);
+  max-width: 96vw;
+  padding: var(--s3);
+  display: grid;
+  gap: var(--s3);
+}
+.bviewer .bshot {
+  border-radius: 10px;
+}
+.always-allow ul.chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+}

@@ -662,6 +662,19 @@ async def test_settings_edits_roles_and_a_role_change_rewrites_cedar() -> None:
     assert bad["statusCode"] == 400
 
 
+async def test_settings_edits_which_tools_vaic_uses_without_asking() -> None:
+    """Always allow from VAIC's permission card is listed and removable in Settings (decision 265)."""
+    d, invoked, c = _api()
+    tools = [{"name": "transcribe"}, {"name": "export"}]
+    await c.store.create({"id": "descript", "label": "Descript", "url": URL, "status": "ready", "roles": {"vaic": "all"},
+                          "tools": tools, "always_allow": ["transcribe", "export"]})  # fmt: skip
+    r = await handle_http(ev("PUT", "/connectors/descript", {"always_allow": ["export"]}), d)
+    assert r["statusCode"] == 200 and js(r)["connector"]["always_allow"] == ["export"]
+    assert invoked == []  # nothing to rewrite in the Gateway
+    bad = await handle_http(ev("PUT", "/connectors/descript", {"always_allow": ["delete_everything"]}), d)
+    assert bad["statusCode"] == 400
+
+
 async def test_the_owner_adds_one_directly_in_settings_without_an_approval() -> None:
     d, invoked, _c = _api()
     r = await handle_http(ev("POST", "/connectors", {"url": URL, "roles": {"worker": "read"}}), d)

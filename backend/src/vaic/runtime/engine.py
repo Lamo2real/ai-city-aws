@@ -60,7 +60,7 @@ _ACTIVITY: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"^(Read|Glob|Grep)$"), "reading"),
     (re.compile(r"^Bash$|run_command"), "running"),
     (re.compile(r"^(WebSearch|WebFetch)$"), "researching"),
-    (re.compile(r"browser"), "browsing"),
+    (re.compile(r"browse"), "browsing"),
     (re.compile(r"hire_worker"), "hiring"),
     (re.compile(r"assign|assign_to_department|delegate_to_orchestrator"), "delegating"),
     (re.compile(r"review|sign_off"), "reviewing"),

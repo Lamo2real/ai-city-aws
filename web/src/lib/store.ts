@@ -92,6 +92,8 @@ export type ConnectCardState = (
       detail?: string;
       /** A skill VAIC wrote (decision 257): its SKILL.md is read beside the chat (a sheet on the phone) before Add. */
       skill?: SkillDraft;
+      /** VAIC asks to use a connector tool (decision 265): Claude's "wants to use … from …" card. */
+      permission?: ConnectorAsk;
       /** The answer the owner tapped, while VAIC saves it. */
       answered?: string;
       result?: "saved" | "discarded" | "failed";
@@ -101,6 +103,58 @@ export type ConnectCardState = (
    * messages and replies go below it (decision 164). */
   after?: string;
 };
+/** A connector call VAIC waits to make until the owner allows it (`vaic.question`'s `permission`, decision 265). */
+export interface ConnectorAsk {
+  title: string;
+  tool: string;
+  connector: string;
+  label: string;
+  inputs: [string, string][];
+  description: string;
+  params: string[];
+  schema: string;
+  /** The service asked about first, then the other connected services offering the same kind of tool. */
+  choices: { id: string; label: string; tool: string }[];
+}
+function connectorAsk(v: unknown): ConnectorAsk | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const o = v as Record<string, unknown>;
+  if (typeof o.title !== "string" || typeof o.connector !== "string") return undefined;
+  const list = (x: unknown) => (Array.isArray(x) ? x : []);
+  return {
+    title: o.title,
+    tool: String(o.tool ?? ""),
+    connector: o.connector,
+    label: String(o.label ?? o.connector),
+    inputs: list(o.inputs).map((p) => [String((p as unknown[])[0] ?? ""), String((p as unknown[])[1] ?? "")]),
+    description: String(o.description ?? ""),
+    params: list(o.params).map(String),
+    schema: String(o.schema ?? ""),
+    choices: list(o.choices)
+      .filter((c): c is Record<string, unknown> => !!c && typeof c === "object")
+      .map((c) => ({ id: String(c.id), label: String(c.label ?? c.id), tool: String(c.tool ?? "") })),
+  };
+}
+/** One step of VAIC's browser (decision 265): what it did, where, and a short-lived link to the screenshot. */
+export interface BrowserStep {
+  n: number;
+  label: string;
+  url: string;
+  title: string;
+  shot: string;
+  pointer: { x: number; y: number } | null;
+}
+/** VAIC's browsing in one turn, keyed by the owner's message (`owner-<line id>`), shown live in the chat. */
+export interface BrowserRun {
+  id: string;
+  started: number;
+  seconds: number;
+  actions: number;
+  done: boolean;
+  width: number;
+  height: number;
+  steps: BrowserStep[];
+}
 /** A skill VAIC drafted, exactly as Add saves it (`vaic.question`'s `skill`, decision 257). */
 export interface SkillDraft {
   name: string;
@@ -135,6 +189,8 @@ export interface HudState {
   settings: Record<string, unknown> | null;
   turn: VaicTurn | null;
   cards: ConnectCardState[];
+  /** VAIC's browser runs, newest last (decision 265). */
+  browsers: BrowserRun[];
 }
 
 type Listener = () => void;
@@ -150,6 +206,16 @@ const readCards = (): ConnectCardState[] => {
     return (JSON.parse(localStorage.getItem(CARDS_KEY) ?? "[]") as ConnectCardState[]).filter(
       (c) => c && typeof c.id === "string" && c.kind !== "approve" && c.kind !== "ask",
     );
+  } catch {
+    return [];
+  }
+};
+const BROWSERS_KEY = "vaic.browsers";
+const readBrowsers = (): BrowserRun[] => {
+  try {
+    return (JSON.parse(localStorage.getItem(BROWSERS_KEY) ?? "[]") as BrowserRun[])
+      .filter((r) => r && typeof r.id === "string" && Array.isArray(r.steps))
+      .map((r) => ({ ...r, done: true })); // after a reload nothing is still browsing
   } catch {
     return [];
   }
@@ -174,6 +240,7 @@ class Store {
     settings: null,
     turn: null,
     cards: readCards(),
+    browsers: readBrowsers(),
   };
   private listeners = new Set<Listener>();
   /** Messages whose answer the owner stopped (`owner-<line id>`): anything still in flight for them is dropped. */
@@ -196,6 +263,13 @@ class Store {
         localStorage.setItem(CHAT_KEY, JSON.stringify(patch.chat.slice(-60)));
       } catch {
         /* storage full or blocked: the chat still works for this session */
+      }
+    }
+    if (patch.browsers) {
+      try {
+        localStorage.setItem(BROWSERS_KEY, JSON.stringify(patch.browsers.slice(-8)));
+      } catch {
+        /* storage blocked: the browser rows last for this session */
       }
     }
     if (patch.cards) {
@@ -258,6 +332,7 @@ class Store {
       return;
     if (e.type === "hud.action") return hudAction(e);
     if (e.type === "vaic.question") return this.askEvent(e);
+    if (e.type === "vaic.browser") return this.browserEvent(e);
     if (e.type === "vaic.change") return this.changeEvent(e);
     if (e.type === "vaic.stopped") {
       if (String(e.conversation ?? "main") !== "main") return;
@@ -360,14 +435,61 @@ class Store {
       ...(lines.length ? { lines } : {}),
       ...(e.detail ? { detail: String(e.detail) } : {}),
       ...(skillDraft(e.skill) ? { skill: skillDraft(e.skill) } : {}),
+      ...(connectorAsk(e.permission) ? { permission: connectorAsk(e.permission) } : {}),
     });
+  }
+  /** A step of VAIC's browser, or the end of its browsing (decision 265). */
+  private browserEvent(e: { [k: string]: unknown }) {
+    if (String(e.conversation ?? "main") !== "main") return;
+    const id = String(e.message_id ?? "");
+    if (!id || this.stoppedIds.has(id)) return;
+    const list = this.state.browsers;
+    const have = list.find((r) => r.id === id);
+    const run: BrowserRun = have ?? {
+      id,
+      started: Date.parse(String(e.started ?? "")) || Date.now(),
+      seconds: 0,
+      actions: 0,
+      done: false,
+      width: Number(e.width) || 1280,
+      height: Number(e.height) || 800,
+      steps: [],
+    };
+    const st = e.step as Partial<BrowserStep> | undefined;
+    const steps =
+      st && typeof st.n === "number" && !run.steps.some((x) => x.n === st.n)
+        ? [
+            ...run.steps,
+            {
+              n: st.n,
+              label: String(st.label ?? ""),
+              url: String(st.url ?? ""),
+              title: String(st.title ?? ""),
+              shot: String(st.shot ?? ""),
+              pointer:
+                st.pointer && typeof st.pointer.x === "number" ? { x: st.pointer.x, y: Number(st.pointer.y) } : null,
+            },
+          ].sort((a, b) => a.n - b.n)
+        : run.steps;
+    const next: BrowserRun = {
+      ...run,
+      steps,
+      actions: Math.max(run.actions, Number(e.actions) || 0, steps.length),
+      seconds: Math.max(run.seconds, Number(e.seconds) || 0),
+      done: run.done || e.done === true,
+    };
+    this.set({ browsers: have ? list.map((r) => (r === have ? next : r)) : [...list, next].slice(-8) });
   }
   /** A staged change was saved or discarded: its card says so and its buttons go. */
   private changeEvent(e: { [k: string]: unknown }) {
     if (String(e.conversation ?? "main") !== "main") return;
     const c = this.state.cards.find((x) => x.kind === "ask" && x.changeId === String(e.id ?? ""));
     if (c?.kind !== "ask") return;
-    const result = e.saved ? "saved" : c.answered && !/^(no|not now)$/i.test(c.answered) ? "failed" : "discarded";
+    const result = e.saved
+      ? "saved"
+      : c.answered && !/^(no|not now|decline)\b/i.test(c.answered)
+        ? "failed"
+        : "discarded";
     this.putCard({ ...c, result });
   }
   /** The owner tapped an answer (`option`) or wrote their own (`option` undefined): a plain question is done, a
@@ -554,6 +676,7 @@ class Store {
     const wasCurrent = this.busyLine()?.id === lineId; // a late confirmation must not end a newer turn
     this.set({
       chat: next,
+      browsers: this.state.browsers.map((r) => (r.id === `owner-${lineId}` ? { ...r, done: true } : r)),
       ...(wasCurrent ? { turn: null, presence: presence === "listening" ? "listening" : "idle" } : {}),
     });
   }

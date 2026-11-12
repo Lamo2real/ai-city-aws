@@ -174,7 +174,10 @@ async def _run_tool(req: EngineRequest, tools: dict[str, Any], use: dict[str, An
     name, args, tid = use["name"], use.get("input") or {}, use["toolUseId"]
 
     def result(text: str, error: bool = False) -> dict[str, Any]:
-        r: dict[str, Any] = {"toolUseId": tid, "content": [{"text": text}]}
+        r: dict[str, Any] = {"toolUseId": tid, "content": [{"text": str(text)}]}
+        # A tool may hand the model pictures too (the browser's screenshots, decision 265).
+        for img in getattr(text, "images", None) or []:
+            r["content"].append({"image": {"format": "jpeg", "source": {"bytes": img}}})
         if error:
             r["status"] = "error"
         return {"toolResult": r}

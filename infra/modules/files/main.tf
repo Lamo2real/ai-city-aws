@@ -134,6 +134,20 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
       noncurrent_days = 1
     }
   }
+  # VAIC's browser screenshots (decision 265) are only for the chat's live view and its thumbnails.
+  rule {
+    id     = "expire-browser-shots"
+    status = "Enabled"
+    filter {
+      prefix = "browser/"
+    }
+    expiration {
+      days = 1
+    }
+    noncurrent_version_expiration {
+      noncurrent_days = 1
+    }
+  }
   # Deleted or replaced files stay recoverable for 30 days, then are gone for good.
   rule {
     id     = "old-versions-and-uploads"
@@ -488,6 +502,8 @@ resource "aws_iam_policy" "vaic" {
     Version = "2012-10-17"
     Statement = [
       { Sid = "ShowFilesInTheChat", Effect = "Allow", Action = ["s3:GetObject"], Resource = ["${aws_s3_bucket.this.arn}/files/*", "${aws_s3_bucket.this.arn}/thumbs/*"] },
+      # The browser's screenshots for the chat's live view (decision 265): written and shown, gone after a day.
+      { Sid = "BrowserScreenshots", Effect = "Allow", Action = ["s3:PutObject", "s3:GetObject"], Resource = ["${aws_s3_bucket.this.arn}/browser/*"] },
     ]
   })
 }

@@ -240,6 +240,13 @@ async def _edit(c: ConnectorsApi, rec: Record, b: dict[str, Any]) -> Answer:
     # "approval" (a per-connector approval level) was removed in decision 237; an old client's value is ignored.
     if "label" in b:
         patch["label"] = _owner_secret(b["label"], "The label", 1, 40)
+    if "always_allow" in b:
+        # The tools VAIC uses without asking first (decision 265); only the connector's own tools.
+        v = b["always_allow"]
+        names = {str(t.get("name")) for t in rec.get("tools") or []}
+        if not isinstance(v, list) or any(not isinstance(x, str) or x not in names for x in v):
+            raise ValueError("always_allow is a list of this connector's tool names.")
+        patch["always_allow"] = sorted(set(v))
     if not patch:
         raise ValueError("Nothing to change.")
     out = await _set(c, rec["id"], patch)

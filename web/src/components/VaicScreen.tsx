@@ -1,5 +1,6 @@
 // The landing screen: VAIC's eye with the voice strip on the left, the conversation on the right (stacked on a
 // phone). Everything else can be done by asking VAIC ("send the workers home", "what's the status?").
+import { BrowserRunRow } from "./BrowserRun.tsx";
 import { ChatCards } from "./ConnectCard.tsx";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { keyBlocked, sendMessage, stopReply } from "../lib/actions.ts";
@@ -62,6 +63,7 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
   const [noSummary, setNoSummary] = useState(false);
   const live = useHud((s) => s.live);
   const turn = useHud((s) => s.turn);
+  const browsers = useHud((s) => s.browsers);
   const [text, setText] = useState(readDraft);
   const input = useRef<HTMLTextAreaElement>(null);
   const log = useRef<HTMLDivElement>(null);
@@ -441,7 +443,11 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
                       Stopped.
                       {l.stoppedSteps?.length ? ` VAIC had already done: ${l.stoppedSteps.join(", ")}.` : ""}
                       {l.handedOn ? " Work it handed to the team keeps going; stop that job in Jobs." : ""}{" "}
-                      <button type="button" className="linkish" onClick={() => editStopped(l.id, bubbleText(l.text, l.attachments), l.attachments)}>
+                      <button
+                        type="button"
+                        className="linkish"
+                        onClick={() => editStopped(l.id, bubbleText(l.text, l.attachments), l.attachments)}
+                      >
                         Edit and send again
                       </button>
                     </span>
@@ -450,8 +456,17 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
                   ) : null}
                 </div>
               </article>
+              {l.who === "owner"
+                ? browsers.filter((r) => r.id === `owner-${l.id}`).map((r) => <BrowserRunRow key={r.id} run={r} />)
+                : null}
             </Fragment>
           ))}
+          {browsers
+            .filter((r) => !r.done && !chat.some((l) => r.id === `owner-${l.id}`))
+            .map((r) => (
+              // Browsing for a spoken request (no typed line to hang it under): at the end while it runs.
+              <BrowserRunRow key={r.id} run={r} />
+            ))}
           <ChatCards cards={placed.end} />
           <WorkflowCard />
           {waitingForVaic && turn ? (
