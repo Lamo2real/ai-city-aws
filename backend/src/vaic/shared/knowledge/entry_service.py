@@ -3,7 +3,7 @@
 Every write goes to the registry first, then to the projections (S3 parts, vector store, graph). A projection
 that fails leaves the record marked ``sync: failed`` with the reason, shown on the card; Re-index and the next
 deploy's seeder repair it, so the three never drift silently. Every change is audited. The API is owner-only
-(the existing permission model); agents only read, through ``search_knowledge``, limited to their department.
+(the existing permission model); agents only read, through ``search_knowledge``, limited to their department (VAIC and the Orchestrator read every department, decision 253).
 """
 
 from __future__ import annotations

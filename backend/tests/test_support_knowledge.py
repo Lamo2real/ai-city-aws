@@ -196,7 +196,7 @@ async def test_support_and_other_departments_never_retrieve_each_others_document
         assert await ids("sales") == [SALES]
         assert await ids("marketing") == [MKT]
         assert await ids(canonical_department("Customer Support")) == [CANCEL, SELF_HARM]  # as the tool does
-    for nobody in (Caller(role="vaic"), Caller(department="finance", role="manager"), None):
+    for nobody in (Caller(role="executive"), Caller(department="finance", role="manager"), None):
         assert (await search(r.kb, r.store, "q", caller=nobody)).items == []
 
 

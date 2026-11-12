@@ -7,7 +7,8 @@ BatchGetItem, so a scope change or a delete counts at once. Everything returned 
 
 Department knowledge entries (§17) are isolated here, server-side: a caller sees an entry only when the entry's
 department is the caller's own department, or ``shared`` (the cross-department documents, decision 238) when the
-caller belongs to a department. The Retrieve filter keeps other departments out of the hits, and the
+caller belongs to a department. VAIC and the Orchestrator (``EVERY_DEPARTMENT``, decision 253) see every
+department's entries, the shared ones and the owner's items; for them ``department`` only narrows the search. The Retrieve filter keeps other departments out of the hits, and the
 re-read record is checked again, so a filter the index cannot apply only shortens an answer, never widens it.
 """
 
@@ -22,7 +23,7 @@ from datetime import date
 from typing import Any
 
 from ..log import log
-from .entries import AUDIENCES, SHARED, all_departments
+from .entries import AUDIENCES, SHARED, all_departments, department_label
 from .graph import Expansion
 from .jurisdiction import (
     item_holds_in,
@@ -55,12 +56,18 @@ ENTRY_CHARS = 6000
 MAX_RELATED_ENTRIES = 3
 
 
+EVERY_DEPARTMENT = frozenset({"vaic", "orchestrator"})
+"""Roles that read every department's knowledge base (the owner's rule, decision 253)."""
+
+
 @dataclass(frozen=True)
 class Caller:
-    """Who is searching: their department sees its own entries; nobody sees another department's."""
+    """Who is searching: their department sees its own entries; no department sees another's. VAIC and the
+    Orchestrator see every department's."""
 
     department: str | None = None
-    """The department key (``marketing``), or None for VAIC, the Orchestrator and the executives."""
+    """A manager's or worker's own department key (``marketing``), or None for the executives. For VAIC and the
+    Orchestrator, the one department (or ``shared``) to narrow the search to; None searches everything."""
     role: str = ""
     audience: str = "mine"
     """``mine`` (a manager gets manager and both entries, a worker worker and both) or ``all``."""
@@ -69,13 +76,25 @@ class Caller:
     entry_type: str | None = None
     related: bool = True
 
+    @property
+    def every_department(self) -> bool:
+        return self.role in EVERY_DEPARTMENT
+
     def audiences(self) -> tuple[str, ...]:
         if self.audience == "all" or self.role not in ("manager", "worker"):
             return AUDIENCES
         return (self.role, "both")
 
     def key(self) -> tuple[object, ...]:
-        return (self.department, self.audiences(), self.domain, self.platforms, self.entry_type, self.related)
+        return (
+            self.department,
+            self.every_department,
+            self.audiences(),
+            self.domain,
+            self.platforms,
+            self.entry_type,
+            self.related,
+        )
 
     def has_entry_filters(self) -> bool:
         return bool(self.domain or self.platforms or self.entry_type)
@@ -84,11 +103,15 @@ class Caller:
 def caller_filter(caller: Caller | None) -> dict[str, Any] | None:
     """The Retrieve filter: other departments out; the entry filters the caller asked for."""
     c = caller or Caller()
-    # As ``entry_visible``: the shared entries (not in ``all_departments``) only for a caller in a department.
-    others = [d for d in all_departments() if d != c.department] + ([] if c.department else [SHARED])
     parts: list[dict[str, Any]] = []
-    if others:
-        parts.append({"notIn": {"key": "department", "value": others}})
+    if c.every_department:
+        if c.department:  # narrowed to one department (or the shared documents)
+            parts.append({"equals": {"key": "department", "value": c.department}})
+    else:
+        # As ``entry_visible``: the shared entries (not in ``all_departments``) only for a caller in a department.
+        others = [d for d in all_departments() if d != c.department] + ([] if c.department else [SHARED])
+        if others:
+            parts.append({"notIn": {"key": "department", "value": others}})
     hidden = [a for a in AUDIENCES if a not in c.audiences()]
     if hidden:
         parts.append({"notIn": {"key": "audience", "value": hidden}})
@@ -105,11 +128,15 @@ def caller_filter(caller: Caller | None) -> dict[str, Any] | None:
 
 
 def entry_visible(item: dict[str, Any], caller: Caller | None) -> bool:
-    """The record decides: an item of a department is visible only to that department's agents; a ``shared`` entry
-    to every department's agents (never to VAIC, the Orchestrator or the executives, who have no department)."""
+    """The record decides: an item of a department is visible only to that department's agents, and to VAIC and the
+    Orchestrator, who see every department; a ``shared`` entry to every department's agents and to VAIC and the
+    Orchestrator (never to the executives, who have no department)."""
     c = caller or Caller()
     dept = item.get("department")
-    if dept and dept != c.department and not (dept == SHARED and c.department):
+    if c.every_department:
+        if c.department and dept != c.department:  # narrowed: that department's entries only
+            return False
+    elif dept and dept != c.department and not (dept == SHARED and c.department):
         return False
     if not item.get("entry_id"):
         return not c.has_entry_filters()  # the owner's own items carry no domain, platform or type
@@ -146,11 +173,18 @@ def entry_block(item: dict[str, Any], today: date | None = None, snippets: list[
     sources = "\n".join(f"- {s}" for s in (item.get("sources") or [])[:20])
     return (
         f'<knowledge entry="{_attr(item.get("entry_id"))}" title="{_attr(item.get("title"))}"{attrs}'
+        f"{_from(item)}"
         f"{' needs_verification="past review date"' if stale else ''}>"
         f"\nSummary: {_body(str(item.get('summary') or ''))}\n\n{_body(body)}"
         + (f"\n\nSources:\n{_body(sources)}" if sources else "")
         + "\n</knowledge>"
     )
+
+
+def _from(item: dict[str, Any]) -> str:
+    """Which knowledge base an entry is from, so VAIC can say where an answer came from ("Marketing: …")."""
+    dept = item.get("department")
+    return f' from="{_attr(department_label(str(dept)))} knowledge base"' if dept else ""
 
 
 def allowed_scopes(include_on_request: bool) -> list[Scope]:
@@ -292,7 +326,8 @@ async def _retrieve(
     # The department, audience and entry filters go to Retrieve (decision 242) and are re-checked on every record
     # (``entry_visible``), so a filter the index could not apply would only shorten an answer.
     who = caller_filter(caller) if RETRIEVE_ENTRY_FILTERS else None
-    if caller is not None and caller.department:  # its own entries and the shared ones, after others are dropped
+    # A department caller: its own entries and the shared ones, after others are dropped; VAIC: every department's.
+    if caller is not None and (caller.department or caller.every_department):
         n = max(n, ENTRY_FETCH)
     parts = [
         *([market_filter(market)] if market else []),
@@ -403,10 +438,11 @@ async def search(
                 break
     c = caller or Caller()
     entry_hits = [i for i in hit_ids if records.get(i, {}).get("entry_id")]
-    if c.related and c.department and entry_hits:
-        # Neighbours come from the hit's own scope: the caller's department, or the shared documents.
+    if c.related and (c.department or c.every_department) and entry_hits:
+        # Neighbours come from the hit's own scope: its department, or the shared documents (``_usable`` re-checks).
         near: list[str] = []
-        for scope in (c.department, SHARED):
+        depts = {str(records[i].get("department")) for i in entry_hits}
+        for scope in sorted(depts, key=lambda x: (x != c.department, x != SHARED, x)):  # own first, then shared
             mine = [i for i in entry_hits if records[i].get("department") == scope]
             near += await store.graph.entry_neighbours(mine, scope) if mine else []
         extra = await store.get_items([i for i in near if i not in hit_ids][: MAX_RELATED_ENTRIES * 3])

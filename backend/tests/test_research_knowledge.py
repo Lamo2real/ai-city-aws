@@ -184,7 +184,7 @@ async def test_research_and_other_departments_never_retrieve_each_others_documen
             who = Caller(department=dept, role=role, audience="all", related=False)
             res = await search(r.kb, r.store, "q", caller=who)
             assert [i["entry_id"] for i, _ in res.items] == want, (dept, role)
-    for nobody in (Caller(role="vaic"), Caller(department="finance", role="manager"), None):
+    for nobody in (Caller(role="executive"), Caller(department="finance", role="manager"), None):
         assert (await search(r.kb, r.store, "q", caller=nobody)).items == []
 
 

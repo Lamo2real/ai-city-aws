@@ -462,7 +462,7 @@ async def test_only_the_marketing_department_retrieves_marketing_entries(kb_clas
     assert [i["entry_id"] for i, _ in mine.items] == [A, B]
     text = mine.text()
     assert f'entry="{A}"' in text and 'as_of="2026-11-11"' in text and "Sources:" in text
-    for other in (Caller(department="sales", role="worker"), Caller(role="vaic"), None):
+    for other in (Caller(department="sales", role="worker"), Caller(role="executive"), None):
         res = await search(r.kb, r.store, "local seo", caller=other)
         assert res.items == [] and res.related_items == []
 
@@ -515,10 +515,15 @@ async def test_the_tool_takes_the_department_from_the_caller_never_from_the_argu
     attrs = {"department": "marketing", "audience": "worker", "domain": "seo"}
     w.kb.hits = [Hit(f"kn-{A}", "local", 0.9, "relevant", attributes=attrs)]
     d = city(w)
-    for role, dept, sees in (("worker", "Marketing", True), ("worker", "Sales", False), ("orchestrator", None, False)):
+    # A Sales worker naming Marketing still gets Sales; the Orchestrator sees every department (decision 253).
+    for role, dept, sees in (
+        ("worker", "Marketing", True),
+        ("worker", "Sales", False),
+        ("orchestrator", None, True),
+    ):
         c = _ctx(role, dept)
         t = next(x for x in gate_tools(d, c, tools_for(d, c)) if x.name == "search_knowledge")
-        out = await t.handler({"query": "local seo", "domain": "seo"})
+        out = await t.handler({"query": f"local seo {role} {dept}", "domain": "seo", "department": "marketing"})
         assert (f'entry="{A}"' in out) == sees, (role, dept)
 
 

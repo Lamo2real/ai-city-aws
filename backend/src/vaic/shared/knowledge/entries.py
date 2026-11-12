@@ -182,6 +182,18 @@ def all_departments() -> list[str]:
     return sorted((set(_department_aliases().values()) | set(seed_departments())) - {SHARED})
 
 
+@cache
+def department_label(key: str) -> str:
+    """``marketing`` → ``Marketing``, ``support`` → ``Customer support``: the seed's label, else the key in words."""
+    try:
+        f = seed_root() / key / "_taxonomy.yaml"
+        if f.is_file():
+            return str((yaml.safe_load(f.read_text(encoding="utf-8")) or {}).get("label") or key)
+    except (FileNotFoundError, yaml.YAMLError):
+        pass
+    return key.replace("-", " ").capitalize()
+
+
 # ---------- parsing ----------
 def split_front_matter(text: str) -> tuple[dict[str, Any], str]:
     m = re.match(r"\A---\n(.*?)\n---\n?(.*)\Z", text, re.S)

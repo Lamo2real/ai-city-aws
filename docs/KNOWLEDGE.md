@@ -437,10 +437,17 @@ too for a caller without a department), audience and entry filters (`RETRIEVE_EN
 242 once the probe of decision 236 showed the index applying filters on attributes Bedrock mapped; the empty results
 of decisions 218-221 came from the scope filter on the plain `keyword` field `scope`), and a department caller
 fetches 30 hits. Since decision 221 an empty filtered Retrieve is retried once as a plain Retrieve (no filter,
-default search type, 30 results), kept as a safety net by the owner's choice (decision 242); the deploy's evaluation prints how often it was used. VAIC, the Orchestrator and the executives see no department entries. The audience
+default search type, 30 results), kept as a safety net by the owner's choice (decision 242); the deploy's evaluation prints how often it was used. VAIC and the Orchestrator see every department's entries, the
+shared documents and the owner's items (decision 253: `EVERY_DEPARTMENT` in `search.py`, a role check in `entry_visible`
+and `caller_filter`, never a prompt); their optional `department` argument narrows a search to one department or
+`shared` (Retrieve filter `equals department`, the owner's items left out), an unknown one is refused with the list.
+A manager's or worker's department always comes from who calls, never from that argument. The executives see no
+department entries. Every entry block says which knowledge base it is from (`from="Marketing knowledge base"`). The
+prompts tell VAIC and the Orchestrator to search only when the city's or the owner's own material can help (never
+for general knowledge, chit-chat, status or what is in context) and to pass `department` when it is obvious. The audience
 defaults to the caller's role (manager: manager + both; worker: worker + both), widened with `audience: "all"`;
 optional `domain`, `platforms`, `entry_type`; `related` (default on) adds up to 3 `REQUIRES`/`RELATED_TO`
-neighbours of the same department as summaries. Entries come back whole with `as_of`, `review_by`, `volatility`,
+neighbours of the same department as each hit (the caller's own first, then shared, then the rest) as summaries. Entries come back whole with `as_of`, `review_by`, `volatility`,
 `confidence`, `origin` and sources; a fast-moving entry past `review_by` is marked `needs_verification`.
 
 **HUD.** Knowledge → "Built in": a card per department ("Marketing knowledge · 131 entries", tags Built in and
@@ -576,8 +583,8 @@ Bedrock/OpenSearch and Neptune projections, Replace (edit), Reset, Delete and Re
 folder (no seeder change was needed: the folder only has to match the taxonomy's `department`). Scope: `SHARED` in
 `entries.py`; `all_departments()` leaves it out (so the index filter never filters shared out of a department's
 search); `entry_visible` lets a caller with a department (managers and workers of every department, including one the
-owner builds on demand) see `department == "shared"` beside its own, and nobody else (VAIC, the Orchestrator, the
-executives see no department knowledge, shared included); audience, domain, type and platform filters apply to shared
+owner builds on demand) see `department == "shared"` beside its own, and so do VAIC and the Orchestrator, who see every
+department (decision 253); the executives see no department knowledge, shared included; audience, domain, type and platform filters apply to shared
 documents like any other; a department caller fetches 30 hits whether or not its own folder exists; graph neighbours of
 a shared hit come from the shared documents. Every other department's isolation is unchanged and tested
 (`backend/tests/test_shared_knowledge.py`). HUD: the "Shared knowledge" card comes after the departments under Built

@@ -75,11 +75,11 @@ from vaic.shared.hierarchy.tasks import (
     which_one,
 )
 from vaic.shared.ids import department_key, manager_id
-from vaic.shared.knowledge.entries import canonical_department
+from vaic.shared.knowledge.entries import SHARED, all_departments, canonical_department
 from vaic.shared.knowledge.jurisdiction import UTC_TZ
 from vaic.shared.knowledge.jurisdiction import normalize as normalize_jurisdiction
 from vaic.shared.knowledge.model import SCOPES
-from vaic.shared.knowledge.search import Caller, label_status, search, search_markets
+from vaic.shared.knowledge.search import EVERY_DEPARTMENT, Caller, label_status, search, search_markets
 from vaic.shared.knowledge.service import KnowledgeError
 from vaic.shared.knowledge.site_profile import brand_key
 from vaic.shared.log import log
@@ -1721,9 +1721,19 @@ def _search_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
         year = int(a.get("year") or datetime.now(UTC_TZ).year)
         query, n, on_request = str(a["query"]), int(a.get("max_results") or 5), bool(a.get("include_on_request"))
         brand = brand_key(str(a["brand"])) if a.get("brand") else None
-        # The department comes from who is calling, never from the arguments (§17).
+        # A manager's or worker's department comes from who is calling, never from the arguments (§17). VAIC and
+        # the Orchestrator read every department's knowledge and may narrow to one with ``department`` (decision 253).
+        if c.role in ("manager", "worker"):
+            dept = canonical_department(c.department)
+        elif c.role in EVERY_DEPARTMENT and a.get("department"):
+            dept = canonical_department(str(a["department"]))
+            known = [*all_departments(), SHARED]
+            if dept not in known:
+                return f"There is no {str(a['department'])[:40]} knowledge base. Departments: {', '.join(known)}."
+        else:
+            dept = None
         who = Caller(
-            department=canonical_department(c.department) if c.role in ("manager", "worker") else None,
+            department=dept,
             role=c.role,
             audience="all" if a.get("audience") == "all" else "mine",
             domain=str(a["domain"]) if a.get("domain") else None,
@@ -1751,7 +1761,9 @@ def _search_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
         "colours, fonts, logo, tone and facts; never mix two brands. Department managers and workers also get "
         "their own department's knowledge base (strategies and best practices, each entry with as_of, review_by, "
         "volatility, confidence and sources); filter it with domain, platforms or entry_type, and set "
-        "audience 'all' to see entries written for the other role. Related entries come along unless related is "
+        "audience 'all' to see entries written for the other role. VAIC and the Orchestrator search every "
+        "department's knowledge base and the shared one; pass department to search only one (Meta ads → "
+        "marketing). Each entry says which knowledge base it is from. Related entries come along unless related is "
         "false.",
         _obj(
             {
@@ -1772,8 +1784,14 @@ def _search_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
                 },
                 "domain": {
                     **_s(2, 40),
-                    "description": "Your department's knowledge only, one domain (marketing: strategy, meta-ads, "
+                    "description": "Department knowledge only, one domain (marketing: strategy, meta-ads, "
                     "google-ads, seo, geo, measurement, compliance, market-sweden, ...).",
+                },
+                "department": {
+                    **_s(2, 40),
+                    "description": "VAIC and the Orchestrator only: search one department's knowledge base "
+                    "(marketing, sales, finance, legal, operations, product, research, media, support, application, "
+                    "data, infrastructure) or shared; leave it out to search all of them.",
                 },
                 "platforms": {"type": "array", "items": _s(1, 40), "maxItems": 10},
                 "entry_type": {
@@ -1790,6 +1808,7 @@ def _search_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
                 "year",
                 "brand",
                 "domain",
+                "department",
                 "platforms",
                 "entry_type",
                 "audience",

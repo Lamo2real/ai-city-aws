@@ -176,7 +176,7 @@ async def test_application_and_other_departments_never_retrieve_each_others_docu
             r.kb, r.store, "q", caller=Caller(department="marketing", role=role, audience="all", related=False)
         )
         assert [i["entry_id"] for i, _ in mkt.items] == [MKT]
-    for nobody in (Caller(role="vaic"), Caller(department="sales", role="worker"), None):
+    for nobody in (Caller(role="executive"), Caller(department="sales", role="worker"), None):
         assert (await search(r.kb, r.store, "q", caller=nobody)).items == []
 
 

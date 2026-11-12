@@ -159,8 +159,9 @@ async def test_every_department_retrieves_the_shared_documents_and_still_only_it
             who = Caller(department=dept, role=role, audience="all", related=False)
             got = [i["entry_id"] for i, _ in (await search(r.kb, r.store, "q", max_results=10, caller=who)).items]
             assert got == [ROUTING, *OWN.get(dept, []), GUARDRAILS], (dept, role)
-    # VAIC, the Orchestrator and the executives have no department: no department knowledge, shared included.
-    for nobody in (Caller(role="vaic"), Caller(role="orchestrator"), Caller(role="executive"), None):
+    # The executives have no department: no department knowledge, shared included. (VAIC and the Orchestrator see
+    # every department, decision 253: test_knowledge_every_department.py.)
+    for nobody in (Caller(role="executive"), None):
         assert (await search(r.kb, r.store, "q", caller=nobody)).items == []
 
 
@@ -171,7 +172,7 @@ def test_adding_shared_loosened_no_department_s_own_isolation() -> None:
         for other in all_departments():
             assert entry_visible({**entry, "department": other}, Caller(department=d, role="worker")) == (d == other)
         assert entry_visible({**entry, "department": SHARED}, Caller(department=d, role="worker"))
-    assert not entry_visible({**entry, "department": SHARED}, Caller(role="vaic"))
+    assert not entry_visible({**entry, "department": SHARED}, Caller(role="executive"))
     assert not entry_visible({**entry, "department": SHARED}, None)
     # Shared follows the caller's other filters like any entry: audience, domain and type still apply.
     manager = Caller(department="sales", role="manager")
