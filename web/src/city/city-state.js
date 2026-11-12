@@ -1039,13 +1039,37 @@ function traceText(e) {
 // ---------- Departments on demand, taxis and the mailman (decision 134) ----------
 
 // How long each building animation runs, in ms.
-export const ANIM_MS = { rise: 900, build: 3200, demolish: 2600 };
-export const RISE_STAGGER_MS = 110;
+export const ANIM_MS = { rise: 900, build: 3200, demolish: 2600, focus: 700, ghost: Infinity };
+export const RISE_STAGGER_MS = 110, FOCUS_STAGGER_MS = 45;
 // Where a building animation is: 0 … 1 (clamped), from its start and its kind.
 export const animProgress = (anim, now) => Math.max(0, Math.min(1, (now - anim.start) / (anim.dur ?? ANIM_MS[anim.kind] ?? 1000)));
-// The page-load entrance: every tower rises in turn, left to right and front to back (its slot order).
-export function entranceAnims(buildings, start) {
-  return [...buildings].filter((b) => !b.archived).sort((a, b) => a.slot - b.slot).map((b, i) => ({ dept: b.dept, kind: "rise", start: start + i * RISE_STAGGER_MS, dur: ANIM_MS.rise }));
+// The page-load entrance: every tower rises in turn, left to right and front to back (its slot order). A tower that
+// stood as a blurred placeholder while the city loaded (`ghosts`, decision 249) comes into focus where it stands instead.
+export function entranceAnims(buildings, start, ghosts = new Set()) {
+  return [...buildings].filter((b) => !b.archived).sort((a, b) => a.slot - b.slot).map((b, i) => {
+    const kind = ghosts.has(b.dept) ? "focus" : "rise";
+    return { dept: b.dept, kind, start: start + i * (kind === "focus" ? FOCUS_STAGGER_MS : RISE_STAGGER_MS), dur: ANIM_MS[kind] };
+  });
+}
+
+// What the City remembers between visits so it can draw itself before the server answers (decision 249): only where
+// the towers stand (each standing department's name and lot, and the lots' sizes), nothing else.
+export function lotsMemory(state) {
+  return {
+    departments: Object.values(state.departments).filter((d) => d.state !== "demolished" && Number.isInteger(d.slot)).map((d) => ({ name: d.name, slot: d.slot, state: d.state ?? "active" })),
+    lots: Object.entries(state.lots ?? {}).map(([slot, size]) => ({ slot: Number(slot), size })),
+  };
+}
+export function readLotsMemory(raw) {
+  try {
+    const v = JSON.parse(raw ?? "null");
+    if (!v || !Array.isArray(v.departments) || !Array.isArray(v.lots)) return null;
+    const departments = v.departments.filter((d) => typeof d?.name === "string" && Number.isInteger(d.slot)).map((d) => ({ name: d.name, slot: d.slot, state: d.state === "archived" ? "archived" : "active" }));
+    const lots = v.lots.filter((l) => Number.isInteger(l?.slot) && typeof l.size === "string").map((l) => ({ slot: l.slot, size: l.size }));
+    return { departments, lots };
+  } catch {
+    return null;
+  }
 }
 // How far a tower stands out of the ground (0 … 1) at progress k: rising overshoots a little and settles; building
 // stacks floors from the street up; demolition shakes, then sinks into its dust.

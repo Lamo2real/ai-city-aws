@@ -4,7 +4,7 @@
 // Reviewer; each department's manager stands at its door; panels are React (see CityView.tsx).
 // The City View: a small game world of the agents, drawn pixel by pixel on a canvas from city-state.js.
 // All of the art is drawn here in code. Every person on screen is a real agent; only the scenery moves on its own.
-import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf, taxiCall, RIDE_PX_S, TO_WORK_BOOST, HOMES_PER_BLOCK } from "./city-state.js";
+import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, lotsMemory, readLotsMemory, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf, taxiCall, RIDE_PX_S, TO_WORK_BOOST, HOMES_PER_BLOCK } from "./city-state.js";
 
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const INK = "#1d1c36";
@@ -519,6 +519,23 @@ function towerSprite(b) {
   if (!c) { const t = towerShape(b); const [cv, g] = newCanvas(t.W, t.H); g.translate(-t.X, -t.Y); towerBody(g, b); c = cv; towerSprites.set(key, c); }
   return c;
 }
+// The same tower as a soft, cool, blurred silhouette: the placeholder on its lot while the city loads (decision 249).
+// Drawn small and scaled back up with smoothing, so it blurs the same in every browser and in the iPhone app.
+const ghostSprites = new Map();
+function ghostSprite(b) {
+  const key = `${b.dept}|${b.slot}|${b.x},${b.y},${b.w},${b.h}`;
+  let c = ghostSprites.get(key);
+  if (!c) {
+    const sp = towerSprite(b), f = 7;
+    const [small, gs] = newCanvas(sp.width / f, sp.height / f);
+    gs.imageSmoothingEnabled = true; gs.drawImage(sp, 0, 0, small.width, small.height);
+    const [cv, g] = newCanvas(sp.width, sp.height);
+    g.imageSmoothingEnabled = true; g.drawImage(small, 0, 0, sp.width, sp.height);
+    g.globalCompositeOperation = "source-atop"; g.fillStyle = "rgba(176,188,222,.6)"; g.fillRect(0, 0, sp.width, sp.height); // grey-blue, like a building in mist
+    c = cv; ghostSprites.set(key, c);
+  }
+  return c;
+}
 function towerBody(g, b) {
   const t = towerShape(b), f = FACADES[hashOf(b.dept) % FACADES.length], [accent, light, dark] = ROOFS[b.slot % ROOFS.length];
   R(g, t.tiers[0].x - 4, t.foot - 1, t.tiers[0].w + 8, 4, "rgba(20,18,40,.35)"); // its shadow on the pavement
@@ -554,6 +571,7 @@ function freeLot(g, l, text) {
   hedge(g, X + 2, Y + 2, W - 4);
   tree(g, X + 26, Y + 62, r); tree(g, X + W - 24, Y + 104, r);
   flowers(g, X + 40, Y + H - 22, "#e0c04a");
+  if (!text) return;
   sign(g, text, X + W / 2, Y + H / 2 - 6, W - 20);
   R(g, X + W / 2 - 1, Y + H / 2 + 5, 2, 8, "#6b4630");
 }
@@ -694,7 +712,7 @@ function courtyardItems(b) {
 const MARGIN = MAP_MARGIN; // tiles of countryside, with the roads running on through it
 const EDGE = 10; // tiles over which the map fades out at its border
 const TREE_W = 24, TREE_H = 18; // the grid of tree spots, in pixels: neighbours never closer than 18 across or 14 down
-function bake(world, skip = new Map()) {
+function bake(world, skip = new Map(), unknown = false) {
   const W = world.width * TILE, H = world.height * TILE, M = MARGIN * TILE, r = rng("world");
   const [c, g] = newCanvas(W + M * 2, H + M * 2);
   g.translate(M, M);
@@ -722,8 +740,9 @@ function bake(world, skip = new Map()) {
   }
   spots.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
   for (const [x, y, h] of spots) tree(g, x, y, rng(`tree:${h}`));
-  for (const b of world.buildings) if (b.archived) freeLot(g, b, "ARCHIVED"); else if (skip.get(b.dept) === "rise") towerPlot(g, b); else if (skip.has(b.dept)) site(g, b); else tower(g, b);
-  for (const l of world.lots) if (l.demolished && skip.has(l.demolished)) site(g, { ...l, dept: l.demolished }); else freeLot(g, l, "FREE LOT");
+  const plotOnly = new Set(["rise", "ghost", "focus"]); // the tower itself is drawn live over its plot
+  for (const b of world.buildings) if (b.archived) freeLot(g, b, "ARCHIVED"); else if (plotOnly.has(skip.get(b.dept))) towerPlot(g, b); else if (skip.has(b.dept)) site(g, b); else tower(g, b);
+  for (const l of world.lots) if (l.demolished && skip.has(l.demolished)) site(g, { ...l, dept: l.demolished }); else freeLot(g, l, unknown ? "" : "FREE LOT"); // not known yet: no sign
   headquarters(g, world.hq);
   // The neighbourhood (decision 188): apartment buildings and their courtyards, far to near; trees in the parks.
   const onRoad = (y) => roads.some((s) => y > s.y * TILE - 30 && y < (s.y + 3) * TILE + 6);
@@ -785,6 +804,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   const anims = new Map(); // dept → { kind: "rise" | "build" | "demolish", start, dur, b?, done? } (decision 134)
   const mail = { queue: [], rider: null, out: 0, back: 0 }; // the one mailman and the letters waiting for him
   let entered = false; // the towers' entrance has played (or there was nothing to show)
+  let unknownLots = false; // loading with nothing remembered: the lots aren't known yet, so they carry no sign
   let leaving = []; // cabs driving off after dropping someone at a door
   let traffic = null, trafficSig = "", trafficAt = 0; // the cruising cabs, their lights and roundabouts (decision 173)
   root._anims = anims; // read-only test hooks (e2e/departments.spec.ts)
@@ -835,7 +855,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     const sig = JSON.stringify(next);
     const rebaked = sig !== worldSig;
     if (rebaked) {
-      world = next; worldSig = sig; ground = bake(world, animSkip()); fitView();
+      world = next; worldSig = sig; ground = bake(world, animSkip(), unknownLots); fitView();
       const roads = JSON.stringify([world.streets, world.lanes, world.avenue, world.width, world.height, world.portrait]);
       if (roads !== trafficSig) {
         // The roads changed: traffic starts afresh on them, the lights keep their clock.
@@ -991,7 +1011,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     }
     if (PLACEMENT_EVENTS.has(e.type)) { sync(); markApps(); } else refreshVisuals();
     if (e.type === "connector.updated") wake(); // a sign goes up (or comes down) by the doors
-    if (e.type.startsWith("department.")) { entered = true; ground = bake(world, animSkip()); wake(); }
+    if (e.type.startsWith("department.")) { entered = true; ground = bake(world, animSkip(), unknownLots); wake(); }
     const letter = mailFor(e, state);
     if (letter) post(letter);
     const hop = courierFor(e); if (hop && !letter) courier(hop); // orchestrator ↔ manager goes by the mailman
@@ -1031,6 +1051,16 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   const RUBBLE = ["#8b8fa8", "#77747f", "#b9ab90", "#55525e", "#cfc4b0"];
   function drawAnim(dept, a, now, ox, oy) {
     const b = a.b ?? world.buildings.find((x) => x.dept === dept);
+    if (b && (a.kind === "ghost" || a.kind === "focus")) {
+      // Loading (decision 249): the placeholder breathes softly; when the city's data is in, the real tower comes
+      // into focus over it, in turn.
+      const t = towerShape(b), X = t.X - ox, Y = t.Y - oy, k = a.kind === "focus" ? animProgress(a, now) : 0, e = k * k * (3 - 2 * k);
+      const breathe = a.kind === "ghost" && !reduced() ? 0.12 * Math.sin(now / 520 + b.slot * 0.9) : 0;
+      ctx.globalAlpha = (0.66 + breathe) * (1 - e); ctx.drawImage(ghostSprite(b), X, Y);
+      if (e > 0) { ctx.globalAlpha = e; ctx.drawImage(towerSprite(b), X, Y); }
+      ctx.globalAlpha = 1;
+      return;
+    }
     if (!b || now < a.start) return; // a tower that hasn't had its turn to rise yet stays a plot
     const k = animProgress(a, now), frac = standFraction(a.kind, k), t = towerShape(b), sp = towerSprite(b);
     const full = t.foot + 3 - t.Y, X = t.X - ox, Y = t.Y - oy, base = t.tiers[0];
@@ -1658,7 +1688,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       busy = true;
       for (const [d, a] of anims) if (!a.done && animProgress(a, now) >= 1) { a.done = true; finishAnim(d, a); }
       // Bake the finished towers into the ground once everything has settled (not once per tower).
-      if ([...anims.values()].every((a) => a.done)) { anims.clear(); ground = bake(world, animSkip()); }
+      if ([...anims.values()].every((a) => a.done)) { anims.clear(); ground = bake(world, animSkip(), unknownLots); }
     }
     // The roof counters follow who is really inside; the doors open for anyone at them, and shut behind.
     const inside = new Map();
@@ -1700,8 +1730,28 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
 
 
   // ---------- Data in: a snapshot, then events (from the HUD's WebSocket) ----------
+  // Before the server answers (decision 249): HQ, the roads and the homes at once (they never move), and every tower
+  // remembered from the last visit as a blurred placeholder on its own lot. First paint never waits on the network.
+  const MEMORY = "vaic.city.lots";
+  function preview() {
+    if (Object.keys(state.departments).length) return; // the city is already here
+    let saved = null;
+    try { saved = readLotsMemory(localStorage.getItem(MEMORY)); } catch { /* storage blocked: nothing remembered */ }
+    state = applySnapshot(state, { agents: [], tickets: [], questions: [], ...(saved ?? {}) });
+    unknownLots = !saved;
+    root.dataset.cityLoading = "1";
+    if (!ctx) return;
+    sync(true);
+    for (const b of world.buildings) if (!b.archived) anims.set(b.dept, { kind: "ghost", start: performance.now(), dur: ANIM_MS.ghost });
+    ground = bake(world, animSkip(), unknownLots); fitView(); needDraw = true; resume();
+  }
   function load(snap) {
     state = applySnapshot(state, snap ?? { agents: [], tickets: [], questions: [] });
+    unknownLots = false;
+    root.dataset.cityLoading = "0";
+    if (Array.isArray(snap?.departments)) try { localStorage.setItem(MEMORY, JSON.stringify(lotsMemory(state))); } catch { /* private mode: nothing remembered */ }
+    const ghosts = new Set([...anims].filter(([, a]) => a.kind === "ghost").map(([d]) => d));
+    for (const d of ghosts) anims.delete(d);
     parcels = []; effects = [];
     // A snapshot (opening or reloading the page, a reconnect) places everyone where they are now, at once: someone
     // already working is in its lit window, not riding in from home again (the owner, decision 211). Only a live
@@ -1712,8 +1762,9 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       // towers (not with reduced motion or a hidden tab).
       if (!entered && world.buildings.length) {
         entered = true;
-        if (!reduced() && visible()) { for (const a of entranceAnims(world.buildings, performance.now() + 200)) anims.set(a.dept, a); ground = bake(world, animSkip()); }
+        if (!reduced() && visible()) for (const a of entranceAnims(world.buildings, performance.now() + (ghosts.size ? 0 : 200), ghosts)) anims.set(a.dept, a);
       }
+      if (ghosts.size || anims.size) ground = bake(world, animSkip(), unknownLots); // placeholders gone, or towers coming in
       fitView(); markApps(); needDraw = true; resume();
     }
     onState(state);
@@ -1723,6 +1774,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   root.dataset.cityReady = "1";
   return {
     load,
+    preview,
     onEvent: (e) => { if (ctx && world) onEvent(e); else { state = reduce(state, e); onState(state); } },
     zoomIn: () => zoomStep(1),
     zoomOut: () => zoomStep(-1),

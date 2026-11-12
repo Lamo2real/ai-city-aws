@@ -17,6 +17,8 @@ const scene = mountCity(root, {
   onSelectBuilding: (dept) => tell("building", dept),
 });
 
+scene.preview(); // HQ, roads, homes and blurred placeholders until the app passes the snapshot (decision 249)
+
 const api = {
   /** A /city snapshot (the same JSON the web HUD loads). */
   load: (snap: unknown) => scene.load(snap),

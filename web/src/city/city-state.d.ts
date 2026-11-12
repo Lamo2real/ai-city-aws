@@ -283,11 +283,16 @@ export function cityMessage(state: CityState): string | null;
 export function workersWorking(state: unknown): number;
 
 // ---------- Departments on demand, taxis and the mailman (decision 134) ----------
-export type CityAnim = { dept: string; kind: "rise" | "build" | "demolish"; start: number; dur?: number };
-export const ANIM_MS: { rise: number; build: number; demolish: number };
+export type CityAnim = { dept: string; kind: "rise" | "build" | "demolish" | "focus" | "ghost"; start: number; dur?: number };
+export const ANIM_MS: { rise: number; build: number; demolish: number; focus: number; ghost: number };
 export const RISE_STAGGER_MS: number;
+export const FOCUS_STAGGER_MS: number;
 export function animProgress(anim: { kind: string; start: number; dur?: number }, now: number): number;
-export function entranceAnims(buildings: CityBuilding[], start: number): CityAnim[];
+export function entranceAnims(buildings: CityBuilding[], start: number, ghosts?: Set<string>): CityAnim[];
+/** Where the towers stand, to draw the city before the server answers (decision 249). */
+export type CityLotsMemory = { departments: Array<{ name: string; slot: number; state: string }>; lots: Array<{ slot: number; size: string }> };
+export function lotsMemory(state: CityState): CityLotsMemory;
+export function readLotsMemory(raw: string | null | undefined): CityLotsMemory | null;
 export function standFraction(kind: string, k: number): number;
 export type CityMail = { dept: string; dir: "out" | "back"; ticket: string; letters?: number };
 export function mailFor(event: unknown, state: CityState): CityMail | null;

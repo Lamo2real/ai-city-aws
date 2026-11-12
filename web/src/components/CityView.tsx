@@ -172,7 +172,10 @@ export function CityView({
       onOpenApp: (slug) => go(`apps/${encodeURIComponent(slug)}`),
     });
     scene.current = s;
-    s.load(snapshotOf(store.get().city));
+    // Already loaded (another tab of the HUD was open first): the city at once. Otherwise the fixed city and
+    // blurred placeholders right away, the real towers when the snapshot arrives (decision 249).
+    if (store.get().loaded) s.load(snapshotOf(store.get().city));
+    else s.preview();
     const off = (e: unknown) => s.onEvent(e);
     store.sceneEvents.add(off);
     return () => {
@@ -266,6 +269,11 @@ export function CityView({
             tone="bad"
             action={{ label: "See costs", onClick: () => go("costs") }}
           >{`You reached your ${city.capHit.cap === "daily_global" ? "daily" : city.capHit.cap.replace(/_/g, " ")} spending limit ($${city.capHit.limit}). No new work starts until you raise it in Settings.`}</Banner>
+        ) : null}
+        {!loaded ? (
+          <p className="cityui empty" role="status">
+            Loading the city…
+          </p>
         ) : null}
         {loaded && !names.length ? (
           <p className="cityui empty">

@@ -2,6 +2,8 @@ import type { CityState } from "./city-state.js";
 
 export interface CityScene {
   load(snapshot: unknown): void;
+  /** Before the first snapshot: HQ, roads and homes at once, remembered towers as blurred placeholders (decision 249). */
+  preview(): void;
   onEvent(event: unknown): void;
   zoomIn(): void;
   zoomOut(): void;
