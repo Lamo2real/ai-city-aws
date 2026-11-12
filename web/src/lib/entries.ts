@@ -94,6 +94,9 @@ export const entriesApi = {
   reset: (id: string) => api<{ entry: Entry }>(`${path(id)}/reset`, { method: "POST" }),
   reindex: (id: string) => api<{ entry: Entry }>(`${path(id)}/reindex`, { method: "POST" }),
   download: (id: string) => api<DownloadTicket>(`${path(id)}/download`),
+  /** A department's whole knowledge as one zip: the active version of every entry, deleted ones left out. */
+  downloadDepartment: (dept: string) =>
+    api<DownloadTicket>(`/knowledge/departments/${encodeURIComponent(dept)}/download`),
 };
 
 /** Short state words for a row, most important first. */

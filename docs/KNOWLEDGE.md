@@ -64,6 +64,7 @@ validated; at most 50 entities per item). Enrichment and KB ingestion run in par
 S3 `vaic-prod-knowledge`:
 - `raw/<item_id>/<file name>` — the upload as given; a link is `raw/<item_id>/link.json` `{"url": …}`; pasted text is `raw/<item_id>/note.md`. **An object created under `raw/` starts the pipeline** (S3 → EventBridge default bus → knowledge Lambda `{"action": "start", "bucket", "key"}` → `states:StartExecution` with execution name = `item_id` taken from the key and input `{"item_id"}`; `ExecutionAlreadyExists` means it already ran and is ignored).
 - `downloads/entries/<entry id>/<sha256>.md` — a department entry's file for Download (decision 246), written on each request and presigned for 5 minutes; expires after a day.
+- `downloads/departments/<department>/<random>.zip` — a department's whole knowledge for Download (decision 268), written on each request and presigned for 5 minutes; expires after a day.
 - `work/<item_id>/…` — MediaConvert audio and Transcribe output (expire after 7 days).
 - `normalized/<item_id>/<name>` + `normalized/<item_id>/<name>.metadata.json` — the KB data source (inclusion prefix `normalized/`). Metadata:
   `{"metadataAttributes": {"item_id": "k-…", "scope": "relevant", "kind": "document"}}` (filterable: `item_id`, `scope`, `kind`; the title is not stored in vector metadata). The same attributes are sent inline with direct ingestion; the file stays so a manual full sync agrees.
@@ -96,6 +97,7 @@ Pipeline bookkeeping on the item (optional, shown in Item JSON): `upload_id` (mu
 | `DELETE /knowledge/<id>` | → `{ok: true}` (`DeleteKnowledgeBaseDocuments`, S3 objects, graph, item record) |
 | `GET /knowledge/<id>/download` | → `{url, file_name, expires_in: 300}`: a presigned GET (attachment) of `raw_key`, the original byte for byte; also `kn-builtin-guide` (its PDF, "AI City guide.pdf"); pasted text is named after its title; 404 for an unknown, deleted or not yet uploaded item, 400 for a link (no file) (decision 246) |
 | `GET /knowledge/entries/<id>/download` | → the same for a department or shared entry (§17): the version agents read, as a `.md` file (decision 246); 404 when deleted, retired or unknown |
+| `GET /knowledge/departments/<key>/download` | → `{url, file_name, expires_in: 300, entries}`: a department's (or `shared`) whole knowledge as `<Department> knowledge.zip`: one `.md` per entry that is not deleted or retired (the same bytes as that entry's own Download), named by title, and a `README.md` listing them (decision 268); 404 for an unknown department |
 
 Item JSON = the DynamoDB item without `pk/sk/gsi*/graph_keys`. Errors as the other routes (plain words).
 Bucket CORS: `PUT` from the HUD origin, `ETag` exposed.
@@ -131,7 +133,7 @@ The HUD's CSP `connect-src` allows `https://vaic-prod-knowledge.s3.eu-north-1.am
 
 ## 9. IAM (permission boundary on every role, as everywhere)
 - Runtimes (all roles): `bedrock:Retrieve` on the one KB; `dynamodb:GetItem/Query/BatchGetItem` on the knowledge table; `neptune-graph:ReadDataViaQuery` on the graph. VAIC also `PutItem`/`UpdateItem` on `ITEM#*` and `s3:PutObject` on `raw/*`.
-- api Lambda: knowledge table read/write; S3 `raw/*` put (presign), multipart, delete under the item's prefixes (`raw/`, `work/`, `normalized/`; list limited to those prefixes); put under `normalized/*` (a scope change rewrites `.metadata.json`); for Download (decision 246) `s3:GetObject` on `raw/*` and `normalized/builtin/ai-city-guide.pdf`, and `s3:PutObject`/`s3:GetObject` on `downloads/*` (presigned GETs are signed with this role); `bedrock:IngestKnowledgeBaseDocuments`/`DeleteKnowledgeBaseDocuments` on the knowledge base; `neptune-graph:ReadDataViaQuery`/`WriteDataViaQuery`/`DeleteDataViaQuery` on the graph.
+- api Lambda: knowledge table read/write; S3 `raw/*` put (presign), multipart, delete under the item's prefixes (`raw/`, `work/`, `normalized/`; list limited to those prefixes); put under `normalized/*` (a scope change rewrites `.metadata.json`); for Download (decision 246) `s3:GetObject` on `raw/*` and `normalized/builtin/ai-city-guide.pdf`, and `s3:PutObject`/`s3:GetObject`/`s3:AbortMultipartUpload` on `downloads/*` (presigned GETs are signed with this role; the abort is for a department zip's multipart upload, decision 268); `bedrock:IngestKnowledgeBaseDocuments`/`DeleteKnowledgeBaseDocuments` on the knowledge base; `neptune-graph:ReadDataViaQuery`/`WriteDataViaQuery`/`DeleteDataViaQuery` on the graph.
 - knowledge Lambda: S3 read/write on the bucket; Transcribe `StartTranscriptionJob`/`GetTranscriptionJob`; MediaConvert `CreateJob`/`GetJob` + `iam:PassRole` on the MediaConvert role only; Bedrock `InvokeModel`/`Converse` on the utility (Haiku 5.5) profile; `bedrock:IngestKnowledgeBaseDocuments`/`GetKnowledgeBaseDocuments`/`DeleteKnowledgeBaseDocuments`; `neptune-graph:ReadDataViaQuery`/`WriteDataViaQuery`/`DeleteDataViaQuery` on the graph; table read/write; `events:PutEvents` on the bus; `states:StartExecution` on the ingest state machine and `states:DescribeExecution` on its runs; ledger `GetItem`/`PutItem`/`UpdateItem`/`Query` (cost rows, spend counters, pause and caps).
 - KB service role: read `normalized/*`, `bedrock:InvokeModel` on Titan V2, `aoss:APIAccessAll` on the collection, KMS. OpenSearch Serverless policies: encryption (project KMS key), network (collection endpoint reachable, IAM-authenticated; Bedrock is allowed as a source service), data access (KB role: read/write index `items`; the deploy role: create/update the index only).
 - MediaConvert role (`vaic-prod-knowledge-mediaconvert`): read `raw/*`, write `work/*`, KMS. The permission boundary allows `iam:PassRole` on this role only, to `mediaconvert.amazonaws.com` only, and denies passing any other role.
@@ -464,6 +466,14 @@ entry, it is the same seed-file form made from the record (`entry_markdown`), or
 are written to `downloads/entries/<entry id>/<sha256>.md` (expires after a day) and that object is presigned with the
 title as file name. Only the owner reaches the route; agents have no tool for it. The iPhone app has no Knowledge
 screen, so Download is on the web HUD only.
+
+**A department's whole knowledge (decision 268).** Every department card under "Built in" (and Shared) has Download
+under its description, like the AI City guide's card. `GET /knowledge/departments/<key>/download` writes
+`<Department> knowledge.zip`: for each entry that is not deleted or retired, the same bytes as its own Download (so
+the owner's edits are in, deleted entries out), named after its title (`Title (2).md` when two share one), sorted by
+domain and title, plus a `README.md` listing file, title and entry id. The zip is written entry by entry into a
+spooled temporary file (memory up to 16 MB, then the Lambda's `/tmp`) and uploaded from it with the managed upload
+(multipart when large) to `downloads/departments/<key>/<random>.zip`, then presigned for 5 minutes.
 
 **Retrieval evaluation.** `_eval.yaml`: 22 marketing questions → the entry ids that should be in the top 5. Offline
 (BM25 over the parts, keywords only) in the tests: 22/22. The live hybrid number is printed by every deploy.

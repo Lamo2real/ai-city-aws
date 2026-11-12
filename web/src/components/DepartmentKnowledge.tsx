@@ -51,6 +51,14 @@ export function DepartmentKnowledge() {
   useEffect(() => {
     void reload();
   }, []);
+  // The whole department as one zip (decision 268): the version its agents use, with the owner's edits.
+  const downloadAll = async (dept: string) => {
+    try {
+      startDownload(await entriesApi.downloadDepartment(dept));
+    } catch (e) {
+      toast({ text: `The download did not start: ${(e as Error).message}`, tone: "bad" });
+    }
+  };
 
   if (error && !list)
     return <Banner tone="warn">{`The department knowledge bases could not be loaded: ${error}`}</Banner>;
@@ -86,6 +94,15 @@ export function DepartmentKnowledge() {
                 ? "Who owns what and how work passes between departments. Every department's agents use it. Your edits and deletions stay when AI City updates."
                 : `Researched strategy and platform practice. Only the ${tax.label} department's agents use it. Your edits and deletions stay when AI City updates.`}
             </p>
+            <div className="kitem-actions">
+              <Button
+                variant="quiet"
+                onClick={() => void downloadAll(dept)}
+                label={`Download all ${tax.label} knowledge`}
+              >
+                Download
+              </Button>
+            </div>
             {open === dept ? <DepartmentEntries list={list} department={dept} reload={reload} /> : null}
           </section>
         );

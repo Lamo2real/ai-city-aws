@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import IO, Any, Protocol
 from urllib.parse import quote
 
 PRESIGN_SECONDS = 3600
@@ -38,6 +38,7 @@ class Blobs(Protocol):
         content_type: str = "application/octet-stream",
         metadata: dict[str, str] | None = None,
     ) -> None: ...
+    async def put_file(self, key: str, file: IO[bytes], content_type: str) -> None: ...
     async def copy(self, src: str, dst: str) -> None: ...
     async def keys(self, prefix: str) -> list[str]: ...
     async def delete_prefix(self, prefix: str) -> int: ...
@@ -77,6 +78,10 @@ class MemoryBlobs:
     ) -> None:
         self.objects[key] = (body, content_type)
         self.meta[key] = dict(metadata or {})
+
+    async def put_file(self, key: str, file: IO[bytes], content_type: str) -> None:
+        file.seek(0)
+        await self.put(key, file.read(), content_type)
 
     async def copy(self, src: str, dst: str) -> None:
         self.objects[dst] = self.objects[src]
@@ -178,6 +183,13 @@ class S3Blobs:
             self._s3.generate_presigned_url, "get_object", Params=params, ExpiresIn=seconds
         )
         return url
+
+    async def put_file(self, key: str, file: IO[bytes], content_type: str) -> None:
+        """Uploads from a file without reading it into memory (the managed upload goes multipart when large)."""
+        file.seek(0)
+        await asyncio.to_thread(
+            self._s3.upload_fileobj, file, self.bucket, key, ExtraArgs={"ContentType": content_type}
+        )
 
     async def copy(self, src: str, dst: str) -> None:
         # The managed copy switches to a multipart copy for large objects on its own.

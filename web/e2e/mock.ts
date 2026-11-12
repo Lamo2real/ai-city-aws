@@ -1004,6 +1004,18 @@ export async function mockBackend(
       m.entries.push(e);
       return ok({ entry: e }, 201);
     }
+    // A department's whole knowledge as one zip (decision 268).
+    const deptZip = /^\/knowledge\/departments\/([a-z0-9-]+)\/download$/.exec(path);
+    if (deptZip && req.method() === "GET") {
+      const dept = deptZip[1]!;
+      const taxes: Record<string, { label: string }> = { shared: MOCK_SHARED_TAXONOMY, marketing: MOCK_TAXONOMY };
+      const label = taxes[dept]?.label;
+      if (!label) return ok({ error: "That department has no knowledge base." }, 404);
+      const name = `${label} knowledge.zip`;
+      const entries = m.entries.filter((e) => e.department === dept && !e.deleted).length;
+      const url = `${S3_URL}/downloads/departments/${dept}/${encodeURIComponent(name)}?signed=get`;
+      return ok({ url, file_name: name, expires_in: 300, entries });
+    }
     const entry = /^\/knowledge\/entries\/([a-z0-9.-]+)(?:\/(reset|reindex|download))?$/.exec(path);
     if (entry) {
       const e = m.entries.find((x) => x.entry_id === entry[1]);

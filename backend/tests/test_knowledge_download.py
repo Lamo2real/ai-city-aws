@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import dataclasses
+import io
+import zipfile
 from types import SimpleNamespace
 from typing import Any
 from urllib.parse import urlsplit
@@ -16,7 +18,7 @@ from vaic.lambdas.api import handle_http
 from vaic.shared.knowledge.blobs import MemoryBlobs, S3Blobs
 from vaic.shared.knowledge.builtin import GUIDE_ID
 from vaic.shared.knowledge.builtin import KEY as GUIDE_KEY
-from vaic.shared.knowledge.download import DOWNLOAD_SECONDS, file_name
+from vaic.shared.knowledge.download import DOWNLOAD_SECONDS, _unique, file_name
 from vaic.shared.knowledge.entries import SeedSet, load_seeds
 from vaic.shared.knowledge.entry_service import EntryService
 from vaic.shared.knowledge.projection import EntryProjector
@@ -192,3 +194,75 @@ async def test_s3_presigns_a_five_minute_attachment() -> None:
     assert seen["op"] == "get_object" and seen["expires"] == 300
     assert seen["params"]["ResponseContentDisposition"].startswith('attachment; filename="a.pdf"')
     assert seen["params"]["ResponseContentType"] == "application/pdf"
+
+
+# ---------- a department's whole knowledge as one zip (decision 268) ----------
+
+
+def unzip(blobs: MemoryBlobs, url: str) -> dict[str, bytes]:
+    with zipfile.ZipFile(io.BytesIO(fetch(blobs, url))) as z:
+        return {n: z.read(n) for n in z.namelist()}
+
+
+def active_files(names: dict[str, bytes]) -> dict[str, bytes]:
+    return {n: b for n, b in names.items() if n != "README.md"}
+
+
+async def test_a_department_downloads_as_a_zip_of_its_entries_byte_for_byte(rig: Any) -> None:
+    w, d = rig
+    r = await handle_http(ev("GET", "/knowledge/departments/marketing/download"), d)
+    assert r["statusCode"] == 200
+    b = js(r)
+    assert b["file_name"] == "Marketing knowledge.zip" and b["expires_in"] == DOWNLOAD_SECONDS and b["entries"] == 2
+    assert urlsplit(b["url"]).path.startswith("/downloads/departments/marketing/")
+    files = unzip(w.blobs, b["url"])
+    assert sorted(active_files(files).values()) == sorted(SEEDS.paths[i].read_bytes() for i in (SEO, DOC))
+    readme = files["README.md"].decode()
+    assert readme.startswith("# Marketing knowledge\n") and SEO in readme and DOC in readme
+    shared = unzip(w.blobs, js(await handle_http(ev("GET", "/knowledge/departments/shared/download"), d))["url"])
+    assert list(active_files(shared).values()) == [SEEDS.paths[SHARED].read_bytes()]
+
+
+async def test_the_zip_has_the_owners_edits_and_leaves_deleted_entries_out(rig: Any) -> None:
+    w, d = rig
+    await handle_http(ev("PUT", f"/knowledge/entries/{SEO}", {"content": "## Ours\n\nOur own local SEO rules."}), d)
+    await settle(w)
+    assert (await handle_http(ev("DELETE", f"/knowledge/entries/{DOC}"), d))["statusCode"] == 200
+    b = js(await handle_http(ev("GET", "/knowledge/departments/marketing/download"), d))
+    files = active_files(unzip(w.blobs, b["url"]))
+    one = js(await handle_http(ev("GET", f"/knowledge/entries/{SEO}/download"), d))
+    assert b["entries"] == 1 and list(files.values()) == [fetch(w.blobs, one["url"])]
+    assert next(iter(files.values())).decode().endswith("## Ours\n\nOur own local SEO rules.\n")
+    assert list(files) == [one["file_name"]]  # named by the entry's title, like the single download
+
+
+async def test_a_department_download_is_owner_only_and_an_unknown_department_is_404(rig: Any) -> None:
+    _w, d = rig
+    for groups in (None, "[]", "[friends]"):
+        r = await handle_http(ev("GET", "/knowledge/departments/marketing/download", None, groups), d)
+        assert r["statusCode"] == 403 and "Only the owner" in js(r)["error"]
+    r = await handle_http(ev("GET", "/knowledge/departments/nope/download"), d)
+    assert r["statusCode"] == 404 and "no knowledge base" in js(r)["error"]
+    assert (await handle_http(ev("POST", "/knowledge/departments/marketing/download"), d))["statusCode"] == 404
+
+
+def test_two_entries_with_one_title_get_two_files() -> None:
+    taken: set[str] = set()
+    assert [_unique("A.md", taken), _unique("a.md", taken), _unique("A.md", taken)] == ["A.md", "a (2).md", "A (3).md"]
+
+
+async def test_s3_uploads_the_zip_from_its_file() -> None:
+    seen: dict[str, Any] = {}
+
+    def upload(f: Any, bucket: str, key: str, ExtraArgs: dict[str, str]) -> None:
+        seen.update(body=f.read(), bucket=bucket, key=key, args=ExtraArgs)
+
+    f = io.BytesIO(b"PK zip")
+    f.seek(3)
+    await S3Blobs(SimpleNamespace(upload_fileobj=upload), "bucket").put_file("downloads/x.zip", f, "application/zip")
+    assert seen == {
+        "body": b"PK zip",
+        "bucket": "bucket",
+        "key": "downloads/x.zip",
+        "args": {"ContentType": "application/zip"},
+    }

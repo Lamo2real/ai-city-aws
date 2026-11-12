@@ -13,7 +13,7 @@ from collections.abc import Callable
 from datetime import date, timedelta
 from typing import Any
 
-from .download import entry_download
+from .download import department_download, entry_download
 from .entries import (
     AUDIENCES,
     CONFIDENCES,
@@ -133,6 +133,13 @@ class EntryService:
         out = await entry_download(await self.registry.get(entry_id), self.seeds(), self.projector.blobs)
         if out is None:
             raise EntryNotFound("That knowledge entry does not exist or was deleted.")
+        return out
+
+    async def download_department(self, department: str) -> dict[str, Any]:
+        """A short-lived address of the department's whole active knowledge as one zip (``download.py``)."""
+        out = await department_download(self.registry, self.seeds(), self.projector.blobs, department)
+        if out is None:
+            raise EntryNotFound("That department has no knowledge base.")
         return out
 
     # ---------- write ----------

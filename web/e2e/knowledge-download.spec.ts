@@ -48,3 +48,24 @@ test("knowledge: Download is on each document card and saves the original", asyn
   ]);
   expect(m.knowledge.downloads).toHaveLength(3);
 });
+
+// A department's whole knowledge (decision 268): every department card, and Shared, has Download under its
+// description, like the AI City guide's, and it saves "<Department> knowledge.zip" through a short-lived S3 address.
+test("knowledge: every department card downloads its whole knowledge as one zip", async ({ page }) => {
+  const m = await mockBackend(page);
+  await page.goto("/#/knowledge");
+  const cards = page.locator("section.kdept");
+  await expect(cards.first()).toBeVisible();
+  const count = await cards.count();
+  expect(count).toBeGreaterThanOrEqual(2);
+  for (let i = 0; i < count; i++) {
+    const card = cards.nth(i);
+    const label = (await card.getAttribute("aria-label"))!.replace(/ knowledge base$/, "");
+    const button = card.getByRole("button", { name: `Download all ${label} knowledge` });
+    await expect(button).toHaveText("Download");
+    const [file] = await Promise.all([page.waitForEvent("download"), button.click()]);
+    expect(file.suggestedFilename()).toBe(`${label} knowledge.zip`);
+    expect(m.knowledge.downloads.at(-1)).toMatch(/^\/downloads\/departments\/[a-z]+\//);
+  }
+  expect(m.knowledge.downloads).toHaveLength(count);
+});

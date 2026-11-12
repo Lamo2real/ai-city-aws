@@ -8,6 +8,12 @@
   are written to ``downloads/entries/<entry id>/<sha256>.md`` on every request (the lifecycle rule expires
   ``downloads/`` after a day) and that object is presigned.
 
+A department's whole knowledge (the owner, 2026-11-12, decision 268): one ``<Department> knowledge.zip`` with the
+active version of every entry that is not deleted or retired (``entry_bytes``, so the owner's edits are in and
+deleted entries are out), each named after its title, and a ``README.md`` listing them. The zip is written entry by
+entry into a spooled temporary file (memory up to 16 MB, then ``/tmp``) and uploaded from it to
+``downloads/departments/<department>/<random>.zip``, so a large department never sits in memory twice.
+
 Only the owner reaches the routes (``handle_http``'s Cognito check); agents have no tool for it.
 """
 
@@ -15,12 +21,16 @@ from __future__ import annotations
 
 import hashlib
 import re
+import tempfile
+import time
+import uuid
+import zipfile
 from typing import Any
 
 from .blobs import Blobs
 from .builtin import TITLE as GUIDE_TITLE
 from .entries import EntryError, SeedSet, entry_from_fields, entry_markdown
-from .registry import served
+from .registry import EntryRegistry, served
 from .service import KnowledgeError, NotFound
 from .store import KnowledgeStore
 
@@ -28,6 +38,8 @@ DOWNLOAD_SECONDS = 300
 """The presigned address works for five minutes: enough to start the download, too short to pass around."""
 DOWNLOAD_PREFIX = "downloads/"
 _MARKDOWN = "text/markdown; charset=utf-8"
+_ZIP = "application/zip"
+_SPOOL = 16 * 1024 * 1024
 
 
 def file_name(title: str, ext: str) -> str:
@@ -91,3 +103,46 @@ async def entry_download(rec: dict[str, Any] | None, seeds: SeedSet, blobs: Blob
     name = file_name(str((served(rec) or rec).get("title") or eid), ".md")
     url = await blobs.presign_get(key, name, False, _MARKDOWN, DOWNLOAD_SECONDS)
     return {"url": url, "file_name": name, "expires_in": DOWNLOAD_SECONDS}
+
+
+def _unique(name: str, taken: set[str]) -> str:
+    """``name``, or ``name (2)`` and so on when two entries share a title (case-insensitive file systems too)."""
+    base, ext = name.rsplit(".", 1)
+    out, n = name, 2
+    while out.lower() in taken:
+        out, n = f"{base} ({n}).{ext}", n + 1
+    taken.add(out.lower())
+    return out
+
+
+async def department_download(
+    registry: EntryRegistry, seeds: SeedSet, blobs: Blobs, department: str
+) -> dict[str, Any] | None:
+    """``{url, file_name, expires_in, entries}`` for a department's whole knowledge as a zip; None if unknown."""
+    tax = seeds.taxonomies.get(department)
+    if not tax:
+        return None
+    recs = [r for r in await registry.in_department(department) if not r.get("deleted") and not r.get("retired")]
+    recs.sort(key=lambda r: (str((served(r) or r).get("domain") or ""), str((served(r) or r).get("title") or "")))
+    label = f"{tax.label} knowledge"
+    stamp = time.localtime()[:6]
+    taken: set[str] = {"readme.md"}
+    listed: list[str] = []
+    with tempfile.SpooledTemporaryFile(max_size=_SPOOL) as tmp:
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
+            for rec in recs:
+                s = served(rec) or rec
+                title = str(s.get("title") or s.get("entry_id") or "entry")
+                name = _unique(file_name(title, ".md"), taken)
+                z.writestr(zipfile.ZipInfo(name, stamp), entry_bytes(rec, seeds), zipfile.ZIP_DEFLATED)
+                listed.append(f"- {name} — {title} (`{s.get('entry_id')}`)")
+            readme = (
+                f"# {label}\n\n{len(recs)} entries: the version the {tax.label} agents use today, with your edits. "
+                f"Deleted entries are left out.\n\n" + "\n".join(listed) + "\n"
+            )
+            z.writestr(zipfile.ZipInfo("README.md", stamp), readme.encode(), zipfile.ZIP_DEFLATED)
+        key = f"{DOWNLOAD_PREFIX}departments/{department}/{uuid.uuid4().hex}.zip"
+        await blobs.put_file(key, tmp, _ZIP)
+    zip_name = file_name(label, ".zip")
+    url = await blobs.presign_get(key, zip_name, False, _ZIP, DOWNLOAD_SECONDS)
+    return {"url": url, "file_name": zip_name, "expires_in": DOWNLOAD_SECONDS, "entries": len(recs)}

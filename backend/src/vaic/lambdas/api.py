@@ -1223,6 +1223,13 @@ async def _knowledge(event: dict[str, Any], method: str, path: str, d: ApiDeps) 
 
     if path == "/knowledge/entries" or path.startswith("/knowledge/entries/"):
         return await _entries(event, method, path, d)
+    if dm := re.fullmatch(r"/knowledge/departments/([a-z0-9-]{1,40})/download", path):
+        if method != "GET":
+            return problem(404, "There is nothing here.")
+        try:
+            return reply(200, await entry_service(d).download_department(dm.group(1)))
+        except EntryNotFound as e:
+            return problem(404, str(e))
     item_id = path.rsplit("/", maxsplit=1)[-1] if re.fullmatch(rf"/knowledge/{_ITEM}", path) else ""
     try:
         if is_("GET", r"/knowledge"):

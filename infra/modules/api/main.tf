@@ -159,7 +159,8 @@ locals {
       # Download (the owner's, 2026-11-11): presigned GETs of an upload's original and the built-in guide's PDF, and
       # of a department entry's file, written under downloads/ (expires after a day) on each request.
       { Action = ["s3:GetObject"], Resource = ["${var.knowledge_bucket_arn}/raw/*", "${var.knowledge_bucket_arn}/normalized/builtin/ai-city-guide.pdf"] },
-      { Action = ["s3:PutObject", "s3:GetObject"], Resource = ["${var.knowledge_bucket_arn}/downloads/*"] },
+      # A department's zip (decision 268) is uploaded with the managed upload, which goes multipart when large.
+      { Action = ["s3:PutObject", "s3:GetObject", "s3:AbortMultipartUpload"], Resource = ["${var.knowledge_bucket_arn}/downloads/*"] },
       { Action = ["s3:ListBucket"], Resource = [var.knowledge_bucket_arn], Condition = { StringLike = { "s3:prefix" = ["raw/*", "work/*", "normalized/*"] } } },
       { Action = ["bedrock:StartIngestionJob", "bedrock:IngestKnowledgeBaseDocuments", "bedrock:GetKnowledgeBaseDocuments", "bedrock:ListKnowledgeBaseDocuments", "bedrock:DeleteKnowledgeBaseDocuments"], Resource = [var.knowledge_base_arn] },
       { Action = ["neptune-graph:ReadDataViaQuery", "neptune-graph:WriteDataViaQuery", "neptune-graph:DeleteDataViaQuery"], Resource = [var.knowledge_graph_arn] },
@@ -256,6 +257,8 @@ locals {
     # Department knowledge entries (docs/KNOWLEDGE.md section 17).
     "GET /knowledge/entries", "POST /knowledge/entries", "GET /knowledge/entries/{entry}", "PUT /knowledge/entries/{entry}",
     "DELETE /knowledge/entries/{entry}", "POST /knowledge/entries/{entry}/{verb}",
+    # Download (decisions 246 and 268): an item's original or the guide, one entry, a department's whole knowledge.
+    "GET /knowledge/{id}/download", "GET /knowledge/entries/{entry}/download", "GET /knowledge/departments/{dept}/download",
     # Files (docs/FILES.md §7): the owner's storage; uploads and downloads go straight to S3, presigned.
     "GET /files", "GET /files/{id}", "POST /files/uploads", "POST /files/uploads/{id}/complete", "PUT /files/{id}",
     "DELETE /files/{id}", "POST /files/{id}/retry",

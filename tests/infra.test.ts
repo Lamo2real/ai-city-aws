@@ -358,6 +358,10 @@ describe("knowledge base (docs/KNOWLEDGE.md)", () => {
       "POST /knowledge/text",
       "PUT /knowledge/{id}",
       "DELETE /knowledge/{id}",
+      // Download (decisions 246 and 268): without these routes API Gateway answers 404 before the Lambda.
+      "GET /knowledge/{id}/download",
+      "GET /knowledge/entries/{entry}/download",
+      "GET /knowledge/departments/{dept}/download",
     ])
       expect(api).toContain(`"${r}"`);
     expect(api).toContain('allow_methods = ["GET", "POST", "PUT", "DELETE"]');
