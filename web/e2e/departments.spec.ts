@@ -67,7 +67,7 @@ test("build a department from the City: the tower goes up; demolish it: it comes
     panel.getByText(/Demolish Customer Success\? Nobody is working there\. Its history stays/),
   ).toBeVisible();
   await panel.getByRole("button", { name: "Yes, demolish" }).click();
-  expect(m.calls.some((c) => c.method === "DELETE" && c.path === "/departments/customer-success")).toBe(true);
+  await expect.poll(() => m.calls.some((c) => c.method === "DELETE" && c.path === "/departments/customer-success")).toBe(true); // the request goes out just after the click
   await expect.poll(() => towers(page)).not.toContain("Customer Success");
   expect(await anim(page, "Customer Success")).toBe("demolish");
   expect(await hooks(page, (h) => h._world?.().lots.some((l) => l.demolished === "Customer Success"))).toBe(true);

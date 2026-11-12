@@ -4,7 +4,7 @@
 // Reviewer; each department's manager stands at its door; panels are React (see CityView.tsx).
 // The City View: a small game world of the agents, drawn pixel by pixel on a canvas from city-state.js.
 // All of the art is drawn here in code. Every person on screen is a real agent; only the scenery moves on its own.
-import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, lotsMemory, readLotsMemory, PITCH_X, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf, taxiCall, RIDE_PX_S, TO_WORK_BOOST, HOMES_PER_BLOCK } from "./city-state.js";
+import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, lotsMemory, readLotsMemory, PITCH_X, PITCH_Y, BLOCK_W, BLOCK_H, blockOf, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf, taxiCall, RIDE_PX_S, TO_WORK_BOOST, HOMES_PER_BLOCK } from "./city-state.js";
 
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const INK = "#1d1c36";
@@ -357,7 +357,7 @@ function bike(frame, carrying) {
 const ENVELOPE = (g, x, y) => { R(g, x - 4, y - 3, 8, 6, INK); R(g, x - 3, y - 2, 6, 4, "#fff6e0"); R(g, x - 3, y - 2, 6, 1, "#d8392b"); R(g, x - 1, y, 2, 1, "#cfc4b0"); };
 
 // ---------- The ground ----------
-const PLAZA = ["#6f5c6c", "#776370", "#6a5768"], WALK = ["#7a7690", "#817d97", "#74708a"];
+const PLAZA = ["#6f5c6c", "#776370", "#6a5768"], WALK = ["#7a7690", "#817d97", "#74708a"], CITY_GROUND = ["#5f5c73", "#64617a", "#5b586e", "#686580"];
 function paving(g, x, y, w, h, tones, grout, seed, size = 8) {
   const r = rng(seed);
   for (let ty = 0; ty < h; ty += size) for (let tx = 0; tx < w; tx += size) {
@@ -794,7 +794,11 @@ function bake(world, skip = new Map(), { now = Date.now(), grow = true } = {}) {
   // Trees wherever nothing else stands, far to near.
   // An empty lot is forest (decision 259); only one whose tower is coming down right now keeps clear for the wrecking ball.
   const wrecking = world.lots.filter((l) => l.demolished && skip.has(l.demolished));
-  const taken = [world.hq, ...world.buildings, ...wrecking, world.homes, ...roads.map((s) => ({ x: s.x0, y: s.y, w: s.x1 - s.x0, h: 3 })), ...verticals.map((v) => ({ x: v.x, y: v.y0, w: 3, h: v.y1 - v.y0 }))];
+  // A built block is city, not forest: paved from road to road, its tower on it (the owner: "it should still feel
+  // like a city", decision 259).
+  const paved = world.buildings.map((b) => { const [c, r] = blockOf(b.slot); return { x: c * PITCH_X, y: r * PITCH_Y, w: BLOCK_W, h: BLOCK_H, seed: `blk${c},${r}` }; });
+  for (const p of paved) paving(g, p.x * TILE, p.y * TILE, p.w * TILE, p.h * TILE, CITY_GROUND, "#5e5a74", p.seed);
+  const taken = [world.hq, ...world.buildings, ...wrecking, ...paved, world.homes, ...roads.map((s) => ({ x: s.x0, y: s.y, w: s.x1 - s.x0, h: 3 })), ...verticals.map((v) => ({ x: v.x, y: v.y0, w: 3, h: v.y1 - v.y0 }))];
   const clear = (x, y) => taken.every((t) => x < (t.x * TILE) - 12 || x > (t.x + t.w) * TILE + 12 || y < t.y * TILE - 2 || y > (t.y + t.h) * TILE + 34);
   // Each tree has its own spot on a fixed grid, the same on every map whatever its size (decision 248): a new tower or
   // row only clears the trees where it stands, and no other tree moves. About one tree to 3000 square pixels.
@@ -1398,8 +1402,16 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     return null;
   }
 
-  let drag = null, pinchDist = 0;
-  const pointers = new Map();
+  // Touch and mouse on the map (the owner, 2026-11-12, decision 260): one finger (or the mouse) drags the map and lets
+  // it glide on after a flick; two fingers pinch to zoom around the point between them and pan as they move together;
+  // lifting one finger carries on as a one-finger drag; a tap picks, a double tap zooms in a step there. The wheel, a
+  // trackpad's two-finger scroll and its pinch (ctrl + wheel) zoom around the pointer.
+  let drag = null, pinch = null, glide = null, lastTap = null;
+  const pointers = new Map(); // pointerId → { x, y } in the canvas's own pixels
+  const at = (ev) => { const r = root.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; };
+  const midst = () => { const [a, b] = [...pointers.values()]; return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, d: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)) }; };
+  const startDrag = (p, touch, moved = false) => { drag = { x: p.x, y: p.y, moved, cx: cam.x, cy: cam.y, touch, trail: [{ x: p.x, y: p.y, t: performance.now() }] }; };
+  const holdView = () => { cam.userMoved = true; if (cam.anchor) { cam.anchor = null; cam.wantZoom = cam.zoom; } };
   canvas.addEventListener("wheel", (ev) => {
     ev.preventDefault();
     const r = root.getBoundingClientRect();
@@ -1407,33 +1419,82 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     const d = ev.deltaY * (ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? 400 : 1);
     zoomTo(cam.wantZoom * Math.exp(-d * (ev.ctrlKey ? 0.01 : 0.0018)), ev.clientX - r.left, ev.clientY - r.top);
   }, { passive: false });
+  // Safari's own page pinch (gesture events) never zooms the page over the map; the map zooms instead.
+  for (const t of ["gesturestart", "gesturechange", "gestureend"]) root.addEventListener(t, (ev) => ev.preventDefault(), { passive: false });
   canvas.addEventListener("pointerdown", (ev) => {
-    pointers.set(ev.pointerId, ev);
-    canvas.setPointerCapture?.(ev.pointerId);
-    if (pointers.size === 1) drag = { x: ev.clientX, y: ev.clientY, moved: false, cx: cam.x, cy: cam.y, touch: ev.pointerType === "touch" };
+    if (ev.pointerType === "touch") ev.preventDefault(); // no page scroll, zoom or callout from a finger on the map
+    pointers.set(ev.pointerId, at(ev));
+    try { canvas.setPointerCapture?.(ev.pointerId); } catch { /* a pointer the browser no longer knows: nothing to capture */ }
+    glide = null;
+    if (pointers.size === 1) startDrag(at(ev), ev.pointerType === "touch");
+    else if (pointers.size === 2) {
+      // A pinch: the map point between the fingers stays between them, at the zoom their spread says.
+      const m = midst();
+      holdView();
+      pinch = { d: m.d, z: cam.zoom, ax: cam.x + m.x / cam.zoom, ay: cam.y + m.y / cam.zoom };
+      drag = null;
+      lastTap = null;
+    }
   });
   canvas.addEventListener("pointermove", (ev) => {
     if (!pointers.has(ev.pointerId)) {
       if (ev.pointerType !== "touch") { const p = pickAgent(ev); const next = p?.id ?? null; if (next !== hover) { hover = next; wake(); } canvas.style.cursor = next || pickApp(ev) || pickBuilding(ev) ? "pointer" : "grab"; }
       return;
     }
-    pointers.set(ev.pointerId, ev);
-    if (pointers.size === 2) {
-      const [a, b] = [...pointers.values()], d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-      if (pinchDist) { const r = root.getBoundingClientRect(); setZoom(cam.zoom * (d / pinchDist), (a.clientX + b.clientX) / 2 - r.left, (a.clientY + b.clientY) / 2 - r.top); } // follows the fingers
-      pinchDist = d;
-      drag = null;
+    pointers.set(ev.pointerId, at(ev));
+    if (pinch && pointers.size >= 2) {
+      const m = midst(), z = clampZoom(pinch.z * (m.d / pinch.d));
+      cam.zoom = z; cam.wantZoom = z; cam.anchor = null;
+      viewSize();
+      [cam.x, cam.y] = clampCam(pinch.ax - m.x / z, pinch.ay - m.y / z);
+      cam.wantX = cam.x; cam.wantY = cam.y;
+      wake();
       return;
     }
     if (!drag) return;
-    const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
-    if (Math.hypot(dx, dy) > 5) drag.moved = true;
-    if (drag.moved) { cam.userMoved = true; if (cam.anchor) { cam.anchor = null; cam.wantZoom = cam.zoom; } [cam.x, cam.y] = clampCam(drag.cx - dx / cam.zoom, drag.cy - dy / cam.zoom); cam.wantX = cam.x; cam.wantY = cam.y; wake(); }
+    const p = at(ev), dx = p.x - drag.x, dy = p.y - drag.y;
+    if (Math.hypot(dx, dy) > (drag.touch ? 8 : 5)) drag.moved = true;
+    drag.trail.push({ x: p.x, y: p.y, t: performance.now() });
+    while (drag.trail.length > 2 && drag.trail[0].t < performance.now() - 100) drag.trail.shift();
+    if (drag.moved) { holdView(); [cam.x, cam.y] = clampCam(drag.cx - dx / cam.zoom, drag.cy - dy / cam.zoom); cam.wantX = cam.x; cam.wantY = cam.y; wake(); }
   });
+  // After a flick the map glides on and slows down (not with reduced motion).
+  function glideOn(prev) {
+    requestAnimationFrame((now) => {
+      if (!glide) return;
+      const dt = Math.min(48, now - prev), k = Math.exp(-dt / 320);
+      const [x, y] = clampCam(cam.x + glide.vx * dt, cam.y + glide.vy * dt);
+      if (x === cam.x && y === cam.y) { glide = null; return; } // against the edge
+      cam.x = x; cam.y = y; cam.wantX = x; cam.wantY = y;
+      glide.vx *= k; glide.vy *= k;
+      wake();
+      if (Math.hypot(glide.vx, glide.vy) * cam.zoom > 0.02) glideOn(now); else glide = null;
+    });
+  }
   const endPointer = (ev) => {
+    const wasPinch = !!pinch;
     pointers.delete(ev.pointerId);
-    if (pointers.size < 2) pinchDist = 0;
-    if (drag && !drag.moved && ev.type === "pointerup") {
+    if (pinch && pointers.size < 2) {
+      pinch = null;
+      // One finger still down: it carries on as a drag from where it is, never a tap.
+      if (pointers.size === 1) startDrag([...pointers.values()][0], true, true);
+      return;
+    }
+    if (wasPinch || !drag) { if (!pointers.size) drag = null; return; }
+    if (!pointers.size && drag.moved && ev.type === "pointerup" && !reduced()) {
+      const a = drag.trail[0], b = drag.trail[drag.trail.length - 1], dt = b.t - a.t;
+      if (dt > 0 && performance.now() - b.t < 80) { glide = { vx: -(b.x - a.x) / dt / cam.zoom, vy: -(b.y - a.y) / dt / cam.zoom }; if (Math.hypot(glide.vx, glide.vy) * cam.zoom > 0.15) glideOn(performance.now()); else glide = null; }
+    }
+    if (!drag.moved && ev.type === "pointerup") {
+      const here = at(ev), now = performance.now();
+      // A double tap with a finger zooms in a step there (a double click on a tower flies to it, below).
+      if (drag.touch && lastTap && now - lastTap.t < 320 && Math.hypot(here.x - lastTap.x, here.y - lastTap.y) < 30) {
+        lastTap = null;
+        zoomTo(cam.wantZoom * ZOOM_STEP, here.x, here.y);
+        drag = null;
+        return;
+      }
+      lastTap = drag.touch ? { ...here, t: now } : null;
       const p = pickAgent(ev, drag.touch ? 14 : 0);
       const app = !p && pickApp(ev, drag.touch ? 6 : 0);
       if (p) selectAgent(p.id); else if (app) onOpenApp(app.slug); else { const dept = pickBuilding(ev); if (dept) onSelectBuilding(dept); else { selected = null; onSelectAgent(null); wake(); } }
