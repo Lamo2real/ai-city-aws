@@ -283,7 +283,7 @@ class Store {
     for (const l of this.sceneEvents) l(e);
   }
   /** Adds a card, or updates it where it stands (so a card doesn't jump when its status changes). */
-  /** Services already announced in the chat this session, so "… is connected, Sir." comes once. */
+  /** Services already announced in the chat this session, so "… is connected, you're all set." comes once. */
   private announced = new Set<string>();
   /** Connectors approved on a card in this session, so a failure while setting one up is shown, never silent. */
   private approved = new Set<string>();
@@ -294,7 +294,7 @@ class Store {
     const line: ChatLine = {
       id: `a-conn-${key}-${Date.now()}`,
       who: "vaic",
-      text: `${name} is connected, Sir.`,
+      text: `${name} is connected, you're all set.`,
       state: "done",
       at: Date.now(),
     };

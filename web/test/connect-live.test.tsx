@@ -1,5 +1,5 @@
 // Connecting any tool end to end (decision 141): checked sign-up links that open in a new tab, the status that turns
-// connected by itself when the owner comes back, VAIC's "… is connected, Sir." line, the green live dot, the token
+// connected by itself when the owner comes back, VAIC's "… is connected, you're all set." line, the green live dot, the token
 // option for sign-ins without self-registration, and every error in full.
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { readFileSync } from "node:fs";
@@ -103,7 +103,7 @@ describe("coming back after signing up and in", () => {
     });
     await refreshFollowed();
     expect(store.get().cards).toMatchObject([{ kind: "signin", status: "connected" }]);
-    expect(store.get().chat.map((l) => [l.who, l.text])).toEqual([["vaic", "Higgsfield is connected, Sir."]]);
+    expect(store.get().chat.map((l) => [l.who, l.text])).toEqual([["vaic", "Higgsfield is connected, you're all set."]]);
     expect(store.following().connectors).toEqual([]);
     store.event({ type: "connector.updated", id: "higgsfield", label: "Higgsfield", status: "ready" });
     expect(store.get().chat).toHaveLength(1); // once
@@ -126,7 +126,7 @@ describe("coming back after signing up and in", () => {
     });
     await refreshFollowed();
     expect(store.get().cards).toMatchObject([{ kind: "signin", status: "connected" }]);
-    expect(store.get().chat.at(-1)?.text).toBe("Work is connected, Sir.");
+    expect(store.get().chat.at(-1)?.text).toBe("Work is connected, you're all set.");
   });
 
   it("a key card becomes a live card, and an error shows in full", () => {

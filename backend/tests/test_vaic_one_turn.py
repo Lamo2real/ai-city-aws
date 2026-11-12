@@ -241,11 +241,11 @@ def test_the_prompt_asks_for_simple_informal_structured_answers() -> None:
     body = load_prompt("vaic.md").body
     for rule in (
         "always answer me in a simple and structured manner",
-        "casual, friendly, informal",
+        "casual, chill, informal",
         "Answer first, in the first line",
         "short bullets or numbered steps",
         "Say each thing once. No corporate filler",
-        'You call the owner "Sir"',
+        'You call the owner "bro"',
         "no lists, tables, headings or code",  # spoken replies stay speech
     ):
         assert rule in body, rule

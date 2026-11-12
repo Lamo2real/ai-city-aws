@@ -207,9 +207,9 @@ def _live_config() -> dict[str, Any]:
 
 
 def _live_prompt() -> str:
-    from vaic.shared.utility import agents_dir
+    from vaic.shared.utility import agents_dir, vaic_voice
 
-    return (agents_dir() / "voice_live.md").read_text(encoding="utf-8").strip()
+    return (agents_dir() / "voice_live.md").read_text(encoding="utf-8").strip() + "\n\n" + vaic_voice()
 
 
 async def create_live_session(d: SpeechDeps, sdp: Any) -> dict[str, str]:

@@ -222,8 +222,8 @@ test("Higgsfield end to end: no account yet, sign up on its own site, come back,
   const live = page.getByRole("status", { name: "Higgsfield is connected" });
   await expect(live).toBeVisible();
   await expect(live.locator(".live-dot")).toHaveCSS("animation-name", "live-pulse");
-  await expect(page.getByText("Higgsfield is connected, Sir.")).toBeVisible();
-  await expect(page.getByText("Higgsfield is connected, Sir.")).toHaveCount(1);
+  await expect(page.getByText("Higgsfield is connected, you're all set.")).toBeVisible();
+  await expect(page.getByText("Higgsfield is connected, you're all set.")).toHaveCount(1);
   // Settings shows the same, with the live dot; it stands still for an owner who prefers less motion.
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/#/settings/connectors");

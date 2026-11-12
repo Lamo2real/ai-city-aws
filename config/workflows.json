@@ -74,7 +74,7 @@
           "key": "objective",
           "label": "Goal",
           "type": "choice",
-          "question": "What should the ads achieve, Sir: sales, leads, website visits or awareness?",
+          "question": "What should the ads achieve: sales, leads, website visits or awareness?",
           "options": [
             {
               "label": "Sales",
@@ -273,7 +273,7 @@
           "key": "objective",
           "label": "Goal",
           "type": "choice",
-          "question": "What should the ads achieve, Sir: sales, leads, website visits or awareness?",
+          "question": "What should the ads achieve: sales, leads, website visits or awareness?",
           "options": [
             {
               "label": "Sales",

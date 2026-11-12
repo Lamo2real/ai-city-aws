@@ -459,7 +459,7 @@ def _options(inp: Mapping[str, Any]) -> list[str]:
     return list(inp.get("suggest") or [])
 
 
-MODE_QUESTION = "Shall I walk you through it step by step, Sir, or do it for you?"
+MODE_QUESTION = "Want me to walk you through it step by step, or just do it for you?"
 MODE_OPTIONS = ["Walk me through it", "Do it for me"]
 
 
@@ -481,7 +481,7 @@ def next_need(run: Mapping[str, Any], w: Mapping[str, Any], connected: bool) -> 
                 return {"kind": "input", "key": k, "question": inp["question"], "options": _options(inp)}
         if spend(w, values) is None and not run.get("present"):
             return {"kind": "go"}  # nothing paid and the owner is away: the team starts now (decision 127)
-        return {"kind": "confirm", "question": "Shall I create it, Sir?", "options": ["Yes, create it", "Not yet"]}
+        return {"kind": "confirm", "question": "Create it?", "options": ["Yes, create it", "Not yet"]}
     steps = w.get("steps") or []
     i = min(int(run.get("step") or 0), max(len(steps) - 1, 0))
     for k in (steps[i].get("inputs") if steps else []) or []:
@@ -491,7 +491,7 @@ def next_need(run: Mapping[str, Any], w: Mapping[str, Any], connected: bool) -> 
     last = i >= len(steps) - 1
     return {
         "kind": "step",
-        "question": "Tell me when it's done, Sir." if last else "Tell me when this page is done, Sir, and we'll go on.",
+        "question": "Tell me when it's done." if last else "Tell me when this page is done and we'll keep going.",
         "options": ["Done"] if last else ["Next"],
     }
 
@@ -743,8 +743,8 @@ def match_line(text: str, conn_of: Mapping[str, Mapping[str, Any]]) -> str | Non
             "mean it."
         )
     return (
-        f"Workflow: the owner's words may mean the {f['name']} workflow [{f['id']}] ({state}). Ask exactly “Is this "
-        f'what you mean, Sir: the {f["name"]} workflow?” with offer_choices ["Yes", "No"], and start nothing '
+        f"Workflow: the owner's words may mean the {f['name']} workflow [{f['id']}] ({state}). Ask exactly “You mean "
+        f'the {f["name"]} workflow?” with offer_choices ["Yes", "No"], and start nothing '
         "until they say yes (then start_workflow with owner_confirmed=true)."
     )
 

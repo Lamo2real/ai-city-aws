@@ -1,7 +1,7 @@
 """VAIC does anything the owner can do in AI City (the owner, 2026-11-09, decision 143).
 
 Since decision 206 (the owner, 2026-11-11) a change is staged first: ``city_api`` with PUT, POST or DELETE shows the
-owner what will change with Yes / No buttons in the chat ("Do you want to save these changes?") and saves nothing;
+owner what will change with Yes / No buttons in the chat ("Save it?") and saves nothing;
 ``save_change`` saves or discards it on the owner's next message (a tap, typed words or speech). ``find_skill`` looks
 up the skill catalog: one match is staged as a skill card with Add, several are offered as choices. ``draft_skill``
 (decision 257) writes a new skill, or a new version of one, and stages it with its files, checked by the same rules
@@ -42,7 +42,7 @@ THEMES = ("light", "dark", "system")
 PAGE = re.compile(r"#/[\w/?=&.-]{0,120}")
 PENDING_PK = "VAIC_PENDING"
 """One staged change per conversation (sk = the conversation); a newer one replaces it."""
-SAVE_QUESTION = "Do you want to save these changes?"
+SAVE_QUESTION = "Save it?"
 SETTING_LABELS = {
     "daily_global_usd": "Daily cap, all departments",
     "daily_department_usd": "Daily cap per department",

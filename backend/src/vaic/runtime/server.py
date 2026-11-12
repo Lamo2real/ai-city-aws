@@ -312,6 +312,7 @@ def _voice(host: TurnRunner, city: Any) -> VoiceFactory:
     """VAIC's voice: Nova Sonic speaks and listens; every request runs as a normal VAIC turn, here, in-process."""
     from vaic.shared.config import voice_config
     from vaic.shared.ids import new_id
+    from vaic.shared.utility import vaic_voice
 
     from .prompts import load_prompt
     from .voice import SonicSession, bedrock_opener
@@ -319,7 +320,7 @@ def _voice(host: TurnRunner, city: Any) -> VoiceFactory:
     cfg = voice_config()
     cues: dict[str, Any] = cfg.get("cues") or {}
     opener = bedrock_opener(city.session)
-    prompt = load_prompt("voice.md").body
+    prompt = load_prompt("voice.md").body + "\n\n" + vaic_voice()
 
     def make(send: Callable[[dict[str, Any]], Awaitable[None]], live: dict[str, str]) -> SonicSession:
         async def ask(text: str) -> str:

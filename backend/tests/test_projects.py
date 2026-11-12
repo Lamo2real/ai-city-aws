@@ -25,7 +25,7 @@ def test_aics_prompt_asks_unclear_requests_first_and_builds_clear_ones_straight_
     p = load_prompt("vaic.md")
     assert "offer_choices" in p.tools
     for words in (
-        "Shall I build it?",
+        "Build it?",
         "at most three per message",
         "don't ask anything",
         "brief",

@@ -65,9 +65,9 @@ async def test_a_limit_change_is_shown_with_yes_and_no_then_saved_on_yes() -> No
     out = await t["city_api"].handler(
         {"method": "PUT", "path": "/settings", "body": {"max_workers_per_goal": 65, "max_new_sessions_per_second": 3}}
     )
-    assert "Do you want to save these changes?" in out
+    assert 'ask "Save it?"' in out
     q = [e for e in bus.events if e["type"] == "vaic.question"][-1]
-    assert q["options"] == ["Yes", "No"] and q["question"] == "Do you want to save these changes?"
+    assert q["options"] == ["Yes", "No"] and q["question"] == "Save it?"
     assert q["title"] == "Settings → Limits & spending" and q["id"].startswith("chg-")
     before = (await api.settings())["max_workers_per_goal"]
     assert q["lines"] == [

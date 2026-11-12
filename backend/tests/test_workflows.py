@@ -159,7 +159,7 @@ async def test_nothing_starts_without_the_owners_yes_when_the_match_is_only_mayb
     d = deps()
     start = tool(d, vaic(), "start_workflow")
     out = await start({"workflow_id": META, "owner_words": "our facebook ads could use some love"})
-    assert "Is this what you mean, Sir: the Meta Ads campaign workflow?" in out
+    assert "You mean the Meta Ads campaign workflow?" in out
     assert await wf.Runs(d.ledger.table).list() == []
     out = await start({"workflow_id": META, "owner_words": "yes", "owner_confirmed": True})
     assert "walk you through it" in out
@@ -184,7 +184,7 @@ async def test_direct_start_asks_only_whats_missing_one_at_a_time_and_never_twic
     run = await live(d)
     assert run["mode"] == "do"  # "do it for me" was in their words: not asked
     assert set(run["values"]) == {"offer", "start_date", "end_date"}
-    assert "“What should the ads achieve, Sir: sales, leads, website visits or awareness?”" in out
+    assert "“What should the ads achieve: sales, leads, website visits or awareness?”" in out
     (q,) = d.bus.of_type("vaic.question")
     assert q["options"] == ["Sales", "Leads", "Website visits", "Awareness"]
     update = tool(d, vaic(), "update_workflow")
@@ -201,7 +201,7 @@ async def test_direct_start_asks_only_whats_missing_one_at_a_time_and_never_twic
         asked.append(key)
         out = await update({"values": {key: answers[key]}})
     assert asked == ["objective", "link", "audience", "creative", "daily_budget"]  # the inputs' order, gaps only
-    assert "Shall I create it, Sir?" in out and "300 per day from Tue 10 Nov 2026 to Mon 23 Nov 2026" in out
+    assert "Create it?" in out and "300 per day from Tue 10 Nov 2026 to Mon 23 Nov 2026" in out
     assert "4,200 in all" in out
     run = await live(d)
     assert run["values"]["daily_budget"]["text"] == "300 per day"
@@ -248,10 +248,10 @@ async def test_yes_to_the_money_hands_it_to_marketing_with_the_brief() -> None:
     go = tool(d, vaic(), "run_workflow")
     # Not in the same message the money was shown in: the owner must have seen it first.
     shown_in = (await live(d))["confirm_shown_in"]
-    assert "Shall I create it" in await tool(d, vaic(message_id=shown_in), "run_workflow")({"confirm": True})
+    assert "Create it?" in await tool(d, vaic(message_id=shown_in), "run_workflow")({"confirm": True})
     assert not d.queue.sent
     # Not on VAIC's word alone: the turn must be the owner's own message.
-    assert "Shall I create it" in await tool(d, vaic(from_owner=False), "run_workflow")({"confirm": True})
+    assert "Create it?" in await tool(d, vaic(from_owner=False), "run_workflow")({"confirm": True})
     assert not d.queue.sent
     out = await go({"confirm": True})
     assert out.startswith("Handed to the Marketing department as task ")
@@ -321,7 +321,7 @@ async def test_aics_prompt_names_the_workflow_and_whats_already_known() -> None:
     host = AgentHost(d, HostOptions(engine=None))  # type: ignore[arg-type]
     inv = {"role": "vaic", "kind": "task", "from": "owner", "conversation": "main"}
     maybe = await host._workflow_lines({**inv, "body": "our facebook ads need some love"})
-    assert len(maybe) == 1 and "Is this what you mean, Sir: the Meta Ads campaign workflow?" in maybe[0]
+    assert len(maybe) == 1 and "You mean the Meta Ads campaign workflow?" in maybe[0]
     direct = await host._workflow_lines({**inv, "body": "let's create Meta ads"})
     assert "Start it now with start_workflow" in direct[0] and "not connected yet" in direct[0]
     assert await host._workflow_lines({**inv, "body": "what's the weather?"}) == []
@@ -346,9 +346,9 @@ def test_aics_prompt_explains_workflows() -> None:
     ):
         assert t in p.tools
     for words in (
-        "Is this what you mean, Sir: the <name> workflow?",
+        "You mean the <name> workflow?",
         "One question at a time",
-        "Shall I create it, Sir?",
+        'ask "Create it?"',
     ):
         assert words in p.body
 
@@ -480,7 +480,7 @@ async def test_when_the_owner_is_here_the_app_is_planned_with_them_first() -> No
     await update({"values": {"must_have": "menu, opening hours, order form"}})
     await update({"values": {"look": "playful"}})
     out = await update({"values": {"paid_private": "Nothing paid or private"}})
-    assert "Shall I build it, Sir?" in out and not d.queue.sent
+    assert "Build it?" in out and not d.queue.sent
     out = await tool(d, vaic(), "run_workflow")({"confirm": True})
     assert out.startswith("Handed to the Application department") and len(d.queue.sent) == 1
     assert await wf.Taste(d.ledger.table).all() == []  # nothing assumed, nothing to ask later

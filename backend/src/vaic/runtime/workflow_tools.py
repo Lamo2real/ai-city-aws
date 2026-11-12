@@ -80,7 +80,7 @@ async def next_words(d: CityDeps, c: TurnCtx, runs: wf.Runs, run: dict[str, Any]
         verb = "create" if pub["spend"] else "build"
         return head + (
             f"everything is known. In two or three short sentences, read the owner the plan ({answers}).{money} "
-            f"Then ask “Shall I {verb} it, Sir?” and stop. On their clear yes, call run_workflow with confirm=true."
+            f"Then ask “{verb.capitalize()} it?” and stop. On their clear yes, call run_workflow with confirm=true."
         )
     if kind == "step":
         steps = w.get("steps") or []
@@ -123,7 +123,7 @@ def workflow_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         direct = any(m["id"] == w["id"] and m["direct"] for m in wf.recognise(words))
         if not c.from_owner or not (direct or a.get("owner_confirmed") is True):
             return (
-                f"Not started. Ask the owner first: “Is this what you mean, Sir: the {w['name']} workflow?” and start "
+                f"Not started. Ask the owner first: “You mean the {w['name']} workflow?” and start "
                 "it only after their yes (owner_confirmed=true)."
             )
         conversation = c.conversation or "main"
@@ -236,7 +236,7 @@ def workflow_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         ToolSpec(
             "start_workflow",
             "Start one of the known workflows (list_workflows) for the owner. Only when they asked for it directly "
-            "(“let's create Meta ads”) or said yes to “Is this what you mean, Sir: the … workflow?” "
+            "(“let's create Meta ads”) or said yes to “You mean the … workflow?” "
             "(owner_confirmed=true). owner_words: their message; values: input key → their words for anything they "
             "already said; mode: guide (walk me through it) or do (do it for me) when they said which; present: "
             "true when the owner said they are here to decide with you, false when they said they are away (left "

@@ -57,6 +57,12 @@ def agents_dir() -> Path:
     raise FileNotFoundError("agents/ not found; set VAIC_AGENTS_DIR")
 
 
+def vaic_voice() -> str:
+    """How VAIC sounds to the owner (``agents/shared/vaic_voice.md``: the address and the slang level, in one place),
+    added to VAIC's own prompt and both voice prompts."""
+    return (agents_dir() / "shared" / "vaic_voice.md").read_text(encoding="utf-8").strip()
+
+
 def _utility_prompt(name: str) -> str:
     return (agents_dir() / "utility" / f"{name}.md").read_text(encoding="utf-8").strip()
 

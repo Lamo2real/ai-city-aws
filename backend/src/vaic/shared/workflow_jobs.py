@@ -118,7 +118,7 @@ async def hand_off(d: CityDeps, runs: wf.Runs, run: Record, w: Record) -> tuple[
         else ""
     )
     return run, (
-        f"Handed to the {w['department']} department as task {t['id']}. Tell the owner, Sir, in one sentence that "
+        f"Handed to the {w['department']} department as task {t['id']}. Tell the owner in one sentence that "
         f"the team is on it and will finish it on its own.{went}"
     )
 

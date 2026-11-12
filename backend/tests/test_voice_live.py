@@ -24,7 +24,11 @@ async def test_the_offer_goes_to_gpt_live_with_client_delegation_and_the_answer_
     s = call["body"]["session"]
     assert s["model"] == "gpt-live-1"
     assert s["delegation"] == {"type": "client"}  # GPT-Live only speaks; VAIC answers
-    assert '"Sir"' in s["instructions"] and "Delegate everything" in s["instructions"]
+    assert (
+        '"bro"' in s["instructions"]
+        and "## Your voice" in s["instructions"]
+        and "Delegate everything" in s["instructions"]
+    )
     assert call["body"]["transport"] == {"type": "webrtc", "sdp": OFFER}
 
 

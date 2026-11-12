@@ -32,6 +32,7 @@ from vaic.shared.policy import NeedsApproval
 from vaic.shared.presets import orchestrator_note
 from vaic.shared.skills_bundled import department_skills
 from vaic.shared.turn import BackoffOptions, GateDeps, GatedTurn, TurnInput, TurnOutput, run_gated_turn
+from vaic.shared.utility import vaic_voice
 
 from .brand_context import BrandContext, BrandLoader, brands_from_items, is_bare_link
 from .connector_tool import add_connector_tool
@@ -504,7 +505,7 @@ class AgentHost:
         role = inv["role"]
         if role == "vaic":
             # The app guide rides with VAIC's instructions so "how do I…" is answered at once (the owner, 2026-11-09).
-            return load_prompt("vaic.md").body + "\n\n" + app_guide(), []
+            return load_prompt("vaic.md").body + "\n\n" + vaic_voice() + "\n\n" + app_guide(), []
         if role == "orchestrator":
             return load_prompt("orchestrator.md").body, []
         if role == "manager":
