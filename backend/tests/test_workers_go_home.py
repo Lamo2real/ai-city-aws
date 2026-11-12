@@ -98,10 +98,10 @@ async def test_the_sweep_sends_an_idle_worker_home_after_15_minutes() -> None:
     wid, (t,) = await hired_and_assigned(city, mgr, ["write it"])
     sent = len(city.queue.sent)
     city.advance(10 * MIN)
-    assert await run_job("sweep", city.ledger, city.queue, city.bus, {}) == {"resent": 0, "sent_home": 0}
+    assert await run_job("sweep", city.ledger, city.queue, city.bus, {}) == {"resent": 0, "sent_home": 0, "stuck": 0}
     assert (await city.ledger.get_agent(wid) or {})["state"] == "active"
     city.advance(6 * MIN)
-    assert await run_job("sweep", city.ledger, city.queue, city.bus, {}) == {"resent": 0, "sent_home": 1}
+    assert await run_job("sweep", city.ledger, city.queue, city.bus, {}) == {"resent": 0, "sent_home": 1, "stuck": 0}
     w = await city.ledger.get_agent(wid)
     assert w and w["state"] == "retired" and w["worker_state"] == "released"
     assert retired(city) == [wid]
@@ -125,7 +125,7 @@ async def test_a_worker_whose_turn_is_running_is_not_idle() -> None:
     city.advance(18 * MIN)
     assert await city.ledger.begin_work(msg["id"], 16 * MIN, msg)
     city.advance(2 * MIN)
-    assert await run_job("sweep", city.ledger, city.queue, city.bus, {}) == {"resent": 0, "sent_home": 0}
+    assert await run_job("sweep", city.ledger, city.queue, city.bus, {}) == {"resent": 0, "sent_home": 0, "stuck": 0}
     assert (await city.ledger.get_agent(wid) or {})["state"] == "active"
     await city.ledger.finish_work(msg["id"])
     city.advance(20 * MIN)

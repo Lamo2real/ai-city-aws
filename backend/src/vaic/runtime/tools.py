@@ -88,6 +88,7 @@ from vaic.shared.log import log
 from vaic.shared.models import model_label, model_name_for
 from vaic.shared.policy import decide, gate
 from vaic.shared.presets import overlapping, preset_for, replaced_by
+from vaic.shared.speed import FASTEST, UNHURRIED, pace_from_words, policy_for, speed_brief
 from vaic.shared.table import UpdateOptions
 from vaic.shared.utility import UtilityDeps, about_ai_city, triage
 
@@ -442,9 +443,13 @@ def _vaic_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 **({"references": refs} if refs else {}),
                 **({"department_choice": choice} if choice else {}),
                 "owner_words": str(a.get("owner_words", ""))[:500],  # so "the Porsche thing" finds it later
+                # Fastest unless the owner asked for time in so many words (decision 287).
+                "pace": pace_from_words(f"{a.get('owner_words') or ''} {a['goal']} {cons or ''}"),
             },
         )
         body = f"New task from the owner.\nGoal: {a['goal']}\nOwner's words: {a.get('owner_words', '')}"
+        if t.get("pace") == UNHURRIED:
+            body += "\nPace: the owner said to take your time."
         if target:
             body += (
                 f"\nThis changes the existing app “{target['title']}” ({target['app_id']}, version "
@@ -984,6 +989,7 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 "kind": "assignment",
                 **({"workers": workers} if workers else {}),
                 **({"app_id": task_app} if (task_app := await _task_app(d, c.task_id)) else {}),
+                "pace": policy_for((task_t or {}).get("pace")).pace,
             },
         )
         task = await d.ledger.get_ticket(c.task_id)
@@ -1000,6 +1006,7 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 "kind": "task",
                 "from": "orchestrator",
                 "body": f"Goal for {dept['name']}: {a['goal']}\nAcceptance: {a['acceptance']}"
+                + f"\n{speed_brief((task_t or {}).get('pace'))}"
                 + (
                     f"\nThe owner asked for exactly {workers} worker{'s' if workers != 1 else ''} on this goal: hire "
                     "exactly that many, give each its own part, and run them at the same time."
@@ -1293,6 +1300,7 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         w = await mine(str(a["worker_id"]))
         if not w or w.get("state") == "retired":
             return f"{a['worker_id']} is not one of your workers."
+        goal_t = await d.ledger.get_ticket(c.ticket_id) if c.ticket_id else None
         t = await new_ticket(
             d,
             {
@@ -1303,6 +1311,7 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 "department": dept,
                 "parent_id": c.ticket_id,
                 "kind": "assignment",
+                "pace": policy_for((goal_t or {}).get("pace")).pace,  # the part's time budget (decision 287)
             },
         )
         await d.ledger.update_agent(w["id"], {"ticket_id": t["id"], "worker_state": "working"})
@@ -1354,6 +1363,7 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             # A bare "FAIL" tells the worker nothing to fix, so it fails again and again (2026-11-12).
             return "Not recorded: say exactly what is wrong in plain words (what to change), not just FAIL."
         rnd = int(t.get("review_rounds", 0)) + 1
+        said = [*map(str, t.get("review_reasons") or []), str(a["reasons"])] if verdict == "FAIL" else []
         await d.bus.put(
             {
                 "type": "review.result",
@@ -1373,6 +1383,24 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             if w and w.get("state") == "retired":
                 return f"PASS recorded. {t['to']} has finished and gone home."
             return f"PASS recorded. {t['to']} still has other work; it goes home when that passes."
+        pol = policy_for(t.get("pace"))
+        if pol.pace == FASTEST and rnd >= pol.review_fails_before_escalation:
+            # Fastest (decision 287): no third try on the same worker and no question for the owner. The part
+            # comes back to the manager with every reason, and that worker goes home.
+            await move(
+                d,
+                t["id"],
+                "cancelled",
+                f"failed review {rnd} times; back to the manager",
+                {"review_rounds": rnd, "review_reasons": said, "escalated": "review"},
+            )
+            log("info", "part.escalated", ticket=t["id"], reason="review", rounds=rnd)
+            listed = "; ".join(f"({i}) {r}" for i, r in enumerate(said, 1))
+            return (
+                f"Escalated: {t['to']} failed review {rnd} times on this part, so it is taken off them (they go home "
+                f"and free their place). Reasons so far: {listed}. Now hire a fresh worker and assign the part "
+                "again with every reason in its acceptance, or split it into smaller parts; don't ask the owner."
+            )
         if rnd >= d.max_review_rounds:
             # Under Autopilot the Chief of Staff answers at once, so the part isn't parked for the owner.
             park = "in_review" if autopilot(await d.settings()) else "waiting_on_owner"
@@ -1389,7 +1417,7 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             )
             await d.bus.put({"type": "question.asked", "question": q})
             return "Review limit reached; asked the owner."
-        await move(d, t["id"], "in_progress", "review failed", {"review_rounds": rnd})
+        await move(d, t["id"], "in_progress", "review failed", {"review_rounds": rnd, "review_reasons": said})
         await d.ledger.update_agent(t["to"], {"worker_state": "working"})
         await d.bus.put({"type": "worker.state", "id": t["to"], "state": "working", "detail": "fixing after review"})
         await send(
@@ -1402,7 +1430,8 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 "taskId": c.task_id,
                 "kind": "fix",
                 "from": c.agent_id,
-                "body": f"Your manager's review: FAIL. Fix exactly this and report again: {a['reasons']}",
+                "body": f"Your manager's review: FAIL. Fix exactly this and report again: {a['reasons']}"
+                + (f"\nEarlier reviews also said: {'; '.join(said[:-1])}" if len(said) > 1 else ""),
             },
         )
         return "FAIL recorded; sent back to the worker."

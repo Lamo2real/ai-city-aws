@@ -154,7 +154,7 @@ async def test_review_needs_a_real_reason_and_the_owner_question_has_no_id() -> 
                               "department": "Application", "parent": "mgr-application", "state": "active"})  # fmt: skip
     t = await d.ledger.create_ticket({"id": "t-a", "goal": "flip cards", "from": "mgr-application", "to": wid,
                                       "department": "Application", "parent_id": None, "kind": "assignment",
-                                      "status": "in_review", "review_rounds": 2})  # fmt: skip
+                                      "status": "in_review", "review_rounds": 2, "pace": "unhurried"})  # fmt: skip
     ctx = TurnCtx(agent_id="mgr-application", role="manager", department="Application", ticket_id="t-a", task_id="t-a")
     review = tool(d, ctx, "review")
     assert (await review({"ticket_id": t["id"], "verdict": "FAIL", "reasons": "FAIL"})).startswith("Not recorded")

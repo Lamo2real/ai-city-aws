@@ -40,6 +40,7 @@ from vaic.shared.hierarchy.factory import Factory, FactoryClient
 from vaic.shared.hierarchy.queue import Queue
 from vaic.shared.ledger import Ledger, Record
 from vaic.shared.log import log
+from vaic.shared.speed import overdue, policy_for
 from vaic.shared.standing_orders import run_due
 from vaic.shared.support_desk import advance as advance_tickets
 from vaic.shared.table import UpdateOptions
@@ -189,6 +190,43 @@ async def _release_idle(d: CityDeps, w: Record, minutes: int) -> int:
     return 1
 
 
+async def report_stuck_parts(d: CityDeps) -> int:
+    """Each worker's part past its time budget (decision 287: 10 minutes at the fastest pace) is reported to its
+    manager once, with what to do, so a stuck part never just sits. Nothing is stopped by the sweep itself."""
+    now = d.ledger.now()
+    n = 0
+    for part in await d.ledger.list_tickets(["open", "in_progress"]):
+        if not overdue(part, part.get("pace"), now):
+            continue
+        goal = await d.ledger.get_ticket(str(part.get("parent_id") or "")) if part.get("parent_id") else None
+        manager = str(part.get("from") or "")
+        if not goal or not manager.startswith("mgr-"):
+            continue
+        budget = policy_for(part.get("pace")).part_budget_minutes
+        await move(d, part["id"], str(part["status"]), f"over its {budget}-minute budget; manager told",
+                   {"stuck_reported_at": now_iso(now)})  # fmt: skip
+        await send(
+            d,
+            {
+                "role": "manager",
+                "agentId": manager,
+                "department": part.get("department"),
+                "ticketId": str(goal["id"]),
+                "taskId": str(goal.get("parent_id") or goal["id"]),
+                "kind": "instruction",
+                "from": "city",
+                "body": (
+                    f"Part {part['id']} ({str(part.get('goal') or '')[:120]}) by {part.get('to')} has run over its "
+                    f"{budget}-minute budget without reporting. Check it now with my_workers: answer its question if it "
+                    "has one; if it is lost, narrow it, or cancel_assignment and give it to a fresh worker with what it was stuck on. Don't wait."
+                ),
+            },
+        )
+        log("info", "part.escalated", ticket=part["id"], reason="time budget", minutes=budget)
+        n += 1
+    return n
+
+
 async def _no_settings() -> dict[str, Any]:
     return {}
 
@@ -251,7 +289,8 @@ async def run_job(
         resent = await resume_stale(ledger, queue) if job == "sweep" else 0
         sent_home = await release_idle_workers(ledger, queue, bus, f, minutes, timeout)
     if job == "sweep":
-        return {"resent": resent, "sent_home": sent_home}
+        sd = CityDeps(ledger=ledger, bus=bus, queue=queue, factory=f, settings=current_settings, max_review_rounds=3)
+        return {"resent": resent, "sent_home": sent_home, "stuck": await report_stuck_parts(sd)}
     if job == "retire_idle":
         n = 0
         open_ = await ledger.list_tickets(["open", "in_progress", "in_review", "waiting_on_owner"])
