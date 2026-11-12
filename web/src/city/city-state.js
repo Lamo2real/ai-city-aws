@@ -1236,7 +1236,7 @@ function tick(sim, dt) {
           if (car.rare) { if (sig === "red" ? approaching(j, cross) || inBox(j, cross) : inBox(j, cross)) stop(); else if (toStop < 2) car.commit = j.id; } // the owner's car runs a red when the way is clear, never into anyone
           else if (sig === "red") stop();
           else if (sig === "amber") { if (car.stopFor === j.id || car.v < 10 || toStop >= (car.v * car.v) / (2 * BRAKE_PX_S2 * 1.6)) { car.stopFor = j.id; stop(); } else car.commit = j.id; } // too close to stop: go
-          else if (blockedBeyond || inBox(j, cross)) { car.stopFor = null; stop(); }
+          else if (blockedBeyond || inBox(j, cross) || committedAcross(sim, j, cross)) { car.stopFor = null; stop(); }
           else { car.stopFor = null; if (toStop < 2) car.commit = j.id; }
         } else if (j.kind === "giveway" && !committed) {
           if (lane.axis === "x") {
@@ -1301,6 +1301,11 @@ function tick(sim, dt) {
 export const RIDE_PX_S = 56;
 const guestsOf = (sim) => sim.guests ?? [];
 const RIDE_LEN = { x: 24, y: 18 };
+// A cab across that has committed to the junction (it goes through whatever the light now says: the owner's car
+// running a red, or one too close to stop) and is not out of it yet. A green waits for it, so the two never meet in the box.
+function committedAcross(sim, j, axis) {
+  return sim.cars.some((o) => o.lane && o.commit === j.id && o.lane.axis === axis && o.lane.controls.some((c) => c.j === j && o.d < c.dc + JUNCTION_HALF + o.lane.len / 2));
+}
 function guestInBox(sim, j, axis) {
   return guestsOf(sim).some((g) => !g.ring && (axis === "y") === g.vertical && Math.abs(g.x - j.cx) < JUNCTION_HALF + 12 && Math.abs(g.y - j.cy) < JUNCTION_HALF + 12);
 }
@@ -1400,7 +1405,7 @@ export function rideHold(sim, r) {
     if (sig === "red") return Math.max(0, stopAt);
     if (sig === "amber") { if (r.stopFor === j.id || v < 10 || stopAt >= (v * v) / (2 * BRAKE_PX_S2 * 1.6)) { r.stopFor = j.id; return Math.max(0, stopAt); } return Infinity; }
     r.stopFor = null;
-    return carsInBox(sim, j, cross) ? Math.max(0, stopAt) : Infinity;
+    return carsInBox(sim, j, cross) || committedAcross(sim, j, cross) ? Math.max(0, stopAt) : Infinity;
   }
   if (axis === "x") {
     const near = sim.cars.some((o) => o.lane && o.lane.axis === "y" && o.lane.controls.some((c) => c.j === j && o.d > c.dc - JUNCTION_HALF - o.lane.len / 2 - Math.max(20, o.v * 2) && o.d < c.dc + JUNCTION_HALF + o.lane.len / 2)) || guestNear(sim, j);
