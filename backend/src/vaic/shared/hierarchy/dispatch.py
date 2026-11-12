@@ -18,7 +18,14 @@ from ..ledger import Ledger, day_key
 from .queue import Queue, WorkMessage
 
 DispatchOutcome = Literal[
-    "started", "duplicate", "cancelled", "deferred:cap", "deferred:ceiling", "deferred:rate", "deferred:throttled"
+    "board",
+    "started",
+    "duplicate",
+    "cancelled",
+    "deferred:cap",
+    "deferred:ceiling",
+    "deferred:rate",
+    "deferred:throttled",
 ]
 DEFER_SECONDS = {"cap": 900, "ceiling": 15, "rate": 1}
 THROTTLE_MAX_SECONDS = 120
@@ -84,6 +91,28 @@ class Dispatcher:
             return "duplicate"
         if await self._cancelled(m):
             return "cancelled"
+        if m.get("board"):
+            # A code step on the project board (decision 289): no model, no runtime, run here once.
+            if not await ledger.claim(f"board:{m['id']}"):
+                return "duplicate"
+            from .actions import CityDeps
+            from .board_path import board_step
+            from .factory import Factory
+
+            deps = CityDeps(
+                ledger=ledger,
+                bus=self.d.bus,
+                queue=self.d.queue,
+                factory=Factory(ledger, self.d.bus, self.d.settings),
+                settings=self.d.settings,
+                max_review_rounds=3,
+            )
+            try:
+                await board_step(deps, dict(m))
+            except Exception:
+                await ledger.unclaim(f"board:{m['id']}")  # SQS delivers it again
+                raise
+            return "board"
         s = await self.d.settings()
         cap = await check_caps(ledger, s, m["role"], m["department"])
         if not cap.ok:

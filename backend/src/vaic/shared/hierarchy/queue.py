@@ -20,6 +20,8 @@ MessageKind = Literal["task", "report", "answer", "question", "instruction", "fi
 #   body          plain text for the agent; reports and answers from other agents are untrusted data
 #   conversation  VAIC's conversation id; deferrals: how many times the dispatcher deferred it
 #   voice         the owner said it out loud (the HUD reads VAIC's answer aloud)
+#   model         the build map's model for this turn (decision 289; set by city code, never by an agent)
+#   board         a code step on the board ("finish", "takeover"): the dispatcher runs it, no model turn
 WorkMessage = TypedDict(
     "WorkMessage",
     {
@@ -35,6 +37,8 @@ WorkMessage = TypedDict(
         "conversation": NotRequired[str],
         "deferrals": NotRequired[int],
         "voice": NotRequired[bool],
+        "model": NotRequired[str],
+        "board": NotRequired[str],
     },
 )
 

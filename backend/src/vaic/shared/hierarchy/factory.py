@@ -12,6 +12,7 @@ from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from ..build_models import build_model_names
 from ..caps import department_cap
 from ..connectors import ConnectorStore
 from ..events import EventBus, now_iso
@@ -54,7 +55,9 @@ class HireRefused(RuntimeError):
 
 
 class FactoryClient(Protocol):
-    async def hire(self, spec: dict[str, Any], manager_id: str, department: str) -> Record: ...
+    async def hire(
+        self, spec: dict[str, Any], manager_id: str, department: str, model: str | None = None
+    ) -> Record: ...
     async def release(self, worker_id: str, manager_id: str) -> Record: ...
 
 
@@ -68,7 +71,11 @@ class Factory:
         self._bus = bus
         self._settings = settings
 
-    async def hire(self, raw: dict[str, Any], manager_id: str, department: str) -> Record:
+    async def hire(self, raw: dict[str, Any], manager_id: str, department: str, model: str | None = None) -> Record:
+        """``model``: the build map's model for this worker (decision 289, set by city code only, never by a
+        manager's spec); None = the department's worker model."""
+        if model is not None and model not in build_model_names():
+            raise HireRefused(f"{model} is not a build model.")
         try:
             spec = HireSpec.model_validate(raw)
         except ValidationError as e:
@@ -111,7 +118,7 @@ class Factory:
             "role": spec.specialty,
             "specialty": spec.specialty,
             "department": dept["name"],
-            "model": model_name_for("worker", dept["name"], dept),
+            "model": model or model_name_for("worker", dept["name"], dept),
             "parent": manager_id,
             "state": "active",
             "worker_state": "hired",

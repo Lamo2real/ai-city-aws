@@ -26,6 +26,7 @@ from vaic.shared.apps import (
     MAX_FILES,
     MAX_TOTAL_BYTES,
     delete_prefix,
+    drafts_of_ticket,
     get_app,
     get_draft,
     list_apps,
@@ -34,11 +35,13 @@ from vaic.shared.apps import (
     validate_files,
     version_files,
 )
+from vaic.shared.build_models import models_for
 from vaic.shared.chat_text import worker_name
 from vaic.shared.chief_of_staff import autopilot, review_reason
 from vaic.shared.events import now_iso
 from vaic.shared.files.service import chat_card
 from vaic.shared.github import redact
+from vaic.shared.hierarchy import board_path as board
 from vaic.shared.hierarchy.actions import (
     FINAL,
     STAND_DOWN_NOTE,
@@ -86,6 +89,7 @@ from vaic.shared.knowledge.service import KnowledgeError
 from vaic.shared.knowledge.site_profile import brand_key
 from vaic.shared.log import log
 from vaic.shared.models import model_label, model_name_for
+from vaic.shared.part_checks import run_checks
 from vaic.shared.policy import decide, gate
 from vaic.shared.presets import overlapping, preset_for, replaced_by
 from vaic.shared.sizing import size_job
@@ -461,6 +465,19 @@ def _vaic_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 **({"vaic_ms": max(0, int(time.time() * 1000) - c.started_ms)} if c.started_ms else {}),
             },
         )
+        if (
+            board.on_board(await d.settings(), sizing.size)
+            and not refs
+            and not choice
+            and (target or (verdict is not None and verdict.route == "department"))
+            and (home := await board.board_department(d, target, verdict.department if verdict else None))
+        ):
+            # A small job goes straight onto the board (decision 289): no Orchestrator or planning turn.
+            extra = "\n".join(
+                x for x in (brief_note(brief) if brief else "", f"Constraints: {cons}" if cons else "") if x
+            )
+            await board.start_small(d, t, home, target, extra)
+            return f"Started: one worker in {home['name']} is on it now (a small job, no planning needed)."
         body = f"New task from the owner.\nGoal: {a['goal']}\nOwner's words: {a.get('owner_words', '')}"
         if t.get("pace") == UNHURRIED:
             body += "\nPace: the owner said to take your time."
@@ -1370,10 +1387,18 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             await d.ledger.update_agent(t["to"], {"worker_state": "completed"})
             await d.bus.put({"type": "worker.state", "id": t["to"], "state": "completed"})
             await move(d, t["id"], "done", "review passed", {"review_rounds": rnd})  # sends the worker home
+            if t.get("path") == "board":  # the board finishes the goal and the job in code (decision 289)
+                await board.finish_part(d, t["id"], f"Reviewed: {a['reasons']}")
+                return "PASS recorded. The part is finished; the board closes the job. End your turn."
             w = await d.ledger.get_agent(t["to"])
             if w and w.get("state") == "retired":
                 return f"PASS recorded. {t['to']} has finished and gone home."
             return f"PASS recorded. {t['to']} still has other work; it goes home when that passes."
+        if t.get("path") == "board" and len(said) >= models_for(str(t.get("size") or "small")).fails_before_takeover:
+            # The board path (decision 289): a fresh worker on the takeover model gets the part with every reason.
+            await d.ledger.set_ticket_status(t["id"], t["status"], "review failed", {"review_rounds": rnd})
+            done = await board.take_over(d, t["id"], said)
+            return f"FAIL recorded. {done} End your turn."
         pol = policy_for(t.get("pace"))
         if pol.pace == FASTEST and rnd >= pol.review_fails_before_escalation:
             # Fastest (decision 287): no third try on the same worker and no question for the owner. The part
@@ -1421,6 +1446,7 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 "taskId": c.task_id,
                 "kind": "fix",
                 "from": c.agent_id,
+                **({"model": str(t["model"])} if t.get("model") else {}),
                 "body": f"Your manager's review: FAIL. Fix exactly this and report again: {a['reasons']}"
                 + (f"\nEarlier reviews also said: {'; '.join(said[:-1])}" if len(said) > 1 else ""),
             },
@@ -1649,6 +1675,8 @@ def _worker_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         body = hide_token(
             f"{a['summary']}\nArtifacts: {', '.join(map(str, artifacts)) or 'none'}\nChecks: {checks or 'none'}"
         )
+        if job and job.get("path") == "board":
+            return await board_report(d, c, job, body)
         await move(d, c.ticket_id, "in_review", "reported", {"result": body})
         for j in await d.ledger.tickets_of(c.agent_id, ("open", "in_progress")):
             if j.get("desk_direct"):  # a handoff's result it used but forgot to close (decision 241)
@@ -1755,6 +1783,66 @@ def _worker_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
 
 BRIEF_MAX = 4000
 _APP_CHAT = re.compile(r"app-(?!new-)([\w-]{1,40})")
+
+
+async def board_report(d: CityDeps, c: TurnCtx, job: dict[str, Any], body: str) -> str:
+    """A board-path part reports (decision 289): the tests run here first, in code, on the worker's own files; an
+    app's draft must be staged; then the part goes to review or is finished. A part failing its tests twice is
+    taken over by a fresh worker on the takeover model."""
+    task_id = str(job.get("task_id") or c.task_id)
+    await board.stage(d, task_id, "tests", "start", c.ticket_id)
+    t0 = time.monotonic()
+    root = Path(d.workspace.root) / c.agent_id if d.workspace is not None else Path(f"/tmp/work/{c.agent_id}")  # noqa: S108
+    task = await d.ledger.get_ticket(task_id)
+    is_app = bool((task or {}).get("app_id"))
+    result = await run_checks(root, app=is_app)
+    draft = None
+    if result.ok and is_app:
+        # The apps Lambda stages what submit_app sent within seconds; its checks count as tests too.
+        for _ in range(60):
+            draft = await board.draft_verdict(d, c.ticket_id)
+            if draft != "staging" and (draft is not None or await drafts_of_ticket(d.ledger, c.ticket_id)):
+                break
+            await asyncio.sleep(0.5)
+        if draft == "staging":
+            draft = "The app is still being checked by the city after 30 seconds; call report_to_manager again."
+        elif draft is None and not await drafts_of_ticket(d.ledger, c.ticket_id):
+            draft = "No app was submitted: call submit_app first, then report_to_manager."
+        if draft:
+            result.failures.append(draft)
+    await board.stage(d, task_id, "tests", "end", c.ticket_id)
+    log(
+        "info",
+        "board.tests",
+        part=c.ticket_id,
+        ok=result.ok,
+        ran="; ".join(result.ran),
+        ms=round((time.monotonic() - t0) * 1000),
+    )
+    if not result.ok:
+        fails = [*map(str, job.get("review_reasons") or []), f"Tests failed: {result.text(600)}"]
+        await d.ledger.set_ticket_status(c.ticket_id, job["status"], "tests failed", {"review_reasons": fails})
+        if len(fails) >= models_for(str(job.get("size") or "small")).fails_before_takeover:
+            await send(
+                d,
+                {
+                    "role": "manager",
+                    "agentId": str(job.get("from")),
+                    "department": c.department,
+                    "ticketId": c.ticket_id,
+                    "taskId": task_id,
+                    "kind": "report",
+                    "from": c.agent_id,
+                    "body": "board: takeover",
+                    "board": "takeover",
+                },
+            )
+            return "The tests failed twice, so a fresh worker takes this part over. Stop now and end your turn."
+        return f"Not reported: the tests failed. Fix exactly this, then call report_to_manager again:\n{result.text()}"
+    await move(d, c.ticket_id, "in_review", "tests passed", {"result": body, "checks_ran": result.ran})
+    await d.ledger.update_agent(c.agent_id, {"worker_state": "review"})
+    part = await d.ledger.get_ticket(c.ticket_id)
+    return await board.after_tests(d, part or job, body, checked=bool(result.ran))
 
 
 def app_of_conversation(conversation: str | None) -> str | None:

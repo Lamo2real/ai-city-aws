@@ -21,6 +21,7 @@ from vaic.shared import workflows as wf
 from vaic.shared.app_guide import app_guide
 from vaic.shared.app_preview import LivePreview
 from vaic.shared.apps import drafts_of_ticket, get_app
+from vaic.shared.build_models import build_model_names
 from vaic.shared.connectors import ConnectorStore
 from vaic.shared.events import now_iso
 from vaic.shared.executives import ensure_executives
@@ -30,7 +31,7 @@ from vaic.shared.knowledge.entries import canonical_department
 from vaic.shared.knowledge.search import Caller, always_block
 from vaic.shared.leads import is_job_report, save_lead_csvs
 from vaic.shared.log import log, metric
-from vaic.shared.models import resolve_role_from_env
+from vaic.shared.models import resolve_build_model, resolve_role_from_env
 from vaic.shared.policy import NeedsApproval
 from vaic.shared.presets import orchestrator_note
 from vaic.shared.skills_bundled import department_skills
@@ -245,9 +246,12 @@ class AgentHost:
                 if inv["role"] == "worker" and agent.get("department")
                 else None
             )
-            models = resolve_role_from_env(
-                inv["role"], self.o.env if self.o.env is not None else os.environ, agent.get("department"), own_dept
-            )
+            env = self.o.env if self.o.env is not None else os.environ
+            if inv.get("model") and inv["role"] in ("manager", "worker") and inv["model"] in build_model_names():
+                # The board path (decision 289): city code names the build map's model on the message.
+                models = resolve_build_model(inv["role"], str(inv["model"]), env)
+            else:
+                models = resolve_role_from_env(inv["role"], env, agent.get("department"), own_dept)
             if agent.get("model") and agent["model"] != models.primary.name and inv["role"] in ("manager", "worker"):
                 # The City shows what the agent really runs on (the model rules changed, decision 129).
                 await ledger.update_agent(agent["id"], {"model": models.primary.name})

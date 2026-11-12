@@ -143,3 +143,18 @@ def resolve_role_from_env(
 def model_label(name: str) -> str:
     m = models_config()["models"].get(current_name(name))
     return str(m["label"]) if m else name
+
+
+def resolve_build_model(
+    role: Role, name: str, env: Mapping[str, str] | None = None, config: Mapping[str, Any] | None = None
+) -> RoleModels:
+    """A board-path turn's model from the build map (decision 289): the message names it, city code set it. Called
+    through its system profile (the role's application profile copies the role's own model); no fallback."""
+    cfg = config or models_config()
+    e = os.environ if env is None else env
+    pfx = e.get("VAIC_PROFILE_PREFIX") or cfg["profilePrefix"]
+    primary = _resolve_name(name, pfx, cfg)
+    if primary is None:
+        return resolve_role(role, prefix=cast(ProfilePrefix, pfx), config=cfg)
+    ttl = cast(CacheTtl, cfg["roles"][role]["cacheTtl"])
+    return RoleModels(role=role, primary=primary, fallback=None, cache_ttl=ttl, degraded=False)

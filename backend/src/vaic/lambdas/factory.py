@@ -14,7 +14,7 @@ from ._runtime import run
 async def handle_factory(req: dict[str, Any], factory: FactoryClient) -> dict[str, Any]:
     try:
         if req.get("action") == "hire":
-            agent = await factory.hire(req["spec"], req["managerId"], req["department"])
+            agent = await factory.hire(req["spec"], req["managerId"], req["department"], req.get("model"))
         elif req.get("action") == "release":
             agent = await factory.release(req["workerId"], req["managerId"])
         else:

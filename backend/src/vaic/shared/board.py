@@ -119,6 +119,10 @@ class Board:
             verdicts = [*((cur or {}).get("verdicts") or []), {"verdict": e["verdict"], "why": e.get("summary", "")}]
             await self.table.put({**(cur or {"pk": pk, "sk": sk, "at": at}), "verdicts": verdicts[-6:]})
             return True
+        if t == "build.stage":
+            await self.mark(str(e["task_id"]), str(e["stage"]), str(e["edge"]), at, str(e.get("key") or "job"),
+                            int(e["ms"]) if e.get("ms") is not None else None)  # fmt: skip
+            return True
         if t == "app.submitted":
             await self.mark(str(e["task_id"]), "publish", "start", at, str(e["ticket_id"]))
             await self._files(
@@ -161,10 +165,12 @@ class Board:
                 "goal": tk.get("goal", ""),
                 "owner_words": tk.get("owner_words") or "",
                 "status": status,
-                "path": "chain",
+                "path": tk.get("path") or "chain",
                 "created_at": tk.get("created_at"),
                 "updated_at": tk.get("updated_at"),
             }
+            if tk.get("path") is None and previous is not None:
+                meta.pop("path")  # an event without the field never turns a board job back into a chain one
             for k in ("size", "size_reason", "size_by_owner", "workers", "pace", "conversation", "app_id", "result",
                       "acceptance", "standing_order"):  # fmt: skip
                 if tk.get(k) is not None:

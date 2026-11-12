@@ -70,6 +70,8 @@ class TicketRecord(_M):
     size_reason: str | None = None
     size_by_owner: bool | None = None
     sizing_ms: float | None = None
+    path: str | None = None
+    """``board`` for a job, goal or part on the board path (decision 289); None = the chain."""
     vaic_ms: float | None = None
     """From VAIC's turn starting to the job being handed on (stage timings, decision 289)."""
     created_at: str
@@ -116,6 +118,17 @@ class Activity(_E):
     id: str
     activity: str
     detail: str | None = None
+
+
+class BuildStage(_E):
+    """A timing mark for the project board (decision 289): a stage of one build started, ended or took ``ms``."""
+
+    type: Literal["build.stage"]
+    task_id: str
+    stage: str
+    edge: Literal["start", "end", "dur"]
+    key: str = "job"
+    ms: float | None = None
 
 
 class TicketStatusEvent(_E):
@@ -585,6 +598,7 @@ CityEventModel = Annotated[
     | AgentRetired
     | WorkerStateEvent
     | Activity
+    | BuildStage
     | TicketStatusEvent
     | DepartmentCreated
     | DepartmentDemolished

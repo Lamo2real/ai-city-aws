@@ -63,8 +63,9 @@ class LambdaFactoryClient:
         agent: Record = out["agent"]
         return agent
 
-    async def hire(self, spec: dict[str, Any], manager_id: str, department: str) -> Record:
-        return await self._call({"action": "hire", "spec": spec, "managerId": manager_id, "department": department})
+    async def hire(self, spec: dict[str, Any], manager_id: str, department: str, model: str | None = None) -> Record:
+        body = {"action": "hire", "spec": spec, "managerId": manager_id, "department": department}
+        return await self._call({**body, **({"model": model} if model else {})})
 
     async def release(self, worker_id: str, manager_id: str) -> Record:
         return await self._call({"action": "release", "workerId": worker_id, "managerId": manager_id})
