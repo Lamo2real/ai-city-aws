@@ -633,19 +633,24 @@ function plaque(item) {
 const ROOFS = [["#c0533f", "#d96c50", "#9c3f30"], ["#3f7fa8", "#5499c2", "#2f6387"], ["#3f8f6a", "#55a97f", "#2f7052"], ["#b5823a", "#d09c4c", "#8e642a"], ["#7f5aa8", "#9a74c2", "#634587"], ["#b84f78", "#d26a92", "#923c5e"], ["#4a6fb0", "#6288c8", "#37558c"], ["#8d9440", "#a8ae52", "#6e7430"], ["#b0663a", "#cb7f4e", "#8c4f2c"], ["#3f9a9a", "#55b4b4", "#2f7878"], ["#a84848", "#c25e5e", "#863636"], ["#5f7a8a", "#7894a4", "#485e6c"]];
 const WALLS = ["#e6d3ae", "#d9c6c0", "#cfd3c0", "#e2c8a8"];
 // ---------- Towers (decision 117): one Manhattan-style tower per department, the same size whatever the headcount ----------
-// Three facades so the streets don't repeat: limestone art deco, red brick, steel and glass. The accent (crown,
-// canopy, stripes) is the department's own colour from ROOFS.
+// Three facades so the streets don't repeat, after the owner's Manhattan references (decision 274,
+// docs/city-references/): a limestone tower stepping back to an art-deco crown, a red-brick walk-up with black fire
+// escapes and a wooden water tower on its roof, and a glass curtain wall with a mast. The accent (crown, canopy,
+// stripes) is the department's own colour from ROOFS. Original drawings only.
 const FACADES = [
-  { wall: "#d9cdb4", shade: "#b9ab90", trim: "#efe4cc", glass: "#2c3550" }, // limestone, art deco
-  { wall: "#b7634a", shade: "#94503b", trim: "#d98a6c", glass: "#2a3048" }, // red brick, pre-war
-  { wall: "#5d7088", shade: "#475a70", trim: "#8fa6c0", glass: "#22304a" }, // steel and glass
+  { style: "stone", wall: "#d9cdb4", shade: "#b9ab90", trim: "#efe4cc", glass: "#2c3550" }, // limestone, art deco
+  { style: "brick", wall: "#b7634a", shade: "#94503b", trim: "#d98a6c", glass: "#2a3048" }, // red brick, pre-war
+  { style: "glass", wall: "#3b6c98", shade: "#2b5276", trim: "#a6cbe8", glass: "#24466a" }, // a glass curtain wall
 ];
+const styleOf = (b) => FACADES[hashOf(b.dept) % FACADES.length];
 // The tower's sections, bottom up, in art pixels inside its plot: a lobby, then set-backs narrowing to a crown.
 function towerShape(b) {
   const X = b.x * TILE, Y = b.y * TILE, W = b.w * TILE, H = b.h * TILE;
   const cx = X + W / 2, foot = Y + H - 14; // the pavement in front takes the last 14 px
   // Sized to the plot (decision 166): wider lots get wider towers, taller lots more floors; three silhouettes.
-  const step = [[1, 0.92, 0.8, 0.45], [1, 0.96, 0.88, 0.5], [1, 0.86, 0.72, 0.42]][hashOf(`shape:${b.dept}`) % 3]; // broad, close-packed (decision 271)
+  // Each style its own silhouette (decision 274): stone steps back like a wedding cake, brick rises straight to a
+  // cornice and a roof house, glass goes up sheer to a narrow crown and its mast.
+  const step = { stone: [1, 0.86, 0.7, 0.42], brick: [1, 1, 0.97, 0.36], glass: [1, 0.97, 0.93, 0.32] }[styleOf(b).style];
   // The body rises to about 40 px over the top of its block (decision 271), the crown and spire above it in the
   // picture's sky, a little lower on some towers so the skyline stays uneven.
   const k = Math.max(0.7, (H - 26 - ((H / TILE - BLOCK_H) * TILE - 40) - (hashOf(`rise:${b.dept}`) % 2) * 12) / 126), base = W - 16;
@@ -653,14 +658,17 @@ function towerShape(b) {
   const out = [];
   let top = foot;
   for (const [w, h] of tiers) { top -= h; out.push({ x: Math.round(cx - w / 2), y: top, w, h }); }
-  return { cx, foot, tiers: out, top, X, Y, W, H };
+  return { cx, foot, tiers: out, top, X, Y, W, H, mast: { stone: 30, glass: 22, brick: 0 }[styleOf(b).style] };
 }
 // Every window of a tower, lowest floor first, so the lit ones fill up from the street as people come in.
 function towerWindows(b) {
-  const t = towerShape(b), out = [];
+  const t = towerShape(b), out = [], glass = styleOf(b).style === "glass", brick = styleOf(b).style === "brick";
   t.tiers.slice(0, 3).forEach((tier, k) => {
     const first = k === 0 ? 30 : 6; // the lobby keeps its glass doors clear
-    for (let y = tier.y + tier.h - first - 6; y >= tier.y + 6; y -= 9) for (let x = tier.x + 6; x + 4 <= tier.x + tier.w - 5; x += 8) out.push({ x, y, w: 4, h: 5 });
+    // Glass: every panel of the curtain wall; brick: tall sash windows in pairs, the fire escape's bay left dark.
+    if (glass) { for (let y = tier.y + tier.h - first - 7; y >= tier.y + 4; y -= 8) for (let x = tier.x + 4; x + 5 <= tier.x + tier.w - 3; x += 7) out.push({ x, y, w: 5, h: 6 }); return; }
+    const right = brick ? tier.x + tier.w - 22 : tier.x + tier.w - 5;
+    for (let y = tier.y + tier.h - first - 6; y >= tier.y + 6; y -= 9) for (let x = tier.x + 6; x + 4 <= right; x += 8) out.push({ x, y, w: 4, h: brick ? 6 : 5 });
   });
   return out;
 }
@@ -683,7 +691,7 @@ function site(g, b) {
 const towerSprites = new Map();
 // A tower's picture has SPRITE_PAD pixels of sky above its lot for the crown and spire (decision 271): the tower
 // rises over the street behind its block, so it is drawn SPRITE_PAD higher than its lot's top.
-const SPRITE_PAD = 48;
+const SPRITE_PAD = 48, STREET_PX = 3 * TILE;
 function towerSprite(b) {
   const key = `${b.dept}|${b.slot}|${b.x},${b.y},${b.w},${b.h}`;
   let c = towerSprites.get(key);
@@ -708,33 +716,82 @@ function ghostSprite(b) {
   return c;
 }
 function towerBody(g, b) {
-  const t = towerShape(b), f = FACADES[hashOf(b.dept) % FACADES.length], [accent, light, dark] = ROOFS[b.slot % ROOFS.length];
+  const t = towerShape(b), f = styleOf(b), [accent, light, dark] = ROOFS[b.slot % ROOFS.length];
   R(g, t.tiers[0].x - 4, t.foot - 1, t.tiers[0].w + 8, 4, "rgba(20,18,40,.35)"); // its shadow on the pavement
+  const r = rng(`facade:${b.dept}`);
   // The body, tier by tier: an ink outline, the wall, a lit edge on the left and a shaded edge on the right.
   for (const [k, q] of t.tiers.entries()) {
     R(g, q.x - 1, q.y - 1, q.w + 2, q.h + 2, INK);
     R(g, q.x, q.y, q.w, q.h, f.wall);
+    if (f.style === "glass" && k < 3) {
+      // The curtain wall: spandrels and mullions in a fine grid, the sky's reflection running across it in bands.
+      for (let y = q.y + q.h - 2; y > q.y; y -= 8) R(g, q.x, y, q.w, 2, "#5f93c0");
+      for (let x = q.x + 2; x < q.x + q.w; x += 7) R(g, x, q.y, 1, q.h, "#1f3a58");
+      // The sky in the glass: two broad diagonal bands of light.
+      for (let y = q.y; y < q.y + q.h; y++) for (const [d, w] of [[18, 10], [44, 5]]) { const x = q.x + ((y - q.y + d) % (q.w + 20)) - 10; R(g, Math.max(q.x, x), y, Math.max(0, Math.min(w, q.x + q.w - Math.max(q.x, x))), 1, "rgba(200,232,255,.22)"); }
+    } else if (f.style === "brick" && k < 3) {
+      for (let y = q.y + 2; y < q.y + q.h; y += 3) for (let x = q.x + ((y >> 1) % 2) * 3; x < q.x + q.w; x += 6) if (r() < 0.35) R(g, x, y, 2, 1, f.shade); // the brickwork
+    }
     R(g, q.x, q.y, 2, q.h, f.trim); R(g, q.x + q.w - 3, q.y, 3, q.h, f.shade);
-    if (k < 3) { R(g, q.x - 3, q.y - 2, q.w + 6, 3, INK); R(g, q.x - 2, q.y - 1, q.w + 4, 1, f.trim); } // the set-back ledge
-    if (k > 0 && k < 3) for (let x = q.x + 5; x < q.x + q.w - 5; x += 8) R(g, x + 4, q.y + 2, 1, q.h - 4, f.shade); // pilasters between window bays
+    if (k < 3 && f.style !== "glass") { R(g, q.x - 3, q.y - 2, q.w + 6, 3, INK); R(g, q.x - 2, q.y - 1, q.w + 4, 1, f.trim); } // the set-back ledge, a cornice on brick
+    if (f.style === "stone" && k > 0 && k < 3) for (let x = q.x + 5; x < q.x + q.w - 5; x += 8) R(g, x + 4, q.y + 2, 1, q.h - 4, f.shade); // pilasters between window bays
   }
-  // Dark glass in every window; the lit ones are painted live, from the headcount.
-  for (const w of towerWindows(b)) { R(g, w.x, w.y, w.w, w.h, f.glass); R(g, w.x, w.y, w.w, 1, "rgba(255,255,255,.12)"); }
-  // The crown: stepped art-deco fins in the department's colour, a spire and its beacon.
-  const c = t.tiers[3];
-  R(g, c.x + 2, c.y + 2, c.w - 4, c.h - 4, accent);
-  for (let x = c.x + 4; x < c.x + c.w - 4; x += 6) { R(g, x, c.y + 2, 2, c.h - 4, light); R(g, x + 2, c.y + c.h - 4, 2, 2, dark); }
-  for (const [w, h] of [[30, 4], [16, 4], [6, 4]]) { const y0 = c.y - h - ([30, 16, 6].indexOf(w)) * 4; R(g, t.cx - w / 2 - 1, y0 - 1, w + 2, h + 2, INK); R(g, t.cx - w / 2, y0, w, h, accent); R(g, t.cx - w / 2, y0, w, 1, light); }
-  R(g, t.cx - 1, c.y - 30, 2, 12, INK); R(g, t.cx - 0.5, c.y - 30, 1, 12, "#cfd6e2");
+  // Dark glass in every window; the lit ones are painted live, from the headcount. Brick ones get a pale lintel.
+  for (const w of towerWindows(b)) {
+    R(g, w.x, w.y, w.w, w.h, f.glass); R(g, w.x, w.y, w.w, 1, "rgba(255,255,255,.12)");
+    if (f.style === "brick") R(g, w.x - 1, w.y - 2, w.w + 2, 1, "#e6d6c0");
+  }
+  const c = t.tiers[3], base = t.tiers[0];
+  if (f.style === "brick") {
+    // Black fire escapes down the right bay: a landing and railing at every other floor, ladders zig-zagging between.
+    const fw = 14;
+    for (const q of t.tiers.slice(0, 3)) {
+      const x0 = q.x + q.w - 20;
+      let flip = false;
+      for (let y = q.y + 10; y < Math.min(q.y + q.h, t.foot - 40); y += 18) {
+        R(g, x0 - 1, y, fw + 2, 2, INK); R(g, x0 - 1, y - 5, 1, 5, INK); R(g, x0 + fw, y - 5, 1, 5, INK); R(g, x0, y - 5, fw, 1, "#2a2a33"); // the landing and its railing
+        R(g, x0 + 2, y - 12, 4, 6, f.glass); R(g, x0 + 8, y - 12, 4, 6, f.glass); // the windows behind it
+        for (let i = 0; i < 16 && y + 2 + i < Math.min(q.y + q.h, t.foot - 40); i += 1) R(g, flip ? x0 + fw - 2 - Math.floor(i * 0.7) : x0 + 1 + Math.floor(i * 0.7), y + 2 + i, 2, 1, INK); // the ladder down
+        flip = !flip;
+      }
+    }
+    // The roof house and a wooden water tower on its legs.
+    R(g, c.x + 2, c.y + 2, c.w - 4, c.h - 4, accent);
+    const wx = c.x + Math.round(c.w / 2) - 7, wy = c.y - 20;
+    for (const lx of [wx + 1, wx + 6, wx + 11]) R(g, lx, wy + 13, 2, 8, INK); R(g, wx, wy + 16, 14, 1, INK); // its legs and brace
+    R(g, wx - 1, wy + 2, 16, 12, INK); R(g, wx, wy + 3, 14, 10, "#8a5a3a"); for (let x = wx + 2; x < wx + 14; x += 3) R(g, x, wy + 3, 1, 10, "#734a30");
+    R(g, wx, wy + 5, 14, 1, "#3a3036"); R(g, wx, wy + 10, 14, 1, "#3a3036"); // its hoops
+    for (let i = 0; i < 5; i++) R(g, wx + 7 - i - 1, wy - 2 + i, 2 * i + 2, 1, i ? "#5a4636" : INK); R(g, wx - 1, wy + 2, 16, 1, INK); // the conical lid
+  } else if (f.style === "glass") {
+    // A narrow crown of louvres and a tall mast with its beacon.
+    R(g, c.x + 2, c.y + 2, c.w - 4, c.h - 4, "#9fb6cc"); for (let x = c.x + 3; x < c.x + c.w - 3; x += 3) R(g, x, c.y + 2, 1, c.h - 4, "#6f8aa6");
+    R(g, c.x + 2, c.y + 2, c.w - 4, 2, accent);
+    R(g, t.cx - 1, c.y - t.mast, 2, t.mast, INK); R(g, t.cx - 0.5, c.y - t.mast, 1, t.mast, "#cfd6e2"); R(g, t.cx - 3, c.y - 10, 6, 2, INK);
+  } else {
+    // The crown: stepped art-deco fins in the department's colour, a spire and its beacon.
+    R(g, c.x + 2, c.y + 2, c.w - 4, c.h - 4, accent);
+    for (let x = c.x + 4; x < c.x + c.w - 4; x += 6) { R(g, x, c.y + 2, 2, c.h - 4, light); R(g, x + 2, c.y + c.h - 4, 2, 2, dark); }
+    for (const [w, h] of [[30, 4], [16, 4], [6, 4]]) { const y0 = c.y - h - ([30, 16, 6].indexOf(w)) * 4; R(g, t.cx - w / 2 - 1, y0 - 1, w + 2, h + 2, INK); R(g, t.cx - w / 2, y0, w, h, accent); R(g, t.cx - w / 2, y0, w, 1, light); }
+    R(g, t.cx - 1, c.y - 30, 2, 12, INK); R(g, t.cx - 0.5, c.y - 30, 1, 12, "#cfd6e2");
+  }
   // A band in the department's colour under each ledge, the name on the lobby, a canopy over the doors.
-  const base = t.tiers[0];
   R(g, base.x, base.y + 3, base.w, 2, accent);
   R(g, base.x + 8, t.foot - 30, base.w - 16, 2, dark);
   const dw = 22, dx = Math.round(t.cx - dw / 2), dy = t.foot - 22;
+  if (f.style === "stone") for (let i = 0; i < 5; i++) { const w = dw + 8 - i * i; R(g, t.cx - w / 2 - 1, dy - 5 - i, w + 2, 1, INK); R(g, t.cx - w / 2, dy - 5 - i, w, 1, i === 4 ? f.trim : f.shade); } // a stone arch over the entrance
   R(g, dx - 4, dy - 4, dw + 8, 4, INK); R(g, dx - 3, dy - 3, dw + 6, 2, accent); // the canopy
   R(g, dx - 1, dy - 1, dw + 2, 23, INK); R(g, dx, dy, dw, 22, "#1a2236"); // the doorway (the panels are live)
   for (const gx of [base.x + 8, base.x + base.w - 24]) { R(g, gx - 1, dy - 1, 18, 19, INK); R(g, gx, dy, 16, 17, "#3b4a66"); R(g, gx, dy, 16, 3, "#5b6f92"); R(g, gx + 7, dy, 2, 17, INK); } // lobby glass
   sign(g, b.dept, t.cx, base.y + 9, base.w - 10);
+  // In the middle of town, a lit blade sign down the tower's left side (decision 274: a few lit signs in the centre,
+  // like the square in the references; no brand, just the department's colour and its initials).
+  const [bc, br] = blockOf(b.slot);
+  if (Math.abs(bc) <= 1 && Math.abs(br - 0.5) <= 1.5) {
+    // A lit screen of coloured light, its pattern its own (no words, no brands).
+    const sx = base.x + 3, sy = base.y + 18, h = 34, lr = rng(`screen:${b.dept}`), tones = [light, "#fff3cf", "#8fdcff", "#ffd84a", accent];
+    R(g, sx - 2, sy - 2, 13, h + 4, "rgba(255,220,140,.2)"); R(g, sx - 1, sy - 1, 11, h + 2, INK); R(g, sx, sy, 9, h, "#1a1630");
+    for (let y = sy + 1; y < sy + h - 1; y += 3) for (let x = sx + 1; x < sx + 8; x += 2) if (lr() < 0.7) R(g, x, y, 2, 2, tones[Math.floor(lr() * tones.length)]);
+  }
 }
 function freeLot(g, l, text) {
   const X = l.x * TILE, Y = l.y * TILE, W = l.w * TILE, H = l.h * TILE, r = rng(`${l.x},${l.y}`);
@@ -1770,7 +1827,9 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       if (b.archived || anims.has(b.dept)) continue;
       const t = towerShape(b), blockTop = blockOf(b.slot)[1] * PITCH_Y * TILE, hh = Math.round(blockTop - t.Y);
       if (t.X - ox > viewW + 10 || t.X + t.W - ox < -10 || t.Y - oy > viewH + 10 || blockTop - oy < -10) continue;
-      ctx.drawImage(towerSprite(b), 0, 0, t.W, hh + SPRITE_PAD, t.X - ox, t.Y - SPRITE_PAD - oy, t.W, hh + SPRITE_PAD);
+      // Only the rows over the street itself: the pavement past it, where people stand at the next tower's door, stays in front.
+      const from = Math.max(0, blockTop - STREET_PX - (t.Y - SPRITE_PAD)), rows = hh + SPRITE_PAD - from;
+      if (rows > 0) ctx.drawImage(towerSprite(b), 0, from, t.W, rows, t.X - ox, t.Y - SPRITE_PAD + from - oy, t.W, rows);
       litWindows(b, ox, oy, blockTop);
       beacon(t, now, ox, oy);
     }
@@ -1790,8 +1849,8 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     // The aircraft beacon on the spire blinks red, like every tower in Manhattan.
     beacon(t, now, ox, oy);
   }
-  function beacon(t, now, ox, oy) {
-    if (!reduced() && Math.floor(now / 900) % 2) { R(ctx, t.cx - 1.5 - ox, t.top - 32 - oy, 3, 3, "#ff4a3d"); R(ctx, t.cx - 3 - ox, t.top - 33.5 - oy, 6, 6, "rgba(255,74,61,.25)"); }
+  function beacon(t, now, ox, oy) { // on top of the spire or mast (a brick walk-up has its water tower instead)
+    if (t.mast && !reduced() && Math.floor(now / 900) % 2) { R(ctx, t.cx - 1.5 - ox, t.top - t.mast - 2 - oy, 3, 3, "#ff4a3d"); R(ctx, t.cx - 3 - ox, t.top - t.mast - 3.5 - oy, 6, 6, "rgba(255,74,61,.25)"); }
   }
   // The roof counter: how many are inside. It pops when it changes, and a +1 / −1 floats up from it.
   function drawCounter(b, now) {
