@@ -931,6 +931,8 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                     "name": dept["name"],
                     "mission": dept["mission"],
                     "manager_id": dept["manager_id"],
+                    "slot": dept.get("slot"),
+                    "lot": dept.get("lot", ""),
                 }
             )
         mgr = await ensure_manager(dept)

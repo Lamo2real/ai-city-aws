@@ -105,9 +105,13 @@ export interface CityState {
       manager_id?: string;
       state?: string;
       worker_model?: string | null;
+      /** Its lot in the City, for good (decision 248). */
+      slot?: number;
       builtAt: number;
     }
   >;
+  /** The City's lots (decision 248): slot → the name its size comes from ("" = sized by its number). */
+  lots?: Record<number, string>;
   usage: { usd: number; turns: number; tokens: number } | null;
   spend: Record<string, number>;
   caps: {
@@ -181,7 +185,8 @@ export interface CityBuilding {
 }
 export interface CityWorld {
   buildings: CityBuilding[];
-  lots: Array<CityPoint & { w: number; h: number; demolished?: string }>;
+  /** Lots no tower stands on (decision 248): free, or just demolished (`demolished`, for the wrecking ball). */
+  lots: Array<CityPoint & { w: number; h: number; slot: number; demolished?: string }>;
   streets: Array<{ y: number; x0: number; x1: number }>;
   /** The road west of HQ and the side streets between towers, each as long as it runs (decision 166). */
   lanes: Array<{ x: number; y0: number; y1: number }>;
@@ -220,6 +225,16 @@ export const TILE: number;
 export const HOMES_PER_BLOCK: number;
 /** A tower's footprint and height in tiles, from its name alone (decision 166). */
 export function towerSize(name: string, portrait?: boolean): { w: number; h: number };
+/** Lots in a row of the wide City, and the fewest lots it ever has (decision 248). */
+export const LOT_COLS: number;
+export const MIN_LOTS: number;
+/** The name a lot is sized by. */
+export function lotSizeName(lots: Record<number, string> | undefined, slot: number): string;
+/** Gives every standing department without a lot the first free one (decision 248). */
+export function numberLots(
+  departments: CityState["departments"],
+  lots?: Record<number, string>,
+): { departments: CityState["departments"]; lots: Record<number, string> };
 export function layout(
   state: CityState,
   opts?: { portrait?: boolean; seats?: Record<string, number>; homes?: number },

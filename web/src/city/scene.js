@@ -693,6 +693,7 @@ function courtyardItems(b) {
 // Everything that does not move, baked once per layout, with a margin of countryside so the map runs off the screen's edges.
 const MARGIN = MAP_MARGIN; // tiles of countryside, with the roads running on through it
 const EDGE = 10; // tiles over which the map fades out at its border
+const TREE_W = 24, TREE_H = 18; // the grid of tree spots, in pixels: neighbours never closer than 18 across or 14 down
 function bake(world, skip = new Map()) {
   const W = world.width * TILE, H = world.height * TILE, M = MARGIN * TILE, r = rng("world");
   const [c, g] = newCanvas(W + M * 2, H + M * 2);
@@ -710,12 +711,17 @@ function bake(world, skip = new Map()) {
   // Trees wherever nothing else stands, far to near.
   const taken = [world.hq, ...world.buildings, ...world.lots, world.homes, ...roads.map((s) => ({ x: s.x0, y: s.y, w: s.x1 - s.x0, h: 3 })), ...verticals.map((v) => ({ x: v.x, y: v.y0, w: 3, h: v.y1 - v.y0 }))];
   const clear = (x, y) => taken.every((t) => x < (t.x * TILE) - 12 || x > (t.x + t.w) * TILE + 12 || y < t.y * TILE - 2 || y > (t.y + t.h) * TILE + 34);
+  // Each tree has its own spot on a fixed grid, the same on every map whatever its size (decision 248): a new tower or
+  // row only clears the trees where it stands, and no other tree moves. About one tree to 3000 square pixels.
   const spots = [];
-  for (let i = 0; i < ((W + M * 2) * (H + M * 2)) / 3000; i++) { const x = -M + r() * (W + M * 2), y = -M + r() * (H + M * 2); if (clear(x, y)) spots.push([Math.round(x), Math.round(y)]); }
-  spots.sort((a, b) => a[1] - b[1]);
-  const kept = [];
-  for (const [x, y] of spots) if (kept.every(([kx, ky]) => Math.abs(kx - x) > 18 || Math.abs(ky - y) > 14)) kept.push([x, y]);
-  for (const [x, y] of kept) tree(g, x, y, r);
+  for (let j = Math.floor(-M / TREE_H); j * TREE_H < H + M; j++) for (let i = Math.floor(-M / TREE_W); i * TREE_W < W + M; i++) {
+    const h = hashOf(`tree:${i},${j}`);
+    if (h % 1000 >= 144) continue;
+    const x = i * TREE_W + TREE_W / 2 + ((h >>> 10) % 7) - 3, y = j * TREE_H + TREE_H / 2 + ((h >>> 14) % 5) - 2;
+    if (x >= -M && x <= W + M && y >= -M && y <= H + M && clear(x, y)) spots.push([x, y, h]);
+  }
+  spots.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+  for (const [x, y, h] of spots) tree(g, x, y, rng(`tree:${h}`));
   for (const b of world.buildings) if (b.archived) freeLot(g, b, "ARCHIVED"); else if (skip.get(b.dept) === "rise") towerPlot(g, b); else if (skip.has(b.dept)) site(g, b); else tower(g, b);
   for (const l of world.lots) if (l.demolished && skip.has(l.demolished)) site(g, { ...l, dept: l.demolished }); else freeLot(g, l, "FREE LOT");
   headquarters(g, world.hq);

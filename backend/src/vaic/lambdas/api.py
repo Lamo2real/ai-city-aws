@@ -375,6 +375,11 @@ async def city_snapshot(d: ApiDeps) -> dict[str, Any]:
         await merge_replaced_departments(_action_deps(d), d.files.store if d.files is not None else None)
     except Exception as e:
         log("warn", "departments.merge_failed", error=type(e).__name__)
+    lots: list[dict[str, Any]] = []
+    try:  # every tower's lot, for good (decision 248): numbered the first time in today's order
+        lots = await d.ledger.ensure_lots()
+    except Exception as e:  # the City still draws; it numbers the lots itself until the next snapshot
+        log("warn", "departments.lots_failed", error=type(e).__name__)
     if d.knowledge is not None:  # the built-in AI City guide, indexed in the Knowledge base
         await ensure_builtin_guide(d.knowledge.store, d.knowledge.blobs, d.knowledge.kb)
     results: list[Any] = await asyncio.gather(
@@ -406,9 +411,11 @@ async def city_snapshot(d: ApiDeps) -> dict[str, Any]:
         connectors,
     ) = results
     spend = {dep["name"]: day_breakdown.get(f"DEPT#{dep['key']}", {}).get("usd", 0) for dep in departments}
+    slot_of = {str(lot["holder"]): lot["slot"] for lot in lots if lot.get("holder")}
     return {
         "agents": [{**a, "model_label": model_label(a["model"])} for a in agents],
-        "departments": departments,
+        "departments": [{**dep, "slot": slot_of[dep["key"]]} if dep["key"] in slot_of else dep for dep in departments],
+        "lots": [{"slot": lot["slot"], "size": str(lot.get("size") or "")} for lot in lots],
         "tickets": tickets,
         "parked": parked,
         "questions": questions,

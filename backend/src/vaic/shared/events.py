@@ -116,6 +116,10 @@ class DepartmentCreated(_E):
     manager_id: str
     worker_model: str | None = None
     """Set when the owner chose the workers' model for a department they built (decision 134)."""
+    slot: int | None = None
+    """Its lot in the City, for good (decision 248); None from a version before lots."""
+    lot: str = ""
+    """The name the City sizes that lot by ("" = sized by its number)."""
 
 
 class DepartmentDemolished(_E):

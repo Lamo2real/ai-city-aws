@@ -125,6 +125,8 @@ async def build_department(
             "name": dept["name"],
             "mission": dept["mission"],
             "manager_id": dept["manager_id"],
+            "slot": dept.get("slot"),
+            "lot": dept.get("lot", ""),
             **({"worker_model": model} if model else {}),
         }
     )

@@ -288,6 +288,25 @@ export async function mockBackend(
   // Events sent before the page's WebSocket connects are held and delivered on connect.
   const pending: Array<Record<string, unknown>> = [];
   const built: string[] = []; // departments built through POST /departments, so DELETE can find them
+  // The City's lots (decision 248), like the ledger's: numbered the first time in the snapshot's order (each lot sized
+  // by its tower), then a department takes the first free lot or a new one; demolishing frees the lot.
+  const keyOf = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  let lotList: Array<{ slot: number; size: string; holder: string }> | null = null;
+  const lots = () =>
+    (lotList ??= ((m.snapshot.departments ?? []) as Array<{ key?: string; name: string; state?: string }>)
+      .filter((d) => d.state !== "demolished")
+      .map((d, slot) => ({ slot, size: d.name, holder: d.key ?? keyOf(d.name) })));
+  const lotOf = (holder: string) => {
+    const all = lots();
+    let mine = all.find((l) => l.holder === holder);
+    if (mine) return mine;
+    let slot = 0;
+    while (all.some((l) => l.slot === slot && l.holder)) slot++;
+    mine = all.find((l) => l.slot === slot);
+    if (mine) mine.holder = holder;
+    else all.push((mine = { slot, size: "", holder }));
+    return mine;
+  };
   const m: Mock = {
     calls: [],
     ws: () => {
@@ -621,7 +640,11 @@ export async function mockBackend(
         { accepted: true, message: "If this is the owner's email, a new first-login email is on its way." },
         202,
       );
-    if (path === "/city") return ok({ ...m.snapshot, apps: m.apps });
+    if (path === "/city") {
+      // The City's lots (decision 248), as the server keeps them: numbered once, a lot for every department.
+      const deps = ((m.snapshot.departments ?? []) as Array<{ key?: string; name: string }>).map((d) => ({ ...d, slot: lotOf(d.key ?? keyOf(d.name)).slot }));
+      return ok({ ...m.snapshot, departments: deps, lots: lots().map(({ slot, size }) => ({ slot, size })), apps: m.apps });
+    }
     if (path === "/apps" && req.method() === "GET") return ok({ apps: m.apps });
     const appAt = () => m.apps.find((a) => a.app_id === decodeURIComponent(path.split("/")[2] ?? ""));
     if (/^\/apps\/[^/]+\/bridge$/.test(path)) {
@@ -1170,11 +1193,16 @@ export async function mockBackend(
         ...(b.worker_model ? { worker_model: b.worker_model } : {}),
       };
       built.push(name);
+      const lot = lotOf(key);
+      const listed = m.snapshot.departments as Array<Record<string, unknown>> | undefined;
+      if (Array.isArray(listed) && !listed.some((d) => d.name === name)) listed.push({ ...department, created_at: new Date().toISOString() }); // a reload still has it
       m.send({
         type: "department.created",
         name,
         mission: department.mission,
         manager_id: department.manager_id,
+        slot: lot.slot,
+        lot: lot.size,
         ...(b.worker_model ? { worker_model: b.worker_model } : {}),
       });
       return ok({ department, outcome: "created" }, 201);
@@ -1186,6 +1214,9 @@ export async function mockBackend(
         (city.departments ?? []).find((d) => d.name.toLowerCase().replace(/[^a-z0-9]+/g, "-") === key)?.name ??
         built.find((n) => n.toLowerCase().replace(/[^a-z0-9]+/g, "-") === key);
       if (!name) return ok({ error: "There is no standing department called that." }, 404);
+      for (const l of lots()) if (l.holder === key) l.holder = "";
+      const listed = m.snapshot.departments as Array<{ name: string }> | undefined;
+      if (Array.isArray(listed)) m.snapshot.departments = listed.filter((d) => d.name !== name);
       m.send({ type: "department.demolished", name, workers: 0, parts: 0 });
       return ok({ name, workers: 0, parts: 0, jobs: 0 });
     }

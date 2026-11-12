@@ -16,7 +16,7 @@ export const estUsd = (v, digits = 2) => (v === null || v === undefined || Numbe
 const RECENT_MS = { done: 6000, review_fail: 20000, hired: 4000, retired: 4000 };
 
 export function initialState(now = Date.now()) {
-  return { agents: {}, activities: {}, tickets: {}, questions: {}, approvals: {}, departments: {}, reviews: {}, costs: {}, usage: null, spend: {}, caps: null, parked: {}, city: null, capHit: null, feed: [], recent: {}, apps: {}, connectors: {}, now };
+  return { agents: {}, activities: {}, tickets: {}, questions: {}, approvals: {}, departments: {}, reviews: {}, costs: {}, usage: null, spend: {}, caps: null, parked: {}, city: null, capHit: null, feed: [], recent: {}, apps: {}, connectors: {}, lots: {}, now };
 }
 
 export const deptOf = (agent) => (CORE.has(agent.id) || agent.kind === "executive" ? "HQ" : agent.department || "other");
@@ -48,14 +48,19 @@ export function applySnapshot(state, snap, now = Date.now()) {
   const next = { ...initialState(now), feed: state.feed };
   // The registry says which departments exist. Only a snapshot from before the registry (no `departments`) falls back to the agents.
   const listed = Array.isArray(snap.departments);
+  // The lots (decision 248): a server that numbers them sends them; from an older one the City keeps the numbers it gave.
+  const served = Array.isArray(snap.lots);
+  next.lots = served ? Object.fromEntries(snap.lots.filter((l) => Number.isInteger(l?.slot)).map((l) => [l.slot, String(l.size ?? "")])) : { ...(state.lots ?? {}) };
   for (const d of listed ? snap.departments : []) {
     const born = Date.parse(d.created_at ?? "");
-    if (d.state !== "deleted") next.departments[d.name] = { ...d, builtAt: Math.min(now - 60000, Number.isNaN(born) ? Infinity : born) }; // already built: no construction animation
+    const slot = Number.isInteger(d.slot) ? d.slot : served ? undefined : state.departments?.[d.name]?.slot;
+    if (d.state !== "deleted") next.departments[d.name] = { ...d, slot, builtAt: Math.min(now - 60000, Number.isNaN(born) ? Infinity : born) }; // already built: no construction animation
   }
   for (const a of snap.agents ?? []) {
     next.agents[a.id] = filed(next.departments, a);
     if (!listed) next.departments = touch(next, deptOf(a), now - 60000);
   }
+  Object.assign(next, numberLots(next.departments, next.lots));
   // Saved specialists who are not hired right now live in the apartment buildings.
   for (const sp of snap.specialists ?? []) {
     const id = `spec-${sp.id}`;
@@ -235,7 +240,7 @@ function reduceEvent(state, event, now) {
     }
     case "agent.hired": {
       const a = filed(state.departments, event.agent);
-      return { ...state, now, agents: { ...state.agents, [a.id]: a }, departments: touch(state, deptOf(a), now), recent: { ...state.recent, [a.id]: { kind: "hired", at: now } }, feed: feed(state, `${a.role} ${event.revived ? "is back" : "hired"} in ${deptOf(a)}`, "hire", now) };
+      return { ...state, now, agents: { ...state.agents, [a.id]: a }, ...numberLots(touch(state, deptOf(a), now), state.lots), recent: { ...state.recent, [a.id]: { kind: "hired", at: now } }, feed: feed(state, `${a.role} ${event.revived ? "is back" : "hired"} in ${deptOf(a)}`, "hire", now) };
     }
     case "agent.retired": {
       const a = state.agents[event.id];
@@ -359,12 +364,16 @@ function reduceEvent(state, event, now) {
     case "department.created": {
       const was = state.departments[event.name];
       if (was && was.state !== "demolished") return state;
-      // A rebuilt department goes back up on its old lot; a new one takes the next free lot.
-      return { ...state, now, departments: { ...state.departments, [event.name]: { name: event.name, mission: event.mission, manager_id: event.manager_id, state: "active", worker_model: event.worker_model ?? null, builtAt: was?.builtAt ?? now, rebuiltAt: now } }, feed: feed(state, `Department ${event.name} created`, "department", now) };
+      // The server says which lot it stands on (decision 248): a rebuilt one its old lot if still free, a new one the
+      // first free lot or a new one at the edge. From an older server the City picks the same way.
+      const slot = Number.isInteger(event.slot) ? event.slot : undefined;
+      const lots = slot === undefined || slot in state.lots ? state.lots : { ...state.lots, [slot]: String(event.lot ?? "") };
+      const departments = { ...state.departments, [event.name]: { name: event.name, mission: event.mission, manager_id: event.manager_id, state: "active", worker_model: event.worker_model ?? null, slot, builtAt: was?.builtAt ?? now, rebuiltAt: now } };
+      return { ...state, now, ...numberLots(departments, lots), feed: feed(state, `Department ${event.name} created`, "department", now) };
     }
     case "department.demolished": {
-      // The record stays until the next snapshot so the lot keeps its place and the towers beside it don't move
-      // (decision 134); the scene plays the demolition over it.
+      // Its lot stands empty for good (decision 248); the record stays until the next snapshot so the scene can play
+      // the demolition over it.
       const was = state.departments[event.name];
       if (!was || was.state === "demolished") return state;
       return { ...state, now, departments: { ...state.departments, [event.name]: { ...was, state: "demolished", demolishedAt: now } }, feed: feed(state, `Department ${event.name} demolished`, "department", now) };
@@ -375,11 +384,11 @@ function reduceEvent(state, event, now) {
       const old = Object.values(state.departments).find((x) => keyOf(x.name) === oldKey);
       const departments = { ...state.departments };
       if (old) delete departments[old.name];
-      if (d.state !== "deleted") departments[d.name] = { ...d, builtAt: old?.builtAt ?? now };
+      if (d.state !== "deleted") departments[d.name] = { ...d, slot: Number.isInteger(d.slot) ? d.slot : old?.slot, builtAt: old?.builtAt ?? now };
       // A rename moves its members in the ledger without an event of its own.
       const agents = old && old.name !== d.name ? Object.fromEntries(Object.entries(state.agents).map(([id, a]) => [id, a.department && keyOf(a.department) === oldKey ? { ...a, department: d.name } : a])) : state.agents;
       const text = !old?.key ? `Department ${d.name} created` : old.name !== d.name ? `Department ${old.name} is now ${d.name}` : old.state !== d.state ? `Department ${d.name}: ${old.state} → ${d.state}` : `Department ${d.name} updated`;
-      return { ...state, now, departments, agents, feed: feed(state, text, "department", now) };
+      return { ...state, now, ...numberLots(departments, state.lots), agents, feed: feed(state, text, "department", now) };
     }
     case "tickets.parked": {
       const tickets = { ...state.tickets }, parked = { ...state.parked };
@@ -412,7 +421,7 @@ export function agentStatus(state, id, now = state.now) {
 }
 
 export const departmentNames = (state) => Object.values(state.departments).sort((a, b) => a.builtAt - b.builtAt).map((d) => d.name);
-// The towers standing (a demolished one keeps its lot until the next snapshot, but it is not a department any more).
+// The towers standing (a demolished one is kept until the next snapshot, for its demolition, but it is not a department any more).
 export const standingDepartments = (state) => departmentNames(state).filter((n) => state.departments[n]?.state !== "demolished");
 
 // ---------- Where each agent is. The whole game follows from these few rules. ----------
@@ -575,62 +584,113 @@ export function towerSize(name, portrait = false) {
 // Between two towers on the same side of a row: a side street most of the time, now and then a strip of park.
 const gapAfter = (r, k) => (hashOf(`gap:${r}:${k}`) % 3 === 0 ? 2 : STREET);
 
-// An archived department keeps its slot, so a building never lands on another; it isn't drawn unless work is still open there.
+// The lots (decision 248). Every tower stands on a lot of its own, numbered from 0, for good: LOT_COLS lots to a row,
+// rows only ever added at the edge (never fewer than MIN_LOTS lots). Lot `s` is row floor(s / LOT_COLS), column
+// s % LOT_COLS (on a phone, two to a row: row floor(s / 2), column s % 2). The server numbers them (the ledger's
+// LOT# items); `numberLots` gives a number to a department that has none, the same way: the first lot no standing
+// tower holds, else a new one. `lots` is { slot: size name }: a lot is always as big as `towerSize(size name)`, and
+// "" means sized by its number, so a lot never grows or shrinks whoever stands on it and nothing beside it moves.
+export const LOT_COLS = 4, MIN_LOTS = 8;
+export const lotSizeName = (lots, slot) => lots?.[slot] || `lot:${slot}`;
+export function numberLots(departments, lots = {}) {
+  const out = { ...departments }, sizes = { ...(lots ?? {}) };
+  const recs = Object.values(out).sort((a, b) => (a.builtAt ?? 0) - (b.builtAt ?? 0));
+  for (const r of recs) if (Number.isInteger(r.slot) && !(r.slot in sizes)) sizes[r.slot] = "";
+  // The first time (no lot numbered yet): in the order the City always drew them, each lot as big as its tower.
+  const fresh = !Object.keys(sizes).length;
+  const held = new Map();
+  for (const r of recs) if (r.state !== "demolished" && Number.isInteger(r.slot) && !held.has(r.slot)) held.set(r.slot, r.name);
+  let next = 0;
+  for (const r of recs) {
+    if (r.state === "demolished" || held.get(r.slot) === r.name) continue;
+    while (held.has(next)) next++;
+    held.set(next, r.name);
+    if (!(next in sizes)) sizes[next] = fresh ? r.name : "";
+    out[r.name] = { ...r, slot: next };
+  }
+  return { departments: out, lots: sizes };
+}
+
+// An archived department keeps its lot, so a building never lands on another; it isn't drawn unless work is still open there.
 // `seats` is { dept: the highest seat in use + 1 }; it only adds a department the registry no longer lists (the
 // towers never grow).
 // The town (decision 166): HQ and the VAIC plaza in the middle with the neighbourhood under it, the towers on both
-// sides of it, each its own size, rows as tall as their tallest tower, side streets wherever they fall.
+// sides of it, each lot its own size, rows as tall as their tallest lot, side streets wherever they fall. Nothing is
+// ever placed by how many towers there are, so a new tower or a demolished one moves nothing else (decision 248).
 export function layout(state, { portrait = false, seats = {}, homes = 0 } = {}) {
-  const names = departmentNames(state);
-  for (const d of Object.keys(seats)) if (d !== "HQ" && !names.includes(d)) names.push(d); // someone works in a department the registry no longer lists
-  const n = names.length;
-  const cols = portrait ? 2 : Math.max(2, n <= 4 ? 2 : Math.ceil(n / 3));
-  const rows = Math.max(2, Math.ceil(n / cols));
-  const sizeOf = (name) => (name ? towerSize(name, portrait) : { w: PLOT_W, h: TOWER_H });
-  const grid = Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => names[r * cols + c]));
-  const rowH = grid.map((row) => Math.max(...row.map((name) => sizeOf(name).h)));
+  const extra = Object.keys(seats).filter((d) => d !== "HQ" && !state.departments[d]); // someone works in a department the registry no longer lists
+  const { departments, lots: sizes } = numberLots({ ...state.departments, ...Object.fromEntries(extra.map((d) => [d, { name: d, builtAt: Infinity }])) }, state.lots);
+  const holder = new Map(), wrecked = new Map();
+  for (const r of Object.values(departments)) {
+    if (!Number.isInteger(r.slot)) continue;
+    const standing = r.state !== "demolished" || !!seats[r.name];
+    if (standing && !holder.has(r.slot)) holder.set(r.slot, r.name);
+    else if (!standing) wrecked.set(r.slot, r.name);
+  }
+  const top = Math.max(-1, ...Object.keys(sizes).map(Number), ...holder.keys(), ...wrecked.keys()) + 1;
+  const n = Math.max(MIN_LOTS, Math.ceil(top / LOT_COLS) * LOT_COLS);
+  const cols = portrait ? 2 : LOT_COLS;
+  const rows = n / cols;
+  const sizeOf = (slot) => towerSize(lotSizeName(sizes, slot), portrait);
+  const grid = Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => r * cols + c));
+  const rowH = grid.map((row) => Math.max(...row.map((slot) => sizeOf(slot).h)));
   const buildings = [], lots = [], lanes = [];
-  const place = (name, slot, x, y, w, h) => {
-    if (!name) { lots.push({ x, y, w, h }); return; }
+  const place = (slot, x, y, w, h) => {
+    const name = holder.get(slot);
+    if (!name) { lots.push({ x, y, w, h, slot, ...(wrecked.has(slot) ? { demolished: wrecked.get(slot) } : {}) }); return; }
     const reg = state.departments[name];
-    if (reg?.state === "demolished" && !seats[name]) { lots.push({ x, y, w, h, demolished: name }); return; }
     buildings.push({ dept: name, slot, x, y, w, h, color: deptColor(name), builtAt: reg?.builtAt ?? 0, archived: reg?.state === "archived" && !seats[name] });
   };
-  let width, hqX, avenueX, hqH, westW = [];
+  let width, hqX, avenueX, hqH;
   const streets = [];
-  let y;
+  let y, homesTop = null;
   if (portrait) {
-    // A phone: HQ on top, the avenue down the middle, a tower on each side of it in every row.
+    // A phone: HQ on top, the neighbourhood under it, then the towers, a tower on each side of the avenue in every
+    // row; new rows only ever add at the bottom.
     const maxW = 10;
     avenueX = 1 + maxW; width = avenueX + STREET + maxW + 1; hqX = Math.round((width - HQ_W) / 2); hqH = HQ_H;
     streets.push({ y: 1 + HQ_H, x0: 0, x1: width });
     y = 1 + HQ_H + STREET;
+    homesTop = y;
+    y += Math.ceil(Math.max(1, Math.ceil(homes / HOMES_PER_BLOCK)) / 2) * (APT_BOX_H + 1);
+    streets.push({ y, x0: 0, x1: width }); y += STREET;
     grid.forEach((row, r) => {
-      row.forEach((name, c) => { const s = sizeOf(name); place(name, r * cols + c, c === 0 ? avenueX - s.w : avenueX + STREET, y + rowH[r] - s.h, s.w, s.h); });
+      row.forEach((slot, c) => { const s = sizeOf(slot); place(slot, c === 0 ? avenueX - s.w : avenueX + STREET, y + rowH[r] - s.h, s.w, s.h); });
       y += rowH[r]; streets.push({ y, x0: 0, x1: width }); y += STREET;
     });
   } else {
     // Columns alternate east and west of HQ, nearest first: east of the avenue, then west of HQ, and outwards.
+    // How far west the town reaches is fixed by the first two rows (always there); a later row's west lots are
+    // narrowed to fit, so HQ, and everything east of the map's edge, never moves when a row is added.
     const side = (c) => (c % 2 === 0 ? "east" : "west");
-    westW = grid.map((row, r) => { let w = 0, k = 0; row.forEach((name, c) => { if (side(c) !== "west") return; w += (k ? gapAfter(r, `w${k - 1}`) : STREET) + sizeOf(name).w; k++; }); return w; });
-    hqX = 1 + Math.max(0, ...westW); avenueX = hqX + HQ_W; hqH = rowH[0];
+    const west = grid.map((row, r) => {
+      const ws = row.filter((_, c) => side(c) === "west").map((slot) => sizeOf(slot).w);
+      return { ws, gaps: ws.map((_, k) => (k ? gapAfter(r, `w${k - 1}`) : STREET)) };
+    });
+    const span = (w) => w.ws.reduce((a, b) => a + b, 0) + w.gaps.reduce((a, b) => a + b, 0);
+    const reach = Math.max(span(west[0]), span(west[1]));
+    for (const w of west.slice(2)) {
+      for (let k = w.ws.length - 1; k >= 0 && span(w) > reach; k--) w.ws[k] = Math.max(8, w.ws[k] - (span(w) - reach));
+      for (let k = 1; k < w.gaps.length && span(w) > reach; k++) w.gaps[k] = 2;
+    }
+    hqX = 1 + reach; avenueX = hqX + HQ_W; hqH = rowH[0];
     width = 0; y = 1;
     grid.forEach((row, r) => {
       const top = y, bottom = y + rowH[r];
-      let east = avenueX + STREET, west = hqX - STREET, ke = 0, kw = 0;
-      const eastCount = row.filter((_, c) => side(c) === "east").length, westCount = row.length - eastCount;
-      row.forEach((name, c) => {
-        const s = sizeOf(name);
+      let east = avenueX + STREET, westX = hqX - STREET, ke = 0, kw = 0;
+      const eastCount = row.filter((_, c) => side(c) === "east").length;
+      row.forEach((slot, c) => {
+        const s = sizeOf(slot);
         if (side(c) === "east") {
-          place(name, r * cols + c, east, bottom - s.h, s.w, s.h);
+          place(slot, east, bottom - s.h, s.w, s.h);
           east += s.w;
           if (ke < eastCount - 1) { const g = gapAfter(r, `e${ke}`); if (g === STREET) lanes.push({ x: east, y0: r ? top : -MAP_MARGIN, y1: bottom }); east += g; }
           ke++;
         } else {
-          const x = west - s.w;
-          place(name, r * cols + c, x, bottom - s.h, s.w, s.h);
-          west = x;
-          if (kw < westCount - 1) { const g = gapAfter(r, `w${kw}`); if (g === STREET) lanes.push({ x: west - STREET, y0: r ? top : -MAP_MARGIN, y1: bottom }); west -= g; }
+          const w = west[r].ws[kw], x = westX - w;
+          place(slot, x, bottom - s.h, w, s.h);
+          westX = x;
+          if (kw < west[r].ws.length - 1) { const g = west[r].gaps[kw + 1]; if (g === STREET) lanes.push({ x: westX - STREET, y0: r ? top : -MAP_MARGIN, y1: bottom }); westX -= g; }
           kw++;
         }
       });
@@ -641,7 +701,7 @@ export function layout(state, { portrait = false, seats = {}, homes = 0 } = {}) 
   const officesEnd = y - STREET;
   // The neighbourhood (decision 188): blocks of three New York apartment buildings, one block per HOMES_PER_BLOCK
   // residents. Wide: under HQ, a block between each pair of streets, more blocks (and streets) below when needed.
-  // Phone: under the offices, a block on each side of the avenue, rows apart by a footpath.
+  // Phone: under HQ, above the offices, a block on each side of the avenue, rows apart by a footpath.
   const blocks = Math.max(1, Math.ceil(homes / HOMES_PER_BLOCK));
   const apartments = [], homeBlocks = [], paths = [], parks = [];
   const build = (x, y, w, b) => {
@@ -651,7 +711,7 @@ export function layout(state, { portrait = false, seats = {}, homes = 0 } = {}) 
   };
   let homesY, homesW, homesH;
   if (portrait) {
-    homesY = y; homesW = width - 2;
+    homesY = homesTop; homesW = width - 2;
     for (let b = 0; b < blocks; b++) {
       const top = homesY + Math.floor(b / 2) * (APT_BOX_H + 1);
       build(b % 2 ? avenueX + STREET : 1, top, b % 2 ? width - 1 - avenueX - STREET : avenueX - 1, b);
@@ -673,7 +733,7 @@ export function layout(state, { portrait = false, seats = {}, homes = 0 } = {}) 
     }
     homesH = bottom - homesY;
     for (const s of streets) s.x1 = width; // every street runs edge to edge, and on off the map
-    if (westW.some(Boolean)) lanes.push({ x: hqX - STREET, y0: -MAP_MARGIN, y1: Math.max(y, homesY + homesH + 1) + MAP_MARGIN }); // the road west of HQ
+    lanes.push({ x: hqX - STREET, y0: -MAP_MARGIN, y1: Math.max(y, homesY + homesH + 1) + MAP_MARGIN }); // the road west of HQ
   }
   const hq = { dept: "HQ", x: hqX, y: 1, w: HQ_W, h: hqH, color: DEPT_COLOR.HQ };
   return { hq, buildings, lots, lanes, streets, hqStreet: portrait ? 1 + HQ_H : 1 + hqH, officesEnd, avenue: avenueX, width, height: Math.max(y, homesY + homesH + 1), homes: { x: portrait ? 1 : hqX, y: homesY, w: homesW, h: homesH, apartments, blocks: homeBlocks, paths, parks }, portrait };

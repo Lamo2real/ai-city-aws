@@ -312,7 +312,7 @@ async def test_reset_city_removes_the_work_and_keeps_what_the_owner_set_up() -> 
     r = await led.reset_city()
 
     assert r["done"] is True
-    assert r["gone"] == {"AGENT": 1, "APPDRAFTS": 1, "APPROVAL": 1, "CONV": 1, "DEPT": 1, "EVENT": 1, "IDEMP": 1, "Q": 1,
+    assert r["gone"] == {"AGENT": 1, "APPDRAFTS": 1, "APPROVAL": 1, "CONV": 1, "DEPT": 1, "EVENT": 1, "IDEMP": 1, "LOT": 1, "Q": 1,
                       "RATE": 1, "SLOTS": 1, "TICKET": 2, "TOOL": 1, "TURN": 1, "WORK": 1}  # fmt: skip
     left = sorted(pk.split("#", 1)[0] for pk, _ in table.items)
     assert left == ["APP", "APPSTATE", "CONFIG", "CONN", "DEVICE", "NOTE", "NOTIFY", "SKILL", "SPEC", "SPEND", "VOICE"]

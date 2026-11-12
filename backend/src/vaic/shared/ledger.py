@@ -36,6 +36,7 @@ RESET_KINDS = frozenset(
         "RATE",
         "STEWARD",
         "EXECREC",
+        "LOT",
     }
 )
 """The key kinds (the part of ``pk`` before ``#``) that ``Ledger.reset_city`` removes. Anything else is kept."""
@@ -55,6 +56,10 @@ TURN_KINDS: tuple[TurnKind, ...] = (
     "chief_of_staff",
     "executive",
 )
+LOT_COLS = 4
+"""The City's rows are four lots wide (``layout`` in web/src/city/city-state.js)."""
+MIN_LOTS = 8
+"""The City always has at least two rows of lots."""
 ALL_STATUSES = ("open", "in_progress", "in_review", "waiting_on_owner", "parked", "done", "failed", "cancelled")
 _KEY_ATTRS = {"pk", "sk", "gsi1pk", "gsi1sk", "gsi2pk", "gsi2sk", "ttl"}
 
@@ -205,7 +210,7 @@ class Ledger:
             if_not_exists=True,
         )
         if created:
-            return dept, True
+            return {**dept, **await self.claim_lot(key)}, True
         existing = await self.get_department(name)
         assert existing is not None
         return existing, False
@@ -228,12 +233,15 @@ class Ledger:
         return rows if include_demolished else [r for r in rows if r.get("state") != "demolished"]
 
     async def demolish_department(self, name: str) -> None:
-        """The record stays (history, and so a demolished preset is not put back by ``ensure_presets``)."""
+        """The record stays (history, and so a demolished preset is not put back by ``ensure_presets``). Its lot
+        in the City stands empty until another department takes it (decision 248); its ``slot`` stays on the
+        record, so a rebuild goes back to the same lot if it is still free."""
         await self.table.update(
             f"DEPT#{department_key(name)}",
             "META",
             UpdateOptions(set={"state": "demolished", "demolished_at": self._iso()}),
         )
+        await self.release_lot(department_key(name))
 
     async def rebuild_department(self, name: str, mission: str, extra: Record | None = None) -> Record:
         """A demolished department built again by the owner: standing, with its new mission and choices."""
@@ -255,7 +263,97 @@ class Ledger:
         )
         if it is None:
             raise KeyError(f"no department {name}")
-        return _strip(it)
+        rec = _strip(it)
+        prefer = rec.get("slot")
+        return {**rec, **await self.claim_lot(rec["key"], int(prefer) if prefer is not None else None)}
+
+    # ---------- the City's lots (decision 248) ----------
+    # Every tower stands on a lot of its own, numbered from 0, for good: four lots to a row of the City, rows only
+    # ever added at the edge. A department takes a lot once, when it is built; demolishing it leaves the lot empty
+    # (a FREE LOT) until a new department takes it, so no tower, road or home ever moves. A lot's footprint is fixed
+    # with it: ``size`` is the name the City sizes it by (the department that stood there when the lots were first
+    # numbered), "" for every lot opened later (the City sizes those by their number).
+    async def list_lots(self) -> list[Record]:
+        return sorted(
+            ({**_strip(i), "slot": int(i["slot"])} for i in await self.table.query_index("gsi1", "LOT")),
+            key=lambda lot: lot["slot"],
+        )
+
+    def _lot_item(self, slot: int, holder: str, size: str) -> Item:
+        return {
+            "pk": f"LOT#{slot:05d}",
+            "sk": "META",
+            "gsi1pk": "LOT",
+            "gsi1sk": f"{slot:05d}",
+            "slot": slot,
+            "holder": holder,
+            "size": size,
+        }
+
+    async def _set_slot(self, key: str, slot: int) -> None:
+        await self.table.update(f"DEPT#{key}", "META", UpdateOptions(set={"slot": slot}, must_exist=True))
+
+    async def ensure_lots(self) -> list[Record]:
+        """The lots, numbered for the first time if they never were: the standing departments in the order the
+        City has always drawn them (oldest first), each lot as big as its tower. Then any standing department
+        without a lot (built by an older version) takes one. Safe to run twice at once: the same numbers come out."""
+        lots = await self.ensure_lots_numbered()
+        held = {str(lot.get("holder")) for lot in lots}
+        standing = sorted(await self.list_departments(), key=lambda r: str(r.get("created_at", "")))
+        missing = [dep for dep in standing if str(dep["key"]) not in held]
+        for dep in missing:
+            await self.claim_lot(str(dep["key"]))
+        return await self.list_lots() if missing else lots
+
+    async def claim_lot(self, key: str, prefer: int | None = None) -> Record:
+        """The department's lot: the one it holds, else ``prefer`` (its old lot) if free, else the first free lot,
+        else a new one at the edge (a new row of the City). Returns ``{"slot", "lot"}`` (``lot``: its size name)."""
+        for _ in range(20):  # another department claiming at the same moment: read again and retry
+            lots = await self.ensure_lots_numbered()
+            by_slot = {lot["slot"]: lot for lot in lots}
+            mine = next((lot for lot in lots if lot.get("holder") == key), None)
+            if mine:
+                await self._set_slot(key, mine["slot"])
+                return {"slot": mine["slot"], "lot": str(mine.get("size") or "")}
+            top = max(by_slot, default=-1) + 1
+            n = max(MIN_LOTS, -(-top // LOT_COLS) * LOT_COLS)
+            free = [s for s in range(n) if not (by_slot.get(s) or {}).get("holder")]
+            order = ([prefer] if prefer is not None and prefer in free else []) + free + [n]
+            for s in dict.fromkeys(order):
+                if s in by_slot:
+                    ok = (
+                        await self.table.update(
+                            f"LOT#{s:05d}", "META", UpdateOptions(set={"holder": key}, expect={"holder": ""})
+                        )
+                        is not None
+                    )
+                    size = str(by_slot[s].get("size") or "")
+                else:
+                    ok = await self.table.put(self._lot_item(s, key, ""), if_not_exists=True)
+                    size = ""
+                if ok:
+                    await self._set_slot(key, s)
+                    return {"slot": s, "lot": size}
+        raise RuntimeError(f"no lot for department {key}")
+
+    async def ensure_lots_numbered(self) -> list[Record]:
+        """The lots, after the first numbering (``ensure_lots`` without claiming for anyone)."""
+        lots = await self.list_lots()
+        if lots:
+            return lots
+        standing = sorted(await self.list_departments(), key=lambda r: str(r.get("created_at", "")))
+        for i, dep in enumerate(standing):
+            await self.table.put(self._lot_item(i, str(dep["key"]), str(dep["name"])), if_not_exists=True)
+            await self._set_slot(str(dep["key"]), i)
+        return await self.list_lots()
+
+    async def release_lot(self, key: str) -> None:
+        """The demolished department's lot stands empty: nothing else changes."""
+        for lot in await self.list_lots():
+            if lot.get("holder") == key:
+                await self.table.update(
+                    f"LOT#{lot['slot']:05d}", "META", UpdateOptions(set={"holder": ""}, expect={"holder": key})
+                )
 
     # ---------- agents (hires) ----------
     async def put_agent(self, a: Record) -> None:
