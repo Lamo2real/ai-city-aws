@@ -289,3 +289,29 @@ test("phone: Activity folds down to its title", async ({ page }) => {
   await expect(page.locator(".cityui.feed")).toHaveClass(/closed/);
   expect((await page.locator(".cityui.feed").boundingBox())!.height).toBeLessThan(70);
 });
+
+test("phone: City is the menu's first tab and its glass highlight lines up, also after scrolling the menu", async ({
+  page,
+}) => {
+  await mockBackend(page);
+  await page.goto("/#/settings");
+  const nav = page.getByRole("navigation", { name: "Screens" });
+  const thumb = nav.locator(".navthumb");
+  await expect(nav.getByRole("link").first()).toHaveText("City");
+  const lined = async (name: string) => {
+    const tab = nav.getByRole("link", { name, exact: true });
+    await expect(tab).toHaveAttribute("aria-current", "page");
+    await expect
+      .poll(async () => {
+        const [a, b] = await Promise.all([tab.boundingBox(), thumb.boundingBox()]);
+        return a && b ? Math.round(Math.abs(a.x - b.x) + Math.abs(a.width - b.width)) : 999;
+      })
+      .toBeLessThanOrEqual(1);
+  };
+  await lined("Settings"); // the last tab, scrolled to
+  await nav.evaluate((e) => (e.scrollLeft = 0));
+  await nav.getByRole("link", { name: "City", exact: true }).tap();
+  await expect(page.locator("section.city")).toHaveAttribute("data-city-ready", "1");
+  await lined("City");
+  await page.screenshot({ path: "test-results/phone-city-tab.png" });
+});

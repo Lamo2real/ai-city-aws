@@ -15,7 +15,7 @@ import { PinnedApps } from "./components/Apps.tsx";
 import { ProjectPage, ProjectsScreen } from "./components/Projects.tsx";
 import { VaicScreen } from "./components/VaicScreen.tsx";
 import { CityView } from "./components/CityView.tsx";
-import { FeaturesScreen } from "./components/Features.tsx";
+import { CityPages } from "./components/Features.tsx";
 import { FirstRun } from "./components/FirstRun.tsx";
 import { UpdateNotice } from "./components/UpdateNotice.tsx";
 import { KnowledgeScreen } from "./components/Knowledge.tsx";
@@ -197,7 +197,7 @@ export function App() {
         Skip to content
       </a>
       <header className="top" ref={top}>
-        {/* The logo is the way to the City (the owner, 2026-11-10): the City has no tab of its own. */}
+        {/* The logo leads to the City, and so does the City tab, first in the menu (the owner, 2026-11-12). */}
         <a
           className="brand"
           href="#/city"
@@ -208,7 +208,7 @@ export function App() {
         </a>
         <nav aria-label="Screens" className="tabs" ref={nav}>
           <span className="navthumb" aria-hidden="true" />
-          {VIEWS.filter((v) => v !== "city").map((v) => (
+          {(["city", ...VIEWS.filter((v) => v !== "city")] as const).map((v) => (
             <a key={v} href={`#/${v}`} aria-current={view === v ? "page" : undefined}>
               {LABEL[v]}
             </a>
@@ -219,8 +219,13 @@ export function App() {
       </header>
       <main id="main" tabIndex={-1}>
         {view === "vaic" ? <VaicScreen go={go} /> : null}
-        {view === "city" && (!slug || visit) ? <CityView go={go} visit={visit} /> : null}
-        {view === "city" && slug && !visit ? <FeaturesScreen page={slug} go={go} /> : null}
+        {view === "city" ? (
+          <CityPages
+            page={slug && !visit ? slug : null}
+            go={go}
+            city={(away) => <CityView go={go} visit={visit} away={away} />}
+          />
+        ) : null}
         {view === "tickets" ? <Tickets page={slug} /> : null}
         {view === "apps" && !slug ? <ProjectsScreen /> : null}
         {view === "apps" && slug ? <ProjectPage key={slug} slug={slug} go={go} /> : null}

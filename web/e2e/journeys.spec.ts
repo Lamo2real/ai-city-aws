@@ -1532,8 +1532,13 @@ test("the top menu's glass highlight sits under the open tab and follows the nex
   await under("Chat");
   await nav.getByRole("link", { name: "Skills", exact: true }).click();
   await under("Skills");
-  await page.locator(".brand").click(); // the City has no tab: the highlight fades away
-  await expect(thumb).toHaveCSS("opacity", "0");
+  await page.locator(".brand").click(); // the logo opens the City: the highlight slides to the City tab, the first
+  await under("City");
+  await nav.getByRole("link", { name: "Settings", exact: true }).click();
+  await under("Settings");
+  await nav.getByRole("link", { name: "City", exact: true }).click();
+  await expect(page).toHaveURL(/#\/city$/);
+  await under("City");
 });
 
 test("sending shows no 'not sent' warning while the message is on its way, and VAIC's new reply is scrolled into view", async ({

@@ -1,7 +1,7 @@
 // The City view: the ported pixel-art scene on a canvas, with the Mac HUD's layout around it —
 // status bar on top, departments / records / activity on the right, zoom and actions at the bottom.
 // Driven entirely by WebSocket events through the store.
-import { CityTabs } from "./Features.tsx";
+import { CityTabs, swapMs } from "./Features.tsx";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import {
   MODEL_NAME,
@@ -60,14 +60,34 @@ type Open =
 export function CityView({
   go,
   visit = null,
+  away = false,
 }: {
   go: (view: string) => void;
+  /** Features is showing (decision 254): the City stays alive behind it, faded out, then hidden and paused. */
+  away?: boolean;
   /** Inside a department's building (decision 166): on its street, or on one project's floor. */
   visit?: Visit | null;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const scene = useRef<CityScene | null>(null);
+  // Away to Features: fade out, then hide (the scene pauses while hidden). Back: show at once, fade in, carry on.
+  const [faded, setFaded] = useState(away);
+  const [gone, setGone] = useState(away);
+  useEffect(() => {
+    if (away) {
+      setFaded(true);
+      const t = setTimeout(() => setGone(true), swapMs());
+      return () => clearTimeout(t);
+    }
+    setGone(false);
+    let r2 = 0;
+    const r1 = requestAnimationFrame(() => (r2 = requestAnimationFrame(() => setFaded(false))));
+    return () => {
+      cancelAnimationFrame(r1);
+      cancelAnimationFrame(r2);
+    };
+  }, [away]);
   const city = useHud((s) => s.city);
   const loaded = useHud((s) => s.loaded);
   const loadError = useHud((s) => s.loadError);
@@ -182,6 +202,9 @@ export function CityView({
       store.sceneEvents.delete(off);
     };
   }, []);
+  useEffect(() => {
+    if (!gone) scene.current?.resume();
+  }, [gone]);
   // A fresh snapshot (first load, reconnect) rebuilds the scene's copy — never a mere event, whose reload
   // would wipe walks in progress and activity bubbles (the scene already gets every event itself).
   const loadedAt = useHud((s) => s.snapshotAt);
@@ -215,7 +238,14 @@ export function CityView({
   const region = (city as CityState & { region?: string }).region ?? "eu-north-1";
 
   return (
-    <section className="city" ref={root} aria-label="City view">
+    <section
+      className={`city${faded ? " is-away" : ""}`}
+      ref={root}
+      aria-label="City view"
+      hidden={gone}
+      aria-hidden={faded || undefined}
+      inert={faded}
+    >
       {/* The refraction behind the City's glass boxes (decision 153): defined once, used by .cityui. */}
       <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true" focusable="false">
         <filter id="city-glass" x="0" y="0" width="100%" height="100%" colorInterpolationFilters="sRGB">

@@ -4840,6 +4840,39 @@ summary,
 }
 
 /* ---------- City → Features and the Calendar (docs/MAIL_CALENDAR.md §12) ---------- */
+/* City ⇄ Features crossfade (the owner, 2026-11-12, decision 254): the City stays alive behind Features, so the
+   two pages fade into each other over the page's own background in either theme, with no rebuild and no flash.
+   Reduced motion: an instant swap. */
+.city {
+  transition: opacity 260ms ease;
+}
+.city.is-away {
+  opacity: 0;
+  pointer-events: none;
+}
+.citypage.is-in {
+  animation: citypage-in 260ms ease both;
+}
+.citypage.is-leaving {
+  animation: none;
+  opacity: 0;
+  transition: opacity 260ms ease;
+  pointer-events: none;
+}
+@keyframes citypage-in {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .city,
+  .citypage.is-in,
+  .citypage.is-leaving {
+    transition: none;
+    animation: none;
+  }
+}
+
 /* "City | Features": one parchment pill on both pages, two equal halves, and a highlight that slides from the
    page you left to the one you opened (the owner's wish, 2026-11-09). On the City it sits at the right of the
    stats card; on Features at the right of the page's top, in the same parchment look. */

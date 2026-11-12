@@ -1,7 +1,7 @@
 // City → Features: the owner's personal features (a gallery, on/off, "Add a feature" through VAIC), and the first
 // one, the Calendar: every meeting from every connected account in one place, with a big Join button.
 // Read-only: nothing here accepts, declines or changes a meeting (docs/MAIL_CALENDAR.md §12).
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   byDay,
   calendarApi,
@@ -31,9 +31,25 @@ const ADD_DRAFT = "I'd like a feature that ";
 /** Which side the "City | Features" highlight was on, so the next page's switch starts there and slides over. */
 let shownTab: "city" | "features" | null = null;
 
+/** City ⇄ Features crossfade length (decision 254), 0 with reduced motion: the pages swap at once. */
+export const SWAP_MS = 260;
+export const swapMs = () => (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? 0 : SWAP_MS);
+
+/** Which City page the address shows, if it is one of them. */
+const tabOfHash = (): "city" | "features" | null =>
+  /^#\/?city\/features/.test(location.hash) ? "features" : /^#\/?city\b/.test(location.hash) ? "city" : null;
+
 /** "City | Features": the two pages under the City tab. One look on both pages; the highlight slides from the
- *  page you left to the one you opened (the owner's wish, 2026-11-09: smooth, not a jump to a new style). */
-export function CityTabs({ on }: { on: "city" | "features" }) {
+ *  page you left to the one you opened (the owner's wish, 2026-11-09: smooth, not a jump to a new style). Each
+ *  switch follows the address, so the City's (kept alive behind Features) and Features' (fading out) agree. */
+export function CityTabs({ on: page }: { on: "city" | "features" }) {
+  const [on, setOn] = useState<"city" | "features">(() => tabOfHash() ?? page);
+  useEffect(() => {
+    const sync = () => setOn(tabOfHash() ?? page);
+    sync();
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, [page]);
   const [at, setAt] = useState<"city" | "features">(shownTab ?? on);
   useEffect(() => {
     shownTab = on;
@@ -50,6 +66,40 @@ export function CityTabs({ on }: { on: "city" | "features" }) {
         Features
       </a>
     </nav>
+  );
+}
+
+/** The City tab's two pages (decision 254): the City is built once and stays alive (hidden, paused) while
+ *  Features shows, so coming back is the same town, camera and people with no entrance; the pages crossfade. */
+export function CityPages({
+  page,
+  go,
+  city,
+}: {
+  /** The Features page shown (`features`, `features/calendar`), or null on the City. */
+  page: string | null;
+  go: (v: string) => void;
+  /** The City itself (CityView), told when it is away behind Features. */
+  city: (away: boolean) => ReactNode;
+}) {
+  const [met, setMet] = useState(page === null); // the City has been shown: Features fades in over it (not on a direct link)
+  const [last, setLast] = useState(page);
+  useEffect(() => {
+    if (page === null) setMet(true);
+    if (page) return setLast(page);
+    const t = setTimeout(() => setLast(null), swapMs());
+    return () => clearTimeout(t);
+  }, [page]);
+  const shown = page ?? last;
+  return (
+    <>
+      {met || page === null ? city(page !== null) : null}
+      {shown ? (
+        <div className={`citypage${met ? " is-in" : ""}${page ? "" : " is-leaving"}`} inert={!page}>
+          <FeaturesScreen page={shown} go={go} />
+        </div>
+      ) : null}
+    </>
   );
 }
 

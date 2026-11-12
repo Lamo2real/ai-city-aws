@@ -93,20 +93,24 @@ test("the City tab has City | Features; Features lists Calendar and adds a featu
   await page.goto("/#/city");
   const tabs = page.getByRole("navigation", { name: "City pages" });
   await expect(tabs.getByRole("link", { name: "City" })).toHaveAttribute("aria-current", "page");
-  // The logo is the way to the City (no City tab); Features lives under City, not beside it.
+  // City is the menu's first tab (the owner, 2026-11-12), open on the City and on Features; Features lives under
+  // City, not beside it.
   const top = page.getByRole("navigation", { name: "Screens" });
-  await expect(top.getByRole("link", { name: "City" })).toHaveCount(0);
+  await expect(top.getByRole("link").first()).toHaveText("City");
+  await expect(top.getByRole("link", { name: "City", exact: true })).toHaveAttribute("aria-current", "page");
   await expect(top.getByRole("link", { name: "Chat" })).toHaveAttribute("href", "#/vaic");
   await expect(top.getByRole("link", { name: "Features" })).toHaveCount(0);
   await tabs.getByRole("link", { name: "Features" }).click();
   await expect(page).toHaveURL(/#\/city\/features$/);
   await expect(page.getByRole("heading", { name: "Features", level: 1 })).toBeVisible();
   await expect(page.getByRole("link", { name: "VAIC — the City" })).toHaveAttribute("aria-current", "page");
+  await expect(top.getByRole("link", { name: "City", exact: true })).toHaveAttribute("aria-current", "page");
   const sw = page.getByRole("switch", { name: "Calendar on or off" });
   await expect(sw).toBeChecked();
   await sw.click({ force: true });
   await expect(sw).not.toBeChecked();
   expect(m.calls.find((c) => c.method === "PUT" && c.path === "/features/calendar")?.body).toEqual({ enabled: false });
+  await expect(page.locator("section.city")).toBeHidden(); // the crossfade from the City is over (decision 254)
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 
   await page.getByRole("button", { name: /Add a feature/ }).click();

@@ -832,6 +832,9 @@ const DASH_MS = 320, WALK_SPEED = 46, SCENERY_MS = 125, TRAFFIC_MS = 50;
 // Zoom is smooth and continuous (the owner, 2026-11-10): from far out to close up, eased between, never in steps.
 const ZOOM_MIN = 0.35, ZOOM_MAX = 8, ZOOM_STEP = 1.5;
 
+/** How many times the towers' entrance has played in this page (decision 254): once, on the first City shown.
+ *  Coming back to the City (from Features or another screen) never plays it again. */
+let entrances = 0, entranceHad = false;
 // `insets()` says how much of the root the HUD's own bars cover, so the map is fitted into the free part.
 export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0, r: 0, b: 0 }), onSelectAgent = () => {}, onSelectBuilding = () => {}, onOpenApp = () => {}, onState = () => {} } = {}) {
   // A test hook for the rare cars' screenshots: data-rare-cabs="all" makes every car one of the two rare ones (half
@@ -869,6 +872,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   root._counts = counts; // and the roof counters (e2e/towers.spec.ts)
   root._doors = doors;
   root._view = () => ({ x: cam.x, y: cam.y, zoom: cam.zoom }); // the camera, for tests that click a tower
+  root._entrances = () => entrances; // how often the towers' entrance has played this page (e2e/features.spec.ts)
   root._world = () => world; // the layout, for tests: towers keep one size whatever the headcount
   root._carSprite = cabImg; // the car sprites (false, "porsche", "lambo"; side, front, rear), for the rare cars' close-up screenshot
   const winBox = document.createElement("div"); winBox.id = "citywindows"; winBox.hidden = true; winBox.setAttribute("aria-hidden", "true"); root.append(winBox);
@@ -1412,7 +1416,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     if (ev.target.closest?.("input")) return;
     if (ev.key === "+" || ev.key === "=") zoomStep(1); else if (ev.key === "-") zoomStep(-1);
   });
-  if (typeof ResizeObserver !== "undefined") new ResizeObserver(() => { if (world) { const was = world.portrait; if (was !== isPortrait()) { worldSig = ""; sync(true); } fitView(); wake(); } }).observe(root);
+  if (typeof ResizeObserver !== "undefined") new ResizeObserver(() => { if (world && root.clientWidth) /* not while hidden behind Features */ { const was = world.portrait; if (was !== isPortrait()) { worldSig = ""; sync(true); } fitView(); wake(); } }).observe(root);
 
   function selectAgent(id) {
     const p = people.get(id);
@@ -1818,11 +1822,13 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     // event while the City is open plays the walk, the taxi and the ride.
     if (ctx) {
       sync(true);
-      // The page opens with every tower rising out of the ground in turn: once, on the first snapshot that has
-      // towers (not with reduced motion or a hidden tab).
+      // The page opens with every tower rising out of the ground in turn: once per page, on the first snapshot that
+      // has towers (not with reduced motion or a hidden tab); never again on coming back to the City (decision 254).
       if (!entered && world.buildings.length) {
         entered = true;
-        if (!reduced() && visible()) for (const a of entranceAnims(world.buildings, performance.now() + (ghosts.size ? 0 : 200), ghosts)) anims.set(a.dept, a);
+        const play = !entranceHad && !reduced() && visible();
+        entranceHad = true;
+        if (play) { entrances++; for (const a of entranceAnims(world.buildings, performance.now() + (ghosts.size ? 0 : 200), ghosts)) anims.set(a.dept, a); }
       }
       if (ghosts.size || anims.size) ground = bake(world, animSkip(), unknownLots); // placeholders gone, or towers coming in
       fitView(); markApps(); needDraw = true; resume();
