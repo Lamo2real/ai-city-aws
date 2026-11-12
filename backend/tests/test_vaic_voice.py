@@ -38,7 +38,7 @@ def test_the_address_lives_only_in_the_shared_section() -> None:
         body = load_prompt(name).body
         assert "Your voice" in body, name
         assert "like Jarvis does" not in body and "Always address the owner as" not in body, name
-    for name in ("orchestrator.md", "manager.md", "worker.md", "chief_of_staff.md"):
+    for name in ("planner.md", "manager.md", "worker.md", "chief_of_staff.md"):
         body = (agents_dir() / name).read_text(encoding="utf-8")
         assert "bro" not in body and "Your voice" not in body, name  # the team keeps its professional voice
 

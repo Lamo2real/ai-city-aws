@@ -290,7 +290,15 @@ async def run_job(
         sent_home = await release_idle_workers(ledger, queue, bus, f, minutes, timeout)
     if job == "sweep":
         sd = CityDeps(ledger=ledger, bus=bus, queue=queue, factory=f, settings=current_settings, max_review_rounds=3)
-        return {"resent": resent, "sent_home": sent_home, "stuck": await report_stuck_parts(sd)}
+        from vaic.shared.hierarchy.board_path import adopt_chain_jobs
+
+        # The drain (decision 298): a job still on the old Orchestrator chain moves onto the board, once.
+        return {
+            "resent": resent,
+            "sent_home": sent_home,
+            "stuck": await report_stuck_parts(sd),
+            "adopted": await adopt_chain_jobs(sd),
+        }
     if job == "retire_idle":
         n = 0
         open_ = await ledger.list_tickets(["open", "in_progress", "in_review", "waiting_on_owner"])

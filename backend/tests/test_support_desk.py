@@ -19,6 +19,7 @@ from vaic.runtime.tools import TurnCtx
 from vaic.shared import standing_orders as so
 from vaic.shared import support_desk as desk
 from vaic.shared.hierarchy.actions import FINAL
+from vaic.shared.ids import manager_id
 from vaic.shared.ledger import ALL_STATUSES
 
 SLACK: list[dict[str, str]] = []
@@ -38,28 +39,23 @@ async def vaic(req: EngineRequest, call: Call) -> str:
 
 
 async def orchestrator(req: EngineRequest, call: Call) -> str:
-    if "(task) from vaic" in req.turn.prompt:
-        dept = re.search(r"Send it to the (.+?) department", req.turn.prompt).group(1)  # type: ignore[union-attr]
-        await call("create_department", {"name": dept, "mission": f"The {dept} team."})
-        await call("assign_to_department", {"department": dept, "goal": await _goal(req), "acceptance": "done"})
-        return "Sent."
-    await call("sign_off", {"verdict": "PASS", "reasons": "Done."})
-    await call("report_to_vaic", {"summary": "Finished."})
-    return "PASS"
+    """The board's planner, for a job whose department isn't standing yet (decision 298)."""
+    dept = re.search(r"Give every part to the (.+?) department", req.turn.prompt).group(1)  # type: ignore[union-attr]
+    await call("add_part", {"name": "The job", "goal": await _goal(req), "acceptance": "done", "department": dept})
+    await call("finish_plan", {})
+    return "Planned."
 
 
 async def manager(req: EngineRequest, call: Call) -> str:
-    if "(task) from orchestrator" in req.turn.prompt:
-        hired = await call("hire_worker", {"specialty": "agent", "instructions": "Do the job.", "tools": ["Read"],
-                                           "budget_hint_usd": 1})  # fmt: skip
-        wid = re.search(r"Hired (\S+)", hired).group(1)  # type: ignore[union-attr]
-        await call("assign", {"worker_id": wid, "goal": await _goal(req), "acceptance": "done"})
-        return "Assigned."
-    for t in await req.ledger.child_tickets(req.ctx.ticket_id):
-        if t["status"] == "in_review":
-            await call("review", {"ticket_id": t["id"], "verdict": "PASS", "reasons": "Meets the acceptance."})
-            await call("report_to_orchestrator", {"summary": str(t.get("result") or "Done.")})
+    """A department's reviewer on the board: one review of the part it was sent."""
+    if "Board review" in req.turn.prompt:
+        await call("review", {"ticket_id": req.ctx.ticket_id, "verdict": "PASS", "reasons": "Meets the acceptance."})
     return "Reviewed."
+
+
+async def departments(city: object, *names: str) -> None:
+    for n in names:
+        await city.ledger.create_department(n, f"The {n} team.", manager_id(n))  # type: ignore[attr-defined]
 
 
 async def worker(req: EngineRequest, call: Call) -> str:
@@ -96,6 +92,7 @@ async def test_a_slack_message_becomes_a_ticket_is_fixed_by_it_and_the_reporter_
     city = make_city(scripted_engine({"vaic": vaic, "orchestrator": orchestrator, "manager": manager,
                                       "worker": worker}))  # fmt: skip
     await city.host.ensure_core()
+    await departments(city, "Customer Support", "IT Infrastructure")
     o = await so.add_order(city.ledger, {"source": "Slack #support", "instructions": "Answer new messages."})
     d = city.deps
 
@@ -153,7 +150,7 @@ async def test_a_team_that_fails_twice_leaves_the_ticket_stuck_and_a_forgotten_t
     await run_job("standing_orders", d.ledger, d.queue, d.bus)
     t = await desk.get_ticket(d.ledger, t["id"])
     assert t is not None and t["status"] == "with_team"
-    assert "Send it to the Finance department" in d.queue.sent[-1]["body"]
+    assert "Give every part to the Finance department" in d.queue.sent[-1]["body"]  # the board's planner
     await d.ledger.set_ticket_status(t["team_job"], "failed", "x")
     assert (await run_job("standing_orders", d.ledger, d.queue, d.bus))["tickets_moved"] == 1
     t2 = await desk.get_ticket(d.ledger, t["id"])

@@ -50,7 +50,7 @@ test("adding a skill: pick a SKILL.md, see what's dropped, choose who may use it
   expect(Buffer.from(post.files[0]!.content_base64, "base64").toString()).toBe(SKILL);
   const card = page.getByRole("article", { name: "Skill pdf-report" });
   await expect(card).toBeVisible();
-  await card.getByLabel("Orchestrator").uncheck();
+  await card.getByLabel("Planner").uncheck();
   await expect
     .poll(() => m.calls.find((c) => c.path === "/skills/pdf-report" && c.method === "PUT")?.body)
     .toEqual({ roles: ["vaic", "manager"] });

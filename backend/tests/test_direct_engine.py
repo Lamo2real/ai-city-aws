@@ -181,9 +181,9 @@ async def test_after_a_triage_says_answer_yourself_vaic_answers_in_the_same_turn
     async def delegate(_: dict[str, Any]) -> str:
         return "Triage: answer this yourself now, in full. No task was created."
 
-    spec = ToolSpec("delegate_to_orchestrator", "Hand off.", {"type": "object", "properties": {}}, delegate)
+    spec = ToolSpec("start_job", "Hand off.", {"type": "object", "properties": {}}, delegate)
     fake = FakeBedrock(
-        [tool_round("delegate_to_orchestrator", '{"goal": "x"}'), text_round("Sentence one. ", "Sentence two.")]
+        [tool_round("start_job", '{"goal": "x"}'), text_round("Sentence one. ", "Sentence two.")]
     )
     texts: list[str] = []
     out = await direct_engine(request([spec], texts), fake)

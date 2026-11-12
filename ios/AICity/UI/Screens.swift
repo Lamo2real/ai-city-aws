@@ -484,7 +484,7 @@ struct FirstRunGuide: View {
     @State private var i = 0
     private let steps = [
         ("Meet VAIC", "Talk to VAIC like a friend. Type, or tap the mic and speak. Ask for anything. VAIC tells you when it is done."),
-        ("See the City", "The City shows your organization live: the Orchestrator at HQ, one building per department, and workers who walk in when hired and leave when done. Tap anyone to see what they are doing."),
+        ("See the City", "The City shows your organization live: the planner at HQ, one building per department, and workers who walk in when hired and leave when done. Tap anyone to see what they are doing."),
         ("Where the money is", "Costs stay out of the way: everything about spend lives under More → Costs, and nowhere else. Figures there are estimates; the AWS bill is the truth."),
     ]
 

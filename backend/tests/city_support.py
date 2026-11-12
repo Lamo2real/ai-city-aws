@@ -163,3 +163,26 @@ def make_city(engine: AgentEngine, **settings: Any) -> City:
         clock=clock,
         invocations=invocations,
     )
+
+
+SPEC = {"specialty": "Writer", "instructions": "Write the piece.", "tools": ["Read"], "budget_hint_usd": 1}
+"""A small hire spec for tests that hire a worker straight through the Factory."""
+
+
+async def make_department(city: City, name: str = "Writing") -> str:
+    """A department with its manager (its Reviewer) awake; returns the manager's id."""
+    mgr = f"mgr-{name.lower()}"
+    await city.ledger.create_department(name, f"{name} work.", mgr)
+    await city.ledger.put_agent(
+        {
+            "id": mgr,
+            "kind": "manager",
+            "role": f"{name} Manager",
+            "department": name,
+            "model": "fable-5-1",
+            "parent": "orchestrator",
+            "state": "active",
+            "total_cost_usd": 0,
+        }
+    )
+    return mgr

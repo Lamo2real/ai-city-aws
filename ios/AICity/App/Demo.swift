@@ -65,7 +65,7 @@ enum Demo {
         [
             "agents": [
                 ["id": "vaic", "kind": "core", "role": "VAIC", "department": nil, "model": "haiku-5-5", "parent": nil, "state": "active"],
-                ["id": "orchestrator", "kind": "core", "role": "Orchestrator", "department": nil, "model": "fable-5-1", "parent": "vaic", "state": "active"],
+                ["id": "orchestrator", "kind": "core", "role": "Planner", "department": nil, "model": "fable-5-1", "parent": "vaic", "state": "active"],
                 ["id": "mgr-app", "kind": "manager", "role": "App manager", "department": "App", "model": "fable-5-1", "parent": "orchestrator", "state": "active"],
                 ["id": "wkr-ios-1", "kind": "worker", "role": "iOS developer", "department": "App", "model": "opus-5-5", "parent": "mgr-app", "state": "active", "worker_state": "working", "total_cost_usd": 1.42],
                 ["id": "wkr-qa-1", "kind": "worker", "role": "QA tester", "department": "App", "model": "opus-5-5", "parent": "mgr-app", "state": "active", "worker_state": "review"],

@@ -39,9 +39,6 @@ def default_settings() -> dict[str, Any]:
         "chief_of_staff_enabled": True,
         # Autopilot (decision 125): nothing waits on the owner; off = the behaviour before it.
         "autopilot": True,
-        # The job sizes built on the project board (decision 289; every size since stage 3); [] = every job through
-        # the Orchestrator chain. The single switch back to the old path.
-        "board_sizes": ["small", "medium", "large", "extreme"],
     }
 
 

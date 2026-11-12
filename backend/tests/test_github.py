@@ -275,9 +275,8 @@ async def test_run_command_stops_at_the_timeout_and_caps_long_output(
 def test_vaic_has_the_terminal_and_the_prompts_say_git_and_gh_work() -> None:
     vaic = load_prompt("vaic.md")
     assert "run_command" in vaic.tools and "run_command" in vaic.body and "/workspace" in vaic.body
-    for f in ("worker.md", "manager.md"):
-        body = load_prompt(f, {"department": "Eng"}).body
-        assert "gh repo create" in body and "git push" in body
+    body = load_prompt("worker.md", {"department": "Eng"}).body  # the workers push; the reviewer only reviews
+    assert "gh repo create" in body and "git push" in body
     text = (Path(__file__).resolve().parents[2] / "services" / "agent-runtime" / "Dockerfile").read_text()
     assert "gh_${GH_VERSION}_linux_arm64.deb" in text and "sha256sum -c" in text and "curl" in text
     assert "/workspace" in text

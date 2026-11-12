@@ -35,8 +35,9 @@ def test_aics_prompt_asks_unclear_requests_first_and_builds_clear_ones_straight_
 
 
 def test_the_brief_reaches_the_planner_managers_and_builders_prompts() -> None:
-    assert "agreed brief" in load_prompt("orchestrator.md").body
-    assert "agreed brief" in load_prompt("manager.md", {"department": "Apps"}).body
+    # The brief itself rides in the planner's message and every part's assignment (start_job, below); the prompt
+    # tells the planner the owner's brief wins.
+    assert "brief" in load_prompt("planner.md").body
 
 
 def test_project_conversations_name_their_app() -> None:
@@ -48,7 +49,7 @@ def test_project_conversations_name_their_app() -> None:
 
 async def test_the_agreed_brief_travels_with_the_build() -> None:
     d = city_deps()
-    out = await tool(d, vaic("app-new-1"), "delegate_to_orchestrator")(
+    out = await tool(d, vaic("app-new-1"), "start_job")(
         {
             "goal": "Build a family shopping list app",
             "owner_words": "make us a shopping list",
@@ -56,7 +57,7 @@ async def test_the_agreed_brief_travels_with_the_build() -> None:
             "confirm": True,
         }
     )
-    assert out.startswith("Handed to the Orchestrator")
+    assert out.startswith("Started: ")
     (t,) = [t for t in await d.ledger.list_tickets(("open", "in_progress")) if t.get("kind") == "task"]
     assert t["brief"] == BRIEF and t["conversation"] == "app-new-1" and "app_id" not in t
     (msg,) = d.queue.sent  # type: ignore[attr-defined]
@@ -73,10 +74,10 @@ async def test_the_agreed_brief_travels_with_the_build() -> None:
 async def test_in_an_apps_own_chat_a_change_goes_to_that_app() -> None:
     d = city_deps()
     await an_app(d)
-    await tool(d, vaic("app-app-snake"), "delegate_to_orchestrator")(
+    await tool(d, vaic("app-app-snake"), "start_job")(
         {"goal": "make snake harder", "owner_words": "harder please", "confirm": True}
     )
-    (t,) = [t for t in await d.ledger.list_tickets(("open",)) if t.get("kind") == "task"]
+    (t,) = [t for t in await d.ledger.list_tickets(("open", "in_progress")) if t.get("kind") == "task"]
     assert t["app_id"] == "app-snake"
 
 

@@ -67,7 +67,7 @@ async def connect_mail_account(d: CityDeps, c: TurnCtx, provider: str, label: st
     return result
 
 
-ROLE_NAMES = {"vaic": "VAIC", "orchestrator": "the Orchestrator", "manager": "Managers", "worker": "Workers"}
+ROLE_NAMES = {"vaic": "VAIC", "orchestrator": "the planner", "manager": "Managers", "worker": "Workers"}
 
 
 def _used_by(roles: dict[str, str]) -> str:

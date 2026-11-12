@@ -63,7 +63,7 @@ def executive_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 'think", "what would the CEO say"). question: what the owner wants judged, with the facts they gave; '
                 "who: the executives they named (ceo, coo, cfo, cto), or leave it out to pick by subject. Returns "
                 "advice with its sources; pass it on in a few plain sentences. It never starts work: if the owner "
-                "then wants something done, that is a normal request to the Orchestrator.",
+                "then wants something done, that is a normal job: start_job.",
                 _obj({"question": _s(3, ex.MAX_QUESTION), "who": _WHO}, ("who",)),
                 ask,
                 step=lambda a: "Asking the executives",

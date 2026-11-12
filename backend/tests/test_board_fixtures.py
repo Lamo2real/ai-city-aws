@@ -2,7 +2,9 @@
 in-process city, so the Playwright specs replay exactly what the backend emits (``web/e2e/fixtures/board-*.json``).
 
 ``VAIC_WRITE_FIXTURES=1 uv run pytest tests/test_board_fixtures.py`` rewrites them; otherwise this checks that the
-saved streams still have the event types and ticket fields the backend sends now.
+saved streams still have the event types and ticket fields the backend sends now. ``chain-*.json`` are frozen streams
+from the Orchestrator chain removed in decision 298: the HUD must still read jobs and history like them, so the specs
+keep replaying them, but nothing here records them any more.
 """
 
 # ruff: noqa: ASYNC240 (test workers write their files like a real worker does)
@@ -17,7 +19,6 @@ from typing import Any
 import pytest
 
 from city_support import Call, City, make_city, scripted_engine
-from test_hierarchy_e2e import make_manager
 from vaic.runtime import tools as tools_mod
 from vaic.runtime.engine import EngineRequest
 from vaic.shared.apps import APPS_PK, drafts_of_ticket, put_draft
@@ -105,7 +106,7 @@ def req_bus(_: EngineRequest) -> Any:
 async def vaic(req: EngineRequest, call: Call) -> str:
     if "(task) from owner" in req.turn.prompt:
         words = req.ctx.owner_text
-        return await call("delegate_to_orchestrator", {"goal": words, "owner_words": words, "confirm": True})
+        return await call("start_job", {"goal": words, "owner_words": words, "confirm": True})
     return "Done, Sir: the game has 4 pairs now. The new version is waiting for your OK in Needs you."
 
 
@@ -119,29 +120,17 @@ async def orchestrator(req: EngineRequest, call: Call) -> str:
             )  # fmt: skip
         await call("finish_plan", {})
         return "Planned."
-    if "(task) from vaic" in req.turn.prompt:
-        await call(
-            "assign_to_department",
-            {"department": "Application", "goal": "Do it", "acceptance": "Done as the owner asked"},
-        )
-        return "Sent."
-    await call("sign_off", {"verdict": "PASS", "reasons": "Meets the ask."})
-    await call("report_to_vaic", {"summary": "The game has 4 pairs."})
-    return "PASS"
+    return "Nothing to plan."
 
 
-async def city_for(board_sizes: list[str] | None = None) -> City:
-    settings = {} if board_sizes is None else {"board_sizes": board_sizes}
-    chain_manager = make_manager()
-
+async def city_for() -> City:
     async def manager(req: EngineRequest, call: Call) -> str:
         if "Board review" in req.turn.prompt:
             return await call("review", {"ticket_id": req.ctx.ticket_id, "verdict": "PASS", "reasons": "Meets it."})
-        return await chain_manager(req, call)
+        return "Nothing to review."
 
     city = make_city(
-        scripted_engine({"vaic": vaic, "orchestrator": orchestrator, "manager": manager, "worker": builder}),
-        **settings,
+        scripted_engine({"vaic": vaic, "orchestrator": orchestrator, "manager": manager, "worker": builder})
     )
     _BUS["bus"] = city.bus
     city.deps.utility_runner = object()
@@ -171,10 +160,8 @@ def _plain(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return keep
 
 
-async def record(
-    name: str, words: str, conversation: str, board_sizes: list[str] | None = None
-) -> list[dict[str, Any]]:
-    city = await city_for(board_sizes)
+async def record(name: str, words: str, conversation: str) -> list[dict[str, Any]]:
+    city = await city_for()
     await city.owner_says(words, conversation)
     await city.run()
     task = next(t for t in await city.ledger.list_tickets(ALL_STATUSES) if t["from"] == "vaic")
@@ -191,17 +178,15 @@ def _shape(events: list[dict[str, Any]]) -> list[str]:
 
 
 CASES = {
-    "board-small": ("change the memory game to 4 pairs", CONV, None),
-    "chain-small": ("change the memory game to 4 pairs", CONV, []),
-    "board-medium": ("build me a memory game with animals", NEW_CONV, None),
-    "chain-medium": ("build me a memory game with animals", NEW_CONV, []),
+    "board-small": ("change the memory game to 4 pairs", CONV),
+    "board-medium": ("build me a memory game with animals", NEW_CONV),
 }
 
 
 @pytest.mark.parametrize("name", list(CASES))
 async def test_the_saved_event_streams_match_what_the_backend_sends(name: str) -> None:
-    words, conv, sizes = CASES[name]
-    events = await record(name, words, conv, sizes)
+    words, conv = CASES[name]
+    events = await record(name, words, conv)
     path = FIXTURES / f"{name}.json"
     text = json.dumps(events, indent=1)
     if os.environ.get("VAIC_WRITE_FIXTURES") == "1":

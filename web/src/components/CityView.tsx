@@ -747,7 +747,7 @@ function DeptPanel({
   const workers = members.filter((a) => a.kind === "worker");
   const open = Object.values(city.tickets).filter((t) => members.some((m) => m.id === t.to));
   const facts: Array<[string, string]> = hq
-    ? [["Team", members.map((a) => roleOf(a) || a.id).join(" · ") || "VAIC · Orchestrator"]]
+    ? [["Team", members.map((a) => roleOf(a) || a.id).join(" · ") || "VAIC · Planner"]]
     : [
         ["Reviewer", d?.manager_id ? `${d.manager_id} · Fable 5.1` : "—"], // the manager, the department's reviewer (decision 295)
         [
@@ -893,7 +893,7 @@ function Legend() {
         <span className="mark">Yellow cab</span> someone riding to work or home (the others just cruise the streets)
       </li>
       <li>
-        <span className="mark">Mailman on a bike</span> a letter between the Orchestrator and a department's manager: a
+        <span className="mark">Mailman on a bike</span> a letter between HQ and a department's reviewer: a
         new goal going out, or the answer coming back
       </li>
       <li>

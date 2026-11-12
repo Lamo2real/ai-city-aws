@@ -184,7 +184,7 @@ async def send_workers_home(d: CityDeps) -> dict[str, int]:
     """The owner's "send everyone home": every running job is stopped (its whole tree cancelled), every live
     worker drops what it is doing and goes home (released, one `agent.retired` each, so the City walks them
     out), and every manager stands down: it goes dormant and its department hires or assigns nothing until the
-    owner starts a new job (`assign_to_department` lifts that). Nobody is woken up; there is nothing to do."""
+    owner starts a new job (a new job on the board lifts that). Nobody is woken up; there is nothing to do."""
     from .tasks import cancel_task  # tasks builds on actions
 
     at_work = await workers_at_work(d)  # counted before anything moves: stopping a job sends its workers home
@@ -227,7 +227,15 @@ async def move(d: CityDeps, id: str, status: str, note: str = "", patch: Record 
         ticket, previous = r
         await d.bus.put({"type": "ticket.status", "ticket": ticket, "previous": previous})
         if status in FINAL:  # nobody needs the owner's answer for a stopped or finished part
-            await withdraw_asks(d.ledger, d.bus, {id})
+            # ...except the app's publish approval, which is asked for once the job is done (decision 298).
+            await withdraw_asks(d.ledger, d.bus, {id}, keep_publish=status == "done")
+        if status in ("cancelled", "failed") and ticket.get("path") == "board" and ticket.get("plan_key"):
+            from .board_path import advance  # late: board_path builds on this module
+
+            try:
+                await advance(d, str(ticket.get("task_id")))
+            except Exception as e:  # the part stopped; the job is checked again by the next step
+                log("warn", "board.advance_failed", ticket=id, error=type(e).__name__)
         if status in FINAL and ticket.get("kind") == "assignment" and ticket.get("to"):
             try:
                 await release_if_finished(d, str(ticket["to"]), str(ticket.get("from") or ""))
@@ -239,14 +247,17 @@ async def move(d: CityDeps, id: str, status: str, note: str = "", patch: Record 
     return t
 
 
-async def withdraw_asks(ledger: Ledger, bus: EventBus, ticket_ids: set[str]) -> int:
-    """Withdraws the open questions and pending approvals of these tickets; the HUD drops them quietly."""
+async def withdraw_asks(ledger: Ledger, bus: EventBus, ticket_ids: set[str], keep_publish: bool = False) -> int:
+    """Withdraws the open questions and pending approvals of these tickets; the HUD drops them quietly.
+    ``keep_publish``: a finished job's app publish approval stays for the owner (it is asked for at the end)."""
     gone = 0
     for q in await ledger.open_questions():
         if q.get("ticket_id") in ticket_ids and await ledger.withdraw_question(str(q["id"])):
             await bus.put({"type": "question.withdrawn", "id": q["id"]})
             gone += 1
     for a in await ledger.pending_approvals():
+        if keep_publish and a.get("kind") == "app.publish":
+            continue
         if a.get("ticket_id") in ticket_ids and await ledger.withdraw_approval(str(a["id"])):
             await bus.put({"type": "approval.withdrawn", "id": a["id"]})
             gone += 1
@@ -262,11 +273,14 @@ async def sweep_stale_asks(ledger: Ledger, bus: EventBus) -> int:
         if r.get("ticket_id")
     }
     stale: set[str] = set()
+    done: set[str] = set()
     for tid in ids:
         t = await ledger.get_ticket(tid)
         if t is None or t.get("status") in FINAL:
-            stale.add(tid)
-    return await withdraw_asks(ledger, bus, stale) if stale else 0
+            (done if t is not None and t.get("status") == "done" else stale).add(tid)
+    n = await withdraw_asks(ledger, bus, stale) if stale else 0
+    # A finished job keeps its app's publish approval for the owner (decision 298); its other asks go.
+    return n + (await withdraw_asks(ledger, bus, done, keep_publish=True) if done else 0)
 
 
 async def new_ticket(d: CityDeps, t: Record) -> Record:

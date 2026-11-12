@@ -1,19 +1,18 @@
-"""One prompt walks the whole chain with a fake model runner.
+"""One prompt walks the whole job on the project board with a fake model runner (decision 298).
 
-owner → VAIC → Orchestrator → creates a department → Manager hires three workers → workers report → manager
-rejects one (FAIL) → the worker fixes it → manager PASS → Orchestrator sign-off → VAIC reports.
+owner → VAIC → the board's planner writes three parts for Builders → each part's worker starts as it is written →
+workers report → the tests run → the Builders reviewer rejects one (FAIL) → the worker fixes it → PASS → the
+whole-app check → the board closes the job → VAIC reports.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
-import re
 import shutil
 from pathlib import Path
 from typing import Any, cast
 
-from city_support import Call, City, Script, make_city, scripted_engine, session_id_for
+from city_support import Call, City, Script, make_city, make_department, scripted_engine, session_id_for
 from vaic.runtime.engine import EngineRequest
 from vaic.shared.hierarchy.actions import instruct_agent
 from vaic.shared.hierarchy.dispatch import Dispatcher, DispatcherDeps, resume_stale
@@ -26,93 +25,76 @@ PARTS = ["implement power", "write the test", "update the docs"]
 
 async def vaic(req: EngineRequest, call: Call) -> str:
     if "(task) from owner" in req.turn.prompt:
-        await call("delegate_to_orchestrator", {"goal": GOAL, "owner_words": GOAL, "confirm": True})
+        await call("start_job", {"goal": GOAL, "owner_words": GOAL, "confirm": True})
         return "On it — the team is starting."
-    return "Done: power(a, b) is in add.js with a test, reviewed and signed off. About a cent of model time."
+    return "Done: power(a, b) is in add.js with a test, reviewed and checked. About a cent of model time."
 
 
 async def orchestrator(req: EngineRequest, call: Call) -> str:
-    if "(task) from vaic" in req.turn.prompt:
-        await call("create_department", {"name": "Builders", "mission": "Build and test the owner's software."})
+    """The board's planner (it runs on the runtime still called "orchestrator" inside)."""
+    if "Board planning" not in req.turn.prompt:
+        return "Nothing to plan."
+    for part in PARTS:
         await call(
-            "assign_to_department",
+            "add_part",
             {
+                "name": part,
+                "goal": part,
+                "acceptance": f"{part} is done and checked",
                 "department": "Builders",
-                "goal": GOAL,
-                "acceptance": "power works for integers and has a passing test",
+                "files": [f"{part.replace(' ', '-')}.js"],
             },
         )
-        return "Sent to Builders."
-    reports = json.loads(await call("get_reports", {}))
-    if all(r["status"] == "in_review" for r in reports):
-        await call("sign_off", {"verdict": "PASS", "reasons": "All acceptance criteria met, tests pass."})
-        await call(
-            "report_to_vaic",
-            {"summary": "power(a, b) added to add.js with a test; three parts reviewed, one fixed after review."},
-        )
-        return "PASS"
-    return "Waiting for reports."
+    await call("finish_plan", {})
+    return "Planned."
 
 
 def make_manager() -> Script:
+    """The Builders reviewer: it fails "write the test" once, then passes everything."""
     failed_once: set[str] = set()
 
     async def manager(req: EngineRequest, call: Call) -> str:
-        ledger, ctx = req.ledger, req.ctx
-        mine = [k for k in await ledger.child_tickets(ctx.ticket_id) if k.get("kind") == "assignment"]
-        if "(task) from orchestrator" in req.turn.prompt:
-            await call("plan_team", {"parts": [{"name": p, "size": "normal"} for p in PARTS]})
-            for part in PARTS[len(mine) :]:
-                hired = await call(
-                    "hire_worker",
-                    {
-                        "specialty": "JavaScript developer",
-                        "instructions": f"You {part} for add.js.",
-                        "tools": ["Bash", "Read", "Edit", "git"],
-                        "budget_hint_usd": 1,
-                    },
-                )
-                wid = re.search(r"Hired (\S+)", hired).group(1)  # type: ignore[union-attr]
-                await call("assign", {"worker_id": wid, "goal": part, "acceptance": f"{part} is done and checked"})
-            return "Team hired and assigned."
-        for t in [k for k in mine if k["status"] == "in_review"]:
-            if t["goal"] == "write the test" and t["id"] not in failed_once:
-                failed_once.add(t["id"])
-                await call(
-                    "review",
-                    {"ticket_id": t["id"], "verdict": "FAIL", "reasons": "The test does not cover negative exponents."},
-                )
-                continue
-            await call("review", {"ticket_id": t["id"], "verdict": "PASS", "reasons": "Meets the acceptance criteria."})
-            await call("release_worker", {"worker_id": t["to"]})
-        now = [k for k in await ledger.child_tickets(ctx.ticket_id) if k.get("kind") == "assignment"]
-        if len(now) == len(PARTS) and all(k["status"] == "done" for k in now):
+        if "Board review" not in req.turn.prompt:
+            return "Nothing to review."
+        t = await req.ledger.get_ticket(req.ctx.ticket_id)
+        assert t
+        if t["goal"] == "write the test" and t["id"] not in failed_once:
+            failed_once.add(t["id"])
             await call(
-                "report_to_orchestrator",
-                {
-                    "summary": "power(a, b) implemented, tested (incl. negative exponents) and documented on branch vaic/power."
-                },
+                "review",
+                {"ticket_id": t["id"], "verdict": "FAIL", "reasons": "The test does not cover negative exponents."},
             )
-        return "Reviewed."
+            return "FAIL"
+        await call("review", {"ticket_id": t["id"], "verdict": "PASS", "reasons": "Meets the acceptance criteria."})
+        return "PASS"
 
     return manager
 
 
 async def worker(req: EngineRequest, call: Call) -> str:
     fixing = "(fix)" in req.turn.prompt
+    checking = "whole-app check" in req.turn.prompt
+    summary = (
+        "power(a, b) is in add.js with a test and docs; every part fits."
+        if checking
+        else "Added negative exponent cases; all tests pass."
+        if fixing
+        else "Done."
+    )
     await call(
-        "report_to_manager",
-        {
-            "summary": "Added negative exponent cases; all tests pass." if fixing else "Done.",
-            "artifacts": ["branch vaic/power"],
-            "checks": "npm test: pass",
-        },
+        "report_to_manager", {"summary": summary, "artifacts": ["branch vaic/power"], "checks": "npm test: pass"}
     )
     return "Reported."
 
 
+async def builders_city(engine: Any) -> City:
+    city = make_city(engine)
+    await make_department(city, "Builders")
+    return city
+
+
 async def test_walks_one_prompt_from_the_owner_to_aces_report() -> None:
-    city = make_city(
+    city = await builders_city(
         scripted_engine({"vaic": vaic, "orchestrator": orchestrator, "manager": make_manager(), "worker": worker})
     )
     await city.owner_says(GOAL)
@@ -121,12 +103,12 @@ async def test_walks_one_prompt_from_the_owner_to_aces_report() -> None:
     # Ledger tickets
     every = await city.ledger.list_tickets(ALL_STATUSES)
     task = next(t for t in every if t["from"] == "vaic")
-    assert task["status"] == "done"
+    assert task["status"] == "done" and task["path"] == "board" and task["planned"]
     assert "power" in task["result"]
     dept = next(t for t in every if t["from"] == "orchestrator")
     assert (dept["status"], dept["department"], dept["to"]) == ("done", "Builders", "mgr-builders")
     assignments = [t for t in every if t["from"] == "mgr-builders"]
-    assert len(assignments) == 3
+    assert len(assignments) == 4  # three parts and the whole-app check
     assert all(t["status"] == "done" for t in assignments)
     test_part = next(t for t in assignments if t["goal"] == "write the test")
     assert test_part["review_rounds"] == 2
@@ -141,11 +123,10 @@ async def test_walks_one_prompt_from_the_owner_to_aces_report() -> None:
 
     # Events
     types = [e["type"] for e in city.bus.events]
-    assert [e["name"] for e in city.bus.of_type("department.created")] == ["Builders"]
-    assert len(city.bus.of_type("agent.hired")) == 4  # manager + 3 workers
+    assert len(city.bus.of_type("agent.hired")) == 4  # one worker per part, and the check's
     reviews = city.bus.of_type("review.result")
     assert sum(r["verdict"] == "FAIL" for r in reviews) == 1
-    assert sum(r["verdict"] == "PASS" for r in reviews) == 3
+    assert sum(r["verdict"] == "PASS" for r in reviews) == 4  # three reviewed parts and the check
     signoffs = city.bus.of_type("signoff.result")
     assert len(signoffs) == 1 and signoffs[0]["verdict"] == "PASS" and signoffs[0]["ticket_id"] == task["id"]
     assert len(city.bus.of_type("result")) == 1
@@ -153,24 +134,23 @@ async def test_walks_one_prompt_from_the_owner_to_aces_report() -> None:
     replies = [r for r in city.bus.of_type("vaic.reply") if r["done"]]
     assert replies[-1]["text"].startswith("Done: power")
 
-    # Costs recorded for every agent that took a turn
+    # Costs recorded for every agent that took a turn, on the build map's models
     workers = [a for a in await city.ledger.list_agents() if a["kind"] == "worker"]
     for id in ["vaic", "orchestrator", "mgr-builders", *[w["id"] for w in workers]]:
         turns = await city.ledger.turns_of(id)
         assert turns, id
         assert all(t["usd"] > 0 and t["input"] == 400 and t["cache_read"] == 3000 for t in turns)
     o = (await city.ledger.turns_of("orchestrator"))[0]
-    assert (o["model"], o["role"]) == ("fable-5-1", "orchestrator")
-    w0 = (await city.ledger.turns_of(workers[0]["id"]))[0]
-    assert (w0["model"], w0["department"]) == ("opus-5-5", "Builders")
+    assert (o["model"], o["role"]) == ("sonnet-5-5", "orchestrator")  # the planner of a small job
+    assert {t["model"] for t in await city.ledger.turns_of("mgr-builders")} == {"opus-5-5"}  # the reviewer
+    models = sorted(w["model"] for w in workers)
+    assert models == ["opus-5-5", "sonnet-5-5", "sonnet-5-5", "sonnet-5-5"]  # the check on the reviewer's model
     today = await city.ledger.spend("day", "GLOBAL")
     assert today["turns"] == len(city.bus.of_type("cost.update"))
-    assert len(city.bus.of_type("cost.update")) >= 10
 
     # Agents released, slots returned
-    assert len(workers) == 3
     assert all(w["state"] == "retired" and w["worker_state"] == "released" for w in workers)
-    assert len(city.bus.of_type("agent.retired")) == 3
+    assert len(city.bus.of_type("agent.retired")) == 4
     assert await city.ledger.active_workers() == 0
 
     # Sessions follow the agreed shapes
@@ -183,35 +163,28 @@ async def test_walks_one_prompt_from_the_owner_to_aces_report() -> None:
     assert all(i["async"] == (i["role"] != "vaic") for i in city.invocations)
 
 
-async def test_a_crash_mid_turn_resumes_from_the_ledger_without_duplicate_hires() -> None:
+async def test_a_crash_mid_turn_resumes_from_the_ledger_without_duplicate_parts() -> None:
     crashed = False
-    manager = make_manager()
 
     async def crashing(req: EngineRequest, call: Call) -> str:
         nonlocal crashed
-        if not crashed and "(task) from orchestrator" in req.turn.prompt:
-            hired = await call(
-                "hire_worker",
-                {
-                    "specialty": "JavaScript developer",
-                    "instructions": "You implement power for add.js.",
-                    "tools": ["Bash"],
-                },
+        if not crashed and "Board planning" in req.turn.prompt:
+            await call(
+                "add_part",
+                {"name": PARTS[0], "goal": PARTS[0], "acceptance": "done", "department": "Builders"},
             )
-            wid = re.search(r"Hired (\S+)", hired).group(1)  # type: ignore[union-attr]
-            await call("assign", {"worker_id": wid, "goal": PARTS[0], "acceptance": "done"})
             crashed = True
             raise RuntimeError("microVM lost mid-turn")
-        return await manager(req, call)
+        return await orchestrator(req, call)
 
-    city = make_city(
-        scripted_engine({"vaic": vaic, "orchestrator": orchestrator, "manager": crashing, "worker": worker})
+    city = await builders_city(
+        scripted_engine({"vaic": vaic, "orchestrator": crashing, "manager": make_manager(), "worker": worker})
     )
     await city.owner_says(GOAL)
     await city.run()
     assert crashed
     workers = [a for a in await city.ledger.list_agents() if a["kind"] == "worker"]
-    assert len(workers) == 3  # the re-run saw one hire in the ledger and added two
+    assert len(workers) == 4  # the re-run found the first part on the board and added only the other two
     task = next(t for t in await city.ledger.list_tickets(["done"]) if t["from"] == "vaic")
     assert "power" in task["result"]
 
@@ -395,7 +368,7 @@ async def test_agent_instructions_reach_the_right_worker_with_its_manager_copied
     async def quiet_worker(_: EngineRequest, __: Call) -> str:
         return "working on it"
 
-    city = make_city(
+    city = await builders_city(
         scripted_engine({"vaic": vaic, "orchestrator": orchestrator, "manager": make_manager(), "worker": quiet_worker})
     )
     await city.owner_says(GOAL)

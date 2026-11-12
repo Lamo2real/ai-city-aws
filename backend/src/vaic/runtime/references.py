@@ -1,7 +1,7 @@
 """Files the owner points at when asking for a build (decision 155): "follow the best practices in my React guide",
 "make the UI like that sunset Porsche image".
 
-VAIC finds the files (``find_files``) and passes them to ``delegate_to_orchestrator`` as ``references``: a file id
+VAIC finds the files (``find_files``) and passes them to ``start_job`` as ``references``: a file id
 and what it is for, ``follow`` (guidance from the owner) or ``inspiration`` (the look). They are stored on the task
 and travel with it, like the brief, to the Orchestrator, the managers and the workers. A worker's assignment turn
 carries them itself: images as images for the model, documents as their text inside a data block. A ``follow``

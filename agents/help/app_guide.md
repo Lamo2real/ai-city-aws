@@ -5,8 +5,8 @@ How to use every part of AI City: where things are, what each button does, and h
 Links like `#/settings/connectors` open that page in the app.
 
 ## The idea in one minute
-- You talk to **VAIC** (said "Vice", short for Vice Artificial Intelligence City). VAIC answers simple things itself and hands real work to the **Orchestrator**.
-- The Orchestrator plans the work and gives each part to a **department** (Application, IT Infrastructure, Data & AI,
+- You talk to **VAIC** (said "Vice", short for Vice Artificial Intelligence City). VAIC answers simple things itself and starts real work on the **project board**.
+- A small job goes straight to one worker; a bigger one gets a **planner** that gives each part to a **department** (Application, IT Infrastructure, Data & AI,
   Marketing, Sales, Customer Support, Finance, Legal, Product, Operations, Research, Media, plus any you build).
 - Each department's **manager** hires **workers** for the job, reviews every result and reports back up. Workers go
   home when they're done.
@@ -49,8 +49,8 @@ Links like `#/settings/connectors` open that page in the app.
   VAIC opens the page and you paste it there yourself, because secrets never go through the chat.
 
 ## The City
-- The map shows HQ (VAIC and the Orchestrator), one tower per department, and the houses where workers live. Workers
-  ride taxis to work and home. The mailman cycles letters between the Orchestrator and the managers.
+- The map shows HQ (VAIC and the planner), one tower per department, and the houses where workers live. Workers
+  ride taxis to work and home. The mailman cycles letters between HQ and the departments.
 - The top card shows **Agents working now** (workers on a job right now), **Jobs running**, and the time. The
   **(i)** button checks whether everything is running normally.
 - **City | Features** switches between the map and your own features (for example Calendar).
@@ -78,7 +78,7 @@ Links like `#/settings/connectors` open that page in the app.
 
 ## How do I…
 - **…start a project or a task?** Tell VAIC what you want, for example "build a booking app for my salon" or "find 20
-  leads for my agency". VAIC asks what it needs, then the Orchestrator starts it. Follow it in Work or the City.
+  leads for my agency". VAIC asks what it needs, then the team starts it. Follow it in Work or the City.
 - **…choose how many agents work on it?** Say it: "use 5 workers". That number is respected exactly.
 - **…add a connector (Slack, Jira, HubSpot, Canva, YouTube…)?** The easiest way: tell VAIC what you want to do ("find
   a person on LinkedIn"). VAIC offers the right service and walks you through signing in. Or go to Settings →

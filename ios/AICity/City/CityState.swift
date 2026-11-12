@@ -328,7 +328,7 @@ enum City {
             s.activities[id] = ActivityNow(activity: e["activity"].string ?? "idle", detail: e["detail"].string)
         case "signoff.result":
             let v = e["verdict"].string ?? ""
-            feed(&s, "Orchestrator sign-off \(v): \(cut(e["summary"].string ?? "", 60))", v == "PASS" ? "pass" : "fail", now)
+            feed(&s, "Sign-off \(v): \(cut(e["summary"].string ?? "", 60))", v == "PASS" ? "pass" : "fail", now)
         case "instruction":
             feed(&s, "You told \(e["to"].string ?? "an agent"): \(cut(e["text"].string ?? "", 60))", "answer", now)
         case "approval.requested":

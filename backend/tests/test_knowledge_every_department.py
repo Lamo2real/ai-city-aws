@@ -136,7 +136,7 @@ def test_vaic_and_the_orchestrator_are_told_when_to_search_and_when_not() -> Non
     for phrase in ("every department's knowledge base", "Never search", "largest ocean", "`department`", "marketing"):
         assert phrase in vaic.body, phrase
     assert "Never imitate them" in vaic.body and "Hormozi" in vaic.body
-    orch = load_prompt("orchestrator.md")
+    orch = load_prompt("planner.md")
     assert "search_knowledge" in orch.tools
     assert "every department's knowledge base" in orch.body and "Never search for general knowledge" in orch.body
     assert "Never imitate Alex or Leila Hormozi" in orch.body

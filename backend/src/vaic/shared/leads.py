@@ -18,7 +18,7 @@ _CSV = re.compile(r"```csv[^\n]*\n(.*?)```", re.S)
 
 
 def is_job_report(role: str, inv: dict[str, Any]) -> bool:
-    """VAIC's turn on the Orchestrator's finished-job report (``report_to_vaic``)."""
+    """VAIC's turn on a finished job's report from the board."""
     return role == "vaic" and inv.get("kind") == "report" and inv.get("from") == "orchestrator"
 
 

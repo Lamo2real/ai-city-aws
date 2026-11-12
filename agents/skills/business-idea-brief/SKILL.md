@@ -15,4 +15,4 @@ One page per idea, so the owner can decide in two minutes:
 7. **Numbers**: cost to build and run (rough), price, customers needed to break even.
 8. **Risks and licences**, and **the decision asked**: go, test first, or park.
 
-Give 3 ideas ranked, the top one recommended. On the owner's go, report it so the Orchestrator can brief Product (spec), Application (build), Marketing (launch) and Sales (B2B) with this brief.
+Give 3 ideas ranked, the top one recommended. On the owner's go, report it so the planner can brief Product (spec), Application (build), Marketing (launch) and Sales (B2B) with this brief.

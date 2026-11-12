@@ -327,7 +327,7 @@ function reduceEvent(state, event, now) {
       return { ...state, now, activities: { ...state.activities, [id]: { activity, detail, at } } };
     }
     case "signoff.result":
-      return { ...state, now, feed: feed(state, `Orchestrator sign-off ${event.verdict}: ${event.summary.slice(0, 60)}`, event.verdict === "PASS" ? "pass" : "fail", now) };
+      return { ...state, now, feed: feed(state, `Sign-off ${event.verdict}: ${event.summary.slice(0, 60)}`, event.verdict === "PASS" ? "pass" : "fail", now) };
     case "instruction":
       return { ...state, now, feed: feed(state, `You told ${event.to}: ${event.text.slice(0, 60)}`, "answer", now) };
     case "approval.requested":

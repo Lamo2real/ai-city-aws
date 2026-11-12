@@ -212,7 +212,7 @@ def test_no_write_tool_name_passes_the_policy_for_apps() -> None:
     assert gate_name(WEATHER) == "mcp__gateway__weather___forecast"  # gated by app_call like the agents' calls
     for bad in ("mail.send", "mail.draft", "mail.trash", "mail.label", "calendar.create", "calendar.respond",
                 "calendar.update", "calendar.delete", "calendar.read.x", "calendar_read", "settings", "propose",
-                "connector___weather___forecast", "connector.read", "delegate_to_orchestrator"):  # fmt: skip
+                "connector___weather___forecast", "connector.read", "start_job"):  # fmt: skip
         assert decide(f"mcp__app__{bad}", {})[0] == "deny", bad
 
 

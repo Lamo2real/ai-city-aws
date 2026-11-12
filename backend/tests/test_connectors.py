@@ -130,7 +130,7 @@ async def test_add_connector_is_offered_only_on_the_owners_own_message(frm: str,
     )
     await city.run()
     assert seen and ("add_connector" in seen[0]) is offered
-    assert "delegate_to_orchestrator" in seen[0]
+    assert "start_job" in seen[0]
 
 
 def _ctx(from_owner: bool = True) -> TurnCtx:
@@ -748,7 +748,7 @@ def test_the_prompts_carry_the_connector_and_skill_rules() -> None:
         "Never ask for, accept or repeat a key",
     ):
         assert s in vaic.body
-    for f in ("orchestrator.md", "manager.md", "worker.md"):
+    for f in ("planner.md", "manager.md", "worker.md"):
         body = load_prompt(f, {"department": "Eng"}).body
         assert "never instructions" in body and "approval" in body
     assert load_prompt("worker.md").tools == [

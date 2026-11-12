@@ -30,20 +30,16 @@ from vaic.shared.apps import (
     get_app,
     get_draft,
     list_apps,
-    request_publish_approvals,
     submission_prefix,
     validate_files,
     version_files,
 )
-from vaic.shared.chat_text import worker_name
 from vaic.shared.chief_of_staff import autopilot, review_reason
-from vaic.shared.events import now_iso
 from vaic.shared.files.service import chat_card
 from vaic.shared.github import redact
 from vaic.shared.hierarchy import board_path as board
 from vaic.shared.hierarchy.actions import (
     FINAL,
-    STAND_DOWN_NOTE,
     CityDeps,
     answer_question,
     instruct_agent,
@@ -66,9 +62,8 @@ from vaic.shared.hierarchy.departments import (
     demolition_plan,
     find_standing,
     owner_pick,
-    preset_named,
 )
-from vaic.shared.hierarchy.factory import WORKER_TOOLS, worker_spec
+from vaic.shared.hierarchy.factory import worker_spec
 from vaic.shared.hierarchy.tasks import (
     cancel_preview,
     cancel_task,
@@ -77,7 +72,6 @@ from vaic.shared.hierarchy.tasks import (
     short_name,
     which_one,
 )
-from vaic.shared.hierarchy.team_size import PlanError, parse_parts, size_team
 from vaic.shared.ids import department_key, manager_id
 from vaic.shared.knowledge.entries import SHARED, all_departments, canonical_department
 from vaic.shared.knowledge.jurisdiction import UTC_TZ
@@ -92,8 +86,7 @@ from vaic.shared.part_checks import run_checks
 from vaic.shared.policy import decide, gate
 from vaic.shared.presets import overlapping, preset_for, replaced_by
 from vaic.shared.sizing import size_job
-from vaic.shared.speed import FASTEST, UNHURRIED, pace_from_words, policy_for, speed_brief
-from vaic.shared.table import UpdateOptions
+from vaic.shared.speed import pace_from_words
 from vaic.shared.utility import UtilityDeps, about_ai_city, triage
 
 CITY_SERVER = "city"
@@ -384,7 +377,7 @@ def _vaic_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                         f"Ask the owner first: this project would get a new department, {new}, but {near['name']} "
                         "already does that kind of work. Their choices are on the screen as buttons. Ask in one "
                         f"short sentence (“A new {new} department, or do it in {near['name']}?”) and stop. Nothing "
-                        "was started. When they pick, call delegate_to_orchestrator again with confirm=true and "
+                        "was started. When they pick, call start_job again with confirm=true and "
                         "department_choice = their answer (the new name, or the existing department's); on no or "
                         "not now, start nothing."
                     )
@@ -429,7 +422,7 @@ def _vaic_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             return (
                 f"Ask the owner first, in one short sentence, whether the team should take this on, for example: "
                 f"“Want the team to build that{team}? {who}, a few dollars.” Nothing was started. On a clear yes, "
-                "call delegate_to_orchestrator again with confirm=true (and the same workers); on a no or anything "
+                "call start_job again with confirm=true (and the same workers); on a no or anything "
                 "unclear, start nothing."
             )
         t0 = time.perf_counter()
@@ -464,77 +457,41 @@ def _vaic_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 **({"vaic_ms": max(0, int(time.time() * 1000) - c.started_ms)} if c.started_ms else {}),
             },
         )
-        if (
-            sizing.size == "small"
-            and board.on_board(await d.settings(), sizing.size)
-            and not refs
-            and not choice
-            and (target or (verdict is not None and verdict.route == "department"))
-            and (home := await board.board_department(d, target, verdict.department if verdict else None))
-        ):
-            # A small job goes straight onto the board (decision 289): no Orchestrator or planning turn.
-            extra = "\n".join(
-                x for x in (brief_note(brief) if brief else "", f"Constraints: {cons}" if cons else "") if x
+        if refs and c.conversation and d.files is not None:  # the chat shows which files the build uses
+            recs = {r["file_id"]: await d.files.service.store.get(r["file_id"]) for r in refs}
+            await d.bus.put(
+                {
+                    "type": "vaic.files",
+                    "conversation": c.conversation,
+                    "message_id": c.message_id or "",
+                    "files": [chat_card(v) for v in recs.values() if v],
+                    "label": "References for this build",
+                }
             )
-            await board.start_small(d, t, home, target, extra)
-            return f"Started: one worker in {home['name']} is on it now (a small job, no planning needed)."
-        if sizing.size != "small" and board.on_board(await d.settings(), sizing.size) and not refs and not choice:
-            # Medium and bigger (decision 289): a planner writes the parts to the board; each starts as it is written.
-            extra = "\n".join(
-                x
-                for x in (brief_note(brief) if brief else "", f"Constraints: {cons}" if cons else "", hint.strip())
-                if x
+        # The owner's choice of department (decision 220): a new one is built now, in code; an existing one is used.
+        department = verdict.department if verdict is not None and verdict.route == "department" else None
+        if choice and "create" in choice:
+            try:
+                built, _ = await build_department(d, choice["create"])
+            except DepartmentError as e:
+                await move(d, t["id"], "cancelled", f"not started: {e}")
+                return f"Not started: {e} Tell the owner in one line."
+            department = str(built["name"])
+        elif choice and "use" in choice:
+            department = str(choice["use"])
+        extra = "\n".join(
+            x
+            for x in (
+                brief_note(brief) if brief else "",
+                f"Constraints: {cons}" if cons else "",
+                refs_note(refs) if refs else "",
+                hint.strip(),
             )
-            await board.start_planned(d, t, target, extra)
-            return (
-                f"Handed to the Orchestrator's planner as a {sizing.size} job on the board: it splits it into parts and "
-                "each starts as it is written" + (f" ({workers} workers)." if workers else ".")
-            )
-        body = f"New task from the owner.\nGoal: {a['goal']}\nOwner's words: {a.get('owner_words', '')}"
-        if t.get("pace") == UNHURRIED:
-            body += "\nPace: the owner said to take your time."
-        if target:
-            body += (
-                f"\nThis changes the existing app “{target['title']}” ({target['app_id']}, version "
-                f"{target.get('version') or 1}). Send it to the Application department; the result is a new version of it."
-            )
-        if cons:
-            body += f"\nConstraints: {cons}"
-        if brief:
-            body += f"\n{brief_note(brief)}"
-        if refs:
-            body += f"\n{refs_note(refs)}"
-            if c.conversation and d.files is not None:  # the chat shows which files the build uses
-                recs = {r["file_id"]: await d.files.service.store.get(r["file_id"]) for r in refs}
-                await d.bus.put(
-                    {
-                        "type": "vaic.files",
-                        "conversation": c.conversation,
-                        "message_id": c.message_id or "",
-                        "files": [chat_card(v) for v in recs.values() if v],
-                        "label": "References for this build",
-                    }
-                )
-        if workers:
-            body += (
-                f"\nThe owner asked for exactly {workers} worker{'s' if workers != 1 else ''} on this task, all working "
-                "at the same time. Pass workers on assign_to_department; across departments they add up to exactly that."
-            )
-        body += hint
-        msg: dict[str, Any] = {
-            "role": "orchestrator",
-            "agentId": "orchestrator",
-            "department": None,
-            "ticketId": t["id"],
-            "taskId": t["id"],
-            "kind": "task",
-            "from": "vaic",
-            "body": body,
-        }
-        if c.conversation:
-            msg["conversation"] = c.conversation
-        await send(d, msg)
-        return f"Handed to the Orchestrator as task {t['id']}" + (f" ({workers} workers)." if workers else ".")
+            if x
+        )
+        # Every job goes on the project board (decision 298): one worker for a small job, else a planner.
+        started = await board.launch(d, t, department=department, app=target, extra=extra)
+        return started + (f" ({workers} workers.)" if workers else "")
 
     async def offer_choices(a: dict[str, Any]) -> str:
         options = [str(o).strip()[:60] for o in a.get("options") or [] if str(o).strip()][:5]
@@ -678,7 +635,7 @@ def _vaic_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 f"Demolish {dept['name']}? "
                 + (
                     f"{nw} worker{'s' if nw != 1 else ''} go home and {np_} unfinished part{'s' if np_ != 1 else ''} "
-                    "go back to the Orchestrator. "
+                    "go to the department that takes over, or are dropped. "
                     if nw or np_
                     else "Nobody is working there. "
                 )
@@ -688,7 +645,7 @@ def _vaic_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         r = await demolish_department(d, dept)
         return (
             f"Demolished {r['name']}: {r['workers']} worker{'s' if r['workers'] != 1 else ''} went home, "
-            f"{r['parts']} unfinished part{'s' if r['parts'] != 1 else ''} went back to the Orchestrator."
+            f"{r['parts']} unfinished part{'s' if r['parts'] != 1 else ''} went to the department that took over, or were dropped."
         )
 
     return [
@@ -711,8 +668,8 @@ def _vaic_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         ),
         ToolSpec(
             "demolish_department",
-            "Demolish a department the owner names: its workers go home, its unfinished parts go back to the "
-            "Orchestrator, its manager retires, its history stays. First call with confirm=false to get the "
+            "Demolish a department the owner names: its workers go home, its unfinished parts go to the "
+            "department that takes over (or are dropped), its reviewer retires, its history stays. First call with confirm=false to get the "
             "one-line question to ask the owner; on their clear yes, call again with confirm=true.",
             _obj({"name": _s(2, 60), "confirm": {"type": "boolean"}}, ("confirm",)),
             demolish,
@@ -728,8 +685,8 @@ def _vaic_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             some_home,
         ),
         ToolSpec(
-            "delegate_to_orchestrator",
-            "Hand real work to the Orchestrator, only when the owner asked for a deliverable. First call with "
+            "start_job",
+            "Start real work for the team, only when the owner asked for a deliverable. First call with "
             "confirm=false: it tells you what to ask the owner (nothing starts); on the owner's clear yes, call "
             "again with confirm=true. To change one of the owner's apps, pass its app_id (from get_status; in an "
             "app's own chat it is that app). For an app or product, pass brief: the plan the owner agreed to, in "
@@ -832,14 +789,6 @@ def _vaic_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
 
 
 # ---------- shared ----------
-def _review_limit_text(worker: dict[str, Any] | None, worker_id: str, rounds: int, reasons: str) -> str:
-    """The owner-facing question when a worker's work keeps failing review: a plain name, the real reason."""
-    name = worker_name(worker, worker_id)
-    reason = review_reason(f"Latest reasons: {reasons}")
-    why = f" Latest reason: {' '.join(reason.split()).rstrip('.')}." if reason else " It didn't pass review."
-    return f"{name[:1].upper()}{name[1:]}'s work failed review {rounds} times.{why} What should happen?"
-
-
 def _ask_owner(d: CityDeps, c: TurnCtx) -> ToolSpec:
     async def ask(a: dict[str, Any]) -> str:
         agent = await d.ledger.get_agent(c.agent_id)
@@ -876,304 +825,21 @@ def _ask_owner(d: CityDeps, c: TurnCtx) -> ToolSpec:
     )
 
 
-# ---------- Orchestrator ----------
-def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
-    ask_spec = _ask_owner(d, c)
-
-    async def ensure_manager(dept: dict[str, Any]) -> dict[str, Any]:
-        """A department's manager: hired the first time the department gets a goal (a preset stands empty until
-        then), dormant until its first turn."""
-        mgr = await d.ledger.get_agent(dept["manager_id"])
-        if mgr:
-            return mgr
-        mgr = {
-            "id": dept["manager_id"],
-            "kind": "manager",
-            "role": f"{dept['name']} Manager",
-            "department": dept["name"],
-            "model": model_name_for("manager", dept["name"]),
-            "parent": "orchestrator",
-            "state": "dormant",
-            "worker_state": None,
-            "total_cost_usd": 0,
-            "hired_at": now_iso(d.ledger.now()),
-        }
-        await d.ledger.put_agent(mgr)
-        await d.bus.put({"type": "agent.hired", "agent": mgr})
-        return mgr
-
-    async def overlap_gate(name: str, existing: list[dict[str, Any]]) -> str:
-        """A new department whose work overlaps a standing one waits for the owner's choice (decision 220): a new
-        one with this name, or the project in the best-fitting existing department. The choice VAIC already got
-        is on the task (``department_choice``); otherwise the owner is asked here, with buttons in Needs you.
-        Returns why nothing was created, or "" to go ahead."""
-        task = await d.ledger.get_ticket(c.task_id) or {}
-        chosen = task.get("department_choice") or {}
-        if chosen.get("use"):
-            return (
-                f"Not created: the owner chose to do this project in the existing {chosen['use']} department, "
-                f"not a new one. Send the work there with assign_to_department; other existing departments may "
-                "take their own parts."
-            )
-        if department_key(str(chosen.get("create") or "")) == department_key(name):
-            return ""
-        near = overlapping(name, existing)
-        if not near:
-            return ""
-        asked = task.get("department_question") or {}
-        if asked.get("id") and department_key(str(asked.get("new") or "")) == department_key(name):
-            q = await d.ledger.get_question(str(asked["id"])) or {}
-            if q.get("status") == "open":
-                return "Still waiting for the owner's answer on that department. End your turn."
-            pick = owner_pick(str(q.get("answer") or ""), name, str(asked.get("existing") or near["name"]))
-            if q.get("status") == "answered" and pick:
-                choice = {"create": name} if pick == "create" else {"use": str(asked.get("existing") or near["name"])}
-                await d.ledger.table.update(
-                    f"TICKET#{c.task_id}", "META", UpdateOptions(set={"department_choice": choice})
-                )
-                return "" if pick == "create" else await overlap_gate(name, existing)
-        options = choice_options(name, str(near["name"]))
-        said = await ask_spec.handler(
-            {
-                "question": (
-                    f"This project would get a new department, {name}, but {near['name']} already does that kind "
-                    f"of work. Create {name}, or do the project in {near['name']}?"
-                ),
-                "options": options,
-                "default_answer": options[1],
-            }
-        )
-        q_id = m.group(1) if (m := re.search(r"question (q-[\w-]+)", said)) else ""
-        await d.ledger.table.update(
-            f"TICKET#{c.task_id}",
-            "META",
-            UpdateOptions(set={"department_question": {"id": q_id, "new": name, "existing": str(near["name"])}}),
-        )
-        log("info", "department.overlap", new=name, existing=str(near["name"]), at="orchestrator")
-        return (
-            f"Not created yet: {name} overlaps {near['name']}, so the owner was asked which they want (question "
-            f"{q_id}). End your turn; their answer arrives as a new message, then call create_department again "
-            f"(it goes ahead only if they chose {name}) or assign to {near['name']}."
-        )
-
-    async def create_department(a: dict[str, Any]) -> str:
-        name = str(a["name"]).strip()
-        preset = preset_for(name)
-        if preset:  # "Engineering", "IT", "Design" → the preset Application, IT Infrastructure, Marketing
-            name = preset["name"]
-            a = {**a, "mission": str(a.get("mission") or "").strip() or preset["mission"]}
-        # The ceiling counts only departments beyond the presets (those exist from the start).
-        dept_cap = int((await d.settings()).get("max_departments") or 6)
-        existing = await d.ledger.list_departments()
-        extra = [x for x in existing if not preset_named(str(x.get("name", "")))]
-        known = any(department_key(str(x.get("name", ""))) == department_key(name) for x in existing)
-        if not preset and not known and (why := await overlap_gate(name, existing)):
-            return why
-        if not preset and not known and len(extra) >= dept_cap:
-            log("info", "department.refused", name=name, departments=len(extra), cap=dept_cap)
-            return (
-                f"Refused: the city already has {len(extra)} departments of its own beyond the pre-configured ones "
-                f"(the ceiling is {dept_cap}). Use one of them: "
-                + ", ".join(str(x.get("name", "")) for x in existing)
-                + "."
-            )
-        gone = await d.ledger.get_department(name)
-        if gone and gone.get("state") == "demolished":  # decision 134: only the owner builds it again
-            return (
-                f"Refused: the owner demolished {gone['name']}. Use one of the standing departments, or tell VAIC "
-                "that the owner would have to build it again."
-            )
-        dept, created = await d.ledger.create_department(name, str(a["mission"]), manager_id(name))
-        if created:  # the building first, then its manager
-            await d.bus.put(
-                {
-                    "type": "department.created",
-                    "name": dept["name"],
-                    "mission": dept["mission"],
-                    "manager_id": dept["manager_id"],
-                    "slot": dept.get("slot"),
-                    "lot": dept.get("lot", ""),
-                }
-            )
-        mgr = await ensure_manager(dept)
-        if not created:
-            return f"{dept['name']} already exists; use it."
-        return f"Created {dept['name']}, managed by {mgr['id']}."
-
-    async def assign(a: dict[str, Any]) -> str:
-        if took_over := replaced_by(str(a["department"])):  # "Apps" is Application now (decision 220)
-            a = {**a, "department": took_over["name"]}
-        dept = await d.ledger.get_department(str(a["department"]))
-        if not dept and (preset := preset_for(str(a["department"]))):  # "Engineering" → IT
-            dept = await d.ledger.get_department(preset["name"])
-            a = {**a, "department": preset["name"]}
-        if not dept:
-            return f"There is no department called {a['department']}. Create it first."
-        if dept.get("state") == "demolished":
-            return f"The owner demolished {dept['name']}. Use another standing department, or report what is left."
-        await ensure_manager(dept)
-        if dept.get("stood_down_at"):
-            await d.ledger.stand_down_department(dept["name"], down=False)  # a new job from the owner lifts it
-        # The owner's exact worker count: given here, or what is left of the task's count.
-        workers = _workers(a.get("workers"))
-        task_t = await d.ledger.get_ticket(c.task_id)
-        if workers is None and task_t and (total := _workers(task_t.get("workers"))):
-            used = sum(_workers(k.get("workers")) or 0 for k in await d.ledger.child_tickets(c.task_id))
-            workers = max(1, total - used)
-        t = await new_ticket(
-            d,
-            {
-                "goal": str(a["goal"]),
-                "acceptance": str(a["acceptance"]),
-                "from": "orchestrator",
-                "to": dept["manager_id"],
-                "department": dept["name"],
-                "parent_id": c.task_id,
-                "task_id": c.task_id,
-                "kind": "assignment",
-                **({"workers": workers} if workers else {}),
-                **({"app_id": task_app} if (task_app := await _task_app(d, c.task_id)) else {}),
-                "pace": policy_for((task_t or {}).get("pace")).pace,
-            },
-        )
-        task = await d.ledger.get_ticket(c.task_id)
-        if task and task["status"] == "open":
-            await move(d, c.task_id, "in_progress", "sent to departments")
-        await send(
-            d,
-            {
-                "role": "manager",
-                "agentId": dept["manager_id"],
-                "department": dept["name"],
-                "ticketId": t["id"],
-                "taskId": c.task_id,
-                "kind": "task",
-                "from": "orchestrator",
-                "body": f"Goal for {dept['name']}: {a['goal']}\nAcceptance: {a['acceptance']}"
-                + f"\n{speed_brief((task_t or {}).get('pace'))}"
-                + (
-                    f"\nThe owner asked for exactly {workers} worker{'s' if workers != 1 else ''} on this goal: hire "
-                    "exactly that many, give each its own part, and run them at the same time."
-                    if workers
-                    else ""
-                )
-                + (
-                    f"\nThis changes the existing app {task_app}: workers start from its current version with load_app."
-                    if task_app
-                    else ""
-                ),
-            },
-        )
-        return f"Sent to {dept['name']} as {t['id']}" + (f" ({workers} workers)." if workers else ".")
-
-    async def get_reports(_: dict[str, Any]) -> str:
-        import json
-
-        kids = await d.ledger.child_tickets(c.task_id)
-        return json.dumps(
-            [
-                {
-                    "ticket": k["id"],
-                    "department": k.get("department"),
-                    "status": k["status"],
-                    "report": quote(k["to"], k["result"]) if k.get("result") else None,
-                }
-                for k in kids
-                if k.get("kind") == "assignment"
-            ]
-        )
-
-    async def sign_off(a: dict[str, Any]) -> str:
-        verdict = a["verdict"]
-        kids = [k for k in await d.ledger.child_tickets(c.task_id) if k.get("kind") == "assignment"]
-        apps: list[dict[str, Any]] = []
-        if verdict == "PASS":
-            pending = [k for k in kids if k["status"] != "in_review" and k["status"] not in DONE_OR_GONE]
-            if pending:
-                return f"Not yet: {', '.join(str(k.get('department')) for k in pending)} has not reported."
-            for k in kids:
-                if k["status"] == "in_review":
-                    await move(d, k["id"], "done", "signed off")
-            await d.ledger.table.put(
-                {"pk": f"TICKET#{c.task_id}", "sk": "SIGNOFF", "verdict": verdict, "at": now_iso(d.ledger.now())}
-            )
-            apps = await request_publish_approvals(d.ledger, d.bus, c.task_id, c.agent_id)
-        else:
-            target = None
-            if a.get("department"):
-                target = next(
-                    (
-                        k
-                        for k in kids
-                        if department_key(str(k.get("department"))) == department_key(str(a["department"]))
-                    ),
-                    None,
-                )
-            target = target or next((k for k in kids if k["status"] == "in_review"), None)
-            if not target:
-                return "Name the department that must fix it."
-            await move(
-                d, target["id"], "in_progress", "sign-off failed", {"review_rounds": target.get("review_rounds", 0) + 1}
-            )
-            await send(
-                d,
-                {
-                    "role": "manager",
-                    "agentId": target["to"],
-                    "department": target.get("department"),
-                    "ticketId": target["id"],
-                    "taskId": c.task_id,
-                    "kind": "fix",
-                    "from": "orchestrator",
-                    "body": f"The Orchestrator did not sign off. Fix and report again: {a['reasons']}",
-                },
-            )
-        await d.bus.put(
-            {"type": "signoff.result", "ticket_id": c.task_id, "verdict": verdict, "summary": str(a["reasons"])[:300]}
-        )
-        if verdict != "PASS":
-            return "Sent back for fixes."
-        if apps:
-            return (
-                f"Signed off. The owner is asked to publish {len(apps)} app(s) in Needs you; tell VAIC it appears "
-                "under Apps once the owner approves it (it is not live yet). Now report to VAIC."
-            )
-        return "Signed off. Now report to VAIC."
-
+# ---------- Planner (decision 298: the planner of the project board; internally still the "orchestrator" runtime) ----------
+def _planner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
     async def add_part(a: dict[str, Any]) -> str:
         return await board.add_part(d, c.task_id, a)
 
     async def finish_plan(_: dict[str, Any]) -> str:
         return await board.finish_plan(d, c.task_id)
 
-    async def report_to_vaic(a: dict[str, Any]) -> str:
-        signed = await d.ledger.table.get(f"TICKET#{c.task_id}", "SIGNOFF")
-        if (signed or {}).get("verdict") != "PASS":
-            return "Sign off with PASS before reporting."
-        task = await move(d, c.task_id, "done", "reported to VAIC", {"result": str(a["summary"])})
-        await d.bus.put({"type": "result", "ticket_id": c.task_id, "summary": str(a["summary"])[:500]})
-        msg: dict[str, Any] = {
-            "role": "vaic",
-            "agentId": "vaic",
-            "department": None,
-            "ticketId": c.task_id,
-            "taskId": c.task_id,
-            "kind": "report",
-            "from": "orchestrator",
-            "body": quote("the Orchestrator", str(a["summary"])),
-        }
-        if task.get("conversation"):
-            msg["conversation"] = task["conversation"]
-        await send(d, msg)
-        return "Reported to VAIC."
-
     _bool = {"type": "boolean"}
     return [
         ToolSpec(
             "add_part",
-            "Board planning only (a job whose brief says Board planning): write one part to the board. It starts at "
-            "once when the parts in `after` are done (or it has none). files: the files this part alone owns. "
-            "trivial: a one-line or config change (runs on Haiku). aws: it creates or changes AWS resources.",
+            "Write one part of the job to the board. It starts at once when the parts in `after` are done (or it has "
+            "none). files: the files this part alone owns. trivial: a one-line or config change (runs on Haiku). aws: "
+            "it creates or changes AWS resources.",
             _obj(
                 {
                     "name": _s(2, 80),
@@ -1192,45 +858,9 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         ),
         ToolSpec(
             "finish_plan",
-            "Board planning only: the plan is complete. The whole-app check is added after every part; the board runs "
-            "the rest and tells VAIC.",
+            "The plan is complete. The whole-app check is added after every part; the board runs the rest and tells VAIC.",
             _obj({}),
             finish_plan,
-        ),
-        ToolSpec(
-            "create_department",
-            "Create a department (data). Its manager is created dormant and costs nothing until work arrives.",
-            _obj({"name": _s(2, 40), "mission": _s(10)}),
-            create_department,
-        ),
-        ToolSpec(
-            "assign_to_department",
-            "Send one goal to a department's manager. workers: the exact number of workers for this goal when the "
-            "owner set one for the task (leave it out otherwise; with one department it defaults to the task's).",
-            _obj(
-                {"department": _s(), "goal": _s(3), "acceptance": _s(3), "workers": _WORKERS},
-                ("workers",),
-            ),
-            assign,
-        ),
-        ToolSpec(
-            "get_reports",
-            "The departments' tickets for this task, with their status and reports.",
-            _obj({}),
-            get_reports,
-        ),
-        ToolSpec(
-            "sign_off",
-            "Final sign-off on the task: PASS, or FAIL with reasons (the work goes back to the department).",
-            _obj({"verdict": _VERDICT, "reasons": _s(3), "department": _s()}, ("department",)),
-            sign_off,
-        ),
-        _ask_owner(d, c),
-        ToolSpec(
-            "report_to_vaic",
-            "Report the finished task to VAIC. Only after a PASS sign-off.",
-            _obj({"summary": _s(3)}),
-            report_to_vaic,
         ),
     ]
 
@@ -1242,149 +872,6 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
     async def mine(worker_id: str) -> dict[str, Any] | None:
         w = await d.ledger.get_agent(worker_id)
         return w if w and w.get("kind") == "worker" and w.get("parent") == c.agent_id else None
-
-    async def _record_team(goal_t: dict[str, Any], n: int, reason: str, parts: list[str]) -> None:
-        """The team decision goes on the goal (and its job), in the history VAIC and the activity read."""
-        line = f"Team for {dept}: {reason}"
-        await move(
-            d,
-            str(goal_t["id"]),
-            str(goal_t["status"]),
-            line,
-            {"team_size": n, "team_reason": reason, "team_parts": parts},
-        )
-        task = await d.ledger.get_ticket(c.task_id) if c.task_id and c.task_id != goal_t["id"] else None
-        if task:
-            lines = [x for x in (task.get("team_lines") or []) if not str(x).startswith(f"Team for {dept}:")]
-            await move(d, str(task["id"]), str(task["status"]), line, {"team_lines": [*lines, line][-12:]})
-        log("info", "team.sized", department=dept, goal=goal_t["id"], workers=n, reason=reason)
-
-    async def plan_team(a: dict[str, Any]) -> str:
-        goal_t = await d.ledger.get_ticket(c.ticket_id) if c.ticket_id else None
-        if not goal_t:
-            return "There is no goal to plan a team for."
-        try:
-            parts = parse_parts(a.get("parts"))
-        except PlanError as e:
-            return f"Not planned: {e}"
-        asked = _workers(goal_t.get("workers"))
-        try:
-            team = size_team(parts, owner_asked=asked)  # no ceiling on the count (decision 288)
-        except PlanError as e:
-            return f"Not planned: {e}"
-        names = [p.name for p in parts]
-        before = _workers(goal_t.get("team_size"))
-        if before is not None and goal_t.get("team_parts"):
-            # Mid-build: the team grows only for a new independent part, and never shrinks under running work.
-            new = [p for p in parts if p.name.lower() not in {str(x).lower() for x in goal_t.get("team_parts") or []}]
-            fresh = [p.name for p in new if p.size == "normal" and not p.after]
-            if team.workers <= before or not fresh or asked:
-                return (
-                    f"The team stays at {before}: {goal_t.get('team_reason')}. No new independent part needs a worker."
-                )
-            n = min(team.workers, before + len(fresh))
-            reason = (
-                f"{n} workers: added {n - before} for the new part{'s' if len(fresh) > 1 else ''} {', '.join(fresh)}"
-            )
-            await _record_team(goal_t, n, reason, sorted({*map(str, goal_t.get("team_parts") or []), *names}))
-            return f"Team grows to {n}: hire {n - before} more for {', '.join(fresh)}."
-        await _record_team(goal_t, team.workers, team.reason, names)
-        order = " → ".join(" + ".join(w) for w in team.waves) if team.waves else ""
-        return (
-            f"Team: {team.reason}. Hire exactly {team.workers} and assign them at once"
-            + (f"; order: {order}" if len(team.waves) > 1 else "")
-            + ". Tiny parts go to the worker of a real part next to them."
-        )
-
-    async def hire(a: dict[str, Any]) -> str:
-        # No cap on how many agents work (the owner, decision 288): a goal gets the team plan_team sized from its
-        # parts, or the owner's exact number. Real limits come from AWS; the dispatcher waits them out.
-        stood = await d.ledger.get_department(dept) or {}
-        if stood.get("stood_down_at"):
-            log("info", "hire.refused", department=dept, reason="stood down")
-            return f"Hire refused: {STAND_DOWN_NOTE}"
-        goal_t = await d.ledger.get_ticket(c.ticket_id) if c.ticket_id else None
-        asked = _workers((goal_t or {}).get("workers"))  # the owner's exact number
-        # The team size decided for this goal (decision 283): plan_team's number, or the owner's exact one.
-        planned = _workers((goal_t or {}).get("team_size"))
-        if goal_t is not None and planned is None:
-            # No plan yet: the owner's number, or one worker by default; plan_team is how a goal gets more.
-            if asked:
-                team = size_team([], owner_asked=asked)
-                n, why = team.workers, team.reason
-            else:
-                n, why = 1, "1 worker: no parts were listed, so one worker by default"
-            await _record_team(goal_t, n, why, [])
-            planned = n
-        if planned:
-            # On this goal: workers hired for it, and goal-less (older) workers only while they are working.
-            on_goal = [
-                w
-                for w in await d.ledger.department_agents(dept)
-                if w.get("kind") == "worker"
-                and w.get("state") != "retired"
-                and w.get("parent") == c.agent_id
-                and (
-                    w.get("goal_id") == c.ticket_id or (w.get("goal_id") is None and w.get("worker_state") == "working")
-                )
-            ]
-            if len(on_goal) >= planned:
-                log("info", "hire.refused", department=dept, goal=c.ticket_id, on_goal=len(on_goal), team=planned)
-                names = ", ".join(
-                    f"{w['id']} ({w.get('specialty') or w.get('role')}, {w.get('worker_state')})" for w in on_goal
-                )
-                why = (
-                    f"the owner asked for exactly {asked}"
-                    if asked
-                    else f"the team for this goal is {planned}; plan_team sizes it from the parts, and grows it only "
-                    "for a new independent part"
-                )
-                return (
-                    f"Hire refused: you already have {len(on_goal)} workers on this goal ({why}): {names}. "
-                    "Assign one of them with `assign`, or free a place with `release_worker` (idle or finished ones)."
-                )
-        try:
-            w = await d.factory.hire(a, c.agent_id, dept)
-        except Exception as e:
-            return f"Hire refused: {e}"
-        await d.ledger.update_agent(w["id"], {"goal_id": c.ticket_id})
-        return f"Hired {w['id']} ({w['role']})."
-
-    async def assign(a: dict[str, Any]) -> str:
-        w = await mine(str(a["worker_id"]))
-        if not w or w.get("state") == "retired":
-            return f"{a['worker_id']} is not one of your workers."
-        goal_t = await d.ledger.get_ticket(c.ticket_id) if c.ticket_id else None
-        t = await new_ticket(
-            d,
-            {
-                "goal": str(a["goal"]),
-                "acceptance": str(a["acceptance"]),
-                "from": c.agent_id,
-                "to": w["id"],
-                "department": dept,
-                "parent_id": c.ticket_id,
-                "task_id": c.task_id,
-                "kind": "assignment",
-                "pace": policy_for((goal_t or {}).get("pace")).pace,  # the part's time budget (decision 287)
-            },
-        )
-        await d.ledger.update_agent(w["id"], {"ticket_id": t["id"], "worker_state": "working"})
-        await d.bus.put({"type": "worker.state", "id": w["id"], "state": "working"})
-        await send(
-            d,
-            {
-                "role": "worker",
-                "agentId": w["id"],
-                "department": dept,
-                "ticketId": t["id"],
-                "taskId": c.task_id,
-                "kind": "task",
-                "from": c.agent_id,
-                "body": f"Assignment: {a['goal']}\nAcceptance: {a['acceptance']}",
-            },
-        )
-        return f"Assigned {t['id']} to {w['id']}."
 
     async def answer_worker(a: dict[str, Any]) -> str:
         w = await mine(str(a["worker_id"]))
@@ -1445,52 +932,13 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             await d.ledger.update_agent(t["to"], {"worker_state": "completed"})
             await d.bus.put({"type": "worker.state", "id": t["to"], "state": "completed"})
             await move(d, t["id"], "done", "review passed", {"review_rounds": rnd})  # sends the worker home
-            if t.get("path") == "board":  # the board finishes the goal and the job in code (decision 289)
-                await board.finish_part(d, t["id"], f"Reviewed: {a['reasons']}")
-                return "PASS recorded. The part is finished; the board closes the job. End your turn."
-            w = await d.ledger.get_agent(t["to"])
-            if w and w.get("state") == "retired":
-                return f"PASS recorded. {t['to']} has finished and gone home."
-            return f"PASS recorded. {t['to']} still has other work; it goes home when that passes."
-        if t.get("path") == "board" and len(said) >= board.fails_allowed(t):
-            # The board path (decision 289): a fresh worker on the takeover model gets the part with every reason.
+            await board.finish_part(d, t["id"], f"Reviewed: {a['reasons']}")  # the board closes the goal and job
+            return "PASS recorded. The part is finished; the board closes the job. End your turn."
+        if len(said) >= board.fails_allowed(t):
+            # A fresh, stronger worker gets the part with every reason (decisions 287 and 294).
             await d.ledger.set_ticket_status(t["id"], t["status"], "review failed", {"review_rounds": rnd})
             done = await board.take_over(d, t["id"], said)
             return f"FAIL recorded. {done} End your turn."
-        pol = policy_for(t.get("pace"))
-        if pol.pace == FASTEST and rnd >= pol.review_fails_before_escalation:
-            # Fastest (decision 287): no third try on the same worker and no question for the owner. The part
-            # comes back to the manager with every reason, and that worker goes home.
-            await move(
-                d,
-                t["id"],
-                "cancelled",
-                f"failed review {rnd} times; back to the manager",
-                {"review_rounds": rnd, "review_reasons": said, "escalated": "review"},
-            )
-            log("info", "part.escalated", ticket=t["id"], reason="review", rounds=rnd)
-            listed = "; ".join(f"({i}) {r}" for i, r in enumerate(said, 1))
-            return (
-                f"Escalated: {t['to']} failed review {rnd} times on this part, so it is taken off them (they go home "
-                f"and free their place). Reasons so far: {listed}. Now hire a fresh worker and assign the part "
-                "again with every reason in its acceptance, or split it into smaller parts; don't ask the owner."
-            )
-        if rnd >= d.max_review_rounds:
-            # Under Autopilot the Chief of Staff answers at once, so the part isn't parked for the owner.
-            park = "in_review" if autopilot(await d.settings()) else "waiting_on_owner"
-            await move(d, t["id"], park, "too many review rounds", {"review_rounds": rnd})
-            q = await d.ledger.ask_question(
-                {
-                    "asked_by": c.agent_id,
-                    "path": c.agent_id,
-                    "ticket_id": t["id"],
-                    "text": _review_limit_text(await d.ledger.get_agent(t["to"]), t["to"], rnd, str(a["reasons"])),
-                    "options": ["Try once more", "Stop this assignment"],
-                    "default_answer": "Stop this assignment",
-                }
-            )
-            await d.bus.put({"type": "question.asked", "question": q})
-            return "Review limit reached; asked the owner."
         await move(d, t["id"], "in_progress", "review failed", {"review_rounds": rnd, "review_reasons": said})
         await d.ledger.update_agent(t["to"], {"worker_state": "working"})
         await d.bus.put({"type": "worker.state", "id": t["to"], "state": "working", "detail": "fixing after review"})
@@ -1526,14 +974,6 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             for w in rows
         )
 
-    async def release(a: dict[str, Any]) -> str:
-        try:
-            w = await d.factory.release(str(a["worker_id"]), c.agent_id)
-        except Exception as e:
-            return f"Not released: {e}"
-        n = await drop_orphans()  # its unfinished assignments on this goal stop with it
-        return f"Released {w['id']}." + (f" {n} unfinished assignment{'s' if n != 1 else ''} stopped." if n else "")
-
     async def cancel_assignment(a: dict[str, Any]) -> str:
         t = await d.ledger.get_ticket(str(a["ticket_id"]))
         if not t or t.get("kind") != "assignment" or t.get("parent_id") != c.ticket_id:
@@ -1559,92 +999,7 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         )
         return f"Saved as specialist {s['id']}."
 
-    async def drop_orphans() -> int:
-        """Assignments held by workers who are gone (released, retired or never there) can never finish:
-        they are stopped, so they never block the goal (the stuck Research goal, 2026-11-08)."""
-        stopped = 0
-        for k in await d.ledger.child_tickets(c.ticket_id):
-            if k.get("kind") != "assignment" or k["status"] in DONE_OR_GONE or k["status"] == "in_review":
-                continue
-            w = await d.ledger.get_agent(str(k.get("to") or ""))
-            if not w or w.get("state") == "retired":
-                await move(d, k["id"], "cancelled", "its worker is gone")
-                stopped += 1
-        return stopped
-
-    async def report(a: dict[str, Any]) -> str:
-        await drop_orphans()
-        kids = [k for k in await d.ledger.child_tickets(c.ticket_id) if k.get("kind") == "assignment"]
-        unreviewed = [k for k in kids if k["status"] not in DONE_OR_GONE]
-        if unreviewed:
-            return f"Not yet: {', '.join(k['id'] for k in unreviewed)} has not passed review."
-        await move(d, c.ticket_id, "in_review", "reported to the Orchestrator", {"result": str(a["summary"])})
-        await send(
-            d,
-            {
-                "role": "orchestrator",
-                "agentId": "orchestrator",
-                "department": None,
-                "ticketId": c.task_id,
-                "taskId": c.task_id,
-                "kind": "report",
-                "from": c.agent_id,
-                "body": quote(c.agent_id, str(a["summary"])),
-            },
-        )
-        return "Reported to the Orchestrator."
-
     return [
-        ToolSpec(
-            "hire_worker",
-            "Hire a worker consultant for one assignment. `tools` must come from the list given; `connectors` only "
-            "ids open to workers (leave it out when unsure; a refusal names the ones that are).",
-            _obj(
-                {
-                    "specialty": _s(),
-                    "instructions": _s(),
-                    "tools": {"type": "array", "items": {"type": "string", "enum": list(WORKER_TOOLS)}, "minItems": 1},
-                    "budget_hint_usd": {"type": "number"},
-                    "specialist_id": _s(),
-                    "connectors": _STRS,
-                },
-                ("budget_hint_usd", "specialist_id", "connectors"),
-            ),
-            hire,
-        ),
-        ToolSpec(
-            "plan_team",
-            "Size the team before hiring (required once per goal). parts: the goal's pieces of work, each a name, "
-            "size tiny (a one-line edit, a value, a rename) or normal (a real piece: a screen, the game logic, the "
-            "tests, a document), and after: the names of parts it must wait for. The answer is how many workers to "
-            "hire: as many as parts can run at the same time, tiny parts folded in. Call it again mid-build only "
-            "when a new independent part shows up; the team then grows by that part.",
-            _obj(
-                {
-                    "parts": {
-                        "type": "array",
-                        "minItems": 1,
-                        "maxItems": 1000,
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "name": _s(1, 80),
-                                "size": {"type": "string", "enum": ["tiny", "normal"]},
-                                "after": _STRS,
-                            },
-                            "required": ["name", "size"],
-                        },
-                    }
-                }
-            ),
-            plan_team,
-        ),
-        ToolSpec(
-            "assign",
-            "Give one of your workers its assignment.",
-            _obj({"worker_id": _s(), "goal": _s(3), "acceptance": _s(3)}),
-            assign,
-        ),
         ToolSpec(
             "answer_worker", "Answer a worker's question.", _obj({"worker_id": _s(), "answer": _s(1)}), answer_worker
         ),
@@ -1668,24 +1023,12 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             cancel_assignment,
         ),
         ToolSpec(
-            "release_worker",
-            "Release one of your workers: one whose work passed review, or an idle one you no longer need.",
-            _obj({"worker_id": _s()}),
-            release,
-        ),
-        ToolSpec(
             "save_specialist",
             "Save a worker's spec so it can be hired again later.",
             _obj({"worker_id": _s()}),
             save_specialist,
         ),
         _ask_owner(d, c),
-        ToolSpec(
-            "report_to_orchestrator",
-            "Report the department's finished goal to the Orchestrator.",
-            _obj({"summary": _s(3)}),
-            report,
-        ),
     ]
 
 
@@ -2153,7 +1496,7 @@ def _search_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
         "colours, fonts, logo, tone and facts; never mix two brands. Department managers and workers also get "
         "their own department's knowledge base (strategies and best practices, each entry with as_of, review_by, "
         "volatility, confidence and sources); filter it with domain, platforms or entry_type, and set "
-        "audience 'all' to see entries written for the other role. VAIC and the Orchestrator search every "
+        "audience 'all' to see entries written for the other role. VAIC and the planner search every "
         "department's knowledge base and the shared one; pass department to search only one (Meta ads → "
         "marketing). Each entry says which knowledge base it is from. Related entries come along unless related is "
         "false.",
@@ -2181,7 +1524,7 @@ def _search_tool(d: CityDeps, c: TurnCtx) -> ToolSpec:
                 },
                 "department": {
                     **_s(2, 40),
-                    "description": "VAIC and the Orchestrator only: search one department's knowledge base "
+                    "description": "VAIC and the planner only: search one department's knowledge base "
                     "(marketing, sales, finance, legal, operations, product, research, media, support, application, "
                     "data, infrastructure) or shared; leave it out to search all of them.",
                 },
@@ -2357,7 +1700,7 @@ def _calendar_agenda_tool(d: CityDeps) -> ToolSpec:
 def tools_for(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
     own = {
         "vaic": _vaic_tools,
-        "orchestrator": _orchestrator_tools,
+        "orchestrator": _planner_tools,
         "manager": _manager_tools,
         "worker": _worker_tools,
     }[c.role](d, c)

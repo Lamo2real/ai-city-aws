@@ -16,7 +16,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .events import now_iso
-from .hierarchy.actions import FINAL, CityDeps, new_ticket, send
+from .hierarchy.actions import FINAL, CityDeps, new_ticket
 from .ids import new_id
 from .ledger import Ledger, Record
 from .log import log
@@ -219,22 +219,11 @@ async def run_due(d: CityDeps) -> dict[str, int]:
             await d.ledger.table.update(
                 "STANDING", o["id"], UpdateOptions(set={"last_run_at": now, "last_job_id": t["id"]}, must_exist=True)
             )
-            await send(
-                d,
-                {
-                    "role": "orchestrator",
-                    "agentId": "orchestrator",
-                    "department": None,
-                    "ticketId": t["id"],
-                    "taskId": t["id"],
-                    "kind": "task",
-                    "from": "vaic",
-                    "body": f"New task from the owner's standing order {o['id']}.\nGoal: {t['goal']}\n"
-                    f"Send it to the {o['department']} department.",
-                },
-            )
+            from .hierarchy.board_path import launch
+
+            await launch(d, t, department=str(o["department"]))
         except Exception as e:
-            # The job never reached the Orchestrator: close it and put the order's last run back, so the order is
+            # The job never reached the board: close it and put the order's last run back, so the order is
             # not left waiting for a job nobody is doing and the next beat starts it again. The other orders still run.
             log("error", "standing.start_failed", order=o["id"], job=t["id"], error=f"{type(e).__name__}: {e}")
             try:

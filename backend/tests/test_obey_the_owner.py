@@ -3,7 +3,7 @@ never a default VAIC fills in; hard ceilings stop runaway hiring, jobs and depar
 
 from typing import Any
 
-from test_task_control import SPEC, city, department, job, vaic_tools
+from test_task_control import city, department, job, vaic_tools
 from vaic.runtime.tools import TurnCtx, tools_for
 from vaic.shared.utility import about_ai_city
 
@@ -34,28 +34,46 @@ async def test_vaic_cannot_answer_a_question_with_words_the_owner_did_not_say() 
 
 
 async def test_no_city_wide_ceiling_on_workers_any_more() -> None:
-    # The owner removed every agent-count limit (decision 288): a busy city never refuses a goal's hire.
+    # The owner removed every agent-count limit (decision 288): a busy city never refuses a new job's hire.
+    from vaic.shared.hierarchy.board_path import start_small
+
     c = await city()
     await job(c, "Write a book", "the book", department_name="Writing", workers=3)
     await job(c, "Build a game", "the game", department_name="Apps", workers=3)
-    ctx = TurnCtx(agent_id="mgr-apps", role="manager", department="Apps", ticket_id="g-apps", task_id="t-apps")
-    hire = {t.name: t for t in tools_for(c.host.d, ctx)}["hire_worker"].handler
-    assert (await hire(SPEC)).startswith("Hired ")
-    assert (await hire(SPEC)).startswith("Hired ")
+    for n in range(2):
+        task = await c.ledger.create_ticket(
+            {
+                "goal": f"Fix typo {n}",
+                "from": "vaic",
+                "to": "orchestrator",
+                "department": None,
+                "parent_id": None,
+                "kind": "task",
+                "size": "small",
+            }
+        )
+        apps = await c.ledger.get_department("Apps")
+        assert apps
+        w = await start_small(c.host.d, task, apps, None)
+        assert w["state"] == "active"
 
 
 async def test_no_more_departments_than_the_ceiling() -> None:
+    # Departments are built only by the owner's word now (VAIC's build_department, or the owner's pick when a job
+    # would overlap one, decision 298), and the ceiling holds there.
+    from vaic.shared.hierarchy.departments import DepartmentError, build_department
+
     c = await city()
     for n in range(3):
         await department(c, f"Dept{n}")
     await c.ledger.update_settings({"max_departments": 3})
-    ctx = TurnCtx(agent_id="orchestrator", role="orchestrator", department=None, ticket_id="t1", task_id="t1")
-    create = {t.name: t for t in tools_for(c.host.d, ctx)}["create_department"].handler
-    out = await create({"name": "Voice Engineering", "mission": "voices"})
-    assert out.startswith("Refused: the city already has 3 departments of its own") and "(the ceiling is 3)" in out
-    assert "Dept0" in out
+    try:
+        await build_department(c.host.d, "Voice Engineering", "voices")
+        raise AssertionError("the ceiling did not hold")
+    except DepartmentError as e:
+        assert "already has 3 departments of your own" in str(e) and "(the limit is 3)" in str(e)
     assert len(await c.ledger.list_departments()) == 3
-    assert (await create({"name": "Dept1", "mission": "again"})).endswith("already exists; use it.")
+    assert (await build_department(c.host.d, "Dept1", "again"))[1] == "exists"
 
 
 def test_what_counts_as_about_ai_city() -> None:
@@ -69,5 +87,5 @@ def test_what_counts_as_about_ai_city() -> None:
 
 async def test_vaic_tools_list_has_the_gate(vaic_tools_fn: Any = vaic_tools) -> None:
     c = await city()
-    spec = vaic_tools_fn(c)["delegate_to_orchestrator"]
+    spec = vaic_tools_fn(c)["start_job"]
     assert "confirm" in spec.schema["properties"] and "confirm" in spec.description

@@ -6,7 +6,8 @@ const BY_TOOL: Record<string, string> = {
   list_notes: "Reading your notes",
   add_note: "Saving a note",
   add_reminder: "Setting a reminder",
-  delegate_to_orchestrator: "Passing this to my team",
+  start_job: "Passing this to my team",
+  delegate_to_orchestrator: "Passing this to my team", // jobs from before decision 298
   instruct_agent: "Passing your instruction on",
   answer_question: "Answering a question from the team",
   search_knowledge: "Searching your knowledge base",

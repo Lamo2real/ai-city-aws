@@ -1,8 +1,7 @@
 """The owner's "send the workers home": every worker drops its work and walks home; nothing else changes."""
 
-from test_task_control import SPEC, city, job, vaic_tools
+from test_task_control import city, job, vaic_tools
 from vaic.runtime.prompts import load_prompt
-from vaic.runtime.tools import TurnCtx, tools_for
 
 
 async def test_asks_first_then_stops_every_job_and_everyone_stays_home() -> None:
@@ -31,24 +30,26 @@ async def test_asks_first_then_stops_every_job_and_everyone_stays_home() -> None
     assert not [m for m in c.queue.sent if "Assign again" in str(m.get("body"))]
     assert (await c.ledger.settings({})) == before
 
-    # A manager that somehow gets a turn cannot hire; a new goal from the Orchestrator lifts the stand-down.
-    mgr_ctx = TurnCtx(agent_id="mgr-writing", role="manager", department="Writing", ticket_id="g-old", task_id="t-old")
-    mgr_tools = {t.name: t for t in tools_for(c.host.d, mgr_ctx)}
-    refused = await mgr_tools["hire_worker"].handler(SPEC)
-    assert refused.startswith("Hire refused: The owner sent everyone home")
+    # A new job from the owner lifts the stand-down: the board hires into Writing again (decision 298).
+    from vaic.shared.hierarchy.board_path import start_small
+
     new_task = await c.ledger.create_ticket(
-        {"goal": "Write a haiku", "from": "vaic", "to": "orchestrator", "department": None, "parent_id": None,
-         "kind": "task", "owner_words": "write me a haiku", "status": "open"}
-    )  # fmt: skip
-    orch_ctx = TurnCtx(
-        agent_id="orchestrator", role="orchestrator", department=None, ticket_id=new_task["id"], task_id=new_task["id"]
+        {
+            "goal": "Write a haiku",
+            "from": "vaic",
+            "to": "orchestrator",
+            "department": None,
+            "parent_id": None,
+            "kind": "task",
+            "owner_words": "write me a haiku",
+            "size": "small",
+        }
     )
-    orch_tools = {t.name: t for t in tools_for(c.host.d, orch_ctx)}
-    await orch_tools["assign_to_department"].handler(
-        {"department": "Writing", "goal": "A haiku", "acceptance": "17 syllables"}
-    )
+    writing = await c.ledger.get_department("Writing")
+    assert writing
+    await start_small(c.host.d, new_task, writing, None)
     assert not (await c.ledger.get_department("Writing")).get("stood_down_at")
-    assert (await mgr_tools["hire_worker"].handler(SPEC)).startswith("Hired ")
+    assert [a for a in await c.ledger.department_agents("Writing") if a["kind"] == "worker" and a["state"] == "active"]
 
     assert (await tools["send_workers_home"].handler({"confirm": False})).startswith(
         "Send everyone home and stop all 1 job?"

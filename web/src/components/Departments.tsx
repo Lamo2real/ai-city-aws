@@ -113,7 +113,7 @@ export function DemolishDepartment({ name, city, onDone }: { name: string; city:
       toast({
         text:
           r.workers || r.parts
-            ? `${r.name} was demolished. ${plural(r.workers, "worker")} went home, ${plural(r.parts, "unfinished part")} went back to the Orchestrator.`
+            ? `${r.name} was demolished. ${plural(r.workers, "worker")} went home, ${plural(r.parts, "unfinished part")} went to the department that took over, or were dropped.`
             : `${r.name} was demolished. Nobody was working there.`,
         tone: "good",
       });
@@ -130,7 +130,7 @@ export function DemolishDepartment({ name, city, onDone }: { name: string; city:
           <p>
             {`Demolish ${name}? `}
             {workers || parts
-              ? `${plural(workers, "worker")} go home and ${plural(parts, "unfinished part")} go back to the Orchestrator. `
+              ? `${plural(workers, "worker")} go home and ${plural(parts, "unfinished part")} go to the department that takes over, or are dropped. `
               : "Nobody is working there. "}
             Its history stays, and you can build it again later.
           </p>
@@ -163,7 +163,7 @@ export function YourDepartments() {
       <h2 id="yourdepts-title">Build or demolish a department</h2>
       <p className="mute">
         Next to the twelve ready-made departments you can build your own, or ask VAIC: “make a Customer Success
-        department”. Demolishing one sends its workers home and hands its unfinished work back to the Orchestrator.
+        department”. Demolishing one sends its workers home and hands its unfinished work to the department that takes over.
       </p>
       <BuildDepartment />
       {names.length ? (

@@ -105,10 +105,14 @@ class AgentHost:
         self.o = o
 
     async def ensure_core(self) -> None:
-        await ensure_executives(self.d.ledger)  # decision 140: permanent, at home until the Orchestrator calls them in
+        await ensure_executives(self.d.ledger)  # decision 140: permanent, at home until someone asks them
         at = now_iso(self.d.ledger.now())
-        for id, role, model in (("vaic", "VAIC", "haiku-5-5"), ("orchestrator", "Orchestrator", "fable-5-1")):
-            if not await self.d.ledger.get_agent(id):
+        # The planner of the project board (decision 298) keeps the id "orchestrator" inside, like its runtime.
+        for id, role, model in (("vaic", "VAIC", "haiku-5-5"), ("orchestrator", "Planner", "sonnet-5-5")):
+            have = await self.d.ledger.get_agent(id)
+            if have and have.get("role") == "Orchestrator":
+                await self.d.ledger.update_agent(id, {"role": role})
+            if not have:
                 await self.d.ledger.put_agent(
                     {
                         "id": id,
@@ -463,7 +467,7 @@ class AgentHost:
         if conversation.startswith("app-new-"):
             return [
                 "This chat is a new project in the owner's Apps studio. Agree the plan with the owner first "
-                "(see Projects in your instructions), then build it with delegate_to_orchestrator and the brief.",
+                "(see Projects in your instructions), then build it with start_job and the brief.",
                 "",
             ]
         app_id = app_of_conversation(conversation)
@@ -475,7 +479,7 @@ class AgentHost:
             recent[:0] = earlier
         out = [
             f"This chat is about the owner's app “{app.get('title')}” (app_id {app['app_id']}, version "
-            f"{app.get('version') or 1}). Changes to it go to delegate_to_orchestrator, which already knows the app."
+            f"{app.get('version') or 1}). Changes to it go to start_job, which already knows the app."
         ]
         if app.get("brief"):
             out.append(f"The plan the owner agreed for it: {app['brief']}")
@@ -555,7 +559,7 @@ class AgentHost:
             # The app guide rides with VAIC's instructions so "how do I…" is answered at once (the owner, 2026-11-09).
             return load_prompt("vaic.md").body + "\n\n" + vaic_voice() + "\n\n" + app_guide(), []
         if role == "orchestrator":
-            return load_prompt("orchestrator.md").body, []
+            return load_prompt("planner.md").body, []
         if role == "manager":
             dept = await self.d.ledger.get_department(inv.get("department") or "") or {}
             return (
@@ -680,16 +684,6 @@ class AgentHost:
                         f"- assignment {k['id']} to {k['to']} [{k['status']}], review rounds {k.get('review_rounds', 0)}"
                     )
                     lines += [_draft_line(dr, "  ") for dr in await drafts_of_ticket(ledger, k["id"])]
-            for_workers = [
-                c
-                for c in await ConnectorStore(ledger.table).list()
-                if c.get("status") == "ready" and (c.get("roles") or {}).get("worker")
-            ]
-            if for_workers:
-                lines.append(
-                    "Connectors you can give a worker (hire_worker connectors): "
-                    + ", ".join(f"{c['id']} ({c.get('label') or c['id']})" for c in for_workers)
-                )
             saved = [s for s in await ledger.list_specialists() if s.get("department") == inv.get("department")]
             if saved:
                 lines.append(f"Saved specialists: {', '.join(f'{s["id"]} ({s["specialty"]})' for s in saved)}")

@@ -27,6 +27,7 @@ from vaic.shared import standing_orders as so
 from vaic.shared import support_desk as desk
 from vaic.shared.connectors import ConnectorStore
 from vaic.shared.hierarchy.actions import FINAL
+from vaic.shared.ids import manager_id
 from vaic.shared.ledger import ALL_STATUSES
 
 SLACK: list[dict[str, str]] = []
@@ -48,43 +49,35 @@ async def vaic(req: EngineRequest, call: Call) -> str:
 
 
 async def orchestrator(req: EngineRequest, call: Call) -> str:
-    if "(task) from vaic" in req.turn.prompt:
-        dept = re.search(r"Send it to the (.+?) department", req.turn.prompt).group(1)  # type: ignore[union-attr]
-        await call("create_department", {"name": dept, "mission": f"The {dept} team."})
-        await call("assign_to_department", {"department": dept, "goal": await _goal(req), "acceptance": "done"})
-        return "Sent."
-    await call("sign_off", {"verdict": "PASS", "reasons": "Done."})
-    await call("report_to_vaic", {"summary": "Finished."})
-    return "PASS"
+    """The board's planner, for a job whose department isn't standing yet (decision 298)."""
+    dept = re.search(r"Give every part to the (.+?) department", req.turn.prompt).group(1)  # type: ignore[union-attr]
+    await call("add_part", {"name": "The job", "goal": await _goal(req), "acceptance": "done", "department": dept})
+    await call("finish_plan", {})
+    return "Planned."
 
 
 async def manager(req: EngineRequest, call: Call) -> str:
-    if "(task) from orchestrator" in req.turn.prompt:
-        goal = await _goal(req)
-        if goal.startswith("Standing order so-company-marketing"):
-            # Marketing's manager hands the qualified lead to Sales (MQL → SQL) and converts it in Salesforce.
-            lead = next(x for x in await deals.list_deals(req.ledger, team="Marketing") if x["name"] == "Lena Shop")
-            SALESFORCE[lead["id"]] = {"type": "Opportunity", "stage": "Qualification", "owner": "Sales"}
-            out = await call("file_handoff", {"to_department": "Sales", "title": "Qualified lead: Lena Shop",
-                                              "details": "Asked for wholesale prices twice.", "ref": lead["id"],
-                                              "priority": "high"})  # fmt: skip
-            assert out.startswith("Filed"), out
-        hired = await call("hire_worker", {"specialty": "agent", "instructions": "Do the job.", "tools": ["Read"],
-                                           "budget_hint_usd": 1})  # fmt: skip
-        wid = re.search(r"Hired (\S+)", hired).group(1)  # type: ignore[union-attr]
-        await call("assign", {"worker_id": wid, "goal": goal, "acceptance": "done"})
-        return "Assigned."
-    for t in await req.ledger.child_tickets(req.ctx.ticket_id):
-        if t["status"] == "in_review":
-            await call("review", {"ticket_id": t["id"], "verdict": "PASS", "reasons": "Meets the acceptance."})
-            await call("report_to_orchestrator", {"summary": str(t.get("result") or "Done.")})
+    """A department's reviewer on the board: one review of the part it was sent."""
+    if "Board review" in req.turn.prompt:
+        await call("review", {"ticket_id": req.ctx.ticket_id, "verdict": "PASS", "reasons": "Meets the acceptance."})
     return "Reviewed."
 
 
 async def worker(req: EngineRequest, call: Call) -> str:
     goal = await _goal(req)
     summary = "Nothing new."
-    if goal.startswith("Standing order so-company-support") and CUSTOMER_MSG["ts"] not in goal:
+    if goal.startswith("Standing order so-company-marketing"):
+        # Marketing hands the qualified lead to Sales (MQL → SQL) and converts it in Salesforce (decision 241: a
+        # worker files handoffs by its own judgement).
+        lead = next(x for x in await deals.list_deals(req.ledger, team="Marketing") if x["name"] == "Lena Shop")
+        if lead["id"] not in SALESFORCE:
+            SALESFORCE[lead["id"]] = {"type": "Opportunity", "stage": "Qualification", "owner": "Sales"}
+            out = await call("file_handoff", {"to_department": "Sales", "title": "Qualified lead: Lena Shop",
+                                              "details": "Asked for wholesale prices twice.", "ref": lead["id"],
+                                              "priority": "high"})  # fmt: skip
+            assert out.startswith("Filed"), out
+            summary = "Handed the lead to Sales."
+    elif goal.startswith("Standing order so-company-support") and CUSTOMER_MSG["ts"] not in goal:
         key = f"SHOP-{len(JIRA) + 1}"
         JIRA[key] = {"project": "SHOP", "component": "Application", "status": "To Do", "comments": []}
         out = await call("open_ticket", {"title": "Checkout fails with a voucher", "details": CUSTOMER_MSG["text"],
@@ -132,6 +125,8 @@ async def test_zalando_runs_itself_support_to_application_and_back_and_a_lead_fr
     city = make_city(scripted_engine({"vaic": vaic, "orchestrator": orchestrator, "manager": manager,
                                       "worker": worker}))  # fmt: skip
     await city.host.ensure_core()
+    for n in ("Customer Support", "Application", "Marketing", "Sales"):
+        await city.ledger.create_department(n, f"The {n} team.", manager_id(n))
     d = city.deps
     jira = {
         "id": "atlassian",

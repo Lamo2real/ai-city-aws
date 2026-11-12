@@ -35,13 +35,13 @@ enum Fmt {
 enum Steps {
     static let byTool = [
         "get_status": "Checking the ledger", "list_notes": "Reading your notes", "add_note": "Saving a note",
-        "add_reminder": "Setting a reminder", "delegate_to_orchestrator": "Handing this to the Orchestrator",
+        "add_reminder": "Setting a reminder", "start_job": "Handing this to the team", "delegate_to_orchestrator": "Handing this to the team",
         "instruct_agent": "Passing your instruction on", "answer_question": "Answering a question from the team",
         "pause_city": "Pausing the City", "resume_city": "Resuming the City",
     ]
     static let byActivity = [
         "understanding": "Understanding your message", "answering": "Answering a question from the team",
-        "delegating": "Handing this to the Orchestrator", "asking": "Asking you a question", "reading": "Reading",
+        "delegating": "Handing this to the team", "asking": "Asking you a question", "reading": "Reading",
         "researching": "Looking things up", "reviewing": "Reviewing", "reporting": "Writing a report",
     ]
     static let first = byActivity["understanding"]!

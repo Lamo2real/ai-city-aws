@@ -78,7 +78,7 @@ describe("Settings → Executives", () => {
     expect(everyDays(14)).toBe("every 2 weeks");
     expect(everyDays(30)).toBe("every 30 days");
     expect(sourceWords(["costs", "department_reports", "knowledge"])).toBe("costs, department reports, knowledge base");
-    expect(askedBy({ ...REC, to: "orchestrator" })).toBe("Asked by the Orchestrator");
+    expect(askedBy({ ...REC, to: "orchestrator" })).toBe("Asked by the planner");
     expect(askedBy({ ...REC, review: "cfo-cost-review" })).toBe("Scheduled review");
     expect(askedBy(REC)).toBe("Asked by you");
   });

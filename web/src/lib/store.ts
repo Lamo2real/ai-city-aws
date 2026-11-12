@@ -697,7 +697,7 @@ class Store {
     const i = chat.findIndex((l) => l.id === lineId && l.who === "owner");
     if (i < 0) return;
     const steps = [...new Set(tools.map((t) => stepWords(t.activity, t.detail)).filter((w): w is string => !!w))];
-    const handedOn = tools.some((t) => t.activity === "delegating" || /delegate_to_orchestrator/.test(t.detail ?? ""));
+    const handedOn = tools.some((t) => t.activity === "delegating" || /start_job|delegate_to_orchestrator/.test(t.detail ?? ""));
     const line = chat[i]!;
     // Only VAIC's half-written answer to this message goes, never a reply to a message sent after it.
     const end = chat.findIndex((l, j) => j > i && l.who === "owner");

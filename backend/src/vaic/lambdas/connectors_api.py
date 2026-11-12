@@ -148,7 +148,7 @@ async def _bearer_key(c: ConnectorsApi, rec: Record, key: str) -> None:
 def _roles(v: Any) -> dict[str, str]:
     r = valid_roles(v)
     if r is None:
-        raise ValueError("Roles must map VAIC, Orchestrator, Managers or Workers to read or all.")
+        raise ValueError("Roles must map VAIC, the planner, reviewers or workers to read or all.")
     return r
 
 

@@ -10,7 +10,7 @@ sign-off would. A part that fails twice (tests or review) is taken over by a fre
 The no-model steps that a worker's runtime may not do (it can only message its manager's queue) run in the
 dispatcher Lambda: a manager-queue message with ``board`` set is a code step, never a model turn.
 
-The old chain stays behind one switch: the ``board_sizes`` setting (default: small) lists the sizes on this path.
+Since decision 298 the board is the only path: the Orchestrator chain and its switch are gone.
 """
 
 from __future__ import annotations
@@ -27,7 +27,6 @@ from ..table import UpdateOptions
 from .actions import FINAL, CityDeps, move, new_ticket, quote, send
 from .factory import WORKER_TOOLS, Factory
 
-DEFAULT_SIZES = ("small", "medium", "large", "extreme")
 AWS_REVIEW = (
     "This part changes AWS infrastructure: also check security (least-privilege IAM, no public data, encryption, "
     "no secrets in code) and cost (nothing left running or oversized, tags on every resource); FAIL with the exact "
@@ -44,18 +43,6 @@ SPEED = (
     "Edit (never rewrite a whole file), run only the checks your change touches, then report. Your part is yours "
     "alone: no one else edits your files."
 )
-
-
-def board_sizes(settings: dict[str, Any]) -> tuple[str, ...]:
-    v = settings.get("board_sizes")
-    if v is None:
-        return DEFAULT_SIZES
-    return tuple(str(x) for x in v) if isinstance(v, list | tuple) else ()
-
-
-def on_board(settings: dict[str, Any], size: str) -> bool:
-    """The single switch: is this size built on the board? (Settings ``board_sizes``; [] = the old chain only.)"""
-    return size in board_sizes(settings)
 
 
 def risky(*texts: Any) -> bool:
@@ -82,10 +69,7 @@ async def board_department(d: CityDeps, app: Record | None, triage_department: s
     name = home_department((app or {}).get("department") or "Application") if app else triage_department
     if not name:
         return None
-    dept = await d.ledger.get_department(str(name))
-    if not dept or dept.get("state") != "active":
-        return None
-    return dept
+    return await _department(d, str(name))  # "Engineering" reaches Application, like the planner's parts
 
 
 async def _manager(d: CityDeps, dept: Record) -> Record:
@@ -146,11 +130,19 @@ async def _hire_and_assign(
     """Hires one worker on ``model`` into the department and gives it the part, the same records and events the
     chain writes (the City drives its taxi to the building), then starts its turn."""
     app_job = bool(task.get("app_id"))
-    spec = {
+    spec: Record = {
         "specialty": f"{dept['name']} builder",
         "instructions": f"You do one part of the owner's job in the {dept['name']} department, fast and well.",
         "tools": APP_TOOLS if app_job else [t for t in WORKER_TOOLS if t != "browser"],
     }
+    from ..connectors import ConnectorStore
+
+    # The connectors the owner opened to workers ride with every worker (the chain's managers picked them per hire).
+    spec["connectors"] = sorted(
+        str(c["id"])
+        for c in await ConnectorStore(d.ledger.table).list()
+        if (c.get("roles") or {}).get("worker") and c.get("status") == "ready"
+    )[:20]
     w = await Factory(d.ledger, d.bus, d.settings).hire(spec, dept["manager_id"], dept["name"], model)
     await d.ledger.update_agent(w["id"], {"goal_id": goal_t["id"]})
     part = await new_ticket(
@@ -374,6 +366,10 @@ async def take_over(d: CityDeps, part_id: str, reasons: list[str]) -> str:
     m = models_for(size)
     model = m.takeover if part.get("check") else worker_model(size, bool(part.get("trivial")), len(reasons))
     listed = "; ".join(f"({i}) {r}" for i, r in enumerate(reasons, 1)) or "it did not pass"
+    if part.get("plan_key"):  # not a stopped part: the board must not count it as dropped while it changes hands
+        await d.ledger.table.update(
+            f"TICKET#{task['id']}", str(part["plan_key"]), UpdateOptions(set={"status": "replacing"}, must_exist=True)
+        )
     await move(
         d,
         part["id"],
@@ -400,7 +396,9 @@ async def take_over(d: CityDeps, part_id: str, reasons: list[str]) -> str:
     )
     if part.get("plan_key"):
         await d.ledger.table.update(
-            f"TICKET#{task['id']}", str(part["plan_key"]), UpdateOptions(set={"ticket_id": new["id"]}, must_exist=True)
+            f"TICKET#{task['id']}",
+            str(part["plan_key"]),
+            UpdateOptions(set={"ticket_id": new["id"], "status": "started"}, must_exist=True),
         )
     await d.ledger.set_ticket_status(new["id"], new["status"], "", {"review_reasons": reasons, "takeover": True})
     log("info", "board.takeover", part=part["id"], new=new["id"], worker=w["id"], model=model, fails=len(reasons))
@@ -466,8 +464,7 @@ def planner_brief(task: Record, app: Record | None, departments: list[str], note
     size = str(task.get("size") or "medium")
     m = models_for(size)
     lines = [
-        f"Board planning (decision 289): you are the planner of a {size} job, not the chain's Orchestrator. Do not use "
-        "create_department, assign_to_department, sign_off or report_to_vaic for it.",
+        f"Board planning: you are the planner of a {size} job.",
         f"The job: {task.get('goal')}",
         f"The owner's words: {task.get('owner_words') or task.get('goal')}",
         "Split it into parts that can run at the same time. Call add_part for each part the moment you have written it: "
@@ -643,6 +640,16 @@ async def advance(d: CityDeps, task_id: str) -> list[str]:
     if not task or task["status"] in FINAL:
         return []
     items = await plan_items(d, task_id)
+    for i in items:
+        # A part stopped outside the board (the owner sent its worker home, a reviewer cancelled it) is dropped, so
+        # the job can still finish with the rest (decision 298).
+        if i.get("status") == "started" and i.get("ticket_id"):
+            t = await d.ledger.get_ticket(str(i["ticket_id"]))
+            if t and t.get("status") in ("cancelled", "failed"):
+                i["status"], i["result"] = "done", f"Stopped: {t.get('status')}."
+                await d.ledger.table.update(
+                    f"TICKET#{task_id}", str(i["sk"]), UpdateOptions(set={"status": "done", "result": i["result"]})
+                )
     done = {str(i["name"]) for i in items if i.get("status") == "done"}
     started: list[str] = []
     for i in items:
@@ -785,3 +792,116 @@ async def escalate(d: CityDeps, part_id: str, notes: str) -> None:
         app = await get_app(d.ledger, str(task["app_id"]))
     await start_planned(d, {**task, "size": "medium"}, app, notes=notes)
     log("info", "board.escalated", task=task["id"], part=part_id)
+
+
+# ---------- one way in for every job (decision 298: the Orchestrator chain is gone) ----------
+async def launch(
+    d: CityDeps,
+    task: Record,
+    *,
+    department: str | None = None,
+    app: Record | None = None,
+    extra: str = "",
+    notes: str = "",
+) -> str:
+    """Starts a job on the board: a small one with a known department gets one worker straight away, anything else
+    a planner (Sonnet, Opus or Fable by size; a small job whose department isn't clear gets the Sonnet planner).
+    Every caller that starts a job comes here: VAIC, standing orders, workflows, the ticket desk, adoption."""
+    from ..sizing import size_job
+
+    size = str(task.get("size") or "")
+    if not size:
+        # A caller that names the department (a standing order, a workflow, the ticket desk) writes a long goal for
+        # one department's routine work: it is sized from the owner's own words only.
+        goal = "" if department else str(task.get("goal") or "")
+        sized = size_job(str(task.get("owner_words") or ""), goal, existing_app=bool(app))
+        size = sized.size
+        await d.ledger.set_ticket_status(
+            task["id"], task["status"], "sized", {"size": size, "size_reason": sized.reason, "path": "board"}
+        )
+        task = {**task, "size": size, "size_reason": sized.reason}
+    dept = await board_department(d, app, department) if (app or department) else None
+    if size == "small" and dept and not notes:
+        await start_small(d, task, dept, app, extra)
+        return f"Started: one worker in {dept['name']} is on it now (a small job, no planning needed)."
+    if department and not app:
+        extra = "\n".join(x for x in (extra, f"Give every part to the {department} department unless one clearly "
+                                      "belongs elsewhere.") if x)  # fmt: skip
+    await start_planned(d, task, app, extra, notes)
+    return f"Started: a {size} job; the planner splits it into parts and each starts as it is written."
+
+
+async def adopt_chain_jobs(d: CityDeps) -> int:
+    """The drain (decision 298): a job still live on the old Orchestrator chain moves onto the board once. Its old
+    goals and parts are closed (their workers go home) and it is planned again from the owner's words, with what the
+    chain had done so far as notes. Run by the sweep; idempotent."""
+    from ..apps import get_app
+    from .actions import LIVE
+
+    moved = 0
+    for t in await d.ledger.list_tickets(LIVE):
+        if t.get("kind") != "task" or t.get("parent_id") or t.get("path") == "board":
+            continue
+        if not await d.ledger.claim(f"adopt:{t['id']}"):
+            continue
+        done: list[str] = []
+        frontier = [t["id"]]
+        while frontier:
+            nxt: list[str] = []
+            for pid in frontier:
+                for k in await d.ledger.child_tickets(pid):
+                    nxt.append(k["id"])
+                    if k["status"] == "done" and k.get("result"):
+                        done.append(f"{k.get('department') or ''}: {str(k['result'])[:300]}")
+                    if k["status"] not in FINAL:
+                        await move(d, k["id"], "cancelled", "moved onto the project board")
+            frontier = nxt
+        app = await get_app(d.ledger, str(t["app_id"])) if t.get("app_id") else None
+        await d.ledger.set_ticket_status(t["id"], t["status"], "moved onto the board", {"path": "board"})
+        fresh = await d.ledger.get_ticket(t["id"]) or t
+        notes = "This job was running on the old chain and moved onto the board." + (
+            " Already done: " + "; ".join(done)[:1800] if done else ""
+        )
+        await launch(d, fresh, app=app, notes=notes)
+        log("info", "board.adopted", task=t["id"], done=len(done))
+        moved += 1
+    return moved
+
+
+async def hand_over_department(d: CityDeps, old: str, instead: str) -> int:
+    """A department was demolished: the board parts it still owned that had not started go to ``instead`` (or are
+    dropped, so the job can still finish). Its started parts were cancelled by the demolition and return to waiting."""
+    from .actions import LIVE
+
+    n = 0
+    for t in await d.ledger.list_tickets(LIVE):
+        if t.get("kind") != "task" or not t.get("planned"):
+            continue
+        for i in await plan_items(d, t["id"]):
+            if i.get("department") != old or i.get("status") == "done":
+                continue
+            patch = (
+                {"department": instead, "status": "waiting", "ticket_id": None}
+                if instead
+                else {"status": "done", "result": f"Dropped: the owner demolished {old}."}
+            )
+            await d.ledger.table.update(f"TICKET#{t['id']}", str(i["sk"]), UpdateOptions(set=patch))
+            n += 1
+        await advance(d, t["id"])
+    return n
+
+
+async def instruct_job(d: CityDeps, task: Record, text: str) -> str:
+    """The owner's change for a running board job: every worker on it hears it (no planner turn to relay it)."""
+    from .actions import instruct_agent
+
+    told = []
+    for k in await d.ledger.list_tickets(("open", "in_progress", "in_review")):
+        if k.get("task_id") == task["id"] and str(k.get("to") or "").startswith("wkr-"):
+            await instruct_agent(d, str(k["to"]), text)
+            told.append(str(k["to"]))
+    return (
+        f"Sent to {len(told)} worker{'s' if len(told) != 1 else ''} on the job."
+        if told
+        else "Nobody is working on it right now."
+    )

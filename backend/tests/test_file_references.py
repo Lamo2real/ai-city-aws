@@ -36,7 +36,7 @@ async def vaic(req: EngineRequest, call: Call) -> str:
         )
     )  # type: ignore[union-attr]
     SEEN["delegate"] = await call(
-        "delegate_to_orchestrator",
+        "start_job",
         {
             "goal": GOAL,
             "owner_words": "build a habit tracker following my React guide, UI like the sunset Porsche image",
@@ -50,29 +50,13 @@ async def vaic(req: EngineRequest, call: Call) -> str:
     return "On it."
 
 
-async def orchestrator(req: EngineRequest, call: Call) -> str:
-    if "(task) from vaic" in req.turn.prompt:
-        SEEN["orchestrator"] = req.turn.prompt
-        await call("create_department", {"name": "Builders", "mission": "Build the owner's apps."})
-        await call("assign_to_department", {"department": "Builders", "goal": GOAL, "acceptance": "it works"})
-    return "Sent."
-
-
-async def manager(req: EngineRequest, call: Call) -> str:
-    if "(task) from orchestrator" in req.turn.prompt and "manager" not in SEEN:
-        SEEN["manager"] = req.turn.prompt
-        hired = await call(
-            "hire_worker",
-            {
-                "specialty": "React developer",
-                "instructions": "Build the habit tracker UI.",
-                "tools": ["Read", "Edit"],
-                "budget_hint_usd": 1,
-            },
-        )
-        wid = re.search(r"Hired (\S+)", hired).group(1)  # type: ignore[union-attr]
-        await call("assign", {"worker_id": wid, "goal": "build the UI", "acceptance": "matches the references"})
-    return "Assigned."
+async def planner(req: EngineRequest, call: Call) -> str:
+    if "Board planning" in req.turn.prompt:
+        SEEN["planner"] = req.turn.prompt
+        await call("add_part", {"name": "UI", "goal": "build the UI", "acceptance": "matches the references",
+                                "department": "Builders"})  # fmt: skip
+        await call("finish_plan", {})
+    return "Planned."
 
 
 async def worker(req: EngineRequest, call: Call) -> str:
@@ -90,9 +74,8 @@ async def test_the_owners_files_reach_the_builder_as_an_image_and_as_text(tmp_pa
     await upload(
         w, "React best practices.pdf", pdf_with_text(["Use function components and hooks. " * 20]), "application/pdf"
     )
-    city = make_city(
-        scripted_engine({"vaic": vaic, "orchestrator": orchestrator, "manager": manager, "worker": worker})
-    )
+    city = make_city(scripted_engine({"vaic": vaic, "orchestrator": planner, "worker": worker}))
+    await city.ledger.create_department("Builders", "Build the owner's apps.", "mgr-builders")
     d = city.host.d
     d.files = FilesAccess(service=w.service, bucket=w.blobs.bucket)
     s3 = FakeS3(w.blobs, tmp_path)
@@ -102,15 +85,14 @@ async def test_the_owners_files_reach_the_builder_as_an_image_and_as_text(tmp_pa
     await city.owner_says("build a habit tracker following my React guide, UI like the sunset Porsche image")
     await city.run()
 
-    assert "Handed to the Orchestrator" in SEEN["delegate"]
+    assert SEEN["delegate"].startswith("Started: ")
     task = next(t for t in await city.ledger.list_tickets(ALL_STATUSES) if t["from"] == "vaic")
     assert [(r["name"], r["use"]) for r in task["references"]] == [
         ("React best practices.pdf", "follow"),
         ("sunset.png", "inspiration"),
     ]
-    # Every level is told, with the rule that contents are data.
-    for role in ("orchestrator", "manager"):
-        assert "sunset.png" in SEEN[role] and "React best practices.pdf" in SEEN[role] and RULE in SEEN[role]
+    # The planner is told, with the rule that contents are data.
+    assert "sunset.png" in SEEN["planner"] and "React best practices.pdf" in SEEN["planner"] and RULE in SEEN["planner"]
     # The project chat shows the references.
     shown = city.bus.of_type("vaic.files")
     assert shown and shown[-1]["label"] == "References for this build"
@@ -133,7 +115,7 @@ async def test_an_unknown_file_starts_nothing() -> None:
     from vaic.runtime.tools import TurnCtx, gate_tools, tools_for
 
     c = TurnCtx("vaic", "vaic", None, "t1", "t1", conversation="main", from_owner=True)
-    t = next(x for x in gate_tools(d, c, tools_for(d, c)) if x.name == "delegate_to_orchestrator")
+    t = next(x for x in gate_tools(d, c, tools_for(d, c)) if x.name == "start_job")
     r = await t.handler(
         {
             "goal": GOAL,

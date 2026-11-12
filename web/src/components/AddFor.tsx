@@ -120,7 +120,7 @@ export function AddFor(p: { adding: Adding; onAdd: (departments: string[] | "all
       ) : null}
       {!every ? (
         <p className="mute" role="status">
-          {`Only ${namesOf(picker)} can use ${them}. VAIC and the Orchestrator always can.`}
+          {`Only ${namesOf(picker)} can use ${them}. VAIC and the planner always can.`}
         </p>
       ) : null}
       <p className="kstep">

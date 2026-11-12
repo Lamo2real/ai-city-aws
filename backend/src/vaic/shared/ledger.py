@@ -220,7 +220,7 @@ class Ledger:
 
     async def stand_down_department(self, name: str, down: bool = True) -> None:
         """The owner sent everyone home: the department hires and assigns nothing until a new goal arrives
-        (`down=False` clears it, which `assign_to_department` does)."""
+        (`down=False` clears it, which a new job on the board does)."""
         await self.table.update(
             f"DEPT#{department_key(name)}",
             "META",

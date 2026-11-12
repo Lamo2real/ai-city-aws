@@ -143,27 +143,47 @@ async def test_no_id_reaches_a_chat_message() -> None:
     assert sent and all(_chat_ids(str(e["text"])) == [] for e in sent)
 
 
-async def test_review_needs_a_real_reason_and_the_owner_question_has_no_id() -> None:
+async def test_review_needs_a_real_reason_and_the_fix_carries_it_with_no_id() -> None:
     from test_apps import city_deps, tool
     from vaic.runtime.tools import TurnCtx
 
     d = city_deps()
     await d.ledger.update_settings({"autopilot": False})
     wid = "wkr-application-3032a482e8b7"
-    await d.ledger.put_agent({"id": wid, "kind": "worker", "role": "Game logic", "specialty": "Game logic",
-                              "department": "Application", "parent": "mgr-application", "state": "active"})  # fmt: skip
-    t = await d.ledger.create_ticket({"id": "t-a", "goal": "flip cards", "from": "mgr-application", "to": wid,
-                                      "department": "Application", "parent_id": None, "kind": "assignment",
-                                      "status": "in_review", "review_rounds": 2, "pace": "unhurried"})  # fmt: skip
+    await d.ledger.put_agent(
+        {
+            "id": wid,
+            "kind": "worker",
+            "role": "Game logic",
+            "specialty": "Game logic",
+            "department": "Application",
+            "parent": "mgr-application",
+            "state": "active",
+        }
+    )
+    t = await d.ledger.create_ticket(
+        {
+            "id": "t-a",
+            "goal": "flip cards",
+            "from": "mgr-application",
+            "to": wid,
+            "department": "Application",
+            "parent_id": None,
+            "kind": "assignment",
+            "status": "in_review",
+            "review_rounds": 2,
+            "path": "board",
+            "model": "sonnet-5-5",
+        }
+    )
     ctx = TurnCtx(agent_id="mgr-application", role="manager", department="Application", ticket_id="t-a", task_id="t-a")
     review = tool(d, ctx, "review")
     assert (await review({"ticket_id": t["id"], "verdict": "FAIL", "reasons": "FAIL"})).startswith("Not recorded")
     assert (await d.ledger.get_ticket(t["id"]))["review_rounds"] == 2  # type: ignore[index]
-    assert "asked the owner" in await review(
-        {"ticket_id": t["id"], "verdict": "FAIL", "reasons": "Cards never flip back."}
-    )
-    q = (await d.ledger.open_questions())[-1]
-    assert (
-        q["text"]
-        == "The game logic worker's work failed review 3 times. Latest reason: Cards never flip back. What should happen?"
-    )
+    out = await review({"ticket_id": t["id"], "verdict": "FAIL", "reasons": "Cards never flip back."})
+    assert out == "FAIL recorded; sent back to the worker."
+    # Nobody asks the owner on the board (decision 298): the reason goes straight back to the worker, no id in it.
+    assert not await d.ledger.open_questions()
+    fix = d.queue.sent[-1]  # type: ignore[attr-defined]
+    assert fix["agentId"] == wid and fix["kind"] == "fix" and "Cards never flip back." in fix["body"]
+    assert "wkr-" not in fix["body"]

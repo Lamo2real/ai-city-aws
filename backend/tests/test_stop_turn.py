@@ -113,7 +113,7 @@ async def test_tools_already_called_are_said_plainly_and_remembered() -> None:
 
     async def engine(req: EngineRequest) -> TurnOutput:
         assert req.on_activity
-        await req.on_activity("delegating", "delegate_to_orchestrator")
+        await req.on_activity("delegating", "start_job")
         await city.ledger.stop_turn(MSG)
         await asyncio.sleep(0.5)
         return TurnOutput(text="Done.", usage=Usage())
@@ -122,10 +122,10 @@ async def test_tools_already_called_are_said_plainly_and_remembered() -> None:
     await city.owner_says("what's 9 + 9?")
     await city.run()
     stopped = city.bus.of_type("vaic.stopped")[0]
-    assert stopped["tools"] == [{"activity": "delegating", "detail": "delegate_to_orchestrator"}]
+    assert stopped["tools"] == [{"activity": "delegating", "detail": "start_job"}]
     lines = await city.ledger.recent_conversation("c1")
     assert [line["who"] for line in lines] == ["owner", "vaic"]
-    assert "delegate_to_orchestrator" in lines[1]["text"] and lines[1]["text"].startswith("(stopped by the owner")
+    assert "start_job" in lines[1]["text"] and lines[1]["text"].startswith("(stopped by the owner")
 
 
 async def test_without_stop_the_turn_answers_as_before() -> None:
@@ -158,8 +158,8 @@ async def test_a_tool_under_way_when_stop_lands_still_finishes_whole() -> None:
         finished.append("delegated")
         return "ticket t-1"
 
-    spec = ToolSpec("delegate_to_orchestrator", "Hand on.", {"type": "object", "properties": {}}, delegate)
-    fake = FakeBedrock([tool_round("delegate_to_orchestrator", "{}"), text_round("Passed on.")])
+    spec = ToolSpec("start_job", "Hand on.", {"type": "object", "properties": {}}, delegate)
+    fake = FakeBedrock([tool_round("start_job", "{}"), text_round("Passed on.")])
     turn = asyncio.ensure_future(direct_engine(request([spec], []), fake))
     await asyncio.sleep(0.02)  # inside the tool call
     turn.cancel()

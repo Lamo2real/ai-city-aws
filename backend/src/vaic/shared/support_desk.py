@@ -441,20 +441,9 @@ async def _start(d: CityDeps, t: Record, goal: str, department: str, kind: str) 
             "owner_words": f"{_what(t)} {t['tracker_key'] or t['id']}: {t['title']}"[:500],
         },
     )
-    await send(
-        d,
-        {
-            "role": "orchestrator",
-            "agentId": "orchestrator",
-            "department": None,
-            "ticketId": job["id"],
-            "taskId": job["id"],
-            "kind": "task",
-            "from": "vaic",
-            "body": f"New task from the ticket desk ({kind} for {_what(t)} {t['tracker_key'] or t['id']}).\n"
-            f"Goal: {goal}\nSend it to the {department} department.",
-        },
-    )
+    from .hierarchy.board_path import launch
+
+    await launch(d, job, department=department, extra=f"From the ticket desk ({kind}).")
     return str(job["id"])
 
 

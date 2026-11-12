@@ -16,6 +16,7 @@ from vaic.lambdas.scheduler import run_job
 from vaic.runtime.tools import TurnCtx, tools_for
 from vaic.shared import utility
 from vaic.shared.apps import APPS_PK, DRAFTS_PK, home_department
+from vaic.shared.hierarchy.board_path import add_part, plan_items
 from vaic.shared.hierarchy.departments import (
     MERGES_PK,
     merge_replaced_departments,
@@ -45,15 +46,16 @@ async def test_nothing_builds_an_apps_department_again() -> None:
     assert said.startswith("Application is already standing")
     task = await c.ledger.create_ticket(
         {"goal": "a game", "from": "vaic", "to": "orchestrator", "department": None, "parent_id": None,
-         "kind": "task", "status": "open"}
+         "kind": "task", "status": "in_progress", "planned": True, "path": "board", "size": "medium"}
     )  # fmt: skip
-    orch = TurnCtx(agent_id="orchestrator", role="orchestrator", department=None, ticket_id=task["id"],
-                   task_id=task["id"])  # fmt: skip
-    tools = {t.name: t for t in tools_for(c.host.d, orch)}
-    made = await tools["create_department"].handler({"name": "Apps", "mission": "Self-contained web apps."})
-    assert made == "Application already exists; use it."
-    sent = await tools["assign_to_department"].handler({"department": "Apps", "goal": "Snake", "acceptance": "plays"})
-    assert sent.startswith("Sent to Application")
+    planner = TurnCtx(agent_id="orchestrator", role="orchestrator", department=None, ticket_id=task["id"],
+                      task_id=task["id"])  # fmt: skip
+    tools = {t.name: t for t in tools_for(c.host.d, planner)}
+    sent = await tools["add_part"].handler({"name": "Snake", "goal": "Build snake", "acceptance": "plays",
+                                            "department": "Apps"})  # fmt: skip
+    assert "starts now" in sent
+    (item,) = await plan_items(c.host.d, task["id"])
+    assert item["department"] == "Application"  # a part for "Apps" lands in Application
     assert await c.ledger.get_department("Apps") is None
     assert c.bus.of_type("department.created") == []
 
@@ -67,6 +69,13 @@ async def test_the_old_apps_department_is_folded_into_application_once() -> None
     await c.ledger.table.put({"pk": APPS_PK, "sk": "APP#app-notes", "app_id": "app-notes", "title": "Notes",
                               "department": "Media"})  # fmt: skip
     await c.ledger.table.put({"pk": DRAFTS_PK, "sk": "DRAFT#drf-1", "draft_id": "drf-1", "department": "Apps"})
+    planned = await c.ledger.create_ticket(
+        {"goal": "a game", "from": "vaic", "to": "orchestrator", "department": None, "parent_id": None,
+         "kind": "task", "status": "in_progress", "planned": True, "path": "board", "size": "medium"}
+    )  # fmt: skip
+    await c.ledger.table.put({"pk": f"TICKET#{planned['id']}", "sk": "PLAN#0000#levels", "name": "Levels",
+                              "goal": "levels", "acceptance": "ok", "department": "Apps", "after": ["Engine"],
+                              "files": [], "order": 0, "status": "waiting"})  # fmt: skip
 
     class Files:
         def __init__(self) -> None:
@@ -88,8 +97,10 @@ async def test_the_old_apps_department_is_folded_into_application_once() -> None
     assert snake and snake["department"] == "Application" and snake["status"] == "live"  # still published
     assert (await c.ledger.table.get(APPS_PK, "APP#app-notes"))["department"] == "Media"  # others untouched
     assert (await c.ledger.table.get(DRAFTS_PK, "DRAFT#drf-1"))["department"] == "Application"
-    (handed,) = [m for m in c.queue.sent if m["role"] == "orchestrator" and "demolished" in m["body"]]
-    assert handed["taskId"] == task["id"] and "Hand that part to the Application department" in handed["body"]
+    # A board job's parts still waiting in Apps go to Application (decision 298); the old job's own parts were stopped.
+    (waiting,) = await plan_items(c.host.d, planned["id"])
+    assert (waiting["department"], waiting["status"]) == ("Application", "waiting")
+    assert all(k["status"] == "cancelled" for k in await c.ledger.child_tickets(task["id"]))
     # Idempotent: the deploy and every City load may call it again; with the marker in place nothing happens.
     events = len(c.bus.events)
     assert await merge_replaced_departments(c.host.d) == []
@@ -151,7 +162,7 @@ async def delegate(route: str, **args: Any) -> tuple[str, Any]:
     c = make_city(scripted_engine({}))
     await ensure_presets(c.ledger)
     c.deps.utility_runner = runner_saying(route)
-    spec = next(t for t in tools_for(c.deps, ctx()) if t.name == "delegate_to_orchestrator")
+    spec = next(t for t in tools_for(c.deps, ctx()) if t.name == "start_job")
     out = await spec.handler({"goal": "Build a puzzle game", "owner_words": "make me a puzzle game", **args})
     return out, c
 
@@ -170,26 +181,35 @@ async def test_vaic_asks_with_buttons_before_an_overlapping_department() -> None
         assert [t for t in await c.ledger.list_tickets(ALL_STATUSES) if t.get("kind") == "task"] == []
 
 
-async def test_the_owners_pick_goes_to_the_orchestrator() -> None:
+async def test_the_owners_pick_reaches_the_board() -> None:
     out, c = await delegate(GAME_STUDIO, confirm=True, department_choice="Use Application")
-    assert out.startswith("Handed to the Orchestrator")
+    assert out.startswith("Started: ")
     (task,) = [t for t in await c.ledger.list_tickets(ALL_STATUSES) if t.get("kind") == "task"]
     assert task["department_choice"] == {"use": "Application"}
     body = c.queue.pending[-1][0]["body"]
     assert "existing Application department instead of a new Game Studio department" in body
-    assert "other existing departments may take their own parts" in body
+    assert "Give every part to the Application department" in body
+    assert await c.ledger.get_department("Game Studio") is None
+    # Several existing departments can still share the project.
+    for dept in ("Application", "Marketing"):
+        said = await add_part(c.deps, task["id"], {"name": f"{dept} part", "goal": "part", "acceptance": "ok",
+                                                    "department": dept})  # fmt: skip
+        assert said.startswith(f"Added {dept} part")
 
     out, c = await delegate(GAME_STUDIO, confirm=True, department_choice="New department: Game Studio")
     (task,) = [t for t in await c.ledger.list_tickets(ALL_STATUSES) if t.get("kind") == "task"]
     assert task["department_choice"] == {"create": "Game Studio"}
-    assert "The owner chose a new department for this project: Game Studio" in c.queue.pending[-1][0]["body"]
+    assert (await c.ledger.get_department("Game Studio") or {}).get("state") == "active"  # built in code, at once
+    body = c.queue.pending[-1][0]["body"]
+    assert "The owner chose a new department for this project: Game Studio" in body
+    assert "Give every part to the Game Studio department" in body
 
 
 async def test_no_question_when_nothing_overlaps_or_the_name_is_a_standing_department() -> None:
     out, c = await delegate('{"route": "new_department", "department": "Aviary"}', confirm=True)
-    assert out.startswith("Handed to the Orchestrator") and c.bus.of_type("vaic.question") == []
+    assert out.startswith("Started: ") and c.bus.of_type("vaic.question") == []
     out, c = await delegate('{"route": "new_department", "department": "Engineering"}', confirm=True)
-    assert out.startswith("Handed to the Orchestrator") and c.bus.of_type("vaic.question") == []
+    assert out.startswith("Started: ") and c.bus.of_type("vaic.question") == []
     assert "Triage suggests the Application department" in c.queue.pending[-1][0]["body"]
 
 
@@ -198,56 +218,3 @@ async def test_a_department_the_owner_asks_to_build_needs_no_question() -> None:
     await ensure_presets(c.ledger)
     said = await vaic_tools(c)["build_department"].handler({"name": "Legal Tech"})
     assert said.startswith("Built Legal Tech") and c.bus.of_type("vaic.question") == []
-
-
-async def orchestrator(choice: dict[str, str] | None = None) -> tuple[Any, dict[str, Any], dict[str, Any]]:
-    c = await city()
-    await ensure_presets(c.ledger)
-    task = await c.ledger.create_ticket(
-        {"goal": "a puzzle game", "from": "vaic", "to": "orchestrator", "department": None, "parent_id": None,
-         "kind": "task", "status": "in_progress", **({"department_choice": choice} if choice else {})}
-    )  # fmt: skip
-    orch = TurnCtx(agent_id="orchestrator", role="orchestrator", department=None, ticket_id=task["id"],
-                   task_id=task["id"])  # fmt: skip
-    return c, task, {t.name: t for t in tools_for(c.host.d, orch)}
-
-
-async def test_the_orchestrator_cannot_create_an_overlapping_department_without_the_owner() -> None:
-    c, task, tools = await orchestrator()
-    create = tools["create_department"].handler
-    out = await create({"name": "Game Studio", "mission": "Puzzle and arcade games."})
-    assert out.startswith("Not created yet: Game Studio overlaps Application")
-    assert await c.ledger.get_department("Game Studio") is None
-    (q,) = await c.ledger.open_questions()
-    assert q["options"] == ["New department: Game Studio", "Use Application"]
-    assert q["default_answer"] == "Use Application" and q["ticket_id"] == task["id"]
-    assert "Still waiting" in await create({"name": "Game Studio", "mission": "Puzzle and arcade games."})
-    assert len(await c.ledger.open_questions()) == 1  # asked once
-    await c.ledger.answer_question(q["id"], "Use Application", "owner")
-    out = await create({"name": "Game Studio", "mission": "Puzzle and arcade games."})
-    assert out.startswith("Not created: the owner chose to do this project in the existing Application")
-    assert (await c.ledger.get_ticket(task["id"]))["department_choice"] == {"use": "Application"}
-    assert await c.ledger.get_department("Game Studio") is None
-
-    c, task, tools = await orchestrator()
-    await tools["create_department"].handler({"name": "Game Studio", "mission": "Puzzle and arcade games."})
-    (q,) = await c.ledger.open_questions()
-    await c.ledger.answer_question(q["id"], "New department: Game Studio", "owner")
-    out = await tools["create_department"].handler({"name": "Game Studio", "mission": "Puzzle and arcade games."})
-    assert out.startswith("Created Game Studio")
-
-
-async def test_the_orchestrator_follows_the_choice_vaic_already_got() -> None:
-    c, _, tools = await orchestrator({"create": "Game Studio"})
-    out = await tools["create_department"].handler({"name": "Game Studio", "mission": "Puzzle and arcade games."})
-    assert out.startswith("Created Game Studio") and await c.ledger.open_questions() == []
-    c, _, tools = await orchestrator({"use": "Application"})
-    out = await tools["create_department"].handler({"name": "Game Studio", "mission": "Puzzle and arcade games."})
-    assert out.startswith("Not created: the owner chose") and await c.ledger.open_questions() == []
-    # Several existing departments can still share the project.
-    for dept in ("Application", "Marketing"):
-        sent = await tools["assign_to_department"].handler({"department": dept, "goal": "part", "acceptance": "ok"})
-        assert sent.startswith(f"Sent to {dept}")
-    c, _, tools = await orchestrator()
-    out = await tools["create_department"].handler({"name": "Aviary", "mission": "Look after the birds."})
-    assert out.startswith("Created Aviary") and await c.ledger.open_questions() == []

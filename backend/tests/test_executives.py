@@ -90,7 +90,7 @@ def test_their_only_tools_read_or_recommend() -> None:
         "mcp__city__hire_worker",
         "mcp__city__assign_to_department",
         "mcp__city__assign_work",
-        "mcp__city__delegate_to_orchestrator",
+        "mcp__city__start_job",
         "mcp__city__start_workflow",
         "mcp__city__create_department",
         "mcp__executive__assign_task",

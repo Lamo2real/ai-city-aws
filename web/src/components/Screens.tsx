@@ -327,6 +327,8 @@ function Meter({ label, spent, cap }: { label: string; spent: number; cap: numbe
     </div>
   );
 }
+/** Inside names never shown to the owner (decision 298): the planner keeps the id "orchestrator" inside. */
+const PLAIN_NAMES: Record<string, string> = { orchestrator: "planner", manager: "reviewer" };
 function Table({ title, rows }: { title: string; rows: Record<string, Spend> }) {
   const list = Object.entries(rows).sort((a, b) => b[1].usd - a[1].usd);
   return (
@@ -344,7 +346,7 @@ function Table({ title, rows }: { title: string; rows: Record<string, Spend> }) 
           <tbody>
             {list.map(([k, v]) => (
               <tr key={k}>
-                <td>{k}</td>
+                <td>{PLAIN_NAMES[k] ?? k}</td>
                 <td>{money(v.usd)}</td>
                 <td>{v.turns}</td>
               </tr>

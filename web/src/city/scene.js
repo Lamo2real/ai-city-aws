@@ -854,8 +854,10 @@ function freeLot(g, l, text) {
 }
 
 // Where the four of the core stand on the plaza, in art pixels from the corner of HQ's plot.
-// The Orchestrator stands on the podium at the HQ entrance; VAIC in the plaza, by the fountain.
+// The planner stands on the podium at the HQ entrance; VAIC in the plaza, by the fountain.
 const CORE_SPOT = { orchestrator: [96, 100], vaic: [62, 152] };
+// The names painted over HQ's two figures: the planner keeps the id "orchestrator" inside (decision 298).
+const CORE_NAME = { vaic: "VAIC", orchestrator: "PLANNER" };
 // The executives' places at HQ while they advise (decision 140): in front of the boardroom window, left of the door.
 const EXEC_SPOT = { "exec-ceo": [22, 92], "exec-coo": [36, 92], "exec-cfo": [22, 106], "exec-cto": [36, 106] };
 const FOUNTAIN = [112, 140];
@@ -2180,7 +2182,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     // The one being looked at gets an arrow and its name; so does whoever the mouse is on, and the core keep name plates.
     for (const p of order) if (p.id === selected || p.id === hover || CORE.has(p.id)) {
       const a = state.agents[p.id];
-      if (a) label(p.id === hover && p.visual && p.visual !== "idle" ? `${p.id === "vaic" ? "VAIC" : p.id}: ${VISUALS[p.visual].label}` : p.id === "vaic" ? "VAIC" : p.id, p.x, p.y + 4, p.id === selected ? INK : "#fff6e0", p.id === selected ? "#ffd84a" : INK);
+      if (a) label(p.id === hover && p.visual && p.visual !== "idle" ? `${CORE_NAME[p.id] ?? p.id}: ${VISUALS[p.visual].label}` : CORE_NAME[p.id] ?? p.id, p.x, p.y + 4, p.id === selected ? INK : "#fff6e0", p.id === selected ? "#ffd84a" : INK);
     }
     // A publish approval is open: the Apps building waits for the owner.
     for (const b of waitingBuildings()) { const k = reduced() ? 1 : f % 2, cx = (b.x + b.w / 2) * TILE, y = b.y * TILE - 12; if (k) { ctx.fillStyle = "rgba(255,216,74,.35)"; ctx.fillRect(Math.round(cx - 50 - cam.x), Math.round(y - 3 - cam.y), 100, 15); } label("WAITING FOR YOU", cx, y, INK, "#ffd84a"); }

@@ -67,7 +67,7 @@ async def test_a_daily_sales_order_follows_up_once_per_deal_per_day() -> None:
     )
     await run_job("standing_orders", d.ledger, d.queue, d.bus)
     body = d.queue.sent[-1]["body"]
-    assert "Send it to the Sales department" in body and "no contact for 7 days" in body
+    assert "Give every part to the Sales department" in body and "no contact for 7 days" in body
     assert "item '<deal id>#2026-11-06'" in body and "list_deals (stale_days 7, team Sales)" in body
     assert "open_ticket" not in body
     assert "list_deals" not in so.goal_text({**o, "department": "Customer Support"}, [])

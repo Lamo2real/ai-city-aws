@@ -3,30 +3,13 @@ sweep after sitting idle. The City scene walks a released worker home."""
 
 from typing import Any
 
-from city_support import City, make_city, scripted_engine
+from city_support import SPEC, City, make_city, scripted_engine
+from city_support import make_department as manager
 from vaic.lambdas.scheduler import run_job
 from vaic.runtime.tools import TurnCtx, tools_for
+from vaic.shared.hierarchy.actions import new_ticket, send
 
-SPEC = {"specialty": "Writer", "instructions": "Write the piece.", "tools": ["Read"], "budget_hint_usd": 1}
 MIN = 60_000
-
-
-async def manager(city: City, name: str = "Writing") -> str:
-    mgr = f"mgr-{name.lower()}"
-    await city.ledger.create_department(name, f"{name} work.", mgr)
-    await city.ledger.put_agent(
-        {
-            "id": mgr,
-            "kind": "manager",
-            "role": f"{name} Manager",
-            "department": name,
-            "model": "fable-5-1",
-            "parent": "orchestrator",
-            "state": "active",
-            "total_cost_usd": 0,
-        }
-    )
-    return mgr
 
 
 def tool(city: City, mgr: str, name: str, ticket: str = "goal-1") -> Any:
@@ -35,12 +18,40 @@ def tool(city: City, mgr: str, name: str, ticket: str = "goal-1") -> Any:
 
 
 async def hired_and_assigned(city: City, mgr: str, parts: list[str]) -> tuple[str, list[str]]:
-    wid = (await tool(city, mgr, "hire_worker")(SPEC)).split()[1]
+    """One worker hired into Writing and given these parts, as the board does it (decision 298)."""
+    w = await city.factory.hire(SPEC, mgr, "Writing")
     tickets = []
     for p in parts:
-        said = await tool(city, mgr, "assign")({"worker_id": wid, "goal": p, "acceptance": f"{p} done"})
-        tickets.append(said.split()[1])
-    return wid, tickets
+        t = await new_ticket(
+            city.deps,
+            {
+                "goal": p,
+                "acceptance": f"{p} done",
+                "from": mgr,
+                "to": w["id"],
+                "department": "Writing",
+                "parent_id": "goal-1",
+                "task_id": "task-1",
+                "kind": "assignment",
+                "path": "board",
+            },
+        )
+        await city.ledger.update_agent(w["id"], {"ticket_id": t["id"], "worker_state": "working"})
+        await send(
+            city.deps,
+            {
+                "role": "worker",
+                "agentId": w["id"],
+                "department": "Writing",
+                "ticketId": t["id"],
+                "taskId": "task-1",
+                "kind": "task",
+                "from": mgr,
+                "body": f"Assignment: {p}",
+            },
+        )
+        tickets.append(str(t["id"]))
+    return str(w["id"]), tickets
 
 
 async def reported(city: City, ticket: str) -> None:
@@ -57,12 +68,12 @@ async def test_a_worker_goes_home_the_moment_its_only_assignment_passes_review()
     wid, (t,) = await hired_and_assigned(city, mgr, ["write it"])
     await reported(city, t)
     said = await tool(city, mgr, "review")({"ticket_id": t, "verdict": "PASS", "reasons": "Good."})
-    assert said == f"PASS recorded. {wid} has finished and gone home."
+    assert said.startswith("PASS recorded.")
     w = await city.ledger.get_agent(wid)
     assert w and w["state"] == "retired" and w["worker_state"] == "released"
     assert retired(city) == [wid]
-    # The manager's own release afterwards changes nothing and raises nothing.
-    assert await tool(city, mgr, "release_worker")({"worker_id": wid}) == f"Released {wid}."
+    # Releasing it again (the sweep, a cancel) changes nothing and raises nothing.
+    await city.factory.release(wid, mgr)
     assert retired(city) == [wid]
 
 
@@ -72,7 +83,7 @@ async def test_a_worker_with_another_open_assignment_stays_until_that_passes_too
     wid, (t1, t2) = await hired_and_assigned(city, mgr, ["part one", "part two"])
     await reported(city, t1)
     said = await tool(city, mgr, "review")({"ticket_id": t1, "verdict": "PASS", "reasons": "Good."})
-    assert "still has other work" in said
+    assert said.startswith("PASS recorded.")
     assert (await city.ledger.get_agent(wid) or {})["state"] == "active"
     assert retired(city) == []
     await reported(city, t2)
@@ -98,10 +109,20 @@ async def test_the_sweep_sends_an_idle_worker_home_after_15_minutes() -> None:
     wid, (t,) = await hired_and_assigned(city, mgr, ["write it"])
     sent = len(city.queue.sent)
     city.advance(10 * MIN)
-    assert await run_job("sweep", city.ledger, city.queue, city.bus, {}) == {"resent": 0, "sent_home": 0, "stuck": 0}
+    assert await run_job("sweep", city.ledger, city.queue, city.bus, {}) == {
+        "resent": 0,
+        "sent_home": 0,
+        "stuck": 0,
+        "adopted": 0,
+    }
     assert (await city.ledger.get_agent(wid) or {})["state"] == "active"
     city.advance(6 * MIN)
-    assert await run_job("sweep", city.ledger, city.queue, city.bus, {}) == {"resent": 0, "sent_home": 1, "stuck": 0}
+    assert await run_job("sweep", city.ledger, city.queue, city.bus, {}) == {
+        "resent": 0,
+        "sent_home": 1,
+        "stuck": 0,
+        "adopted": 0,
+    }
     w = await city.ledger.get_agent(wid)
     assert w and w["state"] == "retired" and w["worker_state"] == "released"
     assert retired(city) == [wid]
@@ -125,7 +146,12 @@ async def test_a_worker_whose_turn_is_running_is_not_idle() -> None:
     city.advance(18 * MIN)
     assert await city.ledger.begin_work(msg["id"], 16 * MIN, msg)
     city.advance(2 * MIN)
-    assert await run_job("sweep", city.ledger, city.queue, city.bus, {}) == {"resent": 0, "sent_home": 0, "stuck": 0}
+    assert await run_job("sweep", city.ledger, city.queue, city.bus, {}) == {
+        "resent": 0,
+        "sent_home": 0,
+        "stuck": 0,
+        "adopted": 0,
+    }
     assert (await city.ledger.get_agent(wid) or {})["state"] == "active"
     await city.ledger.finish_work(msg["id"])
     city.advance(20 * MIN)

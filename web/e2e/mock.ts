@@ -252,7 +252,7 @@ export const baseSnapshot = () => ({
     {
       id: "orchestrator",
       kind: "core",
-      role: "Orchestrator",
+      role: "Planner",
       department: null,
       model: "fable-5-1",
       parent: "vaic",

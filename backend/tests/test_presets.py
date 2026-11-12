@@ -9,6 +9,7 @@ from vaic.lambdas.api import ROUTES, handle_http
 from vaic.runtime.prompts import department_template
 from vaic.runtime.skills import SkillStore
 from vaic.runtime.tools import TurnCtx
+from vaic.shared.hierarchy.board_path import plan_items
 from vaic.shared.presets import (
     catalog,
     ensure_presets,
@@ -93,14 +94,24 @@ async def test_bundled_skills_join_the_plugin_folder_without_s3(tmp_path: Path) 
     assert (run / ".claude-plugin" / "plugin.json").is_file()
 
 
-async def test_the_orchestrator_lands_engineering_work_in_application() -> None:
+async def planned_task(d: Any) -> None:
+    await d.ledger.create_ticket({"id": "t-task", "goal": "an API", "from": "vaic", "to": "orchestrator",
+                                  "department": None, "parent_id": None, "status": "in_progress", "planned": True,
+                                  "path": "board", "size": "medium"})  # fmt: skip
+
+
+async def test_the_planner_lands_engineering_work_in_application() -> None:
     d = city_deps()
-    out = await tool(d, ORCH, "create_department")({"name": "Engineering", "mission": "Build the shop's API."})
-    assert out.startswith("Created Application")
-    (dept,) = await d.ledger.list_departments()
-    assert dept["name"] == "Application" and dept["mission"] == "Build the shop's API."
-    again = await tool(d, ORCH, "create_department")({"name": "software", "mission": "Write the code."})
-    assert "Application already exists" in again
+    await ensure_presets(d.ledger)
+    await planned_task(d)
+    for alias in ("Engineering", "software"):
+        out = await tool(d, ORCH, "add_part")(
+            {"name": f"API {alias}", "goal": "Build the shop's API.", "acceptance": "it runs", "department": alias}
+        )
+        assert "starts now" in out, out
+    items = await plan_items(d, "t-task")
+    assert [i["department"] for i in items] == ["Application", "Application"]
+    assert "Engineering" not in [x["name"] for x in await d.ledger.list_departments()]
     assert "Marketing" in orchestrator_note() and "IT Infrastructure" in orchestrator_note()
 
 
@@ -121,19 +132,6 @@ async def test_the_presets_route_lists_departments_teams_skills_and_connectors()
     assert shop["ask"]["name"] == "store" and "{store}" in shop["url"]
 
 
-async def test_work_sent_to_an_alias_reaches_the_preset() -> None:
-    d = city_deps()
-    await d.ledger.create_ticket({"id": "t-task", "goal": "an API", "from": "vaic", "to": "orchestrator",
-                                  "department": None, "parent_id": None})  # fmt: skip
-    await tool(d, ORCH, "create_department")({"name": "Application", "mission": "Build the owner's software."})
-    out = await tool(d, ORCH, "assign_to_department")(
-        {"department": "Engineering", "goal": "an API", "acceptance": "it runs"}
-    )
-    assert "Application" in out
-    (kid,) = await d.ledger.child_tickets("t-task")
-    assert kid["department"] == "Application"
-
-
 async def test_every_preset_stands_from_the_start_without_managers_and_comes_back_after_start_over() -> None:
     d = make()
     snap = js(await handle_http(ev("GET", "/city"), d))
@@ -148,24 +146,24 @@ async def test_every_preset_stands_from_the_start_without_managers_and_comes_bac
     assert {x["name"] for x in back["departments"]} == set(names)
 
 
-async def test_a_preset_gets_its_manager_with_its_first_goal_and_own_departments_have_their_own_ceiling() -> None:
+async def test_a_preset_gets_its_manager_with_its_first_part_and_own_departments_have_their_own_ceiling() -> None:
     d = city_deps()
     await ensure_presets(d.ledger)
     assert await d.ledger.get_agent("mgr-marketing") is None
-    await d.ledger.create_ticket({"id": "t-task", "goal": "a launch", "from": "vaic", "to": "orchestrator",
-                                  "department": None, "parent_id": None})  # fmt: skip
-    await tool(d, ORCH, "assign_to_department")({"department": "Marketing", "goal": "a launch", "acceptance": "ready"})
+    await planned_task(d)
+    await tool(d, ORCH, "add_part")({"name": "Launch", "goal": "a launch", "acceptance": "ready",
+                                     "department": "Marketing"})  # fmt: skip
     mgr = await d.ledger.get_agent("mgr-marketing")
     assert mgr and mgr["kind"] == "manager" and mgr["department"] == "Marketing"
     # Twelve presets exist; the ceiling (6 by default) counts only the owner's own departments.
-    # Six departments with nothing in common (one that overlaps another would ask the owner first, decision 220).
+    vaic = TurnCtx(agent_id="vaic", role="vaic", department=None, ticket_id="", task_id="")
     for name in ("Garden", "Bakery", "Choir", "Kennel", "Pottery", "Aviary"):
-        out = await tool(d, ORCH, "create_department")({"name": name, "mission": "Look after it."})
-        assert out.startswith("Created"), out
-    refused = await tool(d, ORCH, "create_department")({"name": "Orchard", "mission": "Grow trees."})
-    assert refused.startswith("Refused")
-    ok = await tool(d, ORCH, "create_department")({"name": "Sales", "mission": "Sell the owner's products."})
-    assert "already exists" in ok
+        out = await tool(d, vaic, "build_department")({"name": name, "mission": "Look after it."})
+        assert out.startswith("Built"), out
+    refused = await tool(d, vaic, "build_department")({"name": "Orchard", "mission": "Grow trees."})
+    assert refused.startswith("Not built")
+    ok = await tool(d, vaic, "build_department")({"name": "Sales", "mission": "Sell the owner's products."})
+    assert "already standing" in ok
 
 
 def test_the_catalog_says_how_each_service_connects_and_where_to_sign_up() -> None:

@@ -7,7 +7,7 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-b00e87714396",
+   "id": "t-566163aed09f",
    "goal": "build me a memory game with animals",
    "from": "vaic",
    "to": "orchestrator",
@@ -22,7 +22,7 @@
    "size": "medium",
    "size_reason": "a new app",
    "size_by_owner": false,
-   "sizing_ms": 0.023,
+   "sizing_ms": 0.028,
    "vaic_ms": 1,
    "created_at": "2026-11-06T09:00:00.000Z",
    "updated_at": "2026-11-06T09:00:00.000Z"
@@ -32,7 +32,7 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-b00e87714396",
+   "id": "t-566163aed09f",
    "goal": "build me a memory game with animals",
    "from": "vaic",
    "to": "orchestrator",
@@ -47,7 +47,7 @@
    "size": "medium",
    "size_reason": "a new app",
    "size_by_owner": false,
-   "sizing_ms": 0.023,
+   "sizing_ms": 0.028,
    "path": "board",
    "vaic_ms": 1,
    "created_at": "2026-11-06T09:00:00.000Z",
@@ -58,7 +58,7 @@
  {
   "type": "vaic.reply",
   "conversation": "app-new-mem0001",
-  "text": "Handed to the Orchestrator's planner as a medium job on the board: it splits it into parts and each starts as it is written.",
+  "text": "Started: a medium job; the planner splits it into parts and each starts as it is written.",
   "done": true,
   "message_id": "owner-35-app-new-mem0001"
  },
@@ -90,17 +90,17 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-b4ed6084e94d",
+   "id": "t-c305680f74bc",
    "goal": "Application's parts of: build me a memory game with animals",
    "from": "orchestrator",
    "to": "mgr-application",
    "status": "open",
    "department": "Application",
-   "parent_id": "t-b00e87714396",
+   "parent_id": "t-566163aed09f",
    "kind": "assignment",
    "acceptance": "Every part passes its tests and review.",
    "review_rounds": 0,
-   "task_id": "t-b00e87714396",
+   "task_id": "t-566163aed09f",
    "pace": "fastest",
    "path": "board",
    "created_at": "2026-11-06T09:00:01.000Z",
@@ -111,17 +111,17 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-b4ed6084e94d",
+   "id": "t-c305680f74bc",
    "goal": "Application's parts of: build me a memory game with animals",
    "from": "orchestrator",
    "to": "mgr-application",
    "status": "in_progress",
    "department": "Application",
-   "parent_id": "t-b00e87714396",
+   "parent_id": "t-566163aed09f",
    "kind": "assignment",
    "acceptance": "Every part passes its tests and review.",
    "review_rounds": 0,
-   "task_id": "t-b00e87714396",
+   "task_id": "t-566163aed09f",
    "pace": "fastest",
    "path": "board",
    "created_at": "2026-11-06T09:00:01.000Z",
@@ -132,7 +132,7 @@
  {
   "type": "agent.hired",
   "agent": {
-   "id": "wkr-application-c2f958dc86cb",
+   "id": "wkr-application-6829d7ba3e31",
    "kind": "worker",
    "role": "Application builder",
    "department": "Application",
@@ -151,17 +151,17 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-8da5e8fa8827",
+   "id": "t-cca1ea22fca6",
    "goal": "Build the cards",
    "from": "mgr-application",
-   "to": "wkr-application-c2f958dc86cb",
+   "to": "wkr-application-6829d7ba3e31",
    "status": "open",
    "department": "Application",
-   "parent_id": "t-b4ed6084e94d",
+   "parent_id": "t-c305680f74bc",
    "kind": "assignment",
    "acceptance": "Works",
    "review_rounds": 0,
-   "task_id": "t-b00e87714396",
+   "task_id": "t-566163aed09f",
    "pace": "fastest",
    "size": "medium",
    "path": "board",
@@ -172,13 +172,13 @@
  },
  {
   "type": "worker.state",
-  "id": "wkr-application-c2f958dc86cb",
+  "id": "wkr-application-6829d7ba3e31",
   "state": "working"
  },
  {
   "type": "agent.hired",
   "agent": {
-   "id": "wkr-application-1ba5a0e7c99e",
+   "id": "wkr-application-ba98fb8d9794",
    "kind": "worker",
    "role": "Application builder",
    "department": "Application",
@@ -197,17 +197,17 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-1eeca39f4f23",
+   "id": "t-43fef7ef2ae5",
    "goal": "Build the score",
    "from": "mgr-application",
-   "to": "wkr-application-1ba5a0e7c99e",
+   "to": "wkr-application-ba98fb8d9794",
    "status": "open",
    "department": "Application",
-   "parent_id": "t-b4ed6084e94d",
+   "parent_id": "t-c305680f74bc",
    "kind": "assignment",
    "acceptance": "Works",
    "review_rounds": 0,
-   "task_id": "t-b00e87714396",
+   "task_id": "t-566163aed09f",
    "pace": "fastest",
    "size": "medium",
    "path": "board",
@@ -218,7 +218,7 @@
  },
  {
   "type": "worker.state",
-  "id": "wkr-application-1ba5a0e7c99e",
+  "id": "wkr-application-ba98fb8d9794",
   "state": "working"
  },
  {
@@ -229,17 +229,17 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-8da5e8fa8827",
+   "id": "t-cca1ea22fca6",
    "goal": "Build the cards",
    "from": "mgr-application",
-   "to": "wkr-application-c2f958dc86cb",
+   "to": "wkr-application-6829d7ba3e31",
    "status": "in_progress",
    "department": "Application",
-   "parent_id": "t-b4ed6084e94d",
+   "parent_id": "t-c305680f74bc",
    "kind": "assignment",
    "acceptance": "Works",
    "review_rounds": 0,
-   "task_id": "t-b00e87714396",
+   "task_id": "t-566163aed09f",
    "pace": "fastest",
    "size": "medium",
    "path": "board",
@@ -250,25 +250,25 @@
  },
  {
   "type": "activity",
-  "id": "wkr-application-c2f958dc86cb",
+  "id": "wkr-application-6829d7ba3e31",
   "activity": "understanding"
  },
  {
   "type": "activity",
-  "id": "wkr-application-c2f958dc86cb",
+  "id": "wkr-application-6829d7ba3e31",
   "activity": "coding",
   "detail": "Loaded the app: Star Sweeper"
  },
  {
   "type": "activity",
-  "id": "wkr-application-c2f958dc86cb",
+  "id": "wkr-application-6829d7ba3e31",
   "activity": "coding",
   "detail": "Edited app/game.js"
  },
  {
   "type": "app.preview",
-  "task_id": "t-b00e87714396",
-  "hire_id": "wkr-application-c2f958dc86cb",
+  "task_id": "t-566163aed09f",
+  "hire_id": "wkr-application-6829d7ba3e31",
   "preview_url": "https://apps.vaic.test/drafts/prv-0123456789abcdef0123456789abcdef/index.html",
   "seq": 1,
   "paths": [
@@ -282,9 +282,9 @@
  },
  {
   "type": "app.draft",
-  "draft_id": "d-t-8da5e8fa8827",
-  "ticket_id": "t-8da5e8fa8827",
-  "task_id": "t-b00e87714396",
+  "draft_id": "d-t-cca1ea22fca6",
+  "ticket_id": "t-cca1ea22fca6",
+  "task_id": "t-566163aed09f",
   "department": "Application",
   "title": "Star Sweeper",
   "status": "ready",
@@ -293,18 +293,18 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-8da5e8fa8827",
+   "id": "t-cca1ea22fca6",
    "goal": "Build the cards",
    "from": "mgr-application",
-   "to": "wkr-application-c2f958dc86cb",
+   "to": "wkr-application-6829d7ba3e31",
    "status": "in_review",
    "department": "Application",
-   "parent_id": "t-b4ed6084e94d",
+   "parent_id": "t-c305680f74bc",
    "kind": "assignment",
    "acceptance": "Works",
    "result": "The game now has 4 pairs.\nArtifacts: none\nChecks: -",
    "review_rounds": 0,
-   "task_id": "t-b00e87714396",
+   "task_id": "t-566163aed09f",
    "pace": "fastest",
    "size": "medium",
    "path": "board",
@@ -315,36 +315,36 @@
  },
  {
   "type": "worker.state",
-  "id": "wkr-application-c2f958dc86cb",
+  "id": "wkr-application-6829d7ba3e31",
   "state": "reporting"
  },
  {
   "type": "review.started",
-  "ticket_id": "t-8da5e8fa8827",
-  "task_id": "t-b00e87714396",
+  "ticket_id": "t-cca1ea22fca6",
+  "task_id": "t-566163aed09f",
   "department": "Application",
   "reviewer": "mgr-application",
   "round": 1
  },
  {
   "type": "activity",
-  "id": "wkr-application-c2f958dc86cb",
+  "id": "wkr-application-6829d7ba3e31",
   "activity": "idle"
  },
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-1eeca39f4f23",
+   "id": "t-43fef7ef2ae5",
    "goal": "Build the score",
    "from": "mgr-application",
-   "to": "wkr-application-1ba5a0e7c99e",
+   "to": "wkr-application-ba98fb8d9794",
    "status": "in_progress",
    "department": "Application",
-   "parent_id": "t-b4ed6084e94d",
+   "parent_id": "t-c305680f74bc",
    "kind": "assignment",
    "acceptance": "Works",
    "review_rounds": 0,
-   "task_id": "t-b00e87714396",
+   "task_id": "t-566163aed09f",
    "pace": "fastest",
    "size": "medium",
    "path": "board",
@@ -355,25 +355,25 @@
  },
  {
   "type": "activity",
-  "id": "wkr-application-1ba5a0e7c99e",
+  "id": "wkr-application-ba98fb8d9794",
   "activity": "understanding"
  },
  {
   "type": "activity",
-  "id": "wkr-application-1ba5a0e7c99e",
+  "id": "wkr-application-ba98fb8d9794",
   "activity": "coding",
   "detail": "Loaded the app: Star Sweeper"
  },
  {
   "type": "activity",
-  "id": "wkr-application-1ba5a0e7c99e",
+  "id": "wkr-application-ba98fb8d9794",
   "activity": "coding",
   "detail": "Edited app/game.js"
  },
  {
   "type": "app.preview",
-  "task_id": "t-b00e87714396",
-  "hire_id": "wkr-application-1ba5a0e7c99e",
+  "task_id": "t-566163aed09f",
+  "hire_id": "wkr-application-ba98fb8d9794",
   "preview_url": "https://apps.vaic.test/drafts/prv-0123456789abcdef0123456789abcdef/index.html",
   "seq": 1,
   "paths": [
@@ -387,9 +387,9 @@
  },
  {
   "type": "app.draft",
-  "draft_id": "d-t-1eeca39f4f23",
-  "ticket_id": "t-1eeca39f4f23",
-  "task_id": "t-b00e87714396",
+  "draft_id": "d-t-43fef7ef2ae5",
+  "ticket_id": "t-43fef7ef2ae5",
+  "task_id": "t-566163aed09f",
   "department": "Application",
   "title": "Star Sweeper",
   "status": "ready",
@@ -398,18 +398,18 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-1eeca39f4f23",
+   "id": "t-43fef7ef2ae5",
    "goal": "Build the score",
    "from": "mgr-application",
-   "to": "wkr-application-1ba5a0e7c99e",
+   "to": "wkr-application-ba98fb8d9794",
    "status": "in_review",
    "department": "Application",
-   "parent_id": "t-b4ed6084e94d",
+   "parent_id": "t-c305680f74bc",
    "kind": "assignment",
    "acceptance": "Works",
    "result": "The game now has 4 pairs.\nArtifacts: none\nChecks: -",
    "review_rounds": 0,
-   "task_id": "t-b00e87714396",
+   "task_id": "t-566163aed09f",
    "pace": "fastest",
    "size": "medium",
    "path": "board",
@@ -420,20 +420,20 @@
  },
  {
   "type": "worker.state",
-  "id": "wkr-application-1ba5a0e7c99e",
+  "id": "wkr-application-ba98fb8d9794",
   "state": "reporting"
  },
  {
   "type": "review.started",
-  "ticket_id": "t-1eeca39f4f23",
-  "task_id": "t-b00e87714396",
+  "ticket_id": "t-43fef7ef2ae5",
+  "task_id": "t-566163aed09f",
   "department": "Application",
   "reviewer": "mgr-application",
   "round": 1
  },
  {
   "type": "activity",
-  "id": "wkr-application-1ba5a0e7c99e",
+  "id": "wkr-application-ba98fb8d9794",
   "activity": "idle"
  },
  {
@@ -443,8 +443,8 @@
  },
  {
   "type": "review.result",
-  "ticket_id": "t-8da5e8fa8827",
-  "agent": "wkr-application-c2f958dc86cb",
+  "ticket_id": "t-cca1ea22fca6",
+  "agent": "wkr-application-6829d7ba3e31",
   "reviewer": "mgr-application",
   "verdict": "PASS",
   "summary": "Meets it.",
@@ -452,8 +452,8 @@
  },
  {
   "type": "review.finished",
-  "ticket_id": "t-8da5e8fa8827",
-  "task_id": "t-b00e87714396",
+  "ticket_id": "t-cca1ea22fca6",
+  "task_id": "t-566163aed09f",
   "department": "Application",
   "reviewer": "mgr-application",
   "verdict": "PASS",
@@ -461,24 +461,24 @@
  },
  {
   "type": "worker.state",
-  "id": "wkr-application-c2f958dc86cb",
+  "id": "wkr-application-6829d7ba3e31",
   "state": "completed"
  },
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-8da5e8fa8827",
+   "id": "t-cca1ea22fca6",
    "goal": "Build the cards",
    "from": "mgr-application",
-   "to": "wkr-application-c2f958dc86cb",
+   "to": "wkr-application-6829d7ba3e31",
    "status": "done",
    "department": "Application",
-   "parent_id": "t-b4ed6084e94d",
+   "parent_id": "t-c305680f74bc",
    "kind": "assignment",
    "acceptance": "Works",
    "result": "The game now has 4 pairs.\nArtifacts: none\nChecks: -",
    "review_rounds": 1,
-   "task_id": "t-b00e87714396",
+   "task_id": "t-566163aed09f",
    "pace": "fastest",
    "size": "medium",
    "path": "board",
@@ -489,7 +489,7 @@
  },
  {
   "type": "agent.retired",
-  "id": "wkr-application-c2f958dc86cb"
+  "id": "wkr-application-6829d7ba3e31"
  },
  {
   "type": "activity",
@@ -503,8 +503,8 @@
  },
  {
   "type": "review.result",
-  "ticket_id": "t-1eeca39f4f23",
-  "agent": "wkr-application-1ba5a0e7c99e",
+  "ticket_id": "t-43fef7ef2ae5",
+  "agent": "wkr-application-ba98fb8d9794",
   "reviewer": "mgr-application",
   "verdict": "PASS",
   "summary": "Meets it.",
@@ -512,8 +512,8 @@
  },
  {
   "type": "review.finished",
-  "ticket_id": "t-1eeca39f4f23",
-  "task_id": "t-b00e87714396",
+  "ticket_id": "t-43fef7ef2ae5",
+  "task_id": "t-566163aed09f",
   "department": "Application",
   "reviewer": "mgr-application",
   "verdict": "PASS",
@@ -521,24 +521,24 @@
  },
  {
   "type": "worker.state",
-  "id": "wkr-application-1ba5a0e7c99e",
+  "id": "wkr-application-ba98fb8d9794",
   "state": "completed"
  },
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-1eeca39f4f23",
+   "id": "t-43fef7ef2ae5",
    "goal": "Build the score",
    "from": "mgr-application",
-   "to": "wkr-application-1ba5a0e7c99e",
+   "to": "wkr-application-ba98fb8d9794",
    "status": "done",
    "department": "Application",
-   "parent_id": "t-b4ed6084e94d",
+   "parent_id": "t-c305680f74bc",
    "kind": "assignment",
    "acceptance": "Works",
    "result": "The game now has 4 pairs.\nArtifacts: none\nChecks: -",
    "review_rounds": 1,
-   "task_id": "t-b00e87714396",
+   "task_id": "t-566163aed09f",
    "pace": "fastest",
    "size": "medium",
    "path": "board",
@@ -549,12 +549,12 @@
  },
  {
   "type": "agent.retired",
-  "id": "wkr-application-1ba5a0e7c99e"
+  "id": "wkr-application-ba98fb8d9794"
  },
  {
   "type": "agent.hired",
   "agent": {
-   "id": "wkr-application-9282ffc3538a",
+   "id": "wkr-application-76caefef93a1",
    "kind": "worker",
    "role": "Application builder",
    "department": "Application",
@@ -573,17 +573,17 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-21b367597777",
+   "id": "t-9d31626969a1",
    "goal": "Check that every part fits together as one finished whole, fix what doesn't, and deliver it.",
    "from": "mgr-application",
-   "to": "wkr-application-9282ffc3538a",
+   "to": "wkr-application-76caefef93a1",
    "status": "open",
    "department": "Application",
-   "parent_id": "t-b4ed6084e94d",
+   "parent_id": "t-c305680f74bc",
    "kind": "assignment",
    "acceptance": "Everything the owner asked works together; nothing a part did breaks another.",
    "review_rounds": 0,
-   "task_id": "t-b00e87714396",
+   "task_id": "t-566163aed09f",
    "pace": "fastest",
    "size": "medium",
    "path": "board",
@@ -594,7 +594,7 @@
  },
  {
   "type": "worker.state",
-  "id": "wkr-application-9282ffc3538a",
+  "id": "wkr-application-76caefef93a1",
   "state": "working"
  },
  {
@@ -605,17 +605,17 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-21b367597777",
+   "id": "t-9d31626969a1",
    "goal": "Check that every part fits together as one finished whole, fix what doesn't, and deliver it.",
    "from": "mgr-application",
-   "to": "wkr-application-9282ffc3538a",
+   "to": "wkr-application-76caefef93a1",
    "status": "in_progress",
    "department": "Application",
-   "parent_id": "t-b4ed6084e94d",
+   "parent_id": "t-c305680f74bc",
    "kind": "assignment",
    "acceptance": "Everything the owner asked works together; nothing a part did breaks another.",
    "review_rounds": 0,
-   "task_id": "t-b00e87714396",
+   "task_id": "t-566163aed09f",
    "pace": "fastest",
    "size": "medium",
    "path": "board",
@@ -626,25 +626,25 @@
  },
  {
   "type": "activity",
-  "id": "wkr-application-9282ffc3538a",
+  "id": "wkr-application-76caefef93a1",
   "activity": "understanding"
  },
  {
   "type": "activity",
-  "id": "wkr-application-9282ffc3538a",
+  "id": "wkr-application-76caefef93a1",
   "activity": "coding",
   "detail": "Loaded the app: Star Sweeper"
  },
  {
   "type": "activity",
-  "id": "wkr-application-9282ffc3538a",
+  "id": "wkr-application-76caefef93a1",
   "activity": "coding",
   "detail": "Edited app/game.js"
  },
  {
   "type": "app.preview",
-  "task_id": "t-b00e87714396",
-  "hire_id": "wkr-application-9282ffc3538a",
+  "task_id": "t-566163aed09f",
+  "hire_id": "wkr-application-76caefef93a1",
   "preview_url": "https://apps.vaic.test/drafts/prv-0123456789abcdef0123456789abcdef/index.html",
   "seq": 1,
   "paths": [
@@ -658,9 +658,9 @@
  },
  {
   "type": "app.draft",
-  "draft_id": "d-t-21b367597777",
-  "ticket_id": "t-21b367597777",
-  "task_id": "t-b00e87714396",
+  "draft_id": "d-t-9d31626969a1",
+  "ticket_id": "t-9d31626969a1",
+  "task_id": "t-566163aed09f",
   "department": "Application",
   "title": "Star Sweeper",
   "status": "ready",
@@ -669,18 +669,18 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-21b367597777",
+   "id": "t-9d31626969a1",
    "goal": "Check that every part fits together as one finished whole, fix what doesn't, and deliver it.",
    "from": "mgr-application",
-   "to": "wkr-application-9282ffc3538a",
+   "to": "wkr-application-76caefef93a1",
    "status": "in_review",
    "department": "Application",
-   "parent_id": "t-b4ed6084e94d",
+   "parent_id": "t-c305680f74bc",
    "kind": "assignment",
    "acceptance": "Everything the owner asked works together; nothing a part did breaks another.",
    "result": "The game now has 4 pairs.\nArtifacts: none\nChecks: -",
    "review_rounds": 0,
-   "task_id": "t-b00e87714396",
+   "task_id": "t-566163aed09f",
    "pace": "fastest",
    "size": "medium",
    "path": "board",
@@ -691,13 +691,13 @@
  },
  {
   "type": "activity",
-  "id": "wkr-application-9282ffc3538a",
+  "id": "wkr-application-76caefef93a1",
   "activity": "idle"
  },
  {
   "type": "review.result",
-  "ticket_id": "t-21b367597777",
-  "agent": "wkr-application-9282ffc3538a",
+  "ticket_id": "t-9d31626969a1",
+  "agent": "wkr-application-76caefef93a1",
   "reviewer": "mgr-application",
   "verdict": "PASS",
   "summary": "The tests passed.",
@@ -705,24 +705,24 @@
  },
  {
   "type": "worker.state",
-  "id": "wkr-application-9282ffc3538a",
+  "id": "wkr-application-76caefef93a1",
   "state": "completed"
  },
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-21b367597777",
+   "id": "t-9d31626969a1",
    "goal": "Check that every part fits together as one finished whole, fix what doesn't, and deliver it.",
    "from": "mgr-application",
-   "to": "wkr-application-9282ffc3538a",
+   "to": "wkr-application-76caefef93a1",
    "status": "done",
    "department": "Application",
-   "parent_id": "t-b4ed6084e94d",
+   "parent_id": "t-c305680f74bc",
    "kind": "assignment",
    "acceptance": "Everything the owner asked works together; nothing a part did breaks another.",
    "result": "The game now has 4 pairs.\nArtifacts: none\nChecks: -",
    "review_rounds": 0,
-   "task_id": "t-b00e87714396",
+   "task_id": "t-566163aed09f",
    "pace": "fastest",
    "size": "medium",
    "path": "board",
@@ -733,22 +733,22 @@
  },
  {
   "type": "agent.retired",
-  "id": "wkr-application-9282ffc3538a"
+  "id": "wkr-application-76caefef93a1"
  },
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-b4ed6084e94d",
+   "id": "t-c305680f74bc",
    "goal": "Application's parts of: build me a memory game with animals",
    "from": "orchestrator",
    "to": "mgr-application",
    "status": "done",
    "department": "Application",
-   "parent_id": "t-b00e87714396",
+   "parent_id": "t-566163aed09f",
    "kind": "assignment",
    "acceptance": "Every part passes its tests and review.",
    "review_rounds": 0,
-   "task_id": "t-b00e87714396",
+   "task_id": "t-566163aed09f",
    "pace": "fastest",
    "path": "board",
    "created_at": "2026-11-06T09:00:01.000Z",
@@ -758,12 +758,12 @@
  },
  {
   "type": "approval.requested",
-  "id": "ap-556f496c5d99",
+  "id": "ap-281f071e4237",
   "agent": "orchestrator",
   "action": "Update the app \u201cStar Sweeper\u201d to version 2",
   "reason": "Apps run in AI City only after the owner approves them.",
   "kind": "app.publish",
-  "draft_id": "d-t-1eeca39f4f23",
+  "draft_id": "d-t-43fef7ef2ae5",
   "preview_url": "https://apps.vaic.test/drafts/d-1/",
   "title": "Star Sweeper",
   "description": "Sweep the stars.",
@@ -774,12 +774,12 @@
  },
  {
   "type": "approval.requested",
-  "id": "ap-d8d74dca180d",
+  "id": "ap-720b68b40d6d",
   "agent": "orchestrator",
   "action": "Update the app \u201cStar Sweeper\u201d to version 2",
   "reason": "Apps run in AI City only after the owner approves them.",
   "kind": "app.publish",
-  "draft_id": "d-t-21b367597777",
+  "draft_id": "d-t-9d31626969a1",
   "preview_url": "https://apps.vaic.test/drafts/d-1/",
   "title": "Star Sweeper",
   "description": "Sweep the stars.",
@@ -790,12 +790,12 @@
  },
  {
   "type": "approval.requested",
-  "id": "ap-b8cfdb34ac6b",
+  "id": "ap-87c88d817757",
   "agent": "orchestrator",
   "action": "Update the app \u201cStar Sweeper\u201d to version 2",
   "reason": "Apps run in AI City only after the owner approves them.",
   "kind": "app.publish",
-  "draft_id": "d-t-8da5e8fa8827",
+  "draft_id": "d-t-cca1ea22fca6",
   "preview_url": "https://apps.vaic.test/drafts/d-1/",
   "title": "Star Sweeper",
   "description": "Sweep the stars.",
@@ -806,14 +806,14 @@
  },
  {
   "type": "signoff.result",
-  "ticket_id": "t-b00e87714396",
+  "ticket_id": "t-566163aed09f",
   "verdict": "PASS",
   "summary": "Checked."
  },
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-b00e87714396",
+   "id": "t-566163aed09f",
    "goal": "build me a memory game with animals",
    "from": "vaic",
    "to": "orchestrator",
@@ -829,7 +829,7 @@
    "size": "medium",
    "size_reason": "a new app",
    "size_by_owner": false,
-   "sizing_ms": 0.023,
+   "sizing_ms": 0.028,
    "path": "board",
    "vaic_ms": 1,
    "created_at": "2026-11-06T09:00:00.000Z",
@@ -838,20 +838,8 @@
   "previous": "in_progress"
  },
  {
-  "type": "approval.withdrawn",
-  "id": "ap-b8cfdb34ac6b"
- },
- {
-  "type": "approval.withdrawn",
-  "id": "ap-d8d74dca180d"
- },
- {
-  "type": "approval.withdrawn",
-  "id": "ap-556f496c5d99"
- },
- {
   "type": "result",
-  "ticket_id": "t-b00e87714396",
+  "ticket_id": "t-566163aed09f",
   "summary": "The game now has 4 pairs.\nArtifacts: none\nChecks: -\nThe owner is asked to publish the new version in Needs you; it appears under Apps once they approve it (it is not live yet)."
  },
  {
@@ -864,7 +852,7 @@
   "conversation": "app-new-mem0001",
   "text": "Done, Sir: the game has 4 pairs now. The new version is waiting for your OK in Needs you.",
   "done": true,
-  "message_id": "m-3ef20cc22145"
+  "message_id": "m-53d6b8e5af88"
  },
  {
   "type": "activity",

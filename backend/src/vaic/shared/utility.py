@@ -110,7 +110,7 @@ class Triage:
 
 _TRIAGE_CACHE: dict[str, Triage] = {}
 _TRIAGE_CACHE_MAX = 256
-TRIAGE_WHEN_UNSURE = Triage("department", None, "triage unavailable; the Orchestrator decides")
+TRIAGE_WHEN_UNSURE = Triage("department", None, "triage unavailable; the planner decides")
 
 _CITY_PARTS = re.compile(
     r"\b(ai city|vaic|vice|aic|ace|the city|city view|the map|hud|the app|this app|the iphone app|the voice|your voice|"

@@ -89,22 +89,21 @@ async def test_rejects_malformed_invocations_and_hides_error_details() -> None:
 
 # ---------- prompts ----------
 def test_every_role_prompt_exists_and_lists_its_tools() -> None:
-    assert "delegate_to_orchestrator" in load_prompt("vaic.md").tools
-    assert "sign_off" in load_prompt("orchestrator.md").tools
+    assert "start_job" in load_prompt("vaic.md").tools
+    assert load_prompt("planner.md").tools == ["add_part", "finish_plan", "search_knowledge", "ask_executives"]
     assert "review" in load_prompt("manager.md", {"department": "Eng"}).tools
 
 
-def test_managers_hire_few_and_the_orchestrator_never_staffs_a_one_off() -> None:
+def test_the_reviewer_only_reviews_and_the_planner_writes_few_independent_parts() -> None:
     manager = load_prompt(
         "manager.md", {"id": "m", "department": "Eng", "mission": "x", "department_template": ""}
     ).body
-    assert "plan_team" in manager and "Hire the number `plan_team` gave" in manager
-    assert "Never one worker per item, sentence or section" in manager
-    assert "no limit" not in manager.lower()
-    orchestrator = load_prompt("orchestrator.md").body
-    assert "One department per goal" in orchestrator
-    assert "Never create a department for a one-off question or writing task" in orchestrator
-    assert "each manager sizes its own team with `plan_team`" in orchestrator
+    assert "Eng Reviewer" in manager and "`review`" in manager and "never just FAIL" in manager
+    assert "plan_team" not in manager and "hire_worker" not in manager
+    planner = load_prompt("planner.md").body
+    assert "add_part" in planner and "finish_plan" in planner
+    assert "Few, independent parts beat many small ones" in planner
+    assert "Orchestrator" not in planner
     assert load_prompt("worker.md").tools == [
         "ask_manager",
         "ask_taste",

@@ -10,7 +10,7 @@ from typing import Any
 
 from . import workflows as wf
 from .connectors import ConnectorStore
-from .hierarchy.actions import CityDeps, instruct_agent, new_ticket, running_jobs, send
+from .hierarchy.actions import CityDeps, instruct_agent, new_ticket, running_jobs
 from .log import log
 
 Record = dict[str, Any]
@@ -71,24 +71,9 @@ async def hand_off(d: CityDeps, runs: wf.Runs, run: Record, w: Record) -> tuple[
         if not run.get("present")
         else "The owner said yes to the plan in the brief."
     )
-    await send(
-        d,
-        {
-            "role": "orchestrator",
-            "agentId": "orchestrator",
-            "department": None,
-            "ticketId": t["id"],
-            "taskId": t["id"],
-            "kind": "task",
-            "from": "vaic",
-            "conversation": conversation,
-            "body": (
-                f"New task from the owner: the {w['name']} workflow.\nGoal: {goal}\n"
-                f"Owner's words: {run.get('owner_words', '')}\n"
-                f"Send it to the {w['department']} department{tools}. {yes}"
-            ),
-        },
-    )
+    from .hierarchy.board_path import launch
+
+    await launch(d, t, department=str(w["department"]), extra=f"{tools.lstrip(', ').capitalize()}. {yes}".strip(". "))
     run = await runs.update(run["id"], {"status": "running", "task_id": t["id"]}) or run
     taste = wf.Taste(d.ledger.table, d.ledger.now)
     inputs = {i["key"]: i for i in w.get("inputs") or []}
@@ -188,22 +173,11 @@ async def answer(d: CityDeps, id: str, said: str) -> str:
         if asker and asker.get("state") != "retired" and asker.get("kind") in ("worker", "manager"):
             await instruct_agent(d, asker["id"], change)
             return f"Sent to {asker['id']}: they change it to “{picked}”."
-        await send(
-            d,
-            {
-                "role": "orchestrator",
-                "agentId": "orchestrator",
-                "department": None,
-                "ticketId": task["id"],
-                "taskId": task["id"],
-                "kind": "instruction",
-                "from": "owner",
-                "body": f"Direct instruction from the owner for task {task['id']}: {change} Pass it to the team "
-                "doing it.",
-            },
-        )
+        from .hierarchy.board_path import instruct_job
+
+        await instruct_job(d, task, change)
         return f"Sent to the team: they change it to “{picked}”."
     return (
         f"Noted “{picked}”, but the job has finished. Offer the owner to have the team change it (for an app, "
-        "delegate_to_orchestrator with its app_id)."
+        "start_job with its app_id)."
     )

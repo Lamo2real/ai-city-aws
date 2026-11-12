@@ -3,8 +3,6 @@ skill, and the leads come back as a table in the chat plus a CSV in the owner's 
 
 from __future__ import annotations
 
-import json
-import re
 from pathlib import Path
 
 import pytest
@@ -65,37 +63,22 @@ async def test_find_me_two_leads_walks_to_sales_and_comes_back_as_a_table_and_a_
 
     async def vaic(req: EngineRequest, call: Call) -> str:
         if "(task) from owner" in req.turn.prompt:
-            await call("delegate_to_orchestrator", {"goal": "Sales: lead research. " + ASK, "owner_words": ASK,
+            await call("start_job", {"goal": "Sales: lead research. " + ASK, "owner_words": ASK,
                                                     "confirm": True})  # fmt: skip
             return "On it."
         seen["vaic"] = req.turn.prompt
         return "Here are your two leads."
 
-    async def orchestrator(req: EngineRequest, call: Call) -> str:
-        if "(task) from vaic" in req.turn.prompt:
-            await call("assign_to_department", {"department": "Business Development", "goal": ASK,
-                                                "acceptance": "2 leads with every field or 'not found publicly'"})  # fmt: skip
-            return "Sent."
-        reports = json.loads(await call("get_reports", {}))
-        if reports and all(r["status"] == "in_review" for r in reports):
-            await call("sign_off", {"verdict": "PASS", "reasons": "Two leads, every field sourced."})
-            await call("report_to_vaic", {"summary": f"Two leads found.\n\n{TABLE}"})
-        return "ok"
+    async def orchestrator(req: EngineRequest, call: Call) -> str:  # the board's planner (decision 298)
+        await call("add_part", {"name": "Lead research", "department": "Business Development", "goal": ASK,
+                                "acceptance": "2 leads with every field or 'not found publicly'"})  # fmt: skip
+        await call("finish_plan", {})
+        return "Planned."
 
-    async def manager(req: EngineRequest, call: Call) -> str:
-        mine = [k for k in await req.ledger.child_tickets(req.ctx.ticket_id) if k.get("kind") == "assignment"]
-        if "(task) from orchestrator" in req.turn.prompt and not mine:
+    async def manager(req: EngineRequest, call: Call) -> str:  # Sales' reviewer
+        if "Board review" in req.turn.prompt:
             seen["manager"] = req.system
-            hired = await call("hire_worker", {"specialty": "Prospecting: lead researcher",
-                                               "instructions": "Follow lead-research.", "tools": ["WebFetch"],
-                                               "budget_hint_usd": 1})  # fmt: skip
-            wid = re.search(r"Hired (\S+)", hired).group(1)  # type: ignore[union-attr]
-            await call("assign", {"worker_id": wid, "goal": ASK, "acceptance": "2 leads"})
-            return "Assigned."
-        for t in [k for k in mine if k["status"] == "in_review"]:
-            await call("review", {"ticket_id": t["id"], "verdict": "PASS", "reasons": "Sourced."})
-            await call("release_worker", {"worker_id": t["to"]})
-            await call("report_to_orchestrator", {"summary": REPORT})
+            await call("review", {"ticket_id": req.ctx.ticket_id, "verdict": "PASS", "reasons": "Sourced."})
         return "Reviewed."
 
     async def worker(req: EngineRequest, call: Call) -> str:
@@ -114,8 +97,8 @@ async def test_find_me_two_leads_walks_to_sales_and_comes_back_as_a_table_and_a_
     every = await city.ledger.list_tickets(ALL_STATUSES)
     task = next(t for t in every if t["from"] == "vaic")  # the job the Work screen shows
     assert task["status"] == "done"
-    dept = next(t for t in every if t["from"] == "orchestrator")
-    assert dept["department"] == "Sales"
+    dept = next(t for t in every if t["from"] == "orchestrator" and t.get("parent_id") == task["id"])
+    assert dept["department"] == "Sales"  # "Business Development" reaches the Sales preset
     assert "Lead research" in seen["manager"] and "lead-research" in seen["manager"]
 
     csvs = [(k, v) for k, v in w.blobs.objects.items() if k.endswith("/leads.csv")]

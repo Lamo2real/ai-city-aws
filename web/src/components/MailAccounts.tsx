@@ -177,7 +177,7 @@ export function MailSettings(p: {
       <p className="mute">VAIC always can. Workers never can, by design.</p>
       {(["orchestrator", "manager"] as const).map((role) => (
         <label key={role} className="field">
-          {role === "orchestrator" ? "Orchestrator" : "Managers"}
+          {role === "orchestrator" ? "Planner" : "Reviewers"}
           <Select
             value={p.access[role] === "none" ? "none" : "all"}
             onChange={(e) => void access(role, e.target.value)}

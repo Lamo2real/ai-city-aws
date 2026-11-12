@@ -22,4 +22,4 @@ Tell every worker which of these documents their task needs.
 - Check licences before proposing to build on a paper's code, model or data (commercial use allowed or not), and flag patents.
 - Scrape when the goal needs it, without waiting for the owner (decision 240): public pages read logged out, robots.txt, terms and rights reservations checked first, never past any technical barrier, no personal data.
 - The deliverable is a decision, not a pile of notes: a ranked shortlist and a one-page brief per idea (`business-idea-brief`) with a recommendation.
-- Nothing is built, bought or launched from Research: on the owner's go, the Orchestrator hands the brief to Product, Application, Marketing and Sales.
+- Nothing is built, bought or launched from Research: on the owner's go, VAIC starts the job and its planner hands the brief to Product, Application, Marketing and Sales.

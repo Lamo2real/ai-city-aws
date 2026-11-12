@@ -7,7 +7,7 @@ import pytest
 from test_api import ev, js, make
 from test_task_control import SPEC, city, job, vaic_tools
 from vaic.lambdas.api import handle_http
-from vaic.runtime.tools import TurnCtx, tools_for
+from vaic.shared.hierarchy.board_path import add_part, plan_items
 from vaic.shared.hierarchy.departments import DepartmentError, clean_name, worker_model_choice
 from vaic.shared.models import department_override, model_name_for, resolve_role
 from vaic.shared.presets import ensure_presets, orchestrator_note
@@ -53,15 +53,11 @@ async def test_vaic_builds_a_department_with_opus_workers_and_a_tower_event() ->
     # Its manager is Fable (hired with its first goal); its workers are Opus.
     task = await c.ledger.create_ticket(
         {"goal": "Write a renewal email", "from": "vaic", "to": "orchestrator", "department": None,
-         "parent_id": None, "kind": "task", "status": "open"}
+         "parent_id": None, "kind": "task", "status": "in_progress", "planned": True, "path": "board",
+         "size": "medium"}
     )  # fmt: skip
-    orch = TurnCtx(
-        agent_id="orchestrator", role="orchestrator", department=None, ticket_id=task["id"], task_id=task["id"]
-    )
-    orch_tools = {t.name: t for t in tools_for(c.host.d, orch)}
-    await orch_tools["assign_to_department"].handler(
-        {"department": "Customer Success", "goal": "A renewal email", "acceptance": "One email"}
-    )
+    await add_part(c.host.d, task["id"], {"name": "Email", "goal": "A renewal email", "acceptance": "One email",
+                                          "department": "Customer Success"})  # fmt: skip
     mgr = await c.ledger.get_agent(dept["manager_id"])
     assert mgr and mgr["model"] == "fable-5-1"
     w = await c.factory.hire(SPEC, dept["manager_id"], "Customer Success")
@@ -97,12 +93,19 @@ async def test_demolish_asks_first_then_sends_workers_home_hands_work_back_and_k
     c = await city()
     task = await job(c, "Write 50 sentences about the GT3", "porsche sentences", "Writing", workers=2)
     tools = vaic_tools(c)
+    planned = await c.ledger.create_ticket(
+        {"goal": "More sentences", "from": "vaic", "to": "orchestrator", "department": None, "parent_id": None,
+         "kind": "task", "status": "in_progress", "planned": True, "path": "board", "size": "medium"}
+    )  # fmt: skip
+    await c.ledger.table.put({"pk": f"TICKET#{planned['id']}", "sk": "PLAN#0000#more", "name": "More",
+                              "goal": "more", "acceptance": "ok", "department": "Writing", "after": ["First"],
+                              "files": [], "order": 0, "status": "waiting"})  # fmt: skip
     ask = await tools["demolish_department"].handler({"name": "writing department", "confirm": False})
-    assert ask.startswith("Demolish Writing? 2 workers go home and 3 unfinished parts go back to the Orchestrator.")
+    assert ask.startswith("Demolish Writing? 2 workers go home and 3 unfinished parts go")
     assert (await c.ledger.get_department("Writing"))["state"] == "active"  # not yet
 
     said = await tools["demolish_department"].handler({"name": "Writing", "confirm": True})
-    assert said.startswith("Demolished Writing: 2 workers went home, 3 unfinished parts went back")
+    assert said.startswith("Demolished Writing: 2 workers went home, 3 unfinished parts went to the department that took over, or were dropped.")
     dept = await c.ledger.get_department("Writing")
     assert dept and dept["state"] == "demolished" and dept.get("demolished_at")  # the record stays: history
     assert "Writing" not in [x["name"] for x in await c.ledger.list_departments()]
@@ -112,20 +115,20 @@ async def test_demolish_asks_first_then_sends_workers_home_hands_work_back_and_k
     assert (await c.ledger.get_agent("mgr-writing"))["state"] == "retired"
     kids = await c.ledger.child_tickets(task["id"])
     assert kids and all(k["status"] == "cancelled" for k in kids)
-    assert (await c.ledger.get_ticket(task["id"]))["status"] == "in_progress"  # the job is the Orchestrator's again
-    (handed,) = [m for m in c.queue.sent if m["role"] == "orchestrator" and "demolished" in m["body"]]
-    assert handed["taskId"] == task["id"] and "Do not create or use Writing again" in handed["body"]
+    assert (await c.ledger.get_ticket(task["id"]))["status"] == "in_progress"
+    # A board job's part still waiting in Writing is dropped (nothing took over), so the job can still finish.
+    (dropped,) = await plan_items(c.host.d, planned["id"])
+    assert dropped["status"] == "done" and "demolished Writing" in dropped["result"]
     (e,) = c.bus.of_type("department.demolished")
     assert e == {**e, "name": "Writing", "workers": 2, "parts": 3}
-    # The Orchestrator can neither use nor recreate it.
-    orch = TurnCtx(
-        agent_id="orchestrator", role="orchestrator", department=None, ticket_id=task["id"], task_id=task["id"]
-    )
-    orch_tools = {t.name: t for t in tools_for(c.host.d, orch)}
-    assert "demolished" in await orch_tools["assign_to_department"].handler(
-        {"department": "Writing", "goal": "x", "acceptance": "y"}
-    )
-    assert "Refused" in await orch_tools["create_department"].handler({"name": "Writing", "mission": "Words."})
+    # The planner can't give it work.
+    again = await c.ledger.create_ticket(
+        {"goal": "x", "from": "vaic", "to": "orchestrator", "department": None, "parent_id": None, "kind": "task",
+         "status": "in_progress", "planned": True, "path": "board", "size": "medium"}
+    )  # fmt: skip
+    said_no = await add_part(c.host.d, again["id"], {"name": "Words", "goal": "x", "acceptance": "y",
+                                                     "department": "Writing"})  # fmt: skip
+    assert said_no.startswith("There is no department called Writing")
     assert "no standing department" in await tools["demolish_department"].handler({"name": "Writing", "confirm": True})
     # The owner can build it again.
     assert (await tools["build_department"].handler({"name": "Writing"})).startswith("Rebuilt Writing")

@@ -192,7 +192,7 @@ async def test_retire_idle_puts_managers_without_open_work_to_sleep_and_improve_
     q, bus = MemoryQueue(), MemoryBus()
     assert await run_job("retire_idle", ledger, q, bus, {}) == {"dormant": 1, "sent_home": 0}
     assert await run_job("improve", ledger, q, bus, {}) == {"skipped": "the self-improvement loop is disabled"}
-    assert await run_job("sweep", ledger, q, bus, {}) == {"resent": 0, "sent_home": 0, "stuck": 0}
+    assert await run_job("sweep", ledger, q, bus, {}) == {"resent": 0, "sent_home": 0, "stuck": 0, "adopted": 0}
 
 
 # ---------- self-improvement fence ----------

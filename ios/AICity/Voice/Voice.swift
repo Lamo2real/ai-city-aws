@@ -83,7 +83,7 @@ final class VoiceController {
             try session.setActive(true, options: .notifyOthersOnDeactivation)
             let req = SFSpeechAudioBufferRecognitionRequest()
             req.shouldReportPartialResults = true
-            req.contextualStrings = ["VAIC", "Vice", "AI City", "Orchestrator"]
+            req.contextualStrings = ["VAIC", "Vice", "AI City", "Planner"]
             if recognizer.supportsOnDeviceRecognition { req.requiresOnDeviceRecognition = true }
             request = req
             let input = engine.inputNode

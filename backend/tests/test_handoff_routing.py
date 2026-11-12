@@ -17,6 +17,7 @@ from vaic.runtime.tools import TurnCtx
 from vaic.shared import support_desk as desk
 from vaic.shared.connectors import ConnectorStore
 from vaic.shared.hierarchy.actions import FINAL, CityDeps
+from vaic.shared.ids import manager_id
 from vaic.shared.ledger import ALL_STATUSES
 
 ID = re.compile(r"\b(st-\d{4}-\d{5})\b")
@@ -35,27 +36,17 @@ async def vaic(req: EngineRequest, call: Call) -> str:
 
 
 async def orchestrator(req: EngineRequest, call: Call) -> str:
-    if "(task) from vaic" in req.turn.prompt:
-        dept = re.search(r"Send it to the (.+?) department", req.turn.prompt).group(1)  # type: ignore[union-attr]
-        await call("create_department", {"name": dept, "mission": f"The {dept} team."})
-        await call("assign_to_department", {"department": dept, "goal": await _goal(req), "acceptance": "done"})
-        return "Sent."
-    await call("sign_off", {"verdict": "PASS", "reasons": "Done."})
-    await call("report_to_vaic", {"summary": "Finished."})
-    return "PASS"
+    """The board's planner, for a job whose department isn't standing yet (decision 298)."""
+    dept = re.search(r"Give every part to the (.+?) department", req.turn.prompt).group(1)  # type: ignore[union-attr]
+    await call("add_part", {"name": "The job", "goal": await _goal(req), "acceptance": "done", "department": dept})
+    await call("finish_plan", {})
+    return "Planned."
 
 
 async def manager(req: EngineRequest, call: Call) -> str:
-    if "(task) from orchestrator" in req.turn.prompt:
-        hired = await call("hire_worker", {"specialty": "agent", "instructions": "Do the job.", "tools": ["Read"],
-                                           "budget_hint_usd": 1})  # fmt: skip
-        wid = re.search(r"Hired (\S+)", hired).group(1)  # type: ignore[union-attr]
-        await call("assign", {"worker_id": wid, "goal": await _goal(req), "acceptance": "done"})
-        return "Assigned."
-    for t in await req.ledger.child_tickets(req.ctx.ticket_id):
-        if t["status"] == "in_review":
-            await call("review", {"ticket_id": t["id"], "verdict": "PASS", "reasons": "Meets the acceptance."})
-            await call("report_to_orchestrator", {"summary": str(t.get("result") or "Done.")})
+    """A department's reviewer on the board: one review of the part it was sent."""
+    if "Board review" in req.turn.prompt:
+        await call("review", {"ticket_id": req.ctx.ticket_id, "verdict": "PASS", "reasons": "Meets the acceptance."})
     return "Reviewed."
 
 
@@ -100,6 +91,8 @@ async def test_an_it_worker_files_to_marketing_and_the_result_comes_straight_bac
     city = make_city(scripted_engine({"vaic": vaic, "orchestrator": orchestrator, "manager": manager,
                                       "worker": worker}))  # fmt: skip
     await city.host.ensure_core()
+    for n in ("Customer Support", "IT Infrastructure", "Marketing"):
+        await city.ledger.create_department(n, f"The {n} team.", manager_id(n))
     d = city.deps
     jira = {"id": "atlassian", "label": "Jira", "url": "https://mcp.atlassian.com/v1/mcp", "status": "ready"}
     await ConnectorStore(city.ledger.table).create(jira)
@@ -153,7 +146,7 @@ async def test_a_released_filer_falls_back_to_its_manager() -> None:
     assert h is not None and h["status"] == "replying"
     back = await d.ledger.get_ticket(str(h["reply_job"]))
     assert back is not None and back["from"] == "vaic" and back["goal"].startswith("Your handoff")
-    assert "Send it to the Product department" in _sent(d)[-1]["body"]
+    assert "Give every part to the Product department" in _sent(d)[-1]["body"]  # the planner
 
 
 async def test_bounds_hold_for_workers_and_any_pair_of_departments_works() -> None:

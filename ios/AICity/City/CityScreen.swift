@@ -110,7 +110,7 @@ struct CityList: View {
                                 Circle().fill(CityPalette.color(d)).frame(width: 12, height: 12).accessibilityHidden(true)
                                 Text(d)
                                 Spacer()
-                                Text(d == "HQ" ? "VAIC, Orchestrator" : "\(p.workers.count) at work").foregroundStyle(.secondary)
+                                Text(d == "HQ" ? "VAIC, Planner" : "\(p.workers.count) at work").foregroundStyle(.secondary)
                             }
                             .frame(minHeight: 44)
                         }
@@ -211,7 +211,7 @@ struct Legend: View {
                     Label("Working: the dot has its model's colour", systemImage: "circle.fill").foregroundStyle(.blue)
                 }
                 Section {
-                    Text("HQ: VAIC stands by the fountain in the plaza, the Orchestrator at the HQ entrance.")
+                    Text("HQ: VAIC stands by the fountain in the plaza, the planner at the HQ entrance.")
                     Text("Each department has its own office with its manager at the door and its workers inside. Lit windows mean someone is at work.")
                     Text("Houses: released workers and saved specialists. A FREE LOT sign marks where the next department goes up.")
                     Text("Pinch to zoom, drag to look around, tap anyone or any building. The map is the same one the web HUD shows.")

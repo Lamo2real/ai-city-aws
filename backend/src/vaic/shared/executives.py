@@ -414,7 +414,7 @@ async def _read(d: ExecDeps, tool: str, question: str) -> Any:
         rows.sort(key=lambda t: str(t.get("updated_at", "")), reverse=True)
         return [
             {
-                "department": t.get("department") or "the Orchestrator",
+                "department": t.get("department") or "the planner",
                 "goal": _one(t.get("goal"), 120),
                 "status": t.get("status"),
                 "report": _one(t.get("result"), 500),

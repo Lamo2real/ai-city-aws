@@ -1,11 +1,11 @@
-"""The project board (decision 289): written alongside the current chain from the city's events, with timings for
-every stage, and VAIC's instant no-model status answers from it."""
+"""The project board (decision 289): kept from the city's events, with timings for every stage, and VAIC's instant
+no-model status answers from it. Since decision 298 it is the only path."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from city_support import make_city, scripted_engine
+from city_support import make_city, make_department, scripted_engine
 from test_hierarchy_e2e import GOAL, make_manager, orchestrator, vaic, worker
 from vaic.lambdas import api
 from vaic.lambdas.ledger_writer import write_event
@@ -15,10 +15,11 @@ from vaic.shared.ledger import ALL_STATUSES
 from vaic.shared.table import MemoryTable
 
 
-def board_city() -> Any:
+async def board_city() -> Any:
     city = make_city(
         scripted_engine({"vaic": vaic, "orchestrator": orchestrator, "manager": make_manager(), "worker": worker})
     )
+    await make_department(city, "Builders")
 
     async def project(e: dict[str, Any]) -> None:  # what the ledger writer Lambda does for every event
         await write_event({"detail": e}, city.ledger)
@@ -31,8 +32,8 @@ async def _job(city: Any) -> dict[str, Any]:
     return next(t for t in await city.ledger.list_tickets(ALL_STATUSES) if t["from"] == "vaic")
 
 
-async def test_the_whole_chain_lands_on_the_board_with_stage_timings() -> None:
-    city = board_city()
+async def test_a_whole_job_lands_on_the_board_with_stage_timings() -> None:
+    city = await board_city()
     await city.owner_says(GOAL)
     await city.run()
     task = await _job(city)
@@ -41,19 +42,19 @@ async def test_the_whole_chain_lands_on_the_board_with_stage_timings() -> None:
     # The owner's exact words, the size and why, the status and result, all on the board.
     assert b["owner_words"] == GOAL and b["status"] == "done" and "power" in b["result"]
     assert b["size"] == "small" and b["size_reason"] and b["size_by_owner"] is False
-    assert b["path"] == "chain"
+    assert b["path"] == "board"
     goals = [p for p in b["parts"] if p["role"] == "goal"]
     parts = [p for p in b["parts"] if p["role"] == "part"]
     assert [g["department"] for g in goals] == ["Builders"]
-    assert len(parts) == 3 and all(p["status"] == "done" and p["worker"].startswith("wkr-") for p in parts)
+    assert len(parts) == 4 and all(p["status"] == "done" and p["worker"].startswith("wkr-") for p in parts)
     assert all(p["department"] == "Builders" for p in parts)
     test_part = next(p for p in parts if p["goal"] == "write the test")
     assert [v["verdict"] for v in test_part["verdicts"]] == ["FAIL", "PASS"]
     t = b["timings"]
     assert t["total_ms"] > 0
-    for stage in ("sizing", "planning", "spinup", "work", "review"):
+    for stage in ("sizing", "planning", "spinup", "work", "tests", "review"):
         assert stage in t["stages"], stage
-    assert t["stages"]["work"]["parts"] == 3
+    assert t["stages"]["work"]["parts"] == 4  # three parts and the whole-app check
     assert t["stages"]["planning"]["ms"] > 0 and t["stages"]["work"]["ms"] > 0
     # Every child ticket names its job, so the board never has to walk up the tree.
     kids = [k for k in await city.ledger.list_tickets(ALL_STATUSES) if k.get("parent_id")]
@@ -152,7 +153,7 @@ def test_only_plain_status_questions_skip_the_model() -> None:
 
 
 async def test_vaic_answers_status_from_the_board_with_no_model_call() -> None:
-    city = board_city()
+    city = await board_city()
     await city.owner_says(GOAL)
     await city.run()
     board = Board(city.ledger.table, city.ledger.get_ticket)
@@ -165,7 +166,7 @@ async def test_vaic_answers_status_from_the_board_with_no_model_call() -> None:
 
 
 async def test_the_api_answers_a_status_question_without_queueing_a_turn() -> None:
-    city = board_city()
+    city = await board_city()
     await city.owner_says(GOAL)
     await city.run()
     before = len(city.queue.items) if hasattr(city.queue, "items") else None

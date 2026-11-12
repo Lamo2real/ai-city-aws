@@ -12,9 +12,8 @@ from typing import Any
 
 import pytest
 
-from city_support import Call, City, make_city, scripted_engine
+from city_support import Call, City, make_city, make_department, scripted_engine
 from test_apps import FakeS3
-from test_hire_caps import manager as make_department
 from vaic.lambdas.ledger_writer import write_event
 from vaic.runtime import tools as tools_mod
 from vaic.runtime.engine import EngineRequest
@@ -67,7 +66,7 @@ def city_with(plan: Any, worker: Any = good_worker, reviewer: Any = passing_revi
     async def vaic(req: EngineRequest, call: Call) -> str:
         if "(task) from owner" in req.turn.prompt:
             w = req.ctx.owner_text
-            return await call("delegate_to_orchestrator", {"goal": w, "owner_words": w, "confirm": True})
+            return await call("start_job", {"goal": w, "owner_words": w, "confirm": True})
         return "Done, Sir."
 
     city = make_city(
@@ -313,15 +312,6 @@ async def test_the_plan_keeps_one_owner_per_file_known_departments_and_known_par
     assert answers[6] == "The plan is finished; no more parts."
 
 
-async def test_the_switch_still_sends_bigger_jobs_through_the_chain() -> None:
-    async def chain(req: EngineRequest, call: Call) -> str:
-        return "the chain"
-
-    city = city_with(chain, board_sizes=["small"])
-    task = await run(city)
-    assert task.get("path") is None and "model" not in next(i for i in city.invocations if i["role"] == "orchestrator")
-
-
 # ---------- one app, several workers, one shared copy ----------
 async def test_parts_of_one_app_share_a_copy_and_save_only_their_own_changes(tmp_path: Path) -> None:
     city = make_city(scripted_engine({}))
@@ -381,3 +371,67 @@ async def test_parts_of_one_app_share_a_copy_and_save_only_their_own_changes(tmp
     out = await tool(b, "submit_app")({"title": "Memory", "description": "A memory game."})
     assert re.match(r"Saved 1 changed file to the shared copy \(score\.js\)", out)
     assert not city.bus.of_type("app.submitted")  # no per-part drafts: the whole-app check delivers the one app
+
+
+# ---------- decision 298: the board is the only path ----------
+async def test_a_planned_job_still_finishes_when_the_owner_sends_a_parts_worker_home() -> None:
+    from vaic.shared.hierarchy.actions import send_home
+
+    sent: list[str] = []
+
+    async def worker(req: EngineRequest, call: Call) -> str:
+        part = await req.ledger.get_ticket(req.ctx.ticket_id)
+        if part and part["goal"] == "The slow part" and not sent:
+            sent.append(req.ctx.agent_id)
+            me = await req.ledger.get_agent(req.ctx.agent_id)
+            assert me
+            await send_home(city.deps, [me])  # the owner clicks it in the City mid-turn
+            return "sent home"
+        return await good_worker(req, call)
+
+    parts = [
+        {"name": "Slow", "goal": "The slow part", "acceptance": "Done well", "department": "Builders"},
+        {"name": "Fast", "goal": "The fast part", "acceptance": "Done well", "department": "Builders"},
+    ]
+    city = city_with(planner(parts, {}), worker=worker)
+    task = await run(city)
+    assert sent and task["status"] == "done"
+    items = {i["name"]: i for i in await board.plan_items(city.deps, task["id"])}
+    assert items["Slow"]["result"].startswith("Stopped") and items["Fast"]["status"] == "done"
+
+
+async def test_a_finished_jobs_publish_approval_waits_for_the_owner() -> None:
+    from vaic.shared.apps import put_draft
+    from vaic.shared.hierarchy.actions import sweep_stale_asks
+
+    city = make_city(scripted_engine({}))
+    task = await city.ledger.create_ticket(
+        {
+            "goal": "g",
+            "from": "vaic",
+            "to": "orchestrator",
+            "department": None,
+            "parent_id": None,
+            "kind": "task",
+            "path": "board",
+        }
+    )
+    await put_draft(
+        city.ledger,
+        {
+            "draft_id": "drf-1",
+            "ticket_id": "t-x",
+            "task_id": task["id"],
+            "status": "ready",
+            "title": "Memory",
+            "preview_url": "https://apps.vaic.test/drafts/drf-1/index.html",
+            "created_at": "2026-11-12T10:00:00Z",
+        },
+    )
+    await board.finish_job(city.deps, task, "The game has 4 pairs.")
+    assert (await city.ledger.get_ticket(task["id"]) or {})["status"] == "done"
+    (pending,) = await city.ledger.pending_approvals()
+    assert pending["kind"] == "app.publish"
+    await sweep_stale_asks(city.ledger, city.bus)  # the 5-minute sweep leaves it too
+    assert len(await city.ledger.pending_approvals()) == 1
+    assert not city.bus.of_type("approval.withdrawn")

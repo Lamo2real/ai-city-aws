@@ -9,8 +9,7 @@ from typing import Any
 
 import pytest
 
-from city_support import Call, City, make_city, scripted_engine
-from test_hire_caps import manager as make_department
+from city_support import Call, City, make_city, make_department, scripted_engine
 from vaic.lambdas.ledger_writer import write_event
 from vaic.runtime import tools as tools_mod
 from vaic.runtime.engine import EngineRequest
@@ -25,7 +24,7 @@ def city_with(worker: Any, reviewer: Any | None = None, **settings: Any) -> City
     async def vaic(req: EngineRequest, call: Call) -> str:
         if "(task) from owner" in req.turn.prompt:
             words = req.ctx.owner_text
-            return await call("delegate_to_orchestrator", {"goal": words, "owner_words": words, "confirm": True})
+            return await call("start_job", {"goal": words, "owner_words": words, "confirm": True})
         return "Done, Sir."
 
     async def orchestrator(req: EngineRequest, call: Call) -> str:
@@ -197,13 +196,6 @@ async def test_failing_review_twice_hands_the_part_over_with_every_reason() -> N
     assert fixes and fixes[0]["model"] == "sonnet-5-5"  # a fix stays on the part's model
     last = next(i for i in city.invocations if i.get("agentId") == workers[1]["id"])
     assert last["body"].count("The link still points to /old") == 2
-
-
-async def test_the_switch_sends_small_jobs_through_the_old_chain() -> None:
-    city = city_with(writes("{}"), board_sizes=[])
-    task = await run(city)
-    assert "orchestrator" in roles(city)
-    assert task.get("path") is None and not [a for a in await city.ledger.list_agents() if a["kind"] == "worker"]
 
 
 async def test_a_board_step_runs_once_in_code_with_no_model_turn() -> None:

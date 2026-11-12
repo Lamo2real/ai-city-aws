@@ -14,7 +14,7 @@ from ..ledger import Record
 from ..log import log
 from ..models import WORKER_MODELS, current_name
 from ..presets import preset_for, replaced_by
-from .actions import OPEN_ASSIGNMENT, CityDeps, _walk_home, move, send
+from .actions import OPEN_ASSIGNMENT, CityDeps, _walk_home, move
 
 NAME_MAX = 40
 DEMOLISHED_NOTE = "the owner demolished the department"
@@ -187,33 +187,9 @@ async def demolish_department(d: CityDeps, dept: Record, instead: str = "") -> d
         # The manager's goal sits under the owner's job; workers' parts sit under the goal.
         if t.get("from") == "orchestrator" and t.get("parent_id"):
             jobs.setdefault(str(t["parent_id"]), []).append(str(t.get("goal") or ""))
-    for task_id, goals in jobs.items():
-        task = await d.ledger.get_ticket(task_id)
-        if not task or task.get("status") not in OPEN_ASSIGNMENT:
-            continue
-        await send(
-            d,
-            {
-                "role": "orchestrator",
-                "agentId": "orchestrator",
-                "department": None,
-                "ticketId": task_id,
-                "taskId": task_id,
-                "kind": "instruction",
-                "from": "owner",
-                "body": (
-                    f"The owner demolished the {dept['name']} department. Its part of this job was cancelled: "
-                    + "; ".join(g for g in goals if g)
-                    + (
-                        f". Hand that part to the {instead} department, which took over its work."
-                        if instead
-                        else ". Hand that part to another standing department if one fits, or report to VAIC what "
-                        "is left undone."
-                    )
-                    + f" Do not create or use {dept['name']} again."
-                ),
-            },
-        )
+    from .board_path import hand_over_department
+
+    await hand_over_department(d, dept["name"], instead)  # its parts on the board go to the department that took over
     mgr = await d.ledger.get_agent(str(dept.get("manager_id") or ""))
     if mgr and mgr.get("state") != "retired":
         await d.ledger.update_agent(mgr["id"], {"state": "retired"})

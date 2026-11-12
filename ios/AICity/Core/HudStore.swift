@@ -224,7 +224,7 @@ final class HudStore {
         let wasCurrent = busyLine?.id == lineId  // a late confirmation must not end a newer turn
         var steps: [String] = []
         for t in tools { if let w = Steps.words(activity: t.activity, detail: t.detail), !steps.contains(w) { steps.append(w) } }
-        let handedOn = tools.contains { $0.activity == "delegating" || ($0.detail ?? "").contains("delegate_to_orchestrator") }
+        let handedOn = tools.contains { $0.activity == "delegating" || (($0.detail ?? "").contains("start_job") || ($0.detail ?? "").contains("delegate_to_orchestrator")) }
         // Only VAIC's half-written answer to this message goes, never a reply to a message sent after it.
         let end = chat[(i + 1)...].firstIndex { $0.who == .owner } ?? chat.count
         var c = chat

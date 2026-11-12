@@ -70,7 +70,7 @@ export function everyDays(n: number): string {
 /** Who asked, in plain words. */
 export function askedBy(r: Recommendation): string {
   if (r.review) return "Scheduled review";
-  return r.to === "orchestrator" ? "Asked by the Orchestrator" : "Asked by you";
+  return r.to === "orchestrator" ? "Asked by the planner" : "Asked by you";
 }
 
 const when = (iso: string) => new Date(iso).toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" });
@@ -133,7 +133,7 @@ export function Executives() {
       <h2>Executives</h2>
       <p className="mute">
         Four advisers on top of your city. They give advice only when you ask VAIC (“ask the CFO if this pays off”) or
-        when the Orchestrator weighs a big decision. They never start, assign or run work: your rules and your city's
+        when the planner weighs a big decision. They never start, assign or run work: your rules and your city's
         chain of command stay exactly as they are.
       </p>
       {problem ? <Banner tone="bad">{problem}</Banner> : null}

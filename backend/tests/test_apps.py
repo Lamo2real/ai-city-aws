@@ -358,34 +358,27 @@ async def draft(d: CityDeps | Ledger, draft_id: str, task_id: str, status: str, 
     )
 
 
-async def test_a_pass_sign_off_asks_the_owner_to_publish_each_ready_draft_of_that_task_once() -> None:
+async def test_a_finished_job_asks_the_owner_to_publish_each_ready_draft_of_that_task_once() -> None:
+    from vaic.shared.apps import request_publish_approvals
+    from vaic.shared.hierarchy.board_path import finish_job
+
     d = city_deps()
     task = await d.ledger.create_ticket({"id": "t-task", "goal": "a game", "from": "vaic", "to": "orchestrator",
-                                         "department": None, "parent_id": None})  # fmt: skip
-    await d.ledger.create_ticket({"id": "t-apps", "goal": "build it", "from": "orchestrator", "to": "mgr-apps",
-                                  "department": "Apps", "parent_id": task["id"], "kind": "assignment",
-                                  "status": "in_review"})  # fmt: skip
+                                         "department": None, "parent_id": None, "status": "in_progress"})  # fmt: skip
     await draft(d, "drf-ready", "t-task", "ready")
     await draft(d, "drf-rejected", "t-task", "rejected")
     await draft(d, "drf-other", "t-other", "ready")
-    orch = TurnCtx(agent_id="orchestrator", role="orchestrator", department=None, ticket_id="t-task", task_id="t-task")
-    out = await tool(d, orch, "sign_off")({"verdict": "PASS", "reasons": "plays well"})
-    assert "publish 1 app" in out and "not live yet" in out
-    (ap,) = await d.ledger.pending_approvals()
-    assert (ap["kind"], ap["draft_id"], ap["title"], ap["ticket_id"]) == (
-        "app.publish",
-        "drf-ready",
-        "Comet Hopper",
-        "t-task",
-    )
-    assert ap["preview_url"].endswith("/drafts/drf-ready/index.html")
+    await finish_job(d, task, "plays well")  # the board's sign-off (decision 298)
     (ev,) = d.bus.of_type("approval.requested")  # type: ignore[attr-defined]
-    assert (ev["kind"], ev["draft_id"], ev["preview_url"]) == ("app.publish", "drf-ready", ap["preview_url"])
+    assert (ev["kind"], ev["draft_id"], ev["title"]) == ("app.publish", "drf-ready", "Comet Hopper")
+    assert ev["preview_url"].endswith("/drafts/drf-ready/index.html")
+    ap = await d.ledger.get_approval(str(ev["id"])) or {}
+    assert (ap["kind"], ap["draft_id"], ap["ticket_id"]) == ("app.publish", "drf-ready", "t-task")
     dr = await get_draft(d.ledger, "drf-ready") or {}
     assert (dr["status"], dr["approval_id"]) == ("awaiting_owner", ap["id"])
     assert (await get_draft(d.ledger, "drf-other") or {})["status"] == "ready"
-    await tool(d, orch, "sign_off")({"verdict": "PASS", "reasons": "again"})
-    assert len(await d.ledger.pending_approvals()) == 1
+    assert "not live yet" in str((await d.ledger.get_ticket("t-task") or {}).get("result"))
+    assert await request_publish_approvals(d.ledger, d.bus, "t-task", "orchestrator") == []  # never asked twice
 
 
 # ---------- the owner: publish, refuse, remove ----------

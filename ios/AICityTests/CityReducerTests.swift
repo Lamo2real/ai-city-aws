@@ -153,7 +153,7 @@ final class CityReducerTests: XCTestCase {
 
     func testSteps() {
         XCTAssertEqual(Steps.words(activity: "reading", detail: "mcp__city__get_status"), "Checking the ledger")
-        XCTAssertEqual(Steps.words(activity: "delegating", detail: nil), "Handing this to the Orchestrator")
+        XCTAssertEqual(Steps.words(activity: "delegating", detail: nil), "Handing this to the team")
         XCTAssertEqual(Steps.words(activity: "mystery", detail: nil), "Working on it")
         XCTAssertNil(Steps.words(activity: "idle", detail: nil))
     }

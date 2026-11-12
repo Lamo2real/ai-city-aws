@@ -128,7 +128,7 @@ async def test_vaic_lists_the_apps_and_hands_over_a_change_to_one_by_id() -> Non
     await an_app(d)
     status = await tool(d, VAIC, "get_status")({})
     assert '"app_id": "app-snake"' in status and '"version": 1' in status
-    out = await tool(d, VAIC, "delegate_to_orchestrator")(
+    out = await tool(d, VAIC, "start_job")(
         {
             "goal": "make snake harder",
             "owner_words": "make my snake game harder",
@@ -136,25 +136,27 @@ async def test_vaic_lists_the_apps_and_hands_over_a_change_to_one_by_id() -> Non
             "confirm": True,
         }
     )
-    assert out.startswith("Handed to the Orchestrator")
-    (t,) = [t for t in await d.ledger.list_tickets(("open",)) if t.get("kind") == "task"]
-    assert t["app_id"] == "app-snake"
-    (msg,) = d.queue.sent  # type: ignore[attr-defined]
-    assert "existing app “Snake” (app-snake, version 1)" in msg["body"]
-    bad = await tool(d, VAIC, "delegate_to_orchestrator")({"goal": "x y z", "owner_words": "", "app_id": "app-nope"})
+    assert out.startswith("Started: ")
+    (t,) = [t for t in await d.ledger.list_tickets(("open", "in_progress")) if t.get("kind") == "task"]
+    assert t["app_id"] == "app-snake" and t["path"] == "board"
+    (msg,) = d.queue.sent  # type: ignore[attr-defined]  # no Application here: its planner gets the app
+    assert "existing app “Snake”" in msg["body"]
+    bad = await tool(d, VAIC, "start_job")({"goal": "x y z", "owner_words": "", "app_id": "app-nope"})
     assert "no app with that id" in bad
 
 
 async def test_the_departments_ticket_carries_the_app_id() -> None:
+    from vaic.shared.hierarchy.board_path import launch
+
     d = city_deps()
-    await an_app(d)
-    await d.ledger.create_ticket({"id": "t-task", "goal": "harder", "from": "vaic", "to": "orchestrator",
-                                  "department": None, "parent_id": None, "app_id": "app-snake"})  # fmt: skip
-    orch = TurnCtx(agent_id="orchestrator", role="orchestrator", department=None, ticket_id="t-task", task_id="t-task")
-    await tool(d, orch, "create_department")({"name": "Apps", "mission": "Builds web apps and games."})
-    await tool(d, orch, "assign_to_department")({"department": "Apps", "goal": "harder", "acceptance": "faster"})
-    (kid,) = await d.ledger.child_tickets("t-task")
-    assert kid["app_id"] == "app-snake"
+    app = await an_app(d)
+    await d.ledger.create_department("Application", "Builds web apps and games.", "mgr-application")
+    task = await d.ledger.create_ticket({"id": "t-task", "goal": "harder", "from": "vaic", "to": "orchestrator",
+                                         "department": None, "parent_id": None, "app_id": "app-snake",
+                                         "size": "small"})  # fmt: skip
+    await launch(d, task, app=app)  # a small change: one worker in the app's department, at once
+    (goal,) = await d.ledger.child_tickets("t-task")
+    assert goal["app_id"] == "app-snake" and goal["department"] == "Application"
     assert "load_app" in d.queue.sent[-1]["body"]  # type: ignore[attr-defined]
 
 

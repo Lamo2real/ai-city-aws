@@ -257,7 +257,7 @@ async def test_yes_to_the_money_hands_it_to_marketing_with_the_brief() -> None:
     assert out.startswith("Handed to the Marketing department as task ")
     (msg,) = d.queue.sent
     assert msg["role"] == "orchestrator" and "Marketing" in msg["body"] and "meta-ads" in msg["body"]
-    (t,) = [t for t in await d.ledger.list_tickets(("open",)) if t.get("kind") == "task"]
+    (t,) = [t for t in await d.ledger.list_tickets(("open", "in_progress")) if t.get("kind") == "task"]
     assert t["workflow_run"] == (await wf.Runs(d.ledger.table).list())[0]["id"]
     assert "Spend the owner approved" in t["brief"] and "300 per day from Tue 10 Nov 2026" in t["brief"]
     assert "OUTCOME_SALES" in t["brief"] and "https://shoes.example.com" in t["brief"]
@@ -455,7 +455,7 @@ async def test_an_app_is_built_to_the_end_while_the_owner_is_away() -> None:
     assert not d.bus.of_type("vaic.question")  # nothing was asked
     (msg,) = d.queue.sent
     assert "Application department" in msg["body"] and "without waiting for them" in msg["body"]
-    (t,) = [t for t in await d.ledger.list_tickets(("open",)) if t.get("kind") == "task"]
+    (t,) = [t for t in await d.ledger.list_tickets(("open", "in_progress")) if t.get("kind") == "task"]
     assert words in t["brief"] and "The owner is away" in t["brief"] and "ask_taste" in t["brief"]
     assert "Look: Clean and light (assumed)" in t["brief"] and "how one page should behave" in t["brief"]
     run = (await wf.Runs(d.ledger.table).list())[0]
@@ -509,11 +509,11 @@ async def test_ads_are_never_assumed_away_their_money_is_always_asked() -> None:
 
 async def a_running_app(d: Any) -> tuple[dict[str, Any], dict[str, Any]]:
     await tool(d, vaic(), "start_workflow")({"workflow_id": APP, "owner_words": "make me a snake game"})
-    (t,) = [t for t in await d.ledger.list_tickets(("open",)) if t.get("kind") == "task"]
+    (t,) = [t for t in await d.ledger.list_tickets(("open", "in_progress")) if t.get("kind") == "task"]
     await d.ledger.create_ticket({"id": "t-dept", "goal": "g", "from": "orchestrator", "to": "mgr-apps",
                                   "department": "Apps", "parent_id": t["id"], "kind": "assignment"})  # fmt: skip
     await d.ledger.create_ticket({"id": "t-wkr", "goal": "g", "from": "mgr-apps", "to": "wkr-1", "department": "Apps",
-                                  "parent_id": "t-dept", "kind": "assignment"})  # fmt: skip
+                                  "parent_id": "t-dept", "task_id": t["id"], "kind": "assignment"})  # fmt: skip
     await d.ledger.put_agent({"id": "wkr-1", "kind": "worker", "role": "Game developer", "department": "Apps",
                               "model": "opus-5-5", "parent": "mgr-apps", "state": "active", "worker_state": "working",
                               "ticket_id": "t-wkr", "total_cost_usd": 0, "hired_at": "2026-11-09T10:00:00Z"})  # fmt: skip
@@ -567,12 +567,14 @@ async def test_an_answer_that_differs_reaches_whoever_can_still_change_it() -> N
     look = next(q for q in qs.values() if q["default"] == "Clean and light")
     assert (await answer({"id": look["id"], "answer": "clean and light"})).startswith("Kept")
     assert len(d.queue.sent) == sent + 1
-    # VAIC's own assumption goes to the Orchestrator, who passes it on.
+    # VAIC's own assumption goes to the workers on the job (decision 298: no Orchestrator relays it).
     users = next(q for q in qs.values() if q["default"] == "Just me")
+    before = len(d.queue.sent)
     assert (
         await answer({"id": users["id"], "answer": "My customers"})
     ) == "Sent to the team: they change it to “My customers”."
-    assert d.queue.sent[-1]["role"] == "orchestrator" and d.queue.sent[-1]["taskId"] == t["id"]
+    told = [m for m in d.queue.sent[before:] if m["agentId"] == "wkr-1"]
+    assert told and "“My customers”" in told[0]["body"]
     # After the job: noted, and VAIC offers a change.
     await d.ledger.set_ticket_status(t["id"], "done")
     must = next(q for q in qs.values() if q["default"].startswith("The smallest"))
@@ -634,7 +636,7 @@ async def test_organic_content_is_made_and_published_by_media_while_the_owner_is
     out = await tool(d, vaic(), "start_workflow")({"workflow_id": ORGANIC, "owner_words": words})
     assert "Handed to the Media department as task" in out
     assert not d.bus.of_type("vaic.question")
-    (t,) = [t for t in await d.ledger.list_tickets(("open",)) if t.get("kind") == "task"]
+    (t,) = [t for t in await d.ledger.list_tickets(("open", "in_progress")) if t.get("kind") == "task"]
     brief = t["brief"]
     assert "Format: A short video\n" in brief and "Tone: Bold and energetic\n" in brief
     assert "Where: YouTube, TikTok and Instagram (assumed)" in brief
