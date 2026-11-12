@@ -1,6 +1,5 @@
-"""hire_worker enforces the hard caps: at most max_workers_per_goal live workers on one goal, and at most
-max_concurrent_workers_per_department live workers in the department (the owner's choice after a
-50-sentence request hired 21 workers)."""
+"""hire_worker hires up to the goal's planned team (decision 283) and has no other ceiling: the owner removed every
+agent-count limit (decision 288)."""
 
 from typing import Any
 
@@ -33,46 +32,58 @@ def hire_tool(city: City, mgr: str, dept: str, ticket: str) -> Any:
     return next(t for t in tools_for(city.deps, ctx) if t.name == "hire_worker").handler
 
 
-async def test_a_fourth_worker_on_the_same_goal_is_refused_but_another_goal_may_hire() -> None:
+async def goal(city: City, mgr: str, gid: str, team: int) -> None:
+    await city.ledger.create_ticket(
+        {
+            "id": gid,
+            "goal": "g",
+            "from": "orchestrator",
+            "to": mgr,
+            "department": "Writing",
+            "parent_id": None,
+            "kind": "assignment",
+            "team_size": team,
+            "team_parts": [f"p{i}" for i in range(team)],
+        }
+    )
+
+
+async def test_a_hire_beyond_the_planned_team_is_refused_but_another_goal_may_hire() -> None:
     city = make_city(scripted_engine({}))
     mgr = await manager(city)
+    await goal(city, mgr, "goal-1", 3)
+    await goal(city, mgr, "goal-2", 1)
     hire = hire_tool(city, mgr, "Writing", "goal-1")
     for _ in range(3):
         assert (await hire(SPEC)).startswith("Hired ")
     refused = await hire(SPEC)
-    assert refused.startswith("Hire refused") and "3 workers on this goal" in refused and "cap is 3" in refused
-    live = [a for a in await city.ledger.department_agents("Writing") if a.get("kind") == "worker"]
-    assert len(live) == 3 and all(a.get("goal_id") == "goal-1" for a in live)
-    # The same manager's next goal starts fresh.
+    assert (
+        refused.startswith("Hire refused")
+        and "3 workers on this goal" in refused
+        and "team for this goal is 3" in refused
+    )
     assert (await hire_tool(city, mgr, "Writing", "goal-2")(SPEC)).startswith("Hired ")
 
 
 async def test_a_released_worker_frees_its_place_on_the_goal() -> None:
     city = make_city(scripted_engine({}))
     mgr = await manager(city)
+    await goal(city, mgr, "goal-1", 3)
     hire = hire_tool(city, mgr, "Writing", "goal-1")
     ids = [(await hire(SPEC)).split()[1] for _ in range(3)]
     await city.ledger.update_agent(ids[0], {"state": "retired"})
     assert (await hire(SPEC)).startswith("Hired ")
 
 
-async def test_the_department_ceiling_is_enforced_at_hire_time() -> None:
-    city = make_city(scripted_engine({}), max_workers_per_goal=10, max_concurrent_workers_per_department=4)
+async def test_a_wide_goal_gets_every_worker_it_planned_with_no_department_ceiling() -> None:
+    city = make_city(scripted_engine({}))
     mgr = await manager(city)
-    for goal in ("goal-1", "goal-2"):
-        for _ in range(2):
-            assert (await hire_tool(city, mgr, "Writing", goal)(SPEC)).startswith("Hired ")
-    refused = await hire_tool(city, mgr, "Writing", "goal-3")(SPEC)
-    assert "4 workers at once" in refused and "ceiling is 4" in refused
-
-
-async def test_the_owner_can_raise_the_goal_cap_in_settings() -> None:
-    city = make_city(scripted_engine({}), max_workers_per_goal=5)
-    mgr = await manager(city)
+    await goal(city, mgr, "goal-1", 150)
     hire = hire_tool(city, mgr, "Writing", "goal-1")
-    for _ in range(5):
+    for _ in range(150):
         assert (await hire(SPEC)).startswith("Hired ")
-    assert "cap is 5" in await hire(SPEC)
+    live = [a for a in await city.ledger.department_agents("Writing") if a.get("kind") == "worker"]
+    assert len(live) == 150
 
 
 def manager_tool(city: City, mgr: str, dept: str, ticket: str, name: str) -> Any:
@@ -85,6 +96,9 @@ async def test_idle_leftover_workers_without_a_goal_never_block_a_new_goal() -> 
     # new goal "full", and the manager had no way to see or free them.
     city = make_city(scripted_engine({}))
     mgr = await manager(city, "Research")
+    for g in ("goal-1", "goal-2"):
+        await city.ledger.create_ticket({"id": g, "goal": "g", "from": "orchestrator", "to": mgr, "department": "Research",
+                                         "parent_id": None, "kind": "assignment", "team_size": 3, "team_parts": ["a"]})  # fmt: skip
     hire = hire_tool(city, mgr, "Research", "goal-1")
     for _ in range(3):
         wid = (await hire(SPEC)).split()[1]
@@ -95,6 +109,7 @@ async def test_idle_leftover_workers_without_a_goal_never_block_a_new_goal() -> 
 async def test_a_refusal_names_the_workers_and_the_manager_can_list_and_release_them() -> None:
     city = make_city(scripted_engine({}))
     mgr = await manager(city)
+    await goal(city, mgr, "goal-1", 3)
     hire = hire_tool(city, mgr, "Writing", "goal-1")
     ids = [(await hire(SPEC)).split()[1] for _ in range(3)]
     refused = await hire(SPEC)

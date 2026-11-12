@@ -932,7 +932,7 @@ function Remote({ what }: { what: "workforce" | "health" }) {
     return (
       <div>
         <Row k="City" v="Running" />
-        <Row k="Workers busy" v={`${String(data.workers_busy)} of ${String(data.worker_ceiling)}`} />
+        <Row k="Workers busy" v={String(data.workers_busy)} />
         <Row k="Stuck turns" v={String(data.stale_turns)} />
       </div>
     );

@@ -33,19 +33,15 @@ async def test_vaic_cannot_answer_a_question_with_words_the_owner_did_not_say() 
     assert [m for m in c.queue.sent if m.get("kind") == "answer"][-1]["body"].endswith(": Light")
 
 
-async def test_no_more_workers_than_the_city_ceiling_whatever_the_prompts_do() -> None:
+async def test_no_city_wide_ceiling_on_workers_any_more() -> None:
+    # The owner removed every agent-count limit (decision 288): a busy city never refuses a goal's hire.
     c = await city()
     await job(c, "Write a book", "the book", department_name="Writing", workers=3)
     await job(c, "Build a game", "the game", department_name="Apps", workers=3)
-    await c.ledger.update_settings(
-        {"max_live_workers_city": 7, "max_workers_per_goal": 9, "max_concurrent_workers_per_department": 9}
-    )
     ctx = TurnCtx(agent_id="mgr-apps", role="manager", department="Apps", ticket_id="g-apps", task_id="t-apps")
     hire = {t.name: t for t in tools_for(c.host.d, ctx)}["hire_worker"].handler
     assert (await hire(SPEC)).startswith("Hired ")
-    assert (await hire(SPEC)).startswith(
-        "Hire refused: the whole city already has 7 workers at work (the ceiling is 7)"
-    )
+    assert (await hire(SPEC)).startswith("Hired ")
 
 
 async def test_no_more_departments_than_the_ceiling() -> None:

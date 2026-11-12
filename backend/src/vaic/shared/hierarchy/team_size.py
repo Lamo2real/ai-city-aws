@@ -3,8 +3,9 @@
 The manager lists the goal's parts (a name, ``tiny`` or ``normal``, and the parts each one waits for). The parts
 are laid out in waves: a part starts in the wave after the last part it waits for. Tiny parts (a one-line edit, a
 config value, "change it to 4 pairs") are folded together: all the tiny parts of a wave are one worker's job, and
-a wave of tiny parts next to a real part is done by that part's worker. The team is the widest wave, capped at the
-goal's ceiling. The owner's own number ("use 5 agents") wins, capped only at the hard ceiling.
+a wave of tiny parts next to a real part is done by that part's worker. The team is the widest wave, with no ceiling
+(the owner, decision 288: "No limit on agents… If it needs 1,000, be my guest"); more workers than parallel parts
+would only be slower. The owner's own number ("use 5 agents") wins.
 
 Pure and deterministic: the same parts always give the same team and the same one-line reason.
 """
@@ -15,7 +16,7 @@ from dataclasses import dataclass
 from typing import Any
 
 TINY, NORMAL = "tiny", "normal"
-MAX_PARTS = 30
+MAX_PARTS = 1000
 
 
 @dataclass(frozen=True)
@@ -93,18 +94,16 @@ def _names(ps: list[str]) -> str:
     return ps[0] if len(ps) == 1 else ", ".join(ps[:-1]) + " and " + ps[-1]
 
 
-def size_team(parts: list[Part], *, ceiling: int, hard_cap: int, owner_asked: int | None = None) -> Team:
-    """The team for a goal. ``ceiling``: the most workers one goal gets by itself (Settings, workers per goal);
-    ``hard_cap``: the most it may ever get, the owner's number included (Settings, workers per department)."""
-    hard_cap = max(1, hard_cap)
+def size_team(parts: list[Part], *, owner_asked: int | None = None) -> Team:
+    """The team for a goal: the owner's number, or as many workers as parts can run at the same time."""
     if owner_asked:
-        n = min(owner_asked, hard_cap)
-        why = f"{n} worker{'s' if n != 1 else ''}: the owner asked for {owner_asked}"
-        return Team(n, why + (f" (the ceiling is {hard_cap})" if n < owner_asked else ""))
+        return Team(
+            owner_asked, f"{owner_asked} worker{'s' if owner_asked != 1 else ''}: the owner asked for {owner_asked}"
+        )
     ws = waves(parts)
     sizes = [_wave_workers(w) for w in ws]
     widest = max(sizes)
-    n = max(1, min(widest, ceiling, hard_cap))
+    n = max(1, widest)
     wide = ws[sizes.index(widest)]
     real = [p.name for p in wide if p.size == NORMAL]
     plural = "s" if n != 1 else ""
@@ -112,10 +111,11 @@ def size_team(parts: list[Part], *, ceiling: int, hard_cap: int, owner_asked: in
         what = "a small change" if len(parts) == 1 else "small changes"
         why = f"1 worker: {what} ({_names([p.name for p in parts])})"
     elif len(real) > 1:
-        why = f"{n} worker{plural}: {_names(real)} run in parallel" + (f" (capped at {n})" if n < widest else "")
+        shown = real if len(real) <= 6 else [*real[:5], f"{len(real) - 5} more"]
+        why = f"{n} worker{plural}: {_names(shown)} run in parallel"
         later = [p.name for w in ws for p in w if p not in wide and p.size == NORMAL]
         if later:
-            why += f"; then {_names(later)}"
+            why += f"; then {_names(later if len(later) <= 6 else [*later[:5], f'{len(later) - 5} more'])}"
     elif len(parts) == 1:
         why = f"1 worker: {real[0]} is one piece of work"
     elif len(ws) == 1:

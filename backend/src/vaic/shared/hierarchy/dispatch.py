@@ -1,11 +1,13 @@
 """The dispatcher's decisions, without AWS.
 
-Before any turn starts it checks the spend caps, the concurrency ceilings and the new-session
-rate. Work above a ceiling waits in the queue and starts when a slot frees. Nothing is dropped.
+Before any turn starts it checks the spend caps and the new-session rate. There is no ceiling on how many agents
+work (the owner, decision 288); when AWS throttles a start (AgentCore's session quota or rate, a busy runtime), the
+message waits in the queue with a growing, jittered delay and starts later. Nothing is dropped.
 """
 
 from __future__ import annotations
 
+import random
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol, cast
@@ -15,8 +17,31 @@ from ..events import EventBus
 from ..ledger import Ledger, day_key
 from .queue import Queue, WorkMessage
 
-DispatchOutcome = Literal["started", "duplicate", "cancelled", "deferred:cap", "deferred:ceiling", "deferred:rate"]
+DispatchOutcome = Literal[
+    "started", "duplicate", "cancelled", "deferred:cap", "deferred:ceiling", "deferred:rate", "deferred:throttled"
+]
 DEFER_SECONDS = {"cap": 900, "ceiling": 15, "rate": 1}
+THROTTLE_MAX_SECONDS = 120
+_THROTTLED = (
+    "ThrottlingException",
+    "ServiceQuotaExceededException",
+    "TooManyRequestsException",
+    "LimitExceededException",
+    "ConcurrentInvocationLimitExceeded",
+)
+
+
+def throttled(e: BaseException) -> bool:
+    """AWS said "not now" (a quota or a rate), not "no": the turn should simply start a little later."""
+    code = str(getattr(e, "response", {}).get("Error", {}).get("Code", "")) if hasattr(e, "response") else ""
+    text = f"{type(e).__name__} {code} {e}"
+    return any(t in text for t in _THROTTLED) or "Rate exceeded" in text or "throttl" in text.lower()
+
+
+def throttle_delay(deferrals: int, rnd: random.Random | None = None) -> int:
+    """Exponential with full jitter: 2, 4, 8 … seconds, at most two minutes, never zero."""
+    top = min(THROTTLE_MAX_SECONDS, 2 ** (1 + min(deferrals, 10)))
+    return max(1, round((rnd or random).uniform(top / 2, top)))
 
 
 class AgentInvoker(Protocol):
@@ -88,15 +113,8 @@ class Dispatcher:
             return "deferred:cap"
         is_worker = m["role"] == "worker"
         dept = m["department"]
-        if (
-            is_worker
-            and dept
-            and not await ledger.acquire_worker_slot(
-                dept, s["max_concurrent_workers_per_department"], s["max_concurrent_workers_global"]
-            )
-        ):
-            await self._defer(m, DEFER_SECONDS["ceiling"])
-            return "deferred:ceiling"
+        if is_worker and dept:
+            await ledger.acquire_worker_slot(dept)  # counted for "workers busy"; no ceiling (decision 288)
 
         async def release() -> None:
             if is_worker and dept:
@@ -116,11 +134,15 @@ class Dispatcher:
             # wait (120 s); a wait cut short put the message, and the rest of its batch, back on the queue for
             # 16 minutes, so the owner saw jobs open with nobody working (decision 178).
             await self.d.invoker.invoke({**m, "sessionId": self.d.session_id_for(m), "async": m["role"] != "vaic"})
-        except Exception:
-            # The runtime never started the turn: give the slot back and let SQS deliver it again.
+        except Exception as e:
+            # The runtime never started the turn: give the slot back.
             await release()
             await ledger.abandon_work(m["id"])
-            raise
+            if throttled(e):
+                # A quota or rate said "not now": try again shortly, with back-off, instead of failing the build.
+                await self._defer(m, throttle_delay(int(m.get("deferrals", 0))))
+                return "deferred:throttled"
+            raise  # anything else: SQS delivers it again
         return "started"
 
     async def _cancelled(self, m: WorkMessage) -> bool:

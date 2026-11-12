@@ -415,13 +415,9 @@ async def test_agent_instructions_reach_the_right_worker_with_its_manager_copied
     assert "no working agent" in await instruct_agent(city.deps, "nobody", "x")
 
 
-async def test_500_concurrent_hires_respect_the_ceilings_and_queue_the_rest() -> None:
-    city = make_city(
-        scripted_engine({}),
-        max_concurrent_workers_per_department=100,
-        max_concurrent_workers_global=150,
-        max_new_sessions_per_second=20,
-    )
+async def test_500_concurrent_hires_have_no_city_ceiling_and_wait_out_aws_throttling() -> None:
+    # No agent-count limit (decision 288): only AWS says "not now", here an AgentCore session quota of 150.
+    city = make_city(scripted_engine({}), max_new_sessions_per_second=20)
     for name, n in (("Builders", 300), ("Research", 200)):
         mgr = await _manager_agent(city, name)
         for _ in range(n):
@@ -452,8 +448,13 @@ async def test_500_concurrent_hires_respect_the_ceilings_and_queue_the_rest() ->
     peak = peak_eng = peak_res = per_second_max = deferred = 0
     s = await city.deps.settings()
 
+    class ServiceQuotaExceededException(Exception):
+        pass
+
     class Invoker:
         async def invoke(self, inv: dict[str, Any]) -> None:
+            if len(running) >= 150:
+                raise ServiceQuotaExceededException("Active session workloads per account exceeded")
             assert inv["id"] not in started  # each starts exactly once
             started.add(inv["id"])
             running[inv["id"]] = inv["department"]
@@ -482,10 +483,11 @@ async def test_500_concurrent_hires_respect_the_ceilings_and_queue_the_rest() ->
     while len(started) < 500 and second < 400:
         this_second = 0
         for m in city.queue.take_ready():
-            out = await dispatcher.handle(m)
+            out = await dispatcher.handle(m)  # throttling never raises: the message waits and tries again
             if out == "started":
                 this_second += 1
             else:
+                assert out in ("deferred:throttled", "deferred:rate")
                 deferred += 1
             eng = sum(1 for d in running.values() if d == "Builders")
             peak = max(peak, len(running))
@@ -495,12 +497,9 @@ async def test_500_concurrent_hires_respect_the_ceilings_and_queue_the_rest() ->
         await finish(5)  # a few turns end every second
         city.advance(1000)
         second += 1
-    assert len(started) == 500
-    assert peak <= 150
-    assert peak_eng <= 100
-    assert peak_res <= 100
+    assert len(started) == 500  # every one started, none failed
+    assert peak == 150  # AWS's quota was reached; the city itself never stopped one
     assert per_second_max <= 20
-    assert peak == 150  # the ceilings were actually reached
     assert deferred > 0  # the rest waited in the queue
 
 

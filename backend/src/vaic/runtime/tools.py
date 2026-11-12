@@ -157,7 +157,7 @@ def _obj(props: dict[str, dict[str, Any]], optional: tuple[str, ...] = ()) -> di
 _STRS = {"type": "array", "items": {"type": "string"}}
 _VERDICT = {"type": "string", "enum": ["PASS", "FAIL"]}
 # The exact number of workers the owner asked for on a task (the owner's choice, 2026-11-08); absent = the team decides.
-_WORKERS = {"type": "integer", "minimum": 1, "maximum": 100}
+_WORKERS = {"type": "integer", "minimum": 1, "maximum": 100_000}
 
 
 def _workers(v: Any) -> int | None:
@@ -165,7 +165,7 @@ def _workers(v: Any) -> int | None:
         n = int(v)
     except (TypeError, ValueError):
         return None
-    return n if 1 <= n <= 100 else None
+    return n if 1 <= n <= 100_000 else None
 
 
 def validate_args(schema: dict[str, Any], args: dict[str, Any]) -> str | None:
@@ -1188,12 +1188,9 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             parts = parse_parts(a.get("parts"))
         except PlanError as e:
             return f"Not planned: {e}"
-        s = await d.settings()
-        dept_cap = int(s.get("max_concurrent_workers_per_department") or 10)
-        ceiling = int(s.get("max_workers_per_goal") or 3)
         asked = _workers(goal_t.get("workers"))
         try:
-            team = size_team(parts, ceiling=ceiling, hard_cap=dept_cap, owner_asked=asked)
+            team = size_team(parts, owner_asked=asked)  # no ceiling on the count (decision 288)
         except PlanError as e:
             return f"Not planned: {e}"
         names = [p.name for p in parts]
@@ -1221,74 +1218,52 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         )
 
     async def hire(a: dict[str, Any]) -> str:
-        # Hard caps on hiring (the owner's choice after a 50-sentence request hired 21 workers): a manager
-        # may have at most max_workers_per_goal live workers on one goal, and a department at most
-        # max_concurrent_workers_per_department live workers. Workers hired before goal ids existed count
-        # against the goal, to be safe.
+        # No cap on how many agents work (the owner, decision 288): a goal gets the team plan_team sized from its
+        # parts, or the owner's exact number. Real limits come from AWS; the dispatcher waits them out.
         stood = await d.ledger.get_department(dept) or {}
         if stood.get("stood_down_at"):
             log("info", "hire.refused", department=dept, reason="stood down")
             return f"Hire refused: {STAND_DOWN_NOTE}"
-        s = await d.settings()
         goal_t = await d.ledger.get_ticket(c.ticket_id) if c.ticket_id else None
-        asked = _workers((goal_t or {}).get("workers"))  # the owner's exact number: it replaces the caps below
-        city_cap = int(s.get("max_live_workers_city") or 10)
-        city_live = len(await workers_at_work(d))
-        if city_live >= city_cap and not asked:
-            log("info", "hire.refused", department=dept, live_city=city_live, cap=city_cap)
-            return (
-                f"Hire refused: the whole city already has {city_live} workers at work (the ceiling is {city_cap}). "
-                "Wait for one to finish, or do it with the workers you have."
-            )
-        dept_cap = int(s.get("max_concurrent_workers_per_department") or 10)
+        asked = _workers((goal_t or {}).get("workers"))  # the owner's exact number
         # The team size decided for this goal (decision 283): plan_team's number, or the owner's exact one.
         planned = _workers((goal_t or {}).get("team_size"))
         if goal_t is not None and planned is None:
             # No plan yet: the owner's number, or one worker by default; plan_team is how a goal gets more.
             if asked:
-                team = size_team([], ceiling=dept_cap, hard_cap=dept_cap, owner_asked=asked)
+                team = size_team([], owner_asked=asked)
                 n, why = team.workers, team.reason
             else:
                 n, why = 1, "1 worker: no parts were listed, so one worker by default"
             await _record_team(goal_t, n, why, [])
             planned = n
-        goal_cap = planned or asked or int(s.get("max_workers_per_goal") or 3)
-        live = [
-            w
-            for w in await d.ledger.department_agents(dept)
-            if w.get("kind") == "worker" and w.get("state") != "retired"
-        ]
-        # On this goal: workers hired for it, and goal-less (older) workers only while they are actually working.
-        # An idle goal-less worker left over from earlier work never blocks a new goal.
-        on_goal = [
-            w
-            for w in live
-            if w.get("parent") == c.agent_id
-            and (w.get("goal_id") == c.ticket_id or (w.get("goal_id") is None and w.get("worker_state") == "working"))
-        ]
-        if len(on_goal) >= goal_cap:
-            log("info", "hire.refused", department=dept, goal=c.ticket_id, on_goal=len(on_goal), cap=goal_cap)
-            names = ", ".join(
-                f"{w['id']} ({w.get('specialty') or w.get('role')}, {w.get('worker_state')})" for w in on_goal
-            )
-            why = (
-                f"the owner asked for exactly {asked}"
-                if asked
-                else f"the team for this goal is {goal_cap}; plan_team sizes it from the parts, and grows it only for a "
-                "new independent part"
-                if planned
-                else f"the cap is {goal_cap}"
-            )
-            return (
-                f"Hire refused: you already have {len(on_goal)} workers on this goal ({why}): {names}. "
-                "Assign one of them with `assign`, or free a place with `release_worker` (idle or finished ones)."
-            )
-        if len(live) >= dept_cap and not asked:  # the owner's number is already capped at dept_cap
-            log("info", "hire.refused", department=dept, live=len(live), cap=dept_cap)
-            return (
-                f"Hire refused: the department already has {len(live)} workers at once (the ceiling is {dept_cap}). "
-                "Wait for one to finish."
-            )
+        if planned:
+            # On this goal: workers hired for it, and goal-less (older) workers only while they are working.
+            on_goal = [
+                w
+                for w in await d.ledger.department_agents(dept)
+                if w.get("kind") == "worker"
+                and w.get("state") != "retired"
+                and w.get("parent") == c.agent_id
+                and (
+                    w.get("goal_id") == c.ticket_id or (w.get("goal_id") is None and w.get("worker_state") == "working")
+                )
+            ]
+            if len(on_goal) >= planned:
+                log("info", "hire.refused", department=dept, goal=c.ticket_id, on_goal=len(on_goal), team=planned)
+                names = ", ".join(
+                    f"{w['id']} ({w.get('specialty') or w.get('role')}, {w.get('worker_state')})" for w in on_goal
+                )
+                why = (
+                    f"the owner asked for exactly {asked}"
+                    if asked
+                    else f"the team for this goal is {planned}; plan_team sizes it from the parts, and grows it only "
+                    "for a new independent part"
+                )
+                return (
+                    f"Hire refused: you already have {len(on_goal)} workers on this goal ({why}): {names}. "
+                    "Assign one of them with `assign`, or free a place with `release_worker` (idle or finished ones)."
+                )
         try:
             w = await d.factory.hire(a, c.agent_id, dept)
         except Exception as e:
@@ -1549,7 +1524,7 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                     "parts": {
                         "type": "array",
                         "minItems": 1,
-                        "maxItems": 30,
+                        "maxItems": 1000,
                         "items": {
                             "type": "object",
                             "properties": {

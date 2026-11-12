@@ -75,9 +75,9 @@ async def test_without_a_number_the_planned_team_applies() -> None:
         "plan_team",
     )
     await plan({"parts": [{"name": f"chapter {i}", "size": "normal"} for i in range(5)]})
-    for _ in range(3):  # five parallel parts, capped at the goal ceiling of 3
+    for _ in range(5):  # five parallel parts, five workers: no ceiling (decision 288)
         assert (await hire(SPEC)).startswith("Hired ")
-    assert "the team for this goal is 3" in await hire(SPEC)
+    assert "the team for this goal is 5" in await hire(SPEC)
 
 
 async def test_assignments_of_released_workers_never_block_the_goal() -> None:

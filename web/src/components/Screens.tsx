@@ -363,10 +363,6 @@ type S = Record<string, unknown> & {
   monthly_budget_usd: number | null;
   daily_global_usd: number | null;
   daily_department_usd: number | null;
-  max_workers_per_goal: number;
-  max_concurrent_workers_per_department: number;
-  max_concurrent_workers_global: number;
-  max_live_workers_city: number;
   max_open_jobs: number;
   max_departments: number;
   max_new_sessions_per_second: number;
@@ -668,32 +664,11 @@ function SettingsPageView({
               Caps must be zero or more dollars, or empty for no limit.
             </p>
           ) : null}
-          <h2>How many workers at once</h2>
+          <h2>Work at once</h2>
+          <p className="muted">
+            No limit on agents: each build gets as many workers as its parts can run at the same time.
+          </p>
           <div className="fields">
-            <Field
-              label="Per goal (one manager's team)"
-              value={form.max_workers_per_goal}
-              onChange={(v) => num("max_workers_per_goal", v)}
-              step={1}
-            />
-            <Field
-              label="Per department"
-              value={form.max_concurrent_workers_per_department}
-              onChange={(v) => num("max_concurrent_workers_per_department", v)}
-              step={1}
-            />
-            <Field
-              label="In total"
-              value={form.max_concurrent_workers_global}
-              onChange={(v) => num("max_concurrent_workers_global", v)}
-              step={1}
-            />
-            <Field
-              label="At work in the whole city (hard ceiling)"
-              value={form.max_live_workers_city}
-              onChange={(v) => num("max_live_workers_city", v)}
-              step={1}
-            />
             <Field
               label="Jobs running at once (hard ceiling)"
               value={form.max_open_jobs}

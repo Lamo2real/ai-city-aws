@@ -50,7 +50,7 @@ async def test_vaic_reads_and_changes_a_setting_like_the_hud() -> None:
 
 async def test_the_routes_own_checks_still_apply() -> None:
     _, _, t = wired()
-    out = await t["city_api"].handler({"method": "PUT", "path": "/settings", "body": {"max_workers_per_goal": 0}})
+    out = await t["city_api"].handler({"method": "PUT", "path": "/settings", "body": {"max_open_jobs": 0}})
     assert "Not staged" in out and "whole number" in out
     out = await t["city_api"].handler(
         {"method": "PUT", "path": "/settings", "body": {"max_new_sessions_per_second": 30}}
@@ -63,25 +63,25 @@ async def test_a_limit_change_is_shown_with_yes_and_no_then_saved_on_yes() -> No
     c, api, t = wired()
     bus: MemoryBus = c.bus  # type: ignore[assignment]
     out = await t["city_api"].handler(
-        {"method": "PUT", "path": "/settings", "body": {"max_workers_per_goal": 65, "max_new_sessions_per_second": 3}}
+        {"method": "PUT", "path": "/settings", "body": {"max_open_jobs": 65, "max_new_sessions_per_second": 3}}
     )
     assert 'ask "Save it?"' in out
     q = [e for e in bus.events if e["type"] == "vaic.question"][-1]
     assert q["options"] == ["Yes", "No"] and q["question"] == "Save it?"
     assert q["title"] == "Settings → Limits & spending" and q["id"].startswith("chg-")
-    before = (await api.settings())["max_workers_per_goal"]
+    before = (await api.settings())["max_open_jobs"]
     assert q["lines"] == [
-        f"Workers per goal (one manager's team): {before} → 65",
+        f"Jobs running at once: {before} → 65",
         f"New workers per second: {(await api.settings())['max_new_sessions_per_second']} → 3",
     ]
     # The same turn can't say yes for the owner.
     assert "same turn" in await t["save_change"].handler({"answer": "yes"})
-    assert (await api.settings())["max_workers_per_goal"] == before
+    assert (await api.settings())["max_open_jobs"] == before
     # The owner's next message ("Yes", a tap, typed or spoken) is a new turn.
     out = await turn(c)["save_change"].handler({"answer": "yes"})
     assert out.startswith("Saved")
     s = await api.settings()
-    assert s["max_workers_per_goal"] == 65 and s["max_new_sessions_per_second"] == 3
+    assert s["max_open_jobs"] == 65 and s["max_new_sessions_per_second"] == 3
     done = [e for e in bus.events if e["type"] == "vaic.change"]
     assert done == [{"type": "vaic.change", "conversation": "main", "id": q["id"], "saved": True, **_at(done[0])}]
     assert "Nothing is waiting" in await turn(c)["save_change"].handler({"answer": "yes"})
@@ -94,20 +94,20 @@ def _at(e: dict[str, Any]) -> dict[str, Any]:
 async def test_no_discards_the_change() -> None:
     c, api, t = wired()
     bus: MemoryBus = c.bus  # type: ignore[assignment]
-    await t["city_api"].handler({"method": "PUT", "path": "/settings", "body": {"max_workers_per_goal": 65}})
+    await t["city_api"].handler({"method": "PUT", "path": "/settings", "body": {"max_open_jobs": 65}})
     out = await turn(c)["save_change"].handler({"answer": "no"})
     assert out.startswith("Discarded")
-    assert (await api.settings())["max_workers_per_goal"] != 65
+    assert (await api.settings())["max_open_jobs"] != 65
     assert [e["saved"] for e in bus.events if e["type"] == "vaic.change"] == [False]
     assert "Nothing is waiting" in await turn(c)["save_change"].handler({"answer": "yes"})
 
 
 async def test_a_newer_change_replaces_the_waiting_one() -> None:
     c, api, t = wired()
-    await t["city_api"].handler({"method": "PUT", "path": "/settings", "body": {"max_workers_per_goal": 65}})
-    await turn(c)["city_api"].handler({"method": "PUT", "path": "/settings", "body": {"max_workers_per_goal": 66}})
+    await t["city_api"].handler({"method": "PUT", "path": "/settings", "body": {"max_open_jobs": 65}})
+    await turn(c)["city_api"].handler({"method": "PUT", "path": "/settings", "body": {"max_open_jobs": 66}})
     await turn(c)["save_change"].handler({"answer": "yes"})
-    assert (await api.settings())["max_workers_per_goal"] == 66
+    assert (await api.settings())["max_open_jobs"] == 66
 
 
 @pytest.mark.parametrize(
@@ -131,8 +131,8 @@ async def test_spend_caps_are_the_owners_setting_and_staged_too() -> None:
 
 async def test_an_unchanged_value_stages_nothing() -> None:
     _, api, t = wired()
-    cur = (await api.settings())["max_workers_per_goal"]
-    out = await t["city_api"].handler({"method": "PUT", "path": "/settings", "body": {"max_workers_per_goal": cur}})
+    cur = (await api.settings())["max_open_jobs"]
+    out = await t["city_api"].handler({"method": "PUT", "path": "/settings", "body": {"max_open_jobs": cur}})
     assert "already have those values" in out
 
 
@@ -277,7 +277,7 @@ def test_the_answer_is_cut_to_fit() -> None:
     [
         ("save_change", {"answer": "yes"}),
         ("find_skill", {"query": "release notes"}),
-        ("city_api", {"method": "PUT", "path": "/settings", "body": {"max_workers_per_goal": 65}}),
+        ("city_api", {"method": "PUT", "path": "/settings", "body": {"max_open_jobs": 65}}),
     ],
 )
 def test_the_new_tools_pass_the_policy_gate(tool: str, args: dict[str, Any]) -> None:

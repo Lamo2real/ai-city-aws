@@ -565,8 +565,16 @@ class Ledger:
         return [_strip(i) for i in await self.table.query(f"TURN#{agent_id}")]
 
     # ---------- concurrency slots and the session rate limit ----------
-    async def acquire_worker_slot(self, department: str, per_dept: int, global_: int) -> bool:
-        """Takes a worker slot in the department and globally, or returns False when a ceiling is reached."""
+    async def acquire_worker_slot(
+        self, department: str, per_dept: int | None = None, global_: int | None = None
+    ) -> bool:
+        """Takes a worker slot in the department and globally, or returns False when a ceiling is reached. The city
+        sets no ceiling any more (decision 288): the counts only feed "workers busy"."""
+        if per_dept is None and global_ is None:
+            await self.table.update("SLOTS", "GLOBAL", UpdateOptions(add={"active": 1}))
+            await self.table.update("SLOTS", f"DEPT#{department_key(department)}", UpdateOptions(add={"active": 1}))
+            return True
+        assert per_dept is not None and global_ is not None
         g = await self.table.update(
             "SLOTS", "GLOBAL", UpdateOptions(add={"active": 1}, add_limit=AddLimit("active", global_))
         )

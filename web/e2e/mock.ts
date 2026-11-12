@@ -344,12 +344,8 @@ export async function mockBackend(
       daily_global_usd: 10,
       daily_department_usd: 5,
       department_caps: {},
-      max_workers_per_goal: 3,
-      max_live_workers_city: 10,
       max_open_jobs: 3,
       max_departments: 6,
-      max_concurrent_workers_per_department: 100,
-      max_concurrent_workers_global: 2450,
       max_new_sessions_per_second: 20,
       profile_prefix: "global",
       notify_push: true,
@@ -1226,7 +1222,7 @@ export async function mockBackend(
     }
     if (path === "/workflows" && req.method() === "GET") return ok({ workflows: [], runs: [] });
     if (path === "/workforce") return ok({ workers: [], specialists: [] });
-    if (path === "/health") return ok({ workers_busy: 0, worker_ceiling: 2450, stale_turns: 0 });
+    if (path === "/health") return ok({ workers_busy: 0, stale_turns: 0 });
     // ---------- connectors, skills, mail (CONNECTORS_SKILLS.md §1.7, §2.4; MAIL_CALENDAR.md §4) ----------
     const method = req.method();
     if (path === "/connectors" && method === "GET") return ok({ connectors: m.connectors });

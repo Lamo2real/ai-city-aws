@@ -26,10 +26,6 @@ def default_settings() -> dict[str, Any]:
         "daily_global_usd": c["daily_global_usd"],
         "daily_department_usd": c["daily_department_usd"],
         "department_caps": {},
-        "max_workers_per_goal": c["max_workers_per_goal"],
-        "max_concurrent_workers_per_department": c["max_concurrent_workers_per_department"],
-        "max_concurrent_workers_global": c["max_concurrent_workers_global"],
-        "max_live_workers_city": c["max_live_workers_city"],
         "max_open_jobs": c["max_open_jobs"],
         "max_departments": c["max_departments"],
         "max_new_sessions_per_second": c["max_new_sessions_per_second"],
@@ -134,10 +130,6 @@ def validate_caps(patch: dict[str, Any]) -> str | None:
 
 CAP_KEYS = ("daily_global_usd", "monthly_budget_usd", "daily_department_usd")
 WHOLE_KEYS = (
-    "max_workers_per_goal",
-    "max_concurrent_workers_per_department",
-    "max_concurrent_workers_global",
-    "max_live_workers_city",
     "max_open_jobs",
     "max_departments",
     "max_new_sessions_per_second",

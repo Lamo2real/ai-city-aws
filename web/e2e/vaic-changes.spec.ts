@@ -16,7 +16,7 @@ const sent = (m: Awaited<ReturnType<typeof mockBackend>>) =>
 test("a limit changed from the chat is saved only after Yes and shows in Settings", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/#/vaic");
-  await say(page, "set workers per manager's team to 65 and new workers per second to 2");
+  await say(page, "set jobs at once to 5 and new workers per second to 2");
   m.send({
     type: "vaic.question",
     conversation: "main",
@@ -24,11 +24,11 @@ test("a limit changed from the chat is saved only after Yes and shows in Setting
     options: ["Yes", "No"],
     id: "chg-1",
     title: "Settings → Limits & spending",
-    lines: ["Workers per goal (one manager's team): 3 → 65", "New workers per second: 1 → 2"],
+    lines: ["Jobs running at once: 3 → 5", "New workers per second: 1 → 2"],
   });
-  m.send({ type: "vaic.reply", conversation: "main", text: "Workers per goal to 65 and 2 a second, Sir.", done: true });
+  m.send({ type: "vaic.reply", conversation: "main", text: "Five jobs at once and 2 a second, Sir.", done: true });
   const card = page.getByRole("group", { name: "Settings → Limits & spending" });
-  await expect(card).toContainText("3 → 65");
+  await expect(card).toContainText("3 → 5");
   await expect(card).toContainText("Do you want to save these changes?");
   const r = await new AxeBuilder({ page }).include(".ask-card").withTags(["wcag2a", "wcag2aa"]).analyze();
   expect(r.violations.filter((v) => v.impact === "serious" || v.impact === "critical")).toEqual([]);
@@ -37,12 +37,12 @@ test("a limit changed from the chat is saved only after Yes and shows in Setting
   await expect.poll(() => sent(m).at(-1)).toBe("Yes");
   await expect(card.getByRole("button", { name: "Yes" })).toHaveCount(0);
   // VAIC's save_change: the city saves it and says so.
-  Object.assign(m.settings, { max_workers_per_goal: 65, max_new_sessions_per_second: 2 });
+  Object.assign(m.settings, { max_open_jobs: 5, max_new_sessions_per_second: 2 });
   m.send({ type: "vaic.change", conversation: "main", id: "chg-1", saved: true });
   await expect(card.getByRole("status")).toHaveText("Saved.");
 
   await page.goto("/#/settings/limits");
-  await expect(page.getByLabel("Per goal (one manager's team)")).toHaveValue("65");
+  await expect(page.getByLabel("Jobs running at once (hard ceiling)")).toHaveValue("5");
   await expect(page.getByLabel("New workers per second (max 25)")).toHaveValue("2");
 });
 

@@ -4,9 +4,8 @@ Workers are unlimited by design. What actually limits how many run **at once**:
 
 | Limit | Real? | Default here | Where it's set | What happens at the limit |
 |---|---|---|---|---|
-| AgentCore concurrent sessions | **Real (AWS quota)** — 2,500 in Stockholm (5,000 in us-east-1/us-west-2), adjustable | `max_concurrent_workers_global` = 2,450 (2,500 − 50 kept for VAIC, Orchestrator, managers) | Settings / `config/caps.json` | Work waits in the worker queue and starts when a slot frees |
+| AgentCore concurrent sessions | **Real (AWS quota)** — 2,500 in Stockholm (5,000 in us-east-1/us-west-2), adjustable | No city ceiling (decision 288) | Service Quotas | The start is throttled; the dispatcher waits 2 s, 4 s … up to 2 min with jitter and tries again |
 | New AgentCore sessions per second | **Real** — 25/s, adjustable | `max_new_sessions_per_second` = 20 | Settings (API refuses > 25) | Deferred 1 s |
-| Workers per department | City ceiling (config) | 100 | Settings | Waits in the queue |
 | AgentCore runtimes per account | Real — 1,000 | 4 used | — | Never reached: departments and workers are sessions |
 | Session hardware | Real — 2 vCPU / 8 GB per session, not adjustable | — | — | Big jobs must be split by the manager |
 | Async job length | Real — 8 h (microVMs), not adjustable | 7.5 h soft limit | `async_job_soft_limit_minutes` | The worker reports before it is stopped; longer work must be split |
@@ -22,6 +21,6 @@ The City view gives each department a building whose terrace grows a row of desk
 
 ## Service Quotas to request before heavy use
 1. **Bedrock** in the chosen region, for each model you'll use heavily (Opus 5.5 for workers, Fable 5.1 for coordinators): "tokens per minute" and "requests per minute" for the **global cross-region** profile. The defaults for new accounts can be low; ask for what a busy day needs (rough guide: 50 concurrent Opus workers ≈ several million tokens per minute with caching).
-2. **AgentCore Runtime**: "Active session workloads per account" if you set `max_concurrent_workers_global` above 2,450; "New session creation rate" above 25/s.
+2. **AgentCore Runtime**: "Active session workloads per account" (2,500 in Stockholm) caps how many agents run at once now that the city sets no ceiling (decision 288); "New session creation rate" above 25/s.
 3. **Lambda** concurrent executions if you raise the dispatcher's reserved concurrency or the worker queue's maximum concurrency much.
-Then raise the city ceilings in Settings to match.
+Then raise `max_new_sessions_per_second` in Settings to match the session rate; there is no agent-count setting any more.

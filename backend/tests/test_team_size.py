@@ -10,8 +10,8 @@ from vaic.shared.hierarchy.actions import status_summary
 from vaic.shared.hierarchy.team_size import Part, PlanError, parse_parts, size_team
 
 
-def size(parts: list[dict[str, Any]], ceiling: int = 3, hard_cap: int = 10, asked: int | None = None) -> Any:
-    return size_team(parse_parts(parts), ceiling=ceiling, hard_cap=hard_cap, owner_asked=asked)
+def size(parts: list[dict[str, Any]], asked: int | None = None) -> Any:
+    return size_team(parse_parts(parts), owner_asked=asked)
 
 
 def test_a_tiny_edit_gets_one_worker() -> None:
@@ -63,12 +63,15 @@ def test_the_owner_override_wins_over_the_parts() -> None:
     assert t.workers == 5 and t.reason == "5 workers: the owner asked for 5"
 
 
-def test_caps_are_respected() -> None:
-    many = [{"name": f"part {i}", "size": "normal"} for i in range(8)]
-    assert size(many, ceiling=3).workers == 3 and "capped at 3" in size(many, ceiling=3).reason
-    assert size(many, ceiling=20, hard_cap=4).workers == 4
-    over = size(many, hard_cap=10, asked=40)
-    assert over.workers == 10 and "the owner asked for 40 (the ceiling is 10)" in over.reason
+def test_no_ceiling_500_parallel_parts_get_500_workers() -> None:
+    # The owner (decision 288): "No limit on agents, absolutely no limit."
+    t = size([{"name": f"part {i}", "size": "normal"} for i in range(500)])
+    assert (
+        t.workers == 500
+        and t.reason.startswith("500 workers: part 0, part 1")
+        and "495 more run in parallel" in t.reason
+    )
+    assert size([{"name": "x", "size": "tiny"}], asked=1000).workers == 1000
 
 
 def test_bad_plans_are_refused() -> None:
@@ -77,7 +80,7 @@ def test_bad_plans_are_refused() -> None:
     with pytest.raises(PlanError):
         parse_parts([{"name": "a", "after": ["nope"]}])
     with pytest.raises(PlanError):
-        size_team([Part("a", after=("b",)), Part("b", after=("a",))], ceiling=3, hard_cap=10)
+        size_team([Part("a", after=("b",)), Part("b", after=("a",))])
 
 
 # ---------- the manager's planner ----------
@@ -137,7 +140,7 @@ async def test_the_planner_sizes_a_tiny_change_to_one_worker_and_logs_why() -> N
 
 
 async def test_three_parallel_parts_hire_three_and_a_new_part_mid_build_adds_one() -> None:
-    city = make_city(scripted_engine({}), max_workers_per_goal=5)
+    city = make_city(scripted_engine({}))
     mgr = await manager(city, "Application")
     gid, tid = await goal(city, mgr)  # type: ignore[misc]
     plan = tool(city, mgr, gid, tid, "plan_team")
@@ -179,3 +182,15 @@ async def test_without_a_plan_a_goal_gets_one_worker_and_says_why() -> None:
     parts = [{"name": n, "size": "normal"} for n in ("UI", "game logic")]
     assert "Hire exactly 2" in await tool(city, mgr, gid, tid, "plan_team")({"parts": parts})
     assert (await hire(SPEC)).startswith("Hired ")
+
+
+async def test_the_planner_hires_500_workers_for_500_parallel_parts() -> None:
+    city = make_city(scripted_engine({}))
+    mgr = await manager(city, "Application")
+    gid, tid = await goal(city, mgr)  # type: ignore[misc]
+    parts = [{"name": f"screen {i}", "size": "normal"} for i in range(500)]
+    assert "Hire exactly 500" in await tool(city, mgr, gid, tid, "plan_team")({"parts": parts})
+    hire = tool(city, mgr, gid, tid, "hire_worker")
+    for _ in range(500):
+        assert (await hire(SPEC)).startswith("Hired ")
+    assert (await hire(SPEC)).startswith("Hire refused")  # more than the parallel parts would only be slower

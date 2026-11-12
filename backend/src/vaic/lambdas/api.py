@@ -976,12 +976,10 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
     if is_("GET", r"/costs"):
         return reply(200, await _costs(d))
     if is_("GET", r"/health"):
-        s = await d.settings()
         return reply(
             200,
             {
                 "workers_busy": await d.ledger.active_workers(),
-                "worker_ceiling": s.get("max_concurrent_workers_global"),
                 "stale_turns": len(await d.ledger.stale_work()),
             },
         )
