@@ -107,7 +107,7 @@ export function staffed(state) {
     if (have && have.standin && have.department === d.name && have.state !== "retired") continue;
     if (have && !have.standin && have.state !== "retired") continue;
     agents ??= { ...state.agents };
-    agents[id] = { id, kind: "manager", role: `${d.name} Manager`, department: d.name, model: "fable-5-1", parent: "orchestrator", state: "dormant", worker_state: null, total_cost_usd: 0, standin: true };
+    agents[id] = { id, kind: "manager", role: `${d.name} Reviewer`, department: d.name, model: "fable-5-1", parent: "orchestrator", state: "dormant", worker_state: null, total_cost_usd: 0, standin: true };
   }
   return agents ? { ...state, agents } : state;
 }
@@ -137,13 +137,35 @@ const an = (w) => (/^[aeiou]/i.test(w) ? "an" : "a");
 const inSentence = (role) => (/^[A-Z][a-z]+(\s|$)/.test(role) ? role.charAt(0).toLowerCase() + role.slice(1) : role);
 const shortGoal = (text) => plainText(text, 60).short;
 
+// A department's manager is its reviewer (decision 295, the build design of the project board: it checks every part its
+// department finishes), and the City calls it so: "<Department> Reviewer" wherever a role is shown.
+export const roleOf = (a) => (a?.kind === "manager" ? `${deptOf(a)} Reviewer` : a?.role ?? "");
+// The department a review belongs to: named on the event, else its reviewer's, else its ticket's.
+function reviewDept(state, event, t) {
+  const r = event.reviewer && state.agents[event.reviewer];
+  return event.department ?? (r ? deptOf(r) : null) ?? t?.department ?? (t?.to && state.agents[t.to] ? deptOf(state.agents[t.to]) : null);
+}
+// Is a department's reviewer reviewing right now (decision 295)? While it is, it works inside its tower (one lit window,
+// counted in "Agents working now"), however many parts it is checking. Today a review shows as the reviewer's
+// "reviewing" activity (its review tool), until the review's result; the board's `review.started` / `review.finished`
+// events open and close one too. A review left open is let go after REVIEW_STALE_MS.
+export const REVIEW_STALE_MS = 15 * 60_000;
+const when = (at) => (typeof at === "number" ? at : Date.parse(at ?? "") || 0);
+export function isReviewing(state, id, now = state.now) {
+  const a = state.agents[id];
+  if (!a || a.kind !== "manager" || a.state === "retired") return false;
+  const act = state.activities?.[id];
+  if (act?.activity === "reviewing" && now - when(act.at) < REVIEW_STALE_MS) return true;
+  const dept = deptOf(a);
+  return Object.values(state.reviews ?? {}).some((r) => !r.verdict && r.department === dept && now - when(r.at) < REVIEW_STALE_MS);
+}
 /** Who someone is, in words the owner knows: never an id. */
 export function plainWho(state, id) {
   if (id === "vaic") return "VAIC";
   if (id === "orchestrator") return "The planner";
   const a = state.agents?.[id];
   if (!a) return "Someone on the team";
-  if (a.kind === "manager") return `The ${deptOf(a)} manager`;
+  if (a.kind === "manager") return `The ${deptOf(a)} reviewer`;
   if (a.kind === "executive") return `The ${a.role}`;
   return a.role ? `The ${inSentence(a.role)} in ${deptOf(a)}` : `A worker in ${deptOf(a)}`;
 }
@@ -154,7 +176,7 @@ function storyOf(event, s) {
   switch (event.type) {
     case "agent.hired": {
       const a = event.agent, d = deptOf(a);
-      if (a.kind === "manager") return { key: `mgr:${d}`, one: `${d} got a manager` };
+      if (a.kind === "manager") return { key: `mgr:${d}`, one: `${d} got a reviewer` };
       if (a.kind !== "worker") return null;
       const role = a.role ? inSentence(a.role) : "worker";
       return { key: `hire:${d}`, one: `${d} hired ${an(role)} ${role}`, many: `${d} hired {n} workers` };
@@ -257,7 +279,16 @@ function reduceEvent(state, event, now) {
       if (t.status === "parked") parked[t.id] = t; else if (!terminal) tickets[t.id] = t;
       const recent = terminal ? { ...state.recent, [t.to]: { kind: t.status, at: now, ticket: t.id } } : state.recent;
       const text = event.previous === null ? `${t.to} got a ticket from ${t.from}: ${t.goal.slice(0, 60)}` : `${t.to}: ${event.previous} → ${t.status}`;
-      return { ...state, now, tickets, parked, recent, feed: feed(state, text, t.status, now) };
+      // A part under review that is finished, failed, parked or sent back to work: its review is over (decision 295).
+      const open = state.reviews?.[t.id], over = open && !open.verdict && (terminal || ["parked", "open"].includes(t.status) || (t.status === "in_progress" && event.previous === "in_review"));
+      const reviews = over ? { ...state.reviews, [t.id]: { ...open, verdict: "DONE", at: now } } : state.reviews;
+      return { ...state, now, tickets, parked, recent, reviews, feed: feed(state, text, t.status, now) };
+    }
+    case "build.stage": {
+      // The board's timing marks (decision 294): a part's review starting (and, should it come, ending) opens and
+      // closes a review of its department, so its reviewer works inside (decision 295).
+      if (event.stage !== "review" || !event.key) return state;
+      return event.edge === "start" ? reduce(state, { type: "review.started", ticket_id: event.key, round: 1 }, now) : event.edge === "end" ? reduce(state, { type: "review.finished", ticket_id: event.key }, now) : state;
     }
     case "question.asked":
       return state.questions[event.question.id] ? state : asked(state, event, now);
@@ -267,12 +298,17 @@ function reduceEvent(state, event, now) {
       return { ...state, now, questions, feed: feed(state, `${event.answered_by} answered: ${event.answer.slice(0, 60)}`, "answer", now) };
     }
     case "review.started": {
-      const t = state.tickets[event.ticket_id];
-      return { ...state, now, reviews: { ...state.reviews, [event.ticket_id]: { round: event.round, verdict: null, at: now, agent: t?.to ?? null } }, feed: feed(state, `Inspector at ${t?.to ?? event.ticket_id}'s door (round ${event.round})`, "review", now) };
+      const t = state.tickets[event.ticket_id], department = reviewDept(state, event, t);
+      return { ...state, now, reviews: { ...state.reviews, [event.ticket_id]: { round: event.round, verdict: null, at: now, agent: t?.to ?? null, department } }, feed: feed(state, `The ${department ?? "department"} reviewer is checking ${t?.to ?? event.ticket_id}'s work (round ${event.round ?? 1})`, "review", now) };
     }
-    case "review.result": {
-      const prev = state.reviews[event.ticket_id];
-      return { ...state, now, reviews: { ...state.reviews, [event.ticket_id]: { ...prev, round: event.round, verdict: event.verdict, at: now } }, feed: feed(state, `Review ${event.verdict}: ${event.summary.slice(0, 60)}`, event.verdict === "PASS" ? "pass" : "fail", now) };
+    case "review.result":
+    case "review.finished": {
+      // The review is over: the reviewer walks back out (decision 295), whatever it was doing last.
+      const prev = state.reviews[event.ticket_id], verdict = event.verdict ?? "DONE";
+      const activities = { ...state.activities };
+      for (const [aid, x] of Object.entries(activities)) if (x?.activity === "reviewing" && (aid === event.reviewer || (state.agents[aid]?.kind === "manager" && deptOf(state.agents[aid]) === (prev?.department ?? reviewDept(state, event, state.tickets[event.ticket_id]))))) activities[aid] = { activity: "idle", detail: null, at: now };
+      const next = { ...state, now, activities, reviews: { ...state.reviews, [event.ticket_id]: { ...prev, round: event.round ?? prev?.round, verdict, at: now } } };
+      return event.type === "review.result" ? { ...next, feed: feed(state, `Review ${event.verdict}: ${String(event.summary ?? "").slice(0, 60)}`, event.verdict === "PASS" ? "pass" : "fail", now) } : next;
     }
     case "cost.update": {
       const c = state.costs[event.agent] ?? { usd: 0, tokens: 0 };
@@ -287,7 +323,7 @@ function reduceEvent(state, event, now) {
       return { ...state, now, agents: { ...state.agents, [a.id]: { ...a, worker_state: event.state } }, feed: kind ? feed(state, `${a.id}: ${event.previous ?? "new"} → ${event.state}`, kind, now) : state.feed };
     }
     case "activity": {
-      const { id, activity, detail, at } = event;
+      const { id, activity, detail } = event, at = event.at ?? now; // when it arrived, if the event doesn't say
       return { ...state, now, activities: { ...state.activities, [id]: { activity, detail, at } } };
     }
     case "signoff.result":
@@ -442,7 +478,7 @@ export function placement(state, id) {
   const dept = deptOf(a);
   // A department's manager always stands at its tower's door (decision 212), dormant, idle or busy; the scene puts
   // him beside the door, never at home and never on a floor (decision 201). Only a retired one has left.
-  if (a.kind === "manager" && a.state !== "retired") return { place: "station", dept, why: hasOpenWork(state, id) ? "ticket" : "manager" };
+  if (a.kind === "manager" && a.state !== "retired") return { place: "station", dept, why: isReviewing(state, id) ? "reviewing" : hasOpenWork(state, id) ? "ticket" : "manager" };
   if (hasOpenWork(state, id)) return { place: "station", dept, why: "ticket" };
   if (a.awaiting_merge) return { place: "station", dept, why: "merge" };
   if (a.state !== "retired" && a.worker_state !== "released") return { place: "station", dept, why: "hired" }; // managers too: an idle one stays in its window
@@ -887,7 +923,7 @@ export function agentPanel(state, id, audit = []) {
   const t = currentTicket(state, id);
   const today = state.costs[id];
   return {
-    id, role: a.role, kind: a.kind, executor: a.executor ?? null, lastTicket: state.recent[id]?.ticket ?? null, model: a.model, modelName: MODEL_NAME[a.model] ?? a.model, modelColor: MODEL_COLOR[a.model] ?? "#ccc", department: deptOf(a), parent: a.parent,
+    id, role: roleOf(a), kind: a.kind, executor: a.executor ?? null, lastTicket: state.recent[id]?.ticket ?? null, model: a.model, modelName: MODEL_NAME[a.model] ?? a.model, modelColor: MODEL_COLOR[a.model] ?? "#ccc", department: deptOf(a), parent: a.parent,
     status: agentStatus(state, id),
     ticket: t ? { id: t.id, goal: t.goal, status: t.status } : null,
     actions: audit.slice(-10).map((x) => ({ at: x.ts, text: `${x.decision === "allow" ? "" : `${x.decision}: `}${x.tool}${x.reason ? ` (${x.reason})` : ""}` })),

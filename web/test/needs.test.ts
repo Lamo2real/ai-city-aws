@@ -112,7 +112,7 @@ describe("Needs you counts only what can still be answered", () => {
     expect(needsWords(needsCount(s))).toBe("3 things need you");
     const groups = byJob(needs(s));
     expect(groups.map((g) => g.job?.name ?? "Other")).toEqual(["Porsche sentences", "Other"]);
-    expect(needs(s).find((n) => n.id === "q1")?.who).toBe("The Research manager");
+    expect(needs(s).find((n) => n.id === "q1")?.who).toBe("The Research reviewer") // a manager is its department's reviewer (decision 295);
     s = reduce(s, { type: "question.withdrawn", id: "q1" });
     s = reduce(s, {
       type: "ticket.status",

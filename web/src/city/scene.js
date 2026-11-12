@@ -4,7 +4,7 @@
 // Reviewer; each department's manager stands at its door; panels are React (see CityView.tsx).
 // The City View: a small game world of the agents, drawn pixel by pixel on a canvas from city-state.js.
 // All of the art is drawn here in code. Every person on screen is a real agent; only the scenery moves on its own.
-import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, lotsMemory, readLotsMemory, footbridges, PITCH_X, PITCH_Y, BLOCK_W, BLOCK_H, blockOf, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, carryTraffic, RING_FOOT, WORLD_MARGIN, workingIn, centreLines, WARM_MS, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf, taxiCall, RIDE_PX_S, TO_WORK_BOOST, HOMES_PER_BLOCK } from "./city-state.js";
+import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, lotsMemory, readLotsMemory, footbridges, PITCH_X, PITCH_Y, BLOCK_W, BLOCK_H, blockOf, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, carryTraffic, isReviewing, RING_FOOT, WORLD_MARGIN, workingIn, centreLines, WARM_MS, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf, taxiCall, RIDE_PX_S, TO_WORK_BOOST, HOMES_PER_BLOCK } from "./city-state.js";
 
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const INK = "#1d1c36";
@@ -1211,6 +1211,8 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     const agent = state.agents[id];
     if (where.place === "station" && agent?.kind === "manager") {
       const b = world.buildings.find((x) => x.dept === where.dept);
+      // Reviewing (decision 295): in through its doors, at work inside its tower: one lit window, counted.
+      if (b && where.why === "reviewing") return { ...seatSpot(b, 0), key: `desk:${where.dept}:reviewer`, seated: true };
       if (b) { const d = doorOf(b); return { x: d.x + 20, y: d.y + 6, key: `door:${where.dept}`, seated: false }; }
     }
     if (where.place === "station") {
@@ -1352,6 +1354,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     p.insideOf = !p.inside ? null : m ? m[1] : `home:${homesOf(world).indexOf(homeOf(world, homes.get(p.id) ?? 0))}`;
   }
   function dashTo(p, to, then) {
+    if (p.inside && !to.key?.startsWith("desk:")) setInside(p, false); // out through the doors: no longer counted inside
     p.waitUntil = null;
     p.route = null;
     p.flip = to.x < p.x;
@@ -1388,17 +1391,19 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   function markApps() { const m = appMarkers().filter((x) => x.app); root.dataset.apps = String(m.length); root.dataset.appsWaiting = String(waitingBuildings().size); }
 
   // ---------- Live events ----------
-  const PLACEMENT_EVENTS = new Set(["agent.hired", "agent.retired", "department.created", "department.demolished", "department.updated", "ticket.status", "worker.state", "worker.merge_waiting", "worker.merged", "tickets.parked", "executive.office"]);
+  const PLACEMENT_EVENTS = new Set(["agent.hired", "agent.retired", "department.created", "department.demolished", "department.updated", "ticket.status", "worker.state", "worker.merge_waiting", "worker.merged", "tickets.parked", "executive.office", "review.started", "review.result", "review.finished", "build.stage"]); // a reviewer walks in and out (decision 295)
   function onEvent(e) {
     const feedBefore = state.feed;
     const before = e.type === "department.created" ? state.departments[e.name] : null;
     if (e.type === "department.demolished") demolish(e.name);
+    const wasReviewing = e.type === "activity" && isReviewing(state, e.id);
     state = reduce(state, e);
+    const reviewMove = e.type === "activity" && state.agents[e.id]?.kind === "manager" && isReviewing(state, e.id) !== wasReviewing; // starts or stops reviewing: in or out
     if (e.type === "department.created" && (!before || before.state === "demolished")) {
       root.dataset.built = String(Number(root.dataset.built ?? 0) + 1);
       if (!reduced() && visible()) anims.set(e.name, { kind: "build", start: performance.now(), dur: ANIM_MS.build });
     }
-    if (PLACEMENT_EVENTS.has(e.type)) { sync(); markApps(); } else refreshVisuals();
+    if (PLACEMENT_EVENTS.has(e.type) || reviewMove) { sync(); markApps(); } else refreshVisuals();
     if (e.type === "connector.updated") wake(); // a sign goes up (or comes down) by the doors
     if (e.type.startsWith("department.")) { entered = true; ground = bakeNow(); wake(); }
     const letter = mailFor(e, state);

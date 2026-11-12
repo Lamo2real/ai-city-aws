@@ -410,3 +410,7 @@ export function blockOrder(): Array<[number, number]>;
 /** Decision 290: nothing is built within RING_FOOT px of a roundabout; a corner lot's tower stands on its far side. */
 export const RING_FOOT: number;
 export function lotShift(c: number, r: number, li: number, w: number): number;
+/** Decision 295: a manager is shown as its department's reviewer, and works inside its tower while it reviews. */
+export function roleOf(a: CityAgent | undefined | null): string;
+export const REVIEW_STALE_MS: number;
+export function isReviewing(state: CityState, id: string, now?: number): boolean;

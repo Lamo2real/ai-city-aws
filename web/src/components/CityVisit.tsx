@@ -4,7 +4,7 @@
 // on that project at their desks. Clicking one turns their chair to you and opens their card. "City map" (and
 // Esc, and Back) goes out again. Pixel art drawn in code (lib/officeArt.ts) with plain HTML over it: no library.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { MODEL_NAME, VISUALS, visualState, type CityState } from "../city/city-state.js";
+import { MODEL_NAME, VISUALS, roleOf, visualState, type CityState } from "../city/city-state.js";
 import { towerLook } from "../city/scene.js";
 import {
   FLOOR_PITCH,
@@ -316,7 +316,7 @@ function Floor({
                 className="agent"
                 onClick={() => onAgent(id)}
                 aria-pressed={on}
-                aria-label={`${a.role}${a.kind === "manager" ? " (manager)" : ""}, ${doing.label.toLowerCase()}, ${MODEL_NAME[a.model] ?? a.model}. Turn to face you and open their card.`}
+                aria-label={`${roleOf(a)}${a.kind === "manager" ? " (reviewer)" : ""}, ${doing.label.toLowerCase()}, ${MODEL_NAME[a.model] ?? a.model}. Turn to face you and open their card.`}
               >
                 <span
                   className="chair"
@@ -327,7 +327,7 @@ function Floor({
                   <img className="front" src={personSprite(a, "front")} alt="" />
                 </span>
                 <span className="tag pixel" aria-hidden="true">
-                  {a.kind === "manager" ? "Manager" : a.role}
+                  {a.kind === "manager" ? "Reviewer" : a.role}
                 </span>
               </button>
             </li>

@@ -14,6 +14,7 @@ import {
   topBar,
   visualState,
   type CityState,
+  roleOf,
 } from "../city/city-state.js";
 import { mountCity, type CityScene } from "../city/scene.js";
 import { instruct, sendWorkerHome } from "../lib/actions.ts";
@@ -518,6 +519,7 @@ function snapshotOf(city: CityState) {
     agents: Object.values(city.agents),
     departments: Object.values(city.departments).map((d) => ({ ...d, created_at: new Date(d.builtAt).toISOString() })),
     lots: Object.entries(city.lots ?? {}).map(([slot, size]) => ({ slot: Number(slot), size })), // each lot keeps its size (decision 248)
+    activities: city.activities ?? {}, // what each agent is doing, so a reviewer at work is inside after a reload (decision 295)
     tickets: Object.values(city.tickets),
     parked: Object.values(city.parked),
     questions: Object.values(city.questions),
@@ -745,9 +747,9 @@ function DeptPanel({
   const workers = members.filter((a) => a.kind === "worker");
   const open = Object.values(city.tickets).filter((t) => members.some((m) => m.id === t.to));
   const facts: Array<[string, string]> = hq
-    ? [["Team", members.map((a) => a.role || a.id).join(" · ") || "VAIC · Orchestrator"]]
+    ? [["Team", members.map((a) => roleOf(a) || a.id).join(" · ") || "VAIC · Orchestrator"]]
     : [
-        ["Manager", d?.manager_id ? `${d.manager_id} · Fable 5.1` : "—"],
+        ["Reviewer", d?.manager_id ? `${d.manager_id} · Fable 5.1` : "—"], // the manager, the department's reviewer (decision 295)
         [
           "Workers",
           `${workers.length ? `${workers.length} at their desks` : "None hired"} · ${d?.worker_model === "fable-5-1" ? "Fable 5.1" : workerModel(name)}`,

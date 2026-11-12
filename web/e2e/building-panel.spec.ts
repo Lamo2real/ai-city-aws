@@ -83,7 +83,7 @@ test("a department at work: the count, each piece with its status, Go inside and
   const panel = await open(page, "Application");
   await expect(panel.locator(".bp-count")).toHaveText("6");
   await expect(panel.locator(".bp-list > li")).toHaveCount(6);
-  await expect(panel.locator(".bp-facts")).toContainText("Manager");
+  await expect(panel.locator(".bp-facts")).toContainText("Reviewer");
   await expect(panel.locator(".bp-facts")).toContainText("Workers");
   const r = await laidOut(page);
   expect(r.n).toBe(2);
