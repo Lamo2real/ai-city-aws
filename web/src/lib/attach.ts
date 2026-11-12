@@ -2,6 +2,7 @@
 // and files attached to a message, which go into the knowledge base so VAIC can read them. Pure functions
 // (tested); the menu itself is in components/PlusMenu.tsx.
 import type { KnowledgeItem } from "./api.ts";
+import type { ChatAttachment } from "./store.ts";
 import { listConnectors, listSkills, type Connector, type Skill } from "./connect.ts";
 
 export interface SlashCommand {
@@ -98,6 +99,32 @@ export function attachedLine(items: KnowledgeItem[]): string {
     return `“${i.title}” (${i.kind}, ${state})`;
   };
   return `Attached (now in my knowledge base): ${items.map(one).join("; ")}.`;
+}
+
+/** Said for the owner when only files were attached and no words were typed. */
+export const ONLY_FILES = "Take a look at what I attached.";
+const ATTACHED_TAIL = /\n\nAttached \(now in my knowledge base\): [\s\S]*$/;
+
+export const isImageItem = (i: Pick<KnowledgeItem, "kind" | "content_type">) =>
+  i.kind === "image" || (!!i.content_type && i.content_type.startsWith("image/"));
+
+/** What a sent message keeps of its attachments: enough to draw them again after a reload. */
+export const sentAttachments = (items: KnowledgeItem[]): ChatAttachment[] =>
+  items.map((i) => ({ id: i.id, title: i.title, image: isImageItem(i) }));
+
+/** Attachments split into images (thumbnails) and the rest (chips), each in the order they were attached. */
+export function splitAttachments<T extends { image: boolean }>(xs: T[]): { images: T[]; others: T[] } {
+  return { images: xs.filter((x) => x.image), others: xs.filter((x) => !x.image) };
+}
+
+/**
+ * The words the owner's bubble shows: what they typed, without the "Attached (now in my knowledge base)" line
+ * written for VAIC (the attachments are drawn instead), and nothing at all when they typed no words.
+ */
+export function bubbleText(text: string, attachments?: ChatAttachment[]): string {
+  if (!attachments?.length) return text;
+  const words = text.replace(ATTACHED_TAIL, "");
+  return words === ONLY_FILES ? "" : words;
 }
 
 // ---------- the lists the menu shows ----------

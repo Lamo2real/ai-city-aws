@@ -34,6 +34,14 @@ export interface ChatLine {
   files?: FileCardData[];
   /** A heading over the files ("References for this build"). */
   filesLabel?: string;
+  /** Owner lines: the files attached to this message (knowledge items), drawn as thumbnails and chips. */
+  attachments?: ChatAttachment[];
+}
+/** A file sent with an owner's message: images show as thumbnails, other files as a small chip. */
+export interface ChatAttachment {
+  id: string;
+  title: string;
+  image: boolean;
 }
 /** VAIC's turn in progress: when the owner sent, and the steps so far. */
 export interface VaicTurn {

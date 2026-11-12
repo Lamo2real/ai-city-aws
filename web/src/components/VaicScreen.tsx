@@ -6,7 +6,11 @@ import { keyBlocked, sendMessage, stopReply } from "../lib/actions.ts";
 import { knowledgeApi } from "../lib/api.ts";
 import {
   allCommands,
+  ONLY_FILES,
   attachedLine,
+  bubbleText,
+  isImageItem,
+  sentAttachments,
   expandSlash,
   folderFiles,
   loadLists,
@@ -23,6 +27,8 @@ import { useVoice } from "../voice/useVoice.ts";
 import { VaicStatus, VaicSteps } from "./VaicStatus.tsx";
 import { stepsRunning } from "../lib/steps.ts";
 import { statusWords } from "./Knowledge.tsx";
+import { ComposerAttachment, SentAttachments } from "./ChatAttachments.tsx";
+import { forgetLocal, keepLocal } from "../lib/chatImages.ts";
 import { PlusMenu, type Insert } from "./PlusMenu.tsx";
 import { StreamedText } from "./StreamedText.tsx";
 import { FileCards } from "./FileCards.tsx";
@@ -230,12 +236,16 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
         text: `Up to ${MAX_CHAT_IMAGES} images per message: ${capped.left} ${capped.left === 1 ? "image was" : "images were"} left out.`,
       });
     if (!files.length) return;
-    const problems = await addFiles(files, { onCreated: (item) => setAttached((a) => [...a, item.id]) });
+    const problems = await addFiles(files, {
+      onFile: (item, file) => keepLocal(item.id, file), // the thumbnail shows at once, before the upload ends
+      onCreated: (item) => setAttached((a) => [...a, item.id]),
+    });
     for (const p of problems) toast({ tone: "bad", text: p });
     input.current?.focus();
   };
   const unattach = (id: string) => {
     setAttached((a) => a.filter((x) => x !== id));
+    forgetLocal(id);
     knowledgeApi.remove(id).catch(() => undefined); // it was added for this message only
   };
 
@@ -261,14 +271,15 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
     }
     if (voice.dictating) voice.toggleDictate(); // stop dictating; send what is shown
     let body = slash?.kind === "send" ? slash.text : t;
-    if (items.length) body = `${body || "Take a look at what I attached."}\n\n${attachedLine(items)}`;
+    // Only the owner's words are checked for a pasted key: a photo named like "A9A8BF3C-3DE2-….jpeg" is not one.
     if (keyBlocked(body)) return; // not sent: what was typed and attached stays in the box
+    if (items.length) body = `${body || ONLY_FILES}\n\n${attachedLine(items)}`;
     setText("");
     base.current = "";
     pending.current = ""; // the dictated words were just sent: a late update must not put them back in the box
     setAttached([]);
     // Typed or dictated, the message is text and VAIC answers in text; the voice button is for talking.
-    await sendMessage(body);
+    await sendMessage(body, items.length ? { attachments: sentAttachments(items) } : {});
     input.current?.focus();
   };
   // While VAIC thinks or writes its answer, Send becomes Stop (like ChatGPT and Claude); Esc stops too.
@@ -294,9 +305,10 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
     return () => window.removeEventListener("keydown", esc);
   }, [busyNow]);
   /** "Edit": the stopped message comes back into the box to change and send again. */
-  const editStopped = (id: string, words: string) => {
+  const editStopped = (id: string, words: string, files?: { id: string }[]) => {
     store.removeLine(id);
     setTyped(words);
+    if (files?.length) setAttached(files.map((f) => f.id)); // the attachments come back with the words
     input.current?.focus();
     pendingSelection.current = [words.length, words.length];
   };
@@ -408,7 +420,10 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
                       <StreamedText text={l.text} streaming={l.state === "streaming"} onGrow={follow} />
                     ) : null
                   ) : (
-                    <p>{l.text}</p>
+                    <>
+                      {l.attachments?.length ? <SentAttachments attachments={l.attachments} /> : null}
+                      {bubbleText(l.text, l.attachments) ? <p>{bubbleText(l.text, l.attachments)}</p> : null}
+                    </>
                   )}
                   {l.files?.length ? <FileCards files={l.files} label={l.filesLabel} /> : null}
                   {l.who === "vaic" && l.state === "done" && l.steps ? (
@@ -419,7 +434,7 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
                       Stopped.
                       {l.stoppedSteps?.length ? ` VAIC had already done: ${l.stoppedSteps.join(", ")}.` : ""}
                       {l.handedOn ? " Work it handed to the team keeps going; stop that job in Jobs." : ""}{" "}
-                      <button type="button" className="linkish" onClick={() => editStopped(l.id, l.text)}>
+                      <button type="button" className="linkish" onClick={() => editStopped(l.id, bubbleText(l.text, l.attachments), l.attachments)}>
                         Edit and send again
                       </button>
                     </span>
@@ -452,21 +467,15 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
           {items.length ? (
             <ul className="attached" aria-label="Attached to your message">
               {items.map((i) => (
-                <li key={i.id} className={`chip chip-${kn.localError[i.id] ? "failed" : i.status}`}>
-                  <span className="chip-name">{i.title}</span>
-                  <span className="st" role="status">
-                    {statusWords(i, kn.progress[i.id], kn.localError[i.id])}
-                  </span>
-                  <button
-                    type="button"
-                    className="chip-x"
-                    aria-label={`Remove ${i.title}`}
-                    title="Remove"
-                    onClick={() => unattach(i.id)}
-                  >
-                    ×
-                  </button>
-                </li>
+                <ComposerAttachment
+                  key={i.id}
+                  item={i}
+                  image={isImageItem(i)}
+                  percent={kn.progress[i.id]}
+                  status={statusWords(i, kn.progress[i.id], kn.localError[i.id])}
+                  failed={!!kn.localError[i.id] || i.status === "failed"}
+                  onRemove={() => unattach(i.id)}
+                />
               ))}
             </ul>
           ) : null}

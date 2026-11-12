@@ -179,7 +179,10 @@ function refreshSoon() {
 /** Uploads every file; resolves with plain sentences for the ones that could not start or finish. */
 export async function addFiles(
   files: File[],
-  o: Pick<UploadOptions, "put" | "retryDelayMs" | "onCreated"> = {},
+  o: Pick<UploadOptions, "put" | "retryDelayMs" | "onCreated"> & {
+    /** Like onCreated, with the file the item was made from (the chat keeps a local preview of images). */
+    onFile?: (item: KnowledgeItem, file: File) => void;
+  } = {},
 ): Promise<string[]> {
   const problems: string[] = [];
   await Promise.all(
@@ -196,6 +199,7 @@ export async function addFiles(
             id = item.id;
             knowledge.dispatch({ type: "upsert", item });
             knowledge.dispatch({ type: "progress", id, percent: 0 });
+            o.onFile?.(item, f);
             o.onCreated?.(item);
           },
           onProgress: (percent) => knowledge.dispatch({ type: "progress", id, percent }),

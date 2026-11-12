@@ -2,7 +2,8 @@
 // the chat marked "not sent yet" and goes out when the connection is back. Nothing is lost.
 import { api, ApiError } from "./api.ts";
 import { listConnectors, listMailAccounts, looksLikeKey } from "./connect.ts";
-import { store, type ChatLine } from "./store.ts";
+import { bubbleText } from "./attach.ts";
+import { store, type ChatAttachment, type ChatLine } from "./store.ts";
 import { errorText, toast } from "../components/ui.tsx";
 
 const CONVERSATION = "main";
@@ -60,9 +61,13 @@ export function keyBlocked(text: string): boolean {
 
 /** Sends a message to VAIC. `voice`: the owner said it (VAIC then answers aloud when speaking is "auto"); `answer`:
  * the owner tapped this answer on VAIC's question card. */
-export async function sendMessage(text: string, opts: { voice?: boolean; answer?: string } = {}) {
+export async function sendMessage(
+  text: string,
+  opts: { voice?: boolean; answer?: string; attachments?: ChatAttachment[] } = {},
+) {
   const clean = text.trim();
-  if (!clean || keyBlocked(clean)) return;
+  // The key check reads the owner's words, not the line naming the attached files (decision 256).
+  if (!clean || keyBlocked(bubbleText(clean, opts.attachments))) return;
   store.answerAsk(opts.answer); // a tapped answer, or the owner's own words instead of a button (decision 206)
   const line: ChatLine = {
     id: newLineId(),
@@ -71,6 +76,7 @@ export async function sendMessage(text: string, opts: { voice?: boolean; answer?
     state: "queued",
     at: Date.now(),
     ...(opts.voice ? { voice: true } : {}),
+    ...(opts.attachments?.length ? { attachments: opts.attachments } : {}),
   };
   store.set({ chat: [...store.get().chat, line], presence: "thinking" });
   store.beginTurn();

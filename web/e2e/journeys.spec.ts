@@ -1232,9 +1232,10 @@ test("the + menu: files ride along with the message, slash commands become plain
   const chips = page.getByRole("list", { name: "Attached to your message" });
   await expect(chips.getByRole("listitem")).toHaveCount(2);
   await expect(chips.getByRole("listitem").filter({ hasText: "brief.pdf" }).getByRole("status")).toHaveText("Ready");
-  await expect(chips.getByRole("listitem").filter({ hasText: "whiteboard.png" }).getByRole("status")).toHaveText(
-    "Ready",
-  );
+  // An image is a thumbnail with no filename on it (decision 256): found by its alt text.
+  await expect(
+    chips.getByRole("listitem").filter({ has: page.getByRole("img", { name: "whiteboard.png" }) }).getByRole("status"),
+  ).toHaveText("Ready");
   expect(m.knowledge.puts).toHaveLength(2);
   await shot(page, "plus-attached");
   // Removing a chip deletes the item it made.
