@@ -667,10 +667,11 @@ async def run_reviews(d: ExecDeps) -> dict[str, Any]:
         except Exception as e:
             log("warn", "exec.review_failed", review=k, error=type(e).__name__)
             continue
-        text = f"{EXECUTIVES[who]['title']}, {str(r['title']).lower()}: {rec['recommendation']}"
+        text = f"Heads up, the {EXECUTIVES[who]['title']}'s {str(r['title']).lower()}: {rec['recommendation']}"
         if rec.get("reasons"):
             text += " " + " ".join(f"({i + 1}) {x}" for i, x in enumerate(rec["reasons"][:3]))
-        text += " This is advice only; nothing was started. Settings → Executives has the details."
+        text = text.rstrip() + ("" if text.rstrip().endswith((".", "!", "?")) else ".")
+        text += " Just advice, nothing started. Details are in Settings → Executives."
         await d.ledger.add_conversation_line("main", "vaic", text)
         await d.bus.put({"type": "vaic.reply", "conversation": "main", "text": text, "done": True})
         done.append(k)

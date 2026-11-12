@@ -3,6 +3,7 @@ own prompt and both voice prompts; facts stay plain, no emoji, and only VAIC tal
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from city_support import Call, make_city, scripted_engine
@@ -72,3 +73,16 @@ async def test_a_vaic_turn_gets_the_voice_and_its_reply_reaches_the_chat_as_writ
     assert vaic_voice() in sys and sys.index("You are VAIC") < sys.index(vaic_voice())
     shown: list[dict[str, Any]] = [e for e in c.bus.of_type("vaic.reply") if e.get("done")]
     assert shown and shown[-1]["text"] == reply
+
+
+def test_vaics_fixed_messages_are_casual_too() -> None:
+    """Not only the voice: every line that reaches the owner as VAIC (chat reports, pushes) talks the same way."""
+    from vaic.shared.chief_of_staff import digest_text
+
+    text = digest_text([{"title": "Pick a logo", "choice": "the blue one"}])
+    assert text.startswith("Quick one, bro:") and "decided 1 item" in text and "Pick a logo → the blue one" in text
+    from vaic.lambdas import notifier
+    from vaic.shared import calls, chief_of_staff, executives
+
+    for m in (chief_of_staff, executives, calls, notifier):
+        assert "Sir" not in Path(str(m.__file__)).read_text(encoding="utf-8"), m.__name__

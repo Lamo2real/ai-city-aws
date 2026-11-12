@@ -443,8 +443,8 @@ def digest_text(rows: list[Record]) -> str:
     picks = "; ".join(f"{r.get('title', '')[:80]} → {str(r.get('choice', ''))[:60]}" for r in rows[:6])
     more = f", and {n - 6} more" if n > 6 else ""
     return (
-        f"Chief of Staff, last 24 hours: I decided {n} item{'s' if n != 1 else ''} in Needs you so the work kept "
-        f"moving: {picks}{more}. Open Needs you to see each one and why."
+        f"Quick one, bro: the Chief of Staff decided {n} item{'s' if n != 1 else ''} in Needs you in the last 24 "
+        f"hours so the work kept moving: {picks}{more}. Needs you has each one and why."
     )
 
 

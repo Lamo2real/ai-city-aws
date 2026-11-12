@@ -96,10 +96,10 @@ async def send_message(d: CallDeps, call: Item) -> bool:
     if moved is None:
         return False
     approval = str(call.get("approval") or "")
-    body = call["reason"] + (" Yes or No?" if approval else "")
+    body = call["reason"] + (" Yes or no?" if approval else "")
     counts = await d.devices.push_all(
         d.sns,
-        "Vice called you",
+        "Vice tried calling you",
         body,
         {"vaic_call": {"id": call["id"], "approval": approval}},
         CATEGORY if approval else "",

@@ -91,9 +91,9 @@ async def test_unanswered_call_sends_one_message_with_yes_no() -> None:
     ring, alert = sent(sns)
     assert len(ring) == 1 and len(alert) == 1
     msg = json.loads(alert[0]["message"]["APNS"])
-    assert msg["aps"]["category"] == calls.CATEGORY and msg["aps"]["alert"]["title"] == "Vice called you"
+    assert msg["aps"]["category"] == calls.CATEGORY and msg["aps"]["alert"]["title"] == "Vice tried calling you"
     assert msg["vaic_call"] == {"id": r["call"], "approval": "a-1"} and msg["aps"]["alert"]["body"].endswith(
-        "Yes or No?"
+        "Yes or no?"
     )
     # a late "missed" from the phone, or a late "answered", changes nothing and sends nothing
     late = js(await handle_http(ev("POST", f"/calls/{r['call']}/missed"), d))

@@ -246,8 +246,8 @@ async def test_a_review_the_owner_switched_on_is_a_report_in_aics_chat_and_never
     assert await lambda_handle({"job": "reviews"}, deps(c, m)) == {"reviews": ["cfo-cost-review"]}
     assert m.who() == ["exec-cfo"]
     line = c.bus.of_type("vaic.reply")[-1]
-    assert line["conversation"] == "main" and line["text"].startswith("CFO, cost review: Go ahead")
-    assert "nothing was started" in line["text"]
+    assert line["conversation"] == "main" and line["text"].startswith("Heads up, the CFO's cost review: Go ahead")
+    assert "Just advice, nothing started." in line["text"]
     assert await snapshot(c) == before
     # Not again until it is due (every 7 days by default).
     assert await lambda_handle({"job": "reviews"}, deps(c, m)) == {"reviews": []}

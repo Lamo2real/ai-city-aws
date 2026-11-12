@@ -56,10 +56,10 @@ async def push_text(ledger: Ledger, job: dict[str, Any]) -> tuple[str, str]:
     cost = format_usd(await job_cost(ledger, job))
     status = job["status"]
     if status == "done":
-        return "Done", f"{name} is ready. About {cost}."
+        return "Done", f"{name} is ready, bro. About {cost}."
     if status == "cancelled":
-        return "Stopped", f"{name} was stopped. About {cost} so far."
-    return "Could not finish", f"{name} failed. About {cost} so far. Open AI City to see why."
+        return "Stopped", f"{name} got stopped. About {cost} so far."
+    return "Didn't finish", f"{name} failed, my bad. About {cost} so far. Open AI City to see why."
 
 
 async def notify(detail: Any, ledger: Ledger, store: DeviceStore, sns: Any, apps: PushApps) -> dict[str, Any]:

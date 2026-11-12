@@ -93,8 +93,8 @@ async def test_the_words_name_the_job_and_its_cost() -> None:
     c, task, _ = await city_with_job()
     for status, title, piece in (
         ("done", "Done", "is ready"),
-        ("cancelled", "Stopped", "was stopped"),
-        ("failed", "Could not finish", "failed"),
+        ("cancelled", "Stopped", "got stopped"),
+        ("failed", "Didn't finish", "failed"),
     ):
         t, body = await push_text(c.ledger, {**task, "status": status})
         assert t == title and piece in body and "snake" in body.lower() and "$0.40" in body
@@ -111,7 +111,10 @@ async def test_one_push_per_finished_job_to_every_phone_and_never_twice() -> Non
     r = await notify(status_event(done, "in_progress"), c.ledger, store, sns, APPS)
     assert r["sent"] == 2 and r["reason"] == "sent"
     msg = sns.published[0]["message"]
-    assert json.loads(msg["APNS"])["aps"]["alert"] == {"title": "Done", "body": "A snake game is ready. About $0.40."}
+    assert json.loads(msg["APNS"])["aps"]["alert"] == {
+        "title": "Done",
+        "body": "A snake game is ready, bro. About $0.40.",
+    }
     assert json.loads(msg["APNS"])["job"] == task["id"]
     again = await notify(status_event(done, "in_progress"), c.ledger, store, sns, APPS)
     assert again["sent"] == 0 and again["reason"] == "already notified"
