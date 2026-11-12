@@ -407,3 +407,6 @@ export function lotScore(c: number, r: number, li: number): number;
 export function ringScore(c: number, r: number): number;
 /** The order the town grows in, block by block (decision 286): seeded, nearest the middle most likely, fixed for good. */
 export function blockOrder(): Array<[number, number]>;
+/** Decision 290: nothing is built within RING_FOOT px of a roundabout; a corner lot's tower stands on its far side. */
+export const RING_FOOT: number;
+export function lotShift(c: number, r: number, li: number, w: number): number;

@@ -1,7 +1,7 @@
 // The yellow centre lines (decision 269): they end at a junction's edge, run on through a T on the road that carries
 // on, and bend round every corner, joining the two roads' lines with no gap.
 import { describe, expect, it } from "vitest";
-import { BEND_R, WORLD_MARGIN, TILE, centreLines, initialState, junctions, layout, reduce } from "../src/city/city-state.js";
+import { BEND_R, RING_FOOT, WORLD_MARGIN, TILE, centreLines, initialState, junctions, layout, reduce } from "../src/city/city-state.js";
 
 const city = (n: number) =>
   layout(
@@ -41,7 +41,7 @@ describe("centre lines", () => {
       const M = WORLD_MARGIN * TILE;
       for (const r of runs) for (const [end, cap] of [[r.from, r.cap0], [r.to, r.cap1]] as const) {
         const offMap = r.axis === "x" ? near(end, w.left * TILE - M) || near(end, w.width * TILE + M) : near(end, w.top * TILE - M) || near(end, w.height * TILE + M);
-        const atJunction = js.some((j) => (r.axis === "x" ? near(r.at, j.cy) && [BEND_R, 56].some((h) => near(Math.abs(end - j.cx), h)) : near(r.at, j.cx) && [BEND_R, 56].some((h) => near(Math.abs(end - j.cy), h))));
+        const atJunction = js.some((j) => (r.axis === "x" ? near(r.at, j.cy) && [BEND_R, RING_FOOT].some((h) => near(Math.abs(end - j.cx), h)) : near(r.at, j.cx) && [BEND_R, RING_FOOT].some((h) => near(Math.abs(end - j.cy), h))));
         expect(offMap ? !cap : atJunction && !!cap, `${r.axis} line at ${r.at} ending at ${end}`).toBe(true);
       }
     });

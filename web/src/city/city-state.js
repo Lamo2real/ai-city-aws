@@ -676,6 +676,18 @@ export function lotOf(slot) {
   }
   return LOTS[slot];
 }
+// Where a tower stands across its lot, in tiles from the lot's west edge: in the middle, except that a tower as wide as
+// its lot, on a corner lot by a place that is (or may one day be) a roundabout (decision 290), stands one tile over on
+// the far side of its lot, clear of the ring and its pavement. It follows from the place alone, so a tower never moves when a roundabout appears.
+export function lotShift(c, r, li, w) {
+  const ring = (v, h) => junctionKind(v, h) === "roundabout", mid = Math.floor((LOT_W - w) / 2);
+  // Only a tower that would reach the ring from the middle of its lot moves over (one as wide as its lot): it needs
+  // RING_FOOT − 24 px (the road's half width) between it and the avenue. Every other tower stays in the middle.
+  if (mid * TILE >= RING_FOOT - JUNCTION_HALF) return mid;
+  if (li === 0 && (ring(c - 1, r) || ring(c - 1, r - 1))) return LOT_W - w; // the avenue to the west has one at a corner
+  if (li === lotsAcross(c) - 1 && (ring(c, r) || ring(c, r - 1))) return 0; // the avenue to the east
+  return mid;
+}
 // Lot `slot` → its block, [column, row].
 export const blockOf = (slot) => lotOf(slot).slice(0, 2);
 
@@ -729,7 +741,7 @@ export function layout(state, { portrait = false, seats = {}, homes = 0 } = {}) 
     // Roads only round blocks with a tower standing on them (decision 286): a block whose lots are all free is forest
     // with no road round it, until a department takes one of them.
     if (holder.has(slot)) { built.add(`${c},${r}`); c0 = Math.min(c0, c); c1 = Math.max(c1, c); r0 = Math.min(r0, r); r1 = Math.max(r1, r); }
-    const lx = o.x + li * LOT_W, x = lx + Math.floor((LOT_W - s.w) / 2), y = o.y + BLOCK_H - s.h; // its lot, on the street side of its block
+    const lx = o.x + li * LOT_W, x = lx + lotShift(c, r, li, s.w), y = o.y + BLOCK_H - s.h; // its lot, on the street side of its block
     const name = holder.get(slot);
     if (!name) {
       const freedAt = state.freed?.[slot];
@@ -1207,7 +1219,11 @@ export function cabsPerLane(spans) {
 export const CAB_KEEP = 0.75; // the share of those that drive (decision 269)
 export const FAR_PX_S = 220;
 export const TOWN_PX_S = CAB_PX_S, HIGHWAY_PX_S = 96, RING_PX_S = 22, ACCEL_PX_S2 = 44, BRAKE_PX_S2 = 50, CAR_GAP_PX = 6;
-export const JUNCTION_HALF = 24, STOP_AT = 36, RING_R = 40; // a roundabout twice the size it was, so the circling shows (decision 252)
+// A roundabout (decision 290): the cabs circle at RING_R, the ring road reaches 32 px, its pavement RING_FOOT − 2;
+// nothing is built within RING_FOOT of a roundabout's centre (decision 252 had made it 40, drawn out to 64, which cut
+// into the corners of the blocks round it and under their towers).
+export const RING_FOOT = 40;
+export const JUNCTION_HALF = 24, STOP_AT = 36, RING_R = 24; // (was 40: a roundabout twice the size it was, so the circling shows (decision 252)
 const CAR_LEN = { x: 24, y: 18 }, RING_LEN = 20, LOOKAHEAD = 420, TAU = Math.PI * 2;
 // A light: green, amber, then a moment of red both ways before the crossing road goes green. Red lasts 5 s.
 export const SIGNAL_MS = { green: 3600, amber: 900, allRed: 250 };
@@ -1302,7 +1318,7 @@ export function centreLines(world) {
     }
     if (to - a >= 1) runs.push({ axis, at, from: a, to, cap0: capA, cap1: false });
   };
-  const half = (j) => (j.kind === "roundabout" ? 56 : H);
+  const half = (j) => (j.kind === "roundabout" ? RING_FOOT : H);
   const corner = (j) => [j.arms.w, j.arms.e, j.arms.n, j.arms.s].filter(Boolean).length === 2 && !(j.arms.w && j.arms.e) && !(j.arms.n && j.arms.s);
   const stop = (j, c) => ({ c, half: half(j), cap: corner(j) ? "bend" : "junction" });
   world.streets.forEach((st, i) => {

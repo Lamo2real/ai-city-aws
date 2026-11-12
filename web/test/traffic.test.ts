@@ -14,6 +14,12 @@ import {
   STOP_AT,
   TOWN_PX_S,
   createTraffic,
+  RING_FOOT,
+  BLOCK_H,
+  PITCH_Y,
+  colW,
+  colX,
+  junctionKind,
   carryTraffic,
   footbridges,
   initialState,
@@ -249,5 +255,27 @@ describe("footbridges (decision 262)", () => {
     expect(passed.size).toBe(bs.length); // every bridge had cabs under it
     expect(stoppedUnder).toBeLessThan(100); // passing, not parked (a queue from a red light may reach one now and then)
     for (const j of lights) for (const c of ["green", "amber", "red"]) expect(seen.has(`${j.id}:${c}`)).toBe(true);
+  });
+});
+
+describe("roundabouts and towers (decision 290)", () => {
+  it("never overlap: no tower, HQ or home within RING_FOOT of a roundabout, now or once one appears", () => {
+    const dist = (b: { x: number; y: number; w: number; h: number }, cx: number, cy: number) => {
+      const x0 = b.x * TILE, x1 = (b.x + b.w) * TILE, y0 = b.y * TILE, y1 = (b.y + b.h) * TILE;
+      return Math.hypot(Math.max(x0 - cx, 0, cx - x1), Math.max(y0 - cy, 0, cy - y1));
+    };
+    let s = initialState(0);
+    for (let n = 1; n <= 40; n++) {
+      s = reduce(s, { type: "department.created", name: `D${n}`, mission: "x", manager_id: `m${n}` }, n);
+      if (n % 7 === 0) s = reduce(s, { type: "department.demolished", name: `D${n - 3}` }, n + 0.5); // a gap, filled by the next newcomer
+      const w = layout(s, { homes: 16 }), boxes = [...w.buildings, w.hq, ...w.homes.apartments];
+      for (const j of junctions(w).filter((k) => k.kind === "roundabout")) for (const b of boxes) expect(dist(b, j.cx, j.cy), `${j.id} at ${n}`).toBeGreaterThanOrEqual(RING_FOOT - 0.01);
+      // Every place that may one day be a roundabout is kept clear already, so no tower ever has to move for one.
+      for (let v = -6; v <= 6; v++) for (let h = -6; h <= 6; h++) {
+        if (junctionKind(v, h) !== "roundabout") continue;
+        const cx = (colX(v) + colW(v) + 1.5) * TILE, cy = (h * PITCH_Y + BLOCK_H + 1.5) * TILE;
+        for (const b of w.buildings) expect(dist(b, cx, cy)).toBeGreaterThanOrEqual(RING_FOOT - 0.01);
+      }
+    }
   });
 });

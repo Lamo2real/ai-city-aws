@@ -4,7 +4,7 @@
 // Reviewer; each department's manager stands at its door; panels are React (see CityView.tsx).
 // The City View: a small game world of the agents, drawn pixel by pixel on a canvas from city-state.js.
 // All of the art is drawn here in code. Every person on screen is a real agent; only the scenery moves on its own.
-import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, lotsMemory, readLotsMemory, footbridges, PITCH_X, PITCH_Y, BLOCK_W, BLOCK_H, blockOf, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, carryTraffic, WORLD_MARGIN, workingIn, centreLines, WARM_MS, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf, taxiCall, RIDE_PX_S, TO_WORK_BOOST, HOMES_PER_BLOCK } from "./city-state.js";
+import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, lotsMemory, readLotsMemory, footbridges, PITCH_X, PITCH_Y, BLOCK_W, BLOCK_H, blockOf, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, carryTraffic, RING_FOOT, WORLD_MARGIN, workingIn, centreLines, WARM_MS, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf, taxiCall, RIDE_PX_S, TO_WORK_BOOST, HOMES_PER_BLOCK } from "./city-state.js";
 
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const INK = "#1d1c36";
@@ -386,6 +386,7 @@ function roadH(g, x, y, w, h, seed) {
 }
 // A footbridge over the road (decision 262): a stone deck from kerb to kerb with railings and lamp posts, a few steps
 // down at each end, and its shadow on the road; drawn above the cabs, which drive on underneath.
+const BRIDGE_REACH = 46; // how far a footbridge (its deck, landings and steps) reaches from its middle
 function footbridge(g, b, ox, oy) {
   // Seen from above (decision 269): a raised stone deck with heavy parapets, a crisp shadow falling across the road
   // below, and a landing with steps on the pavement at each end, so it reads as a bridge, not a stripe.
@@ -488,29 +489,33 @@ function junctionMarks(g, j) {
   } else if (j.kind === "roundabout") roundabout(g, j);
 }
 // A roundabout (decision 272, the owner: "more elegant… edges on the sidewalk… something in the middle like a
-// statue"): the ring road (RING_R 40 for the cabs, drawn out to 52) inside a kerbed pavement that runs into each
+// statue"): the ring road (RING_R for the cabs; decision 290 made it smaller) inside a kerbed pavement that runs into each
 // street's, a dashed lane line round it, give-way marks at each entry, and a raised island with a stone kerb, grass,
 // flowers and a monument picked by the junction's seed: a statue on a plinth, a fountain, an obelisk or a clock.
 const MONUMENTS = ["statue", "fountain", "obelisk", "clock"];
 function roundabout(g, j) {
-  const { cx, cy } = j, O = 52, I = 26, LINE = "#e8e6f0", r = rng(`ring:${j.id}`);
+  // Decision 290: smaller, so it fits the crossing and never reaches under a tower: the cabs circle at RING_R (24), the
+  // ring road runs from the island (14) out to 32, its kerbed pavement to RING_FOOT − 2 (38).
+  const { cx, cy } = j, O = 32, I = 14, P = 38, LINE = "#e8e6f0", r = rng(`ring:${j.id}`);
   const teeth = (x, y, w, h) => { for (let k = 0; k < Math.max(w, h); k += 4) R(g, x + (w > h ? k : 0), y + (w > h ? 0 : k), w > h ? 2 : w, w > h ? h : 2, LINE); };
   // The pavement round the ring, with a kerb on both edges; the streets' pavements run into it.
-  oval(g, cx, cy, O + 11, O + 11, INK); oval(g, cx, cy, O + 10, O + 10, "#7a7690");
-  for (let a = 0; a < 64; a++) { const t = (a / 64) * Math.PI * 2; R(g, cx + Math.cos(t) * (O + 6) - 1, cy + Math.sin(t) * (O + 6), 2, 1, "#65617c"); } // its paving joints
+  oval(g, cx, cy, P + 1, P + 1, INK); oval(g, cx, cy, P, P, "#7a7690");
+  for (let a = 0; a < 48; a++) { const t = (a / 48) * Math.PI * 2; R(g, cx + Math.cos(t) * (P - 3) - 1, cy + Math.sin(t) * (P - 3), 2, 1, "#65617c"); } // its paving joints
   oval(g, cx, cy, O + 2, O + 2, "#a8a3bd"); // the kerb's lit edge
   oval(g, cx, cy, O, O, "#3f4168"); // the ring road
-  R(g, cx - O - 12, cy - 16, 2 * O + 24, 32, "#3f4168"); R(g, cx - 16, cy - O - 12, 32, 2 * O + 24, "#3f4168"); // where the streets come in
+  R(g, cx - P - 2, cy - 16, 2 * P + 4, 32, "#3f4168"); R(g, cx - 16, cy - P - 2, 32, 2 * P + 4, "#3f4168"); // where the streets come in
   for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { // the kerb rounding each corner between two streets
-    for (let a = 0; a < 12; a++) { const t = Math.atan2(dy, dx) + ((a - 5.5) / 12) * 0.9; R(g, cx + Math.cos(t) * (O + 1) - 1, cy + Math.sin(t) * (O + 1) - 1, 2, 2, "#a8a3bd"); }
+    for (let a = 0; a < 8; a++) { const t = Math.atan2(dy, dx) + ((a - 3.5) / 8) * 0.8; R(g, cx + Math.cos(t) * (O + 1) - 1, cy + Math.sin(t) * (O + 1) - 1, 2, 2, "#a8a3bd"); }
   }
-  for (let a = 0; a < 48; a++) { if (a % 3 === 2) continue; const t = (a / 48) * Math.PI * 2; R(g, cx + Math.cos(t) * (I + 13) - 1, cy + Math.sin(t) * (I + 13) - 1, 2, 2, "#cfcfd6"); } // the dashed lane line
-  teeth(cx - O - 10, cy, 2, 16); teeth(cx + O + 8, cy - 16, 2, 16); teeth(cx - 16, cy - O - 10, 16, 2); teeth(cx, cy + O + 8, 16, 2); // give way to the ring
+  for (let a = 0; a < 36; a++) { if (a % 3 === 2) continue; const t = (a / 36) * Math.PI * 2; R(g, cx + Math.cos(t) * (I + 9) - 1, cy + Math.sin(t) * (I + 9) - 1, 1, 1, "#cfcfd6"); } // the dashed lane line
+  teeth(cx - P, cy, 2, 16); teeth(cx + P - 2, cy - 16, 2, 16); teeth(cx - 16, cy - P, 16, 2); teeth(cx, cy + P - 2, 16, 2); // give way to the ring
   // The island: a raised stone kerb, grass, a ring of flowers.
-  oval(g, cx + 2, cy + 3, I + 2, I + 2, "rgba(20,18,40,.35)"); // its shadow on the road
-  oval(g, cx, cy, I + 2, I + 2, INK); oval(g, cx, cy, I + 1, I + 1, "#d8d2c4"); oval(g, cx, cy, I - 2, I - 2, "#2f6a52"); oval(g, cx, cy, I - 6, I - 6, "#387a5c");
+  oval(g, cx + 2, cy + 2, I + 2, I + 2, "rgba(20,18,40,.35)"); // its shadow on the road
+  oval(g, cx, cy, I + 2, I + 2, INK); oval(g, cx, cy, I + 1, I + 1, "#d8d2c4"); oval(g, cx, cy, I - 1, I - 1, "#2f6a52"); oval(g, cx, cy, I - 4, I - 4, "#387a5c");
   const flowers = ["#f4c63c", "#e0625a", "#fff6e0", "#d2699e"];
-  for (let a = 0; a < 18; a++) { const t = (a / 18) * Math.PI * 2 + r() * 0.2; R(g, cx + Math.cos(t) * (I - 5) - 1, cy + Math.sin(t) * (I - 5) - 1, 2, 2, flowers[a % flowers.length]); }
+  for (let a = 0; a < 12; a++) { const t = (a / 12) * Math.PI * 2 + r() * 0.2; R(g, cx + Math.cos(t) * (I - 3) - 1, cy + Math.sin(t) * (I - 3) - 1, 2, 2, flowers[a % flowers.length]); }
+  // The monument, two thirds of its old size, so it stands on the smaller island.
+  g.save(); g.translate(cx, cy); g.scale(2 / 3, 2 / 3); g.translate(-cx, -cy);
   // The monument, with a soft shadow at its foot.
   const kind = MONUMENTS[hashOf(`${j.id}:monument`) % MONUMENTS.length];
   oval(g, cx + 3, cy + 6, 11, 5, "rgba(20,18,40,.3)");
@@ -531,6 +536,7 @@ function roundabout(g, j) {
     oval(g, cx, cy - 15, 7, 7, INK); oval(g, cx, cy - 15, 6, 6, "#fff6e0"); R(g, cx, cy - 19, 1, 4, INK); R(g, cx, cy - 15, 3, 1, INK); // its face
     R(g, cx - 5, cy + 5, 10, 3, INK); R(g, cx - 4, cy + 5, 8, 2, "#3a4058");
   }
+  g.restore();
 }
 // Rounded kerbs (decision 279, the owner: "smooth out the edges of the road"): where two roads meet, the pavement's
 // corner between them curves (a quarter circle of radius 8 round the block's corner); where both roads turn away (the
@@ -1033,7 +1039,7 @@ function bake(world, skip = new Map(), { now = Date.now(), grow = true } = {}) {
   // Trees wherever nothing else stands, far to near.
   // An empty lot is forest (decision 259); only one whose tower is coming down right now keeps clear for the wrecking ball.
   const wrecking = world.lots.filter((l) => l.demolished && skip.has(l.demolished));
-  const rings = js.filter((j) => j.kind === "roundabout").map((j) => ({ x: j.cx / TILE - 4, y: j.cy / TILE - 4, w: 8, h: 8 })); // no tree on a ring or its pavement
+  const rings = js.filter((j) => j.kind === "roundabout").map((j) => ({ x: (j.cx - RING_FOOT) / TILE, y: (j.cy - RING_FOOT) / TILE, w: (2 * RING_FOOT) / TILE, h: (2 * RING_FOOT) / TILE })); // no tree on a ring or its pavement
   const taken = [world.hq, ...world.buildings, ...(world.neighbours ?? []), ...homesOf(world), ...wrecking, ...paved, ...rings, world.homes, ...roads.map((s) => ({ x: s.x0, y: s.y, w: s.x1 - s.x0, h: 3 })), ...verticals.map((v) => ({ x: v.x, y: v.y0, w: 3, h: v.y1 - v.y0 }))];
   const clear = (x, y) => taken.every((t) => x < (t.x * TILE) - 12 || x > (t.x + t.w) * TILE + 12 || y < t.y * TILE - 2 || y > (t.y + t.h) * TILE + 34);
   // Each tree has its own spot on a fixed grid, the same on every map whatever its size (decision 248): a new tower or
@@ -1989,6 +1995,32 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     fade(X0, 0, X0 + E, 0, X0, Y0, E, Y1 - Y0); fade(X1, 0, X1 - E, 0, X1 - E, Y0, E, Y1 - Y0);
     fade(0, Y0, 0, Y0 + E, X0, Y0, X1 - X0, E); fade(0, Y1, 0, Y1 - E, X0, Y1 - E, X1 - X0, E);
   }
+  // A footbridge's deck is drawn over the cabs passing under it, but a tower beside it stands in front of its ends
+  // (decision 290, the owner: "the building should be in front of the bridge"): the part of any tower over the bridge's
+  // rectangle is drawn again on top, with its live windows, doors and plaques. `root._bridgeCovers` counts it, for tests.
+  function coverBridgeEnds(br, now, ox, oy) {
+    const hw = BRIDGE_REACH, hh = BRIDGE_REACH; // a square round it: outside the tower's own pixels its picture is clear, so nothing else is covered
+    const x0 = br.x - hw, x1 = br.x + hw, y0 = br.y - hh, y1 = br.y + hh;
+    for (const b of world.buildings) {
+      if (b.archived || anims.has(b.dept)) continue;
+      const t = towerShape(b), bx0 = t.X, bx1 = t.X + t.W, by0 = t.Y - SPRITE_PAD, by1 = t.Y + t.H;
+      const cx0 = Math.max(x0, bx0), cx1 = Math.min(x1, bx1), cy0 = Math.max(y0, by0), cy1 = Math.min(y1, by1);
+      if (cx0 >= cx1 || cy0 >= cy1) continue;
+      ctx.save(); ctx.beginPath(); ctx.rect(cx0 - ox, cy0 - oy, cx1 - cx0, cy1 - cy0); ctx.clip();
+      ctx.drawImage(towerSprite(b), t.X - ox, t.Y - SPRITE_PAD - oy); drawTowerLive(b, now, ox, oy);
+      ctx.restore();
+      root._bridgeCovers = (root._bridgeCovers ?? 0) + 1;
+    }
+    // The apartment buildings and houses too: their walls, copied back from the town's picture over the bridge.
+    const M = MARGIN * TILE, gx = (world.left ?? 0) * TILE - M, gy = (world.top ?? 0) * TILE - M;
+    for (const a of homesOf(world)) {
+      const { X, W, foot, top } = aptShape(a);
+      const cx0 = Math.max(x0, X - 1), cx1 = Math.min(x1, X + W + 1), cy0 = Math.max(y0, top - 2), cy1 = Math.min(y1, foot);
+      if (cx0 >= cx1 || cy0 >= cy1) continue;
+      ctx.drawImage(ground, cx0 - gx, cy0 - gy, cx1 - cx0, cy1 - cy0, cx0 - ox, cy0 - oy, cx1 - cx0, cy1 - cy0);
+      root._bridgeCovers = (root._bridgeCovers ?? 0) + 1;
+    }
+  }
   function drawTowerLive(b, now, ox, oy) {
     const t = towerShape(b);
     litWindows(b, ox, oy);
@@ -2087,7 +2119,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     }
     ctx.globalAlpha = 1;
     // The footbridges over the cabs (decision 262).
-    for (const b of bridges) if (b.x - ox > -60 && b.x - ox < w + 60 && b.y - oy > -60 && b.y - oy < h + 60) footbridge(ctx, b, ox, oy);
+    for (const b of bridges) if (b.x - ox > -60 && b.x - ox < w + 60 && b.y - oy > -60 && b.y - oy < h + 60) { footbridge(ctx, b, ox, oy); coverBridgeEnds(b, now, ox, oy); }
     // The traffic lights, one at the kerb before the stop line on each approach.
     for (const j of traffic.junctions) {
       if (j.kind !== "light") continue;
