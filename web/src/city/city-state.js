@@ -577,6 +577,7 @@ const APARTMENTS = [["slim", 0, 0, 3, 9], ["mid", 3, 5, 4, 5], ["wide", 5, 0, 5,
 const APT_BOX_W = 10, APT_BOX_H = 11;
 export const HOMES_PER_BLOCK = 24; // eight residents by each building's door
 const HOMES_PER_APT = HOMES_PER_BLOCK / APARTMENTS.length;
+export const HOUSES = 6, HOUSE_W = 6, HOUSE_H = 5, HOUSE_PITCH = 9; // the suburb (decision 276), in tiles
 
 // A tower's footprint and height in tiles, fixed by its name (decision 166): the skyline is uneven like a real
 // one, but a tower still never grows or shrinks with its headcount (decision 117) and never moves. New York close up
@@ -735,11 +736,19 @@ export function layout(state, { portrait = false, seats = {}, homes = 0 } = {}) 
   const blocks = [...built].map((k) => { const [c, r] = k.split(",").map(Number); return { x: colX(c), y: r * PITCH_Y, w: colW(c), h: BLOCK_H, c, r }; });
   const hq = { dept: "HQ", x: 0, y: BLOCK_H - HQ_DRAW_H, w: LOT_W, h: HQ_DRAW_H, color: DEPT_COLOR.HQ };
   // The homes (decision 188): one block of three apartment buildings at the foot of its block, a small park behind.
-  const hb = corner(...HOMES_BLOCK), apartments = [], homeBlocks = [{ x: hb.x, y: hb.y + BLOCK_H - APT_BOX_H, w: BLOCK_W, h: APT_BOX_H, mirror: false }];
+  const hb = corner(...HOMES_BLOCK), apartments = [], houses = [], homeBlocks = [{ x: hb.x, y: hb.y + BLOCK_H - APT_BOX_H, w: BLOCK_W, h: APT_BOX_H, mirror: false }];
   const off = Math.floor((BLOCK_W - APT_BOX_W) / 2);
   for (const [kind, ax, ay, aw, ah] of APARTMENTS) apartments.push({ kind, block: 0, x: hb.x + off + ax, y: hb.y + BLOCK_H - APT_BOX_H + ay, w: aw, h: ah });
+  // The suburb (decision 276, the owner: "placeholder houses, outside the town… they have to take the cab to the
+  // town"): HOUSES small houses on the street between HQ and the homes, just past the town's edge on either side,
+  // facing the street, where some residents live and ride a cab in. Placeholders: they keep just outside the town,
+  // so they move out with its edge as it grows.
+  for (let i = 0; i < HOUSES; i++) {
+    const west = i % 2 === 0, k = Math.floor(i / 2);
+    houses.push({ kind: "house", block: -1, x: west ? left - 4 - (k + 1) * HOUSE_PITCH : width + 4 + k * HOUSE_PITCH, y: BLOCK_H - HOUSE_H, w: HOUSE_W, h: HOUSE_H });
+  }
   const parks = [{ x: hb.x, y: hb.y, w: BLOCK_W, h: BLOCK_H - APT_BOX_H }];
-  return { hq, buildings, lots, neighbours, blocks, lanes, streets, hqStreet: BLOCK_H, officesEnd: height - STREET, avenue: AVENUE_X, left, top: topY, width, height, homes: { x: hb.x, y: hb.y, w: BLOCK_W, h: BLOCK_H, apartments, blocks: homeBlocks, paths: [], parks }, portrait };
+  return { hq, buildings, lots, neighbours, blocks, lanes, streets, hqStreet: BLOCK_H, officesEnd: height - STREET, avenue: AVENUE_X, left, top: topY, width, height, homes: { x: hb.x, y: hb.y, w: BLOCK_W, h: BLOCK_H, apartments, houses, blocks: homeBlocks, paths: [], parks }, portrait };
 }
 
 // Where a worker at work is: inside the tower, just behind its door (drawn hidden; the roof counts them). The seat
@@ -756,6 +765,9 @@ export function seatSpot(building, seat) {
 // The neighbourhood never grows past the blocks it has (decision 213): later slots share the same buildings, their
 // windows already lit, and the count on the roof says how many are home.
 export function homeOf(world, slot) {
+  // Every fourth resident lives in a house in the suburb (decision 276), the rest in the apartment buildings.
+  const houses = world.homes.houses ?? [];
+  if (houses.length && slot % 4 === 3) return houses[Math.floor(slot / 4) % houses.length];
   const blocks = Math.max(1, world.homes.blocks.length);
   const b = Math.floor(slot / HOMES_PER_BLOCK) % blocks, k = slot % HOMES_PER_BLOCK;
   return world.homes.apartments[b * APARTMENTS.length + (k % APARTMENTS.length)] ?? null;
@@ -765,7 +777,7 @@ const STAND = [-7, 7, -19, 19];
 export function homeSpot(world, slot) {
   const a = homeOf(world, slot);
   if (!a) return null;
-  const j = Math.floor((slot % HOMES_PER_BLOCK) / APARTMENTS.length) % HOMES_PER_APT;
+  const j = a.kind === "house" ? Math.floor(slot / 4 / Math.max(1, (world.homes.houses ?? []).length)) % 4 : Math.floor((slot % HOMES_PER_BLOCK) / APARTMENTS.length) % HOMES_PER_APT;
   const d = doorOf(a);
   return { x: d.x + STAND[j % 4], y: (a.y + a.h) * TILE + 6 + Math.floor(j / 4) * 8, inside: true }; // at home: indoors (decision 213)
 }
@@ -1712,7 +1724,7 @@ export function taxiCall(world, route, ride, from) {
   let x = at.x - d.x * CALL_PX, y = at.y - d.y * CALL_PX;
   if (Math.abs(d.x) >= Math.abs(d.y)) {
     const s = world.streets.find((t) => (t.y + STREET / 2) * TILE === at.y);
-    const L = world.left ?? 0, lo = s && s.x0 > L ? s.x0 * TILE + 12 : L * TILE, hi = s && s.x1 < world.width ? s.x1 * TILE - 12 : world.width * TILE;
+    const L = world.left ?? 0, lo = s && s.x0 > L ? s.x0 * TILE + 12 : (L - MAP_MARGIN) * TILE, hi = s && s.x1 < world.width ? s.x1 * TILE - 12 : (world.width + MAP_MARGIN) * TILE; // the street to the suburb runs on out of town
     x = Math.max(lo, Math.min(hi, x));
   } else y = Math.max((world.top ?? 0) * TILE, Math.min(world.height * TILE, y));
   return { at: { x: at.x, y: at.y }, start: { x, y }, leg: i };

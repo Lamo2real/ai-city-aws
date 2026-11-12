@@ -2,6 +2,7 @@
 // and goes round a roundabout; only the owner's car runs the lights. The commute takes longer for it.
 import { describe, expect, it } from "vitest";
 import {
+  MAP_MARGIN,
   RING_R,
   STOP_AT,
   commuteRoute,
@@ -184,8 +185,8 @@ describe("a taxi called for a new hire", () => {
       if (Math.abs(next.x - call.at.x) >= Math.abs(next.y - call.at.y)) {
         expect(call.start.y).toBe(call.at.y);
         expect(Math.sign(call.at.x - call.start.x)).toBe(Math.sign(next.x - call.at.x));
-        expect(call.start.x).toBeGreaterThanOrEqual(w.left * 16);
-        expect(call.start.x).toBeLessThanOrEqual(w.width * 16);
+        expect(call.start.x).toBeGreaterThanOrEqual((w.left - MAP_MARGIN) * 16); // the street to the suburb runs on out of town (decision 276)
+        expect(call.start.x).toBeLessThanOrEqual((w.width + MAP_MARGIN) * 16);
       } else {
         expect(call.start.x).toBe(call.at.x);
         expect(Math.sign(call.at.y - call.start.y)).toBe(Math.sign(next.y - call.at.y));

@@ -215,6 +215,8 @@ export interface CityWorld {
     w: number;
     h: number;
     apartments: CityApartment[];
+    /** The suburb's houses (decision 276): every fourth resident lives in one and rides a cab into town. */
+    houses?: CityApartment[];
     blocks: Array<{ x: number; y: number; w: number; h: number; mirror: boolean }>;
     paths: number[];
     /** Grass and trees: the top of a deep block, or a phone's row with one block. */
@@ -224,7 +226,7 @@ export interface CityWorld {
 }
 /** One New York style apartment building, in tiles; its door is doorOf(it). */
 export interface CityApartment {
-  kind: "slim" | "mid" | "wide";
+  kind: "slim" | "mid" | "wide" | "house";
   block: number;
   x: number;
   y: number;
@@ -247,6 +249,10 @@ export const CITY_SEED: string;
 export const OVAL: number;
 /** Manhattan blocks (decision 275): lots LOT_W wide, two or three to a block, the block columns' west edges and widths. */
 export const LOT_W: number;
+export const HOUSES: number;
+export const HOUSE_W: number;
+export const HOUSE_H: number;
+export const HOUSE_PITCH: number;
 export const AVENUE_X: number;
 export function lotsAcross(c: number): number;
 export function colW(c: number): number;

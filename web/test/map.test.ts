@@ -100,7 +100,7 @@ describe("the apartment buildings (decision 188)", () => {
       expect(built).toBeLessThan(block.w * block.h * 0.75); // some green left over
     });
 
-  it("residents stand by their own building's door, sharing the one block's three buildings", () => {
+  it("residents stand by their own building's door, sharing the one block's three buildings and the suburb's houses", () => {
     const w = layout(city(6), { homes: 48 });
     expect(w.homes.blocks.map((b) => b.mirror)).toEqual([false]); // one block (decision 213): its residents share it
     const per = new Map<object, number>();
@@ -111,7 +111,9 @@ describe("the apartment buildings (decision 188)", () => {
       expect(spot.y).toBeGreaterThan((a.y + a.h) * TILE); // on the pavement in front
       expect(spot.y - d.y).toBeLessThan(24);
     }
-    expect([...per.values()]).toEqual(Array(3).fill(16));
+    // Every fourth lives in a house in the suburb (decision 276): 12 in each flat building, 2 in each of the 6 houses.
+    expect([...per.values()]).toEqual([...Array(3).fill(12), ...Array(6).fill(2)]);
+    for (const [a] of per) if ((a as { kind: string }).kind === "house") expect(w.homes.houses).toContain(a);
   });
 
   it("nothing stands between a door and the street below it, so a walk never cuts through a building", () => {

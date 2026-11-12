@@ -227,7 +227,7 @@ describe("footbridges (decision 262)", () => {
   });
 
   it("cabs drive under them without stopping, and the lights still cycle", () => {
-    const w = city(40), sim = createTraffic(w), bs = footbridges(w);
+    const w = city(40), sim = createTraffic(w, "traffic", 1), bs = footbridges(w); // a fixed roll of the rare cars, so the run is the same every time
     const passed = new Set<string>();
     let stoppedUnder = 0;
     const lights = sim.junctions.filter((j) => j.kind === "light");

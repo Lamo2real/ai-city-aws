@@ -864,6 +864,7 @@ function aptShape(a) {
 }
 // The windows of the upper floors, top floor first; the ground floor keeps the entrance (and the shops on a wide one).
 function aptWindows(a) {
+  if (a.kind === "house") { const { X, W, foot } = aptShape(a); return [{ x: X + 10, y: foot - 34, w: 9, h: 9, floor: 0, col: 0, cols: 2 }, { x: X + W - 19, y: foot - 34, w: 9, h: 9, floor: 0, col: 1, cols: 2 }]; }
   const { W, foot, top, cx } = aptShape(a), cols = Math.max(2, Math.floor((W - 6) / 9)), x0 = Math.round(cx - (cols * 9 - 4) / 2), out = [];
   for (let y = top + 9, floor = 0; y + 8 <= foot - 21; y += 13, floor++) for (let c = 0; c < cols; c++) out.push({ x: x0 + c * 9, y, w: 5, h: 8, floor, col: c, cols });
   return out;
@@ -878,7 +879,30 @@ function bulkhead(g, x, top, w, c) {
   R(g, x - 1, top - 8, w + 2, 8, INK); R(g, x, top - 7, w, 7, c); R(g, x, top - 7, w, 1, "rgba(255,255,255,.18)");
   R(g, x + 2, top - 5, 3, 4, GLASS);
 }
+// Every home: the apartment buildings, then the suburb's houses (decision 276).
+const homesOf = (world) => [...world.homes.apartments, ...(world.homes.houses ?? [])];
+// A house in the suburb (decision 276): a little clapboard house with a pitched roof and a chimney, a front door and
+// two windows on the street, a lawn with a white picket fence. Its windows light for whoever is home, like a flat's.
+const HOUSE_WALLS = [["#d9c7a0", "#efe0bc", "#b8a47e"], ["#a9c4cf", "#c4dbe3", "#87a3ae"], ["#d6a9a0", "#ebc3ba", "#b3867d"], ["#bfcfa4", "#d6e3bd", "#9caf82"]];
+const HOUSE_ROOFS = ["#7a3a2c", "#3f4f6a", "#5a4636", "#4a5a3a"];
+function house(g, a) {
+  const { X, W, foot, cx } = aptShape(a), k = hashOf(`house:${a.x},${a.y}`), [wall, light, dark] = HOUSE_WALLS[k % HOUSE_WALLS.length], roof = HOUSE_ROOFS[(k >> 3) % HOUSE_ROOFS.length];
+  lawn(g, X - 6, foot - 58, W + 12, 64, "house");
+  for (let x = X - 6; x < X + W + 6; x += 4) { R(g, x, foot + 1, 2, 5, "#efe9dc"); } R(g, X - 6, foot + 3, W + 12, 1, "#d8d2c4"); // the picket fence
+  R(g, cx - 4, foot, 8, 7, "#a8a3bd"); // the path to the door
+  const wy = foot - 44; // the walls
+  R(g, X + 3, foot - 1, W - 2, 3, "rgba(20,18,40,.3)");
+  R(g, X + 3, wy - 1, W - 6, foot - wy + 1, INK); R(g, X + 4, wy, W - 8, foot - wy, wall);
+  for (let y = wy + 3; y < foot; y += 4) R(g, X + 4, y, W - 8, 1, dark); // clapboard
+  R(g, X + 4, wy, 2, foot - wy, light);
+  for (let i = 0; i < 16; i++) { const w = Math.round((W + 4) * (1 - i / 16)); R(g, cx - w / 2 - 1, wy - i - 1, w + 2, 1, INK); R(g, cx - w / 2, wy - i - 1, w, 1, i % 3 ? roof : "rgba(0,0,0,.25)"); } // the roof
+  R(g, X + W - 22, wy - 18, 6, 12, INK); R(g, X + W - 21, wy - 17, 4, 11, "#8a4a3a"); // the chimney
+  for (const w of aptWindows(a)) { R(g, w.x - 1, w.y - 1, w.w + 2, w.h + 2, INK); R(g, w.x, w.y, w.w, w.h, GLASS); R(g, w.x + 4, w.y, 1, w.h, light); R(g, w.x, w.y + 4, w.w, 1, light); }
+  R(g, cx - 5, foot - 16, 10, 16, INK); R(g, cx - 4, foot - 15, 8, 15, roof); R(g, cx + 1, foot - 8, 1, 1, "#f4c63c"); // the front door
+  R(g, cx + 6, foot - 14, 2, 2, "#ffd98a"); // the porch light
+}
 function apartment(g, a) {
+  if (a.kind === "house") return house(g, a);
   const { X, W, foot, top, cx } = aptShape(a), k = hashOf(`apt:${a.x},${a.y}`), [wall, light, dark] = APT_WALLS[a.kind][k % 2];
   // The pavement in front, where the residents stand, and the building's shadow on it.
   paving(g, X - 2, foot, W + 4, 16, WALK, "#5f5b74", `apt${a.x},${a.y}`, 8);
@@ -975,7 +999,7 @@ function bake(world, skip = new Map(), { now = Date.now(), grow = true } = {}) {
   // An empty lot is forest (decision 259); only one whose tower is coming down right now keeps clear for the wrecking ball.
   const wrecking = world.lots.filter((l) => l.demolished && skip.has(l.demolished));
   const rings = js.filter((j) => j.kind === "roundabout").map((j) => ({ x: j.cx / TILE - 4, y: j.cy / TILE - 4, w: 8, h: 8 })); // no tree on a ring or its pavement
-  const taken = [world.hq, ...world.buildings, ...(world.neighbours ?? []), ...wrecking, ...paved, ...rings, world.homes, ...roads.map((s) => ({ x: s.x0, y: s.y, w: s.x1 - s.x0, h: 3 })), ...verticals.map((v) => ({ x: v.x, y: v.y0, w: 3, h: v.y1 - v.y0 }))];
+  const taken = [world.hq, ...world.buildings, ...(world.neighbours ?? []), ...homesOf(world), ...wrecking, ...paved, ...rings, world.homes, ...roads.map((s) => ({ x: s.x0, y: s.y, w: s.x1 - s.x0, h: 3 })), ...verticals.map((v) => ({ x: v.x, y: v.y0, w: 3, h: v.y1 - v.y0 }))];
   const clear = (x, y) => taken.every((t) => x < (t.x * TILE) - 12 || x > (t.x + t.w) * TILE + 12 || y < t.y * TILE - 2 || y > (t.y + t.h) * TILE + 34);
   // Each tree has its own spot on a fixed grid, the same on every map whatever its size (decision 248): a new tower or
   // row only clears the trees where it stands, and no other tree moves. About one tree to 3000 square pixels.
@@ -1009,7 +1033,7 @@ function bake(world, skip = new Map(), { now = Date.now(), grow = true } = {}) {
     near.push([c.bench[1] + 8, () => bench(g, c.bench[0] - (c.mirror ? 22 : 0), c.bench[1])]);
     near.push([c.flowers[1] + 10, () => flowers(g, c.flowers[0] - (c.mirror ? 16 : 0), c.flowers[1], "#d2699e")]);
   }
-  for (const a of world.homes.apartments) near.push([(a.y + a.h) * TILE, () => apartment(g, a)]);
+  for (const a of homesOf(world)) near.push([(a.y + a.h) * TILE, () => apartment(g, a)]);
   near.sort((p, q) => p[0] - q[0]).forEach(([, draw]) => draw());
   const FW = W - L + M * 2, FH = H - T + M * 2, X0 = L - M, Y0 = T - M;
   g.fillStyle = "rgba(38,30,78,.14)"; g.fillRect(X0, Y0, FW, FH); // the dusk wash over all of it
@@ -1225,7 +1249,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   function lightHouse(id, ms) {
     const slot = homes.get(id) ?? 0, a = homeOf(world, slot);
     if (!a) return;
-    const i = `${world.homes.apartments.indexOf(a)}:${hashOf(`win:${slot}`)}`;
+    const i = `${homesOf(world).indexOf(a)}:${hashOf(`win:${slot}`)}`;
     lights.set(i, Math.max(lights.get(i) ?? 0, performance.now() + ms));
     setTimeout(() => wake(), ms + 150);
   }
@@ -1235,7 +1259,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     const m = /^desk:([^:]+)/.exec(p.key ?? ""), home = p.key === "home" && world;
     p.inside = !!(yes && (m || home));
     // At home (decision 213): inside the apartment building, one lit window each, counted on its roof.
-    p.insideOf = !p.inside ? null : m ? m[1] : `home:${world.homes.apartments.indexOf(homeOf(world, homes.get(p.id) ?? 0))}`;
+    p.insideOf = !p.inside ? null : m ? m[1] : `home:${homesOf(world).indexOf(homeOf(world, homes.get(p.id) ?? 0))}`;
   }
   function dashTo(p, to, then) {
     p.waitUntil = null;
@@ -1892,7 +1916,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     // A lit window marks a home with movement: someone called in to work, or just home after checking out.
     for (const [i, until] of lights) {
       if (until <= now) { lights.delete(i); continue; }
-      const [ai, wi] = i.split(":").map(Number), a = world.homes.apartments[ai], wins = a ? aptWindows(a) : [];
+      const [ai, wi] = i.split(":").map(Number), a = homesOf(world)[ai], wins = a ? aptWindows(a) : [];
       const win = wins[wi % (wins.length || 1)];
       if (win) { R(ctx, win.x - ox, win.y - oy, win.w, win.h, LIT); R(ctx, win.x - ox, win.y - oy, win.w, 1, LIT_TOP); R(ctx, win.x - ox, win.y + 4 - oy, win.w, 1, INK); }
     }
@@ -1900,7 +1924,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     const homeCount = new Map();
     for (const p of people.values()) if (p.inside && p.insideOf?.startsWith("home:")) { const ai = Number(p.insideOf.slice(5)); homeCount.set(ai, (homeCount.get(ai) ?? 0) + 1); }
     let athome = 0;
-    world.homes.apartments.forEach((a, ai) => {
+    homesOf(world).forEach((a, ai) => {
       const n = homeCount.get(ai) ?? 0, wins = aptWindows(a), { top, cx } = aptShape(a);
       athome += n;
       const order = wins.map((_, i) => i).sort((x, y) => hashOf(`home:${ai}:${x}`) - hashOf(`home:${ai}:${y}`));
