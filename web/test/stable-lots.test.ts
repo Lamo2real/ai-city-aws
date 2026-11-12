@@ -4,7 +4,7 @@
 // takes the free lot nearest HQ, else the next one); demolishing one leaves its lot to the trees and changes nothing
 // else; the same records always draw the same city.
 import { describe, expect, it } from "vitest";
-import { LOT_W, PITCH_Y, applySnapshot, blockOf, colW, colX, lotOf, ringScore, initialState, junctions, layout, reduce, type CityState } from "../src/city/city-state.js";
+import { PITCH_Y, applySnapshot, blockOf, blockOrder, colW, colX, lotOf, ringScore, initialState, junctions, layout, reduce, type CityState } from "../src/city/city-state.js";
 
 type World = ReturnType<typeof layout>;
 const PRESETS = ["Application", "IT Infrastructure", "Data & AI", "Marketing", "Sales", "Customer Support", "Finance", "Legal", "Product", "Operations", "Research", "Media"];
@@ -47,25 +47,27 @@ const created = (s: CityState, name: string, at: number, slot?: number, lot = ""
 const demolished = (s: CityState, name: string, at: number) => reduce(s, { type: "department.demolished", name }, at);
 
 describe("the town", () => {
-  it("fills in rings from HQ, block by block, each block packed before the next: a compact X × X (decision 282)", () => {
+  it("grows organically from HQ, a block at a time, each block packed before the next: compact but never a rectangle (decision 286)", () => {
     const lots = Array.from({ length: 600 }, (_, s) => lotOf(s));
     expect(new Set(lots.map((l) => l.join(","))).size).toBe(600); // a lot of its own for every department
     for (const [c, r, li] of lots) expect(li === 0 && ((c === 0 && r === 0) || (c === 0 && r === 1))).toBe(false); // never HQ's or the homes' own lot
-    // Ring order: a block's distance from the middle never goes down, and a block is filled before the next starts.
     const seen: string[] = [];
-    for (const [c, r] of lots) { const k = `${c},${r}`; if (seen.at(-1) !== k) { expect(seen).not.toContain(k); seen.push(k); } }
-    const d = seen.map((k) => ringScore(...(k.split(",").map(Number) as [number, number])));
-    for (let i = 1; i < d.length; i++) expect(d[i]!).toBeGreaterThanOrEqual(d[i - 1]! - 1e-9);
-    for (const n of [12, 30, 60, 150]) {
-      const set = lots.slice(0, n), used = new Set(set.map(([c, r]) => `${c},${r}`));
-      // Minimal: no block nearer the middle than the furthest one used is left out (apart from the one being filled).
-      const far = Math.max(...[...used].map((k) => ringScore(...(k.split(",").map(Number) as [number, number]))));
-      for (let r = -20; r <= 20; r++) for (let c = -12; c <= 12; c++) if (ringScore(c, r) < far - 1e-9 && !(c === 0 && (r === 0 || r === 1))) expect(used.has(`${c},${r}`), `block ${c},${r} at ${n}`).toBe(true);
-      // X × X: about as wide as it is tall, in tiles (a ring of whole blocks at a time, so it swings either side of square).
-      const xs = set.map(([c, , li]) => colX(c) + li * LOT_W), ys = set.map(([, r]) => r * PITCH_Y);
-      const wide = Math.max(...xs, 12) - Math.min(...xs, 0) + LOT_W, tall = Math.max(...ys, PITCH_Y) - Math.min(...ys, 0) + PITCH_Y;
-      expect(wide / tall).toBeGreaterThan(0.6);
-      expect(wide / tall).toBeLessThan(2.5);
+    for (const [c, r] of lots) { const k = `${c},${r}`; if (seen.at(-1) !== k) { expect(seen).not.toContain(k); seen.push(k); } } // a block filled before the next
+    expect(blockOrder().slice(0, 50)).toEqual(blockOrder().slice(0, 50)); // the same order every time (the town's seed)
+    for (const n of [13, 30, 60]) {
+      const set = lots.slice(0, n), used = new Set(["0,0", "0,1", ...set.map(([c, r]) => `${c},${r}`)]);
+      // Every block touches another (no tower stands alone).
+      for (const k of used) { const [c, r] = k.split(",").map(Number) as [number, number]; expect([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dc, dr]) => used.has(`${c + dc!},${r + dr!}`)), `block ${k} at ${n}`).toBe(true); }
+      // Not a rectangle: its bounding box has blocks left out.
+      const cs = [...used].map((k) => Number(k.split(",")[0])), rs = [...used].map((k) => Number(k.split(",")[1]));
+      expect(used.size).toBeLessThan((Math.max(...cs) - Math.min(...cs) + 1) * (Math.max(...rs) - Math.min(...rs) + 1));
+      // Compact round HQ: on average about as near the middle as the nearest blocks could be.
+      const all: number[] = [];
+      for (let r = -15; r <= 15; r++) for (let c = -10; c <= 10; c++) if (!(c === 0 && (r === 0 || r === 1))) all.push(ringScore(c, r));
+      all.sort((a, b) => a - b);
+      const mine = [...used].filter((k) => k !== "0,0" && k !== "0,1").map((k) => ringScore(...(k.split(",").map(Number) as [number, number])));
+      const best = all.slice(0, mine.length), mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+      expect(mean(mine)).toBeLessThan(mean(best) * 1.6 + 2);
     }
   });
 

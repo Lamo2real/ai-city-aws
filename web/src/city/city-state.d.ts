@@ -405,3 +405,5 @@ export function workingIn(state: CityState): Record<string, Array<{ id: string; 
 export function lotOf(slot: number): [number, number, number];
 export function lotScore(c: number, r: number, li: number): number;
 export function ringScore(c: number, r: number): number;
+/** The order the town grows in, block by block (decision 286): seeded, nearest the middle most likely, fixed for good. */
+export function blockOrder(): Array<[number, number]>;

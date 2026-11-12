@@ -647,22 +647,37 @@ export const ringScore = (c, r) => {
 };
 const LOTS = [];
 // Lot `slot` → [block column, block row, lot in the block], for good.
+// Grown, not drawn with a ruler (decision 286, the owner: "too rectangular… place them randomly while still compact
+// around the middle"): the town grows a block at a time from HQ and the homes. The next block is drawn by the town's
+// seed from the blocks touching the town so far, each weighted by how near the middle it is (GROW_SCALE tiles per
+// halving of its chance), so it stays densest round HQ while its edge comes out on any side, never a rectangle. A
+// block is filled lot by lot, nearest first, before the next; the order is fixed by the seed, so it never changes.
+const GROW_SCALE = 6, GROW_SEED = `${CITY_SEED}:grow4`; // the seed picked for a town that starts round HQ, not in a line
+export function blockOrder() {
+  if (!BLOCKS.length) {
+    const rand = rngOf(GROW_SEED), taken = new Set(["0,0", `${HOMES_BLOCK[0]},${HOMES_BLOCK[1]}`]), frontier = new Map();
+    const touch = (c, r) => { for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const k = `${c + dc},${r + dr}`; if (!taken.has(k) && Math.abs(c + dc) <= REACH && Math.abs(r + dr) <= REACH) frontier.set(k, [c + dc, r + dr]); } };
+    touch(0, 0); touch(...HOMES_BLOCK);
+    while (frontier.size) {
+      const options = [...frontier.values()].map(([c, r]) => ({ c, r, w: 2 ** (-ringScore(c, r) / GROW_SCALE) }));
+      let x = rand() * options.reduce((a, o) => a + o.w, 0), pick = options[0];
+      for (const o of options) { x -= o.w; if (x <= 0) { pick = o; break; } }
+      const k = `${pick.c},${pick.r}`;
+      frontier.delete(k); taken.add(k); BLOCKS.push([pick.c, pick.r]); touch(pick.c, pick.r);
+    }
+  }
+  return BLOCKS;
+}
 export function lotOf(slot) {
   if (!LOTS.length) {
-    const all = [];
-    for (let r = -REACH; r <= REACH; r++) for (let c = -REACH; c <= REACH; c++) for (let li = 0; li < lotsAcross(c); li++) {
-      if (li === 0 && ((c === 0 && r === 0) || (c === HOMES_BLOCK[0] && r === HOMES_BLOCK[1]))) continue; // HQ's and the homes'
-      all.push({ c, r, li, block: ringScore(c, r), score: lotScore(c, r, li) });
-    }
-    // A block fills completely, nearest lot first, before the next one starts: no grass between neighbours.
-    all.sort((p, q) => p.block - q.block || p.r - q.r || p.c - q.c || p.score - q.score || p.li - q.li);
-    for (const b of all) LOTS.push([b.c, b.r, b.li]);
+    const lotsIn = (c, r) => Array.from({ length: lotsAcross(c) }, (_, li) => li).filter((li) => !(li === 0 && ((c === 0 && r === 0) || (c === HOMES_BLOCK[0] && r === HOMES_BLOCK[1])))).sort((a, b) => lotScore(c, r, a) - lotScore(c, r, b) || a - b);
+    // HQ's block and the homes' have a lot each for a department first, then the grown blocks, each filled before the next.
+    for (const [c, r] of [[0, 0], HOMES_BLOCK, ...blockOrder()]) for (const li of lotsIn(c, r)) LOTS.push([c, r, li]);
   }
   return LOTS[slot];
 }
 // Lot `slot` → its block, [column, row].
 export const blockOf = (slot) => lotOf(slot).slice(0, 2);
-void BLOCKS;
 
 // The lots (decision 248). Every tower stands on a lot of its own, numbered from 0, for good, and lot `s` is always
 // block `blockOf(s)`. The server numbers them (the ledger's LOT# items); `numberLots` gives a number to a department
@@ -711,8 +726,9 @@ export function layout(state, { portrait = false, seats = {}, homes = 0 } = {}) 
   const built = new Set(["0,0", `${HOMES_BLOCK[0]},${HOMES_BLOCK[1]}`]); // blocks with a road along them
   for (let slot = 0; slot < top; slot++) {
     const [c, r, li] = lotOf(slot), o = corner(c, r), s = towerSize(lotSizeName(sizes, slot));
-    built.add(`${c},${r}`);
-    c0 = Math.min(c0, c); c1 = Math.max(c1, c); r0 = Math.min(r0, r); r1 = Math.max(r1, r);
+    // Roads only round blocks with a tower standing on them (decision 286): a block whose lots are all free is forest
+    // with no road round it, until a department takes one of them.
+    if (holder.has(slot)) { built.add(`${c},${r}`); c0 = Math.min(c0, c); c1 = Math.max(c1, c); r0 = Math.min(r0, r); r1 = Math.max(r1, r); }
     const lx = o.x + li * LOT_W, x = lx + Math.floor((LOT_W - s.w) / 2), y = o.y + BLOCK_H - s.h; // its lot, on the street side of its block
     const name = holder.get(slot);
     if (!name) {
