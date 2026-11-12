@@ -4,7 +4,7 @@
 // takes the free lot nearest HQ, else the next one); demolishing one leaves its lot to the trees and changes nothing
 // else; the same records always draw the same city.
 import { describe, expect, it } from "vitest";
-import { LOT_W, OVAL, PITCH_X, PITCH_Y, applySnapshot, blockOf, blockScore, colW, colX, initialState, junctions, layout, reduce, type CityState } from "../src/city/city-state.js";
+import { LOT_W, PITCH_Y, applySnapshot, blockOf, colW, colX, lotOf, ringScore, initialState, junctions, layout, reduce, type CityState } from "../src/city/city-state.js";
 
 type World = ReturnType<typeof layout>;
 const PRESETS = ["Application", "IT Infrastructure", "Data & AI", "Marketing", "Sales", "Customer Support", "Finance", "Legal", "Product", "Operations", "Research", "Media"];
@@ -47,33 +47,26 @@ const created = (s: CityState, name: string, at: number, slot?: number, lot = ""
 const demolished = (s: CityState, name: string, at: number) => reduce(s, { type: "department.demolished", name }, at);
 
 describe("the town", () => {
-  it("fills outward from HQ, compact and oval (wider than tall), with a ragged edge, never a square or a rectangle", () => {
-    const blocks = Array.from({ length: 400 }, (_, s) => blockOf(s));
-    expect(new Set(blocks.map((b) => b.join(","))).size).toBe(400); // a block of its own for every lot
-    for (const b of blocks) expect(b.join(",")).not.toMatch(/^0,0$|^0,1$/); // never HQ's or the homes'
-    for (const n of [7, 12, 20, 40, 100, 400]) {
-      const set = blocks.slice(0, n);
-      // Compact: every lot within an oval whose size grows like the square root of the count (in tiles).
-      // (Blocks are two or three lots wide since decision 275: about MEAN_PITCH tiles from avenue to avenue.)
-      const MEAN_PITCH = 2.5 * LOT_W + 3;
-      const oval = ([c, r]: [number, number]) => blockScore(c, r);
-      expect(Math.max(...set.map(oval))).toBeLessThan(Math.sqrt(((n + 2) * MEAN_PITCH * OVAL) / (PITCH_Y * Math.PI)) + 1.2);
-      // Not a rectangle: the town's bounding box has empty blocks (forest) in it.
-      const cs = set.map((b) => b[0]), rs = set.map((b) => b[1]);
-      const box = (Math.max(...cs, 1) - Math.min(...cs, -1) + 1) * (Math.max(...rs, 1) - Math.min(...rs, -1) + 1);
-      expect(box).toBeGreaterThan(n + 2);
-      // An oval, not a square or a rectangle: wider than tall on the map, and every corner of its box is forest.
-      if (n >= 30) {
-        const wide = colX(Math.max(...cs)) + colW(Math.max(...cs)) - colX(Math.min(...cs)) + 3, tall = (Math.max(...rs) - Math.min(...rs) + 1) * PITCH_Y;
-        expect(wide / tall).toBeGreaterThan(1.15);
-        expect(wide / tall).toBeLessThan(1.9);
-        const has = new Set(set.map((b) => b.join(",")));
-        for (const c of [Math.min(...cs), Math.max(...cs)]) for (const r of [Math.min(...rs), Math.max(...rs)]) expect(has.has(`${c},${r}`), `corner ${c},${r} at ${n}`).toBe(false);
-      }
+  it("fills in rings from HQ, block by block, each block packed before the next: a compact X × X (decision 282)", () => {
+    const lots = Array.from({ length: 600 }, (_, s) => lotOf(s));
+    expect(new Set(lots.map((l) => l.join(","))).size).toBe(600); // a lot of its own for every department
+    for (const [c, r, li] of lots) expect(li === 0 && ((c === 0 && r === 0) || (c === 0 && r === 1))).toBe(false); // never HQ's or the homes' own lot
+    // Ring order: a block's distance from the middle never goes down, and a block is filled before the next starts.
+    const seen: string[] = [];
+    for (const [c, r] of lots) { const k = `${c},${r}`; if (seen.at(-1) !== k) { expect(seen).not.toContain(k); seen.push(k); } }
+    const d = seen.map((k) => ringScore(...(k.split(",").map(Number) as [number, number])));
+    for (let i = 1; i < d.length; i++) expect(d[i]!).toBeGreaterThanOrEqual(d[i - 1]! - 1e-9);
+    for (const n of [12, 30, 60, 150]) {
+      const set = lots.slice(0, n), used = new Set(set.map(([c, r]) => `${c},${r}`));
+      // Minimal: no block nearer the middle than the furthest one used is left out (apart from the one being filled).
+      const far = Math.max(...[...used].map((k) => ringScore(...(k.split(",").map(Number) as [number, number]))));
+      for (let r = -20; r <= 20; r++) for (let c = -12; c <= 12; c++) if (ringScore(c, r) < far - 1e-9 && !(c === 0 && (r === 0 || r === 1))) expect(used.has(`${c},${r}`), `block ${c},${r} at ${n}`).toBe(true);
+      // X × X: about as wide as it is tall, in tiles (a ring of whole blocks at a time, so it swings either side of square).
+      const xs = set.map(([c, , li]) => colX(c) + li * LOT_W), ys = set.map(([, r]) => r * PITCH_Y);
+      const wide = Math.max(...xs, 12) - Math.min(...xs, 0) + LOT_W, tall = Math.max(...ys, PITCH_Y) - Math.min(...ys, 0) + PITCH_Y;
+      expect(wide / tall).toBeGreaterThan(0.6);
+      expect(wide / tall).toBeLessThan(2.5);
     }
-    // Not just rings by distance: some later lot is nearer HQ than an earlier one (the seeded jitter).
-    const d = blocks.slice(0, 40).map(([c, r]) => blockScore(c, r));
-    expect(d.some((x, i) => i > 0 && x < d[i - 1]! - 0.1)).toBe(true);
   });
 
   it("blocks of two or three lots (decision 275) hold only departments' towers, never filler buildings (decision 279), and nothing overlaps", () => {
@@ -160,7 +153,7 @@ describe("the town", () => {
       rounds = now;
       before = after;
     }
-    expect(rounds.length).toBeGreaterThan(6);
+    expect(rounds.length).toBeGreaterThanOrEqual(3); // a compact town has fewer crossings (decision 282)
     // Nothing stands on anything else: every tower, empty lot, HQ and the homes in a block of its own.
     const boxes = [...before.buildings, ...before.lots, before.hq, before.homes];
     for (const a of boxes) for (const b of boxes) if (a !== b) expect(a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h).toBe(false);

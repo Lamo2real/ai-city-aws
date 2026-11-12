@@ -1009,7 +1009,9 @@ function bake(world, skip = new Map(), { now = Date.now(), grow = true } = {}) {
   // A built block is city, not forest: paved from road to road, its tower on it (the owner: "it should still feel
   // like a city", decision 259). Paved first, so the roads and a roundabout's ring lie over its corners (decision 267).
   // Each lot with a building on it, the department's or a neighbour's (decision 275).
-  const paved = [...world.buildings, ...(world.neighbours ?? [])].map((b) => ({ ...b.lot, seed: `lot${b.lot.x},${b.lot.y}` }));
+  // No paving round a tower any more (decision 282, the owner: "it should always be green around"): grass up to its
+  // walls, and only the pavement strip in front of its door (`towerPlot`) joins it to the street.
+  const paved = [];
   for (const p of paved) paving(g, p.x * TILE, p.y * TILE, p.w * TILE, p.h * TILE, CITY_GROUND, "#5e5a74", p.seed);
   // The avenue east of HQ and the other avenues, each as long as it runs.
   const verticals = [{ x: world.avenue, y0: top, y1: bottom }, ...(world.lanes ?? [])];
@@ -1169,6 +1171,8 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   root._counts = counts; // and the roof counters (e2e/towers.spec.ts)
   root._doors = doors;
   root._view = () => ({ x: cam.x, y: cam.y, zoom: cam.zoom }); // the camera, for tests that click a tower
+  // The baked ground's colour at an art pixel (for tests: grass round a tower, pavement only in front, decision 282).
+  root._groundAt = (x, y) => { const M = MARGIN * TILE, d = ground?.getContext("2d")?.getImageData(Math.round(x - (world.left ?? 0) * TILE + M), Math.round(y - (world.top ?? 0) * TILE + M), 1, 1).data; return d ? [d[0], d[1], d[2]] : null; };
   root._entrances = () => entrances; // how often the towers' entrance has played this page (e2e/features.spec.ts)
   root._world = () => world; // the layout, for tests: towers keep one size whatever the headcount
   root._carSprite = cabImg; // the car sprites (false, "porsche", "lambo"; side, front, rear), for the rare cars' close-up screenshot

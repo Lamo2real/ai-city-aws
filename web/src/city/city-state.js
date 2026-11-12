@@ -627,22 +627,42 @@ const HOMES_BLOCK = [0, 1], REACH = 24; // blocks are ranked out to REACH blocks
 const BLOCKS = [];
 // How far block (c, r) is from the middle of town, in block heights, on the oval: the density falls with it.
 export const blockScore = (c, r) => Math.hypot((colX(c) + colW(c) / 2 - LOT_W) / OVAL, (r - 0.5) * PITCH_Y) / PITCH_Y;
-// Lot `slot` → its block, for good.
-export function blockOf(slot) {
-  if (!BLOCKS.length) {
+// Packed in rings (decision 282, the owner: "more compressed, an X times X layout. The middle should be the most
+// compact… the buildings should still be really tight together"): every lot of a block is a department's, and lot n
+// goes, block by block, to the blocks nearest the middle of town (between HQ and the homes, on the avenue side of HQ)
+// by a squarish distance in tiles (a 4-norm: rings that are nearly square, X × X), each block filled lot by lot before
+// the next, with no randomness: the town fills the central blocks shoulder to shoulder and grows outward a ring at a
+// time. HQ and the homes keep their own lots.
+const RING_P = 4, MID = { x: LOT_W, y: BLOCK_H + STREET / 2 };
+export const lotScore = (c, r, li) => {
+  const dx = Math.abs(colX(c) + li * LOT_W + LOT_W / 2 - MID.x), dy = Math.abs(r * PITCH_Y + BLOCK_H / 2 - MID.y);
+  return (dx ** RING_P + dy ** RING_P) ** (1 / RING_P);
+};
+// How far a block's middle is from the middle of town, on the same squarish rings.
+// (To the block's nearest edge, so a three-lot block east of HQ counts the same as a two-lot one west of it.)
+export const ringScore = (c, r) => {
+  const gap = (lo, hi, v) => (v < lo ? lo - v : v > hi ? v - hi : 0);
+  const dx = gap(colX(c), colX(c) + colW(c), MID.x), dy = gap(r * PITCH_Y, r * PITCH_Y + BLOCK_H, MID.y);
+  return (dx ** RING_P + dy ** RING_P) ** (1 / RING_P);
+};
+const LOTS = [];
+// Lot `slot` → [block column, block row, lot in the block], for good.
+export function lotOf(slot) {
+  if (!LOTS.length) {
     const all = [];
-    for (let r = -REACH; r <= REACH; r++) for (let c = -REACH; c <= REACH; c++) {
-      if ((c === 0 && r === 0) || (c === HOMES_BLOCK[0] && r === HOMES_BLOCK[1])) continue;
-      const jitter = (hashOf(`${CITY_SEED}:${c},${r}`) % 1000) / 1000; // 0 … 1
-      // An oval (decision 261): distance in tiles, the east–west axis OVAL times the north–south one, measured from
-      // between HQ and the homes; the jitter only ragged the edge, so the outline is never a row or a column.
-      all.push({ c, r, score: blockScore(c, r) + jitter * 0.45 });
+    for (let r = -REACH; r <= REACH; r++) for (let c = -REACH; c <= REACH; c++) for (let li = 0; li < lotsAcross(c); li++) {
+      if (li === 0 && ((c === 0 && r === 0) || (c === HOMES_BLOCK[0] && r === HOMES_BLOCK[1]))) continue; // HQ's and the homes'
+      all.push({ c, r, li, block: ringScore(c, r), score: lotScore(c, r, li) });
     }
-    all.sort((p, q) => p.score - q.score || p.r - q.r || p.c - q.c);
-    for (const b of all) BLOCKS.push([b.c, b.r]);
+    // A block fills completely, nearest lot first, before the next one starts: no grass between neighbours.
+    all.sort((p, q) => p.block - q.block || p.r - q.r || p.c - q.c || p.score - q.score || p.li - q.li);
+    for (const b of all) LOTS.push([b.c, b.r, b.li]);
   }
-  return BLOCKS[slot];
+  return LOTS[slot];
 }
+// Lot `slot` → its block, [column, row].
+export const blockOf = (slot) => lotOf(slot).slice(0, 2);
+void BLOCKS;
 
 // The lots (decision 248). Every tower stands on a lot of its own, numbered from 0, for good, and lot `s` is always
 // block `blockOf(s)`. The server numbers them (the ledger's LOT# items); `numberLots` gives a number to a department
@@ -690,10 +710,10 @@ export function layout(state, { portrait = false, seats = {}, homes = 0 } = {}) 
   let c0 = -1, c1 = 1, r0 = -1, r1 = 1; // the map reaches at least one block around HQ
   const built = new Set(["0,0", `${HOMES_BLOCK[0]},${HOMES_BLOCK[1]}`]); // blocks with a road along them
   for (let slot = 0; slot < top; slot++) {
-    const [c, r] = blockOf(slot), o = corner(c, r), s = towerSize(lotSizeName(sizes, slot));
+    const [c, r, li] = lotOf(slot), o = corner(c, r), s = towerSize(lotSizeName(sizes, slot));
     built.add(`${c},${r}`);
     c0 = Math.min(c0, c); c1 = Math.max(c1, c); r0 = Math.min(r0, r); r1 = Math.max(r1, r);
-    const lx = o.x + deptLot(c, r) * LOT_W, x = lx + Math.floor((LOT_W - s.w) / 2), y = o.y + BLOCK_H - s.h; // its lot, on the street side of its block
+    const lx = o.x + li * LOT_W, x = lx + Math.floor((LOT_W - s.w) / 2), y = o.y + BLOCK_H - s.h; // its lot, on the street side of its block
     const name = holder.get(slot);
     if (!name) {
       const freedAt = state.freed?.[slot];

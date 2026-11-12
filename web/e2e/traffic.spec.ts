@@ -21,7 +21,8 @@ const hooks = <T>(page: Page, f: (h: Hooks) => T) =>
 
 async function openCity(page: Page) {
   const created_at = new Date(Date.now() - 86_400_000).toISOString();
-  const departments = ["Research", "Sales", "Legal", "Media"].map((name) => ({
+  // Sixteen, so the compact town (decision 282) has four-way crossings for its roundabouts.
+  const departments = ["Research", "Sales", "Legal", "Media", "Finance", "Product", "Marketing", "Operations", "Design", "Data", "Support", "People", "Security", "Growth", "Partners", "Studio"].map((name) => ({
     key: name.toLowerCase(),
     name,
     mission: "x",

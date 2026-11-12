@@ -90,7 +90,7 @@ describe("traffic lights", () => {
       before = js;
       rounds = now;
     }
-    expect(rounds).toBeGreaterThan(4); // a big town has many
+    expect(rounds).toBeGreaterThanOrEqual(3); // a big town has several (a compact one, decision 282, has fewer crossings)
   });
 
   it("a cab stops at the line on red, waits, and drives on when it turns green", () => {

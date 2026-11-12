@@ -401,3 +401,7 @@ export function centreLines(world: CityWorld): { runs: Array<{ axis: "x" | "y"; 
 export const CAB_KEEP: number;
 /** Who is working in each department's building right now (decision 279): one lit window each. */
 export function workingIn(state: CityState): Record<string, Array<{ id: string; what: string | null }>>;
+/** Packed in rings (decision 282): lot n's [block column, block row, lot in the block], and how far a lot is from the middle. */
+export function lotOf(slot: number): [number, number, number];
+export function lotScore(c: number, r: number, li: number): number;
+export function ringScore(c: number, r: number): number;
