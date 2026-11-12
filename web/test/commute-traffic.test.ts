@@ -53,7 +53,7 @@ function frame(sim: CityTraffic, r: CityRider & { route: CityRoutePoint[] }, dt 
   }
   const next = r.route[0];
   const j = next ? ringOf(sim, { x: r.x, y: r.y, to: next }) : null;
-  const g: CityGuest = { x: r.x, y: r.y, vertical: !!next && Math.abs(next.y - r.y) > Math.abs(next.x - r.x), commit: r.commit ?? null, ring: j ? { j, ang: Math.atan2(r.y - j.cy, r.x - j.cx) } : null };
+  const g: CityGuest = { x: r.x, y: r.y, vertical: !!next && Math.abs(next.y - r.y) > Math.abs(next.x - r.x), commit: r.commit ?? null, rv: r.rv ?? 0, ring: j ? { j, ang: Math.atan2(r.y - j.cy, r.x - j.cx) } : null };
   r.guest = g;
   sim.guests = next ? [g] : [];
   stepTraffic(sim, dt * 1000);

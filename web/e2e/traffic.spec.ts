@@ -55,6 +55,8 @@ async function zoomTo(page: Page, kind: string) {
 test("lights at some junctions never go green both ways, and a cab waits at the red", async ({ page }, info) => {
   test.slow();
   await openCity(page);
+  // (A roundabout needs a crossing with four roads out, decision 267: wait for the town's towers to be in.)
+  await expect.poll(() => hooks(page, (h) => Number(h.dataset.roundabouts)), { timeout: 10_000 }).toBeGreaterThanOrEqual(1);
   const signals = Number(await hooks(page, (h) => h.dataset.signals));
   const rounds = Number(await hooks(page, (h) => h.dataset.roundabouts));
   const total = await hooks(page, (h) => h._traffic!.junctions.length);

@@ -1878,10 +1878,10 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       traffic.guests = [];
       for (const p of people.values()) {
         const c = p.call;
-        if (c && !c.here && c.route[0]) { const to = c.route[0], j = ringOf(traffic, { x: c.x, y: c.y, to }); c.guest = { id: `${p.id}:call`, x: c.x, y: c.y, vertical: Math.abs(to.y - c.y) > Math.abs(to.x - c.x), commit: c.commit, ring: j ? { j, ang: Math.atan2(c.y - j.cy, c.x - j.cx) } : null }; traffic.guests.push(c.guest); }
+        if (c && !c.here && c.route[0]) { const to = c.route[0], j = ringOf(traffic, { x: c.x, y: c.y, to }); c.guest = { id: `${p.id}:call`, x: c.x, y: c.y, vertical: Math.abs(to.y - c.y) > Math.abs(to.x - c.x), commit: c.commit, rv: c.rv ?? 0, ring: j ? { j, ang: Math.atan2(c.y - j.cy, c.x - j.cx) } : null }; traffic.guests.push(c.guest); }
         if (!(p.route && !p.waitUntil && p.ride?.[0])) { p.guest = null; continue; }
         const to = p.route[0], j = ringOf(traffic, { x: p.x, y: p.y, to });
-        p.guest = { id: p.id, x: p.x, y: p.y, vertical: Math.abs(to.y - p.y) > Math.abs(to.x - p.x), commit: p.commit, ring: j ? { j, ang: Math.atan2(p.y - j.cy, p.x - j.cx) } : null };
+        p.guest = { id: p.id, x: p.x, y: p.y, vertical: Math.abs(to.y - p.y) > Math.abs(to.x - p.x), commit: p.commit, rv: p.rv ?? 0, ring: j ? { j, ang: Math.atan2(p.y - j.cy, p.x - j.cx) } : null };
         traffic.guests.push(p.guest);
       }
     }

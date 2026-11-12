@@ -1363,7 +1363,7 @@ function tick(sim, dt) {
         // No room on the road it turns onto: it waits at its line (or, past it, in the junction). Turning left across
         // cabs coming the other way: it pulls into the junction and waits there for a gap.
         const turning = car.next && car.next.j === j;
-        const noRoom = turning && !roomAt(sim, car.next.l, car.next.c, car);
+        const noRoom = turning && (!roomAt(sim, car.next.l, car.next.c, car) || guestAround(sim, j));
         const noGap = turning && !ends && leftTurn(lane, car.next.l) && oncoming(sim, byLane, lane, ctl, committed && j.kind === "light" && signalAt(j, sim.t)[lane.axis] === "red");
         if (noRoom && !committed) { stop(); plans.push({ car, cap, hold }); return; }
         if (noRoom || noGap) { cap = Math.min(cap, reach(0, ctl.dc - d)); hold = Math.min(hold, ctl.dc); }
@@ -1435,7 +1435,7 @@ function tick(sim, dt) {
       // Round the corner onto the other road (the drawing eases the corner, `turn`); at the end of a road always.
       const next = car.next ?? (!lane.endOff && car.d >= lane.span - 1e-6 && lane.endJ ? { ...turnsAt(sim, lane, lane.endJ)[0], j: lane.endJ, at: lane.span } : null);
       if (next?.l && car.d >= next.at - 1e-6) {
-        if (roomAt(sim, next.l, next.c, car)) {
+        if (roomAt(sim, next.l, next.c, car) && !guestAround(sim, next.j)) {
           const p0 = lanePoint(lane, next.at);
           car.turn = { x: p0.x, y: p0.y, t: sim.t };
           car.lane = next.l; car.d = next.c.dc + Math.max(0, car.d - next.at); car.next = null; car.commit = next.j.id; car.decided = next.j.id; car.turnedAt = next.j.id;
@@ -1446,6 +1446,9 @@ function tick(sim, dt) {
   }
 }
 export const TURN_ODDS = 0.3;
+// A commuter's cab in a junction or about to come into it: a cab turning there waits for it to go through first.
+// (One waiting at its line is not coming: it waits for the junction to clear.)
+const guestAround = (sim, j) => guestsOf(sim).some((g) => !g.ring && Math.abs(g.x - j.cx) < JUNCTION_HALF + 60 && Math.abs(g.y - j.cy) < JUNCTION_HALF + 60 && ((g.rv ?? 1) > 1 || (Math.abs(g.x - j.cx) < JUNCTION_HALF + 12 && Math.abs(g.y - j.cy) < JUNCTION_HALF + 12)));
 // A turn across the other half of the road (cabs keep right; y grows southwards on screen).
 const vecOf = (l) => (l.axis === "x" ? [l.dir, 0] : [0, l.dir]);
 const leftTurn = (from, to) => { const [a, b] = vecOf(from), [c, d] = vecOf(to); return a * d - b * c < 0; };
