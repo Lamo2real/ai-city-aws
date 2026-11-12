@@ -200,7 +200,9 @@ class Proc:
         threading.Thread(target=self._read, args=(self.popen,), daemon=True).start()
 
     def alive(self) -> bool:
-        return self.popen is not None and self.popen.poll() is None
+        # Its stdout closing counts as dead too: a process that has answered and is still exiting must not be
+        # reused, or the retry after a failed call lands on it again (seen under load, decision 263).
+        return self.popen is not None and not self.closed and self.popen.poll() is None
 
     def stop(self) -> None:
         if self.popen and self.popen.poll() is None:
@@ -290,6 +292,7 @@ class Connector:
                 if self.restarts >= 1:
                     raise HostError(502, "the server stopped again after a restart")
                 self.restarts += 1
+                self.proc.stop()
             self.proc = Proc(self.argv, self.env)
             self.proc.start()
             if self.init is not None:  # replay the handshake to the new process
