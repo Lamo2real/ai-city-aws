@@ -56,10 +56,19 @@ TURN_KINDS: tuple[TurnKind, ...] = (
     "chief_of_staff",
     "executive",
 )
-LOT_COLS = 4
-"""The City's rows are four lots wide (``layout`` in web/src/city/city-state.js)."""
-MIN_LOTS = 8
-"""The City always has at least two rows of lots."""
+MIN_SIDE = 3
+"""The City is a square of blocks, at least 3 × 3, HQ and the homes in two of them (decision 250; ``layout`` in
+web/src/city/city-state.js)."""
+
+
+def lots_shown(count: int) -> int:
+    """How many lots the City shows when ``count`` lots are numbered: those of the smallest square that holds them."""
+    n = MIN_SIDE
+    while n * n - 2 < count:
+        n += 1
+    return n * n - 2
+
+
 ALL_STATUSES = ("open", "in_progress", "in_review", "waiting_on_owner", "parked", "done", "failed", "cancelled")
 _KEY_ATTRS = {"pk", "sk", "gsi1pk", "gsi1sk", "gsi2pk", "gsi2sk", "ttl"}
 
@@ -268,8 +277,8 @@ class Ledger:
         return {**rec, **await self.claim_lot(rec["key"], int(prefer) if prefer is not None else None)}
 
     # ---------- the City's lots (decision 248) ----------
-    # Every tower stands on a lot of its own, numbered from 0, for good: four lots to a row of the City, rows only
-    # ever added at the edge. A department takes a lot once, when it is built; demolishing it leaves the lot empty
+    # Every tower stands on a lot of its own, numbered from 0, for good: lot n is always the same block of the City's
+    # square, which only ever grows a ring at its edge (decision 250). A department takes a lot once, when it is built; demolishing it leaves the lot empty
     # (a FREE LOT) until a new department takes it, so no tower, road or home ever moves. A lot's footprint is fixed
     # with it: ``size`` is the name the City sizes it by (the department that stood there when the lots were first
     # numbered), "" for every lot opened later (the City sizes those by their number).
@@ -316,7 +325,7 @@ class Ledger:
                 await self._set_slot(key, mine["slot"])
                 return {"slot": mine["slot"], "lot": str(mine.get("size") or "")}
             top = max(by_slot, default=-1) + 1
-            n = max(MIN_LOTS, -(-top // LOT_COLS) * LOT_COLS)
+            n = lots_shown(top)
             free = [s for s in range(n) if not (by_slot.get(s) or {}).get("holder")]
             order = ([prefer] if prefer is not None and prefer in free else []) + free + [n]
             for s in dict.fromkeys(order):

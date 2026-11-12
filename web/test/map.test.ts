@@ -3,7 +3,6 @@
 // The homes are three New York apartment buildings a block since decision 188.
 import { describe, expect, it } from "vitest";
 import {
-  HOMES_PER_BLOCK,
   TILE,
   commuteRoute,
   doorOf,
@@ -35,15 +34,14 @@ describe("the map", () => {
       it(`${portrait ? "phone" : "wide"}, ${depts} departments, ${homes} homes: no dead ends, no building on a road`, () => {
         const w = layout(city(depts), { portrait, homes });
         expect(w.streets.length).toBeGreaterThanOrEqual(2);
-        for (const s of w.streets) expect([s.x0, s.x1]).toEqual([0, w.width]); // edge to edge, then on off the map
+        for (const s of w.streets) expect([s.x0, s.x1]).toEqual([w.left, w.width]); // edge to edge, then on off the map
         const roads = [
           ...w.streets.map((s) => ({ x: s.x0, y: s.y, w: s.x1 - s.x0, h: STREET })),
-          { x: w.avenue, y: portrait ? w.hqStreet : 0, w: STREET, h: w.height },
+          { x: w.avenue, y: w.top, w: STREET, h: w.height - w.top },
           ...((w.lanes ?? []) as Array<{ x: number; y0: number; y1: number }>).map((l) => ({ x: l.x, y: l.y0, w: STREET, h: l.y1 - l.y0 })),
         ];
-        const blocks = Math.ceil(homes / HOMES_PER_BLOCK);
-        expect(w.homes.blocks.length).toBe(blocks);
-        expect(w.homes.apartments.length).toBe(blocks * 3);
+        expect(w.homes.blocks.length).toBe(1); // one block of homes, however many live there (decision 213)
+        expect(w.homes.apartments.length).toBe(3);
         // Room for every resident, each by a door, and nobody stands on a road.
         for (let slot = 0; slot < homes; slot++) {
           const spot = homeSpot(w, slot)!;
@@ -60,10 +58,14 @@ describe("the map", () => {
         expect(w.height).toBeGreaterThanOrEqual(Math.max(...w.homes.apartments.map((a) => a.y + a.h)));
       });
 
-  it("on the wide map HQ's street and the first row of towers' street are one road", () => {
-    const w = layout(city(6), { homes: 16 });
-    expect(w.streets[0]!.y).toBe(w.hq.y + w.hq.h);
-    expect(w.streets[0]!.y).toBe(w.buildings[0]!.y + w.buildings[0]!.h);
+  it("HQ, the homes and every tower stand on a street, the towers beside HQ on HQ's own street", () => {
+    const w = layout(city(7), { homes: 16 });
+    const streets = new Set(w.streets.map((s) => s.y));
+    expect(streets.has(w.hq.y + w.hq.h)).toBe(true);
+    for (const b of w.buildings) expect(streets.has(b.y + b.h)).toBe(true);
+    expect(streets.has(w.homes.y + w.homes.h)).toBe(true);
+    const beside = w.buildings.filter((b) => b.y + b.h === w.hq.y + w.hq.h);
+    expect(beside.length).toBe(2); // west and east of HQ
   });
 
   it("a walk from any home reaches a street", () => {
@@ -94,9 +96,9 @@ describe("the apartment buildings (decision 188)", () => {
       expect(built).toBeLessThan(block.w * block.h * 0.75); // some green left over
     });
 
-  it("residents stand by their own building's door, eight to a building, and every other block is mirrored", () => {
+  it("residents stand by their own building's door, sharing the one block's three buildings", () => {
     const w = layout(city(6), { homes: 48 });
-    expect(w.homes.blocks.map((b) => b.mirror)).toEqual([false, true]);
+    expect(w.homes.blocks.map((b) => b.mirror)).toEqual([false]); // one block (decision 213): its residents share it
     const per = new Map<object, number>();
     for (let slot = 0; slot < 48; slot++) {
       const a = homeOf(w, slot)!, spot = homeSpot(w, slot)!, d = doorOf(a);
@@ -105,7 +107,7 @@ describe("the apartment buildings (decision 188)", () => {
       expect(spot.y).toBeGreaterThan((a.y + a.h) * TILE); // on the pavement in front
       expect(spot.y - d.y).toBeLessThan(24);
     }
-    expect([...per.values()]).toEqual(Array(6).fill(8));
+    expect([...per.values()]).toEqual(Array(3).fill(16));
   });
 
   it("nothing stands between a door and the street below it, so a walk never cuts through a building", () => {

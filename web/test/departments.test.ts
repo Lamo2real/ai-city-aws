@@ -183,7 +183,7 @@ describe("yellow cabs", () => {
   it("drive off past the edge of the map and fade out there; they never pop in or out mid-road", () => {
     const M = MAP_MARGIN * TILE;
     for (const l of streetLanes(w)) {
-      expect(l.x0).toBe(-M); // every street runs right through the countryside to the map's border
+      expect(l.x0).toBe(w.left * TILE - M); // every street runs right through the countryside to the map's border
       expect(l.x1).toBe(w.width * TILE + M);
     }
     expect(edgeAlpha(0, 0, 1000)).toBe(0);

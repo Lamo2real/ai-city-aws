@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from vaic.shared.ledger import Ledger
+from vaic.shared.ledger import Ledger, lots_shown
 from vaic.shared.table import MemoryTable
 
 
@@ -64,14 +64,19 @@ async def test_a_new_department_takes_the_next_lot_and_a_demolished_one_leaves_i
     assert await _slots(ledger) == {"marketing": 0, "media": 1, "legal": 2, "research": 3}
 
 
-async def test_lots_left_in_a_row_are_filled_first_then_the_city_grows_by_a_row(ledger: Ledger) -> None:
-    for i in range(8):
+def test_the_square_shows_n_by_n_blocks_less_hq_and_the_homes() -> None:
+    assert [lots_shown(c) for c in (0, 7, 8, 14, 15, 23, 24)] == [7, 7, 14, 14, 23, 23, 34]
+
+
+async def test_free_lots_are_filled_first_then_the_square_grows_a_ring(ledger: Ledger) -> None:
+    for i in range(7):
         await ledger.create_department(f"Dept {i}", "x", f"mgr-{i}")
-    assert sorted((await _slots(ledger)).values()) == list(range(8))
+    assert sorted((await _slots(ledger)).values()) == list(range(7))  # the 3 × 3 square is full
+    await ledger.demolish_department("Dept 3")
+    back, _ = await ledger.create_department("Eighth", "x", "mgr-8")
+    assert back["slot"] == 3  # a free lot first
     ninth, _ = await ledger.create_department("Ninth", "x", "mgr-9")
-    assert ninth["slot"] == 8  # the two rows are full: a new row at the edge
-    tenth, _ = await ledger.create_department("Tenth", "x", "mgr-10")
-    assert tenth["slot"] == 9  # the rest of that row first
+    assert ninth["slot"] == 7  # then the next ring: 4 × 4
 
 
 async def test_a_rebuilt_department_goes_back_to_its_old_lot_when_it_is_still_free(ledger: Ledger) -> None:

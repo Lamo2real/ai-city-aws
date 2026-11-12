@@ -54,7 +54,7 @@ test("adding and demolishing departments never moves another tower on screen", a
   await settled(page);
   const start = await onScreen(page), size = await world(page);
   expect(Object.keys(start)).toHaveLength(11);
-  expect(size.lots.map((l) => l.slot)).toEqual([11]); // twelve lots, one free
+  expect(size.lots.map((l) => l.slot)).toEqual([11, 12, 13]); // a 4 × 4 square: fourteen lots, three free
   // Each lot is as big as the tower that stood on it when the lots were numbered (the server's sizes reach the scene).
   const dims = Object.fromEntries(size.buildings.map((b) => [b.dept, [b.w, b.h]]));
   expect([dims.Application, dims["IT Infrastructure"], dims["Data & AI"], dims.Marketing]).toEqual([[8, 11], [10, 11], [10, 13], [10, 12]]);
@@ -78,7 +78,7 @@ test("adding and demolishing departments never moves another tower on screen", a
   for (const name of [...NAMES.filter((n) => n !== "Sales"), "Partnerships"]) expect(down[name], name).toEqual(added[name]);
   const after = await world(page);
   expect([after.width, after.height]).toEqual([size.width, size.height]);
-  expect(after.lots.map((l) => l.slot)).toEqual([4]);
+  expect(after.lots.map((l) => l.slot)).toEqual([4, 12, 13]);
   await page.screenshot({ path: test.info().outputPath("city-demolished.png") });
 
   // Build again: it goes up on Sales's old lot, at that lot's size, in the same place on screen.

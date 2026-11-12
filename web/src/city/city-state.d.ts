@@ -192,8 +192,14 @@ export interface CityWorld {
   lanes: Array<{ x: number; y0: number; y1: number }>;
   avenue: number;
   hq: CityBuilding;
+  /** The map's west and north edges in tiles (negative: west and north of HQ, decision 250); width and height are its east and south edges. */
+  left: number;
+  top: number;
   width: number;
   height: number;
+  /** The square's side, in blocks. */
+  side: number;
+  /** Only how the camera starts: the map is the same on every screen. */
   portrait: boolean;
   hqStreet: number;
   officesEnd: number;
@@ -224,10 +230,21 @@ export const TILE: number;
 /** Home slots per block of three apartment buildings. */
 export const HOMES_PER_BLOCK: number;
 /** A tower's footprint and height in tiles, from its name alone (decision 166). */
-export function towerSize(name: string, portrait?: boolean): { w: number; h: number };
-/** Lots in a row of the wide City, and the fewest lots it ever has (decision 248). */
-export const LOT_COLS: number;
-export const MIN_LOTS: number;
+export function towerSize(name: string): { w: number; h: number };
+/** The square grid of blocks (decision 250): block size and spacing in tiles, the smallest square's side. */
+export const BLOCK_W: number;
+export const BLOCK_H: number;
+export const PITCH_X: number;
+export const PITCH_Y: number;
+export const MIN_SIDE: number;
+/** The blocks of a square of side n: columns and rows from lo to hi, HQ at 0. */
+export function squareBounds(n: number): { lo: number; hi: number };
+/** How many lots a square of side n holds. */
+export function lotsIn(n: number): number;
+/** The side of the smallest square with room for `count` lots. */
+export function sideFor(count: number): number;
+/** Lot `slot`'s block, [column, row] from HQ, for good. */
+export function blockOf(slot: number): [number, number];
 /** The name a lot is sized by. */
 export function lotSizeName(lots: Record<number, string> | undefined, slot: number): string;
 /** Gives every standing department without a lot the first free one (decision 248). */

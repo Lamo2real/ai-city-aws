@@ -164,7 +164,7 @@ describe("a taxi called for a new hire", () => {
       if (Math.abs(next.x - call.at.x) >= Math.abs(next.y - call.at.y)) {
         expect(call.start.y).toBe(call.at.y);
         expect(Math.sign(call.at.x - call.start.x)).toBe(Math.sign(next.x - call.at.x));
-        expect(call.start.x).toBeGreaterThanOrEqual(0);
+        expect(call.start.x).toBeGreaterThanOrEqual(w.left * 16);
         expect(call.start.x).toBeLessThanOrEqual(w.width * 16);
       } else {
         expect(call.start.x).toBe(call.at.x);

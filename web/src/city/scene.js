@@ -4,7 +4,7 @@
 // Reviewer; each department's manager stands at its door; panels are React (see CityView.tsx).
 // The City View: a small game world of the agents, drawn pixel by pixel on a canvas from city-state.js.
 // All of the art is drawn here in code. Every person on screen is a real agent; only the scenery moves on its own.
-import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, lotsMemory, readLotsMemory, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf, taxiCall, RIDE_PX_S, TO_WORK_BOOST, HOMES_PER_BLOCK } from "./city-state.js";
+import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, lotsMemory, readLotsMemory, PITCH_X, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf, taxiCall, RIDE_PX_S, TO_WORK_BOOST, HOMES_PER_BLOCK } from "./city-state.js";
 
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const INK = "#1d1c36";
@@ -713,15 +713,16 @@ const MARGIN = MAP_MARGIN; // tiles of countryside, with the roads running on th
 const EDGE = 10; // tiles over which the map fades out at its border
 const TREE_W = 24, TREE_H = 18; // the grid of tree spots, in pixels: neighbours never closer than 18 across or 14 down
 function bake(world, skip = new Map(), unknown = false) {
-  const W = world.width * TILE, H = world.height * TILE, M = MARGIN * TILE, r = rng("world");
-  const [c, g] = newCanvas(W + M * 2, H + M * 2);
-  g.translate(M, M);
-  lawn(g, -M, -M, W + M * 2, H + M * 2, "lawn");
-  const top = world.portrait ? world.hqStreet : -MARGIN, bottom = world.height + MARGIN; // every avenue runs on off the map
-  // The avenue, the road west of HQ and the side streets between towers, each as long as it runs (decision 166).
+  // The map spans [L, W] × [T, H] in pixels (west and north of HQ are negative, decision 250), plus the countryside.
+  const L = (world.left ?? 0) * TILE, T = (world.top ?? 0) * TILE, W = world.width * TILE, H = world.height * TILE, M = MARGIN * TILE, r = rng("world");
+  const [c, g] = newCanvas(W - L + M * 2, H - T + M * 2);
+  g.translate(M - L, M - T);
+  lawn(g, L - M, T - M, W - L + M * 2, H - T + M * 2, "lawn");
+  const top = (world.top ?? 0) - MARGIN, bottom = world.height + MARGIN; // every avenue runs on off the map
+  // The avenue east of HQ and the other avenues, each as long as it runs.
   const verticals = [{ x: world.avenue, y0: top, y1: bottom }, ...(world.lanes ?? [])];
   for (const v of verticals) avenue(g, v.x, v.y0, v.y1, `ave${v.x},${v.y0}`);
-  const roads = world.streets.map((s) => ({ ...s, x0: s.x0 === 0 ? -MARGIN : s.x0, x1: s.x1 === world.width ? world.width + MARGIN : s.x1 }));
+  const roads = world.streets.map((s) => ({ ...s, x0: s.x0 <= (world.left ?? 0) ? (world.left ?? 0) - MARGIN : s.x0, x1: s.x1 >= world.width ? world.width + MARGIN : s.x1 }));
   const through = verticals.filter((v) => v.y0 <= top).map((v) => v.x);
   const js = junctions(world), round = new Set(js.filter((j) => j.kind === "roundabout").map((j) => `${j.cx},${j.cy}`));
   for (const s of roads) street(g, s.x0, s.x1, s.y, `st${s.y}`, through.filter((a) => !round.has(`${(a + 1.5) * TILE},${(s.y + 1.5) * TILE}`)));
@@ -732,11 +733,11 @@ function bake(world, skip = new Map(), unknown = false) {
   // Each tree has its own spot on a fixed grid, the same on every map whatever its size (decision 248): a new tower or
   // row only clears the trees where it stands, and no other tree moves. About one tree to 3000 square pixels.
   const spots = [];
-  for (let j = Math.floor(-M / TREE_H); j * TREE_H < H + M; j++) for (let i = Math.floor(-M / TREE_W); i * TREE_W < W + M; i++) {
+  for (let j = Math.floor((T - M) / TREE_H); j * TREE_H < H + M; j++) for (let i = Math.floor((L - M) / TREE_W); i * TREE_W < W + M; i++) {
     const h = hashOf(`tree:${i},${j}`);
     if (h % 1000 >= 144) continue;
     const x = i * TREE_W + TREE_W / 2 + ((h >>> 10) % 7) - 3, y = j * TREE_H + TREE_H / 2 + ((h >>> 14) % 5) - 2;
-    if (x >= -M && x <= W + M && y >= -M && y <= H + M && clear(x, y)) spots.push([x, y, h]);
+    if (x >= L - M && x <= W + M && y >= T - M && y <= H + M && clear(x, y)) spots.push([x, y, h]);
   }
   spots.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
   for (const [x, y, h] of spots) tree(g, x, y, rng(`tree:${h}`));
@@ -756,11 +757,12 @@ function bake(world, skip = new Map(), unknown = false) {
   }
   for (const a of world.homes.apartments) near.push([(a.y + a.h) * TILE, () => apartment(g, a)]);
   near.sort((p, q) => p[0] - q[0]).forEach(([, draw]) => draw());
-  g.fillStyle = "rgba(38,30,78,.14)"; g.fillRect(-M, -M, W + M * 2, H + M * 2); // the dusk wash over all of it
+  const FW = W - L + M * 2, FH = H - T + M * 2, X0 = L - M, Y0 = T - M;
+  g.fillStyle = "rgba(38,30,78,.14)"; g.fillRect(X0, Y0, FW, FH); // the dusk wash over all of it
   // The map's border fades softly into the night, so roads and cabs run off into it rather than stopping at an edge.
   const E = EDGE * TILE, fade = (x0, y0, x1, y1, rx, ry, rw, rh) => { const gr = g.createLinearGradient(x0, y0, x1, y1); gr.addColorStop(0, "rgba(22,30,40,.92)"); gr.addColorStop(1, "rgba(22,30,40,0)"); g.fillStyle = gr; g.fillRect(rx, ry, rw, rh); };
-  fade(-M, 0, -M + E, 0, -M, -M, E, H + M * 2); fade(W + M, 0, W + M - E, 0, W + M - E, -M, E, H + M * 2);
-  fade(0, -M, 0, -M + E, -M, -M, W + M * 2, E); fade(0, H + M, 0, H + M - E, -M, H + M - E, W + M * 2, E);
+  fade(X0, 0, X0 + E, 0, X0, Y0, E, FH); fade(W + M, 0, W + M - E, 0, W + M - E, Y0, E, FH);
+  fade(0, Y0, 0, Y0 + E, X0, Y0, FW, E); fade(0, H + M, 0, H + M - E, X0, H + M - E, FW, E);
   return c;
 }
 
@@ -856,7 +858,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     const rebaked = sig !== worldSig;
     if (rebaked) {
       world = next; worldSig = sig; ground = bake(world, animSkip(), unknownLots); fitView();
-      const roads = JSON.stringify([world.streets, world.lanes, world.avenue, world.width, world.height, world.portrait]);
+      const roads = JSON.stringify([world.streets, world.lanes, world.avenue, world.left, world.top, world.width, world.height]);
       if (roads !== trafficSig) {
         // The roads changed: traffic starts afresh on them, the lights keep their clock.
         const t = traffic?.t ?? 0; traffic = createTraffic(world); traffic.t = t; trafficSig = roads; root._traffic = traffic;
@@ -1214,25 +1216,27 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   }
   // Pan anywhere over the countryside, never past where the map has faded out (centred when it all fits).
   function clampCam(x, y) {
-    const { w, h } = viewSize(), W = world.width * TILE, H = world.height * TILE, M = (MARGIN - EDGE / 2) * TILE;
+    const { w, h } = viewSize(), L = (world.left ?? 0) * TILE, T = (world.top ?? 0) * TILE, W = world.width * TILE, H = world.height * TILE, M = (MARGIN - EDGE / 2) * TILE;
     const keep = (v, lo, hi, size) => (hi - lo <= size ? (lo + hi - size) / 2 : Math.max(lo, Math.min(hi - size, v)));
-    return [keep(x, -M, W + M, w), keep(y, -M, H + M, h)];
+    return [keep(x, L - M, W + M, w), keep(y, T - M, H + M, h)];
   }
   function centreOn(x, y, area = safeArea()) {
     const px = ((area.l + area.r) / 2) / cam.zoom, py = ((area.t + area.b) / 2) / cam.zoom;
     [cam.wantX, cam.wantY] = clampCam(x - px, y - py);
   }
-  // The zoom that shows the whole map (on a phone: its whole width, never below one art pixel per screen pixel).
+  // The zoom that shows the whole map, centred on it. A phone has the same map (decision 250): it starts on HQ, close
+  // enough to read (HQ's block and its neighbours across the screen), and pinch, pan or Fit shows the rest.
   function fitView(force = false) {
     if (!world || (cam.userMoved && !force) || !root.clientWidth) return;
-    const area = safeArea(), W = world.width * TILE, H = world.height * TILE;
-    const portrait = world.portrait;
-    const fitW = (area.r - area.l) / W, fitH = portrait ? Infinity : (area.b - area.t) / H;
-    const best = clampZoom(Math.max(portrait ? 1 : ZOOM_MIN, Math.min(fitW, fitH)));
+    const area = safeArea(), L = (world.left ?? 0) * TILE, T = (world.top ?? 0) * TILE, W = world.width * TILE, H = world.height * TILE;
+    const phone = world.portrait;
+    const whole = Math.min((area.r - area.l) / (W - L), (area.b - area.t) / (H - T));
+    const best = clampZoom(phone ? Math.max(whole, (area.r - area.l) / (3 * PITCH_X * TILE)) : Math.max(ZOOM_MIN, whole));
     cam.zoom = best; cam.wantZoom = best; cam.anchor = null;
     if (force) cam.userMoved = false;
     viewSize();
-    centreOn(W / 2, portrait ? (area.b - area.t) / 2 / best : H / 2, area); // a phone starts at the top of the map, HQ first
+    const hq = world.hq;
+    if (phone) centreOn((hq.x + hq.w / 2) * TILE, (hq.y + hq.h / 2) * TILE, area); else centreOn((L + W) / 2, (T + H) / 2, area);
     cam.x = cam.wantX; cam.y = cam.wantY;
   }
   // As far out as the whole countryside, faded border and all, is on screen (not further: past that is only empty
@@ -1240,7 +1244,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   function clampZoom(z) {
     let lo = ZOOM_MIN;
     if (world && root.clientWidth) {
-      const M = (MARGIN - EDGE / 2) * TILE, W = world.width * TILE, H = world.height * TILE;
+      const M = (MARGIN - EDGE / 2) * TILE, W = (world.width - (world.left ?? 0)) * TILE, H = (world.height - (world.top ?? 0)) * TILE;
       lo = Math.max(ZOOM_MIN, Math.min(root.clientWidth / (W + 2 * M), root.clientHeight / (H + 2 * M)));
     }
     return Math.max(lo, Math.min(ZOOM_MAX, z));
@@ -1505,8 +1509,9 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     ctx.fillStyle = "#2d5d53"; ctx.fillRect(0, 0, w, h);
     const ox = Math.round(cam.x), oy = Math.round(cam.y);
     OX = ox; OY = oy;
-    const M = MARGIN * TILE, sx = Math.max(0, ox + M), sy = Math.max(0, oy + M), dw = Math.min(w, ground.width - sx), dh = Math.min(h, ground.height - sy);
-    if (dw > 0 && dh > 0) ctx.drawImage(ground, sx, sy, dw, dh, sx - ox - M, sy - oy - M, dw, dh); // only the part on screen
+    const M = MARGIN * TILE, gx = (world.left ?? 0) * TILE - M, gy = (world.top ?? 0) * TILE - M; // where the baked ground starts
+    const sx = Math.max(0, ox - gx), sy = Math.max(0, oy - gy), dw = Math.min(w, ground.width - sx), dh = Math.min(h, ground.height - sy);
+    if (dw > 0 && dh > 0) ctx.drawImage(ground, sx, sy, dw, dh, sx + gx - ox, sy + gy - oy, dw, dh); // only the part on screen
     // Scenery that moves: the fountain's jet and ripples.
     const fx = world.hq.x * TILE + FOUNTAIN[0] - ox, fy = world.hq.y * TILE + FOUNTAIN[1] - oy;
     const jet = [13, 15, 14, 16][f];
