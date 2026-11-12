@@ -71,7 +71,7 @@ test("adding and demolishing departments never moves another tower on screen", a
   const panel = page.getByRole("dialog", { name: "Sales department" });
   await panel.getByRole("button", { name: "Demolish this department" }).click();
   await panel.getByRole("button", { name: "Yes, demolish" }).click();
-  expect(m.calls.some((c) => c.method === "DELETE" && c.path === "/departments/sales")).toBe(true);
+  await expect.poll(() => m.calls.some((c) => c.method === "DELETE" && c.path === "/departments/sales")).toBe(true);
   await expect.poll(async () => (await world(page)).buildings.some((b) => b.dept === "Sales")).toBe(false);
   await settled(page);
   const down = await onScreen(page);

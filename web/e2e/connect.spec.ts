@@ -334,7 +334,7 @@ test("Settings lists connectors and mail accounts; roles can be changed", async 
     .toEqual({ roles: { vaic: "read", worker: "all", manager: "read" } });
   await table.getByRole("button", { name: /^Personal/ }).click();
   await expect(page.getByRole("article", { name: "Personal account" })).toContainText("me@gmail.test");
-  await expect(page.getByRole("heading", { name: "Who may read mail" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Who may use mail" })).toBeVisible();
   expect(await primaries(page)).toBeLessThanOrEqual(1);
   await noSeriousA11y(page, "settings connectors");
   await page.screenshot({ path: `${SHOTS}/connectors-connected.png`, fullPage: true });
