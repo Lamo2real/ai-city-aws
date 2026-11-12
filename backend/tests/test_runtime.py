@@ -98,13 +98,13 @@ def test_managers_hire_few_and_the_orchestrator_never_staffs_a_one_off() -> None
     manager = load_prompt(
         "manager.md", {"id": "m", "department": "Eng", "mission": "x", "department_template": ""}
     ).body
-    assert "fewest workers" in manager and "3 workers per goal" in manager
+    assert "plan_team" in manager and "Hire the number `plan_team` gave" in manager
     assert "Never one worker per item, sentence or section" in manager
     assert "no limit" not in manager.lower()
     orchestrator = load_prompt("orchestrator.md").body
     assert "One department per goal" in orchestrator
     assert "Never create a department for a one-off question or writing task" in orchestrator
-    assert "never more than three per goal" in orchestrator
+    assert "each manager sizes its own team with `plan_team`" in orchestrator
     assert load_prompt("worker.md").tools == [
         "ask_manager",
         "ask_taste",

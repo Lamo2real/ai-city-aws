@@ -74,6 +74,7 @@ from vaic.shared.hierarchy.tasks import (
     short_name,
     which_one,
 )
+from vaic.shared.hierarchy.team_size import PlanError, parse_parts, size_team
 from vaic.shared.ids import department_key, manager_id
 from vaic.shared.knowledge.entries import SHARED, all_departments, canonical_department
 from vaic.shared.knowledge.jurisdiction import UTC_TZ
@@ -1147,6 +1148,62 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         w = await d.ledger.get_agent(worker_id)
         return w if w and w.get("kind") == "worker" and w.get("parent") == c.agent_id else None
 
+    async def _record_team(goal_t: dict[str, Any], n: int, reason: str, parts: list[str]) -> None:
+        """The team decision goes on the goal (and its job), in the history VAIC and the activity read."""
+        line = f"Team for {dept}: {reason}"
+        await move(
+            d,
+            str(goal_t["id"]),
+            str(goal_t["status"]),
+            line,
+            {"team_size": n, "team_reason": reason, "team_parts": parts},
+        )
+        task = await d.ledger.get_ticket(c.task_id) if c.task_id and c.task_id != goal_t["id"] else None
+        if task:
+            lines = [x for x in (task.get("team_lines") or []) if not str(x).startswith(f"Team for {dept}:")]
+            await move(d, str(task["id"]), str(task["status"]), line, {"team_lines": [*lines, line][-12:]})
+        log("info", "team.sized", department=dept, goal=goal_t["id"], workers=n, reason=reason)
+
+    async def plan_team(a: dict[str, Any]) -> str:
+        goal_t = await d.ledger.get_ticket(c.ticket_id) if c.ticket_id else None
+        if not goal_t:
+            return "There is no goal to plan a team for."
+        try:
+            parts = parse_parts(a.get("parts"))
+        except PlanError as e:
+            return f"Not planned: {e}"
+        s = await d.settings()
+        dept_cap = int(s.get("max_concurrent_workers_per_department") or 10)
+        ceiling = int(s.get("max_workers_per_goal") or 3)
+        asked = _workers(goal_t.get("workers"))
+        try:
+            team = size_team(parts, ceiling=ceiling, hard_cap=dept_cap, owner_asked=asked)
+        except PlanError as e:
+            return f"Not planned: {e}"
+        names = [p.name for p in parts]
+        before = _workers(goal_t.get("team_size"))
+        if before is not None and goal_t.get("team_parts"):
+            # Mid-build: the team grows only for a new independent part, and never shrinks under running work.
+            new = [p for p in parts if p.name.lower() not in {str(x).lower() for x in goal_t.get("team_parts") or []}]
+            fresh = [p.name for p in new if p.size == "normal" and not p.after]
+            if team.workers <= before or not fresh or asked:
+                return (
+                    f"The team stays at {before}: {goal_t.get('team_reason')}. No new independent part needs a worker."
+                )
+            n = min(team.workers, before + len(fresh))
+            reason = (
+                f"{n} workers: added {n - before} for the new part{'s' if len(fresh) > 1 else ''} {', '.join(fresh)}"
+            )
+            await _record_team(goal_t, n, reason, sorted({*map(str, goal_t.get("team_parts") or []), *names}))
+            return f"Team grows to {n}: hire {n - before} more for {', '.join(fresh)}."
+        await _record_team(goal_t, team.workers, team.reason, names)
+        order = " → ".join(" + ".join(w) for w in team.waves) if team.waves else ""
+        return (
+            f"Team: {team.reason}. Hire exactly {team.workers} and assign them at once"
+            + (f"; order: {order}" if len(team.waves) > 1 else "")
+            + ". Tiny parts go to the worker of a real part next to them."
+        )
+
     async def hire(a: dict[str, Any]) -> str:
         # Hard caps on hiring (the owner's choice after a 50-sentence request hired 21 workers): a manager
         # may have at most max_workers_per_goal live workers on one goal, and a department at most
@@ -1167,8 +1224,19 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 f"Hire refused: the whole city already has {city_live} workers at work (the ceiling is {city_cap}). "
                 "Wait for one to finish, or do it with the workers you have."
             )
-        goal_cap = asked or int(s.get("max_workers_per_goal") or 3)
         dept_cap = int(s.get("max_concurrent_workers_per_department") or 10)
+        # The team size decided for this goal (decision 283): plan_team's number, or the owner's exact one.
+        planned = _workers((goal_t or {}).get("team_size"))
+        if goal_t is not None and planned is None:
+            # No plan yet: the owner's number, or one worker by default; plan_team is how a goal gets more.
+            if asked:
+                team = size_team([], ceiling=dept_cap, hard_cap=dept_cap, owner_asked=asked)
+                n, why = team.workers, team.reason
+            else:
+                n, why = 1, "1 worker: no parts were listed, so one worker by default"
+            await _record_team(goal_t, n, why, [])
+            planned = n
+        goal_cap = planned or asked or int(s.get("max_workers_per_goal") or 3)
         live = [
             w
             for w in await d.ledger.department_agents(dept)
@@ -1187,12 +1255,19 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             names = ", ".join(
                 f"{w['id']} ({w.get('specialty') or w.get('role')}, {w.get('worker_state')})" for w in on_goal
             )
-            why = f"the owner asked for exactly {asked}" if asked else f"the cap is {goal_cap}"
+            why = (
+                f"the owner asked for exactly {asked}"
+                if asked
+                else f"the team for this goal is {goal_cap}; plan_team sizes it from the parts, and grows it only for a "
+                "new independent part"
+                if planned
+                else f"the cap is {goal_cap}"
+            )
             return (
                 f"Hire refused: you already have {len(on_goal)} workers on this goal ({why}): {names}. "
                 "Assign one of them with `assign`, or free a place with `release_worker` (idle or finished ones)."
             )
-        if len(live) >= dept_cap and not asked:
+        if len(live) >= dept_cap and not asked:  # the owner's number is already capped at dept_cap
             log("info", "hire.refused", department=dept, live=len(live), cap=dept_cap)
             return (
                 f"Hire refused: the department already has {len(live)} workers at once (the ceiling is {dept_cap}). "
@@ -1420,6 +1495,33 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 ("budget_hint_usd", "specialist_id", "connectors"),
             ),
             hire,
+        ),
+        ToolSpec(
+            "plan_team",
+            "Size the team before hiring (required once per goal). parts: the goal's pieces of work, each a name, "
+            "size tiny (a one-line edit, a value, a rename) or normal (a real piece: a screen, the game logic, the "
+            "tests, a document), and after: the names of parts it must wait for. The answer is how many workers to "
+            "hire: as many as parts can run at the same time, tiny parts folded in. Call it again mid-build only "
+            "when a new independent part shows up; the team then grows by that part.",
+            _obj(
+                {
+                    "parts": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 30,
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": _s(1, 80),
+                                "size": {"type": "string", "enum": ["tiny", "normal"]},
+                                "after": _STRS,
+                            },
+                            "required": ["name", "size"],
+                        },
+                    }
+                }
+            ),
+            plan_team,
         ),
         ToolSpec(
             "assign",

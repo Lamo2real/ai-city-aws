@@ -307,6 +307,13 @@ async def status_summary(d: CityDeps) -> dict[str, Any]:
         "departments": [x["name"] for x in departments],
         "workers_busy": sum(1 for a in active if a.get("kind") == "worker"),
         "questions_waiting": len(questions),
+        # How many workers each running job got and why (decision 283), for VAIC to tell the owner.
+        "teams": [
+            line
+            for t in tickets
+            if t["status"] in ("in_progress", "in_review") and t.get("team_lines")
+            for line in t["team_lines"]
+        ][:12],
         "spend_today": f"about {format_usd(today['usd'])} today; no spending limit is set"
         if daily is None
         else f"about {format_usd(today['usd'])} of the {format_usd(daily)} daily limit",

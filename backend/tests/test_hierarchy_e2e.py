@@ -61,6 +61,7 @@ def make_manager() -> Script:
         ledger, ctx = req.ledger, req.ctx
         mine = [k for k in await ledger.child_tickets(ctx.ticket_id) if k.get("kind") == "assignment"]
         if "(task) from orchestrator" in req.turn.prompt:
+            await call("plan_team", {"parts": [{"name": p, "size": "normal"} for p in PARTS]})
             for part in PARTS[len(mine) :]:
                 hired = await call(
                     "hire_worker",

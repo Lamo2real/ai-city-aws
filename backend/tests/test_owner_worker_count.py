@@ -55,7 +55,7 @@ async def test_the_owners_exact_worker_count_reaches_the_manager_and_is_hired_ex
     assert "the owner asked for exactly 5" in refused
 
 
-async def test_without_a_number_the_usual_cap_applies() -> None:
+async def test_without_a_number_the_planned_team_applies() -> None:
     d = city_deps()
     await d.ledger.create_ticket({"id": "t-task", "goal": "g", "from": "vaic", "to": "orchestrator",
                                   "department": None, "parent_id": None})  # fmt: skip
@@ -69,9 +69,15 @@ async def test_without_a_number_the_usual_cap_applies() -> None:
         TurnCtx(agent_id=goal["to"], role="manager", department="Writing", ticket_id=goal["id"], task_id="t-task"),
         "hire_worker",
     )
-    for _ in range(3):
+    plan = tool(
+        d,
+        TurnCtx(agent_id=goal["to"], role="manager", department="Writing", ticket_id=goal["id"], task_id="t-task"),
+        "plan_team",
+    )
+    await plan({"parts": [{"name": f"chapter {i}", "size": "normal"} for i in range(5)]})
+    for _ in range(3):  # five parallel parts, capped at the goal ceiling of 3
         assert (await hire(SPEC)).startswith("Hired ")
-    assert "cap is 3" in await hire(SPEC)
+    assert "the team for this goal is 3" in await hire(SPEC)
 
 
 async def test_assignments_of_released_workers_never_block_the_goal() -> None:
@@ -85,6 +91,9 @@ async def test_assignments_of_released_workers_never_block_the_goal() -> None:
     await tool(d, orch, "assign_to_department")({"department": "Writing", "goal": "A report", "acceptance": "Done"})
     (goal,) = await d.ledger.child_tickets("t-task")
     mctx = TurnCtx(agent_id=goal["to"], role="manager", department="Writing", ticket_id=goal["id"], task_id="t-task")
+    await tool(d, mctx, "plan_team")(
+        {"parts": [{"name": "part a", "size": "normal"}, {"name": "part b", "size": "normal"}]}
+    )
     w1 = (await tool(d, mctx, "hire_worker")(SPEC)).split()[1]
     w2 = (await tool(d, mctx, "hire_worker")(SPEC)).split()[1]
     for w in (w1, w2):
