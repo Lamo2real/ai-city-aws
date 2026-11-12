@@ -1288,7 +1288,7 @@ function tick(sim, dt) {
         const stop = () => { cap = Math.min(cap, toStop < 0.5 ? 0 : reach(0, toStop)); hold = Math.min(hold, stopD); };
         if (j.kind === "light" && !committed) {
           const sig = signalAt(j, sim.t)[lane.axis];
-          if (car.rare) { if (sig === "red" ? approaching(j, cross) || inBox(j, cross) : inBox(j, cross)) stop(); else if (toStop < 2) car.commit = j.id; } // the owner's car runs a red when the way is clear, never into anyone
+          if (car.rare) { if (sig === "red" ? approaching(j, cross) || guestComing(sim, j, cross) || inBox(j, cross) : inBox(j, cross)) stop(); else if (toStop < 2) car.commit = j.id; } // the owner's car runs a red when the way is clear, never into anyone
           else if (sig === "red") stop();
           else if (sig === "amber") { if (car.stopFor === j.id || car.v < 10 || toStop >= (car.v * car.v) / (2 * BRAKE_PX_S2 * 1.6)) { car.stopFor = j.id; stop(); } else car.commit = j.id; } // too close to stop: go
           else if (blockedBeyond || inBox(j, cross) || committedAcross(sim, j, cross)) { car.stopFor = null; stop(); }
@@ -1364,6 +1364,9 @@ function committedAcross(sim, j, axis) {
 function guestInBox(sim, j, axis) {
   return guestsOf(sim).some((g) => !g.ring && (axis === "y") === g.vertical && Math.abs(g.x - j.cx) < JUNCTION_HALF + 12 && Math.abs(g.y - j.cy) < JUNCTION_HALF + 12);
 }
+// A commuter's cab on the given axis in the junction or close enough to it that it may be past its line on green and
+// can no longer stop: the owner's car never runs a red into it (decision 264).
+const guestComing = (sim, j, axis, self) => guestsOf(sim).some((g) => g !== self && !g.ring && (axis === "y") === g.vertical && Math.abs(axis === "y" ? g.x - j.cx : g.y - j.cy) < JUNCTION_HALF + 12 && Math.abs(axis === "y" ? g.y - j.cy : g.x - j.cx) < JUNCTION_HALF + 100);
 const guestNear = (sim, j) => guestsOf(sim).some((g) => !g.ring && g.vertical && Math.abs(g.x - j.cx) < 12 && Math.abs(g.y - j.cy) < JUNCTION_HALF + 50);
 const ringGuestNear = (sim, j, ang) => guestsOf(sim).some((g) => g.ring?.j === j && (ringArc(g.ring.ang, ang) < 50 || TAU * RING_R - ringArc(g.ring.ang, ang) < RING_LEN + CAR_GAP_PX));
 const carsInBox = (sim, j, axis) => sim.cars.some((o) => o.lane && o.lane.axis === axis && o.lane.controls.some((c) => c.j === j && Math.abs(o.d - c.dc) < JUNCTION_HALF + o.lane.len / 2)) || guestInBox(sim, j, axis);
@@ -1455,7 +1458,7 @@ export function rideHold(sim, r) {
     const sig = signalAt(j, sim.t)[axis], v = r.rv ?? 0;
     if (r.rare) { // the owner's car runs a red when the way is clear, never into anyone
       const coming = sig === "red" && sim.cars.some((o) => o.lane && o.lane.axis === cross && o.lane.controls.some((c) => c.j === j && o.d > c.dc - JUNCTION_HALF - o.lane.len / 2 - Math.max(20, o.v * 2) && o.d < c.dc + JUNCTION_HALF + o.lane.len / 2));
-      return coming || carsInBox(sim, j, cross) ? Math.max(0, stopAt) : Infinity;
+      return coming || guestComing(sim, j, cross, r.guest) || carsInBox(sim, j, cross) ? Math.max(0, stopAt) : Infinity;
     }
     if (sig === "red") return Math.max(0, stopAt);
     if (sig === "amber") { if (r.stopFor === j.id || v < 10 || stopAt >= (v * v) / (2 * BRAKE_PX_S2 * 1.6)) { r.stopFor = j.id; return Math.max(0, stopAt); } return Infinity; }

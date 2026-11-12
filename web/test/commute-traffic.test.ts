@@ -144,6 +144,26 @@ describe("a commuter's cab", () => {
   });
 });
 
+// Decision 264: the owner's car decided to run a red while a commuter's cab, on green on the crossing road, was past
+// its stop line but not yet in the box, and both were in the junction (about 1 in 5 runs, by the rare-car roll).
+describe("the owner's car at a red light", () => {
+  it("does not run it while a commuter's cab is coming into the junction across", () => {
+    for (const guestThere of [false, true]) {
+      const sim = createTraffic(city(4), "traffic", 1);
+      const j = sim.junctions.find((k) => k.kind === "light")!;
+      const car = sim.cars.find((c) => c.lane && c.lane.axis === "y" && c.lane.controls.some((k) => k.j === j))!;
+      const ctl = car.lane!.controls.find((k) => k.j === j)!;
+      sim.cars = [car];
+      Object.assign(car, { rare: "porsche", d: ctl.dc - STOP_AT - car.lane!.len / 2 - 1, v: 30, commit: null });
+      while (signalAt(j, sim.t).y !== "red" || signalAt(j, sim.t).x !== "green") sim.t += 50;
+      // A commuter's cab on the street, past its line on green, just short of the box.
+      sim.guests = guestThere ? [{ x: j.cx - 40, y: j.cy, vertical: false, commit: null, ring: null }] : [];
+      stepTraffic(sim, 50);
+      expect(car.commit === j.id).toBe(!guestThere);
+    }
+  });
+});
+
 // Decision 207: a new hire's taxi is called to the kerb outside its apartment building before the worker comes out.
 describe("a taxi called for a new hire", () => {
   it("waits at the kerb where the ride starts, having come along that same street the way it will set off", () => {
