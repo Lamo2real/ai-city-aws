@@ -1324,7 +1324,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     const phone = world.portrait;
     const whole = Math.min((area.r - area.l) / (W - L), (area.b - area.t) / (H - T));
     const close = phone && !force; // a phone opens close on HQ; Fit shows the whole town there too
-    const best = clampZoom(close ? Math.max(whole, (area.r - area.l) / (3 * PITCH_X * TILE)) : Math.max(ZOOM_MIN, whole));
+    const best = clampZoom(close ? Math.max(whole, (area.r - area.l) / (3 * PITCH_X * TILE)) : whole); // clampZoom keeps it between the whole town and the whole countryside
     cam.zoom = best; cam.wantZoom = best; cam.anchor = null;
     if (force) cam.userMoved = false;
     viewSize();
@@ -1338,7 +1338,10 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     let lo = ZOOM_MIN;
     if (world && root.clientWidth) {
       const M = (MARGIN - EDGE / 2) * TILE, W = (world.width - (world.left ?? 0)) * TILE, H = (world.height - (world.top ?? 0)) * TILE;
-      lo = Math.max(ZOOM_MIN, Math.min(root.clientWidth / (W + 2 * M), root.clientHeight / (H + 2 * M)));
+      // Never further out than the whole countryside; and never so close that the whole town can't be on screen
+      // (on a phone the oval town is wider than ZOOM_MIN allows, decision 261).
+      const town = Math.min(root.clientWidth / W, root.clientHeight / H);
+      lo = Math.max(Math.min(ZOOM_MIN, town), Math.min(root.clientWidth / (W + 2 * M), root.clientHeight / (H + 2 * M)));
     }
     return Math.max(lo, Math.min(ZOOM_MAX, z));
   }

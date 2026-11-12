@@ -588,11 +588,13 @@ export function towerSize(name) {
 // (0, 0), the homes in the block south of it, every tower in a block of its own, roads around them. Block (c, r) is c
 // blocks east and r blocks south of HQ; its corner is at (c * PITCH_X, r * PITCH_Y) tiles, so a block never moves,
 // whatever else is built (west and north of HQ are negative). Which blocks get built is organic (the owner,
-// 2026-11-12, decision 259): every block has a fixed place in one order, by its distance from HQ (in blocks) plus a
-// seeded jitter of up to about a block (dense at the centre, ragged at the edge: "it should still feel like a city"), so the town fills outward compact and roughly round, with a ragged edge, never a
-// rectangle. Blocks not built yet, and lots whose tower was demolished, are forest.
+// 2026-11-12, decisions 259 to 261): every block has a fixed place in one order, by its distance from the middle of
+// an oval 1.4 times as wide as it is tall, plus a small seeded jitter, so the town fills outward dense at the centre
+// and grows as an oval with a ragged edge ("it should still feel like a city"), never a square or a rectangle.
+// Blocks not built yet, and lots whose tower was demolished, are forest.
 export const BLOCK_W = 12, BLOCK_H = 16, PITCH_X = BLOCK_W + STREET, PITCH_Y = BLOCK_H + STREET, HQ_DRAW_H = 13;
 export const CITY_SEED = "vaic-city-1"; // the town's seed: changing it would move every tower, so it never changes
+export const OVAL = 1.4; // the town is an oval, 1.4 times as wide as it is tall (decision 261)
 const HOMES_BLOCK = [0, 1], REACH = 24; // blocks are ranked out to REACH blocks from HQ (over 2,000 lots)
 const BLOCKS = [];
 // Lot `slot` → its block, for good.
@@ -602,7 +604,9 @@ export function blockOf(slot) {
     for (let r = -REACH; r <= REACH; r++) for (let c = -REACH; c <= REACH; c++) {
       if ((c === 0 && r === 0) || (c === HOMES_BLOCK[0] && r === HOMES_BLOCK[1])) continue;
       const jitter = (hashOf(`${CITY_SEED}:${c},${r}`) % 1000) / 1000; // 0 … 1
-      all.push({ c, r, score: Math.hypot(c, r - 0.5) + jitter * 0.9 }); // in blocks, round the HQ-and-homes pair
+      // An oval (decision 261): distance in tiles, the east–west axis OVAL times the north–south one, measured from
+      // between HQ and the homes; the jitter only ragged the edge, so the outline is never a row or a column.
+      all.push({ c, r, score: Math.hypot((c * PITCH_X) / OVAL, (r - 0.5) * PITCH_Y) / PITCH_Y + jitter * 0.45 });
     }
     all.sort((p, q) => p.score - q.score || p.r - q.r || p.c - q.c);
     for (const b of all) BLOCKS.push([b.c, b.r]);

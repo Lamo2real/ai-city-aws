@@ -239,6 +239,8 @@ export const PITCH_X: number;
 export const PITCH_Y: number;
 /** The town's seed (decision 259): which blocks get built, and where the roundabouts are. */
 export const CITY_SEED: string;
+/** How much wider than tall the oval town is (decision 261). */
+export const OVAL: number;
 /** What a crossing is, from where it is: the avenue east of block column v, the street south of block row h. */
 export function junctionKind(v: number, h: number): "light" | "roundabout" | "giveway";
 /** Lot `slot`'s block, [column, row] from HQ, for good. */
