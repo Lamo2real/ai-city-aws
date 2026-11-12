@@ -227,7 +227,7 @@ export const titleFrom = (text: string) => {
 };
 
 /** A link or a piece of text from the paste field, for the departments chosen ("all" when none were). */
-export async function addPasted(value: string, departments?: string[] | "all") {
+export async function addPasted(value: string, departments?: string[] | "all"): Promise<KnowledgeItem | undefined> {
   const v = value.trim();
   if (!v) return;
   if (v.length > 200_000)
@@ -240,6 +240,7 @@ export async function addPasted(value: string, departments?: string[] | "all") {
     ? await knowledgeApi.addLink(v, undefined, departments)
     : await knowledgeApi.addText(v, titleFrom(v), undefined, departments);
   knowledge.dispatch({ type: "upsert", item });
+  return item;
 }
 
 export async function setScope(id: string, scope: Scope) {

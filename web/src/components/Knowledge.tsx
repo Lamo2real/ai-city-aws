@@ -4,7 +4,7 @@
 // automatically (§15). Download saves a document's original (a link has none: it opens instead). Before anything
 // is stored the owner picks which departments can use it, none meaning every department (decision 270). The page
 // filters by name as you type, by department and by built in or mine (decision 270), remembered on this device.
-import { useEffect, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { knowledgeApi, startDownload, type KnowledgeItem, type KnowledgeKind, type Scope } from "../lib/api.ts";
 import {
   addFiles,
@@ -27,7 +27,7 @@ import {
   type KnowledgeShow,
 } from "../lib/knowledge.ts";
 import { allNames, countWords, loadDeptChoices, type DeptChoice } from "../lib/deptPick.ts";
-import { AddFor, type Adding } from "./AddFor.tsx";
+import { AddFor, FileTray } from "./AddFor.tsx";
 import { DOC_TYPES, placeCode, placeName, TOPICS, topicWord } from "../lib/places.ts";
 import { Banner, Button, Confirm, Loading, toast, UNDO_MS } from "./ui.tsx";
 import { Select } from "./Select.tsx";
@@ -80,7 +80,13 @@ export function KnowledgeScreen() {
   const [confirming, setConfirming] = useState<KnowledgeItem | null>(null);
   const [filters, setFiltersState] = useState<KnowledgeFilters>(savedFilters);
   const [editing, setEditing] = useState<string | null>(null);
-  const [adding, setAdding] = useState<Adding | null>(null);
+  // ① Files waiting in the drop zone, or a pasted link or text, until ③ Add (decision 280).
+  const [tray, setTray] = useState<File[]>([]);
+  const [pending, setPending] = useState<string | null>(null);
+  const trayAdding = useMemo(() => ({ files: tray }), [tray]);
+  const pasteAdding = useMemo(() => (pending ? { text: pending } : null), [pending]);
+  // The rows just added glow and settle into the list for a moment, so it's clear where they went.
+  const [fresh, setFresh] = useState<string[]>([]);
   const [depts, setDepts] = useState<DeptChoice[]>([]);
   const [builtInShown, setBuiltInShown] = useState(0);
   const setFilters = (f: KnowledgeFilters) => {
@@ -97,16 +103,29 @@ export function KnowledgeScreen() {
     };
   }, []);
 
-  // Dropped or chosen files wait for the department choice; more files dropped meanwhile join them.
+  useEffect(() => {
+    if (!fresh.length) return;
+    document
+      .querySelector(`[data-item="${fresh[0]}"]`)
+      ?.scrollIntoView?.({
+        block: "nearest",
+        behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      });
+    const t = setTimeout(() => setFresh([]), 4000);
+    return () => clearTimeout(t);
+  }, [fresh]);
+
+  // Dropped or chosen files wait in the drop zone for the department choice; more join them.
   const add = (files: File[]) => {
     if (!files.length) return;
     setError(null);
-    setAdding((a) => ({ files: [...(a && "files" in a ? a.files : []), ...files] }));
+    setTray((t) => [...t, ...files]);
   };
-  const store = async (a: Adding, departments: string[] | "all") => {
-    setAdding(null);
-    if ("text" in a) return void submitPaste(a.text, departments);
-    const problems = await addFiles(a.files, { departments });
+  const storeFiles = async (files: File[], departments: string[] | "all") => {
+    setTray([]);
+    const ids: string[] = [];
+    const problems = await addFiles(files, { departments, onCreated: (item) => ids.push(item.id) });
+    setFresh(ids);
     if (problems.length) setError(problems.join(" "));
   };
   const onDrop = (e: DragEvent) => {
@@ -116,8 +135,10 @@ export function KnowledgeScreen() {
   };
   const submitPaste = async (v: string, departments: string[] | "all") => {
     setError(null);
+    setPending(null);
     try {
-      await addPasted(v, departments);
+      const item = await addPasted(v, departments);
+      if (item) setFresh([item.id]);
       setPasted("");
       toast({ text: isLink(v) ? "Link added. It is being read now." : "Text added.", tone: "good" });
     } catch (e) {
@@ -159,31 +180,51 @@ export function KnowledgeScreen() {
       <h1 id="kn-title">Knowledge</h1>
       <p className="lede">What your agents should know. Add a file or a link; you choose how each one is used.</p>
 
-      <label
-        className={`drop${dragging ? " drop-over" : ""}`}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragging(true);
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={onDrop}
-      >
-        <span className="drop-big">Drop files here, or choose files</span>
-        <span className="mute">
-          Documents, images, audio and video, many at once, up to 5 GB each. Laws and rules are sorted by country, year
-          and topic for you.
-        </span>
-        <input
-          className="sr-only"
-          type="file"
-          multiple
-          onChange={(e) => {
-            const files = [...(e.target.files ?? [])];
-            e.target.value = "";
-            add(files);
+      <div className={`kadd-flow${tray.length ? " is-open" : ""}`}>
+        <div
+          className={`drop${dragging ? " drop-over" : ""}${tray.length ? " has-files" : ""}`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
           }}
-        />
-      </label>
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+        >
+          {tray.length ? (
+            <>
+              <p className="kstep">
+                <span className="kstep-n" aria-hidden="true">
+                  1
+                </span>
+                {tray.length === 1 ? "1 file ready" : `${tray.length} files ready`}
+                <span className="mute"> · drop more here</span>
+              </p>
+              <FileTray files={tray} onRemove={(i) => setTray((t) => t.filter((_, n) => n !== i))} onMore={add} />
+            </>
+          ) : (
+            <label className="drop-empty">
+              <span className="drop-big">Drop files here, or choose files</span>
+              <span className="mute">
+                Documents, images, audio and video, many at once, up to 5 GB each. Laws and rules are sorted by country,
+                year and topic for you.
+              </span>
+              <input
+                className="sr-only"
+                type="file"
+                multiple
+                onChange={(e) => {
+                  const files = [...(e.target.files ?? [])];
+                  e.target.value = "";
+                  add(files);
+                }}
+              />
+            </label>
+          )}
+        </div>
+        {tray.length ? (
+          <AddFor adding={trayAdding} onAdd={(d) => void storeFiles(tray, d)} onCancel={() => setTray([])} />
+        ) : null}
+      </div>
       <label className="folder-pick">
         <span className="linkish">Or add a whole folder</span>
         <input
@@ -204,7 +245,7 @@ export function KnowledgeScreen() {
         className="paste"
         onSubmit={(e) => {
           e.preventDefault();
-          if (pasted.trim()) setAdding({ text: pasted.trim() });
+          if (pasted.trim()) setPending(pasted.trim());
         }}
       >
         <label className="field">
@@ -216,7 +257,13 @@ export function KnowledgeScreen() {
         </Button>
       </form>
 
-      {adding ? <AddFor adding={adding} onAdd={(d) => void store(adding, d)} onCancel={() => setAdding(null)} /> : null}
+      {pasteAdding ? (
+        <AddFor
+          adding={pasteAdding}
+          onAdd={(d) => void submitPaste(pasteAdding.text, d)}
+          onCancel={() => setPending(null)}
+        />
+      ) : null}
       {error ? <Banner tone="bad">{error}</Banner> : null}
 
       <p className="budget" aria-live="polite">
@@ -302,7 +349,11 @@ export function KnowledgeScreen() {
                 item.doc_type ? topicWord(item.doc_type) : "",
               ].filter(Boolean);
               return (
-                <li key={item.id} className={`kitem${item.superseded_by ? " kitem-old" : ""}`}>
+                <li
+                  key={item.id}
+                  data-item={item.id}
+                  className={`kitem${item.superseded_by ? " kitem-old" : ""}${fresh.includes(item.id) ? " kitem-new" : ""}`}
+                >
                   <div className="kitem-head">
                     <span className="kind" aria-hidden="true">
                       {KIND[item.kind]?.icon ?? KIND.other.icon}

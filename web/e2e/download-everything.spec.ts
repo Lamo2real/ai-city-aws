@@ -14,7 +14,7 @@ async function addFor(page: Page, name: string, depts: string[]) {
   await page.locator(".drop input[type=file]").setInputFiles([md(name)]);
   const pick = page.getByRole("region", { name: "Who can use it" });
   for (const d of depts) await pick.getByRole("button", { name: new RegExp(`^\\S*\\s*${d}`) }).click();
-  await pick.getByRole("button", { name: /^Add for / }).click();
+  await pick.getByRole("button", { name: /^Add (1 file|the) / }).click();
   await expect(card(page, name)).toBeVisible();
 }
 
@@ -60,7 +60,7 @@ test("knowledge: an upload downloads as soon as it has arrived, and a link opens
 
   await page.getByLabel("Paste a link or text").fill("https://example.com/pricing");
   await page.getByRole("button", { name: "Add", exact: true }).click();
-  await page.getByRole("button", { name: "Add for every department" }).click();
+  await page.getByRole("button", { name: /^Add .* for every department$/ }).click();
   const link = card(page, "example.com");
   await expect(link.getByRole("link", { name: "Open link" })).toHaveAttribute("href", "https://example.com/pricing");
   await expect(link.getByRole("status")).toHaveText("Ready", { timeout: 10_000 });

@@ -707,6 +707,15 @@ projections, record check and HUD card are department-generic.
   owner's documents it can use, every-department ones included; the department's own card and Shared, which every
   department uses) and Built in (All, Built in, Mine). Remembered on the device (`localStorage`
   `vaic.knowledge.filters`); "Show everything" clears them.
+- **The upload as a numbered flow (decision 280).** Dropped or chosen files sit inside the drop zone as tiles (a big
+  picture for the kind, the name shortened in the middle with its extension kept, the size, ✕ to remove), with a
+  "+ Add more" tile and the zone still taking drops; "① 3 files ready". Right under it, attached to it: "② Pick who
+  can use them" with big chips (a picture per department, 48 px), recommended ones outlined in amber, chosen ones
+  filled with ✓, "Use recommended", and "None picked: every department can use them."; then "③ Add" with one big
+  button saying exactly what happens ("Add 3 files for Marketing and Media", "Add 1 file for every department";
+  `addLabel` in `web/src/lib/deptPick.ts`) and "Remove all". The new rows slide into the list with an amber glow for
+  a few seconds (none with reduced motion: a steady outline). A pasted link or text uses ② and ③ under the paste box
+  ("Add the link for …"). One choice for all the files; no per-file choice.
 - **Counted, not listed (decision 277).** The badge on each of the owner's documents is one department's name, or
   "3 departments" with the number in digits; a document for every department is counted too ("13 departments"). The
   names are in the badge's tooltip and accessible label, and "For 3 departments · Show which" lists them ("Used by

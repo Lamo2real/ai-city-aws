@@ -31,8 +31,8 @@ test("knowledge: laws are grouped by country, year and topic, filterable, and th
       pdf("GDPR privacy 2018.pdf"),
       pdf("meeting notes.pdf"),
     ]);
-  await expect(page.getByRole("region", { name: "Who can use it" })).toContainText("5 files");
-  await page.getByRole("button", { name: "Add for every department" }).click();
+  await expect(page.getByText("5 files ready")).toBeVisible();
+  await page.getByRole("button", { name: /^Add .* for every department$/ }).click();
   await expect.poll(() => m.knowledge.puts.length).toBe(5);
 
   await expect(group(page, "Sweden · 2026 · Tax")).toBeVisible({ timeout: 10_000 });
@@ -84,7 +84,7 @@ test("knowledge by place fits a phone", async ({ page }) => {
   const m = await mockBackend(page);
   await page.goto("/#/knowledge");
   await page.locator(".drop input[type=file]").setInputFiles([pdf("Sweden tax 2026.pdf"), pdf("USA privacy 2024.pdf")]);
-  await page.getByRole("button", { name: "Add for every department" }).click();
+  await page.getByRole("button", { name: /^Add .* for every department$/ }).click();
   await expect.poll(() => m.knowledge.puts.length).toBe(2);
   await expect(group(page, "Sweden · 2026 · Tax")).toBeVisible({ timeout: 10_000 });
   await expect(group(page, "United States · 2024 · Privacy")).toBeVisible();

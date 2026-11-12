@@ -254,7 +254,7 @@ describe("the Knowledge screen", () => {
     fireEvent.change(box, { target: { value: "https://example.com" } });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
     // Who can use it is asked first (decision 270); with nothing ticked, every department.
-    fireEvent.click(await screen.findByRole("button", { name: "Add for every department" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add the link for every department" }));
     await waitFor(() => expect(addLink).toHaveBeenCalledWith("https://example.com", undefined, "all"));
     expect(await screen.findByText("Reading the page")).toBeTruthy();
     expect((box as HTMLTextAreaElement).value).toBe("");

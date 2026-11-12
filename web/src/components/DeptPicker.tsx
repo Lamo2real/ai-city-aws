@@ -5,6 +5,7 @@ import { useEffect, useId, useState } from "react";
 import {
   allNames,
   countWords,
+  deptIcon,
   forWhom,
   isAll,
   loadDeptChoices,
@@ -20,6 +21,7 @@ export function DeptPicker({
   label = "Which departments?",
   disabled,
   noneText = "Pick at least one department.",
+  big = false,
 }: {
   p: Picker;
   onChange: (keys: string[]) => void;
@@ -27,13 +29,15 @@ export function DeptPicker({
   disabled?: boolean;
   /** What the picker says while nothing is ticked. */
   noneText?: string;
+  /** Big friendly chips with a picture per department (the Knowledge upload, decision 280). */
+  big?: boolean;
 }) {
   const id = useId();
   const rec = new Map(p.recommended.map((r) => [r.key, r.why]));
   const why = p.recommended.filter((r) => r.why);
   const names = new Map(p.choices.map((c) => [c.key, c.name]));
   return (
-    <div className="dept-pick" role="group" aria-labelledby={`${id}-l`}>
+    <div className={`dept-pick${big ? " is-big" : ""}`} role="group" aria-labelledby={`${id}-l`}>
       <div className="dept-pick-head">
         <p id={`${id}-l`} className="dept-pick-label">
           {label}
@@ -70,6 +74,11 @@ export function DeptPicker({
               title={rec.get(c.key) ? `Recommended: ${rec.get(c.key)}` : undefined}
               onClick={() => onChange(toggle(p, c.key))}
             >
+              {big ? (
+                <span aria-hidden="true" className="dept-icon">
+                  {deptIcon(c.key)}
+                </span>
+              ) : null}
               <span aria-hidden="true" className="dept-tick">
                 {on ? "✓" : "+"}
               </span>

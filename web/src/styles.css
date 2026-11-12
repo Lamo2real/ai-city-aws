@@ -3664,6 +3664,191 @@ a.pin:hover {
   margin: 0;
   overflow-wrap: anywhere;
 }
+/* The upload as a numbered flow (decision 280): ① tiles in the drop zone, ② big chips right under it, ③ one button. */
+.kadd-flow.is-open {
+  margin: var(--s3) 0;
+}
+.kadd-flow.is-open .drop {
+  margin: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  place-items: stretch;
+  text-align: left;
+}
+.kadd-flow.is-open .kadd {
+  margin: 0;
+  border: 2px solid var(--edge-2);
+  border-top: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  padding: var(--s3);
+  gap: var(--s3);
+}
+.drop-empty {
+  display: grid;
+  gap: var(--s1);
+  place-items: center;
+  width: 100%;
+  min-height: 88px;
+  cursor: pointer;
+}
+.kstep {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin: 0;
+  font-weight: 800;
+  font-size: var(--fs-m, 1.05rem);
+}
+.kstep-n {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--amber);
+  color: #1d1400;
+  font-weight: 800;
+}
+.ktray {
+  list-style: none;
+  margin: var(--s2) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s2);
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+}
+.ktile {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  min-height: 120px;
+  height: 100%;
+  padding: var(--s2);
+  border: 1px solid var(--edge-2);
+  border-radius: var(--rg-s);
+  background: var(--glass-2);
+  text-align: center;
+  animation: ktile-in var(--dur-s, 0.2s) var(--ease, ease-out);
+}
+.ktile-icon {
+  font-size: 40px;
+  line-height: 1.1;
+}
+.ktile-name {
+  font-weight: 700;
+  font-size: var(--fs-s);
+  overflow-wrap: anywhere;
+}
+.ktile-size {
+  font-size: var(--fs-xs);
+  color: var(--gtext);
+}
+.ktile-x {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font-size: 18px;
+  cursor: pointer;
+}
+.ktile-x:hover,
+.ktile-x:focus-visible {
+  background: var(--glass-3);
+}
+.ktile-more {
+  border-style: dashed;
+  background: transparent;
+  cursor: pointer;
+}
+.ktile-more:hover,
+.ktile-more:focus-within {
+  background: var(--glass-2);
+  outline: 3px solid var(--gfocus);
+  outline-offset: 2px;
+}
+.ktile-more .ktile-icon {
+  font-size: 34px;
+  font-weight: 300;
+}
+@keyframes ktile-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.dept-pick.is-big .dept-chip {
+  min-height: 48px;
+  padding: 0 var(--s3) 0 var(--s2);
+  font-size: var(--fs-m, 1rem);
+}
+.dept-pick.is-big .dept-icon {
+  font-size: 22px;
+}
+.dept-pick.is-big .dept-chip.is-rec:not(.is-on) {
+  border: 2px dashed var(--amber);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--amber) 22%, transparent);
+}
+.dept-pick.is-big .dept-chip.is-on {
+  box-shadow: 0 0 0 2px var(--accent-edge);
+}
+.dept-pick.is-big .dept-pick-quick button {
+  min-height: 44px;
+}
+.kadd-btn {
+  min-height: 52px;
+  font-size: var(--fs-m, 1.05rem);
+  white-space: normal;
+}
+.kadd-go {
+  flex-wrap: wrap;
+  gap: var(--s2);
+}
+/* The rows just added settle into the list with a glow, then calm down. */
+.kitem-new {
+  animation:
+    kitem-settle 0.5s var(--ease, ease-out),
+    kitem-glow 3.5s ease-out;
+}
+@keyframes kitem-settle {
+  from {
+    transform: translateY(-16px);
+  }
+}
+@keyframes kitem-glow {
+  0%,
+  40% {
+    box-shadow: 0 0 0 3px var(--amber);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ktile,
+  .kitem-new {
+    animation: none;
+  }
+  .kitem-new {
+    box-shadow: 0 0 0 3px var(--amber);
+  }
+}
+@media (max-width: 640px) {
+  .ktray {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .kadd-go .btn {
+    flex: 1 1 100%;
+  }
+}
 .kfilters .check {
   display: inline-flex;
   align-items: center;

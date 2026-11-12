@@ -97,7 +97,12 @@ export async function describeFiles(files: File[]): Promise<string> {
     files
       .filter((f) => (f.type.startsWith("text/") || TEXTY.test(f.name)) && f.size <= 5_000_000)
       .slice(0, 10)
-      .map((f) => f.slice(0, 4000).text().catch(() => "")),
+      .map((f) =>
+        f
+          .slice(0, 4000)
+          .text()
+          .catch(() => ""),
+      ),
   );
   return [...names, ...heads].join("\n");
 }
@@ -117,4 +122,56 @@ export function allNames(choices: DeptChoice[], keys: string[] | undefined): str
     : choices.map((c) => c.name);
   if (!names.length) return keys?.length ? keys.join(", ") : "every department";
   return names.length === 1 ? names[0]! : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/** What the big Add button says (decision 280): exactly what will happen, "Add 3 files for Marketing and Media" or
+ * "Add 1 file for every department"; nothing picked (or all) is every department. */
+export function addLabel(what: { files: number } | { link: boolean }, p: DeptPicker): string {
+  const thing =
+    "files" in what ? (what.files === 1 ? "1 file" : `${what.files} files`) : what.link ? "the link" : "the text";
+  const who = !p.selected.length || isAll(p) ? "every department" : namesOf(p);
+  return `Add ${thing} for ${who}`;
+}
+
+/** A friendly picture per department for the big chips (decision 280); an owner-built one gets a building. */
+export const DEPT_ICON: Record<string, string> = {
+  application: "💻",
+  infrastructure: "🖥️",
+  data: "📊",
+  marketing: "📣",
+  sales: "🤝",
+  support: "🎧",
+  finance: "💰",
+  legal: "⚖️",
+  product: "🧩",
+  operations: "⚙️",
+  research: "🔬",
+  media: "🎬",
+};
+export const deptIcon = (key: string) => DEPT_ICON[key] ?? "🏢";
+
+/** A long file name shortened in the middle, keeping its end and extension: "phed-make-real…10-31.md". */
+export function shortName(name: string, max = 28): string {
+  if (name.length <= max) return name;
+  const dot = name.lastIndexOf(".");
+  const ext = dot > 0 && name.length - dot <= 6 ? name.slice(dot) : "";
+  const keep = max - ext.length - 1;
+  const head = Math.ceil(keep * 0.6);
+  const tail = keep - head;
+  const base = name.slice(0, name.length - ext.length);
+  return `${base.slice(0, head)}…${base.slice(base.length - tail)}${ext}`;
+}
+
+/** A big picture for a file by its name or type. */
+export function fileIcon(f: { name: string; type?: string }): string {
+  const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+  const t = f.type ?? "";
+  if (t.startsWith("image/") || ["png", "jpg", "jpeg", "gif", "webp", "heic", "svg"].includes(ext)) return "🖼️";
+  if (t.startsWith("audio/") || ["mp3", "wav", "m4a", "aac", "flac"].includes(ext)) return "🎵";
+  if (t.startsWith("video/") || ["mp4", "mov", "webm", "mkv"].includes(ext)) return "🎬";
+  if (["csv", "xls", "xlsx", "numbers"].includes(ext)) return "📊";
+  if (["ppt", "pptx", "key"].includes(ext)) return "📽️";
+  if (["md", "txt", "markdown", "rtf"].includes(ext)) return "📝";
+  if (["zip", "gz", "tar", "7z"].includes(ext)) return "📦";
+  return "📄";
 }
