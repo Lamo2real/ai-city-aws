@@ -355,6 +355,8 @@ export type SignalColour = "green" | "amber" | "red";
 export function signalAt(junction: { offset?: number }, t: number): { x: SignalColour; y: SignalColour };
 export function throughRoads(world: CityWorld): Array<{ x: number; y0: number; y1: number }>;
 export function junctions(world: CityWorld): CityJunction[];
+/** The town's few footbridges (decision 262): the middle of the road they span, in pixels; cabs pass under them. */
+export function footbridges(world: CityWorld): Array<{ x: number; y: number; across: "x" | "y" }>;
 export function createTraffic(world: CityWorld, seed?: string, rareSeed?: string | number): CityTraffic;
 export function stepTraffic(sim: CityTraffic, dtMs: number): void;
 export function trafficCars(sim: CityTraffic): CityTrafficCar[];

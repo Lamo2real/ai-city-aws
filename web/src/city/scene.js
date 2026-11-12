@@ -4,7 +4,7 @@
 // Reviewer; each department's manager stands at its door; panels are React (see CityView.tsx).
 // The City View: a small game world of the agents, drawn pixel by pixel on a canvas from city-state.js.
 // All of the art is drawn here in code. Every person on screen is a real agent; only the scenery moves on its own.
-import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, lotsMemory, readLotsMemory, PITCH_X, PITCH_Y, BLOCK_W, BLOCK_H, blockOf, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf, taxiCall, RIDE_PX_S, TO_WORK_BOOST, HOMES_PER_BLOCK } from "./city-state.js";
+import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, lotsMemory, readLotsMemory, footbridges, PITCH_X, PITCH_Y, BLOCK_W, BLOCK_H, blockOf, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf, taxiCall, RIDE_PX_S, TO_WORK_BOOST, HOMES_PER_BLOCK } from "./city-state.js";
 
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const INK = "#1d1c36";
@@ -384,10 +384,38 @@ function roadH(g, x, y, w, h, seed) {
   const r = rng(seed);
   for (let i = 0; i < (w * h) / 40; i++) R(g, x + r() * w, y + r() * h, 1, 1, r() > 0.5 ? "#4a4c74" : "#383a5e");
 }
-function street(g, x0, x1, y, seed, avenues) { // tiles
+// A footbridge over the road (decision 262): a stone deck from kerb to kerb with railings and lamp posts, a few steps
+// down at each end, and its shadow on the road; drawn above the cabs, which drive on underneath.
+function footbridge(g, b, ox, oy) {
+  const along = b.across === "y"; // spans a street: the deck runs north–south
+  const cx = Math.round(b.x - ox), cy = Math.round(b.y - oy), half = 34, wide = 9;
+  const box = (u0, v0, u1, v1, c) => (along ? R(g, cx + u0, cy + v0, u1 - u0, v1 - v0, c) : R(g, cx + v0, cy + u0, v1 - v0, u1 - u0, c));
+  box(-wide + 4, -16, wide + 7, 16, "rgba(20,18,40,.32)"); // its shadow across the carriageway
+  box(-wide - 1, -half - 1, wide + 1, half + 1, INK);
+  box(-wide, -half, wide, half, "#b8a98a");
+  box(-wide + 2, -half, wide - 2, half, "#d8cbab"); // the deck, warm stone
+  for (let v = -half + 3; v < half - 2; v += 6) box(-wide + 4, v, wide - 4, v + 1, "#c2b393"); // its slabs
+  box(-wide, -half, -wide + 2, half, "#5b4a3c"); box(wide - 2, -half, wide, half, "#5b4a3c"); // the railings
+  box(-wide - 1, -14, wide + 1, -12, "#8a7a62"); box(-wide - 1, 12, wide + 1, 14, "#8a7a62"); // where it springs from each kerb
+  for (let v = -half + 2; v <= half - 4; v += 8) { box(-wide - 1, v, -wide + 2, v + 2, INK); box(wide - 2, v, wide + 1, v + 2, INK); } // their posts
+  for (const e of [-1, 1]) for (let k = 0; k < 3; k++) box(-wide + 1, e * (half - 2 - k * 3) - 1, wide - 1, e * (half - 2 - k * 3), "#8f88a4"); // the steps down
+}
+// A sidewalk along a street, open where an avenue joins it from that side (decision 262): the avenue's carriageway
+// runs into the street, never under the pavement.
+function sidewalk(g, X, Y, W, gaps, seed) {
+  let x = X;
+  for (const [a, b] of [...gaps].sort((p, q) => p[0] - q[0])) {
+    if (b <= X || a >= X + W) continue;
+    if (a > x) paving(g, x, Y, a - x, 8, WALK, "#65617c", `${seed}${x}`);
+    x = Math.max(x, b);
+  }
+  if (x < X + W) paving(g, x, Y, X + W - x, 8, WALK, "#65617c", `${seed}${x}`);
+}
+function street(g, x0, x1, y, seed, avenues, joins = []) { // tiles; joins: [{ x, north, south }] avenues meeting it
   const X = x0 * TILE, W = (x1 - x0) * TILE, Y = y * TILE, H = 3 * TILE;
-  paving(g, X, Y, W, 8, WALK, "#65617c", `${seed}n`);
-  paving(g, X, Y + H - 8, W, 8, WALK, "#65617c", `${seed}s`);
+  const gap = (j) => [j.x * TILE + 8, j.x * TILE + 40];
+  sidewalk(g, X, Y, W, joins.filter((j) => j.north).map(gap), `${seed}n`);
+  sidewalk(g, X, Y + H - 8, W, joins.filter((j) => j.south).map(gap), `${seed}s`);
   roadH(g, X, Y + 8, W, H - 16, seed);
   for (let dx = 4; dx < W; dx += 20) R(g, X + dx, Y + H / 2 - 1, 10, 2, "#b9a45a");
   for (const a of avenues) if (a >= x0 && a < x1) for (let k = 0; k < 4; k++) R(g, (a + 3) * TILE + 2, Y + 11 + k * 7, 8, 4, "#cfcfd6"); // a crossing beside each junction
@@ -789,7 +817,8 @@ function bake(world, skip = new Map(), { now = Date.now(), grow = true } = {}) {
   const js = junctions(world), round = new Set(js.filter((j) => j.kind === "roundabout").map((j) => `${j.cx},${j.cy}`));
   // Each street's crossings: the avenues that reach it there (decision 259: roads only where the town is).
   const crossings = (s) => verticals.filter((v) => v.y0 <= s.y - 1 && v.y1 >= s.y + 4 && v.x >= s.x0 && v.x + 3 <= s.x1).map((v) => v.x);
-  for (const s of roads) street(g, s.x0, s.x1, s.y, `st${s.y}`, crossings(s).filter((a) => !round.has(`${(a + 1.5) * TILE},${(s.y + 1.5) * TILE}`)));
+  const joins = (s) => verticals.filter((v) => v.y0 <= s.y + 3 && v.y1 >= s.y && v.x >= s.x0 && v.x + 3 <= s.x1).map((v) => ({ x: v.x, north: v.y0 < s.y, south: v.y1 > s.y + 3 }));
+  for (const s of roads) street(g, s.x0, s.x1, s.y, `st${s.y}`, crossings(s).filter((a) => !round.has(`${(a + 1.5) * TILE},${(s.y + 1.5) * TILE}`)), joins(s));
   for (const j of js) junctionMarks(g, j);
   // Trees wherever nothing else stands, far to near.
   // An empty lot is forest (decision 259); only one whose tower is coming down right now keeps clear for the wrecking ball.
@@ -890,6 +919,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   let OX = 0, OY = 0; // the camera rounded to whole art pixels, the same for the ground and everything on it
   const anims = new Map(); // dept → { kind: "rise" | "build" | "demolish", start, dur, b?, done? } (decision 134)
   const mail = { queue: [], rider: null, out: 0, back: 0 }; // the one mailman and the letters waiting for him
+  let bridges = []; // the town's footbridges, drawn over the cabs (decision 262)
   let entered = false; // the towers' entrance has played (or there was nothing to show)
   const bakeNow = () => bake(world, animSkip(), { now: Date.now(), grow: !reduced() });
   // While saplings grow, the ground is baked afresh now and then so they get taller (decision 259).
@@ -950,6 +980,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       // only, so nothing on screen jumps when the town grows (decision 259).
       const first = !world;
       world = next; worldSig = sig; ground = bakeNow(); if (first) fitView();
+      bridges = footbridges(world); root._bridges = bridges; // for tests
       const roads = JSON.stringify([world.streets, world.lanes, world.avenue, world.left, world.top, world.width, world.height]);
       if (roads !== trafficSig) {
         // The roads changed: traffic starts afresh on them, the lights keep their clock.
@@ -1717,6 +1748,8 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       if (rare === "lambo") lamboShown += 1;
     }
     ctx.globalAlpha = 1;
+    // The footbridges over the cabs (decision 262).
+    for (const b of bridges) if (b.x - ox > -60 && b.x - ox < w + 60 && b.y - oy > -60 && b.y - oy < h + 60) footbridge(ctx, b, ox, oy);
     // The traffic lights, one at the kerb before the stop line on each approach.
     for (const j of traffic.junctions) {
       if (j.kind !== "light") continue;

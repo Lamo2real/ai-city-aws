@@ -62,6 +62,11 @@ test("lights at some junctions never go green both ways, and a cab waits at the 
   expect(signals).toBeLessThan(total); // some junctions, not all
   expect(rounds).toBeGreaterThanOrEqual(1); // scattered by the town's seed, more as the town grows (decision 259)
   expect(rounds).toBeLessThan(total / 3);
+  // A few footbridges, none at a junction (decision 262): the cabs drive under them, the lights don't care.
+  const bridges = await hooks(page, (h) => (h as unknown as { _bridges?: Array<{ x: number; y: number }> })._bridges ?? []);
+  const js = await hooks(page, (h) => h._traffic!.junctions.map((j) => [j.cx, j.cy]));
+  expect(bridges.length).toBeGreaterThan(0);
+  for (const b of bridges) for (const [x, y] of js) expect(Math.hypot(b.x - x!, b.y - y!)).toBeGreaterThan(80);
 
   // Sample the lights for a full cycle and more: one way is always red; every colour shows.
   const seen = new Set<string>();

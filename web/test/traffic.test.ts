@@ -12,6 +12,7 @@ import {
   STOP_AT,
   TOWN_PX_S,
   createTraffic,
+  footbridges,
   initialState,
   junctions,
   layout,
@@ -174,4 +175,46 @@ describe("the traffic as a whole", () => {
       expect(roadTop).toBeGreaterThan(HIGHWAY_PX_S * 0.85); // highway pace out in the countryside
     });
   }
+});
+
+describe("footbridges (decision 262)", () => {
+  it("are few, halfway along a block (never at a junction), inside the town, and stay as it grows", () => {
+    let before: ReturnType<typeof footbridges> = [];
+    for (const n of [4, 12, 20, 40, 80]) {
+      const w = city(n), bs = footbridges(w), js = junctions(w);
+      for (const b of bs) {
+        for (const j of js) expect(Math.hypot(b.x - j.cx, b.y - j.cy)).toBeGreaterThan(JUNCTION_HALF + 60);
+        expect(b.x).toBeGreaterThanOrEqual((w.left ?? 0) * TILE);
+        expect(b.x).toBeLessThanOrEqual(w.width * TILE);
+      }
+      for (const b of before) expect(bs).toContainEqual(b); // a bridge, once there, stays
+      expect(bs.length).toBeLessThanOrEqual(Math.max(3, js.length / 3)); // a handful, not one on every block
+      before = bs;
+    }
+    expect(before.length).toBeGreaterThan(3);
+  });
+
+  it("cabs drive under them without stopping, and the lights still cycle", () => {
+    const w = city(40), sim = createTraffic(w), bs = footbridges(w);
+    const passed = new Set<string>();
+    let stoppedUnder = 0;
+    const lights = sim.junctions.filter((j) => j.kind === "light");
+    const seen = new Set<string>();
+    for (let t = 0; t < 120_000; t += 50) {
+      stepTraffic(sim, 50);
+      for (const c of trafficCars(sim)) {
+        if (c.ring) continue;
+        for (const [i, b] of bs.entries()) {
+          const under = b.across === "y" ? Math.abs(c.x - b.x) < 8 && Math.abs(c.y - b.y) < 24 : Math.abs(c.y - b.y) < 8 && Math.abs(c.x - b.x) < 24;
+          if (!under) continue;
+          passed.add(`${i}`);
+          if (c.v < 1) stoppedUnder++;
+        }
+      }
+      for (const j of lights) seen.add(`${j.id}:${signalAt(j, sim.t).x}`);
+    }
+    expect(passed.size).toBe(bs.length); // every bridge had cabs under it
+    expect(stoppedUnder).toBeLessThan(40); // passing, not parked (a queue from a red light may reach one now and then)
+    for (const j of lights) for (const c of ["green", "amber", "red"]) expect(seen.has(`${j.id}:${c}`)).toBe(true);
+  });
 });

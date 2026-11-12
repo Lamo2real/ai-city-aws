@@ -1174,6 +1174,32 @@ export function junctions(world) {
   return list;
 }
 
+// Footbridges (the owner, 2026-11-12, decision 262): a few places where the sidewalk arches over the road and the
+// cabs drive under it. Only ever halfway along a block (never at a junction, so lights, roundabouts and giving way
+// are untouched), only inside the town, and only where the town's seed says so (about one block side in eleven), so
+// a bridge, once there, stays. Each is { x, y } in pixels at the middle of the road and `across`: "y" for a bridge over
+// a street (it runs north–south), "x" for one over an avenue. Cabs and commuters never stop for one.
+export function footbridges(world) {
+  const out = [], L = world.left ?? 0, T = world.top ?? 0;
+  for (const s of world.streets) {
+    const h = Math.round((s.y - BLOCK_H) / PITCH_Y);
+    for (let c = Math.ceil((Math.max(s.x0, L) - 0) / PITCH_X) - 1; c * PITCH_X + BLOCK_W <= Math.min(s.x1, world.width); c++) {
+      const mid = c * PITCH_X + BLOCK_W / 2;
+      if (mid - 2 < Math.max(s.x0, L) || mid + 2 > Math.min(s.x1, world.width)) continue;
+      if (hashOf(`${CITY_SEED}:bridge:s${c},${h}`) % 11 === 0) out.push({ x: mid * TILE, y: (s.y + STREET / 2) * TILE, across: "y" });
+    }
+  }
+  for (const l of world.lanes ?? []) {
+    const v = Math.round((l.x - BLOCK_W) / PITCH_X);
+    for (let r = Math.ceil(Math.max(l.y0, T) / PITCH_Y) - 1; r * PITCH_Y + BLOCK_H <= Math.min(l.y1, world.height); r++) {
+      const mid = r * PITCH_Y + BLOCK_H / 2;
+      if (mid - 2 < Math.max(l.y0, T) || mid + 2 > Math.min(l.y1, world.height)) continue;
+      if (hashOf(`${CITY_SEED}:bridge:a${v},${r}`) % 11 === 0) out.push({ x: (l.x + STREET / 2) * TILE, y: mid * TILE, across: "x" });
+    }
+  }
+  return out;
+}
+
 // A lane: travel coordinate `d` from 0 at the lane's start to `span` at its end.
 const posOf = (lane, d) => (lane.dir > 0 ? lane.from + d : lane.to - d);
 const dOf = (lane, p) => (lane.dir > 0 ? p - lane.from : lane.to - p);
