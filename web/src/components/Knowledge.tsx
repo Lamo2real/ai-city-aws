@@ -26,7 +26,7 @@ import {
   type KnowledgeFilters,
   type KnowledgeShow,
 } from "../lib/knowledge.ts";
-import { loadDeptChoices, type DeptChoice } from "../lib/deptPick.ts";
+import { allNames, countWords, loadDeptChoices, type DeptChoice } from "../lib/deptPick.ts";
 import { AddFor, type Adding } from "./AddFor.tsx";
 import { DOC_TYPES, placeCode, placeName, TOPICS, topicWord } from "../lib/places.ts";
 import { Banner, Button, Confirm, Loading, toast, UNDO_MS } from "./ui.tsx";
@@ -216,9 +216,7 @@ export function KnowledgeScreen() {
         </Button>
       </form>
 
-      {adding ? (
-        <AddFor adding={adding} onAdd={(d) => void store(adding, d)} onCancel={() => setAdding(null)} />
-      ) : null}
+      {adding ? <AddFor adding={adding} onAdd={(d) => void store(adding, d)} onCancel={() => setAdding(null)} /> : null}
       {error ? <Banner tone="bad">{error}</Banner> : null}
 
       <p className="budget" aria-live="polite">
@@ -317,6 +315,15 @@ export function KnowledgeScreen() {
                       <span className="tag tag-old">{`Older: ${yearOf(item.superseded_by) ?? "a newer year"} replaces it`}</span>
                     ) : null}
                     {item.builtin ? <span className="tag tag-builtin">Built in</span> : null}
+                    {item.builtin || !depts.length ? null : (
+                      <span
+                        className="tag tag-dept"
+                        title={allNames(depts, item.departments)}
+                        aria-label={`For ${allNames(depts, item.departments)}`}
+                      >
+                        {countWords(depts, item.departments)}
+                      </span>
+                    )}
                     <span className={`tag tag-${statusTone(item, local)}`} role="status">
                       {statusWords(item, s.progress[item.id], local)}
                     </span>
@@ -363,7 +370,12 @@ export function KnowledgeScreen() {
                         ))}
                       </fieldset>
                     )}
-                    {item.kind !== "link" && item.status !== "uploading" ? (
+                    {item.kind === "link" && item.source ? (
+                      <a className="btn btn-quiet" href={item.source} target="_blank" rel="noopener noreferrer">
+                        Open link
+                      </a>
+                    ) : null}
+                    {(item.kind === "link" ? item.status === "ready" : item.status !== "uploading") ? (
                       <Button variant="quiet" onClick={() => void download(item)} label={`Download “${item.title}”`}>
                         Download
                       </Button>
@@ -403,6 +415,7 @@ export function KnowledgeScreen() {
 function WhoUses(p: { item: KnowledgeItem; onError: (m: string | null) => void }) {
   return (
     <DeptLine
+      count
       what={p.item.title}
       keys={p.item.departments}
       onSave={async (keys, every) => {

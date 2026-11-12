@@ -707,6 +707,16 @@ projections, record check and HUD card are department-generic.
   owner's documents it can use, every-department ones included; the department's own card and Shared, which every
   department uses) and Built in (All, Built in, Mine). Remembered on the device (`localStorage`
   `vaic.knowledge.filters`); "Show everything" clears them.
+- **Counted, not listed (decision 277).** The badge on each of the owner's documents is one department's name, or
+  "3 departments" with the number in digits; a document for every department is counted too ("13 departments"). The
+  names are in the badge's tooltip and accessible label, and "For 3 departments · Show which" lists them ("Used by
+  Finance, Legal and Sales."); Change still opens the chips. The Shared card's badge counts every department; an opened
+  department card says "Used by Marketing." and the opened Shared card names every department.
+- **Download on everything (decision 277).** The owner's uploads have Download from the moment the file has arrived
+  (while it is still being read too), as before; a link has "Open link" and, once read, Download of the page text it
+  saved (`GET /knowledge/<id>/download`: its `normalized_keys` joined in order without the site profile, written to
+  `downloads/items/<id>/<sha256>.md` and presigned; before it is read, 400 "open the link instead"). The api role
+  reads `normalized/*` for this. With the guide, each entry and each department's zip, every card has a download.
 - Found with decision 270: `GET /departments/choices` (decision 266) was missing from the API Gateway routes, so the
   chips never loaded in prod and every document just said "For every department" with no Change. It is routed now,
   and `backend/tests/test_api.py` checks that every route in `ROUTES` has an API Gateway route.

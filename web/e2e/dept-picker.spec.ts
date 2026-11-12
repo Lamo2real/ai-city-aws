@@ -185,7 +185,7 @@ test("the Knowledge page changes which departments use a document", async ({ pag
   });
   await page.goto("/#/knowledge");
   const row = page.locator(".kitem", { hasText: "Budget rules.pdf" });
-  await expect(row).toContainText("For every department");
+  await expect(row).toContainText("For 12 departments"); // every department, counted (decision 277)
   await row.getByRole("button", { name: "Change which departments use “Budget rules.pdf”" }).click();
   const dp = row.locator(".dept-pick");
   await expect(dp.locator('[aria-pressed="true"]')).toHaveCount(12); // every department, as now
@@ -199,7 +199,7 @@ test("the Knowledge page changes which departments use a document", async ({ pag
   await row.getByRole("button", { name: "Change which departments use “Budget rules.pdf”" }).click();
   await row.locator(".dept-pick").getByRole("button", { name: "All departments" }).click();
   await row.getByRole("button", { name: "Save" }).click();
-  await expect(row).toContainText("For every department");
+  await expect(row).toContainText("For 12 departments"); // every department, counted (decision 277)
   expect(m.calls.filter((c) => c.method === "PUT").at(-1)?.body).toEqual({ departments: "all" });
 });
 

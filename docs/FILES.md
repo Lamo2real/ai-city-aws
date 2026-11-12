@@ -138,7 +138,9 @@ fake MediaConvert/Transcribe/S3); vitest `web/test/files.test.tsx`, `tests/infra
 folder in a grid or a list (remembered on the device), 60 at a time, the next page loading as the end scrolls into
 view (and a "Show more" button), thumbnails loaded lazily; sort (best match, newest, oldest, name A–Z / Z–A, largest,
 smallest, type); kind and department filters; search names and contents everywhere or "Only in" the open folder,
-with matching folders listed first and each file saying where it lives; uploads go into the open folder.
+with matching folders listed first and each file saying where it lives; uploads go into the open folder. Every
+file in the grid and the list has Download beside it (decision 277): it asks `GET /files/<id>` for a fresh
+`download_url` (so a page left open still works) and saves the original under its name.
 **iPhone, Files tab:** the same browsing (each folder a page, Back goes up, the path above), search with an
 Everywhere / In this folder scope, a Sort and view menu, endless scroll, + for Photos and videos (photos sent as
 JPEG with their date) or the Files app (sent from disk part by part, so a long video never sits in memory whole),

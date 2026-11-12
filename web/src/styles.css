@@ -6664,6 +6664,24 @@ button.hub-status {
   gap: var(--s3);
   grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
 }
+/* Every file has Download beside its tile or row (decision 270). */
+.files-grid > li {
+  display: grid;
+  gap: var(--s1);
+  align-content: start;
+}
+.files-grid > li > .file-dl {
+  justify-self: start;
+}
+.files-list > li {
+  display: flex;
+  gap: var(--s2);
+  align-items: center;
+}
+.files-list > li > .file-row {
+  flex: 1 1 auto;
+  min-width: 0;
+}
 .file-tile {
   display: grid;
   gap: var(--s1);

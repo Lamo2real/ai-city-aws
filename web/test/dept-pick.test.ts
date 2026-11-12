@@ -1,6 +1,6 @@
 // The department picker's words (decision 266): Add says the pick so the city reads exactly what is on the card.
 import { describe, expect, it } from "vitest";
-import { addWords, forWhom, namesOf, readPicker, toggle } from "../src/lib/deptPick.ts";
+import { addWords, allNames, countWords, forWhom, namesOf, readPicker, toggle } from "../src/lib/deptPick.ts";
 
 const choices = [
   { key: "application", name: "Application" },
@@ -33,5 +33,21 @@ describe("department picker", () => {
   it("no departments is every department", () => {
     expect(forWhom(choices, undefined)).toBe("every department");
     expect(forWhom(choices, ["finance"])).toBe("Finance");
+  });
+});
+
+describe("the department badge (decision 270)", () => {
+  it("names one department, counts more in digits, and counts every department when none is listed", () => {
+    expect(countWords(choices, ["finance"])).toBe("Finance");
+    expect(countWords(choices, ["finance", "data", "application"])).toBe("3 departments");
+    expect(countWords(choices, ["finance", "data"])).toBe("2 departments");
+    expect(countWords(choices, undefined)).toBe("3 departments");
+    expect(countWords(choices, [])).toBe("3 departments");
+    expect(countWords([], undefined)).toBe("every department");
+  });
+  it("lists the names for the tooltip and Show which, in the departments' order", () => {
+    expect(allNames(choices, ["finance", "application"])).toBe("Application and Finance");
+    expect(allNames(choices, undefined)).toBe("Application, Data & AI and Finance");
+    expect(allNames(choices, ["finance"])).toBe("Finance");
   });
 });

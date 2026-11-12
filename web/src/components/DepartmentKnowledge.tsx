@@ -16,6 +16,7 @@ import {
 } from "../lib/entries.ts";
 import { startDownload } from "../lib/api.ts";
 import { NO_FILTERS, wordStart, type KnowledgeFilters } from "../lib/knowledge.ts";
+import { allNames, countWords, loadDeptChoices, type DeptChoice } from "../lib/deptPick.ts";
 import { Banner, Button, Confirm, Loading, toast } from "./ui.tsx";
 import { Select } from "./Select.tsx";
 
@@ -61,8 +62,14 @@ export function DepartmentKnowledge({
       setError((e as Error).message);
     }
   };
+  const [choices, setChoices] = useState<DeptChoice[]>([]);
   useEffect(() => {
     void reload();
+    let on = true;
+    void loadDeptChoices().then((c) => on && setChoices(c));
+    return () => {
+      on = false;
+    };
   }, []);
   // The whole department as one zip (decision 268): the version its agents use, with the owner's edits.
   const downloadAll = async (dept: string) => {
@@ -83,10 +90,7 @@ export function DepartmentKnowledge({
       return { dept, tax, live, byName, hits };
     })
     .filter(
-      (c) =>
-        q !== null &&
-        (!filters.dept || c.dept === filters.dept || c.dept === SHARED) &&
-        (c.byName || c.hits > 0),
+      (c) => q !== null && (!filters.dept || c.dept === filters.dept || c.dept === SHARED) && (c.byName || c.hits > 0),
     );
   const shown = cards.length;
   useEffect(() => {
@@ -112,7 +116,14 @@ export function DepartmentKnowledge({
                 {byName ? null : <span className="mute">{` · ${hits} match “${q}”`}</span>}
               </span>
               <span className="tag tag-builtin">Built in</span>
-              <span className="tag tag-dept">{shared ? "Shared" : tax.label}</span>
+              {/* Shared is every department's: counted, the names on hover and when opened (decision 270). */}
+              <span
+                className="tag tag-dept"
+                title={shared && choices.length ? allNames(choices, undefined) : undefined}
+                aria-label={shared && choices.length ? `For ${allNames(choices, undefined)}` : undefined}
+              >
+                {shared && choices.length ? countWords(choices, undefined) : shared ? "Shared" : tax.label}
+              </span>
               <Button
                 variant="quiet"
                 onClick={() => setOpen(open === dept ? null : dept)}
@@ -135,6 +146,9 @@ export function DepartmentKnowledge({
                 Download
               </Button>
             </div>
+            {open === dept ? (
+              <p className="mute kdept-used">{`Used by ${shared ? allNames(choices, undefined) : tax.label}.`}</p>
+            ) : null}
             {open === dept ? (
               <DepartmentEntries list={list} department={dept} reload={reload} words={byName ? "" : (q ?? "")} />
             ) : null}

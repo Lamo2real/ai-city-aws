@@ -39,7 +39,7 @@ test("files: upload anything, find it by what's in it, preview, rename, download
   await page.getByRole("searchbox").fill("porsche at sunrise");
   await page.getByRole("button", { name: "Search", exact: true }).click();
   await expect(page.getByText("1 file matches “porsche at sunrise”")).toBeVisible();
-  await expect(grid.getByRole("button")).toHaveCount(1);
+  await expect(grid.getByRole("button", { name: /^Open / })).toHaveCount(1);
 
   // Open it: a preview, what it is, Download, and rename.
   await grid.getByRole("button", { name: "Open IMG_sunrise.jpg" }).click();
@@ -164,7 +164,7 @@ test("storage by hand: open folders, go back up, scroll a long list, sort, list 
   const folders = page.getByRole("list", { name: "Folders" });
   await expect(folders.getByRole("button", { name: /Brand/ })).toContainText("2 files");
   await expect(folders.getByRole("button", { name: /Shoots/ })).toContainText("75 files");
-  await expect(page.getByRole("list", { name: "Your files" }).getByRole("button")).toHaveCount(1); // notes.txt
+  await expect(page.getByRole("list", { name: "Your files" }).getByRole("button", { name: /^Open / })).toHaveCount(1); // notes.txt
 
   // Into Shoots, then 2026: 60 files, the rest load as the end scrolls into view.
   await folders.getByRole("button", { name: /Shoots/ }).click();
@@ -172,17 +172,17 @@ test("storage by hand: open folders, go back up, scroll a long list, sort, list 
   const crumbs = page.getByRole("navigation", { name: "Where you are" });
   await expect(crumbs.getByRole("listitem")).toHaveText(["Files", "Shoots", "2026"]);
   const files = page.getByRole("list", { name: "Your files" });
-  await expect(files.getByRole("button")).toHaveCount(60);
+  await expect(files.getByRole("button", { name: /^Open / })).toHaveCount(60);
   await expect(page.getByText("75 files in “Shoots/2026”")).toBeVisible();
   await page.mouse.wheel(0, 20_000);
-  await expect(files.getByRole("button")).toHaveCount(75);
+  await expect(files.getByRole("button", { name: /^Open / })).toHaveCount(75);
   await expect(page.getByRole("button", { name: /Show more/ })).toHaveCount(0);
 
   // Sort by name, as a list.
   await page.getByRole("group", { name: "Show as" }).getByRole("button", { name: "List" }).click();
   await page.getByLabel("Sort").click();
   await page.getByRole("option", { name: "Name Z–A" }).click();
-  await expect(files.getByRole("button").first()).toHaveAccessibleName("Open photo-075.jpg");
+  await expect(files.getByRole("button", { name: /^Open / }).first()).toHaveAccessibleName("Open photo-075.jpg");
   await noSeriousA11y(page, "files list");
   await page.screenshot({ path: `${SHOTS}/files-browse.png` });
 

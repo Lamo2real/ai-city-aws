@@ -101,3 +101,20 @@ export async function describeFiles(files: File[]): Promise<string> {
   );
   return [...names, ...heads].join("\n");
 }
+
+/** The badge for who can use a document (decision 270): one department by name, more as "3 departments" with the
+ * number in digits; none listed is every department, counted ("13 departments"). */
+export function countWords(choices: DeptChoice[], keys: string[] | undefined): string {
+  const n = keys?.length ? keys.length : choices.length;
+  if (keys?.length === 1) return choices.find((c) => c.key === keys[0])?.name ?? keys[0]!;
+  return n ? `${n} departments` : "every department";
+}
+
+/** Every department name a document is for, in the departments' order ("Finance, Legal and Sales"). */
+export function allNames(choices: DeptChoice[], keys: string[] | undefined): string {
+  const names = keys?.length
+    ? choices.filter((c) => keys.includes(c.key)).map((c) => c.name)
+    : choices.map((c) => c.name);
+  if (!names.length) return keys?.length ? keys.join(", ") : "every department";
+  return names.length === 1 ? names[0]! : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}

@@ -3,6 +3,8 @@
 // Knowledge page. The owner can also say it in words ("all except Sales and Legal"); the chips follow.
 import { useEffect, useId, useState } from "react";
 import {
+  allNames,
+  countWords,
   forWhom,
   isAll,
   loadDeptChoices,
@@ -104,9 +106,12 @@ export function DeptLine(p: {
   what: string;
   keys: string[] | undefined;
   onSave: (keys: string[], every: boolean) => Promise<void>;
+  /** "For 3 departments" with "Show which" listing the names (the Knowledge page, decision 270). */
+  count?: boolean;
 }) {
   const [choices, setChoices] = useState<DeptChoice[]>([]);
   const [picking, setPicking] = useState<string[] | null>(null);
+  const [showing, setShowing] = useState(false);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     let on = true;
@@ -131,8 +136,17 @@ export function DeptLine(p: {
     <div className="kwho">
       <p className="kplace">
         <span>
-          For <b>{forWhom(choices, p.keys)}</b>
+          For <b>{p.count ? countWords(choices, p.keys) : forWhom(choices, p.keys)}</b>
         </span>
+        {p.count && p.keys?.length !== 1 && choices.length && !picking ? (
+          <Button
+            variant="quiet"
+            onClick={() => setShowing(!showing)}
+            label={showing ? `Hide which departments use “${p.what}”` : `Show which departments use “${p.what}”`}
+          >
+            {showing ? "Hide" : "Show which"}
+          </Button>
+        ) : null}
         {choices.length && !picking ? (
           <Button
             variant="quiet"
@@ -143,6 +157,7 @@ export function DeptLine(p: {
           </Button>
         ) : null}
       </p>
+      {p.count && showing && !picking ? <p className="mute">{`Used by ${allNames(choices, p.keys)}.`}</p> : null}
       {picking ? (
         <div className="kwho-edit">
           <DeptPicker

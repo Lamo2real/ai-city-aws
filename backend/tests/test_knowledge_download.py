@@ -266,3 +266,30 @@ async def test_s3_uploads_the_zip_from_its_file() -> None:
         "key": "downloads/x.zip",
         "args": {"ContentType": "application/zip"},
     }
+
+
+async def test_a_link_downloads_its_saved_page_text_once_read(rig: Any) -> None:
+    w, d = rig
+    link = await w.service.add_link("https://example.com/long", "A long page", None)
+    r = await handle_http(ev("GET", f"/knowledge/{link['id']}/download"), d)
+    assert r["statusCode"] == 400 and "open the link" in js(r)["error"]  # not read yet
+    keys = [f"normalized/{link['id']}/page-part{n}.md" for n in (1, 2)]
+    for n, k in enumerate(keys, 1):
+        await w.blobs.put(k, f"part {n}".encode(), "text/markdown")
+    await w.blobs.put(f"normalized/{link['id']}/site-profile.md", b"profile", "text/markdown")
+    await w.service.store.update_item(
+        link["id"], {"normalized_keys": [*keys, f"normalized/{link['id']}/site-profile.md"]}
+    )
+    b = js(await handle_http(ev("GET", f"/knowledge/{link['id']}/download"), d))
+    assert b["file_name"] == "A long page.md" and fetch(w.blobs, b["url"]) == b"part 1\npart 2"
+    assert urlsplit(b["url"]).path.startswith(f"/downloads/items/{link['id']}/")
+
+
+async def test_an_upload_downloads_while_it_is_still_being_read(rig: Any) -> None:
+    w, d = rig
+    body = {"file_name": "plan.pdf", "content_type": "application/pdf", "size_bytes": 4}
+    up = js(await handle_http(ev("POST", "/knowledge/uploads", body), d))["item"]
+    await w.blobs.put(up["raw_key"], b"%PDF", "application/pdf")
+    await w.service.store.update_item(up["id"], {"status": "processing"})
+    b = js(await handle_http(ev("GET", f"/knowledge/{up['id']}/download"), d))
+    assert fetch(w.blobs, b["url"]) == b"%PDF"

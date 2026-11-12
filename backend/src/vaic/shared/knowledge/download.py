@@ -1,7 +1,8 @@
 """Download of a knowledge document's original (the owner, 2026-11-11): a short-lived presigned S3 GET.
 
 - The owner's items and the built-in AI City guide: the object under ``raw_key`` as uploaded (the guide's is its
-  PDF), byte for byte. A link has no file (the HUD opens the link instead); an upload that has not arrived is 404.
+  PDF), byte for byte, from the moment the upload has arrived (while it is still being read too); an upload that has
+  not arrived is 404. A link: the page text the pipeline saved, as one ``.md`` (decision 270); before it is read, 400.
 - Department and shared entries (§17): the version agents read (``served``). While that is the shipped default, the
   seed file exactly as shipped (front matter included; a whole document byte for byte); once the owner has edited it,
   or for the owner's own entry, the same seed-file form made from the record (a whole document: its text). The bytes
@@ -55,7 +56,7 @@ async def item_download(store: KnowledgeStore, blobs: Blobs, item_id: str) -> di
     if not item:
         raise NotFound("That item does not exist.")
     if item.get("kind") == "link":
-        raise KnowledgeError("A link has no file to download: open the link instead.")
+        return await _link_download(blobs, item)
     key = str(item.get("raw_key") or "")
     head = await blobs.head(key) if key else None
     if head is None:
@@ -69,6 +70,20 @@ async def item_download(store: KnowledgeStore, blobs: Blobs, item_id: str) -> di
         name = file_name(raw_name, "")
     ct = str(item.get("content_type") or head.content_type or "application/octet-stream")
     url = await blobs.presign_get(key, name, False, ct, DOWNLOAD_SECONDS)
+    return {"url": url, "file_name": name, "expires_in": DOWNLOAD_SECONDS}
+
+
+async def _link_download(blobs: Blobs, item: dict[str, Any]) -> dict[str, Any]:
+    """A link's saved page as one Markdown file (decision 270): the text the pipeline read, its parts joined in
+    order, without the site profile. Written under ``downloads/items/`` and presigned like an entry's file."""
+    keys = [str(k) for k in item.get("normalized_keys") or [] if not str(k).endswith("/site-profile.md")]
+    if not keys:
+        raise KnowledgeError("This page hasn't been read yet: open the link instead, or try again in a minute.")
+    body = b"\n".join([await blobs.get(k) for k in keys])
+    key = f"{DOWNLOAD_PREFIX}items/{item['id']}/{hashlib.sha256(body).hexdigest()[:32]}.md"
+    await blobs.put(key, body, _MARKDOWN)
+    name = file_name(str(item.get("title") or "page"), ".md")
+    url = await blobs.presign_get(key, name, False, _MARKDOWN, DOWNLOAD_SECONDS)
     return {"url": url, "file_name": name, "expires_in": DOWNLOAD_SECONDS}
 
 

@@ -78,7 +78,7 @@ test("knowledge: the shared cross-department documents sit under Built in with a
   await expect(cards.last()).toHaveAttribute("aria-label", "Shared knowledge base"); // after the departments
   const card = page.getByRole("region", { name: "Shared knowledge base" });
   await expect(card).toContainText("Built in");
-  await expect(card.locator(".tag-dept")).toHaveText("Shared");
+  await expect(card.locator(".tag-dept")).toHaveText(/^\d+ departments$/); // every department, counted (decision 270)
   await expect(card).toContainText("2 entries");
   await expect(card).toContainText("Every department's agents use it.");
   await card.getByRole("button", { name: "Show the Shared entries" }).click();

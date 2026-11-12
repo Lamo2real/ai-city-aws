@@ -67,7 +67,10 @@ export function AddFor(p: { adding: Adding; onAdd: (departments: string[] | "all
         </div>
       ) : null}
       {!every ? (
-        <p className="mute" role="status">{`Only ${namesOf(picker)} can use it. VAIC and the Orchestrator always can.`}</p>
+        <p
+          className="mute"
+          role="status"
+        >{`Only ${namesOf(picker)} can use it. VAIC and the Orchestrator always can.`}</p>
       ) : null}
       <div className="row-end">
         <Button variant="quiet" onClick={p.onCancel}>

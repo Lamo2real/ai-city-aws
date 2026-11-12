@@ -41,7 +41,7 @@ test("knowledge: a dropped file waits for the departments; Finance only, or ever
   await pick.getByRole("button", { name: "Add for every department" }).click();
   await expect.poll(() => uploads(m).length).toBe(3);
   expect(uploads(m).slice(1).map((b) => (b as { departments?: unknown }).departments)).toEqual(["all", "all"]);
-  await expect(card(page, "a.md")).toContainText("For every department");
+  await expect(card(page, "a.md")).toContainText(/For \d+ departments/); // every department, counted
 
   // Pasted text asks too; Cancel stores nothing.
   await page.getByLabel("Paste a link or text").fill("Contract terms with the supplier");

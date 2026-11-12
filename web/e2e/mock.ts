@@ -157,7 +157,7 @@ export interface Mock {
   /** The built-in department knowledge entries (docs/KNOWLEDGE.md §17), by entry id. */
   entries: Array<Record<string, unknown>>;
   /** Files (docs/FILES.md): stored files (newest first) and the S3 PUTs the HUD made. */
-  files: { items: Array<Record<string, unknown>>; puts: string[] };
+  files: { items: Array<Record<string, unknown>>; puts: string[]; bodies: Record<string, Buffer> };
   /** v3 per-app state, `<app_id>/<key>` → value. */
   state: Record<string, unknown>;
   /** OpenAI's voice (docs/VOICE.md): the stored key, when it was saved, and an error /speech should answer. */
@@ -357,7 +357,7 @@ export async function mockBackend(
     },
     knowledge: { items: [], puts: [], downloads: [] },
     entries: MOCK_ENTRIES.map((e) => ({ ...e })),
-    files: { items: [], puts: [] },
+    files: { items: [], puts: [], bodies: {} },
   };
   let fn = 0;
   const fItem = (id: string) => m.files.items.find((x) => x.id === id);
@@ -519,7 +519,8 @@ export async function mockBackend(
   if (!opts.foldsClosed)
     await page.addInitScript(() => {
       // Open unless the test (or the page, on a reload) already chose: tests click departments and read Activity.
-      for (const k of ["vaic.departments", "vaic.activity"]) if (localStorage.getItem(k) === null) localStorage.setItem(k, "open");
+      for (const k of ["vaic.departments", "vaic.activity"])
+        if (localStorage.getItem(k) === null) localStorage.setItem(k, "open");
     });
   await page.addInitScript(
     ({ signedIn, realVoice }) => {
@@ -1054,7 +1055,18 @@ export async function mockBackend(
     if (dl && req.method() === "GET") {
       const i = kItem(dl[1]!);
       if (!i) return ok({ error: "That item does not exist." }, 404);
-      if (i.kind === "link") return ok({ error: "A link has no file to download: open the link instead." }, 400);
+      if (i.kind === "link") {
+        // The page text it saved (decision 270), once it has been read.
+        if (i.status !== "ready") return ok({ error: "This page hasn't been read yet: open the link instead." }, 400);
+        const page = `${String(i.title)
+          .replace(/[\\/:*?"<>|]+/g, " ")
+          .trim()}.md`;
+        return ok({
+          url: `${S3_URL}/downloads/items/${i.id}/${encodeURIComponent(page)}?signed=get`,
+          file_name: page,
+          expires_in: 300,
+        });
+      }
       const name = String(i.title);
       return ok({
         url: `${S3_URL}/raw/${i.id}/${encodeURIComponent(name)}?signed=get`,
@@ -1228,7 +1240,9 @@ export async function mockBackend(
         ["marketing", /\b(campaigns?|brand|newsletter)\b/],
       ];
       return ok({
-        recommended: words.filter(([, r]) => r.test(t)).map(([key, r]) => ({ key, why: `it's about ${r.exec(t)![1]}` })),
+        recommended: words
+          .filter(([, r]) => r.test(t))
+          .map(([key, r]) => ({ key, why: `it's about ${r.exec(t)![1]}` })),
       });
     }
     if (path === "/departments/choices")
@@ -1445,6 +1459,11 @@ export async function mockBackend(
     };
     if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers });
     const url = new URL(req.url());
+    const id = url.pathname.split("/")[2] ?? "";
+    if (req.method() === "GET" && url.searchParams.has("attachment") && m.files.bodies[id]) {
+      // Download: the bytes that were uploaded (decision 270).
+      return route.fulfill({ status: 200, headers, contentType: "application/octet-stream", body: m.files.bodies[id] });
+    }
     if (req.method() === "GET") {
       const pdf = /\.pdf$/i.test(decodeURIComponent(url.pathname));
       return route.fulfill({
@@ -1457,6 +1476,8 @@ export async function mockBackend(
     m.files.puts.push(url.pathname + url.search);
     const part = url.searchParams.get("partNumber");
     if (!part) {
+      const body = req.postDataBuffer();
+      if (body) m.files.bodies[id] = body;
       const f = fItem(url.pathname.split("/")[2]!);
       if (f) describeFile(f);
     }

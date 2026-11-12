@@ -23,6 +23,26 @@ import {
   type StoredFile,
 } from "../lib/files.ts";
 import { Banner, Button, Confirm, errorText, Loading, toast } from "./ui.tsx";
+import { startDownload } from "../lib/api.ts";
+
+/** Download from the grid or the list (decision 270): a fresh presigned address, so a page left open still works. */
+function DownloadFile({ f }: { f: StoredFile }) {
+  if (f.status === "uploading") return null;
+  return (
+    <Button
+      variant="quiet"
+      className="file-dl"
+      label={`Download ${f.name}`}
+      onClick={async () => {
+        const fresh = await filesApi.get(f.id);
+        if (!fresh.download_url) throw new Error("That file can't be downloaded yet. Try again in a moment.");
+        startDownload({ url: fresh.download_url, file_name: fresh.name, expires_in: 900 });
+      }}
+    >
+      Download
+    </Button>
+  );
+}
 import { Select } from "./Select.tsx";
 
 const KINDS: Array<{ value: "" | FileKind; label: string }> = [
@@ -373,6 +393,7 @@ export function FilesScreen() {
                     </span>
                   ) : null}
                 </button>
+                <DownloadFile f={f} />
               </li>
             );
           })}
@@ -403,6 +424,7 @@ export function FilesScreen() {
                     </span>
                   ) : null}
                 </button>
+                <DownloadFile f={f} />
               </li>
             );
           })}
@@ -634,8 +656,7 @@ function FileThumb({ f }: { f: StoredFile }) {
     if (img.current?.complete && img.current.naturalWidth) setShown(true);
   }, [f.thumb_url]);
   if (f.kind !== "image" && !f.thumb_url) return <span>{ICON[f.kind] ?? ICON.other}</span>;
-  if (f.kind !== "image")
-    return <img src={f.thumb_url} alt="" loading="lazy" decoding="async" />;
+  if (f.kind !== "image") return <img src={f.thumb_url} alt="" loading="lazy" decoding="async" />;
   return (
     <span className={`thumb-glass${shown ? " shown" : ""}`} data-state={shown ? "shown" : "loading"}>
       {ghost ? <img className="thumb-ghost" src={ghost} alt="" /> : null}
