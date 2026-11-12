@@ -473,6 +473,7 @@ function snapshotOf(city: CityState) {
   return {
     agents: Object.values(city.agents),
     departments: Object.values(city.departments).map((d) => ({ ...d, created_at: new Date(d.builtAt).toISOString() })),
+    lots: Object.entries(city.lots ?? {}).map(([slot, size]) => ({ slot: Number(slot), size })), // each lot keeps its size (decision 248)
     tickets: Object.values(city.tickets),
     parked: Object.values(city.parked),
     questions: Object.values(city.questions),

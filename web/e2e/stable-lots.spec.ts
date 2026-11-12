@@ -55,6 +55,9 @@ test("adding and demolishing departments never moves another tower on screen", a
   const start = await onScreen(page), size = await world(page);
   expect(Object.keys(start)).toHaveLength(11);
   expect(size.lots.map((l) => l.slot)).toEqual([11]); // twelve lots, one free
+  // Each lot is as big as the tower that stood on it when the lots were numbered (the server's sizes reach the scene).
+  const dims = Object.fromEntries(size.buildings.map((b) => [b.dept, [b.w, b.h]]));
+  expect([dims.Application, dims["IT Infrastructure"], dims["Data & AI"], dims.Marketing]).toEqual([[8, 11], [10, 11], [10, 13], [10, 12]]);
 
   // Build: it takes the free lot; every other tower stays exactly where it was on screen.
   await build(page, "Partnerships");
