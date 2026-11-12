@@ -415,7 +415,14 @@ async def city_snapshot(d: ApiDeps) -> dict[str, Any]:
     return {
         "agents": [{**a, "model_label": model_label(a["model"])} for a in agents],
         "departments": [{**dep, "slot": slot_of[dep["key"]]} if dep["key"] in slot_of else dep for dep in departments],
-        "lots": [{"slot": lot["slot"], "size": str(lot.get("size") or "")} for lot in lots],
+        "lots": [
+            {
+                "slot": lot["slot"],
+                "size": str(lot.get("size") or ""),
+                **({"freed_at": lot["freed_at"]} if lot.get("freed_at") and not lot.get("holder") else {}),
+            }
+            for lot in lots
+        ],
         "tickets": tickets,
         "parked": parked,
         "questions": questions,

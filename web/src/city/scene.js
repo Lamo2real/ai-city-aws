@@ -443,6 +443,21 @@ function lamp(g, x, y) {
   oval(g, x, y - 23, 6, 6, "rgba(255,226,150,.16)");
   oval(g, x, y - 23, 3, 3, INK); oval(g, x, y - 23, 2, 2, "#ffe9a0"); R(g, x - 1, y - 24, 1, 1, "#fff8d8");
 }
+// A tree at a fraction `k` of its full size (a sapling grows from about a quarter, decision 259).
+function grownTree(g, x, y, r, k) {
+  if (k >= 1) { tree(g, x, y, r); return; }
+  g.save(); g.translate(x, y); g.scale(k, k); tree(g, 0, 0, r); g.restore();
+}
+// The stumps and logs of the trees cut down to clear a lot for a new tower (decision 259).
+function stumps(g, b) {
+  const t = towerShape(b), r = rng(`stumps:${b.dept}`);
+  for (const [dx, dy] of [[-0.62, -4], [0.6, -10], [-0.45, -26], [0.7, -30]]) {
+    const x = Math.round(t.cx + dx * t.W), y = t.foot + dy;
+    oval(g, x, y, 4, 2, "rgba(20,18,40,.35)"); oval(g, x, y - 2, 4, 3, "#5a3a28"); oval(g, x, y - 3, 3, 2, "#c79a64"); R(g, x - 1, y - 3, 1, 1, "#8a6542");
+  }
+  const lx = Math.round(t.cx + (r() < 0.5 ? -1 : 1) * t.W * 0.55);
+  R(g, lx - 9, t.foot - 17, 18, 4, INK); R(g, lx - 8, t.foot - 16, 16, 2, "#7f5638"); oval(g, lx + 8, t.foot - 15, 2, 2, "#c79a64");
+}
 function tree(g, x, y, r) {
   oval(g, x + 1, y, 9, 3, "rgba(20,18,40,.35)");
   R(g, x - 2, y - 9, 4, 9, "#6b4630"); R(g, x - 2, y - 9, 1, 9, "#7f5638"); R(g, x - 3, y - 1, 6, 2, "#5a3a28");
@@ -759,7 +774,8 @@ function courtyardItems(b) {
 const MARGIN = MAP_MARGIN; // tiles of countryside, with the roads running on through it
 const EDGE = 10; // tiles over which the map fades out at its border
 const TREE_W = 24, TREE_H = 18; // the grid of tree spots, in pixels: neighbours never closer than 18 across or 14 down
-function bake(world, skip = new Map(), unknown = false) {
+export const REGROW_MS = 20 * 60_000; // saplings on a demolished tower's lot are full-grown trees after 20 minutes (decision 259)
+function bake(world, skip = new Map(), { now = Date.now(), grow = true } = {}) {
   // The map spans [L, W] × [T, H] in pixels (west and north of HQ are negative, decision 250), plus the countryside.
   const L = (world.left ?? 0) * TILE, T = (world.top ?? 0) * TILE, W = world.width * TILE, H = world.height * TILE, M = MARGIN * TILE, r = rng("world");
   const [c, g] = newCanvas(W - L + M * 2, H - T + M * 2);
@@ -770,12 +786,15 @@ function bake(world, skip = new Map(), unknown = false) {
   const verticals = [{ x: world.avenue, y0: top, y1: bottom }, ...(world.lanes ?? [])];
   for (const v of verticals) avenue(g, v.x, v.y0, v.y1, `ave${v.x},${v.y0}`);
   const roads = world.streets.map((s) => ({ ...s, x0: s.x0 <= (world.left ?? 0) ? (world.left ?? 0) - MARGIN : s.x0, x1: s.x1 >= world.width ? world.width + MARGIN : s.x1 }));
-  const through = verticals.filter((v) => v.y0 <= top).map((v) => v.x);
   const js = junctions(world), round = new Set(js.filter((j) => j.kind === "roundabout").map((j) => `${j.cx},${j.cy}`));
-  for (const s of roads) street(g, s.x0, s.x1, s.y, `st${s.y}`, through.filter((a) => !round.has(`${(a + 1.5) * TILE},${(s.y + 1.5) * TILE}`)));
+  // Each street's crossings: the avenues that reach it there (decision 259: roads only where the town is).
+  const crossings = (s) => verticals.filter((v) => v.y0 <= s.y - 1 && v.y1 >= s.y + 4 && v.x >= s.x0 && v.x + 3 <= s.x1).map((v) => v.x);
+  for (const s of roads) street(g, s.x0, s.x1, s.y, `st${s.y}`, crossings(s).filter((a) => !round.has(`${(a + 1.5) * TILE},${(s.y + 1.5) * TILE}`)));
   for (const j of js) junctionMarks(g, j);
   // Trees wherever nothing else stands, far to near.
-  const taken = [world.hq, ...world.buildings, ...world.lots, world.homes, ...roads.map((s) => ({ x: s.x0, y: s.y, w: s.x1 - s.x0, h: 3 })), ...verticals.map((v) => ({ x: v.x, y: v.y0, w: 3, h: v.y1 - v.y0 }))];
+  // An empty lot is forest (decision 259); only one whose tower is coming down right now keeps clear for the wrecking ball.
+  const wrecking = world.lots.filter((l) => l.demolished && skip.has(l.demolished));
+  const taken = [world.hq, ...world.buildings, ...wrecking, world.homes, ...roads.map((s) => ({ x: s.x0, y: s.y, w: s.x1 - s.x0, h: 3 })), ...verticals.map((v) => ({ x: v.x, y: v.y0, w: 3, h: v.y1 - v.y0 }))];
   const clear = (x, y) => taken.every((t) => x < (t.x * TILE) - 12 || x > (t.x + t.w) * TILE + 12 || y < t.y * TILE - 2 || y > (t.y + t.h) * TILE + 34);
   // Each tree has its own spot on a fixed grid, the same on every map whatever its size (decision 248): a new tower or
   // row only clears the trees where it stands, and no other tree moves. About one tree to 3000 square pixels.
@@ -787,10 +806,16 @@ function bake(world, skip = new Map(), unknown = false) {
     if (x >= L - M && x <= W + M && y >= T - M && y <= H + M && clear(x, y)) spots.push([x, y, h]);
   }
   spots.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
-  for (const [x, y, h] of spots) tree(g, x, y, rng(`tree:${h}`));
+  // Saplings on a lot whose tower came down grow back over REGROW_MS (with reduced motion: grown at once).
+  const growing = grow ? world.lots.filter((l) => Number.isFinite(l.freedAt) && now - l.freedAt < REGROW_MS) : [];
+  const sizeAt = (x, y) => {
+    const l = growing.find((q) => x >= q.block.x * TILE && x <= (q.block.x + q.block.w) * TILE && y >= q.block.y * TILE && y <= (q.block.y + q.block.h) * TILE + 34);
+    return l ? Math.max(0.22, Math.min(1, (now - l.freedAt) / REGROW_MS)) : 1;
+  };
+  for (const [x, y, h] of spots) grownTree(g, x, y, rng(`tree:${h}`), sizeAt(x, y));
   const plotOnly = new Set(["rise", "ghost", "focus"]); // the tower itself is drawn live over its plot
-  for (const b of world.buildings) if (b.archived) freeLot(g, b, "ARCHIVED"); else if (plotOnly.has(skip.get(b.dept))) towerPlot(g, b); else if (skip.has(b.dept)) site(g, b); else tower(g, b);
-  for (const l of world.lots) if (l.demolished && skip.has(l.demolished)) site(g, { ...l, dept: l.demolished }); else freeLot(g, l, unknown ? "" : "FREE LOT"); // not known yet: no sign
+  for (const b of world.buildings) if (b.archived) freeLot(g, b, "ARCHIVED"); else if (plotOnly.has(skip.get(b.dept))) towerPlot(g, b); else if (skip.has(b.dept)) { site(g, b); stumps(g, b); } else tower(g, b);
+  for (const l of wrecking) site(g, { ...l, dept: l.demolished });
   headquarters(g, world.hq);
   // The neighbourhood (decision 188): apartment buildings and their courtyards, far to near; trees in the parks.
   const onRoad = (y) => roads.some((s) => y > s.y * TILE - 30 && y < (s.y + 3) * TILE + 6);
@@ -862,7 +887,9 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   const anims = new Map(); // dept → { kind: "rise" | "build" | "demolish", start, dur, b?, done? } (decision 134)
   const mail = { queue: [], rider: null, out: 0, back: 0 }; // the one mailman and the letters waiting for him
   let entered = false; // the towers' entrance has played (or there was nothing to show)
-  let unknownLots = false; // loading with nothing remembered: the lots aren't known yet, so they carry no sign
+  const bakeNow = () => bake(world, animSkip(), { now: Date.now(), grow: !reduced() });
+  // While saplings grow, the ground is baked afresh now and then so they get taller (decision 259).
+  setInterval(() => { if (world?.lots.some((l) => Number.isFinite(l.freedAt) && Date.now() - l.freedAt < REGROW_MS + 20_000) && !reduced() && visible()) { ground = bakeNow(); wake(); } }, 15_000);
   let leaving = []; // cabs driving off after dropping someone at a door
   let traffic = null, trafficSig = "", trafficAt = 0; // the cruising cabs, their lights and roundabouts (decision 173)
   root._anims = anims; // read-only test hooks (e2e/departments.spec.ts)
@@ -915,7 +942,10 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     const sig = JSON.stringify(next);
     const rebaked = sig !== worldSig;
     if (rebaked) {
-      world = next; worldSig = sig; ground = bake(world, animSkip(), unknownLots); fitView();
+      // A new tower or a demolished one changes the map but never the view: the camera fits on a load, a resize or Fit
+      // only, so nothing on screen jumps when the town grows (decision 259).
+      const first = !world;
+      world = next; worldSig = sig; ground = bakeNow(); if (first) fitView();
       const roads = JSON.stringify([world.streets, world.lanes, world.avenue, world.left, world.top, world.width, world.height]);
       if (roads !== trafficSig) {
         // The roads changed: traffic starts afresh on them, the lights keep their clock.
@@ -1071,7 +1101,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     }
     if (PLACEMENT_EVENTS.has(e.type)) { sync(); markApps(); } else refreshVisuals();
     if (e.type === "connector.updated") wake(); // a sign goes up (or comes down) by the doors
-    if (e.type.startsWith("department.")) { entered = true; ground = bake(world, animSkip(), unknownLots); wake(); }
+    if (e.type.startsWith("department.")) { entered = true; ground = bakeNow(); wake(); }
     const letter = mailFor(e, state);
     if (letter) post(letter);
     const hop = courierFor(e); if (hop && !letter) courier(hop); // orchestrator ↔ manager goes by the mailman
@@ -1289,12 +1319,13 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     const area = safeArea(), L = (world.left ?? 0) * TILE, T = (world.top ?? 0) * TILE, W = world.width * TILE, H = world.height * TILE;
     const phone = world.portrait;
     const whole = Math.min((area.r - area.l) / (W - L), (area.b - area.t) / (H - T));
-    const best = clampZoom(phone ? Math.max(whole, (area.r - area.l) / (3 * PITCH_X * TILE)) : Math.max(ZOOM_MIN, whole));
+    const close = phone && !force; // a phone opens close on HQ; Fit shows the whole town there too
+    const best = clampZoom(close ? Math.max(whole, (area.r - area.l) / (3 * PITCH_X * TILE)) : Math.max(ZOOM_MIN, whole));
     cam.zoom = best; cam.wantZoom = best; cam.anchor = null;
     if (force) cam.userMoved = false;
     viewSize();
     const hq = world.hq;
-    if (phone) centreOn((hq.x + hq.w / 2) * TILE, (hq.y + hq.h / 2) * TILE, area); else centreOn((L + W) / 2, (T + H) / 2, area);
+    if (close) centreOn((hq.x + hq.w / 2) * TILE, (hq.y + hq.h / 2) * TILE, area); else centreOn((L + W) / 2, (T + H) / 2, area);
     cam.x = cam.wantX; cam.y = cam.wantY;
   }
   // As far out as the whole countryside, faded border and all, is on screen (not further: past that is only empty
@@ -1752,7 +1783,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       busy = true;
       for (const [d, a] of anims) if (!a.done && animProgress(a, now) >= 1) { a.done = true; finishAnim(d, a); }
       // Bake the finished towers into the ground once everything has settled (not once per tower).
-      if ([...anims.values()].every((a) => a.done)) { anims.clear(); ground = bake(world, animSkip(), unknownLots); }
+      if ([...anims.values()].every((a) => a.done)) { anims.clear(); ground = bakeNow(); }
     }
     // The roof counters follow who is really inside; the doors open for anyone at them, and shut behind.
     const inside = new Map();
@@ -1802,16 +1833,14 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     let saved = null;
     try { saved = readLotsMemory(localStorage.getItem(MEMORY)); } catch { /* storage blocked: nothing remembered */ }
     state = applySnapshot(state, { agents: [], tickets: [], questions: [], ...(saved ?? {}) });
-    unknownLots = !saved;
     root.dataset.cityLoading = "1";
     if (!ctx) return;
     sync(true);
     for (const b of world.buildings) if (!b.archived) anims.set(b.dept, { kind: "ghost", start: performance.now(), dur: ANIM_MS.ghost });
-    ground = bake(world, animSkip(), unknownLots); fitView(); needDraw = true; resume();
+    ground = bakeNow(); fitView(); needDraw = true; resume();
   }
   function load(snap) {
     state = applySnapshot(state, snap ?? { agents: [], tickets: [], questions: [] });
-    unknownLots = false;
     root.dataset.cityLoading = "0";
     if (Array.isArray(snap?.departments)) try { localStorage.setItem(MEMORY, JSON.stringify(lotsMemory(state))); } catch { /* private mode: nothing remembered */ }
     const ghosts = new Set([...anims].filter(([, a]) => a.kind === "ghost").map(([d]) => d));
@@ -1830,7 +1859,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
         entranceHad = true;
         if (play) { entrances++; for (const a of entranceAnims(world.buildings, performance.now() + (ghosts.size ? 0 : 200), ghosts)) anims.set(a.dept, a); }
       }
-      if (ghosts.size || anims.size) ground = bake(world, animSkip(), unknownLots); // placeholders gone, or towers coming in
+      if (ghosts.size || anims.size) ground = bakeNow(); // placeholders gone, or towers coming in
       fitView(); markApps(); needDraw = true; resume();
     }
     onState(state);

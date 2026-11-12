@@ -53,17 +53,21 @@ test("adding and demolishing departments never moves another tower on screen", a
   await expect.poll(async () => (await world(page)).buildings.length).toBe(11);
   await settled(page);
   const start = await onScreen(page), size = await world(page);
+  const boxes = (w: Awaited<ReturnType<typeof world>>) => Object.fromEntries(w.buildings.map((b) => [b.dept, [b.x, b.y, b.w, b.h]]));
+  const startBoxes = boxes(size);
   expect(Object.keys(start)).toHaveLength(11);
-  expect(size.lots.map((l) => l.slot)).toEqual([11, 12, 13]); // a 4 × 4 square: fourteen lots, three free
+  expect(size.lots.map((l) => l.slot)).toEqual([]); // no empty lots: forest where no tower stands (decision 259)
   // Each lot is as big as the tower that stood on it when the lots were numbered (the server's sizes reach the scene).
   const dims = Object.fromEntries(size.buildings.map((b) => [b.dept, [b.w, b.h]]));
   expect([dims.Application, dims["IT Infrastructure"], dims["Data & AI"], dims.Marketing]).toEqual([[8, 11], [10, 11], [10, 13], [10, 12]]);
 
-  // Build: it takes the free lot; every other tower stays exactly where it was on screen.
+  // Build: no lot is free, so the town takes the next one (it may reach a new block: the map grows, the camera stays);
+  // every other tower stays exactly where it was on the map.
   await build(page, "Partnerships");
-  const added = await onScreen(page);
-  for (const name of NAMES) expect(added[name], name).toEqual(start[name]);
-  expect((await world(page)).buildings.find((b) => b.dept === "Partnerships")?.slot).toBe(11);
+  const grown = await world(page);
+  for (const name of NAMES) expect(boxes(grown)[name], name).toEqual(startBoxes[name]);
+  expect(grown.buildings.find((b) => b.dept === "Partnerships")?.slot).toBe(11);
+  const added = await onScreen(page); // fitted to the grown map, for the steps that follow
   await page.screenshot({ path: test.info().outputPath("city-added.png") });
 
   // Demolish Sales: its lot stands empty; nothing else moves, the map keeps its size.
@@ -77,14 +81,14 @@ test("adding and demolishing departments never moves another tower on screen", a
   const down = await onScreen(page);
   for (const name of [...NAMES.filter((n) => n !== "Sales"), "Partnerships"]) expect(down[name], name).toEqual(added[name]);
   const after = await world(page);
-  expect([after.width, after.height]).toEqual([size.width, size.height]);
-  expect(after.lots.map((l) => l.slot)).toEqual([4, 12, 13]);
+  expect([after.width, after.height]).toEqual([grown.width, grown.height]);
+  expect(after.lots.map((l) => l.slot)).toEqual([4]); // Sales's lot, now saplings
   await page.screenshot({ path: test.info().outputPath("city-demolished.png") });
 
   // Build again: it goes up on Sales's old lot, at that lot's size, in the same place on screen.
   await build(page, "Events");
   const again = await onScreen(page);
-  expect(again.Events).toEqual(start.Sales);
+  expect(again.Events).toEqual(added.Sales);
   for (const name of [...NAMES.filter((n) => n !== "Sales"), "Partnerships"]) expect(again[name], name).toEqual(added[name]);
 
   // A reload with the same records draws the same city.

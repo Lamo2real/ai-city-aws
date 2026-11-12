@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from vaic.shared.ledger import Ledger, lots_shown
+from vaic.shared.ledger import Ledger
 from vaic.shared.table import MemoryTable
 
 
@@ -64,24 +64,7 @@ async def test_a_new_department_takes_the_next_lot_and_a_demolished_one_leaves_i
     assert await _slots(ledger) == {"marketing": 0, "media": 1, "legal": 2, "research": 3}
 
 
-def test_the_city_grows_a_column_or_a_row_at_a_time() -> None:
-    # 3 × 3, 4 × 3, 4 × 4, 5 × 4, 5 × 5, 6 × 5 blocks, less HQ's and the homes'
-    assert [lots_shown(c) for c in (0, 7, 8, 10, 11, 14, 15, 18, 19, 23, 24)] == [
-        7,
-        7,
-        10,
-        10,
-        14,
-        14,
-        18,
-        18,
-        23,
-        23,
-        28,
-    ]
-
-
-async def test_free_lots_are_filled_first_then_the_square_grows_a_ring(ledger: Ledger) -> None:
+async def test_free_lots_are_filled_first_then_a_new_lot(ledger: Ledger) -> None:
     for i in range(7):
         await ledger.create_department(f"Dept {i}", "x", f"mgr-{i}")
     assert sorted((await _slots(ledger)).values()) == list(range(7))  # the 3 × 3 square is full
@@ -89,7 +72,7 @@ async def test_free_lots_are_filled_first_then_the_square_grows_a_ring(ledger: L
     back, _ = await ledger.create_department("Eighth", "x", "mgr-8")
     assert back["slot"] == 3  # a free lot first
     ninth, _ = await ledger.create_department("Ninth", "x", "mgr-9")
-    assert ninth["slot"] == 7  # then the next column: 4 × 3
+    assert ninth["slot"] == 7  # then the next new lot
 
 
 async def test_a_rebuilt_department_goes_back_to_its_old_lot_when_it_is_still_free(ledger: Ledger) -> None:
@@ -118,3 +101,10 @@ async def test_a_standing_department_without_a_lot_gets_one_from_the_snapshot(le
     await ledger.table.delete(f"LOT#{lot['slot']:05d}", "META")
     await ledger.create_department("Sales", "x", "mgr-s")  # numbering again: Marketing 0, Sales 1
     assert await _slots(ledger) == {"marketing": 0, "sales": 1}
+
+
+async def test_a_freed_lot_remembers_when_so_its_trees_grow_back(ledger: Ledger) -> None:
+    await ledger.create_department("Sales", "x", "mgr-s")
+    await ledger.demolish_department("Sales")
+    lot = (await ledger.list_lots())[0]
+    assert lot["holder"] == "" and lot["freed_at"]

@@ -16,7 +16,7 @@ export const estUsd = (v, digits = 2) => (v === null || v === undefined || Numbe
 const RECENT_MS = { done: 6000, review_fail: 20000, hired: 4000, retired: 4000 };
 
 export function initialState(now = Date.now()) {
-  return { agents: {}, activities: {}, tickets: {}, questions: {}, approvals: {}, departments: {}, reviews: {}, costs: {}, usage: null, spend: {}, caps: null, parked: {}, city: null, capHit: null, feed: [], recent: {}, apps: {}, connectors: {}, lots: {}, now };
+  return { agents: {}, activities: {}, tickets: {}, questions: {}, approvals: {}, departments: {}, reviews: {}, costs: {}, usage: null, spend: {}, caps: null, parked: {}, city: null, capHit: null, feed: [], recent: {}, apps: {}, connectors: {}, lots: {}, freed: {}, now };
 }
 
 export const deptOf = (agent) => (CORE.has(agent.id) || agent.kind === "executive" ? "HQ" : agent.department || "other");
@@ -51,6 +51,8 @@ export function applySnapshot(state, snap, now = Date.now()) {
   // The lots (decision 248): a server that numbers them sends them; from an older one the City keeps the numbers it gave.
   const served = Array.isArray(snap.lots);
   next.lots = served ? Object.fromEntries(snap.lots.filter((l) => Number.isInteger(l?.slot)).map((l) => [l.slot, String(l.size ?? "")])) : { ...(state.lots ?? {}) };
+  // When each empty lot's tower came down, so its saplings keep growing across reloads (decision 259).
+  next.freed = served ? Object.fromEntries(snap.lots.filter((l) => Number.isInteger(l?.slot) && !Number.isNaN(Date.parse(l.freed_at ?? ""))).map((l) => [l.slot, Date.parse(l.freed_at)])) : { ...(state.freed ?? {}) };
   for (const d of listed ? snap.departments : []) {
     const born = Date.parse(d.created_at ?? "");
     const slot = Number.isInteger(d.slot) ? d.slot : served ? undefined : state.departments?.[d.name]?.slot;
@@ -376,7 +378,8 @@ function reduceEvent(state, event, now) {
       // the demolition over it.
       const was = state.departments[event.name];
       if (!was || was.state === "demolished") return state;
-      return { ...state, now, departments: { ...state.departments, [event.name]: { ...was, state: "demolished", demolishedAt: now } }, feed: feed(state, `Department ${event.name} demolished`, "department", now) };
+      const freed = Number.isInteger(was.slot) ? { ...(state.freed ?? {}), [was.slot]: now } : state.freed; // saplings go in
+      return { ...state, now, freed, departments: { ...state.departments, [event.name]: { ...was, state: "demolished", demolishedAt: now } }, feed: feed(state, `Department ${event.name} demolished`, "department", now) };
     }
     case "department.updated": {
       const d = event.department;
@@ -581,50 +584,35 @@ export function towerSize(name) {
   const h = hashOf(`size:${name}`);
   return { w: 8 + (h % 4), h: 11 + ((h >>> 4) % 5) };
 }
-// The town is a grid of New York blocks (the owner, 2026-11-12, decisions 250, 252), the same on a phone and on a Mac
-// or PC: HQ in the middle block, the homes in the block south of it, a tower's lot in every other block, and a road
-// on all four sides of every block. Block (c, r) is c blocks east and r blocks south of HQ; its corner is at
-// (c * PITCH_X, r * PITCH_Y) tiles, so a block never moves, whatever else is built (west and north of HQ are negative).
-// The town starts 3 × 3 and grows one column or row at a time, in turn east, south, west and north: 3 × 3, 4 × 3,
-// 4 × 4, 5 × 4, 5 × 5…, always a square or one block off one, HQ in the middle, filling as it goes.
+// The town is built on a grid of New York blocks (decision 250), the same on a phone and on a Mac or PC: HQ in block
+// (0, 0), the homes in the block south of it, every tower in a block of its own, roads around them. Block (c, r) is c
+// blocks east and r blocks south of HQ; its corner is at (c * PITCH_X, r * PITCH_Y) tiles, so a block never moves,
+// whatever else is built (west and north of HQ are negative). Which blocks get built is organic (the owner,
+// 2026-11-12, decision 259): every block has a fixed place in one order, by its distance from HQ (in blocks) plus a
+// seeded jitter of up to about a block and a half, so the town fills outward compact and roughly round, with a ragged edge, never a
+// rectangle. Blocks not built yet, and lots whose tower was demolished, are forest.
 export const BLOCK_W = 12, BLOCK_H = 16, PITCH_X = BLOCK_W + STREET, PITCH_Y = BLOCK_H + STREET, HQ_DRAW_H = 13;
-const HOMES_BLOCK = [0, 1];
-// The blocks after `step` growth steps: columns c0..c1, rows r0..r1.
-export function gridBounds(step) {
-  const g = { c0: -1, c1: 1, r0: -1, r1: 1 };
-  for (let i = 0; i < step; i++) { const d = i % 4; if (d === 0) g.c1++; else if (d === 1) g.r1++; else if (d === 2) g.c0--; else g.r0--; }
-  return g;
-}
-// How many lots the town holds after `step` steps (every block but HQ's and the homes').
-export const lotsIn = (step) => { const g = gridBounds(step); return (g.c1 - g.c0 + 1) * (g.r1 - g.r0 + 1) - 2; };
-// The fewest growth steps with room for `count` lots.
-export function stepFor(count) {
-  let k = 0;
-  while (lotsIn(k) < count) k++;
-  return k;
-}
-// Lot `slot` → its block, for good: the 3 × 3 blocks nearest HQ first (then clockwise from north), then each new
-// column or row the same way. Cached: the order never changes.
+export const CITY_SEED = "vaic-city-1"; // the town's seed: changing it would move every tower, so it never changes
+const HOMES_BLOCK = [0, 1], REACH = 24; // blocks are ranked out to REACH blocks from HQ (over 2,000 lots)
 const BLOCKS = [];
-let stepsDone = -1; // the growth steps whose blocks are in BLOCKS
+// Lot `slot` → its block, for good.
 export function blockOf(slot) {
-  while (BLOCKS.length <= slot) {
-    const k = ++stepsDone, g = gridBounds(k), prev = k ? gridBounds(k - 1) : null, add = [];
-    for (let r = g.r0; r <= g.r1; r++) for (let c = g.c0; c <= g.c1; c++) {
+  if (!BLOCKS.length) {
+    const all = [];
+    for (let r = -REACH; r <= REACH; r++) for (let c = -REACH; c <= REACH; c++) {
       if ((c === 0 && r === 0) || (c === HOMES_BLOCK[0] && r === HOMES_BLOCK[1])) continue;
-      if (prev && c >= prev.c0 && c <= prev.c1 && r >= prev.r0 && r <= prev.r1) continue;
-      add.push([c, r]);
+      const jitter = (hashOf(`${CITY_SEED}:${c},${r}`) % 1000) / 1000; // 0 … 1
+      all.push({ c, r, score: Math.hypot(c, r - 0.5) + jitter * 1.4 }); // in blocks, round the HQ-and-homes pair
     }
-    const turn = ([c, r]) => (Math.atan2(c, -r) + 2 * Math.PI) % (2 * Math.PI); // clockwise from north
-    add.sort((p, q) => p[0] ** 2 + p[1] ** 2 - (q[0] ** 2 + q[1] ** 2) || turn(p) - turn(q));
-    BLOCKS.push(...add);
+    all.sort((p, q) => p.score - q.score || p.r - q.r || p.c - q.c);
+    for (const b of all) BLOCKS.push([b.c, b.r]);
   }
   return BLOCKS[slot];
 }
 
 // The lots (decision 248). Every tower stands on a lot of its own, numbered from 0, for good, and lot `s` is always
 // block `blockOf(s)`. The server numbers them (the ledger's LOT# items); `numberLots` gives a number to a department
-// that has none, the same way: the first lot no standing tower holds, else a new one. `lots` is { slot: size name }:
+// that has none, the same way: the first lot no standing tower holds (the one nearest HQ), else the next new one. `lots` is { slot: size name }:
 // a tower is always as big as `towerSize(size name)` ("" = sized by its number), whoever stands on its lot.
 export const lotSizeName = (lots, slot) => lots?.[slot] || `lot:${slot}`;
 export function numberLots(departments, lots = {}) {
@@ -660,31 +648,54 @@ export function layout(state, { portrait = false, seats = {}, homes = 0 } = {}) 
     if (standing && !holder.has(r.slot)) holder.set(r.slot, r.name);
     else if (!standing) wrecked.set(r.slot, r.name);
   }
+  // The town's lots are the ones ever numbered: an empty one is forest (decision 259), and saplings grow back on a lot
+  // whose tower came down (`freed`: { slot: when }).
   const top = Math.max(-1, ...Object.keys(sizes).map(Number), ...holder.keys(), ...wrecked.keys()) + 1;
-  const step = stepFor(top), count = lotsIn(step), { c0, c1, r0, r1 } = gridBounds(step);
   const corner = (c, r) => ({ x: c * PITCH_X, y: r * PITCH_Y });
   const buildings = [], lots = [];
-  for (let slot = 0; slot < count; slot++) {
+  let c0 = -1, c1 = 1, r0 = -1, r1 = 1; // the map reaches at least one block around HQ
+  const built = new Set(["0,0", `${HOMES_BLOCK[0]},${HOMES_BLOCK[1]}`]); // blocks with a road along them
+  for (let slot = 0; slot < top; slot++) {
     const [c, r] = blockOf(slot), o = corner(c, r), s = towerSize(lotSizeName(sizes, slot));
+    built.add(`${c},${r}`);
+    c0 = Math.min(c0, c); c1 = Math.max(c1, c); r0 = Math.min(r0, r); r1 = Math.max(r1, r);
     const x = o.x + Math.floor((BLOCK_W - s.w) / 2), y = o.y + BLOCK_H - s.h; // on the street side of its block
     const name = holder.get(slot);
-    if (!name) { lots.push({ x, y, w: s.w, h: s.h, slot, ...(wrecked.has(slot) ? { demolished: wrecked.get(slot) } : {}) }); continue; }
+    if (!name) {
+      const freedAt = state.freed?.[slot];
+      lots.push({ x, y, w: s.w, h: s.h, slot, block: { x: o.x, y: o.y, w: BLOCK_W, h: BLOCK_H }, ...(Number.isFinite(freedAt) ? { freedAt } : {}), ...(wrecked.has(slot) ? { demolished: wrecked.get(slot) } : {}) });
+      continue;
+    }
     const reg = state.departments[name];
     buildings.push({ dept: name, slot, x, y, w: s.w, h: s.h, color: deptColor(name), builtAt: reg?.builtAt ?? 0, archived: reg?.state === "archived" && !seats[name] });
   }
-  // The roads: a street along the south side of every row of blocks and the north side of the top row, an avenue
-  // along the east side of every column and the west side of the first. All of them run right through the map.
+  // The roads (decision 259): only where the town is. A street runs along the blocks built on either side of it, and
+  // on to the avenue past HQ, so every door reaches it; an avenue runs along the blocks built on either side of it.
+  // The avenue past HQ and the street between HQ and the homes run right through the map and on into the countryside,
+  // where the cabs come from. The town only ever grows, so a road, once there, stays.
   const left = c0 * PITCH_X - STREET, topY = r0 * PITCH_Y - STREET, width = (c1 + 1) * PITCH_X, height = (r1 + 1) * PITCH_Y;
   const streets = [], lanes = [];
-  for (let r = r0 - 1; r <= r1; r++) streets.push({ y: r * PITCH_Y + BLOCK_H, x0: left, x1: width });
-  for (let c = c0 - 1; c <= c1; c++) if (c !== 0) lanes.push({ x: c * PITCH_X + BLOCK_W, y0: topY - MAP_MARGIN, y1: height + MAP_MARGIN });
+  const isBuilt = (c, r) => built.has(`${c},${r}`);
+  for (let r = r0 - 1; r <= r1; r++) {
+    const y = r * PITCH_Y + BLOCK_H;
+    if (r === 0) { streets.push({ y, x0: left, x1: width }); continue; }
+    let x0 = Infinity, x1 = -Infinity;
+    for (let c = c0; c <= c1; c++) if (isBuilt(c, r) || isBuilt(c, r + 1)) { x0 = Math.min(x0, c * PITCH_X - STREET); x1 = Math.max(x1, (c + 1) * PITCH_X); }
+    if (x0 < Infinity) streets.push({ y, x0: Math.min(x0, BLOCK_W), x1: Math.max(x1, BLOCK_W + STREET) });
+  }
+  for (let c = c0 - 1; c <= c1; c++) {
+    if (c === 0) continue; // the avenue past HQ, below
+    let y0 = Infinity, y1 = -Infinity;
+    for (let r = r0; r <= r1; r++) if (isBuilt(c, r) || isBuilt(c + 1, r)) { y0 = Math.min(y0, r * PITCH_Y - STREET); y1 = Math.max(y1, (r + 1) * PITCH_Y); }
+    if (y0 < Infinity) lanes.push({ x: c * PITCH_X + BLOCK_W, y0, y1 });
+  }
   const hq = { dept: "HQ", x: 0, y: BLOCK_H - HQ_DRAW_H, w: BLOCK_W, h: HQ_DRAW_H, color: DEPT_COLOR.HQ };
   // The homes (decision 188): one block of three apartment buildings at the foot of its block, a small park behind.
   const hb = corner(...HOMES_BLOCK), apartments = [], homeBlocks = [{ x: hb.x, y: hb.y + BLOCK_H - APT_BOX_H, w: BLOCK_W, h: APT_BOX_H, mirror: false }];
   const off = Math.floor((BLOCK_W - APT_BOX_W) / 2);
   for (const [kind, ax, ay, aw, ah] of APARTMENTS) apartments.push({ kind, block: 0, x: hb.x + off + ax, y: hb.y + BLOCK_H - APT_BOX_H + ay, w: aw, h: ah });
   const parks = [{ x: hb.x, y: hb.y, w: BLOCK_W, h: BLOCK_H - APT_BOX_H }];
-  return { hq, buildings, lots, lanes, streets, hqStreet: BLOCK_H, officesEnd: height - STREET, avenue: BLOCK_W, left, top: topY, width, height, cols: c1 - c0 + 1, rows: r1 - r0 + 1, homes: { x: hb.x, y: hb.y, w: BLOCK_W, h: BLOCK_H, apartments, blocks: homeBlocks, paths: [], parks }, portrait };
+  return { hq, buildings, lots, lanes, streets, hqStreet: BLOCK_H, officesEnd: height - STREET, avenue: BLOCK_W, left, top: topY, width, height, homes: { x: hb.x, y: hb.y, w: BLOCK_W, h: BLOCK_H, apartments, blocks: homeBlocks, paths: [], parks }, portrait };
 }
 
 // Where a worker at work is: inside the tower, just behind its door (drawn hidden; the roof counts them). The seat
@@ -1112,31 +1123,45 @@ export function signalAt(junction, t) {
 // west of HQ (in tiles). The short side streets between towers carry no traffic.
 export function throughRoads(world) {
   const top = (world.top ?? 0) - MAP_MARGIN;
-  return [{ x: world.avenue, y0: top, y1: world.height + MAP_MARGIN }, ...(world.lanes ?? []).filter((l) => l.y0 <= top && l.y1 >= world.height)];
+  return [{ x: world.avenue, y0: top, y1: world.height + MAP_MARGIN }, ...(world.lanes ?? [])]; // every avenue carries cabs (decision 259)
 }
 // Each street has two lanes, westbound above the centre line and eastbound below it; each through road has two,
 // southbound on the left and northbound on the right. Every lane runs out through the countryside to the map's
 // faded border, so a cab arrives from beyond the edge and drives off beyond it.
 export function streetLanes(world) {
   const M = MAP_MARGIN * TILE, L = world.left ?? 0, x0 = L * TILE - M, x1 = world.width * TILE + M;
-  return world.streets.map((s) => ({ y0: s.y * TILE + 17, y1: s.y * TILE + 33, x0: s.x0 <= L ? x0 : s.x0 * TILE, x1: s.x1 >= world.width ? x1 : s.x1 * TILE }));
+  return world.streets.map((s) => ({ y0: s.y * TILE + 17, y1: s.y * TILE + 33, x0: s.x0 <= L ? x0 : s.x0 * TILE + T_END_PX, x1: s.x1 >= world.width ? x1 : s.x1 * TILE - T_END_PX }));
 }
+// A road that ends at a T (decision 259: roads only where the town is) carries its cabs to just short of the
+// crossing, where they fade out (and fade in on the way back), clear of any roundabout there.
+export const T_END_PX = 72;
 export function avenueLanes(world) {
-  return throughRoads(world).map((r) => ({ x0: r.x * TILE + 18, x1: r.x * TILE + 30, y0: r.y0 * TILE, y1: r.y1 * TILE }));
+  const top = (world.top ?? 0) - MAP_MARGIN, bottom = world.height + MAP_MARGIN;
+  return throughRoads(world).map((r) => ({ x0: r.x * TILE + 18, x1: r.x * TILE + 30, y0: r.y0 * TILE + (r.y0 <= top ? 0 : T_END_PX), y1: r.y1 * TILE - (r.y1 >= bottom ? 0 : T_END_PX) }));
 }
 // Every crossing of a street and a through road. What each one is follows from where it is, never from how big the
-// town is (decision 252), so a new row, a new tower or a demolished one never changes a crossing: lights at the six
-// around HQ and the homes; a roundabout every third avenue on every third street (from the corners of the first
-// 3 × 3 blocks outwards), so the town gets more of them as it grows; elsewhere the street gives way to the avenue.
-const mod = (a, n) => ((a % n) + n) % n;
+// town is (decision 252), so a new tower, a demolished one or a new road never changes a crossing: lights at the six
+// around HQ and the homes; roundabouts scattered at random (decision 259: about one crossing in three or four, seeded
+// by the town's seed, never two next to each other, diagonals included), so the town gets more of them as it grows; elsewhere
+// the street gives way to the avenue.
+const roundHash = (v, h) => hashOf(`${CITY_SEED}:round:${v},${h}`);
+const isLight = (v, h) => (v === -1 || v === 0) && h >= -1 && h <= 1;
+const roundCandidate = (v, h) => !isLight(v, h) && roundHash(v, h) % 3 === 0;
 export function junctionKind(v, h) {
-  if ((v === -1 || v === 0) && h >= -1 && h <= 1) return "light";
-  return mod(v - 1, 3) === 0 && mod(h - 1, 3) === 0 ? "roundabout" : "giveway";
+  if (isLight(v, h)) return "light";
+  if (!roundCandidate(v, h)) return "giveway";
+  // The candidate with the lowest number among its near neighbours wins; the others give way.
+  for (let dv = -2; dv <= 2; dv++) for (let dh = -2; dh <= 2; dh++) {
+    if ((!dv && !dh) || Math.abs(dv) > 1 || Math.abs(dh) > 1 || !roundCandidate(v + dv, h + dh)) continue;
+    const mine = roundHash(v, h), theirs = roundHash(v + dv, h + dh);
+    if (theirs < mine || (theirs === mine && (dv < 0 || (dv === 0 && dh < 0)))) return "giveway";
+  }
+  return "roundabout";
 }
 export function junctions(world) {
   const roads = throughRoads(world), list = [];
   world.streets.forEach((s, street) => roads.forEach((r, road) => {
-    if (r.y0 > s.y - 1 || r.y1 < s.y + STREET + 1) return;
+    if (r.y0 > s.y || r.y1 < s.y + STREET || s.x0 > r.x || s.x1 < r.x + STREET) return; // both roads reach the crossing
     // The avenue east of block column v and the street south of block row h (decision 250's grid).
     const v = Math.round((r.x - BLOCK_W) / PITCH_X), h = Math.round((s.y - BLOCK_H) / PITCH_Y);
     list.push({ id: `j${v},${h}`, street, road, v, h, kind: junctionKind(v, h), cx: (r.x + STREET / 2) * TILE, cy: (s.y + STREET / 2) * TILE });

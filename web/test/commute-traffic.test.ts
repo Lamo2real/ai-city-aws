@@ -61,7 +61,7 @@ function frame(sim: CityTraffic, r: CityRider & { route: CityRoutePoint[] }, dt 
 
 describe("a commuter's cab", () => {
   it("goes round a roundabout, anticlockwise on the ring, never over the island", () => {
-    const w = city(4);
+    const w = city(12);
     const sim = createTraffic(w);
     const j = sim.junctions.find((k) => k.kind === "roundabout")!;
     const from = { x: j.cx - 200, y: j.cy }, route = [{ x: j.cx + 200, y: j.cy }];

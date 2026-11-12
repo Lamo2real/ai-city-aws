@@ -283,7 +283,7 @@ test("zoom is smooth from far out to close up", async ({ page }) => {
   expect(seen.size).toBeGreaterThan(2); // not one jump
   // Far out: the whole countryside.
   for (let i = 0; i < 12; i++) await page.mouse.wheel(0, 400);
-  await expect.poll(zoom).toBeLessThan(before * 0.6); // well past Fit: the whole countryside
+  await expect.poll(zoom).toBeLessThan(before * 0.7); // well past Fit: the whole countryside (a small town's Fit is close)
   // Far out the canvas never grows past the screen's own pixels (Safari shows an oversized canvas black, decision
   // 174), and the map stays painted: no blank or black frame while zooming.
   const canvasState = () =>

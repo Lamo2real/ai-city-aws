@@ -180,12 +180,12 @@ describe("yellow cabs", () => {
     expect(b.some((c) => c.vertical)).toBe(true);
   });
 
-  it("drive off past the edge of the map and fade out there; they never pop in or out mid-road", () => {
+  it("drive off past the edge of the map and fade out there, or short of a T at a road's end; never pop in or out mid-road", () => {
     const M = MAP_MARGIN * TILE;
-    for (const l of streetLanes(w)) {
-      expect(l.x0).toBe(w.left * TILE - M); // every street runs right through the countryside to the map's border
-      expect(l.x1).toBe(w.width * TILE + M);
-    }
+    // The street between HQ and the homes runs right through the countryside to the map's border (decision 259);
+    // every other street runs along the town and ends at a T.
+    expect(streetLanes(w).some((l) => l.x0 === w.left * TILE - M && l.x1 === w.width * TILE + M)).toBe(true);
+    for (const l of streetLanes(w)) expect(l.x0).toBeLessThan(l.x1);
     expect(edgeAlpha(0, 0, 1000)).toBe(0);
     expect(edgeAlpha(CAB_FADE_PX / 2, 0, 1000)).toBeCloseTo(0.5);
     expect(edgeAlpha(500, 0, 1000)).toBe(1);
@@ -199,7 +199,10 @@ describe("yellow cabs", () => {
           c.x < w.width * TILE + M - CAB_FADE_PX &&
           c.y > -M + CAB_FADE_PX &&
           c.y < w.height * TILE + M - CAB_FADE_PX;
-        if (inside) expect(c.alpha).toBe(1);
+        // Faded only out by the border, or by the end of its lane short of a T (decision 259).
+        const lane = sim.lanes.find((l) => l.id === c.lane);
+        const nearEnd = lane ? (() => { const car = sim.cars.find((k) => k.id === c.id)!; return car.d < CAB_FADE_PX || car.d > lane.span - CAB_FADE_PX; })() : true;
+        if (inside && !nearEnd) expect(c.alpha).toBe(1);
       }
     }
   });

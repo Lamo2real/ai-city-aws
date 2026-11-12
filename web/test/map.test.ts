@@ -34,7 +34,9 @@ describe("the map", () => {
       it(`${portrait ? "phone" : "wide"}, ${depts} departments, ${homes} homes: no dead ends, no building on a road`, () => {
         const w = layout(city(depts), { portrait, homes });
         expect(w.streets.length).toBeGreaterThanOrEqual(2);
-        for (const s of w.streets) expect([s.x0, s.x1]).toEqual([w.left, w.width]); // edge to edge, then on off the map
+        // The street between HQ and the homes runs edge to edge, then on off the map; every street reaches the avenue.
+        expect(w.streets.some((s) => s.x0 === w.left && s.x1 === w.width)).toBe(true);
+        for (const s of w.streets) expect(s.x0 <= w.avenue && s.x1 >= w.avenue + STREET).toBe(true);
         const roads = [
           ...w.streets.map((s) => ({ x: s.x0, y: s.y, w: s.x1 - s.x0, h: STREET })),
           { x: w.avenue, y: w.top, w: STREET, h: w.height - w.top },
@@ -65,7 +67,7 @@ describe("the map", () => {
     for (const b of w.buildings) expect(streets.has(b.y + b.h)).toBe(true);
     expect(streets.has(w.homes.y + w.homes.h)).toBe(true);
     const beside = w.buildings.filter((b) => b.y + b.h === w.hq.y + w.hq.h);
-    expect(beside.length).toBe(2); // west and east of HQ
+    expect(beside.length).toBeGreaterThanOrEqual(1); // the town grows out from HQ
   });
 
   it("a walk from any home reaches a street", () => {

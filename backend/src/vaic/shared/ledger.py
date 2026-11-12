@@ -58,21 +58,6 @@ TURN_KINDS: tuple[TurnKind, ...] = (
 )
 
 
-def lots_shown(count: int) -> int:
-    """How many lots the City shows when ``count`` lots are numbered (decisions 250, 252; ``gridBounds`` in
-    web/src/city/city-state.js): its blocks start 3 × 3 and grow a column or a row at a time (east, south, west,
-    north in turn) until they hold them all; every block but HQ's and the homes' is a lot."""
-    cols = rows = 3
-    step = 0
-    while cols * rows - 2 < count:
-        if step % 2 == 0:
-            cols += 1
-        else:
-            rows += 1
-        step += 1
-    return cols * rows - 2
-
-
 ALL_STATUSES = ("open", "in_progress", "in_review", "waiting_on_owner", "parked", "done", "failed", "cancelled")
 _KEY_ATTRS = {"pk", "sk", "gsi1pk", "gsi1sk", "gsi2pk", "gsi2sk", "ttl"}
 
@@ -282,7 +267,7 @@ class Ledger:
 
     # ---------- the City's lots (decision 248) ----------
     # Every tower stands on a lot of its own, numbered from 0, for good: lot n is always the same block of the City's
-    # grid, which only ever grows a column or a row at its edge (decisions 250, 252). A department takes a lot once, when it is built; demolishing it leaves the lot empty
+    # grid; the City places the lots nearest HQ first, with a seeded jitter (decisions 250, 259). A department takes a lot once, when it is built; demolishing it leaves the lot empty
     # (a FREE LOT) until a new department takes it, so no tower, road or home ever moves. A lot's footprint is fixed
     # with it: ``size`` is the name the City sizes it by (the department that stood there when the lots were first
     # numbered), "" for every lot opened later (the City sizes those by their number).
@@ -329,7 +314,9 @@ class Ledger:
                 await self._set_slot(key, mine["slot"])
                 return {"slot": mine["slot"], "lot": str(mine.get("size") or "")}
             top = max(by_slot, default=-1) + 1
-            n = lots_shown(top)
+            # The town's lots are the ones ever numbered (decision 259): the City lays them out nearest HQ first, so
+            # the lowest free one is the most central; with none free, the next new lot.
+            n = top
             free = [s for s in range(n) if not (by_slot.get(s) or {}).get("holder")]
             order = ([prefer] if prefer is not None and prefer in free else []) + free + [n]
             for s in dict.fromkeys(order):
@@ -361,11 +348,14 @@ class Ledger:
         return await self.list_lots()
 
     async def release_lot(self, key: str) -> None:
-        """The demolished department's lot stands empty: nothing else changes."""
+        """The demolished department's lot stands empty, and saplings grow there from ``freed_at`` (decision 259):
+        nothing else changes."""
         for lot in await self.list_lots():
             if lot.get("holder") == key:
                 await self.table.update(
-                    f"LOT#{lot['slot']:05d}", "META", UpdateOptions(set={"holder": ""}, expect={"holder": key})
+                    f"LOT#{lot['slot']:05d}",
+                    "META",
+                    UpdateOptions(set={"holder": "", "freed_at": self._iso()}, expect={"holder": key}),
                 )
 
     # ---------- agents (hires) ----------

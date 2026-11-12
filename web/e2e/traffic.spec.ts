@@ -60,7 +60,7 @@ test("lights at some junctions never go green both ways, and a cab waits at the 
   const total = await hooks(page, (h) => h._traffic!.junctions.length);
   expect(signals).toBe(6); // the crossings around HQ and the homes (decision 252)
   expect(signals).toBeLessThan(total); // some junctions, not all
-  expect(rounds).toBeGreaterThanOrEqual(4); // one at each outer corner of the first 3 × 3 blocks, more as the town grows
+  expect(rounds).toBeGreaterThanOrEqual(1); // scattered by the town's seed, more as the town grows (decision 259)
   expect(rounds).toBeLessThan(total / 3);
 
   // Sample the lights for a full cycle and more: one way is always red; every colour shows.

@@ -61,7 +61,7 @@ describe("traffic lights", () => {
     expect(longest).toBe(RED_MS);
   });
 
-  it("lights around HQ, more roundabouts as the town grows, and a crossing never changes once it is there (decision 252)", () => {
+  it("lights around HQ, roundabouts scattered and more as the town grows, and a crossing never changes once it is there (decisions 252, 259)", () => {
     let before: ReturnType<typeof junctions> = [];
     let rounds = 0;
     for (const n of [4, 8, 12, 20, 40, 70]) {
@@ -75,8 +75,8 @@ describe("traffic lights", () => {
         const k = js.find((x) => x.id === j.id)!;
         expect([k.kind, k.cx, k.cy, k.offset ?? null]).toEqual([j.kind, j.cx, j.cy, j.offset ?? null]);
       }
-      // Never two roundabouts side by side.
-      for (const a of js) for (const b of js) if (a !== b && a.kind === "roundabout" && b.kind === "roundabout") expect(Math.abs(a.v - b.v) + Math.abs(a.h - b.h)).toBeGreaterThanOrEqual(3);
+      // Never two roundabouts next to each other, diagonals included (decision 259).
+      for (const a of js) for (const b of js) if (a !== b && a.kind === "roundabout" && b.kind === "roundabout") expect(Math.max(Math.abs(a.v - b.v), Math.abs(a.h - b.h))).toBeGreaterThanOrEqual(2);
       before = js;
       rounds = now;
     }
@@ -121,10 +121,12 @@ describe("the traffic as a whole", () => {
       const sim = createTraffic(city(n, portrait));
       const before = sim.lanes.map((l) => Math.max(1, Math.round(l.span / CAB_GAP_PX))); // after decision 180
       const total = before.reduce((a, b) => a + b, 0);
-      expect(sim.cars.length).toBe(Math.max(sim.lanes.length, Math.round(total / 2))); // half again
+      // Half again, but every lane keeps at least one (the town's short roads too, decision 259).
+      expect(sim.cars.length).toBeGreaterThanOrEqual(Math.max(sim.lanes.length, Math.round(total / 2)));
+      expect(sim.cars.length).toBeLessThanOrEqual(Math.round(total / 2) + sim.lanes.length);
       for (const l of sim.lanes) expect(sim.cars.filter((c) => c.lane === l).length).toBeGreaterThanOrEqual(1);
       const first = sim.lanes.reduce((k, l) => k + Math.max(1, Math.round(l.span / (22 * TILE))), 0); // before any halving
-      expect(sim.cars.length / first).toBeLessThan(0.4);
+      expect(sim.cars.length / first).toBeLessThan(0.5); // about a quarter; the town's short roads keep one each
     }
   });
 
@@ -167,7 +169,7 @@ describe("the traffic as a whole", () => {
           }
         }
       }
-      if (sim.junctions.some((j) => j.kind === "roundabout")) expect(ringRides).toBeGreaterThan(20);
+      if (sim.junctions.some((j) => j.kind === "roundabout")) expect(ringRides).toBeGreaterThan(5);
       expect(townTop).toBeLessThan(TOWN_PX_S * 1.25); // town pace in town
       expect(roadTop).toBeGreaterThan(HIGHWAY_PX_S * 0.85); // highway pace out in the countryside
     });

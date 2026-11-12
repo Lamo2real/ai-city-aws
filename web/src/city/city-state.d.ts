@@ -112,6 +112,8 @@ export interface CityState {
   >;
   /** The City's lots (decision 248): slot → the name its size comes from ("" = sized by its number). */
   lots?: Record<number, string>;
+  /** When each empty lot's tower came down (ms), for the saplings growing back (decision 259). */
+  freed?: Record<number, number>;
   usage: { usd: number; turns: number; tokens: number } | null;
   spend: Record<string, number>;
   caps: {
@@ -186,7 +188,8 @@ export interface CityBuilding {
 export interface CityWorld {
   buildings: CityBuilding[];
   /** Lots no tower stands on (decision 248): free, or just demolished (`demolished`, for the wrecking ball). */
-  lots: Array<CityPoint & { w: number; h: number; slot: number; demolished?: string }>;
+  /** Empty lots (decision 259): forest, with saplings growing back since `freedAt`; `demolished` while the wrecking ball plays. */
+  lots: Array<CityPoint & { w: number; h: number; slot: number; block: { x: number; y: number; w: number; h: number }; freedAt?: number; demolished?: string }>;
   streets: Array<{ y: number; x0: number; x1: number }>;
   /** The road west of HQ and the side streets between towers, each as long as it runs (decision 166). */
   lanes: Array<{ x: number; y0: number; y1: number }>;
@@ -197,9 +200,6 @@ export interface CityWorld {
   top: number;
   width: number;
   height: number;
-  /** How many blocks across and down. */
-  cols: number;
-  rows: number;
   /** Only how the camera starts: the map is the same on every screen. */
   portrait: boolean;
   hqStreet: number;
@@ -232,17 +232,13 @@ export const TILE: number;
 export const HOMES_PER_BLOCK: number;
 /** A tower's footprint and height in tiles, from its name alone (decision 166). */
 export function towerSize(name: string): { w: number; h: number };
-/** The grid of blocks (decisions 250, 252): block size and spacing in tiles, the smallest square's side. */
+/** The grid of blocks (decisions 250, 259): block size and spacing in tiles. */
 export const BLOCK_W: number;
 export const BLOCK_H: number;
 export const PITCH_X: number;
 export const PITCH_Y: number;
-/** The blocks after `step` growth steps (one column or row each, east, south, west, north in turn), HQ at 0. */
-export function gridBounds(step: number): { c0: number; c1: number; r0: number; r1: number };
-/** How many lots the town holds after `step` steps. */
-export function lotsIn(step: number): number;
-/** The fewest growth steps with room for `count` lots. */
-export function stepFor(count: number): number;
+/** The town's seed (decision 259): which blocks get built, and where the roundabouts are. */
+export const CITY_SEED: string;
 /** What a crossing is, from where it is: the avenue east of block column v, the street south of block row h. */
 export function junctionKind(v: number, h: number): "light" | "roundabout" | "giveway";
 /** Lot `slot`'s block, [column, row] from HQ, for good. */
