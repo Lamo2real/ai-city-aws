@@ -16,7 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from vaic.shared import skills_catalog
+from vaic.shared import dept_pick, skills_catalog
 from vaic.shared.events import now_iso
 from vaic.shared.ledger import Ledger
 from vaic.shared.log import log
@@ -46,6 +46,15 @@ class SkillsApi:
     ledger: Ledger
     s3: Any = None
     bucket: str | None = None
+
+
+async def _departments(s: SkillsApi, v: Any) -> list[str]:
+    """The departments a skill is for (decision 266): an empty list (or none on the row) is every department."""
+    try:
+        sel = dept_pick.check(v, dept_pick.choices(await s.ledger.list_departments()))
+    except ValueError as e:
+        raise SkillInvalid(str(e)) from e
+    return [] if sel == dept_pick.ALL else list(sel)
 
 
 def _err(status: int, message: str, fix: str | None = None) -> Answer:
@@ -190,7 +199,8 @@ async def _catalog(
         return _err(503, "Skills can't be stored yet.", "The owner deploys the skills bucket first.")
     b = body() or {}
     files = [{"path": p, "content_base64": base64.b64encode(v).decode()} for p, v in skills_catalog.files(e).items()]
-    return await _upload(s, {"files": files, "roles": b.get("roles")}, source="catalog")
+    req = {"files": files, "roles": b.get("roles"), **({"departments": b["departments"]} if "departments" in b else {})}
+    return await _upload(s, req, source="catalog")
 
 
 async def _route(s: SkillsApi, method: str, seg: list[str], body: Callable[[], dict[str, Any]]) -> Answer | None:
@@ -220,6 +230,8 @@ async def _route(s: SkillsApi, method: str, seg: list[str], body: Callable[[], d
         patch: dict[str, Any] = {}
         if "roles" in b:
             patch["roles"] = valid_roles(b["roles"])
+        if "departments" in b:
+            patch["departments"] = await _departments(s, b["departments"])
         if "enabled" in b:
             if not isinstance(b["enabled"], bool):
                 raise SkillInvalid("Enabled must be on or off.")
@@ -243,6 +255,9 @@ async def _upload(s: SkillsApi, b: dict[str, Any], source: str = "upload") -> An
     table = s.ledger.table
     old = await table.get(PK, sk(name))
     roles = valid_roles(b["roles"]) if b.get("roles") is not None else list((old or {}).get("roles") or ROLES)
+    depts = (
+        await _departments(s, b["departments"]) if "departments" in b else list((old or {}).get("departments") or [])
+    )
     version = f"v{s.ledger.now_ms()}"
     at = now_iso(s.ledger.now())
     fields: dict[str, Any] = {
@@ -257,6 +272,7 @@ async def _upload(s: SkillsApi, b: dict[str, Any], source: str = "upload") -> An
         "size_bytes": sum(len(v) for v in files.values()),
         "source": source,
         "updated_at": at,
+        "departments": depts,
     }
     await _put_objects(s, name, version, files)
     if old:

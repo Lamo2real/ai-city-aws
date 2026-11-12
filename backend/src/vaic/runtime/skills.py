@@ -16,6 +16,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from vaic.shared.dept_pick import canonical
 from vaic.shared.log import log
 from vaic.shared.skills import PK, object_key, path_problem, reduce_frontmatter
 from vaic.shared.table import Table
@@ -37,11 +38,11 @@ class SkillStore:
         self.bucket = bucket
         self.root = root
 
-    async def skills_for(self, role: str) -> list[Row]:
+    async def skills_for(self, role: str, department: str | None = None) -> list[Row]:
+        """The enabled skills for this role. A skill with departments (decision 266) reaches only those departments'
+        managers and workers; VAIC and the Orchestrator get every skill of their role."""
         rows = await self.table.query(PK, "SKILL#")
-        return sorted(
-            (r for r in rows if r.get("enabled", True) and role in (r.get("roles") or [])), key=lambda r: r["name"]
-        )
+        return sorted((r for r in rows if for_agent(r, role, department)), key=lambda r: r["name"])
 
     def _get(self, key: str) -> bytes:
         body: bytes = self.s3.get_object(Bucket=self.bucket, Key=key)["Body"].read()
@@ -99,6 +100,15 @@ class SkillStore:
 
     async def read(self, row: Row, path: str) -> bytes:
         return await asyncio.to_thread(self._read, row, path)
+
+
+def for_agent(row: Row, role: str, department: str | None) -> bool:
+    if not row.get("enabled", True) or role not in (row.get("roles") or []):
+        return False
+    depts = row.get("departments") or []
+    if not depts or role not in ("manager", "worker"):
+        return True
+    return bool(department) and canonical(str(department)) in depts
 
 
 def empty_home(root: Path = ROOT) -> Path:

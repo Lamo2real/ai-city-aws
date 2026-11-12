@@ -384,6 +384,11 @@ class VaicQuestion(_E):
     skill: dict[str, Any] | None = None
     """A skill VAIC drafted (decision 257): ``name``, ``description``, ``markdown`` (the SKILL.md that Yes saves,
     exactly), ``files`` (its other paths) and ``replacing``. The HUD shows it beside the chat to read before Add."""
+    departments: dict[str, Any] | None = None
+    """The department picker (decision 266): ``choices`` [{key, name}], ``recommended`` [{key, why}] and
+    ``selected`` (keys). Add sends the picked names in the owner's words."""
+    knowledge: dict[str, Any] | None = None
+    """The document a knowledge card is about: ``id``, ``title``, ``status`` (decision 266)."""
     permission: dict[str, Any] | None = None
     """VAIC asks to use a connector tool (decision 265): ``title``, ``label``, ``connector``, ``tool``, ``inputs`` (pairs),
     ``description``, ``params``, ``schema`` and ``choices`` (the services that offer the same kind of tool). The HUD
@@ -412,6 +417,16 @@ class CallRequested(_E):
     type: Literal["call.requested"]
     reason: str
     approval: str = ""
+
+
+class VaicDepartments(_E):
+    """The owner changed which departments a waiting skill or document is for, in words (decision 266): the card's
+    picked departments follow."""
+
+    type: Literal["vaic.departments"]
+    conversation: str = "main"
+    id: str
+    selected: list[str]
 
 
 class VaicChange(_E):
@@ -475,6 +490,8 @@ class KnowledgeUpdated(_E):
     scope: Literal["always", "relevant", "on_request"]
     kind: Literal["text", "document", "image", "audio", "video", "link", "other"]
     error: str | None = None
+    departments: list[str] | None = None
+    """Who may use it (decision 266): department keys; empty is every department."""
 
 
 class FileCard(BaseModel):
@@ -548,6 +565,7 @@ CityEventModel = Annotated[
     | VaicQuestion
     | VaicBrowser
     | VaicChange
+    | VaicDepartments
     | CallRequested
     | HudAction
     | AppSubmitted

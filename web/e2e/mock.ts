@@ -295,7 +295,11 @@ export async function mockBackend(
   const lots = () =>
     (lotList ??= ((m.snapshot.departments ?? []) as Array<{ key?: string; name: string; state?: string }>)
       .filter((d) => d.state !== "demolished")
-      .map((d, slot): { slot: number; size: string; holder: string; freed_at?: string } => ({ slot, size: d.name, holder: d.key ?? keyOf(d.name) })));
+      .map((d, slot): { slot: number; size: string; holder: string; freed_at?: string } => ({
+        slot,
+        size: d.name,
+        holder: d.key ?? keyOf(d.name),
+      })));
   const lotOf = (holder: string) => {
     const all = lots();
     let mine = all.find((l) => l.holder === holder);
@@ -642,8 +646,20 @@ export async function mockBackend(
       );
     if (path === "/city") {
       // The City's lots (decision 248), as the server keeps them: numbered once, a lot for every department.
-      const deps = ((m.snapshot.departments ?? []) as Array<{ key?: string; name: string }>).map((d) => ({ ...d, slot: lotOf(d.key ?? keyOf(d.name)).slot }));
-      return ok({ ...m.snapshot, departments: deps, lots: lots().map(({ slot, size, holder, freed_at }) => ({ slot, size, ...(freed_at && !holder ? { freed_at } : {}) })), apps: m.apps });
+      const deps = ((m.snapshot.departments ?? []) as Array<{ key?: string; name: string }>).map((d) => ({
+        ...d,
+        slot: lotOf(d.key ?? keyOf(d.name)).slot,
+      }));
+      return ok({
+        ...m.snapshot,
+        departments: deps,
+        lots: lots().map(({ slot, size, holder, freed_at }) => ({
+          slot,
+          size,
+          ...(freed_at && !holder ? { freed_at } : {}),
+        })),
+        apps: m.apps,
+      });
     }
     if (path === "/apps" && req.method() === "GET") return ok({ apps: m.apps });
     const appAt = () => m.apps.find((a) => a.app_id === decodeURIComponent(path.split("/")[2] ?? ""));
@@ -1030,7 +1046,8 @@ export async function mockBackend(
       if (req.method() === "PUT") {
         const placeKeys = ["jurisdictions", "year", "topic", "doc_type"];
         const owner = Object.keys(body ?? {}).some((k) => placeKeys.includes(k)) ? { meta_source: "owner" } : {};
-        Object.assign(i, body, owner, { updated_at: at() });
+        const depts = body?.departments === "all" ? { departments: [] } : {}; // every department (decision 266)
+        Object.assign(i, body, owner, depts, { updated_at: at() });
         kEvent(i);
         return ok({ item: i });
       }
@@ -1178,6 +1195,8 @@ export async function mockBackend(
     const method = req.method();
     if (path === "/connectors" && method === "GET") return ok({ connectors: m.connectors });
     if (path === "/departments/presets") return ok(PRESETS);
+    if (path === "/departments/choices")
+      return ok({ departments: PRESETS_FILE.departments.map((d) => ({ key: d.key, name: d.name })) });
     // Departments on demand (decision 134): the server answers and tells the city, as the real one does.
     if (path === "/departments" && method === "POST") {
       const b = (body ?? {}) as { name?: string; mission?: string; worker_model?: string };
@@ -1195,7 +1214,8 @@ export async function mockBackend(
       built.push(name);
       const lot = lotOf(key);
       const listed = m.snapshot.departments as Array<Record<string, unknown>> | undefined;
-      if (Array.isArray(listed) && !listed.some((d) => d.name === name)) listed.push({ ...department, created_at: new Date().toISOString() }); // a reload still has it
+      if (Array.isArray(listed) && !listed.some((d) => d.name === name))
+        listed.push({ ...department, created_at: new Date().toISOString() }); // a reload still has it
       m.send({
         type: "department.created",
         name,
@@ -1214,7 +1234,11 @@ export async function mockBackend(
         (city.departments ?? []).find((d) => d.name.toLowerCase().replace(/[^a-z0-9]+/g, "-") === key)?.name ??
         built.find((n) => n.toLowerCase().replace(/[^a-z0-9]+/g, "-") === key);
       if (!name) return ok({ error: "There is no standing department called that." }, 404);
-      for (const l of lots()) if (l.holder === key) { l.holder = ""; l.freed_at = new Date().toISOString(); } // saplings go in
+      for (const l of lots())
+        if (l.holder === key) {
+          l.holder = "";
+          l.freed_at = new Date().toISOString();
+        } // saplings go in
       const listed = m.snapshot.departments as Array<{ name: string }> | undefined;
       if (Array.isArray(listed)) m.snapshot.departments = listed.filter((d) => d.name !== name);
       m.send({ type: "department.demolished", name, workers: 0, parts: 0 });
@@ -1299,7 +1323,7 @@ export async function mockBackend(
     }
     if (/^\/skills\/[\w-]+$/.test(path) && method === "PUT") {
       const sk = m.skills.find((x) => x.name === path.split("/")[2])!;
-      Object.assign(sk, body);
+      Object.assign(sk, body, body?.departments === "all" ? { departments: [] } : {});
       return ok({ skill: sk });
     }
     if (/^\/skills\/[\w-]+$/.test(path) && method === "DELETE") {

@@ -662,3 +662,25 @@ one Markdown file per document with front matter, and `_eval.yaml`; run `uv run 
 `backend/tests/test_research_knowledge.py` (or `test_operations_knowledge.py` for a source with house style) for the
 department. No code changes: the seeder, registry,
 projections, record check and HUD card are department-generic.
+
+## 18. The owner's documents for some departments (2026-11-12, decision 266)
+- An owner's item (not a department entry, not the built-in guide) may carry `departments`: department keys. Empty or
+  absent is every department, as before. `PUT /knowledge/<id> {departments: "all" | [names or keys]}` sets it (names
+  are stored as keys; an empty list is refused; a department entry answers "A department's own document stays with
+  its department"). It is not in the index metadata, so nothing is re-indexed: the record check decides.
+- `entry_visible` (`search.py`): a manager or worker sees an item with departments only when its department is listed;
+  the executives (no department) don't; VAIC and the Orchestrator see it, and when they narrow to one department they
+  see the items listed for it. The always-on summaries (`always_block(store, caller)`) leave it out of other
+  departments' prompts. `knowledge.updated` carries `departments`.
+- From the chat: the owner attaches a file (it is stored as before) and says "add this to the knowledge base". VAIC's
+  `add_as_knowledge` (item: the title as attached, or the newest of the owner's items when none is named;
+  `departments: [{name, why}]`) stages `PUT /knowledge/<id>` with a card: "Add “<title>” as knowledge", every
+  department as a chip with the recommended few picked and why, Add / No. On Add the departments are saved and VAIC
+  says "I'll add it as knowledge for Finance and Data & AI, and it'll be ready in a minute or two"; the card follows
+  `knowledge.updated` and says "Ready. Finance and Data & AI can use it now." Words and voice work as for skills
+  (`docs/CONNECTORS_SKILLS.md` §2.7). No technical words reach the owner.
+- The Knowledge page shows "For every department" or "For Finance and Data & AI" on each of the owner's documents, with
+  Change opening the same chips. The built-in department knowledge bases are unchanged.
+- Later (suggestion, not built): a file attached in the chat is still readable by every department until the owner
+  picks; the owner may want attachments kept to VAIC and the Orchestrator until they say where they go.
+

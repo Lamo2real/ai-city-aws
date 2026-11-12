@@ -259,7 +259,7 @@ A folder with `SKILL.md` at its root (YAML frontmatter `name`, `description`, th
 
 ### 2.2 Storage
 - S3 bucket `vaic-prod-skills` (SSE-KMS with the project key, versioning on, no public access, TLS only, noncurrent versions expire after 30 days). Objects are `skills/<name>/<version>/<path>`, where `version` = `v<unix ms>`.
-- Ledger rows (`vaic-prod-ledger`): `pk = "SKILLS"`, `sk = "SKILL#<name>"`, with fields `name, description, roles[], enabled, version, files: [{path, size, sha256}], size_bytes, created_at, updated_at`. One `Query` on `pk = "SKILLS"` lists them all.
+- Ledger rows (`vaic-prod-ledger`): `pk = "SKILLS"`, `sk = "SKILL#<name>"`, with fields `name, description, roles[], departments[], enabled, version, files: [{path, size, sha256}], size_bytes, created_at, updated_at`. One `Query` on `pk = "SKILLS"` lists them all.
 - Replace = write the new version's objects → conditional update of the row to the new `version` → delete the old version's objects. Runtimes read the row first, so a turn never sees half a skill.
 
 ### 2.3 Validation (api Lambda, on every upload)
@@ -268,6 +268,7 @@ A folder with `SKILL.md` at its root (YAML frontmatter `name`, `description`, th
 - **Frontmatter is reduced to `name` and `description`.** Everything else (`allowed-tools`, `hooks`, `model`, `disable-model-invocation`, …) is removed and the HUD says so, because `allowed-tools` would pre-approve tools past the policy gate. The runtime strips the frontmatter again when it writes the files, as a second check.
 - Files: at most 100, at most 4 MB in total after decoding (it fits the 6 MB Lambda payload as base64). Paths must be relative and use `/`, with no `..`, no leading `/`, no `\`, no NUL, at most 200 characters, and no `.claude-plugin/`, `hooks/`, `.mcp.json` or `settings*.json` anywhere. Symlinks can't be sent (contents only).
 - `roles`: a non-empty subset of `vaic, orchestrator, manager, worker`.
+- `departments` (decision 266): `"all"`, or a non-empty list of department names or keys (the pre-configured ones and the owner's own), stored as keys; `"all"` (or every department) is stored as `[]`. A new version keeps the old list unless one is sent.
 
 ### 2.4 HTTP API (the owner group is checked, as on every route)
 | Route | Body → answer |
@@ -275,7 +276,8 @@ A folder with `SKILL.md` at its root (YAML frontmatter `name`, `description`, th
 | `GET /skills` | → `{skills: [Skill]}` (by name) |
 | `GET /skills/<name>` | → `Skill` + `skill_md` (the stored SKILL.md text) |
 | `POST /skills` | `{name?, roles, files: [{path, content_base64}]}` → `{skill, removed_frontmatter: [key…]}`. Creates the skill, or replaces it when the name exists (`roles` replaces the old roles when given) |
-| `PUT /skills/<name>` | `{roles?, enabled?}` → `{skill}` |
+| `PUT /skills/<name>` | `{roles?, enabled?, departments?}` → `{skill}` |
+| `GET /departments/choices` | → `{departments: [{key, name}]}`: what the department chips list |
 | `DELETE /skills/<name>` | → `{ok: true}` (the row and every version's objects) |
 
 Skill JSON = the ledger row without `pk`/`sk`. Errors are in plain words, like the other routes.
@@ -296,6 +298,12 @@ Skill JSON = the ledger row without `pk`/`sk`. Errors are in plain words, like t
 - What is staged is the checked body (the reduced SKILL.md, base64), so Yes saves exactly the SKILL.md the owner read. An existing name is staged as "Update the skill <name>" with Save / Not now; a new one as "Add the skill <name>" with Add / Not now. A newer draft replaces the shown one (one staged change per conversation); No discards it.
 - `vaic.question` carries `skill: {name, description, markdown, files, replacing}`. The HUD (`web/src/components/SkillDraft.tsx`): at 900 px and wider the chat narrows to the left and the SKILL.md opens on the right (rendered, with a Markdown tab for the raw text, Add / Not now and ×); narrower (the phone, the iPhone home-screen web app) the chat card shows an excerpt and "View skill", which opens a full-screen sheet with Add / Not now at the bottom. The desktop app loads the same HUD. Saving shows "Added. It's on the Skills page" and closes the panel.
 - Spoken, VAIC doesn't read the skill out; it says it's on the screen and asks "Add this skill?".
+
+### 2.7 Which departments get a skill (decision 266)
+- A skill row has `departments` (keys; empty is every department). `skills_for(role, department)` (`runtime/skills.py`, `for_agent`) gives a manager or worker a skill with departments only when its own department (name or key, canonicalised by `shared/dept_pick.canonical`) is in the list; VAIC and the Orchestrator get every skill of their role. Enforced in code when the turn loads its skills, not by prompt.
+- `draft_skill` and `find_skill` take `departments: [{name, why}]`, VAIC's recommendation (at most 4, checked against the departments; when it gives none, `dept_pick.recommend` picks a few from the skill's words; a catalog skill's own departments are its recommendation). `vaic.question` carries `departments: {choices, recommended, selected}`; the pending change keeps the picker.
+- The owner taps chips (the HUD's card and side panel share one pick) or says it. `choose_departments(words)` updates the pick and sends `vaic.departments {id, selected}`; `save_change` yes reads the departments from the owner's own message (`TurnCtx.owner_text`, parsed by `dept_pick.parse`: "all", "all except Sales and Legal", "just Finance", "also Sales", "not Legal"), else keeps the pick, and adds `departments` to the staged body. Add sends "Add for Data & AI and Finance" or "Add for all departments", so a tap and words are the same path. None picked is not saved.
+- The Skills page shows "For …" on each skill with Change (the same chips) → `PUT /skills/<name> {departments}`.
 
 ## 3. HUD (web)
 - **Skills screen** (new nav item next to Tickets/Costs/Settings, and next to the Knowledge screen if that lands first). It has a list (name, description, role chips, updated date, an on/off switch), an "Add skill" button (one primary button) with a choice between a folder (`<input webkitdirectory>`) and a single `SKILL.md` file, a role picker (VAIC, Orchestrator, Managers, Workers; default: all four), a preview of the SKILL.md text before saving, and a notice when frontmatter keys were removed. Each skill can be replaced, have its roles edited, or be deleted after a confirmation that says it can't be undone. The client checks the same limits as §2.3 before uploading.

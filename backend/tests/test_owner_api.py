@@ -159,7 +159,11 @@ async def test_skill_one_match_shows_a_card_with_add() -> None:
     assert q["lines"] and "Product" in q["detail"]
     out = await turn(c)["save_change"].handler({"answer": "yes"})
     assert out.startswith("Saved")
-    assert seen == [{"method": "POST", "path": "/skills/catalog/release-notes", "body": {}}]
+    # The catalog's own departments are the recommendation, picked already (decision 266).
+    assert q["departments"]["selected"] == ["product", "application"]
+    assert seen == [
+        {"method": "POST", "path": "/skills/catalog/release-notes", "body": {"departments": ["product", "application"]}}
+    ]
 
 
 async def test_skill_several_matches_are_offered_as_choices() -> None:

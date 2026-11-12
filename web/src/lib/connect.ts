@@ -244,6 +244,8 @@ export interface Skill {
   updated_at: string;
   /** "catalog" when it was added from Discover (decision 188); uploads and older skills say "upload" or nothing. */
   source?: "upload" | "catalog";
+  /** The departments whose managers and workers get it (decision 266); none is every department. */
+  departments?: string[];
 }
 export const SKILL_LIMITS = { files: 100, bytes: 4 * 1024 * 1024, description: 1024, path: 200 };
 const NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -325,7 +327,7 @@ export const uploadSkill = (files: SkillFile[], roles: Role[], name?: string) =>
       files: files.map((f) => ({ path: f.path, content_base64: b64(f.bytes) })),
     },
   });
-export const editSkill = (name: string, patch: { roles?: Role[]; enabled?: boolean }) =>
+export const editSkill = (name: string, patch: { roles?: Role[]; enabled?: boolean; departments?: string[] | "all" }) =>
   api<{ skill: Skill }>(`/skills/${name}`, { method: "PUT", body: patch });
 export const removeSkill = (name: string) => api(`/skills/${name}`, { method: "DELETE" });
 

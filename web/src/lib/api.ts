@@ -64,6 +64,8 @@ export interface KnowledgeItem {
   language?: string | null;
   meta_source?: "detected" | "owner";
   folder?: string;
+  /** Who may use it (decision 266): department keys; none is every department. */
+  departments?: string[];
   /** A newer item for the same place and topic (this one stays, marked). */
   superseded_by?: string;
   /** The site's tenant key (its domain) when a link's brand and site profile was captured (§16). */
@@ -163,7 +165,7 @@ export const knowledgeApi = {
     api<{ item: KnowledgeItem }>("/knowledge/links", { method: "POST", body: { url, scope } }),
   addText: (text: string, title: string, scope?: Scope) =>
     api<{ item: KnowledgeItem }>("/knowledge/text", { method: "POST", body: { text, title, scope } }),
-  update: (id: string, patch: { scope?: Scope; title?: string } & KnowledgePlace) =>
+  update: (id: string, patch: { scope?: Scope; title?: string; departments?: string[] | "all" } & KnowledgePlace) =>
     api<{ item: KnowledgeItem }>(`/knowledge/${id}`, { method: "PUT", body: patch }),
   remove: (id: string) => api<{ ok: true }>(`/knowledge/${id}`, { method: "DELETE" }),
 };

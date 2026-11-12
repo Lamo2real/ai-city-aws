@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Literal, cast
 
-from vaic.shared import company, owner_api
+from vaic.shared import company, dept_pick, owner_api
 from vaic.shared import executives as execs
 from vaic.shared import sales_pipeline as deals
 from vaic.shared import standing_orders as standing
@@ -116,6 +116,7 @@ ROUTES: list[tuple[str, str]] = [
     ("POST", "/departments"),
     ("DELETE", "/departments/customer-success"),
     ("GET", "/departments/presets"),
+    ("GET", "/departments/choices"),
     ("GET", "/agents"),
     ("GET", "/workforce"),
     ("GET", "/costs"),
@@ -930,6 +931,10 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         return reply(200, {"ok": False, "status": status, "reason": f"AWS answered {status}: {body or 'no details'}"})
     if is_("GET", r"/departments/presets"):
         return reply(200, public_presets())
+    if is_("GET", r"/departments/choices"):
+        # What the department chips list (decision 266): the pre-configured departments, then the owner's own.
+        own = dept_pick.choices(await d.ledger.list_departments())
+        return reply(200, {"departments": [{"key": x.key, "name": x.name} for x in own]})
     if is_("GET", r"/departments"):
         return reply(200, {"departments": await d.ledger.list_departments()})
     if is_("POST", r"/departments"):

@@ -15,6 +15,7 @@ import {
   NO_FILTERS,
   placeLabel,
   scheduleDelete,
+  setDepartments,
   setPlace,
   setScope,
   useKnowledge,
@@ -25,6 +26,7 @@ import { Banner, Button, Confirm, Loading, toast, UNDO_MS } from "./ui.tsx";
 import { Select } from "./Select.tsx";
 import { SiteProfileView } from "./SiteProfile.tsx";
 import { DepartmentKnowledge } from "./DepartmentKnowledge.tsx";
+import { DeptLine } from "./DeptPicker.tsx";
 
 export const SCOPES: Array<{ value: Scope; label: string }> = [
   { value: "always", label: "Always include" },
@@ -328,6 +330,7 @@ export function KnowledgeScreen() {
                   {editing === item.id ? (
                     <PlaceEditor item={item} onDone={() => setEditing(null)} onError={setError} />
                   ) : null}
+                  {item.builtin ? null : <WhoUses item={item} onError={setError} />}
                   <div className="kitem-actions">
                     {item.builtin ? null : (
                       <fieldset className="scope">
@@ -377,6 +380,25 @@ export function KnowledgeScreen() {
         />
       ) : null}
     </section>
+  );
+}
+
+/** Which departments may use the document (decision 266); VAIC and the Orchestrator always see everything. */
+function WhoUses(p: { item: KnowledgeItem; onError: (m: string | null) => void }) {
+  return (
+    <DeptLine
+      what={p.item.title}
+      keys={p.item.departments}
+      onSave={async (keys, every) => {
+        try {
+          await setDepartments(p.item.id, keys, every);
+          p.onError(null);
+        } catch (e) {
+          p.onError(e instanceof Error ? e.message : String(e));
+          throw e;
+        }
+      }}
+    />
   );
 }
 

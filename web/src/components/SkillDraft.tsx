@@ -4,7 +4,8 @@
 // the same. A newer draft from VAIC replaces the shown one; saving closes the panel with a confirmation.
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { sendMessage } from "../lib/actions.ts";
+import { namesOf } from "../lib/deptPick.ts";
+import { AskChoices, AskDepartments } from "./AskAnswers.tsx";
 import { readFrontmatter } from "../lib/connect.ts";
 import { Markdown } from "../lib/markdown.tsx";
 import { useHud, type ConnectCardState } from "../lib/store.ts";
@@ -137,25 +138,17 @@ export function SkillPanel({ d, sheet }: { d: Ask; sheet: boolean }) {
       <footer className="skill-side-foot">
         {d.result === "saved" ? (
           <p className="ask-done" role="status">
-            {s.replacing ? "Saved." : "Added."} It's on the Skills page; agents use it from their next turn.
+            {s.replacing ? "Saved" : "Added"}
+            {d.departments ? ` for ${namesOf(d.departments)}` : ""}. It's on the Skills page; agents use it from their
+            next turn.
           </p>
         ) : d.answered ? (
           <p className="mute" role="status">{`${d.answered}: saving…`}</p>
         ) : (
           <>
+            <AskDepartments d={d} compact />
             <p className="skill-q">{d.question}</p>
-            <div className="choices">
-              {d.options.map((o, i) => (
-                <button
-                  key={o}
-                  type="button"
-                  className={`choice choice-big${i === 0 ? " choice-yes" : ""}`}
-                  onClick={() => void sendMessage(o, { answer: o })}
-                >
-                  {o}
-                </button>
-              ))}
-            </div>
+            <AskChoices d={d} />
           </>
         )}
       </footer>
@@ -178,7 +171,12 @@ export function SkillExcerpt({ d }: { d: Ask }) {
   if (!s) return null;
   const first = skillBody(s.markdown)
     .split("\n")
-    .map((l) => l.replace(/^(#+|[-*+]|\d+[.)])\s+/, "").replace(/[*_`]+/g, "").trim())
+    .map((l) =>
+      l
+        .replace(/^(#+|[-*+]|\d+[.)])\s+/, "")
+        .replace(/[*_`]+/g, "")
+        .trim(),
+    )
     .filter(Boolean)
     .slice(0, 3)
     .join(" · ");

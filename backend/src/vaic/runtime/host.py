@@ -24,7 +24,8 @@ from vaic.shared.events import now_iso
 from vaic.shared.executives import ensure_executives
 from vaic.shared.hierarchy.actions import CityDeps, move
 from vaic.shared.ids import manager_id
-from vaic.shared.knowledge.search import always_block
+from vaic.shared.knowledge.entries import canonical_department
+from vaic.shared.knowledge.search import Caller, always_block
 from vaic.shared.leads import is_job_report, save_lead_csvs
 from vaic.shared.log import log, metric
 from vaic.shared.models import resolve_role_from_env
@@ -181,16 +182,19 @@ class AgentHost:
                 # add_connector is offered only when the input is the owner's own message (typed or spoken),
                 # never on reports, results, answers, approvals or reminders.
                 from_owner=inv.get("from") == "owner" and inv.get("kind") == "task",
+                owner_text=str(inv.get("body") or "")[:4000]
+                if inv.get("from") == "owner" and inv.get("kind") == "task"
+                else "",
             )
             system, builtins = await self._system(agent, inv)
-            system += await self._owner_knowledge()
+            system += await self._owner_knowledge(ctx.role, await self._department_name(agent, inv))
             city_tools = tools_for(self.d, ctx)
             if ctx.role == "vaic" and ctx.from_owner:
                 city_tools.append(add_connector_tool(self.d, ctx))
-            skill_rows = await self._skills(ctx.role)
+            dept = await self._department_name(agent, inv) if ctx.role in ("manager", "worker") else ""
+            skill_rows = await self._skills(ctx.role, dept)
             if ctx.role in ("manager", "worker"):  # a preset department's bundled skills; the owner's win on a name
                 own = {r["name"] for r in skill_rows}
-                dept = await self._department_name(agent, inv)
                 skill_rows = skill_rows + [r for r in department_skills(dept) if r["name"] not in own]
             if ctx.role == "vaic" and skill_rows and self.o.skills:
                 city_tools.append(use_skill_tool(self.o.skills, skill_rows))
@@ -479,23 +483,25 @@ class AgentHost:
                 out.append(line)
         return out
 
-    async def _owner_knowledge(self) -> str:
-        """The ``always`` summaries, after the stable system prompt so the cached prefix stays the same."""
+    async def _owner_knowledge(self, role: str = "vaic", department: str = "") -> str:
+        """The ``always`` summaries, after the stable system prompt so the cached prefix stays the same. A document
+        for some departments only is left out of the others' prompts (decision 266)."""
         k = self.d.knowledge
         if not k:
             return ""
         try:
-            block = await always_block(k.store)
+            dept = canonical_department(department) if role in ("manager", "worker") else None
+            block = await always_block(k.store, Caller(department=dept, role=role))
         except Exception as e:
             log("warn", "knowledge.always_failed", error=type(e).__name__)
             return ""
         return f"\n\n{block}" if block else ""
 
-    async def _skills(self, role: str) -> list[dict[str, Any]]:
+    async def _skills(self, role: str, department: str = "") -> list[dict[str, Any]]:
         if not self.o.skills:
             return []
         try:
-            return await self.o.skills.skills_for(role)
+            return await self.o.skills.skills_for(role, department or None)
         except Exception as e:  # the turn goes on without skills
             log("warn", "skills.unavailable", error=type(e).__name__)
             return []

@@ -288,6 +288,16 @@ export async function setPlace(id: string, patch: KnowledgePlace) {
   }
 }
 
+/** Which departments may use the owner's document (decision 266): every one when all are picked. */
+export async function setDepartments(id: string, keys: string[], every: boolean) {
+  try {
+    const { item } = await knowledgeApi.update(id, { departments: every ? "all" : keys });
+    knowledge.dispatch({ type: "upsert", item });
+  } catch (e) {
+    throw new Error(`Not saved: ${words(e)}`, { cause: e });
+  }
+}
+
 // ---------- grouping by place, year and topic (§15) ----------
 export interface KnowledgeFilters {
   place: string;
@@ -369,8 +379,13 @@ export function groupKnowledge(items: KnowledgeItem[]): KnowledgeGroup[] {
 export const MAX_CHAT_IMAGES = 10;
 export const isImageType = (type?: string | null) => !!type && type.startsWith("image/");
 /** Keeps every file that is not an image and the first images up to the cap, counting those already attached. */
-export function capImages(files: File[], alreadyImages: number, max = MAX_CHAT_IMAGES): { files: File[]; left: number } {
-  let room = Math.max(0, max - alreadyImages), left = 0;
+export function capImages(
+  files: File[],
+  alreadyImages: number,
+  max = MAX_CHAT_IMAGES,
+): { files: File[]; left: number } {
+  let room = Math.max(0, max - alreadyImages),
+    left = 0;
   const kept = files.filter((f) => {
     if (!isImageType(f.type)) return true;
     if (room > 0) {

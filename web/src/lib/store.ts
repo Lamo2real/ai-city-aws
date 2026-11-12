@@ -1,5 +1,6 @@
 // One store for the whole HUD: the city (via the ported reducer), VAIC's chat, connection status and
 // the owner's outbox. Every screen reads from here; the WebSocket and API write to it.
+import { ordered, readPicker, type DeptPicker } from "./deptPick.ts";
 import { hudAction } from "./hudAction.ts";
 import { needsCount } from "./needs.ts";
 import { useSyncExternalStore } from "react";
@@ -94,6 +95,10 @@ export type ConnectCardState = (
       skill?: SkillDraft;
       /** VAIC asks to use a connector tool (decision 265): Claude's "wants to use … from …" card. */
       permission?: ConnectorAsk;
+      /** Which departments it is for (decision 266): every department, VAIC's recommended ones, the picked ones. */
+      departments?: DeptPicker;
+      /** A knowledge card's document, followed until it is ready (decision 266). */
+      knowledge?: { id: string; title: string; status: string };
       /** The answer the owner tapped, while VAIC saves it. */
       answered?: string;
       result?: "saved" | "discarded" | "failed";
@@ -174,6 +179,13 @@ function skillDraft(v: unknown): SkillDraft | undefined {
     files: Array.isArray(o.files) ? o.files.map(String) : [],
     replacing: o.replacing === true,
   };
+}
+function knowledgeRef(v: unknown): { id: string; title: string; status: string } | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const o = v as Record<string, unknown>;
+  return typeof o.id === "string"
+    ? { id: o.id, title: String(o.title ?? ""), status: String(o.status ?? "") }
+    : undefined;
 }
 export type Presence = "idle" | "listening" | "thinking" | "speaking" | "waiting";
 
@@ -334,6 +346,11 @@ class Store {
     if (e.type === "vaic.question") return this.askEvent(e);
     if (e.type === "vaic.browser") return this.browserEvent(e);
     if (e.type === "vaic.change") return this.changeEvent(e);
+    if (e.type === "vaic.departments") {
+      if (String(e.conversation ?? "main") !== "main") return;
+      return this.pickDepartments(String(e.id ?? ""), Array.isArray(e.selected) ? e.selected.map(String) : []);
+    }
+    if (e.type === "knowledge.updated") this.knowledgeEvent(e); // the knowledge page has its own store too
     if (e.type === "vaic.stopped") {
       if (String(e.conversation ?? "main") !== "main") return;
       const id = String(e.message_id ?? "").replace(/^owner-/, "");
@@ -436,6 +453,30 @@ class Store {
       ...(e.detail ? { detail: String(e.detail) } : {}),
       ...(skillDraft(e.skill) ? { skill: skillDraft(e.skill) } : {}),
       ...(connectorAsk(e.permission) ? { permission: connectorAsk(e.permission) } : {}),
+      ...(readPicker(e.departments) ? { departments: readPicker(e.departments) } : {}),
+      ...(knowledgeRef(e.knowledge) ? { knowledge: knowledgeRef(e.knowledge) } : {}),
+    });
+  }
+  /** The owner tapped chips (or said departments in words: `vaic.departments`): the card shows the new pick. */
+  pickDepartments(changeId: string, keys: string[]) {
+    this.set({
+      cards: this.state.cards.map((c) =>
+        c.kind === "ask" && c.changeId === changeId && c.departments
+          ? { ...c, departments: { ...c.departments, selected: ordered(c.departments.choices, keys) } }
+          : c,
+      ),
+    });
+  }
+  /** A knowledge card's document moved on (processing → ready): the card says when it's ready. */
+  private knowledgeEvent(e: { [k: string]: unknown }) {
+    const id = String(e.id ?? "");
+    if (!this.state.cards.some((c) => c.kind === "ask" && c.knowledge?.id === id)) return;
+    this.set({
+      cards: this.state.cards.map((c) =>
+        c.kind === "ask" && c.knowledge?.id === id
+          ? { ...c, knowledge: { ...c.knowledge, status: String(e.status ?? c.knowledge.status) } }
+          : c,
+      ),
     });
   }
   /** A step of VAIC's browser, or the end of its browsing (decision 265). */

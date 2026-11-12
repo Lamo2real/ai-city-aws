@@ -115,6 +115,8 @@ class TurnCtx:
     message_id: str | None = None
     from_owner: bool = False
     """The turn's input is the owner's own message (typed or spoken), not a report, answer or reminder."""
+    owner_text: str = ""
+    """That message's words, when ``from_owner`` (the departments the owner names are read from them in code)."""
 
 
 @dataclass(frozen=True)

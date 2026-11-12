@@ -12,6 +12,8 @@ import { Button, errorText, LiveDot } from "./ui.tsx";
 import { Select } from "./Select.tsx";
 import { SkillExcerpt } from "./SkillDraft.tsx";
 import { Chevron } from "./BrowserRun.tsx";
+import { AskChoices, AskDepartments } from "./AskAnswers.tsx";
+import { namesOf, type DeptPicker as DeptPickerState } from "../lib/deptPick.ts";
 
 /** "No account yet?": the service's own sign-up page, checked by scripts/check-signup-links.mjs, in a new tab. */
 export function SignupLink(p: { href?: string; service: string }) {
@@ -371,6 +373,7 @@ const SETTLED = { saved: "Saved.", discarded: "Not saved: nothing changed.", fai
  * is sent as the owner's message, so typing or saying the answer works the same. */
 export function AskCard(p: AskProps) {
   if (p.permission) return <PermissionCard {...p} permission={p.permission} />;
+  const k = p.knowledge;
   return (
     <div className="connect-card ask-card" role="group" aria-label={p.title ?? p.question}>
       {p.title ? <p className="ask-title">{p.title}</p> : null}
@@ -382,29 +385,33 @@ export function AskCard(p: AskProps) {
         </ul>
       ) : null}
       {p.skill ? <SkillExcerpt d={p} /> : p.detail ? <p className="mute">{p.detail}</p> : null}
-      <p>{p.question}</p>
+      {p.departments && !p.result && !p.answered ? <AskDepartments d={p} /> : null}
+      {p.result ? null : <p>{p.question}</p>}
       {p.result ? (
         <p className={p.result === "saved" ? "ask-done" : "mute"} role="status">
-          {p.skill && p.result === "saved" ? "Added. It's on the Skills page." : SETTLED[p.result]}
+          {p.result !== "saved"
+            ? SETTLED[p.result]
+            : k
+              ? knowledgeDone(k.status, p.departments)
+              : p.skill
+                ? `Added${p.departments ? ` for ${namesOf(p.departments)}` : ""}. It's on the Skills page.`
+                : SETTLED.saved}
         </p>
       ) : p.answered ? (
         <p className="mute" role="status">{`${p.answered}: saving…`}</p>
       ) : (
-        <div className="choices">
-          {p.options.map((o, i) => (
-            <button
-              key={o}
-              type="button"
-              className={`choice choice-big${i === 0 && p.changeId ? " choice-yes" : ""}`}
-              onClick={() => void sendMessage(o, { answer: o })}
-            >
-              {o}
-            </button>
-          ))}
-        </div>
+        <AskChoices d={p} />
       )}
     </div>
   );
+}
+
+/** A knowledge card once added: being prepared, then ready (plain words, decision 266). */
+function knowledgeDone(status: string, d?: DeptPickerState): string {
+  const who = d ? namesOf(d) : "every department";
+  if (status === "ready") return `Ready. ${who === "every department" ? "Every department" : who} can use it now.`;
+  if (status === "failed" || status === "unsupported") return "Added, but that file couldn't be read.";
+  return `Adding it as knowledge for ${who}. It'll be ready in a minute or two.`;
 }
 
 /** Every connect card, in the order they arrived. Rendered under the chat by VaicScreen. */

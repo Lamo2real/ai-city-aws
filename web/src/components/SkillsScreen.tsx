@@ -2,6 +2,7 @@
 // owner can, here or by asking VAIC. Yours lists what's installed, with + Add for writing or uploading one; Discover
 // (decision 188) is the catalog: the AI City catalog and the departments' built-in skills, searched and filtered by
 // department, each added in one tap through the same path as an upload (POST /skills/catalog/<name>).
+import { DeptLine } from "./DeptPicker.tsx";
 import { useEffect, useRef, useState } from "react";
 import { ApiError } from "../lib/api.ts";
 import { matches, skillMarkdown } from "../lib/catalog.ts";
@@ -653,6 +654,19 @@ export function SkillsScreen() {
                     ? void change(s, { roles })
                     : toast({ text: "Keep at least one role, or turn it off.", tone: "bad" })
                 }
+              />
+              <DeptLine
+                what={s.name}
+                keys={s.departments}
+                onSave={async (keys, every) => {
+                  try {
+                    const r = await editSkill(s.name, { departments: every ? "all" : keys });
+                    setSkills((xs) => xs?.map((x) => (x.name === s.name ? r.skill : x)) ?? null);
+                  } catch (e) {
+                    toast({ text: errorText(e, "Not saved. Try again."), tone: "bad" });
+                    throw e;
+                  }
+                }}
               />
               <div className="row-end">
                 {s.source !== "catalog" ? (

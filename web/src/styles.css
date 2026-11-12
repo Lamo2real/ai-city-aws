@@ -8150,7 +8150,9 @@ a.btn-primary.chat-file-dl,
   position: absolute;
   transform: translate(-3px, -2px);
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
-  transition: left var(--dur-m) var(--ease-out), top var(--dur-m) var(--ease-out);
+  transition:
+    left var(--dur-m) var(--ease-out),
+    top var(--dur-m) var(--ease-out);
 }
 .bsteps {
   list-style: none;
@@ -8238,4 +8240,133 @@ a.btn-primary.chat-file-dl,
   display: flex;
   flex-wrap: wrap;
   gap: var(--s2);
+}
+/* Which departments a skill or a knowledge document is for (decision 266): chips, recommended ones marked. */
+.dept-pick {
+  display: grid;
+  gap: var(--s2);
+  min-width: 0;
+}
+.dept-pick-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+.dept-pick-label {
+  margin: 0;
+  font-weight: 700;
+}
+.dept-pick-quick {
+  display: flex;
+  gap: var(--s1);
+}
+.dept-pick-quick button {
+  min-height: 32px;
+  padding: 0 var(--s3);
+  border-radius: 999px;
+  border: 1px solid var(--edge-2);
+  background: transparent;
+  color: inherit;
+  font-size: var(--fs-s);
+  font-weight: 700;
+  cursor: pointer;
+}
+.dept-pick-quick button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.dept-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+}
+.dept-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 var(--s3);
+  border-radius: 999px;
+  border: 1px solid var(--edge-2);
+  background: var(--glass-2);
+  color: inherit;
+  font-size: var(--fs-s);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--dur-xs) var(--ease);
+}
+.dept-chip:hover {
+  background: var(--glass-3);
+}
+.dept-chip.is-on {
+  background: var(--accent-fill);
+  color: var(--accent-ink);
+  border-color: var(--accent-edge);
+}
+.dept-chip.is-rec:not(.is-on) {
+  border-style: dashed;
+}
+.dept-chip:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.dept-tick {
+  font-weight: 800;
+  width: 1ch;
+  text-align: center;
+}
+.dept-rec {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.14);
+}
+.dept-why,
+.dept-none {
+  margin: 0;
+  font-size: var(--fs-s);
+}
+.dept-none {
+  color: var(--warn);
+  font-weight: 700;
+}
+.choice:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.kwho-edit {
+  display: grid;
+  gap: var(--s3);
+  padding: var(--s3);
+  border: 1px solid var(--edge);
+  border-radius: var(--rg-s);
+}
+.dept-compact {
+  display: grid;
+  gap: var(--s2);
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.dept-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  margin: 0;
+}
+.dept-toggle {
+  min-height: 32px;
+  padding: 0 var(--s3);
+  border-radius: 999px;
+  border: 1px solid var(--edge-2);
+  background: transparent;
+  color: inherit;
+  font-weight: 700;
+  cursor: pointer;
 }

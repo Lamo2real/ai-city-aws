@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+from ..dept_pick import canonical
 from ..events import EventBus
 from ..log import log
 from .blobs import Blobs
@@ -65,6 +66,16 @@ def check_title(v: Any, fallback: str = "") -> str:
     return " ".join(v.split())
 
 
+def check_departments(v: Any) -> list[str]:
+    """Who may use the owner's document (decision 266): ``"all"`` (stored as no list: every department) or a list
+    of department names or keys, stored as keys. VAIC and the Orchestrator always see it."""
+    if v == "all":
+        return []
+    if not isinstance(v, list) or not v or len(v) > 50 or not all(isinstance(x, str) and x.strip() for x in v):
+        raise KnowledgeError('Departments must be "all" or a list of department names.')
+    return list(dict.fromkeys(canonical(x)[:64] for x in v))
+
+
 def check_folder(v: Any) -> str:
     """The folder a dropped file came from ("tax/Sweden"), a hint for detecting where it holds."""
     if not isinstance(v, str):
@@ -81,6 +92,7 @@ def updated_event(item: dict[str, Any]) -> dict[str, Any]:
         "title": item.get("title", ""),
         "scope": item["scope"],
         "kind": item["kind"],
+        "departments": list(item.get("departments") or []),
     }
     if item.get("error"):
         e["error"] = item["error"]
@@ -268,6 +280,10 @@ class KnowledgeService:
             patch["title"] = check_title(b["title"])
         if b.get("scope") is not None:
             patch["scope"] = check_scope(b["scope"])
+        if b.get("departments") is not None:
+            if item.get("entry_id") or item.get("department"):
+                raise KnowledgeError("A department's own document stays with its department.")
+            patch["departments"] = check_departments(b["departments"])
         try:
             meta = clean_metadata(b, partial=True)
         except MetadataError as e:

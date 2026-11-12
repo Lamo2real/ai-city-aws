@@ -130,14 +130,19 @@ def caller_filter(caller: Caller | None) -> dict[str, Any] | None:
 def entry_visible(item: dict[str, Any], caller: Caller | None) -> bool:
     """The record decides: an item of a department is visible only to that department's agents, and to VAIC and the
     Orchestrator, who see every department; a ``shared`` entry to every department's agents and to VAIC and the
-    Orchestrator (never to the executives, who have no department)."""
+    Orchestrator (never to the executives, who have no department). The owner's own item with ``departments``
+    reaches only those departments' agents, and VAIC and the Orchestrator."""
     c = caller or Caller()
     dept = item.get("department")
+    # The owner's own document may be for some departments only (decision 266); none listed is every department.
+    picked = [str(x) for x in item.get("departments") or []]
     if c.every_department:
-        if c.department and dept != c.department:  # narrowed: that department's entries only
+        if c.department and dept != c.department and c.department not in picked:  # narrowed to one department
             return False
-    elif dept and dept != c.department and not (dept == SHARED and c.department):
-        return False
+    else:
+        other = bool(dept) and dept != c.department and not (dept == SHARED and c.department)
+        if other or (picked and c.department not in picked):
+            return False
     if not item.get("entry_id"):
         return not c.has_entry_filters()  # the owner's own items carry no domain, platform or type
     if item.get("deleted") or item.get("retired") or item.get("audience") not in c.audiences():
@@ -522,9 +527,12 @@ async def search_markets(
     return "\n".join(parts)
 
 
-async def always_block(store: KnowledgeStore) -> str:
-    """The ``always`` summaries for every role's prompt, inside the 8,000-token budget, oldest first."""
+async def always_block(store: KnowledgeStore, caller: Caller | None = None) -> str:
+    """The ``always`` summaries for every role's prompt, inside the 8,000-token budget, oldest first; an item for
+    some departments only goes to those departments' agents (and VAIC and the Orchestrator)."""
     inside, _ = await store.always_items()
+    if caller is not None and not caller.every_department:
+        inside = [i for i in inside if not i.get("departments") or caller.department in i["departments"]]
     if not inside:
         return ""
     blocks = "\n".join(knowledge_block(i, str(i["summary"])) for i in inside)

@@ -21,8 +21,8 @@ import re
 from typing import Any
 
 from vaic.lambdas.skills_api import prepare as prepare_skill
+from vaic.shared import dept_pick, owner_api, skills_catalog
 from vaic.shared import executives as execs
-from vaic.shared import owner_api, skills_catalog
 from vaic.shared.ad_spend import AdLimitStore
 from vaic.shared.caps import SETTING_KEYS, settings_patch
 from vaic.shared.events import now_iso
@@ -70,6 +70,17 @@ NOT_A_SETTING = (
 )
 
 
+RECOMMEND = {
+    "type": "array",
+    "maxItems": 4,
+    "items": {
+        "type": "object",
+        "properties": {"name": {"type": "string", "maxLength": 60}, "why": {"type": "string", "maxLength": 80}},
+        "required": ["name"],
+    },
+}
+"""VAIC's recommended departments, each with a few words why (decision 266)."""
+
 DRAFT_MAX_BYTES = 48_000
 """A skill VAIC writes in the chat stays readable beside it; bigger ones are uploaded on the Skills page."""
 
@@ -97,6 +108,12 @@ def _per(r: dict[str, Any]) -> str:
     return "a day" if r.get("per") == "day" else "per campaign"
 
 
+def _picker_depts(picker: dict[str, Any]) -> list[dept_pick.Dept]:
+    """The card's departments, with every name the owner may use for a pre-configured one."""
+    presets = {x.key: x for x in dept_pick.choices()}
+    return [presets.get(x["key"]) or dept_pick.Dept(x["key"], x["name"], (x["name"],)) for x in picker["choices"]]
+
+
 def _norm(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
 
@@ -117,6 +134,7 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         question, options = SAVE_QUESTION, ["Yes", "No"]
         title, lines, detail = summary or f"{method} {p}", [], ""
         preview: dict[str, Any] | None = None
+        picker: dict[str, Any] | None = None
         if card is None and method == "POST" and p == "/skills":
             # A skill written in the chat: checked now with the save's own rules (decision 257).
             built_or_why = await drafted(body)
@@ -127,6 +145,7 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             title, lines, detail = card["title"], card["lines"], card.get("detail", "")
             question, options = card["question"], card["options"]
             preview = card.get("skill")
+            picker = card.get("departments")
         elif method == "PUT" and p == "/settings":
             given = body or {}
             unknown = [k for k in given if k not in SETTING_KEYS or k == "first_run_done"]
@@ -167,7 +186,7 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             e = skills_catalog.find(m.group(1))
             if e is None:
                 return "That skill is not in the catalog. Use find_skill with the owner's words."
-            built = skill_card(e, body)
+            built = await skill_card(e, body)
             title, lines, detail, question, options = (
                 built["title"],
                 built["lines"],
@@ -189,6 +208,7 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 "title": title,
                 "lines": lines,
                 "at": now_iso(d.ledger.now()),
+                **({"picker_json": json.dumps(picker)} if picker else {}),
             }
         )
         staged_now.append(pid)
@@ -203,9 +223,24 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 "lines": [x[:200] for x in lines][:12],
                 "detail": detail[:300],
                 **({"skill": preview} if preview else {}),
+                **({"departments": picker} if picker else {}),
+                **({"knowledge": card["knowledge"]} if card and card.get("knowledge") else {}),
             }
         )
         said = "; ".join(lines) if lines else title
+        if picker:
+            depts = [dept_pick.Dept(x["key"], x["name"]) for x in picker["choices"]]
+            said += f"; recommended for {dept_pick.names(picker['selected'], depts)}"
+            return (
+                f"Staged, NOT saved yet: {title} ({said}). The owner sees it with every department as a choice, "
+                "the recommended ones already picked, and Add / No. Now say in one or two short sentences which "
+                f'departments you recommend and why, and ask "{question}" and which departments it should be for. '
+                "Their answer may "
+                'be a tap on Add, or words: "all", "all except Sales and Legal", "just Finance". When they change '
+                "the departments without saying add, call choose_departments with their words; when they say add "
+                "or yes (with or without departments), call save_change with answer yes: it reads their departments "
+                "itself. On no, answer no."
+            )
         return (
             f"Staged, NOT saved yet: {title} ({said}). The owner sees it with {options[0]} / {options[1]} buttons. "
             f'Now say what will change in one short sentence, ask "{question}" and stop. On the owner\'s yes '
@@ -230,11 +265,14 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             )
         text = {p: v.decode("utf-8", "replace") for p, v in files.items()}
         old = await d.ledger.table.get(SKILLS_PK, skill_sk(name))
-        checked: dict[str, Any] = {
+        checked: dict[str, Any] = {  # ``departments`` is added on the owner's yes, from their pick
             "files": [{"path": p, "content_base64": base64.b64encode(v).decode()} for p, v in sorted(files.items())],
             **({"roles": roles} if roles else {}),
         }
         who = f"For: {', '.join(roles)}." if roles else ("Same roles as now." if old else "For every role.")
+        picker = await pick_card(
+            b.get("recommend"), f"{name} {description} {text['SKILL.md'][:3000]}", (old or {}).get("departments")
+        )
         extra = sorted(p for p in text if p != "SKILL.md")
         dropped = f" Removed from the frontmatter: {', '.join(removed)}." if removed else ""
         card = {
@@ -243,6 +281,7 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             "detail": " ".join(x for x in (who, f"Also: {', '.join(extra)}." if extra else "", dropped) if x),
             "question": "Save this new version?" if old else "Add this skill?",
             "options": ["Save", "Not now"] if old else ["Add", "Not now"],
+            "departments": picker,
             "skill": {
                 "name": name,
                 "description": description,
@@ -252,6 +291,15 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             },
         }
         return checked, card
+
+    async def pick_card(given: Any, text: str, current: Any = None) -> dict[str, Any]:
+        """Every department, VAIC's recommendation (checked; a fallback from the words when none), and the selection:
+        what the skill or document has now when it has departments, else the recommended ones (decision 266)."""
+        depts = dept_pick.choices(await d.ledger.list_departments())
+        recs = dept_pick.recommended(given, text, depts)
+        known = {x.key for x in depts}
+        now = [k for k in current or [] if k in known] if isinstance(current, list) else []
+        return dept_pick.card(depts, recs, now or [k for k, _ in recs])
 
     async def draft_skill(a: dict[str, Any]) -> str:
         if not c.from_owner:
@@ -271,9 +319,11 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 files.append({"path": str(f.get("path") or ""), "content_base64": base64.b64encode(content).decode()})
         roles = a.get("roles")
         req: dict[str, Any] = {"files": files, **({"roles": roles} if isinstance(roles, list) and roles else {})}
+        if a.get("departments"):
+            req["recommend"] = a["departments"]
         return await stage("POST", "/skills", req, "")
 
-    def skill_card(e: dict[str, Any], body: dict[str, Any] | None) -> dict[str, Any]:
+    async def skill_card(e: dict[str, Any], body: dict[str, Any] | None, given: Any = None) -> dict[str, Any]:
         roles = (body or {}).get("roles")
         who = f"For: {', '.join(map(str, roles))}." if isinstance(roles, list) and roles else "For every role."
         depts = ", ".join(e.get("departments") or [])
@@ -283,6 +333,10 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             "detail": " ".join(x for x in (e.get("source", ""), f"({depts})" if depts else "", who) if x),
             "question": "Add this skill?",
             "options": ["Add", "Not now"],
+            "departments": await pick_card(
+                given or [{"name": x} for x in e.get("departments") or []][: dept_pick.MAX_RECOMMENDED],
+                f"{e['name']} {e['title']} {e['description']}",
+            ),
         }
 
     async def call(a: dict[str, Any]) -> str:
@@ -319,6 +373,26 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             await d.bus.put({"type": "vaic.change", "conversation": conv, "id": row["id"], "saved": False})
             return f"Discarded, nothing changed: {row['title']}. Say so in one short sentence."
         body = json.loads(row["body_json"]) if row.get("body_json") else None
+        picker = json.loads(row["picker_json"]) if row.get("picker_json") else None
+        if picker:
+            depts = _picker_depts(picker)
+            said = " ".join(x for x in (c.owner_text, str(a.get("departments") or "")) if x)
+            sel = dept_pick.parse(said, depts, picker["selected"]) if said else None
+            sel = picker["selected"] if sel is None else sel
+            if sel != dept_pick.ALL and not sel:
+                await d.ledger.table.put(row)  # still waiting
+                return (
+                    "Not saved: no department is picked. Ask the owner which departments it should be for (the "
+                    "chips on the card, or in words) and stop."
+                )
+            all_keys = [x["key"] for x in picker["choices"]]
+            sel = dept_pick.ALL if sel == dept_pick.ALL or set(sel) >= set(all_keys) else sel
+            body = {**(body or {}), "departments": sel if sel == dept_pick.ALL else list(sel)}
+            body.pop("recommend", None)
+            await d.bus.put(
+                {"type": "vaic.departments", "conversation": conv, "id": row["id"],
+                 "selected": all_keys if sel == dept_pick.ALL else list(sel)}
+            )  # fmt: skip
         if row["method"] == "HUD":  # the owner's device: light, dark or system
             value = (body or {}).get("value")
             await d.bus.put({"type": "hud.action", "action": "theme", "value": value, "conversation": conv})
@@ -330,6 +404,24 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             status=int(r.get("statusCode", 500)), detail="" if ok else str(r.get("body") or "")[:300])  # fmt: skip
         await d.bus.put({"type": "vaic.change", "conversation": conv, "id": row["id"], "saved": ok})
         head = "Saved" if ok else "Not saved, the city refused it"
+        if ok and picker:
+            who = dept_pick.names(body["departments"] if body else None, [
+                dept_pick.Dept(x["key"], x["name"]) for x in picker["choices"]
+            ])  # fmt: skip
+            if row.get("knowledge_item"):
+                item = await d.knowledge.store.get_item(row["knowledge_item"]) if d.knowledge else None
+                ready = (item or {}).get("status") == "ready"
+                return (
+                    f"Saved: {row['title']}, for {who}. Say in one short sentence: "
+                    + (
+                        f'"Done, it\'s knowledge for {who} now."'
+                        if ready
+                        else f"\"I'll add it as knowledge for {who}, and it'll be ready in a minute or two.\" The "
+                        "chat card says when it's ready."
+                    )
+                    + " Never say indexing, RAG, vectors or graph."
+                )
+            return f"{head}: {row['title']}, for {who}. Say who can use it now in one short sentence."
         return f"{head}: {row['title']}. " + owner_api.summarise(r, cap=1500)
 
     async def find_skill(a: dict[str, Any]) -> str:
@@ -351,7 +443,8 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 return f"The owner already has the skill {e['title']} ({e['name']}). Nothing to add; say so."
             roles = a.get("roles")
             body: dict[str, Any] = {"roles": roles} if isinstance(roles, list) and roles else {}
-            return await stage("POST", f"/skills/catalog/{e['name']}", body, "", skill_card(e, body))
+            card = await skill_card(e, body, a.get("departments"))
+            return await stage("POST", f"/skills/catalog/{e['name']}", body, "", card)
         top = found[:5]
         await d.bus.put(
             {
@@ -369,6 +462,73 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             f"{len(found)} skills fit: {listing}.{more} Their titles are on the owner's screen as choices. Ask which "
             "one in one short sentence and stop; when they pick, call find_skill again with that title."
         )
+
+    async def choose(a: dict[str, Any]) -> str:
+        if not c.from_owner:
+            return NOT_OWNER
+        row = await d.ledger.table.get(PENDING_PK, conv)
+        picker = json.loads(row["picker_json"]) if row and row.get("picker_json") else None
+        if not row or not picker:
+            return "Nothing with departments is waiting. Stage the skill or the knowledge first."
+        depts = _picker_depts(picker)
+        words = str(a.get("words") or "") or c.owner_text
+        sel = dept_pick.parse(words, depts, picker["selected"])
+        if sel is None:
+            return (
+                "Their words name no department. Ask which departments, in one short sentence, and stop. The "
+                "departments are: " + ", ".join(x["name"] for x in picker["choices"]) + "."
+            )
+        keys = [x["key"] for x in picker["choices"]]
+        picked = keys if sel == dept_pick.ALL else [k for k in keys if k in sel]
+        picker["selected"] = picked
+        await d.ledger.table.put({**row, "picker_json": json.dumps(picker)})
+        await d.bus.put({"type": "vaic.departments", "conversation": conv, "id": row["id"], "selected": picked})
+        who = dept_pick.names(picked, [dept_pick.Dept(x["key"], x["name"]) for x in picker["choices"]])
+        return (
+            f"Picked on the owner's card: {who}. Nothing is saved yet. Say who it's for now in one short sentence and "
+            "ask whether to add it; on their yes call save_change with answer yes."
+        )
+
+    async def add_knowledge(a: dict[str, Any]) -> str:
+        if not c.from_owner:
+            return NOT_OWNER
+        k = d.knowledge
+        if not k:
+            return "The knowledge base is not set up yet."
+        want = str(a.get("item") or "").strip()
+        items = await k.store.list_items(200)
+        own = [i for i in items if not i.get("entry_id") and not i.get("builtin") and not i.get("department")]
+        item = next((i for i in own if i["id"] == want), None)
+        if item is None and want:
+            n = _norm(want)
+            item = next((i for i in own if _norm(str(i.get("title") or "")) == n), None) or next(
+                (i for i in own if n and n in _norm(str(i.get("title") or ""))), None
+            )
+        if item is None:
+            if not want and own:
+                item = own[0]  # newest first: what the owner just attached
+            else:
+                return (
+                    "That document isn't in the owner's knowledge yet. If they meant to attach a file, ask them to "
+                    "attach it to a message (the + button, or drop it on the chat) and say again."
+                )
+        title = str(item.get("title") or "this document")
+        text = f"{title} {item.get('summary') or ''} {' '.join(str(x) for x in item.get('topic') or [])}"
+        picker = await pick_card(a.get("departments"), text, item.get("departments"))
+        card = {
+            "title": f"Add “{title[:80]}” as knowledge",
+            "lines": [],
+            "detail": "",
+            "question": "Add it as knowledge for these departments?",
+            "options": ["Add", "No"],
+            "departments": picker,
+            "knowledge": {"id": item["id"], "title": title[:200], "status": item.get("status") or "processing"},
+        }
+        out = await stage("PUT", f"/knowledge/{item['id']}", {}, "", card)
+        row = await d.ledger.table.get(PENDING_PK, conv)
+        if row:
+            await d.ledger.table.put({**row, "knowledge_item": item["id"]})
+        return out
 
     async def hud(a: dict[str, Any]) -> str:
         if not c.from_owner:
@@ -504,8 +664,10 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             "save_change",
             "Save or discard the change you staged with city_api, find_skill or draft_skill, on the owner's answer in their new "
             "message: answer yes when they said yes, save, add, go ahead or tapped Yes / Add; no when they said no, "
-            "cancel, not now or tapped No / Not now. Never in the same turn you staged it.",
-            _obj({"answer": {"type": "string", "enum": ["yes", "no"]}}),
+            "cancel, not now or tapped No / Not now. Never in the same turn you staged it. For a skill or knowledge "
+            'with departments it reads the owner\'s departments from their own message ("add it for all except Legal"); '
+            "departments: only when they said them in an earlier message.",
+            _obj({"answer": {"type": "string", "enum": ["yes", "no"]}, "departments": _s(0, 300)}, ("departments",)),
             save,
             step=lambda a: "Saving the change" if a.get("answer") == "yes" else "Discarding the change",
         ),
@@ -520,8 +682,9 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                     "query": _s(1, 100),
                     "department": _s(0, 60),
                     "roles": {"type": "array", "items": _s(1, 40)},
+                    "departments": RECOMMEND,
                 },
-                ("department", "roles"),
+                ("department", "roles", "departments"),
             ),
             find_skill,
             step=lambda a: f"Looking for the skill {str(a.get('query') or '')[:40]}",
@@ -536,7 +699,9 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             "clear steps, rules and examples); roles: who gets it (vaic, orchestrator, manager, worker), every role "
             "when not said; files: extra text files only when the skill needs them. To change a skill, GET "
             "/skills/<name> with city_api, then draft_skill the whole new version under the same name. When the "
-            "owner asks for changes, call it again: the new draft replaces the shown one.",
+            "owner asks for changes, call it again: the new draft replaces the shown one. departments: the few "
+            "departments it fits, each with a few words why (a Python skill: Application, IT Infrastructure, Data & "
+            "AI); never every department. The owner picks on the card; save_change saves it for their pick.",
             _obj(
                 {
                     "name": _s(1, 64),
@@ -550,11 +715,33 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                         "type": "array",
                         "items": _obj({"path": _s(1, 200), "content": _s(0, DRAFT_MAX_BYTES)}),
                     },
+                    "departments": RECOMMEND,
                 },
-                ("roles", "files"),
+                ("roles", "files", "departments"),
             ),
             draft_skill,
             step=lambda a: f"Writing the skill {str(a.get('name') or '')[:40]}",
+        ),
+        ToolSpec(
+            "choose_departments",
+            'Change which departments the waiting skill or knowledge is for, from the owner\'s words ("all", "all '
+            'except Sales and Legal", "just Finance", "also Sales", "not Legal"), when they haven\'t said add '
+            "yet. words: what they said. The card on their screen updates; nothing is saved.",
+            _obj({"words": _s(1, 300)}, ()),
+            choose,
+            step=lambda a: "Picking departments",
+        ),
+        ToolSpec(
+            "add_as_knowledge",
+            "When the owner asks to add a document they attached (or one already in their knowledge) as knowledge "
+            '("add this to the knowledge base", "use this for finance", "remember this PDF"): shows a card '
+            "with every department, your recommended ones picked, and Add / No. item: its title as attached (or its "
+            "id); leave it out for the file they just attached. departments: the few it fits from its title and "
+            "what it's about, each with a few words why; never every department. Plain words only: never say RAG, "
+            "indexing, vectors or graph.",
+            _obj({"item": _s(0, 200), "departments": RECOMMEND}, ("item", "departments")),
+            add_knowledge,
+            step=lambda a: "Getting it ready to add as knowledge",
         ),
         ToolSpec(
             "hud_action",
