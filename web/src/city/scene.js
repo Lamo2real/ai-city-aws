@@ -4,7 +4,7 @@
 // Reviewer; each department's manager stands at its door; panels are React (see CityView.tsx).
 // The City View: a small game world of the agents, drawn pixel by pixel on a canvas from city-state.js.
 // All of the art is drawn here in code. Every person on screen is a real agent; only the scenery moves on its own.
-import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, lotsMemory, readLotsMemory, footbridges, PITCH_X, PITCH_Y, BLOCK_W, BLOCK_H, blockOf, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf, taxiCall, RIDE_PX_S, TO_WORK_BOOST, HOMES_PER_BLOCK } from "./city-state.js";
+import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, lotsMemory, readLotsMemory, footbridges, PITCH_X, PITCH_Y, BLOCK_W, BLOCK_H, blockOf, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, carryTraffic, WARM_MS, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf, taxiCall, RIDE_PX_S, TO_WORK_BOOST, HOMES_PER_BLOCK } from "./city-state.js";
 
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const INK = "#1d1c36";
@@ -411,7 +411,9 @@ function sidewalk(g, X, Y, W, gaps, seed) {
   }
   if (x < X + W) paving(g, x, Y, X + W - x, 8, WALK, "#65617c", `${seed}${x}`);
 }
-function street(g, x0, x1, y, seed, avenues, joins = []) { // tiles; joins: [{ x, north, south }] avenues meeting it
+// `ends` (decision 267): an end that stops at a crossing (a T or a corner) rather than running off the map gets the
+// avenue's outer pavement across it, so the carriageway never pokes out past the avenue into the grass.
+function street(g, x0, x1, y, seed, avenues, joins = [], ends = { w: false, e: false }) { // tiles; joins: [{ x, north, south }] avenues meeting it
   const X = x0 * TILE, W = (x1 - x0) * TILE, Y = y * TILE, H = 3 * TILE;
   const gap = (j) => [j.x * TILE + 8, j.x * TILE + 40];
   sidewalk(g, X, Y, W, joins.filter((j) => j.north).map(gap), `${seed}n`);
@@ -419,6 +421,8 @@ function street(g, x0, x1, y, seed, avenues, joins = []) { // tiles; joins: [{ x
   roadH(g, X, Y + 8, W, H - 16, seed);
   for (let dx = 4; dx < W; dx += 20) R(g, X + dx, Y + H / 2 - 1, 10, 2, "#b9a45a");
   for (const a of avenues) if (a >= x0 && a < x1) for (let k = 0; k < 4; k++) R(g, (a + 3) * TILE + 2, Y + 11 + k * 7, 8, 4, "#cfcfd6"); // a crossing beside each junction
+  if (ends.w) paving(g, X, Y, 8, H, WALK, "#65617c", `${seed}cw`);
+  if (ends.e) paving(g, X + W - 8, Y, 8, H, WALK, "#65617c", `${seed}ce`);
 }
 function avenue(g, x, y0, y1, seed) { // tiles
   const X = x * TILE, Y = y0 * TILE, H = (y1 - y0) * TILE, W = 3 * TILE;
@@ -433,11 +437,14 @@ function avenue(g, x, y0, y1, seed) { // tiles
 function junctionMarks(g, j) {
   const { cx, cy } = j, s = STOP_AT, LINE = "#e8e6f0";
   const teeth = (x, y, w, h) => { for (let k = 0; k < Math.max(w, h); k += 4) R(g, x + (w > h ? k : 0), y + (w > h ? 0 : k), w > h ? 2 : w, w > h ? h : 2, LINE); };
+  const arm = j.arms ?? { w: true, e: true, n: true, s: true }; // paint only on the roads that come in (decision 267)
   if (j.kind === "light") {
-    R(g, cx - s - 2, cy, 2, 16, LINE); R(g, cx + s, cy - 16, 2, 16, LINE); // eastbound, westbound
-    R(g, cx - 16, cy - s - 2, 16, 2, LINE); R(g, cx, cy + s, 16, 2, LINE); // southbound, northbound
+    if (arm.w) R(g, cx - s - 2, cy, 2, 16, LINE); if (arm.e) R(g, cx + s, cy - 16, 2, 16, LINE); // eastbound, westbound
+    if (arm.n) R(g, cx - 16, cy - s - 2, 16, 2, LINE); if (arm.s) R(g, cx, cy + s, 16, 2, LINE); // southbound, northbound
   } else if (j.kind === "giveway") {
-    teeth(cx - s - 2, cy, 2, 16); teeth(cx + s, cy - 16, 2, 16);
+    // Teeth where traffic gives way: the street's two approaches, or at a T where the street runs on, the avenue's one.
+    if (arm.w && arm.e && !(arm.n && arm.s)) { if (arm.n) teeth(cx - 16, cy - s - 2, 16, 2); if (arm.s) teeth(cx, cy + s, 16, 2); }
+    else { if (arm.w) teeth(cx - s - 2, cy, 2, 16); if (arm.e) teeth(cx + s, cy - 16, 2, 16); }
   } else if (j.kind === "roundabout") {
     // Twice the old size (decision 252): the ring road around RING_R (40), a kerb outside it, a planted island inside.
     const O = 52, I = 26;
@@ -810,24 +817,26 @@ function bake(world, skip = new Map(), { now = Date.now(), grow = true } = {}) {
   g.translate(M - L, M - T);
   lawn(g, L - M, T - M, W - L + M * 2, H - T + M * 2, "lawn");
   const top = (world.top ?? 0) - MARGIN, bottom = world.height + MARGIN; // every avenue runs on off the map
+  // A built block is city, not forest: paved from road to road, its tower on it (the owner: "it should still feel
+  // like a city", decision 259). Paved first, so the roads and a roundabout's ring lie over its corners (decision 267).
+  const paved = world.buildings.map((b) => { const [c, r] = blockOf(b.slot); return { x: c * PITCH_X, y: r * PITCH_Y, w: BLOCK_W, h: BLOCK_H, seed: `blk${c},${r}` }; });
+  for (const p of paved) paving(g, p.x * TILE, p.y * TILE, p.w * TILE, p.h * TILE, CITY_GROUND, "#5e5a74", p.seed);
   // The avenue east of HQ and the other avenues, each as long as it runs.
   const verticals = [{ x: world.avenue, y0: top, y1: bottom }, ...(world.lanes ?? [])];
   for (const v of verticals) avenue(g, v.x, v.y0, v.y1, `ave${v.x},${v.y0}`);
-  const roads = world.streets.map((s) => ({ ...s, x0: s.x0 <= (world.left ?? 0) ? (world.left ?? 0) - MARGIN : s.x0, x1: s.x1 >= world.width ? world.width + MARGIN : s.x1 }));
+  // Only the street between HQ and the homes runs on off the map; every other street ends at a crossing (decision 267).
+  const roads = world.streets.map((s) => (s.y === world.hqStreet ? { ...s, x0: (world.left ?? 0) - MARGIN, x1: world.width + MARGIN, off: true } : s));
   const js = junctions(world), round = new Set(js.filter((j) => j.kind === "roundabout").map((j) => `${j.cx},${j.cy}`));
   // Each street's crossings: the avenues that reach it there (decision 259: roads only where the town is).
   const crossings = (s) => verticals.filter((v) => v.y0 <= s.y - 1 && v.y1 >= s.y + 4 && v.x >= s.x0 && v.x + 3 <= s.x1).map((v) => v.x);
   const joins = (s) => verticals.filter((v) => v.y0 <= s.y + 3 && v.y1 >= s.y && v.x >= s.x0 && v.x + 3 <= s.x1).map((v) => ({ x: v.x, north: v.y0 < s.y, south: v.y1 > s.y + 3 }));
-  for (const s of roads) street(g, s.x0, s.x1, s.y, `st${s.y}`, crossings(s).filter((a) => !round.has(`${(a + 1.5) * TILE},${(s.y + 1.5) * TILE}`)), joins(s));
+  for (const s of roads) street(g, s.x0, s.x1, s.y, `st${s.y}`, crossings(s).filter((a) => !round.has(`${(a + 1.5) * TILE},${(s.y + 1.5) * TILE}`)), joins(s), { w: !s.off, e: !s.off });
   for (const j of js) junctionMarks(g, j);
   // Trees wherever nothing else stands, far to near.
   // An empty lot is forest (decision 259); only one whose tower is coming down right now keeps clear for the wrecking ball.
   const wrecking = world.lots.filter((l) => l.demolished && skip.has(l.demolished));
-  // A built block is city, not forest: paved from road to road, its tower on it (the owner: "it should still feel
-  // like a city", decision 259).
-  const paved = world.buildings.map((b) => { const [c, r] = blockOf(b.slot); return { x: c * PITCH_X, y: r * PITCH_Y, w: BLOCK_W, h: BLOCK_H, seed: `blk${c},${r}` }; });
-  for (const p of paved) paving(g, p.x * TILE, p.y * TILE, p.w * TILE, p.h * TILE, CITY_GROUND, "#5e5a74", p.seed);
-  const taken = [world.hq, ...world.buildings, ...wrecking, ...paved, world.homes, ...roads.map((s) => ({ x: s.x0, y: s.y, w: s.x1 - s.x0, h: 3 })), ...verticals.map((v) => ({ x: v.x, y: v.y0, w: 3, h: v.y1 - v.y0 }))];
+  const rings = js.filter((j) => j.kind === "roundabout").map((j) => ({ x: j.cx / TILE - 3.5, y: j.cy / TILE - 3.5, w: 7, h: 7 })); // no tree on a ring
+  const taken = [world.hq, ...world.buildings, ...wrecking, ...paved, ...rings, world.homes, ...roads.map((s) => ({ x: s.x0, y: s.y, w: s.x1 - s.x0, h: 3 })), ...verticals.map((v) => ({ x: v.x, y: v.y0, w: 3, h: v.y1 - v.y0 }))];
   const clear = (x, y) => taken.every((t) => x < (t.x * TILE) - 12 || x > (t.x + t.w) * TILE + 12 || y < t.y * TILE - 2 || y > (t.y + t.h) * TILE + 34);
   // Each tree has its own spot on a fixed grid, the same on every map whatever its size (decision 248): a new tower or
   // row only clears the trees where it stands, and no other tree moves. About one tree to 3000 square pixels.
@@ -983,8 +992,9 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       bridges = footbridges(world); root._bridges = bridges; // for tests
       const roads = JSON.stringify([world.streets, world.lanes, world.avenue, world.left, world.top, world.width, world.height]);
       if (roads !== trafficSig) {
-        // The roads changed: traffic starts afresh on them, the lights keep their clock.
-        const t = traffic?.t ?? 0; traffic = createTraffic(world); traffic.t = t; trafficSig = roads; root._traffic = traffic;
+        // The roads changed: the cabs out on the old roads drive on along the new ones from where they are, and the
+        // lights keep their clock (decision 267). The first time, the town opens with its cabs already out.
+        traffic = traffic ? carryTraffic(createTraffic(world), traffic) : createTraffic(world, "traffic", undefined, { warmMs: WARM_MS }); trafficSig = roads; root._traffic = traffic;
         root.dataset.signals = String(traffic.junctions.filter((j) => j.kind === "light").length);
         root.dataset.roundabouts = String(traffic.junctions.filter((j) => j.kind === "roundabout").length);
         root._signals = () => traffic.junctions.filter((j) => j.kind === "light").map((j) => ({ id: j.id, ...signalAt(j, traffic.t) })); // for tests
@@ -1754,7 +1764,8 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     for (const j of traffic.junctions) {
       if (j.kind !== "light") continue;
       const sig = signalAt(j, traffic.t), s = STOP_AT, k = JUNCTION_HALF - 3;
-      for (const [dx, dy, axis] of [[-s + 2, k, "x"], [s - 2, -k + 4, "x"], [-k, -s + 2, "y"], [k, s + 4, "y"]]) {
+      for (const [dx, dy, axis, arm] of [[-s + 2, k, "x", "w"], [s - 2, -k + 4, "x", "e"], [-k, -s + 2, "y", "n"], [k, s + 4, "y", "s"]]) {
+        if (j.arms && !j.arms[arm]) continue; // no light on a road that isn't there
         const x = j.cx + dx - ox, y = j.cy + dy - oy;
         if (x > -10 && x < w + 10 && y > -30 && y < h + 10) signalHead(ctx, x, y, sig[axis]);
       }

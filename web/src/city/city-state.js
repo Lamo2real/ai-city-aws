@@ -1070,8 +1070,8 @@ export function bikeSpeed(route, from) {
   return Math.max(BIKE_PX_S, len / (BIKE_LEG_MS / 1000));
 }
 
-// A cab's opacity: it fades in over the last stretch before a lane's end and out over the same stretch after it,
-// so it never appears or vanishes in the middle of a road.
+// A cab's opacity: it fades in over the last stretch of road at the map's faded border and out over the same
+// stretch on its way off it, so it never appears or vanishes in the middle of a road (decision 267: only at the edge).
 export const CAB_FADE_PX = 6 * TILE;
 export function edgeAlpha(pos, from, to) {
   return Math.max(0, Math.min(1, Math.min(pos - from, to - pos) / CAB_FADE_PX));
@@ -1130,18 +1130,23 @@ export function throughRoads(world) {
   return [{ x: world.avenue, y0: top, y1: world.height + MAP_MARGIN }, ...(world.lanes ?? [])]; // every avenue carries cabs (decision 259)
 }
 // Each street has two lanes, westbound above the centre line and eastbound below it; each through road has two,
-// southbound on the left and northbound on the right. Every lane runs out through the countryside to the map's
-// faded border, so a cab arrives from beyond the edge and drives off beyond it.
+// southbound on the left and northbound on the right. A road either runs out through the countryside to the map's
+// faded border (`off0`/`off1`: that end is off the map), where cabs arrive from beyond the edge and drive off beyond
+// it, or ends at a crossing (a T or a corner), where its lanes end at the crossing's centre and a cab turns onto the
+// other road (decision 267). No lane ends anywhere else.
 export function streetLanes(world) {
   const M = MAP_MARGIN * TILE, L = world.left ?? 0, x0 = L * TILE - M, x1 = world.width * TILE + M;
-  return world.streets.map((s) => ({ y0: s.y * TILE + 17, y1: s.y * TILE + 33, x0: s.x0 <= L ? x0 : s.x0 * TILE + T_END_PX, x1: s.x1 >= world.width ? x1 : s.x1 * TILE - T_END_PX }));
+  return world.streets.map((s) => {
+    const off0 = s.y === world.hqStreet, off1 = off0; // only the street between HQ and the homes runs off the map
+    return { y0: s.y * TILE + 17, y1: s.y * TILE + 33, x0: off0 ? x0 : (s.x0 + STREET / 2) * TILE, x1: off1 ? x1 : (s.x1 - STREET / 2) * TILE, off0, off1 };
+  });
 }
-// A road that ends at a T (decision 259: roads only where the town is) carries its cabs to just short of the
-// crossing, where they fade out (and fade in on the way back), clear of any roundabout there.
-export const T_END_PX = 72;
 export function avenueLanes(world) {
   const top = (world.top ?? 0) - MAP_MARGIN, bottom = world.height + MAP_MARGIN;
-  return throughRoads(world).map((r) => ({ x0: r.x * TILE + 18, x1: r.x * TILE + 30, y0: r.y0 * TILE + (r.y0 <= top ? 0 : T_END_PX), y1: r.y1 * TILE - (r.y1 >= bottom ? 0 : T_END_PX) }));
+  return throughRoads(world).map((r) => {
+    const off0 = r.y0 <= top, off1 = r.y1 >= bottom;
+    return { x0: r.x * TILE + 18, x1: r.x * TILE + 30, y0: off0 ? r.y0 * TILE : (r.y0 + STREET / 2) * TILE, y1: off1 ? r.y1 * TILE : (r.y1 - STREET / 2) * TILE, off0, off1 };
+  });
 }
 // Every crossing of a street and a through road. What each one is follows from where it is, never from how big the
 // town is (decision 252), so a new tower, a demolished one or a new road never changes a crossing: lights at the six
@@ -1162,13 +1167,20 @@ export function junctionKind(v, h) {
   }
   return "roundabout";
 }
+// Each crossing also says which of its four arms are road (`arms`: w, e, n, s): a T has three, a corner two. A
+// roundabout only ever sits on a crossing with all four (decision 267): its ring needs a road out on every side, so a T
+// or a corner where the seed would put one gives way instead, and becomes the roundabout only once the town has grown
+// the fourth road (roads only grow, so it never turns back).
 export function junctions(world) {
   const roads = throughRoads(world), list = [];
   world.streets.forEach((s, street) => roads.forEach((r, road) => {
     if (r.y0 > s.y || r.y1 < s.y + STREET || s.x0 > r.x || s.x1 < r.x + STREET) return; // both roads reach the crossing
     // The avenue east of block column v and the street south of block row h (decision 250's grid).
     const v = Math.round((r.x - BLOCK_W) / PITCH_X), h = Math.round((s.y - BLOCK_H) / PITCH_Y);
-    list.push({ id: `j${v},${h}`, street, road, v, h, kind: junctionKind(v, h), cx: (r.x + STREET / 2) * TILE, cy: (s.y + STREET / 2) * TILE });
+    const off = s.y === world.hqStreet; // the street between HQ and the homes runs on off the map
+    const arms = { w: s.x0 < r.x || off, e: s.x1 > r.x + STREET || off, n: r.y0 < s.y, s: r.y1 > s.y + STREET };
+    const four = arms.w && arms.e && arms.n && arms.s, kind = junctionKind(v, h);
+    list.push({ id: `j${v},${h}`, street, road, v, h, arms, kind: kind === "roundabout" && !four ? "giveway" : kind, cx: (r.x + STREET / 2) * TILE, cy: (s.y + STREET / 2) * TILE });
   }));
   for (const j of list) if (j.kind === "light") j.offset = hashOf(j.id) % SIGNAL_CYCLE_MS;
   return list;
@@ -1207,15 +1219,23 @@ const lanePoint = (lane, d) => (lane.axis === "x" ? { x: posOf(lane, d), y: lane
 const reach = (vEnd, dist) => Math.sqrt(Math.max(0, vEnd) ** 2 + 2 * BRAKE_PX_S2 * Math.max(0, dist)); // the fastest one can go and still slow to vEnd in dist
 const ringArc = (from, to) => (((from - to) % TAU) + TAU) % TAU * RING_R; // along the ring (angle decreasing: anticlockwise on screen)
 
-export function createTraffic(world, seed = "traffic", rareSeed) {
+// The traffic (decision 267): every cab drives in from beyond the map's edge on a road that runs off it, and out
+// again the same way; nowhere else does one appear or vanish. A road that ends at a T or a corner ends at that
+// crossing, and a cab reaching its end turns onto the other road there (giving way, or on its green) once there is room.
+// A cab that drives off the map comes back in a moment later on one of the roads that run in from the edge.
+// `warmMs` runs the traffic for that long first (from every cab beyond the edge), so the town opens with its cabs
+// already out on the roads.
+export const WARM_MS = 90000;
+export function createTraffic(world, seed = "traffic", rareSeed, { warmMs = 0 } = {}) {
   const M = MAP_MARGIN * TILE, W = world.width * TILE, H = world.height * TILE, lanes = [];
+  // `startOff`: the lane begins off the map (cabs come in on it); `endOff`: it ends off the map (cabs leave on it).
   streetLanes(world).forEach((l, i) => {
-    lanes.push({ id: `e${i}`, axis: "x", dir: 1, at: l.y1, from: l.x0, to: l.x1, street: i });
-    lanes.push({ id: `w${i}`, axis: "x", dir: -1, at: l.y0, from: l.x0, to: l.x1, street: i });
+    lanes.push({ id: `e${i}`, axis: "x", dir: 1, at: l.y1, from: l.x0, to: l.x1, street: i, startOff: l.off0, endOff: l.off1 });
+    lanes.push({ id: `w${i}`, axis: "x", dir: -1, at: l.y0, from: l.x0, to: l.x1, street: i, startOff: l.off1, endOff: l.off0 });
   });
   avenueLanes(world).forEach((l, i) => {
-    lanes.push({ id: `s${i}`, axis: "y", dir: 1, at: l.x0, from: l.y0, to: l.y1, road: i });
-    lanes.push({ id: `n${i}`, axis: "y", dir: -1, at: l.x1, from: l.y0, to: l.y1, road: i });
+    lanes.push({ id: `s${i}`, axis: "y", dir: 1, at: l.x0, from: l.y0, to: l.y1, road: i, startOff: l.off0, endOff: l.off1 });
+    lanes.push({ id: `n${i}`, axis: "y", dir: -1, at: l.x1, from: l.y0, to: l.y1, road: i, startOff: l.off1, endOff: l.off0 });
   });
   const js = junctions(world);
   for (const lane of lanes) {
@@ -1232,23 +1252,65 @@ export function createTraffic(world, seed = "traffic", rareSeed) {
       lane.controls.push(c);
     }
     lane.controls.sort((p, q) => p.dc - q.dc);
+    // A lane that ends at a crossing: the crossing it ends at.
+    lane.endJ = lane.endOff ? null : (lane.controls.find((c) => Math.abs(c.dc - lane.span) < 1)?.j ?? null);
   }
   const cars = [], counts = cabsPerLane(lanes.map((l) => l.span));
   const sim = { world, lanes, junctions: js, cars, guests: [], t: 0, rand: rngOf(seed), margin: M, arrivals: 0, rareRand: rngOf(`rare:${seed}:${rareSeed ?? Math.floor(Math.random() * 2 ** 31)}`) };
-  for (const [li, lane] of lanes.entries()) {
-    const n = counts[li];
-    for (let k = 0; k < n; k++) {
-      const id = `${lane.id}:${k}`;
-      let d = (k * lane.span) / n + (hashOf(id) % Math.max(1, Math.round(lane.span / n / 2)));
-      if (lane.controls.some((c) => Math.abs(d - c.dc) < 70)) d += 140; // never start inside a junction
-      d %= lane.span;
-      const f = 0.88 + (hashOf(`pace:${id}`) % 25) / 100;
-      cars.push({ id, lane, d, v: (d >= lane.townFrom && d <= lane.townTo ? TOWN_PX_S : HIGHWAY_PX_S) * f, f, lap: 0, rare: arrive(sim), commit: null, stopFor: null, ring: null, braking: false });
-    }
+  sim.entries = lanes.filter((l) => l.startOff);
+  // Every cab starts beyond the map's edge, queued on the roads that come in from it.
+  let k = 0;
+  for (const [li, lane] of lanes.entries()) for (let n = 0; n < counts[li]; n++, k++) {
+    const id = `${lane.id}:${n}`, f = 0.88 + (hashOf(`pace:${id}`) % 25) / 100;
+    const car = { id, lane: null, d: 0, v: HIGHWAY_PX_S * f, f, lap: 0, rare: false, commit: null, stopFor: null, ring: null, braking: false };
+    cars.push(car);
+    comeIn(sim, car, sim.entries[k % sim.entries.length]);
   }
+  for (let t = 0; t < warmMs; t += 1000) stepTraffic(sim, 1000);
   return sim;
 }
+// A cab comes in from beyond the edge on `lane` (one that starts off the map), behind the last one queued there.
+function comeIn(sim, car, lane) {
+  const behind = sim.cars.reduce((m, o) => (o !== car && o.lane === lane && !o.ring ? Math.min(m, o.d) : m), Infinity);
+  car.lane = lane; car.ring = null; car.turn = null; car.commit = null; car.stopFor = null; car.next = null; car.decided = null; car.turnedAt = null;
+  car.d = Math.min(0, behind - lane.len - CAR_GAP_PX - 40);
+  car.v = HIGHWAY_PX_S * car.f;
+  car.rare = arrive(sim);
+}
+// Where a cab at the end of `lane` (which ends at crossing `j`) may turn: the other road's lanes leading away from
+// the crossing; back down its own road the other way only if there is nothing else.
+function turnsAt(sim, lane, j) {
+  const away = (l) => { const c = l.controls.find((k) => k.j === j); return c && c.dc < l.span - 1 ? { l, c } : null; };
+  const other = sim.lanes.filter((l) => l.axis !== lane.axis).map(away).filter(Boolean);
+  return other.length ? other : sim.lanes.filter((l) => l !== lane && l.axis === lane.axis && (l.axis === "x" ? l.street === lane.street : l.road === lane.road)).map(away).filter(Boolean);
+}
+// Room on lane `l` at crossing `c` for a cab turning in: nobody in the way just past the turn, nor coming up to it.
+const roomAt = (sim, l, c, self) => !sim.cars.some((o) => o !== self && o.lane === l && !o.ring && o.d > c.dc - 40 && o.d < c.dc + l.len + CAR_GAP_PX + 4);
 const rngOf = (seed) => { let x = hashOf(seed) || 1; return () => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return (x >>> 0) / 4294967296; }; };
+
+// The roads changed (a new tower, decision 267): the new traffic takes over the cabs already out on the old roads, each
+// where it is on the lane that runs the same way through the same spot (every old road is still there: roads only
+// grow), so nothing on screen jumps. Cabs that find no lane, or are more than the new roads carry, go off beyond the
+// edge and come back in; the new roads' extra cabs come in from the edge.
+export function carryTraffic(next, prev) {
+  if (!prev) return next;
+  const keep = [];
+  for (const o of prev.cars) {
+    if (o.ring) {
+      const j = next.junctions.find((k) => k.id === o.ring.j.id && k.kind === "roundabout"), toLane = j && next.lanes.find((l) => l.axis === o.ring.toLane.axis && l.dir === o.ring.toLane.dir && l.at === o.ring.toLane.at && l.controls.some((c) => c.j === j));
+      if (toLane) { keep.push({ ...o, ring: { ...o.ring, j, toLane, toD: toLane.controls.find((c) => c.j === j).exitD }, next: null, decided: null }); continue; }
+    } else if (o.lane && o.d >= 0 && o.d <= o.lane.span) {
+      const p = lanePoint(o.lane, o.d), at = o.lane.axis === "x" ? p.x : p.y;
+      const l = next.lanes.find((k) => k.axis === o.lane.axis && k.dir === o.lane.dir && k.at === o.lane.at && at >= k.from - 0.5 && at <= k.to + 0.5);
+      if (l) { keep.push({ ...o, lane: l, d: dOf(l, at), next: null }); continue; }
+    }
+  }
+  const out = keep.slice(0, next.cars.length);
+  for (const c of next.cars) { if (out.length >= next.cars.length) break; while (out.some((k) => k.id === c.id)) c.id += "'"; out.push(c); }
+  next.cars.splice(0, next.cars.length, ...out);
+  next.t = prev.t;
+  return next;
+}
 
 // Advances the traffic by dtMs (in steps of at most 50 ms; a long pause, a hidden tab, is cut to a second).
 export function stepTraffic(sim, dtMs) {
@@ -1269,7 +1331,9 @@ function tick(sim, dt) {
   // Who is inside a junction's box right now, and on which axis.
   const inBox = (j, axis) => guestInBox(sim, j, axis) || sim.lanes.some((l) => l.axis === axis && l.controls.some((c) => c.j === j && byLane.get(l).some((o) => Math.abs(o.d - c.dc) < JUNCTION_HALF + l.len / 2)));
   // A car on the given axis is in the junction or will be within about two seconds.
-  const approaching = (j, axis) => sim.lanes.some((l) => l.axis === axis && l.controls.some((c) => c.j === j && byLane.get(l).some((o) => o.d > c.dc - JUNCTION_HALF - l.len / 2 - Math.max(20, o.v * 2) && o.d < c.dc + JUNCTION_HALF + l.len / 2)));
+  // (A cab waiting at the end of its road to turn is not coming through until it is over its line: the road it ends
+  // on goes first.)
+  const approaching = (j, axis) => sim.lanes.some((l) => l.axis === axis && l.controls.some((c) => c.j === j && byLane.get(l).some((o) => (l.endJ !== j || o.commit === j.id || o.d > c.dc - STOP_AT - l.len / 2) && o.d > c.dc - JUNCTION_HALF - l.len / 2 - Math.max(20, o.v * 2) && o.d < c.dc + JUNCTION_HALF + l.len / 2)));
   const plans = [];
   for (const lane of sim.lanes) {
     const list = byLane.get(lane);
@@ -1278,7 +1342,7 @@ function tick(sim, dt) {
       const base = (d >= lane.townFrom && d <= lane.townTo ? TOWN_PX_S : HIGHWAY_PX_S) * car.f;
       let cap = base, hold = Infinity;
       if (d < lane.townFrom) cap = Math.min(cap, reach(TOWN_PX_S * car.f, lane.townFrom - d)); // easing off the highway into town
-      const lead = list[i + 1] ?? (list.length > 1 ? list[0] : null), leadD = !lead ? Infinity : list[i + 1] ? lead.d : lead.d + lane.span;
+      const lead = list[i + 1] ?? null, leadD = lead ? lead.d : Infinity;
       if (lead) { const gap = leadD - lead.lane.len / 2 - d - L / 2 - CAR_GAP_PX; cap = Math.min(cap, reach(lead.v, gap)); hold = Math.min(hold, d + Math.max(0, gap)); }
       const ctl = lane.controls.find((c) => (c.j.kind === "roundabout" ? c.entryD > d : c.dc + JUNCTION_HALF + L / 2 > d));
       if (ctl && ctl.dc - d < LOOKAHEAD) {
@@ -1286,6 +1350,23 @@ function tick(sim, dt) {
         const blockedBeyond = lead && leadD > ctl.dc && leadD - lead.lane.len / 2 < ctl.dc + JUNCTION_HALF + L + CAR_GAP_PX && lead.v < 8;
         const cross = lane.axis === "x" ? "y" : "x";
         const stop = () => { cap = Math.min(cap, toStop < 0.5 ? 0 : reach(0, toStop)); hold = Math.min(hold, stopD); };
+        // Where it goes here: at the end of its road it turns (decision 267); elsewhere, now and then, it turns off
+        // onto the other road (so a road that starts at a T gets its cabs). It turns once there is room on the road
+        // it turns onto and, turning off a road that runs on, nothing coming the other way.
+        const ends = lane.endJ === j;
+        if (car.decided !== j.id) {
+          car.decided = j.id; car.turnedAt = null;
+          const opts = ends ? turnsAt(sim, lane, j) : j.kind !== "roundabout" && sim.rand() < TURN_ODDS ? sim.lanes.filter((l) => l.axis !== lane.axis).map((l) => ({ l, c: l.controls.find((k) => k.j === j) })).filter((o) => o.c && o.c.dc < o.l.span - 1) : [];
+          const pick = opts[Math.floor(sim.rand() * opts.length)];
+          car.next = pick ? { ...pick, j, at: ctl.dc } : null;
+        }
+        // No room on the road it turns onto: it waits at its line (or, past it, in the junction). Turning left across
+        // cabs coming the other way: it pulls into the junction and waits there for a gap.
+        const turning = car.next && car.next.j === j;
+        const noRoom = turning && !roomAt(sim, car.next.l, car.next.c, car);
+        const noGap = turning && !ends && leftTurn(lane, car.next.l) && oncoming(sim, byLane, lane, ctl, committed && j.kind === "light" && signalAt(j, sim.t)[lane.axis] === "red");
+        if (noRoom && !committed) { stop(); plans.push({ car, cap, hold }); return; }
+        if (noRoom || noGap) { cap = Math.min(cap, reach(0, ctl.dc - d)); hold = Math.min(hold, ctl.dc); }
         if (j.kind === "light" && !committed) {
           const sig = signalAt(j, sim.t)[lane.axis];
           if (car.rare) { if (sig === "red" ? approaching(j, cross) || guestComing(sim, j, cross) || inBox(j, cross) : inBox(j, cross)) stop(); else if (toStop < 2) car.commit = j.id; } // the owner's car runs a red when the way is clear, never into anyone
@@ -1294,13 +1375,14 @@ function tick(sim, dt) {
           else if (blockedBeyond || inBox(j, cross) || committedAcross(sim, j, cross)) { car.stopFor = null; stop(); }
           else { car.stopFor = null; if (toStop < 2) car.commit = j.id; }
         } else if (j.kind === "giveway" && !committed) {
-          if (lane.axis === "x") {
-            // The street gives way: slow to a crawl at the line, go when nothing on the avenue is near.
-            const near = guestNear(sim, j) || approaching(j, "y");
+          if (lane.axis === yieldAxis(j)) {
+            // The street (or, at a T, the road that ends there) gives way: slow to a crawl at the line, go when nothing
+            // on the other road is near.
+            const near = (cross === "y" ? guestNear(sim, j) : guestComing(sim, j, "x")) || approaching(j, cross) || (ends && inBox(j, cross));
             if (near || blockedBeyond) stop();
             else if (toStop < 6) car.commit = j.id;
             else cap = Math.min(cap, reach(12, toStop));
-          } else if (inBox(j, "x") || blockedBeyond) stop();
+          } else if (inBox(j, cross) || blockedBeyond || (ends && committedAcross(sim, j, cross))) stop();
         } else if (j.kind === "roundabout") {
           const yieldD = ctl.entryD - L / 2 - 2, toYield = yieldD - d;
           if (car.commit !== j.id) {
@@ -1346,10 +1428,36 @@ function tick(sim, dt) {
       continue;
     }
     car.d = Math.min(car.d + step, Math.max(car.d, p.hold));
+    const lane = car.lane;
     if (p.enter && car.d >= p.enter.entryD) enterRing(sim, car, p.enter);
-    else if (car.d > car.lane.span) { car.d -= car.lane.span; car.lap += 1; car.rare = arrive(sim); car.commit = null; car.v = Math.min(car.v, (car.d >= car.lane.townFrom && car.d <= car.lane.townTo ? TOWN_PX_S : HIGHWAY_PX_S) * car.f); }
+    else if (lane.endOff && car.d > lane.span) { car.lap += 1; comeIn(sim, car, sim.entries[Math.floor(sim.rand() * sim.entries.length)]); } // off the map, and back in on a road from the edge
+    else {
+      // Round the corner onto the other road (the drawing eases the corner, `turn`); at the end of a road always.
+      const next = car.next ?? (!lane.endOff && car.d >= lane.span - 1e-6 && lane.endJ ? { ...turnsAt(sim, lane, lane.endJ)[0], j: lane.endJ, at: lane.span } : null);
+      if (next?.l && car.d >= next.at - 1e-6) {
+        if (roomAt(sim, next.l, next.c, car)) {
+          const p0 = lanePoint(lane, next.at);
+          car.turn = { x: p0.x, y: p0.y, t: sim.t };
+          car.lane = next.l; car.d = next.c.dc + Math.max(0, car.d - next.at); car.next = null; car.commit = next.j.id; car.decided = next.j.id; car.turnedAt = next.j.id;
+          car.v = Math.min(car.v, TOWN_PX_S * car.f);
+        } else car.d = next.at;
+      }
+    }
   }
 }
+export const TURN_ODDS = 0.3;
+// A turn across the other half of the road (cabs keep right; y grows southwards on screen).
+const vecOf = (l) => (l.axis === "x" ? [l.dir, 0] : [0, l.dir]);
+const leftTurn = (from, to) => { const [a, b] = vecOf(from), [c, d] = vecOf(to); return a * d - b * c < 0; };
+// Anyone on the other half of its own road coming up to (or in) the crossing, which a cab turning left would cut
+// across; one that is turning off there itself doesn't cross its path, nor does one waiting at its line. Once its
+// light is red (`boxOnly`), a cab waiting in the junction to turn left goes as soon as the junction itself is clear.
+function oncoming(sim, byLane, lane, ctl, boxOnly = false) {
+  const j = ctl.j;
+  return sim.lanes.some((l) => l !== lane && l.axis === lane.axis && (l.axis === "x" ? l.street === lane.street : l.road === lane.road) && l.controls.some((c) => c.j === j && byLane.get(l).some((o) => o.next?.j !== j && (boxOnly ? Math.abs(o.d - c.dc) < JUNCTION_HALF + l.len / 2 + 30 : (o.v > 2 || Math.abs(o.d - c.dc) < JUNCTION_HALF + l.len / 2) && o.d > c.dc - JUNCTION_HALF - l.len / 2 - Math.max(30, o.v * 2.5) && o.d < c.dc + JUNCTION_HALF + l.len / 2))));
+}
+// Who gives way at a give-way crossing: the street, except at a T where the street runs on and the avenue ends there.
+const yieldAxis = (j) => (j.arms && j.arms.w && j.arms.e && !(j.arms.n && j.arms.s) ? "y" : "x");
 // ---------- Commuters' cabs (decision 177): a cab carrying an agent to or from work keeps to the same rules. It
 // drives the route's centre line, so the simulation sees it as a guest: cruising cabs keep out of a junction it is
 // crossing, give way to it on a roundabout and at a give-way line. Each frame `rideStep` says how far it may go.
@@ -1465,11 +1573,11 @@ export function rideHold(sim, r) {
     r.stopFor = null;
     return carsInBox(sim, j, cross) || committedAcross(sim, j, cross) ? Math.max(0, stopAt) : Infinity;
   }
-  if (axis === "x") {
-    const near = sim.cars.some((o) => o.lane && o.lane.axis === "y" && o.lane.controls.some((c) => c.j === j && o.d > c.dc - JUNCTION_HALF - o.lane.len / 2 - Math.max(20, o.v * 2) && o.d < c.dc + JUNCTION_HALF + o.lane.len / 2)) || guestNear(sim, j);
+  if (axis === yieldAxis(j)) {
+    const near = sim.cars.some((o) => o.lane && o.lane.axis === cross && (o.lane.endJ !== j || o.commit === j.id) && o.lane.controls.some((c) => c.j === j && o.d > c.dc - JUNCTION_HALF - o.lane.len / 2 - Math.max(20, o.v * 2) && o.d < c.dc + JUNCTION_HALF + o.lane.len / 2)) || (cross === "y" && guestNear(sim, j));
     return near ? Math.max(0, stopAt) : Infinity;
   }
-  return carsInBox(sim, j, "x") ? Math.max(0, stopAt) : Infinity;
+  return carsInBox(sim, j, cross) ? Math.max(0, stopAt) : Infinity;
 }
 
 // Onto the roundabout: straight on half the time, otherwise left or right; never back the way it came.
@@ -1495,9 +1603,14 @@ export function trafficCars(sim) {
       return { id: c.id, x: j.cx + RING_R * Math.cos(ang), y: j.cy + RING_R * Math.sin(ang), vertical, east: vertical ? ty < 0 : tx > 0, alpha: 1, rare: c.rare, braking: c.braking, v: c.v, ring: j.id };
     }
     const l = c.lane, p = lanePoint(l, c.d);
-    return { id: c.id, x: p.x, y: p.y, vertical: l.axis === "y", east: l.axis === "x" ? l.dir > 0 : l.dir < 0, alpha: edgeAlpha(c.d, 0, l.span), rare: c.rare, braking: c.braking, v: c.v, lane: l.id };
+    const k = c.turn ? (sim.t - c.turn.t) / TURN_MS : 1; // just round a corner: eased from the end of the old lane
+    if (k < 1) { const e = k * k * (3 - 2 * k); p.x = c.turn.x + (p.x - c.turn.x) * e; p.y = c.turn.y + (p.y - c.turn.y) * e; }
+    // Faded only on a stretch of road at the map's faded border: never in town.
+    const alpha = Math.min(l.startOff ? edgeAlpha(c.d, 0, Infinity) : 1, l.endOff ? edgeAlpha(c.d, -Infinity, l.span) : 1);
+    return { id: c.id, x: p.x, y: p.y, vertical: l.axis === "y", east: l.axis === "x" ? l.dir > 0 : l.dir < 0, alpha, rare: c.rare, braking: c.braking, v: c.v, lane: l.id, turning: k < 1, turnedAt: c.turnedAt ?? null };
   });
 }
+const TURN_MS = 350;
 // A commute by cab: which legs of a route are ridden. A leg is ridden when it runs along a street or the avenue,
 // from the first kerb a cab can reach to the kerb in front of the tower; the path from the apartment doors (grass, no
 // cabs) and the steps through the doors stay a walk.

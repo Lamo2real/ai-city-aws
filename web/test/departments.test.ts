@@ -170,7 +170,7 @@ describe("yellow cabs", () => {
     for (let t = 0; t < 120_000; t += 1000) {
       stepTraffic(sim, 1000);
       for (const c of trafficCars(sim)) {
-        if (c.ring) continue; // circling a roundabout (traffic.test.ts)
+        if (c.ring || c.turning || c.alpha === 0) continue; // circling a roundabout (traffic.test.ts), rounding a corner, or still beyond the edge
         const on = c.vertical
           ? aves.some((l) => c.x === (c.east ? l.x1 : l.x0) && c.y >= l.y0 && c.y <= l.y1)
           : lanes.some((l) => c.y === (c.east ? l.y1 : l.y0) && c.x >= l.x0 && c.x <= l.x1);
@@ -180,30 +180,39 @@ describe("yellow cabs", () => {
     expect(b.some((c) => c.vertical)).toBe(true);
   });
 
-  it("drive off past the edge of the map and fade out there, or short of a T at a road's end; never pop in or out mid-road", () => {
+  it("come in only from beyond the map's edge and leave only past it: never appearing, fading or vanishing mid-road (decision 267)", () => {
     const M = MAP_MARGIN * TILE;
     // The street between HQ and the homes runs right through the countryside to the map's border (decision 259);
-    // every other street runs along the town and ends at a T.
+    // every other street ends at a crossing.
     expect(streetLanes(w).some((l) => l.x0 === w.left * TILE - M && l.x1 === w.width * TILE + M)).toBe(true);
     for (const l of streetLanes(w)) expect(l.x0).toBeLessThan(l.x1);
     expect(edgeAlpha(0, 0, 1000)).toBe(0);
     expect(edgeAlpha(CAB_FADE_PX / 2, 0, 1000)).toBeCloseTo(0.5);
     expect(edgeAlpha(500, 0, 1000)).toBe(1);
-    // Anything near the middle of the map is fully drawn; only cabs out by the border are faded.
-    const sim = createTraffic(w);
-    for (let t = 0; t < 120_000; t += 5_000) {
-      stepTraffic(sim, 1000);
-      for (const c of trafficCars(sim)) {
-        const inside =
-          c.x > -M + CAB_FADE_PX &&
-          c.x < w.width * TILE + M - CAB_FADE_PX &&
-          c.y > -M + CAB_FADE_PX &&
-          c.y < w.height * TILE + M - CAB_FADE_PX;
-        // Faded only out by the border, or by the end of its lane short of a T (decision 259).
-        const lane = sim.lanes.find((l) => l.id === c.lane);
-        const nearEnd = lane ? (() => { const car = sim.cars.find((k) => k.id === c.id)!; return car.d < CAB_FADE_PX || car.d > lane.span - CAB_FADE_PX; })() : true;
-        if (inside && !nearEnd) expect(c.alpha).toBe(1);
+    for (const n of [4, 12, 30]) {
+      const ww = layout(city(...Array.from({ length: n }, (_, i) => `D${i}`)), { homes: 16 });
+      const sim = createTraffic(ww, "traffic", 7);
+      // Every lane either runs off the map at an end, or ends at a crossing there.
+      for (const l of sim.lanes) {
+        expect(l.endOff || !!l.endJ).toBe(true);
+        expect(l.startOff || l.controls.some((c) => Math.abs(c.dc) < 1)).toBe(true);
       }
+      // Out in the faded border: further from the town than the stretch a cab fades over.
+      const out = (c: { x: number; y: number }) => c.x < ww.left * TILE - M + CAB_FADE_PX + 1 || c.x > ww.width * TILE + M - CAB_FADE_PX - 1 || c.y < ww.top * TILE - M + CAB_FADE_PX + 1 || c.y > ww.height * TILE + M - CAB_FADE_PX - 1;
+      let prev = new Map(trafficCars(sim).map((c) => [c.id, c]));
+      let appeared = 0;
+      for (let t = 0; t < 180_000; t += 50) {
+        stepTraffic(sim, 50);
+        for (const c of trafficCars(sim)) {
+          const p = prev.get(c.id)!;
+          if (c.alpha < 1) expect(out(c)).toBe(true); // faded only out by the border
+          if (p.alpha === 0 && c.alpha > 0) { appeared++; expect(out(c)).toBe(true); } // comes in from beyond the edge
+          if (p.alpha > 0 && c.alpha === 0) expect(out(p)).toBe(true); // and leaves past it
+          if (p.alpha > 0 && c.alpha > 0 && !c.ring && !p.ring) expect(Math.hypot(c.x - p.x, c.y - p.y)).toBeLessThan(12); // never jumps
+        }
+        prev = new Map(trafficCars(sim).map((c) => [c.id, c]));
+      }
+      expect(appeared).toBeGreaterThan(sim.cars.length); // they keep coming in
     }
   });
 

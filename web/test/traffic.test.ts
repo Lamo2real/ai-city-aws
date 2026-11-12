@@ -12,6 +12,7 @@ import {
   STOP_AT,
   TOWN_PX_S,
   createTraffic,
+  carryTraffic,
   footbridges,
   initialState,
   junctions,
@@ -39,7 +40,7 @@ function lone(sim: CityTraffic, ahead: number, rare = false) {
   const lane = sim.lanes.find((l) => l.axis === "x" && l.controls.some((c) => c.j === j))!;
   const ctl = lane.controls.find((c) => c.j === j)!;
   const stopD = ctl.dc - STOP_AT - lane.len / 2;
-  const car: CityCar = { id: "test", lane, d: stopD - ahead, v: TOWN_PX_S, f: 1, lap: 0, rare, commit: null, stopFor: null, ring: null, braking: false };
+  const car: CityCar = { id: "test", lane, d: stopD - ahead, v: TOWN_PX_S, f: 1, lap: 0, rare, commit: null, stopFor: null, ring: null, braking: false, decided: j.id }; // straight on, no turn
   sim.cars = [car];
   return { j, car, stopD, ctl };
 }
@@ -74,8 +75,14 @@ describe("traffic lights", () => {
       expect(now).toBeLessThan(js.length / 3); // the street gives way at most crossings
       for (const j of before) {
         const k = js.find((x) => x.id === j.id)!;
-        expect([k.kind, k.cx, k.cy, k.offset ?? null]).toEqual([j.kind, j.cx, j.cy, j.offset ?? null]);
+        // The one change allowed (decision 267): a T the seed marks for a roundabout gives way until the town grows
+        // its fourth road, then becomes the roundabout, for good.
+        const grew = j.kind === "giveway" && k.kind === "roundabout" && !Object.values(j.arms).every(Boolean);
+        expect([grew ? "roundabout" : k.kind, k.cx, k.cy, k.offset ?? null]).toEqual([grew ? "roundabout" : j.kind, j.cx, j.cy, j.offset ?? null]);
+        for (const a of ["w", "e", "n", "s"] as const) if (j.arms[a]) expect(k.arms[a]).toBe(true); // roads only grow
       }
+      // A roundabout only ever sits on a crossing with a road out on all four sides (decision 267).
+      for (const j of js) if (j.kind === "roundabout") expect(Object.values(j.arms).every(Boolean)).toBe(true);
       // Never two roundabouts next to each other, diagonals included (decision 259).
       for (const a of js) for (const b of js) if (a !== b && a.kind === "roundabout" && b.kind === "roundabout") expect(Math.max(Math.abs(a.v - b.v), Math.abs(a.h - b.h))).toBeGreaterThanOrEqual(2);
       before = js;
@@ -116,7 +123,7 @@ describe("traffic lights", () => {
 });
 
 describe("the traffic as a whole", () => {
-  it("has a quarter of the original cabs: halved twice, at least one per lane (decisions 180 and 191)", () => {
+  it("has a quarter of the original cabs: halved twice (decisions 180 and 191), every one starting beyond the map's edge (decision 267)", () => {
     expect(CAB_GAP_PX).toBe(44 * TILE);
     for (const [n, portrait] of [[2, false], [4, false], [8, false], [12, false], [6, true]] as const) {
       const sim = createTraffic(city(n, portrait));
@@ -125,7 +132,7 @@ describe("the traffic as a whole", () => {
       // Half again, but every lane keeps at least one (the town's short roads too, decision 259).
       expect(sim.cars.length).toBeGreaterThanOrEqual(Math.max(sim.lanes.length, Math.round(total / 2)));
       expect(sim.cars.length).toBeLessThanOrEqual(Math.round(total / 2) + sim.lanes.length);
-      for (const l of sim.lanes) expect(sim.cars.filter((c) => c.lane === l).length).toBeGreaterThanOrEqual(1);
+      for (const c of sim.cars) expect(c.lane!.startOff && c.d <= 0).toBe(true); // queued on a road in from the edge
       const first = sim.lanes.reduce((k, l) => k + Math.max(1, Math.round(l.span / (22 * TILE))), 0); // before any halving
       expect(sim.cars.length / first).toBeLessThan(0.5); // about a quarter; the town's short roads keep one each
     }
@@ -165,7 +172,8 @@ describe("the traffic as a whole", () => {
           // A crossing car is never in a lit junction's box while the other way is in it too.
           const cars = trafficCars(sim);
           for (const j of sim.junctions.filter((k) => k.kind !== "roundabout")) {
-            const box = cars.filter((c) => !c.ring && Math.abs(c.x - j.cx) < JUNCTION_HALF && Math.abs(c.y - j.cy) < JUNCTION_HALF);
+            // (A cab that has just turned the corner here came in on the same green as the others.)
+            const box = cars.filter((c) => !c.ring && c.turnedAt !== j.id && Math.abs(c.x - j.cx) < JUNCTION_HALF && Math.abs(c.y - j.cy) < JUNCTION_HALF);
             expect(box.some((c) => c.vertical) && box.some((c) => !c.vertical)).toBe(false);
           }
         }
@@ -175,6 +183,24 @@ describe("the traffic as a whole", () => {
       expect(roadTop).toBeGreaterThan(HIGHWAY_PX_S * 0.85); // highway pace out in the countryside
     });
   }
+});
+
+describe("a new tower (decision 267)", () => {
+  it("leaves every cab out on the roads where it is: the traffic carries on along the grown roads", () => {
+    for (const n of [4, 11, 29]) {
+      const before = createTraffic(city(n), "traffic", 1, { warmMs: 60_000 });
+      const was = new Map(trafficCars(before).filter((c) => c.alpha > 0).map((c) => [c.id, c]));
+      const after = carryTraffic(createTraffic(city(n + 1)), before);
+      const now = new Map(trafficCars(after).map((c) => [c.id, c]));
+      expect(after.t).toBe(before.t);
+      for (const [id, c] of was) {
+        const k = now.get(id);
+        expect(k).toBeDefined();
+        expect([Math.round(k!.x), Math.round(k!.y), k!.vertical, k!.east]).toEqual([Math.round(c.x), Math.round(c.y), c.vertical, c.east]);
+      }
+      stepTraffic(after, 5000); // and drives on
+    }
+  });
 });
 
 describe("footbridges (decision 262)", () => {
