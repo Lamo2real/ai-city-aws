@@ -191,7 +191,10 @@ resource "aws_cloudfront_distribution" "apps" {
   }
   viewer_certificate {
     cloudfront_default_certificate = true
-    minimum_protocol_version       = "TLSv1.2_2021"
+    # With the default *.cloudfront.net certificate CloudFront sets this to TLSv1 whatever is asked; asking for
+    # TLSv1.2_2021 only made every deploy update the distribution again (~2 minutes, decision 263). Raise it with a
+    # custom domain's own certificate.
+    minimum_protocol_version = "TLSv1"
   }
   tags = local.tags
 }
