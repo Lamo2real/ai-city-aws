@@ -597,9 +597,30 @@ export function towerSize(name) {
 // Blocks not built yet, and lots whose tower was demolished, are forest.
 export const BLOCK_W = 12, BLOCK_H = 16, PITCH_X = BLOCK_W + STREET, PITCH_Y = BLOCK_H + STREET, HQ_DRAW_H = 13;
 export const CITY_SEED = "vaic-city-1"; // the town's seed: changing it would move every tower, so it never changes
+// Manhattan blocks (decision 275, the owner's references): a block is a row of LOT_W-wide lots side by side, two or
+// three of them (seeded per column of blocks, so the avenues run straight but at uneven spacing), with no street
+// between neighbours. One lot of each block is a department's (seeded too); the others hold neighbour buildings. The
+// column of HQ and the homes is two lots wide: HQ and the homes in its west lot, the avenue past HQ east of it.
+export const LOT_W = 12;
+export const lotsAcross = (c) => (c === 0 ? 2 : 2 + (hashOf(`${CITY_SEED}:col:${c}`) % 2));
+export const colW = (c) => lotsAcross(c) * LOT_W;
+const COL_X = new Map([[0, 0]]);
+export function colX(c) { // the west edge of block column c, in tiles
+  if (!COL_X.has(c)) COL_X.set(c, c > 0 ? colX(c - 1) + colW(c - 1) + STREET : colX(c + 1) - colW(c) - STREET);
+  return COL_X.get(c);
+}
+export const AVENUE_X = colW(0); // the avenue past HQ
+const AVENUE_COL = new Map();
+export function avenueCol(x) { // the block column whose east side the avenue at x runs along
+  if (!AVENUE_COL.size) for (let c = -40; c <= 40; c++) AVENUE_COL.set(colX(c) + colW(c), c);
+  return AVENUE_COL.get(x) ?? Math.round((x - AVENUE_X) / (2.5 * LOT_W + STREET));
+}
+export const deptLot = (c, r) => hashOf(`${CITY_SEED}:dlot:${c},${r}`) % lotsAcross(c); // the department's lot in its block
 export const OVAL = 1.4; // the town is an oval, 1.4 times as wide as it is tall (decision 261)
 const HOMES_BLOCK = [0, 1], REACH = 24; // blocks are ranked out to REACH blocks from HQ (over 2,000 lots)
 const BLOCKS = [];
+// How far block (c, r) is from the middle of town, in block heights, on the oval: the density falls with it.
+export const blockScore = (c, r) => Math.hypot((colX(c) + colW(c) / 2 - LOT_W) / OVAL, (r - 0.5) * PITCH_Y) / PITCH_Y;
 // Lot `slot` → its block, for good.
 export function blockOf(slot) {
   if (!BLOCKS.length) {
@@ -609,7 +630,7 @@ export function blockOf(slot) {
       const jitter = (hashOf(`${CITY_SEED}:${c},${r}`) % 1000) / 1000; // 0 … 1
       // An oval (decision 261): distance in tiles, the east–west axis OVAL times the north–south one, measured from
       // between HQ and the homes; the jitter only ragged the edge, so the outline is never a row or a column.
-      all.push({ c, r, score: Math.hypot((c * PITCH_X) / OVAL, (r - 0.5) * PITCH_Y) / PITCH_Y + jitter * 0.45 });
+      all.push({ c, r, score: blockScore(c, r) + jitter * 0.45 });
     }
     all.sort((p, q) => p.score - q.score || p.r - q.r || p.c - q.c);
     for (const b of all) BLOCKS.push([b.c, b.r]);
@@ -658,7 +679,7 @@ export function layout(state, { portrait = false, seats = {}, homes = 0 } = {}) 
   // The town's lots are the ones ever numbered: an empty one is forest (decision 259), and saplings grow back on a lot
   // whose tower came down (`freed`: { slot: when }).
   const top = Math.max(-1, ...Object.keys(sizes).map(Number), ...holder.keys(), ...wrecked.keys()) + 1;
-  const corner = (c, r) => ({ x: c * PITCH_X, y: r * PITCH_Y });
+  const corner = (c, r) => ({ x: colX(c), y: r * PITCH_Y });
   const buildings = [], lots = [];
   let c0 = -1, c1 = 1, r0 = -1, r1 = 1; // the map reaches at least one block around HQ
   const built = new Set(["0,0", `${HOMES_BLOCK[0]},${HOMES_BLOCK[1]}`]); // blocks with a road along them
@@ -666,43 +687,59 @@ export function layout(state, { portrait = false, seats = {}, homes = 0 } = {}) 
     const [c, r] = blockOf(slot), o = corner(c, r), s = towerSize(lotSizeName(sizes, slot));
     built.add(`${c},${r}`);
     c0 = Math.min(c0, c); c1 = Math.max(c1, c); r0 = Math.min(r0, r); r1 = Math.max(r1, r);
-    const x = o.x + Math.floor((BLOCK_W - s.w) / 2), y = o.y + BLOCK_H - s.h; // on the street side of its block
+    const lx = o.x + deptLot(c, r) * LOT_W, x = lx + Math.floor((LOT_W - s.w) / 2), y = o.y + BLOCK_H - s.h; // its lot, on the street side of its block
     const name = holder.get(slot);
     if (!name) {
       const freedAt = state.freed?.[slot];
-      lots.push({ x, y, w: s.w, h: s.h, slot, block: { x: o.x, y: o.y, w: BLOCK_W, h: BLOCK_H }, ...(Number.isFinite(freedAt) ? { freedAt } : {}), ...(wrecked.has(slot) ? { demolished: wrecked.get(slot) } : {}) });
+      lots.push({ x, y, w: s.w, h: s.h, slot, block: { x: lx, y: o.y, w: LOT_W, h: BLOCK_H }, ...(Number.isFinite(freedAt) ? { freedAt } : {}), ...(wrecked.has(slot) ? { demolished: wrecked.get(slot) } : {}) });
       continue;
     }
     const reg = state.departments[name];
-    buildings.push({ dept: name, slot, x, y, w: s.w, h: s.h, color: deptColor(name), builtAt: reg?.builtAt ?? 0, archived: reg?.state === "archived" && !seats[name] });
+    buildings.push({ dept: name, slot, x, y, w: s.w, h: s.h, lot: { x: lx, y: o.y, w: LOT_W, h: BLOCK_H }, color: deptColor(name), builtAt: reg?.builtAt ?? 0, archived: reg?.state === "archived" && !seats[name] });
   }
   // The roads (decision 259): only where the town is. A street runs along the blocks built on either side of it, and
   // on to the avenue past HQ, so every door reaches it; an avenue runs along the blocks built on either side of it.
   // The avenue past HQ and the street between HQ and the homes run right through the map and on into the countryside,
   // where the cabs come from. The town only ever grows, so a road, once there, stays.
-  const left = c0 * PITCH_X - STREET, topY = r0 * PITCH_Y - STREET, width = (c1 + 1) * PITCH_X, height = (r1 + 1) * PITCH_Y;
+  const left = colX(c0) - STREET, topY = r0 * PITCH_Y - STREET, width = colX(c1) + colW(c1) + STREET, height = (r1 + 1) * PITCH_Y;
   const streets = [], lanes = [];
   const isBuilt = (c, r) => built.has(`${c},${r}`);
   for (let r = r0 - 1; r <= r1; r++) {
     const y = r * PITCH_Y + BLOCK_H;
     if (r === 0) { streets.push({ y, x0: left, x1: width }); continue; }
     let x0 = Infinity, x1 = -Infinity;
-    for (let c = c0; c <= c1; c++) if (isBuilt(c, r) || isBuilt(c, r + 1)) { x0 = Math.min(x0, c * PITCH_X - STREET); x1 = Math.max(x1, (c + 1) * PITCH_X); }
-    if (x0 < Infinity) streets.push({ y, x0: Math.min(x0, BLOCK_W), x1: Math.max(x1, BLOCK_W + STREET) });
+    for (let c = c0; c <= c1; c++) if (isBuilt(c, r) || isBuilt(c, r + 1)) { x0 = Math.min(x0, colX(c) - STREET); x1 = Math.max(x1, colX(c) + colW(c) + STREET); }
+    if (x0 < Infinity) streets.push({ y, x0: Math.min(x0, AVENUE_X), x1: Math.max(x1, AVENUE_X + STREET) });
   }
   for (let c = c0 - 1; c <= c1; c++) {
     if (c === 0) continue; // the avenue past HQ, below
     let y0 = Infinity, y1 = -Infinity;
     for (let r = r0; r <= r1; r++) if (isBuilt(c, r) || isBuilt(c + 1, r)) { y0 = Math.min(y0, r * PITCH_Y - STREET); y1 = Math.max(y1, (r + 1) * PITCH_Y); }
-    if (y0 < Infinity) lanes.push({ x: c * PITCH_X + BLOCK_W, y0, y1 });
+    if (y0 < Infinity) lanes.push({ x: colX(c) + colW(c), y0, y1 });
   }
-  const hq = { dept: "HQ", x: 0, y: BLOCK_H - HQ_DRAW_H, w: BLOCK_W, h: HQ_DRAW_H, color: DEPT_COLOR.HQ };
+  // The neighbours (decision 275): every other lot of a built block holds a building that is nobody's department,
+  // shoulder to shoulder with the department's tower: tall towers in the middle of town, mid-rises further out,
+  // low-rises at the edge, where now and then a lot is left to the trees. Each is fixed by its place, so a neighbour,
+  // once there, stays.
+  const neighbours = [];
+  for (const key of built) {
+    const [c, r] = key.split(",").map(Number), o = corner(c, r), d = blockScore(c, r), special = (c === 0 && r === 0) || (c === HOMES_BLOCK[0] && r === HOMES_BLOCK[1]);
+    for (let li = 0; li < lotsAcross(c); li++) {
+      if (special ? li === 0 : li === deptLot(c, r)) continue;
+      const h = hashOf(`${CITY_SEED}:nb:${c},${r},${li}`);
+      if (d > 4.2 && h % 5 < 2) continue; // the edge of town thins out to trees
+      const w = 9 + (h % 3), tall = d < 2.2 ? 18 + ((h >>> 3) % 2) : d < 3.4 ? 14 + ((h >>> 3) % 3) : 9 + ((h >>> 3) % 3);
+      neighbours.push({ id: `nb:${c},${r},${li}`, x: o.x + li * LOT_W + Math.floor((LOT_W - w) / 2), y: o.y + BLOCK_H - tall, w, h: tall, c, r, lot: { x: o.x + li * LOT_W, y: o.y, w: LOT_W, h: BLOCK_H }, rise: d < 2.2 ? "tall" : d < 3.4 ? "mid" : "low" });
+    }
+  }
+  const blocks = [...built].map((k) => { const [c, r] = k.split(",").map(Number); return { x: colX(c), y: r * PITCH_Y, w: colW(c), h: BLOCK_H, c, r }; });
+  const hq = { dept: "HQ", x: 0, y: BLOCK_H - HQ_DRAW_H, w: LOT_W, h: HQ_DRAW_H, color: DEPT_COLOR.HQ };
   // The homes (decision 188): one block of three apartment buildings at the foot of its block, a small park behind.
   const hb = corner(...HOMES_BLOCK), apartments = [], homeBlocks = [{ x: hb.x, y: hb.y + BLOCK_H - APT_BOX_H, w: BLOCK_W, h: APT_BOX_H, mirror: false }];
   const off = Math.floor((BLOCK_W - APT_BOX_W) / 2);
   for (const [kind, ax, ay, aw, ah] of APARTMENTS) apartments.push({ kind, block: 0, x: hb.x + off + ax, y: hb.y + BLOCK_H - APT_BOX_H + ay, w: aw, h: ah });
   const parks = [{ x: hb.x, y: hb.y, w: BLOCK_W, h: BLOCK_H - APT_BOX_H }];
-  return { hq, buildings, lots, lanes, streets, hqStreet: BLOCK_H, officesEnd: height - STREET, avenue: BLOCK_W, left, top: topY, width, height, homes: { x: hb.x, y: hb.y, w: BLOCK_W, h: BLOCK_H, apartments, blocks: homeBlocks, paths: [], parks }, portrait };
+  return { hq, buildings, lots, neighbours, blocks, lanes, streets, hqStreet: BLOCK_H, officesEnd: height - STREET, avenue: AVENUE_X, left, top: topY, width, height, homes: { x: hb.x, y: hb.y, w: BLOCK_W, h: BLOCK_H, apartments, blocks: homeBlocks, paths: [], parks }, portrait };
 }
 
 // Where a worker at work is: inside the tower, just behind its door (drawn hidden; the roof counts them). The seat
@@ -1180,7 +1217,7 @@ export function junctions(world) {
   world.streets.forEach((s, street) => roads.forEach((r, road) => {
     if (r.y0 > s.y || r.y1 < s.y + STREET || s.x0 > r.x || s.x1 < r.x + STREET) return; // both roads reach the crossing
     // The avenue east of block column v and the street south of block row h (decision 250's grid).
-    const v = Math.round((r.x - BLOCK_W) / PITCH_X), h = Math.round((s.y - BLOCK_H) / PITCH_Y);
+    const v = avenueCol(r.x), h = Math.round((s.y - BLOCK_H) / PITCH_Y);
     const off = s.y === world.hqStreet; // the street between HQ and the homes runs on off the map
     const arms = { w: s.x0 < r.x || off, e: s.x1 > r.x + STREET || off, n: r.y0 < s.y, s: r.y1 > s.y + STREET };
     const four = arms.w && arms.e && arms.n && arms.s, kind = junctionKind(v, h);
@@ -1239,7 +1276,7 @@ export function footbridges(world) {
   // Only over the avenues (decision 271): a tower now rises over the street behind it, so a bridge over a street
   // would land on the back of the tower in front.
   for (const l of world.lanes ?? []) {
-    const v = Math.round((l.x - BLOCK_W) / PITCH_X);
+    const v = avenueCol(l.x);
     for (let r = Math.ceil(Math.max(l.y0, T) / PITCH_Y) - 1; r * PITCH_Y + BLOCK_H <= Math.min(l.y1, world.height); r++) {
       const mid = r * PITCH_Y + BLOCK_H / 2;
       if (mid - 2 < Math.max(l.y0, T) || mid + 2 > Math.min(l.y1, world.height)) continue;

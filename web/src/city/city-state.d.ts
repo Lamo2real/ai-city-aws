@@ -190,6 +190,10 @@ export interface CityWorld {
   /** Lots no tower stands on (decision 248): free, or just demolished (`demolished`, for the wrecking ball). */
   /** Empty lots (decision 259): forest, with saplings growing back since `freedAt`; `demolished` while the wrecking ball plays. */
   lots: Array<CityPoint & { w: number; h: number; slot: number; block: { x: number; y: number; w: number; h: number }; freedAt?: number; demolished?: string }>;
+  /** The buildings that are nobody's department (decision 275), shoulder to shoulder with the towers. */
+  neighbours: CityNeighbour[];
+  /** The town's blocks, in tiles, with their column and row. */
+  blocks: Array<{ x: number; y: number; w: number; h: number; c: number; r: number }>;
   streets: Array<{ y: number; x0: number; x1: number }>;
   /** The road west of HQ and the side streets between towers, each as long as it runs (decision 166). */
   lanes: Array<{ x: number; y0: number; y1: number }>;
@@ -241,6 +245,16 @@ export const PITCH_Y: number;
 export const CITY_SEED: string;
 /** How much wider than tall the oval town is (decision 261). */
 export const OVAL: number;
+/** Manhattan blocks (decision 275): lots LOT_W wide, two or three to a block, the block columns' west edges and widths. */
+export const LOT_W: number;
+export const AVENUE_X: number;
+export function lotsAcross(c: number): number;
+export function colW(c: number): number;
+export function colX(c: number): number;
+export function avenueCol(x: number): number;
+export function deptLot(c: number, r: number): number;
+export function blockScore(c: number, r: number): number;
+export type CityNeighbour = { id: string; x: number; y: number; w: number; h: number; c: number; r: number; lot: { x: number; y: number; w: number; h: number }; rise: "tall" | "mid" | "low" };
 /** What a crossing is, from where it is: the avenue east of block column v, the street south of block row h. */
 export function junctionKind(v: number, h: number): "light" | "roundabout" | "giveway";
 /** Lot `slot`'s block, [column, row] from HQ, for good. */

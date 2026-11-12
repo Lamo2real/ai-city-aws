@@ -232,7 +232,7 @@ describe("footbridges (decision 262)", () => {
     let stoppedUnder = 0;
     const lights = sim.junctions.filter((j) => j.kind === "light");
     const seen = new Set<string>();
-    for (let t = 0; t < 120_000; t += 50) {
+    for (let t = 0; t < 300_000; t += 50) { // a bigger town with fewer cabs since decisions 269 and 275: give them time
       stepTraffic(sim, 50);
       for (const c of trafficCars(sim)) {
         if (c.ring) continue;
@@ -246,7 +246,7 @@ describe("footbridges (decision 262)", () => {
       for (const j of lights) seen.add(`${j.id}:${signalAt(j, sim.t).x}`);
     }
     expect(passed.size).toBe(bs.length); // every bridge had cabs under it
-    expect(stoppedUnder).toBeLessThan(40); // passing, not parked (a queue from a red light may reach one now and then)
+    expect(stoppedUnder).toBeLessThan(100); // passing, not parked (a queue from a red light may reach one now and then)
     for (const j of lights) for (const c of ["green", "amber", "red"]) expect(seen.has(`${j.id}:${c}`)).toBe(true);
   });
 });

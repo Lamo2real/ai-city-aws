@@ -4,7 +4,7 @@
 // takes the free lot nearest HQ, else the next one); demolishing one leaves its lot to the trees and changes nothing
 // else; the same records always draw the same city.
 import { describe, expect, it } from "vitest";
-import { OVAL, PITCH_X, PITCH_Y, applySnapshot, blockOf, initialState, junctions, layout, reduce, type CityState } from "../src/city/city-state.js";
+import { LOT_W, OVAL, PITCH_X, PITCH_Y, applySnapshot, blockOf, blockScore, colW, colX, initialState, junctions, layout, reduce, type CityState } from "../src/city/city-state.js";
 
 type World = ReturnType<typeof layout>;
 const PRESETS = ["Application", "IT Infrastructure", "Data & AI", "Marketing", "Sales", "Customer Support", "Finance", "Legal", "Product", "Operations", "Research", "Media"];
@@ -54,15 +54,17 @@ describe("the town", () => {
     for (const n of [7, 12, 20, 40, 100, 400]) {
       const set = blocks.slice(0, n);
       // Compact: every lot within an oval whose size grows like the square root of the count (in tiles).
-      const oval = ([c, r]: [number, number]) => Math.hypot((c * PITCH_X) / OVAL, (r - 0.5) * PITCH_Y) / PITCH_Y;
-      expect(Math.max(...set.map(oval))).toBeLessThan(Math.sqrt(((n + 2) * PITCH_X * OVAL) / (PITCH_Y * Math.PI)) + 1.2);
+      // (Blocks are two or three lots wide since decision 275: about MEAN_PITCH tiles from avenue to avenue.)
+      const MEAN_PITCH = 2.5 * LOT_W + 3;
+      const oval = ([c, r]: [number, number]) => blockScore(c, r);
+      expect(Math.max(...set.map(oval))).toBeLessThan(Math.sqrt(((n + 2) * MEAN_PITCH * OVAL) / (PITCH_Y * Math.PI)) + 1.2);
       // Not a rectangle: the town's bounding box has empty blocks (forest) in it.
       const cs = set.map((b) => b[0]), rs = set.map((b) => b[1]);
       const box = (Math.max(...cs, 1) - Math.min(...cs, -1) + 1) * (Math.max(...rs, 1) - Math.min(...rs, -1) + 1);
       expect(box).toBeGreaterThan(n + 2);
       // An oval, not a square or a rectangle: wider than tall on the map, and every corner of its box is forest.
       if (n >= 30) {
-        const wide = (Math.max(...cs) - Math.min(...cs) + 1) * PITCH_X, tall = (Math.max(...rs) - Math.min(...rs) + 1) * PITCH_Y;
+        const wide = colX(Math.max(...cs)) + colW(Math.max(...cs)) - colX(Math.min(...cs)) + 3, tall = (Math.max(...rs) - Math.min(...rs) + 1) * PITCH_Y;
         expect(wide / tall).toBeGreaterThan(1.15);
         expect(wide / tall).toBeLessThan(1.9);
         const has = new Set(set.map((b) => b.join(",")));
@@ -70,8 +72,28 @@ describe("the town", () => {
       }
     }
     // Not just rings by distance: some later lot is nearer HQ than an earlier one (the seeded jitter).
-    const d = blocks.slice(0, 40).map(([c, r]) => Math.hypot((c * PITCH_X) / OVAL, (r - 0.5) * PITCH_Y) / PITCH_Y);
+    const d = blocks.slice(0, 40).map(([c, r]) => blockScore(c, r));
     expect(d.some((x, i) => i > 0 && x < d[i - 1]! - 0.1)).toBe(true);
+  });
+
+  it("packs each block shoulder to shoulder: neighbours never overlap a tower, each other or a road, and never move (decision 275)", () => {
+    type Box = { x: number; y: number; w: number; h: number };
+    const ground = (t: Box) => ({ ...t, y: t.y + t.h - Math.min(t.h, 16), h: Math.min(t.h, 16) }); // its footprint on its block
+    const hit = (a: Box, b: Box) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    let s = unnumbered(["Research"]), before = layout(s, { homes: 16 });
+    for (let i = 0; i < 60; i++) {
+      s = created(s, `Dept ${i}`, NOW + 1000 * (i + 1));
+      const w = layout(s, { homes: 16 });
+      const all = [...w.buildings, ...w.neighbours, w.hq, ...w.homes.apartments].map(ground);
+      for (const a of all) for (const b of all) if (a !== b) expect(hit(a, b)).toBe(false);
+      const roads = [...w.streets.map((st) => ({ x: st.x0, y: st.y, w: st.x1 - st.x0, h: 3 })), ...w.lanes.map((l) => ({ x: l.x, y: l.y0, w: 3, h: l.y1 - l.y0 })), { x: w.avenue, y: w.top, w: 3, h: w.height - w.top }];
+      for (const a of all) for (const r of roads) expect(hit(a, r)).toBe(false);
+      for (const n of before.neighbours) expect(w.neighbours).toContainEqual(n); // a neighbour, once there, stays
+      before = w;
+    }
+    // Dense: most lots of the town hold a building; the middle is tall, the edge low.
+    expect(before.neighbours.length).toBeGreaterThan(before.buildings.length);
+    expect(before.neighbours.some((n) => n.rise === "tall") && before.neighbours.some((n) => n.rise === "low")).toBe(true);
   });
 
   it("a phone and a Mac or PC draw the very same map", () => {
@@ -88,7 +110,8 @@ describe("the town", () => {
     expect(w.lots).toEqual([]); // no empty lot: forest only where no tower ever stood
     for (const b of w.buildings) {
       const [c, r] = blockOf(b.slot as number);
-      expect(b.x).toBeGreaterThanOrEqual(c * PITCH_X);
+      expect(b.x).toBeGreaterThanOrEqual(colX(c)); // in its block (decision 275: on its own lot of it)
+      expect(b.x + b.w).toBeLessThanOrEqual(colX(c) + colW(c));
       expect(b.y + b.h).toBe(r * PITCH_Y + 16); // standing on its block's street
     }
   });

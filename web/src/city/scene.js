@@ -643,6 +643,9 @@ const FACADES = [
   { style: "glass", wall: "#3b6c98", shade: "#2b5276", trim: "#a6cbe8", glass: "#24466a" }, // a glass curtain wall
 ];
 const styleOf = (b) => FACADES[hashOf(b.dept) % FACADES.length];
+// A neighbour (decision 275) as the tower drawing wants it: its id stands in for a department's name (its style and
+// shape), a number for its lot (its accent colour).
+const neighbourBody = (n) => ({ ...n, dept: n.id, slot: hashOf(n.id) % 997, neighbour: true });
 // The tower's sections, bottom up, in art pixels inside its plot: a lobby, then set-backs narrowing to a crown.
 function towerShape(b) {
   const X = b.x * TILE, Y = b.y * TILE, W = b.w * TILE, H = b.h * TILE;
@@ -653,7 +656,7 @@ function towerShape(b) {
   const step = { stone: [1, 0.86, 0.7, 0.42], brick: [1, 1, 0.97, 0.36], glass: [1, 0.97, 0.93, 0.32] }[styleOf(b).style];
   // The body rises to about 40 px over the top of its block (decision 271), the crown and spire above it in the
   // picture's sky, a little lower on some towers so the skyline stays uneven.
-  const k = Math.max(0.7, (H - 26 - ((H / TILE - BLOCK_H) * TILE - 40) - (hashOf(`rise:${b.dept}`) % 2) * 12) / 126), base = W - 16;
+  const k = b.h <= BLOCK_H ? Math.max(0.3, (H - 60) / 126) : Math.max(0.7, (H - 26 - ((H / TILE - BLOCK_H) * TILE - 40) - (hashOf(`rise:${b.dept}`) % 2) * 12) / 126), base = W - 16; // a mid- or low-rise neighbour stays on its block
   const tiers = [[base * step[0], 46 * k], [base * step[1], 46 * k], [base * step[2], 34 * k], [base * step[3], 12]].map(([w, h]) => [Math.round(w / 2) * 2, Math.round(h)]); // [width, height] from the street up
   const out = [];
   let top = foot;
@@ -782,11 +785,14 @@ function towerBody(g, b) {
   R(g, dx - 4, dy - 4, dw + 8, 4, INK); R(g, dx - 3, dy - 3, dw + 6, 2, accent); // the canopy
   R(g, dx - 1, dy - 1, dw + 2, 23, INK); R(g, dx, dy, dw, 22, "#1a2236"); // the doorway (the panels are live)
   for (const gx of [base.x + 8, base.x + base.w - 24]) { R(g, gx - 1, dy - 1, 18, 19, INK); R(g, gx, dy, 16, 17, "#3b4a66"); R(g, gx, dy, 16, 3, "#5b6f92"); R(g, gx + 7, dy, 2, 17, INK); } // lobby glass
-  sign(g, b.dept, t.cx, base.y + 9, base.w - 10);
+  if (b.neighbour) { // nobody's department: no name; some windows lit, people live and work there
+    const lr = rng(`lit:${b.dept}`);
+    for (const w of towerWindows(b)) if (lr() < (styleOf(b).style === "glass" ? 0.08 : 0.14)) { R(g, w.x, w.y, w.w, w.h, "#f2cf86"); R(g, w.x, w.y, w.w, 1, "#fff0c8"); }
+  } else sign(g, b.dept, t.cx, base.y + 9, base.w - 10);
   // In the middle of town, a lit blade sign down the tower's left side (decision 274: a few lit signs in the centre,
   // like the square in the references; no brand, just the department's colour and its initials).
-  const [bc, br] = blockOf(b.slot);
-  if (Math.abs(bc) <= 1 && Math.abs(br - 0.5) <= 1.5) {
+  const [bc, br] = b.neighbour ? [b.c, b.r] : blockOf(b.slot);
+  if (Math.abs(bc) <= 1 && Math.abs(br - 0.5) <= 1.5 && (!b.neighbour || hashOf(`screen:${b.dept}`) % 3 === 0)) {
     // A lit screen of coloured light, its pattern its own (no words, no brands).
     const sx = base.x + 3, sy = base.y + 18, h = 34, lr = rng(`screen:${b.dept}`), tones = [light, "#fff3cf", "#8fdcff", "#ffd84a", accent];
     R(g, sx - 2, sy - 2, 13, h + 4, "rgba(255,220,140,.2)"); R(g, sx - 1, sy - 1, 11, h + 2, INK); R(g, sx, sy, 9, h, "#1a1630");
@@ -950,7 +956,8 @@ function bake(world, skip = new Map(), { now = Date.now(), grow = true } = {}) {
   const top = (world.top ?? 0) - MARGIN, bottom = world.height + MARGIN; // every avenue runs on off the map
   // A built block is city, not forest: paved from road to road, its tower on it (the owner: "it should still feel
   // like a city", decision 259). Paved first, so the roads and a roundabout's ring lie over its corners (decision 267).
-  const paved = world.buildings.map((b) => { const [c, r] = blockOf(b.slot); return { x: c * PITCH_X, y: r * PITCH_Y, w: BLOCK_W, h: BLOCK_H, seed: `blk${c},${r}` }; });
+  // Each lot with a building on it, the department's or a neighbour's (decision 275).
+  const paved = [...world.buildings, ...(world.neighbours ?? [])].map((b) => ({ ...b.lot, seed: `lot${b.lot.x},${b.lot.y}` }));
   for (const p of paved) paving(g, p.x * TILE, p.y * TILE, p.w * TILE, p.h * TILE, CITY_GROUND, "#5e5a74", p.seed);
   // The avenue east of HQ and the other avenues, each as long as it runs.
   const verticals = [{ x: world.avenue, y0: top, y1: bottom }, ...(world.lanes ?? [])];
@@ -968,7 +975,7 @@ function bake(world, skip = new Map(), { now = Date.now(), grow = true } = {}) {
   // An empty lot is forest (decision 259); only one whose tower is coming down right now keeps clear for the wrecking ball.
   const wrecking = world.lots.filter((l) => l.demolished && skip.has(l.demolished));
   const rings = js.filter((j) => j.kind === "roundabout").map((j) => ({ x: j.cx / TILE - 4, y: j.cy / TILE - 4, w: 8, h: 8 })); // no tree on a ring or its pavement
-  const taken = [world.hq, ...world.buildings, ...wrecking, ...paved, ...rings, world.homes, ...roads.map((s) => ({ x: s.x0, y: s.y, w: s.x1 - s.x0, h: 3 })), ...verticals.map((v) => ({ x: v.x, y: v.y0, w: 3, h: v.y1 - v.y0 }))];
+  const taken = [world.hq, ...world.buildings, ...(world.neighbours ?? []), ...wrecking, ...paved, ...rings, world.homes, ...roads.map((s) => ({ x: s.x0, y: s.y, w: s.x1 - s.x0, h: 3 })), ...verticals.map((v) => ({ x: v.x, y: v.y0, w: 3, h: v.y1 - v.y0 }))];
   const clear = (x, y) => taken.every((t) => x < (t.x * TILE) - 12 || x > (t.x + t.w) * TILE + 12 || y < t.y * TILE - 2 || y > (t.y + t.h) * TILE + 34);
   // Each tree has its own spot on a fixed grid, the same on every map whatever its size (decision 248): a new tower or
   // row only clears the trees where it stands, and no other tree moves. About one tree to 3000 square pixels.
@@ -989,7 +996,7 @@ function bake(world, skip = new Map(), { now = Date.now(), grow = true } = {}) {
   for (const [x, y, h] of spots) grownTree(g, x, y, rng(`tree:${h}`), sizeAt(x, y));
   const plotOnly = new Set(["rise", "ghost", "focus"]); // the tower itself is drawn live over its plot
   // Back to front (decision 271): a tower rises over the street behind it, so the rows further back go first.
-  for (const b of [...world.buildings].sort((p, q) => p.y + p.h - (q.y + q.h) || p.x - q.x)) if (b.archived) freeLot(g, b, "ARCHIVED"); else if (plotOnly.has(skip.get(b.dept))) towerPlot(g, b); else if (skip.has(b.dept)) { site(g, b); stumps(g, b); } else tower(g, b);
+  for (const b of [...world.buildings, ...(world.neighbours ?? []).map(neighbourBody)].sort((p, q) => p.y + p.h - (q.y + q.h) || p.x - q.x)) if (b.neighbour) { towerPlot(g, b); towerBody(g, b); } else if (b.archived) freeLot(g, b, "ARCHIVED"); else if (plotOnly.has(skip.get(b.dept))) towerPlot(g, b); else if (skip.has(b.dept)) { site(g, b); stumps(g, b); } else tower(g, b);
   for (const l of wrecking) site(g, { ...l, dept: l.demolished });
   headquarters(g, world.hq);
   // The neighbourhood (decision 188): apartment buildings and their courtyards, far to near; trees in the parks.
@@ -1514,7 +1521,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       const M = (MARGIN - EDGE / 2) * TILE, W = (world.width - (world.left ?? 0)) * TILE, H = (world.height - (world.top ?? 0)) * TILE;
       // Never further out than the whole countryside; and never so close that the whole town can't be on screen
       // (on a phone the oval town is wider than ZOOM_MIN allows, decision 261).
-      const town = Math.min(root.clientWidth / W, root.clientHeight / H);
+      const area = safeArea(), town = Math.min(Math.max(1, area.r - area.l) / W, Math.max(1, area.b - area.t) / H); // the part the panels leave free
       lo = Math.max(Math.min(ZOOM_MIN, town), Math.min(root.clientWidth / (W + 2 * M), root.clientHeight / (H + 2 * M)));
     }
     return Math.max(lo, Math.min(ZOOM_MAX, z));
@@ -1823,14 +1830,14 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   // The part of a tower that rises over the street behind its block (decision 271), drawn again after the cabs and
   // people there, so whoever is behind the tower is hidden by it, like a street between two New York towers.
   function drawTowerTops(ox, oy, viewW, viewH, now) {
-    for (const b of [...world.buildings].sort((p, q) => p.y + p.h - (q.y + q.h))) {
+    for (const b of [...world.buildings, ...(world.neighbours ?? []).filter((n) => n.h > BLOCK_H).map(neighbourBody)].sort((p, q) => p.y + p.h - (q.y + q.h))) {
       if (b.archived || anims.has(b.dept)) continue;
-      const t = towerShape(b), blockTop = blockOf(b.slot)[1] * PITCH_Y * TILE, hh = Math.round(blockTop - t.Y);
+      const t = towerShape(b), blockTop = (b.neighbour ? b.r : blockOf(b.slot)[1]) * PITCH_Y * TILE, hh = Math.round(blockTop - t.Y);
       if (t.X - ox > viewW + 10 || t.X + t.W - ox < -10 || t.Y - oy > viewH + 10 || blockTop - oy < -10) continue;
       // Only the rows over the street itself: the pavement past it, where people stand at the next tower's door, stays in front.
       const from = Math.max(0, blockTop - STREET_PX - (t.Y - SPRITE_PAD)), rows = hh + SPRITE_PAD - from;
       if (rows > 0) ctx.drawImage(towerSprite(b), 0, from, t.W, rows, t.X - ox, t.Y - SPRITE_PAD + from - oy, t.W, rows);
-      litWindows(b, ox, oy, blockTop);
+      if (!b.neighbour) litWindows(b, ox, oy, blockTop);
       beacon(t, now, ox, oy);
     }
   }
