@@ -1,9 +1,10 @@
-// Every tower keeps its lot for good (decision 248) on one square map, the same on a phone and on a Mac or PC
-// (decision 250): HQ in the middle block, the town growing 3 × 3 → 4 × 4 → 5 × 5…; adding a department never moves
-// an existing tower, road, home or HQ (it takes the first free lot, else the square grows a ring); demolishing one
+// Every tower keeps its lot for good (decision 248) on one map of New York blocks, the same on a phone and on a Mac or
+// PC (decisions 250, 252): HQ in the middle block, the town growing a column or a row at a time, 3 × 3 → 4 × 3 → 4 × 4
+// → 5 × 4 → 5 × 5…; adding a department never moves
+// an existing tower, road, home or HQ (it takes the first free lot, else the town grows a column or row); demolishing one
 // leaves its lot empty and changes nothing else; the same records always draw the same city.
 import { describe, expect, it } from "vitest";
-import { PITCH_X, PITCH_Y, applySnapshot, blockOf, initialState, layout, lotsIn, reduce, sideFor, squareBounds, type CityState } from "../src/city/city-state.js";
+import { PITCH_X, PITCH_Y, applySnapshot, blockOf, gridBounds, initialState, layout, lotsIn, reduce, stepFor, type CityState } from "../src/city/city-state.js";
 
 type World = ReturnType<typeof layout>;
 const PRESETS = ["Application", "IT Infrastructure", "Data & AI", "Marketing", "Sales", "Customer Support", "Finance", "Legal", "Product", "Operations", "Research", "Media"];
@@ -46,18 +47,14 @@ const created = (s: CityState, name: string, at: number, slot?: number, lot = ""
 const demolished = (s: CityState, name: string, at: number) => reduce(s, { type: "department.demolished", name }, at);
 
 describe("the square", () => {
-  it("grows 3 × 3 → 4 × 4 → 5 × 5…, two sides at a time, east and south then west and north, HQ in the middle", () => {
-    expect([3, 4, 5, 6, 7].map(squareBounds)).toEqual([
-      { lo: -1, hi: 1 },
-      { lo: -1, hi: 2 },
-      { lo: -2, hi: 2 },
-      { lo: -2, hi: 3 },
-      { lo: -3, hi: 3 },
-    ]);
-    expect([3, 4, 5].map(lotsIn)).toEqual([7, 14, 23]); // every block but HQ's and the homes'
-    expect([0, 7, 8, 14, 15, 23, 24].map(sideFor)).toEqual([3, 3, 4, 4, 5, 5, 6]);
-    // Every lot has its own block, never HQ's (0,0) or the homes' (0,1); the first 7 fill the 3 × 3 square.
-    const blocks = Array.from({ length: lotsIn(9) }, (_, s) => blockOf(s).join(","));
+  it("grows a column or a row at a time, east, south, west, north in turn, so it stays near a square around HQ", () => {
+    const dims = Array.from({ length: 9 }, (_, k) => { const g = gridBounds(k); return `${g.c1 - g.c0 + 1}x${g.r1 - g.r0 + 1}`; });
+    expect(dims).toEqual(["3x3", "4x3", "4x4", "5x4", "5x5", "6x5", "6x6", "7x6", "7x7"]);
+    expect(gridBounds(4)).toEqual({ c0: -2, c1: 2, r0: -2, r1: 2 }); // HQ back in the very middle at every odd square
+    expect([0, 1, 2, 3, 4].map(lotsIn)).toEqual([7, 10, 14, 18, 23]); // every block but HQ's and the homes'
+    expect([0, 7, 8, 10, 11, 14, 15].map(stepFor)).toEqual([0, 0, 1, 1, 2, 2, 3]);
+    // Every lot has its own block, never HQ's (0,0) or the homes' (0,1); the first 7 fill the 3 × 3 blocks.
+    const blocks = Array.from({ length: lotsIn(12) }, (_, s) => blockOf(s).join(","));
     expect(new Set(blocks).size).toBe(blocks.length);
     expect(blocks).not.toContain("0,0");
     expect(blocks).not.toContain("0,1");
@@ -71,12 +68,12 @@ describe("the square", () => {
     }
   });
 
-  it("numbering the lots the first time keeps the order the towers had: the twelve fill the 4 × 4 square", () => {
+  it("numbering the lots the first time keeps the order the towers had: the twelve stand in a 4 × 4 town", () => {
     const w = layout(served(), { homes: 16 }), u = layout(unnumbered(), { homes: 16 });
     expect(towers(u)).toEqual(towers(w));
-    expect(w.side).toBe(4);
+    expect([w.cols, w.rows]).toEqual([4, 4]);
     expect(w.buildings.map((b) => b.slot as number).sort((a, b) => a - b)).toEqual(PRESETS.map((_, i) => i));
-    expect(w.lots.map((l) => l.slot)).toEqual([12, 13]); // two free lots left in the square
+    expect(w.lots.map((l) => l.slot)).toEqual([12, 13]); // two free lots left
     for (const b of w.buildings) {
       const [c, r] = blockOf(b.slot as number);
       expect(b.x).toBeGreaterThanOrEqual(c * PITCH_X);
@@ -94,7 +91,7 @@ describe("the square", () => {
       const added = layout(s, opts);
       unmoved(start, added);
       expect(added.buildings.find((b) => b.dept === "Partnerships")?.slot).toBe(12);
-      expect([added.side, added.lots.map((l) => l.slot)]).toEqual([4, [13]]);
+      expect([added.cols, added.rows, added.lots.map((l) => l.slot)]).toEqual([4, 4, [13]]);
       // Demolish Sales: its lot stands empty, nothing else changes, and the map never shrinks.
       s = demolished(s, "Sales", NOW + 2000);
       const down = layout(s, opts);
@@ -114,24 +111,25 @@ describe("the square", () => {
       expect(again.buildings.find((b) => b.dept === "Events")).toMatchObject({ x: sales.x, y: sales.y, w: sales.w, h: sales.h, slot: 4 });
     });
 
-  it("growing ring after ring, from 3 × 3 to 8 × 8, never moves a tower, a road, the homes or HQ", () => {
+  it("growing a column or row at a time, from 3 × 3 to 8 × 8, never moves a tower, a road, the homes or HQ", () => {
     let s = unnumbered(["Research"]);
     let before = layout(s, { homes: 16 });
-    const sides = [before.side];
-    for (let i = 0; i < lotsIn(8) - 1; i++) {
+    const sizes = [`${before.cols}x${before.rows}`];
+    for (let i = 0; i < lotsIn(10) - 1; i++) {
       s = created(s, `Dept ${i}`, NOW + 1000 * (i + 1));
       const after = layout(s, { homes: 16 });
       unmoved(before, after);
       expect(after.buildings.find((b) => b.dept === `Dept ${i}`)?.slot).toBe(1 + i);
-      // Always a square around HQ, whose block stays within a block of the middle.
+      // Always a square or one block off one, around HQ, whose block stays within a block of the middle.
       const cols = (after.width - after.left - 3) / PITCH_X, rows = (after.height - after.top - 3) / PITCH_Y;
-      expect([cols, rows]).toEqual([after.side, after.side]);
+      expect([cols, rows]).toEqual([after.cols, after.rows]);
+      expect(cols - rows === 0 || cols - rows === 1).toBe(true);
       const mid = (after.left + after.width) / 2 - (after.hq.x + after.hq.w / 2);
       expect(Math.abs(mid)).toBeLessThanOrEqual(PITCH_X / 2 + 2);
-      if (after.side !== sides.at(-1)) sides.push(after.side);
+      if (`${after.cols}x${after.rows}` !== sizes.at(-1)) sizes.push(`${after.cols}x${after.rows}`);
       before = after;
     }
-    expect(sides).toEqual([3, 4, 5, 6, 7, 8]);
+    expect(sizes).toEqual(["3x3", "4x3", "4x4", "5x4", "5x5", "6x5", "6x6", "7x6", "7x7", "8x7", "8x8"]);
     // Nothing stands on anything else: every tower, free lot, HQ and the homes in a block of its own.
     const boxes = [...before.buildings, ...before.lots, before.hq, before.homes];
     for (const a of boxes) for (const b of boxes) if (a !== b) expect(a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h).toBe(false);

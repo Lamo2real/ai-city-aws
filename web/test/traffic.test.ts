@@ -61,16 +61,26 @@ describe("traffic lights", () => {
     expect(longest).toBe(RED_MS);
   });
 
-  it("stand at some junctions, not all; two or three roundabouts; the street gives way at the rest", () => {
-    for (const [n, portrait] of [[4, false], [8, false], [12, false], [6, true]] as const) {
-      const js = junctions(city(n, portrait));
+  it("lights around HQ, more roundabouts as the town grows, and a crossing never changes once it is there (decision 252)", () => {
+    let before: ReturnType<typeof junctions> = [];
+    let rounds = 0;
+    for (const n of [4, 8, 12, 20, 40, 70]) {
+      const js = junctions(city(n));
       const kinds = js.map((j) => j.kind);
-      expect(kinds.filter((k) => k === "light").length).toBeGreaterThan(0);
-      expect(kinds.filter((k) => k === "light").length).toBeLessThan(js.length);
-      const rounds = kinds.filter((k) => k === "roundabout").length;
-      expect(rounds).toBeGreaterThanOrEqual(js.length >= 4 ? 2 : 1);
-      expect(rounds).toBeLessThanOrEqual(3);
+      expect(kinds.filter((k) => k === "light").length).toBe(6); // the six around HQ and the homes
+      const now = kinds.filter((k) => k === "roundabout").length;
+      expect(now).toBeGreaterThanOrEqual(rounds); // never fewer
+      expect(now).toBeLessThan(js.length / 3); // the street gives way at most crossings
+      for (const j of before) {
+        const k = js.find((x) => x.id === j.id)!;
+        expect([k.kind, k.cx, k.cy, k.offset ?? null]).toEqual([j.kind, j.cx, j.cy, j.offset ?? null]);
+      }
+      // Never two roundabouts side by side.
+      for (const a of js) for (const b of js) if (a !== b && a.kind === "roundabout" && b.kind === "roundabout") expect(Math.abs(a.v - b.v) + Math.abs(a.h - b.h)).toBeGreaterThanOrEqual(3);
+      before = js;
+      rounds = now;
     }
+    expect(rounds).toBeGreaterThan(4); // a big town has many
   });
 
   it("a cab stops at the line on red, waits, and drives on when it turns green", () => {

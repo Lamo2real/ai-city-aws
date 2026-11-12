@@ -581,45 +581,43 @@ export function towerSize(name) {
   const h = hashOf(`size:${name}`);
   return { w: 8 + (h % 4), h: 11 + ((h >>> 4) % 5) };
 }
-// The town is a square grid of blocks (the owner, 2026-11-12, decision 250), the same on a phone and on a Mac or PC:
-// HQ in the middle block, the homes in the block south of it, a tower's lot in every other block, and a road on all
-// four sides of every block. Block (c, r) is c blocks east and r blocks south of HQ; its corner is at (c * PITCH_X,
-// r * PITCH_Y) tiles, so a block never moves, whatever else is built (west and north of HQ are negative tiles).
-// The town starts 3 × 3 and grows like a square in maths, 3 × 3 → 4 × 4 → 5 × 5…: each time a new column and row on
-// two sides, east and south, then west and north, then east and south…, so HQ stays in the middle.
+// The town is a grid of New York blocks (the owner, 2026-11-12, decisions 250, 252), the same on a phone and on a Mac
+// or PC: HQ in the middle block, the homes in the block south of it, a tower's lot in every other block, and a road
+// on all four sides of every block. Block (c, r) is c blocks east and r blocks south of HQ; its corner is at
+// (c * PITCH_X, r * PITCH_Y) tiles, so a block never moves, whatever else is built (west and north of HQ are negative).
+// The town starts 3 × 3 and grows one column or row at a time, in turn east, south, west and north: 3 × 3, 4 × 3,
+// 4 × 4, 5 × 4, 5 × 5…, always a square or one block off one, HQ in the middle, filling as it goes.
 export const BLOCK_W = 12, BLOCK_H = 16, PITCH_X = BLOCK_W + STREET, PITCH_Y = BLOCK_H + STREET, HQ_DRAW_H = 13;
-export const MIN_SIDE = 3;
 const HOMES_BLOCK = [0, 1];
-// The blocks of a square of side n: columns and rows from lo to hi.
-export function squareBounds(n) {
-  let lo = -1, hi = 1;
-  for (let k = MIN_SIDE + 1; k <= n; k++) if (k % 2 === 0) hi++; else lo--;
-  return { lo, hi };
+// The blocks after `step` growth steps: columns c0..c1, rows r0..r1.
+export function gridBounds(step) {
+  const g = { c0: -1, c1: 1, r0: -1, r1: 1 };
+  for (let i = 0; i < step; i++) { const d = i % 4; if (d === 0) g.c1++; else if (d === 1) g.r1++; else if (d === 2) g.c0--; else g.r0--; }
+  return g;
 }
-// How many lots a square of side n holds (every block but HQ's and the homes').
-export const lotsIn = (n) => n * n - 2;
-// The side of the smallest square with room for `count` lots.
-export function sideFor(count) {
-  let n = MIN_SIDE;
-  while (lotsIn(n) < count) n++;
-  return n;
+// How many lots the town holds after `step` steps (every block but HQ's and the homes').
+export const lotsIn = (step) => { const g = gridBounds(step); return (g.c1 - g.c0 + 1) * (g.r1 - g.r0 + 1) - 2; };
+// The fewest growth steps with room for `count` lots.
+export function stepFor(count) {
+  let k = 0;
+  while (lotsIn(k) < count) k++;
+  return k;
 }
-// Lot `slot` → its block, for good: the 3 × 3 square's blocks nearest HQ first (north, then clockwise), then each new
-// ring's blocks the same way. Cached: the order never changes.
+// Lot `slot` → its block, for good: the 3 × 3 blocks nearest HQ first (then clockwise from north), then each new
+// column or row the same way. Cached: the order never changes.
 const BLOCKS = [];
-let ringsDone = MIN_SIDE - 1; // the squares whose blocks are in BLOCKS
+let stepsDone = -1; // the growth steps whose blocks are in BLOCKS
 export function blockOf(slot) {
-  for (let n = ringsDone + 1; BLOCKS.length <= slot; n++) {
-    ringsDone = n;
-    const { lo, hi } = squareBounds(n), prev = n > MIN_SIDE ? squareBounds(n - 1) : null, ring = [];
-    for (let r = lo; r <= hi; r++) for (let c = lo; c <= hi; c++) {
+  while (BLOCKS.length <= slot) {
+    const k = ++stepsDone, g = gridBounds(k), prev = k ? gridBounds(k - 1) : null, add = [];
+    for (let r = g.r0; r <= g.r1; r++) for (let c = g.c0; c <= g.c1; c++) {
       if ((c === 0 && r === 0) || (c === HOMES_BLOCK[0] && r === HOMES_BLOCK[1])) continue;
-      if (prev && c >= prev.lo && c <= prev.hi && r >= prev.lo && r <= prev.hi) continue;
-      ring.push([c, r]);
+      if (prev && c >= prev.c0 && c <= prev.c1 && r >= prev.r0 && r <= prev.r1) continue;
+      add.push([c, r]);
     }
     const turn = ([c, r]) => (Math.atan2(c, -r) + 2 * Math.PI) % (2 * Math.PI); // clockwise from north
-    ring.sort((p, q) => p[0] ** 2 + p[1] ** 2 - (q[0] ** 2 + q[1] ** 2) || turn(p) - turn(q));
-    BLOCKS.push(...ring);
+    add.sort((p, q) => p[0] ** 2 + p[1] ** 2 - (q[0] ** 2 + q[1] ** 2) || turn(p) - turn(q));
+    BLOCKS.push(...add);
   }
   return BLOCKS[slot];
 }
@@ -663,7 +661,7 @@ export function layout(state, { portrait = false, seats = {}, homes = 0 } = {}) 
     else if (!standing) wrecked.set(r.slot, r.name);
   }
   const top = Math.max(-1, ...Object.keys(sizes).map(Number), ...holder.keys(), ...wrecked.keys()) + 1;
-  const side = sideFor(top), count = lotsIn(side), { lo, hi } = squareBounds(side);
+  const step = stepFor(top), count = lotsIn(step), { c0, c1, r0, r1 } = gridBounds(step);
   const corner = (c, r) => ({ x: c * PITCH_X, y: r * PITCH_Y });
   const buildings = [], lots = [];
   for (let slot = 0; slot < count; slot++) {
@@ -676,17 +674,17 @@ export function layout(state, { portrait = false, seats = {}, homes = 0 } = {}) 
   }
   // The roads: a street along the south side of every row of blocks and the north side of the top row, an avenue
   // along the east side of every column and the west side of the first. All of them run right through the map.
-  const left = lo * PITCH_X - STREET, topY = lo * PITCH_Y - STREET, width = (hi + 1) * PITCH_X, height = (hi + 1) * PITCH_Y;
+  const left = c0 * PITCH_X - STREET, topY = r0 * PITCH_Y - STREET, width = (c1 + 1) * PITCH_X, height = (r1 + 1) * PITCH_Y;
   const streets = [], lanes = [];
-  for (let r = lo - 1; r <= hi; r++) streets.push({ y: r * PITCH_Y + BLOCK_H, x0: left, x1: width });
-  for (let c = lo - 1; c <= hi; c++) if (c !== 0) lanes.push({ x: c * PITCH_X + BLOCK_W, y0: topY - MAP_MARGIN, y1: height + MAP_MARGIN });
+  for (let r = r0 - 1; r <= r1; r++) streets.push({ y: r * PITCH_Y + BLOCK_H, x0: left, x1: width });
+  for (let c = c0 - 1; c <= c1; c++) if (c !== 0) lanes.push({ x: c * PITCH_X + BLOCK_W, y0: topY - MAP_MARGIN, y1: height + MAP_MARGIN });
   const hq = { dept: "HQ", x: 0, y: BLOCK_H - HQ_DRAW_H, w: BLOCK_W, h: HQ_DRAW_H, color: DEPT_COLOR.HQ };
   // The homes (decision 188): one block of three apartment buildings at the foot of its block, a small park behind.
   const hb = corner(...HOMES_BLOCK), apartments = [], homeBlocks = [{ x: hb.x, y: hb.y + BLOCK_H - APT_BOX_H, w: BLOCK_W, h: APT_BOX_H, mirror: false }];
   const off = Math.floor((BLOCK_W - APT_BOX_W) / 2);
   for (const [kind, ax, ay, aw, ah] of APARTMENTS) apartments.push({ kind, block: 0, x: hb.x + off + ax, y: hb.y + BLOCK_H - APT_BOX_H + ay, w: aw, h: ah });
   const parks = [{ x: hb.x, y: hb.y, w: BLOCK_W, h: BLOCK_H - APT_BOX_H }];
-  return { hq, buildings, lots, lanes, streets, hqStreet: BLOCK_H, officesEnd: height - STREET, avenue: BLOCK_W, left, top: topY, width, height, side, homes: { x: hb.x, y: hb.y, w: BLOCK_W, h: BLOCK_H, apartments, blocks: homeBlocks, paths: [], parks }, portrait };
+  return { hq, buildings, lots, lanes, streets, hqStreet: BLOCK_H, officesEnd: height - STREET, avenue: BLOCK_W, left, top: topY, width, height, cols: c1 - c0 + 1, rows: r1 - r0 + 1, homes: { x: hb.x, y: hb.y, w: BLOCK_W, h: BLOCK_H, apartments, blocks: homeBlocks, paths: [], parks }, portrait };
 }
 
 // Where a worker at work is: inside the tower, just behind its door (drawn hidden; the roof counts them). The seat
@@ -1096,7 +1094,7 @@ export function cabsPerLane(spans) {
   return out;
 }
 export const TOWN_PX_S = CAB_PX_S, HIGHWAY_PX_S = 96, RING_PX_S = 22, ACCEL_PX_S2 = 44, BRAKE_PX_S2 = 50, CAR_GAP_PX = 6;
-export const JUNCTION_HALF = 24, STOP_AT = 36, RING_R = 20;
+export const JUNCTION_HALF = 24, STOP_AT = 36, RING_R = 40; // a roundabout twice the size it was, so the circling shows (decision 252)
 const CAR_LEN = { x: 24, y: 18 }, RING_LEN = 20, LOOKAHEAD = 420, TAU = Math.PI * 2;
 // A light: green, amber, then a moment of red both ways before the crossing road goes green. Red lasts 5 s.
 export const SIGNAL_MS = { green: 3600, amber: 900, allRed: 250 };
@@ -1126,19 +1124,23 @@ export function streetLanes(world) {
 export function avenueLanes(world) {
   return throughRoads(world).map((r) => ({ x0: r.x * TILE + 18, x1: r.x * TILE + 30, y0: r.y0 * TILE, y1: r.y1 * TILE }));
 }
-// Every crossing of a street and a through road (a T where the avenue starts is not one). The ones nearest HQ get
-// lights, a couple of the outer ones are roundabouts, the rest are plain crossings where the street gives way to
-// the avenue: lights at some junctions, never all, and two or three roundabouts at most.
+// Every crossing of a street and a through road. What each one is follows from where it is, never from how big the
+// town is (decision 252), so a new row, a new tower or a demolished one never changes a crossing: lights at the six
+// around HQ and the homes; a roundabout every third avenue on every third street (from the corners of the first
+// 3 × 3 blocks outwards), so the town gets more of them as it grows; elsewhere the street gives way to the avenue.
+const mod = (a, n) => ((a % n) + n) % n;
+export function junctionKind(v, h) {
+  if ((v === -1 || v === 0) && h >= -1 && h <= 1) return "light";
+  return mod(v - 1, 3) === 0 && mod(h - 1, 3) === 0 ? "roundabout" : "giveway";
+}
 export function junctions(world) {
   const roads = throughRoads(world), list = [];
   world.streets.forEach((s, street) => roads.forEach((r, road) => {
     if (r.y0 > s.y - 1 || r.y1 < s.y + STREET + 1) return;
-    list.push({ id: `j${street}-${road}`, street, road, cx: (r.x + STREET / 2) * TILE, cy: (s.y + STREET / 2) * TILE });
+    // The avenue east of block column v and the street south of block row h (decision 250's grid).
+    const v = Math.round((r.x - BLOCK_W) / PITCH_X), h = Math.round((s.y - BLOCK_H) / PITCH_Y);
+    list.push({ id: `j${v},${h}`, street, road, v, h, kind: junctionKind(v, h), cx: (r.x + STREET / 2) * TILE, cy: (s.y + STREET / 2) * TILE });
   }));
-  const hx = (world.hq.x + world.hq.w / 2) * TILE, hy = (world.hq.y + world.hq.h) * TILE;
-  const byNear = [...list].sort((a, b) => Math.hypot(a.cx - hx, a.cy - hy) - Math.hypot(b.cx - hx, b.cy - hy) || a.id.localeCompare(b.id));
-  const n = list.length, rounds = n >= 7 ? 3 : n >= 4 ? 2 : n >= 2 ? 1 : 0, lights = Math.min(n - rounds, Math.max(1, Math.round((n - rounds) / 2)));
-  byNear.forEach((j, i) => { j.kind = i < lights ? "light" : i >= n - rounds ? "roundabout" : "giveway"; });
   for (const j of list) if (j.kind === "light") j.offset = hashOf(j.id) % SIGNAL_CYCLE_MS;
   return list;
 }

@@ -56,17 +56,21 @@ TURN_KINDS: tuple[TurnKind, ...] = (
     "chief_of_staff",
     "executive",
 )
-MIN_SIDE = 3
-"""The City is a square of blocks, at least 3 × 3, HQ and the homes in two of them (decision 250; ``layout`` in
-web/src/city/city-state.js)."""
 
 
 def lots_shown(count: int) -> int:
-    """How many lots the City shows when ``count`` lots are numbered: those of the smallest square that holds them."""
-    n = MIN_SIDE
-    while n * n - 2 < count:
-        n += 1
-    return n * n - 2
+    """How many lots the City shows when ``count`` lots are numbered (decisions 250, 252; ``gridBounds`` in
+    web/src/city/city-state.js): its blocks start 3 × 3 and grow a column or a row at a time (east, south, west,
+    north in turn) until they hold them all; every block but HQ's and the homes' is a lot."""
+    cols = rows = 3
+    step = 0
+    while cols * rows - 2 < count:
+        if step % 2 == 0:
+            cols += 1
+        else:
+            rows += 1
+        step += 1
+    return cols * rows - 2
 
 
 ALL_STATUSES = ("open", "in_progress", "in_review", "waiting_on_owner", "parked", "done", "failed", "cancelled")
@@ -278,7 +282,7 @@ class Ledger:
 
     # ---------- the City's lots (decision 248) ----------
     # Every tower stands on a lot of its own, numbered from 0, for good: lot n is always the same block of the City's
-    # square, which only ever grows a ring at its edge (decision 250). A department takes a lot once, when it is built; demolishing it leaves the lot empty
+    # grid, which only ever grows a column or a row at its edge (decisions 250, 252). A department takes a lot once, when it is built; demolishing it leaves the lot empty
     # (a FREE LOT) until a new department takes it, so no tower, road or home ever moves. A lot's footprint is fixed
     # with it: ``size`` is the name the City sizes it by (the department that stood there when the lots were first
     # numbered), "" for every lot opened later (the City sizes those by their number).

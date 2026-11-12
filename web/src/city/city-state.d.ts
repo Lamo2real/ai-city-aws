@@ -197,8 +197,9 @@ export interface CityWorld {
   top: number;
   width: number;
   height: number;
-  /** The square's side, in blocks. */
-  side: number;
+  /** How many blocks across and down. */
+  cols: number;
+  rows: number;
   /** Only how the camera starts: the map is the same on every screen. */
   portrait: boolean;
   hqStreet: number;
@@ -231,18 +232,19 @@ export const TILE: number;
 export const HOMES_PER_BLOCK: number;
 /** A tower's footprint and height in tiles, from its name alone (decision 166). */
 export function towerSize(name: string): { w: number; h: number };
-/** The square grid of blocks (decision 250): block size and spacing in tiles, the smallest square's side. */
+/** The grid of blocks (decisions 250, 252): block size and spacing in tiles, the smallest square's side. */
 export const BLOCK_W: number;
 export const BLOCK_H: number;
 export const PITCH_X: number;
 export const PITCH_Y: number;
-export const MIN_SIDE: number;
-/** The blocks of a square of side n: columns and rows from lo to hi, HQ at 0. */
-export function squareBounds(n: number): { lo: number; hi: number };
-/** How many lots a square of side n holds. */
-export function lotsIn(n: number): number;
-/** The side of the smallest square with room for `count` lots. */
-export function sideFor(count: number): number;
+/** The blocks after `step` growth steps (one column or row each, east, south, west, north in turn), HQ at 0. */
+export function gridBounds(step: number): { c0: number; c1: number; r0: number; r1: number };
+/** How many lots the town holds after `step` steps. */
+export function lotsIn(step: number): number;
+/** The fewest growth steps with room for `count` lots. */
+export function stepFor(count: number): number;
+/** What a crossing is, from where it is: the avenue east of block column v, the street south of block row h. */
+export function junctionKind(v: number, h: number): "light" | "roundabout" | "giveway";
 /** Lot `slot`'s block, [column, row] from HQ, for good. */
 export function blockOf(slot: number): [number, number];
 /** The name a lot is sized by. */
@@ -325,7 +327,7 @@ export const CAB_FADE_PX: number;
 export const MAP_MARGIN: number;
 export function edgeAlpha(pos: number, from: number, to: number): number;
 export function avenueLanes(world: CityWorld): Array<{ x0: number; x1: number; y0: number; y1: number }>;
-export type CityJunction = { id: string; street: number; road: number; cx: number; cy: number; kind: "light" | "roundabout" | "giveway"; offset?: number };
+export type CityJunction = { id: string; street: number; road: number; v: number; h: number; cx: number; cy: number; kind: "light" | "roundabout" | "giveway"; offset?: number };
 export type CityLane = { id: string; axis: "x" | "y"; dir: 1 | -1; at: number; from: number; to: number; span: number; len: number; townFrom: number; townTo: number; controls: Array<{ j: CityJunction; dc: number; entryD: number; exitD: number; entryAng: number; exitAng: number }> };
 export type CityCar = { id: string; lane: CityLane | null; d: number; v: number; f: number; lap: number; rare: RareCar | boolean; commit: string | null; stopFor: string | null; braking: boolean; ring: { j: CityJunction; ang: number; exitAng: number; toLane: CityLane; toD: number } | null };
 export type CityGuest = { id?: string; x: number; y: number; vertical: boolean; commit: string | null; ring: { j: CityJunction; ang: number } | null };

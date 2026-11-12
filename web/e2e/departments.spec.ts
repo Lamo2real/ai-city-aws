@@ -106,7 +106,8 @@ test("on page load every tower rises in turn; workers ride a yellow cab; the mai
   await expect
     .poll(() => hooks(page, (h) => h._people?.get("wkr-research-a1")?.ride?.some(Boolean) ?? false))
     .toBe(true);
-  await expect.poll(() => hooks(page, (h) => Number(h.dataset.taxiRides ?? 0)), { timeout: 10_000 }).toBeGreaterThan(0);
+  // The called cab may have to wait out a red light by the homes before it reaches the kerb.
+  await expect.poll(() => hooks(page, (h) => Number(h.dataset.taxiRides ?? 0)), { timeout: 25_000 }).toBeGreaterThan(0);
   await page.screenshot({ path: `${SHOTS}/city-taxi.png` });
 
   // The Orchestrator's instruction to Research's manager: a letter, cycled over.

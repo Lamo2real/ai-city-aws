@@ -64,8 +64,21 @@ async def test_a_new_department_takes_the_next_lot_and_a_demolished_one_leaves_i
     assert await _slots(ledger) == {"marketing": 0, "media": 1, "legal": 2, "research": 3}
 
 
-def test_the_square_shows_n_by_n_blocks_less_hq_and_the_homes() -> None:
-    assert [lots_shown(c) for c in (0, 7, 8, 14, 15, 23, 24)] == [7, 7, 14, 14, 23, 23, 34]
+def test_the_city_grows_a_column_or_a_row_at_a_time() -> None:
+    # 3 × 3, 4 × 3, 4 × 4, 5 × 4, 5 × 5, 6 × 5 blocks, less HQ's and the homes'
+    assert [lots_shown(c) for c in (0, 7, 8, 10, 11, 14, 15, 18, 19, 23, 24)] == [
+        7,
+        7,
+        10,
+        10,
+        14,
+        14,
+        18,
+        18,
+        23,
+        23,
+        28,
+    ]
 
 
 async def test_free_lots_are_filled_first_then_the_square_grows_a_ring(ledger: Ledger) -> None:
@@ -76,7 +89,7 @@ async def test_free_lots_are_filled_first_then_the_square_grows_a_ring(ledger: L
     back, _ = await ledger.create_department("Eighth", "x", "mgr-8")
     assert back["slot"] == 3  # a free lot first
     ninth, _ = await ledger.create_department("Ninth", "x", "mgr-9")
-    assert ninth["slot"] == 7  # then the next ring: 4 × 4
+    assert ninth["slot"] == 7  # then the next column: 4 × 3
 
 
 async def test_a_rebuilt_department_goes_back_to_its_old_lot_when_it_is_still_free(ledger: Ledger) -> None:

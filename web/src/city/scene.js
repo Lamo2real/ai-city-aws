@@ -411,13 +411,15 @@ function junctionMarks(g, j) {
   } else if (j.kind === "giveway") {
     teeth(cx - s - 2, cy, 2, 16); teeth(cx + s, cy - 16, 2, 16);
   } else if (j.kind === "roundabout") {
-    oval(g, cx, cy, 30, 30, "#65617c"); oval(g, cx, cy, 28, 28, "#3f4168");
-    R(g, cx - 32, cy - 16, 64, 32, "#3f4168"); R(g, cx - 16, cy - 32, 32, 64, "#3f4168");
-    for (let a = 0; a < 24; a++) { const t = (a / 24) * Math.PI * 2; if (a % 2) R(g, cx + Math.cos(t) * 27 - 1, cy + Math.sin(t) * 27 - 1, 2, 2, "#56587e"); }
-    teeth(cx - 30, cy, 2, 16); teeth(cx + 28, cy - 16, 2, 16); teeth(cx - 16, cy - 30, 16, 2); teeth(cx, cy + 28, 16, 2);
-    oval(g, cx, cy, 12, 12, "#cfcfd6"); oval(g, cx, cy, 10, 10, "#387a5c");
-    for (const [dx, dy, c] of [[-5, 2, "#f4c63c"], [4, 4, "#e0625a"], [-2, 6, "#fff6e0"], [6, -1, "#f4c63c"]]) R(g, cx + dx, cy + dy, 2, 2, c);
-    R(g, cx - 1, cy - 4, 2, 5, "#6b4226"); oval(g, cx, cy - 7, 5, 4, "#2f7a52"); oval(g, cx - 1, cy - 8, 3, 2, "#4f9a6a");
+    // Twice the old size (decision 252): the ring road around RING_R (40), a kerb outside it, a planted island inside.
+    const O = 52, I = 26;
+    oval(g, cx, cy, O + 2, O + 2, "#65617c"); oval(g, cx, cy, O, O, "#3f4168");
+    R(g, cx - O - 4, cy - 16, 2 * O + 8, 32, "#3f4168"); R(g, cx - 16, cy - O - 4, 32, 2 * O + 8, "#3f4168");
+    for (let a = 0; a < 40; a++) { const t = (a / 40) * Math.PI * 2; if (a % 2) R(g, cx + Math.cos(t) * (O - 3) - 1, cy + Math.sin(t) * (O - 3) - 1, 2, 2, "#56587e"); }
+    teeth(cx - O, cy, 2, 16); teeth(cx + O - 2, cy - 16, 2, 16); teeth(cx - 16, cy - O, 16, 2); teeth(cx, cy + O - 2, 16, 2);
+    oval(g, cx, cy, I, I, "#cfcfd6"); oval(g, cx, cy, I - 2, I - 2, "#387a5c");
+    for (const [dx, dy, c] of [[-10, 4, "#f4c63c"], [8, 8, "#e0625a"], [-4, 12, "#fff6e0"], [12, -2, "#f4c63c"], [-14, -6, "#e0625a"], [2, -14, "#fff6e0"]]) R(g, cx + dx, cy + dy, 2, 2, c);
+    R(g, cx - 1, cy - 6, 2, 7, "#6b4226"); oval(g, cx, cy - 10, 7, 6, "#2f7a52"); oval(g, cx - 1, cy - 12, 4, 3, "#4f9a6a");
   }
 }
 // A traffic light on its pole at the kerb, facing the traffic it holds: red, amber and green, one of them lit.
