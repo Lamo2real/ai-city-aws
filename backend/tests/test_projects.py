@@ -57,7 +57,7 @@ async def test_the_agreed_brief_travels_with_the_build() -> None:
         }
     )
     assert out.startswith("Handed to the Orchestrator")
-    (t,) = [t for t in await d.ledger.list_tickets(("open",)) if t.get("kind") == "task"]
+    (t,) = [t for t in await d.ledger.list_tickets(("open", "in_progress")) if t.get("kind") == "task"]
     assert t["brief"] == BRIEF and t["conversation"] == "app-new-1" and "app_id" not in t
     (msg,) = d.queue.sent  # type: ignore[attr-defined]
     assert BRIEF in msg["body"] and "nothing more" in msg["body"]

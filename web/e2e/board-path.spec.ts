@@ -11,7 +11,20 @@ type Ev = Record<string, unknown> & { type: string };
 const fixture = (name: string): Ev[] =>
   JSON.parse(readFileSync(`${import.meta.dirname}/fixtures/${name}.json`, "utf8")) as Ev[];
 const SHOTS = process.env.BOARD_SHOTS ?? `${import.meta.dirname}/../test-results/board-shots`;
-const NAMES = ["Application", "IT Infrastructure", "Data & AI", "Marketing", "Sales", "Customer Support", "Finance", "Legal", "Product", "Operations", "Research", "Media"];
+const NAMES = [
+  "Application",
+  "IT Infrastructure",
+  "Data & AI",
+  "Marketing",
+  "Sales",
+  "Customer Support",
+  "Finance",
+  "Legal",
+  "Product",
+  "Operations",
+  "Research",
+  "Media",
+];
 const departments = NAMES.map((name, i) => ({
   key: name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
   name,
@@ -52,24 +65,33 @@ const inside = (page: Page, ids: string[], dept: string) =>
 for (const [name, label] of [
   ["board-small", "a small change on the board"],
   ["chain-small", "the same change on the old chain (before)"],
-  ["board-medium", "a medium build"],
+  ["board-medium", "a medium build on the board"],
+  ["chain-medium", "the same build on the old chain (before)"],
 ] as const) {
   test(`City: ${label}: hires ride into the Application tower and the count is who is inside`, async ({ page }) => {
     test.setTimeout(90_000);
     const events = fixture(name);
-    const m = await mockBackend(page, { snapshot: { departments }, apps: [appRecord(APP, "star-sweeper", "Star Sweeper")] });
+    const m = await mockBackend(page, {
+      snapshot: { departments },
+      apps: [appRecord(APP, "star-sweeper", "Star Sweeper")],
+    });
     await page.goto("/#/city");
     const city = page.locator("section.city");
     await expect(city).toHaveAttribute("data-city-ready", "1");
     await expect(city).toHaveAttribute("data-at-work", "0");
     const ids = workerIds(events);
     // Up to the last worker being put to work, then they ride in.
-    const lastStart = events.findLastIndex((e) => e.type === "worker.state" && e.state === "working" && ids.includes(String(e.id)));
+    const lastStart = events.findLastIndex(
+      (e) => e.type === "worker.state" && e.state === "working" && ids.includes(String(e.id)),
+    );
     const firstHome = events.findIndex((e) => e.type === "agent.retired");
     const cut = firstHome >= 0 && firstHome < lastStart ? firstHome : lastStart + 1;
     await replay(page, m, events.slice(0, cut));
-    const riding = ids.filter((id) => !events.slice(0, cut).some((e) => e.type === "agent.retired" && e.id === id));
-    await expect.poll(() => inside(page, riding, "Application").then((c) => c.inside), { timeout: 20_000 }).toBe(riding.length);
+    const sent = events.slice(0, cut);
+    const riding = workerIds(sent).filter((id) => !sent.some((e) => e.type === "agent.retired" && e.id === id));
+    await expect
+      .poll(() => inside(page, riding, "Application").then((c) => c.inside), { timeout: 20_000 })
+      .toBe(riding.length);
     const c = await inside(page, riding, "Application");
     expect(c.atWork).toBe(riding.length);
     await expect.poll(() => inside(page, riding, "Application").then((x) => x.shown)).toBe(String(riding.length));
@@ -86,9 +108,16 @@ for (const [name, label] of [
   test(`Projects: ${label}: live preview with who edits what, one timeline, no ids`, async ({ page }) => {
     test.setTimeout(60_000);
     const events = fixture(name);
-    const m = await mockBackend(page, { snapshot: { departments }, apps: [appRecord(APP, "star-sweeper", "Star Sweeper")] });
+    const m = await mockBackend(page, {
+      snapshot: { departments },
+      apps: [appRecord(APP, "star-sweeper", "Star Sweeper")],
+    });
     await page.route("https://apps.vaic.test/**", (route) =>
-      route.fulfill({ status: 200, contentType: "text/html", body: "<!doctype html><title>Star Sweeper</title><h1>Star Sweeper</h1>" }),
+      route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!doctype html><title>Star Sweeper</title><h1>Star Sweeper</h1>",
+      }),
     );
     await page.goto(`/#/apps/star-sweeper`);
     await expect(page.getByRole("heading", { name: "Star Sweeper" })).toBeVisible();
@@ -121,24 +150,33 @@ for (const [name, label] of [
   });
 }
 
-test("Projects: a medium build from a new project: steps, preview and the final reply in its chat only", async ({ page }) => {
-  test.setTimeout(60_000);
-  const events = fixture("board-medium");
-  const m = await mockBackend(page, { snapshot: { departments } });
-  await page.route("https://apps.vaic.test/**", (route) =>
-    route.fulfill({ status: 200, contentType: "text/html", body: "<!doctype html><title>Memory</title><h1>Memory</h1>" }),
-  );
-  await page.goto("/#/apps");
-  await page.getByRole("button", { name: /New project/ }).click();
-  const dialog = page.getByRole("dialog", { name: "What should your app do?" });
-  await dialog.getByPlaceholder("Describe your app in one sentence").fill("build me a memory game with animals");
-  await dialog.getByRole("button", { name: "Start building" }).click();
-  await expect(page).toHaveURL(/#\/apps\/new-[a-z0-9]+$/);
-  const conv = `app-${page.url().split("/apps/")[1]}`;
-  await replay(page, m, events, { from: "app-new-mem0001", to: conv });
-  const log = page.locator(".pj-log");
-  await expect(log.getByText("Edited app/game.js").first()).toBeAttached();
-  const last = String([...events].reverse().find((e) => e.type === "vaic.reply" && e.done)?.text ?? "");
-  await expect(log.locator(".pj-vaic").last()).toContainText(last.slice(0, 30));
-  expect(await log.textContent()).not.toMatch(/\b(wkr|mgr)-[a-z-]+-[0-9a-f]{6,}/);
-});
+for (const name of ["board-medium", "chain-medium"] as const)
+  test(`Projects: ${name}: a medium build from a new project: steps, preview and the final reply in its chat only`, async ({
+    page,
+  }) => {
+    test.setTimeout(60_000);
+    const events = fixture(name);
+    const m = await mockBackend(page, { snapshot: { departments } });
+    await page.route("https://apps.vaic.test/**", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!doctype html><title>Memory</title><h1>Memory</h1>",
+      }),
+    );
+    await page.goto("/#/apps");
+    await page.getByRole("button", { name: /New project/ }).click();
+    const dialog = page.getByRole("dialog", { name: "What should your app do?" });
+    await dialog.getByPlaceholder("Describe your app in one sentence").fill("build me a memory game with animals");
+    await dialog.getByRole("button", { name: "Start building" }).click();
+    await expect(page).toHaveURL(/#\/apps\/new-[a-z0-9]+$/);
+    const conv = `app-${page.url().split("/apps/")[1]}`;
+    await replay(page, m, events, { from: "app-new-mem0001", to: conv });
+    const log = page.locator(".pj-log");
+    await expect(log.getByText("Edited app/game.js").first()).toBeAttached();
+    const last = String([...events].reverse().find((e) => e.type === "vaic.reply" && e.done)?.text ?? "");
+    await expect(log.locator(".pj-vaic").last()).toContainText(last.slice(0, 30));
+    expect(await log.textContent()).not.toMatch(/\b(wkr|mgr)-[a-z-]+-[0-9a-f]{6,}/);
+    await expect(log.getByRole("status")).toHaveCount(0);
+    await page.screenshot({ path: `${SHOTS}/project-${name}-done.png` });
+  });

@@ -70,7 +70,8 @@ locals {
   # the model the owner's chosen departments run on (decision 129: Fable for the workers of Media, Research, Legal).
   dept_models = try(compact([local.models.departmentModels.model, local.models.departmentModels.fallback]), [])
   dept_roles  = try(local.models.departmentModels.roles, ["manager", "worker"])
-  # The build map (decision 289): workers and managers (planners, reviewers, takeovers) may call every build model.
+  # The build map (decision 289): the Orchestrator's runtime (the planners), managers (reviewers) and workers may
+  # call every build model.
   build_models = distinct(compact(concat(
     [local.models.build.trivialWorker],
     flatten([for s in values(local.models.build.sizes) : [s.planner, s.worker, s.reviewer, s.takeover]]),
@@ -79,7 +80,7 @@ locals {
     for r in local.all_roles : r => distinct(compact(concat(
       [local.models.roles[r].model, local.models.roles[r].fallback],
       contains(local.dept_roles, r) ? local.dept_models : [],
-      contains(["manager", "worker"], r) ? local.build_models : [],
+      contains(["orchestrator", "manager", "worker"], r) ? local.build_models : [],
     )))
   }
   system_profile_arn = {

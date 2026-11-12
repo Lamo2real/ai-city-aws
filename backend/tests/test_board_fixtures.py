@@ -110,6 +110,15 @@ async def vaic(req: EngineRequest, call: Call) -> str:
 
 
 async def orchestrator(req: EngineRequest, call: Call) -> str:
+    if "Board planning" in req.turn.prompt:
+        for name, files in (("Cards", ["cards.js"]), ("Score", ["score.js"])):
+            await call(
+                "add_part",
+                {"name": name, "goal": f"Build the {name.lower()}", "acceptance": "Works", "department": "Application",
+                 "files": files},
+            )  # fmt: skip
+        await call("finish_plan", {})
+        return "Planned."
     if "(task) from vaic" in req.turn.prompt:
         await call(
             "assign_to_department",
@@ -123,8 +132,15 @@ async def orchestrator(req: EngineRequest, call: Call) -> str:
 
 async def city_for(board_sizes: list[str] | None = None) -> City:
     settings = {} if board_sizes is None else {"board_sizes": board_sizes}
+    chain_manager = make_manager()
+
+    async def manager(req: EngineRequest, call: Call) -> str:
+        if "Board review" in req.turn.prompt:
+            return await call("review", {"ticket_id": req.ctx.ticket_id, "verdict": "PASS", "reasons": "Meets it."})
+        return await chain_manager(req, call)
+
     city = make_city(
-        scripted_engine({"vaic": vaic, "orchestrator": orchestrator, "manager": make_manager(), "worker": builder}),
+        scripted_engine({"vaic": vaic, "orchestrator": orchestrator, "manager": manager, "worker": builder}),
         **settings,
     )
     _BUS["bus"] = city.bus
@@ -178,6 +194,7 @@ CASES = {
     "board-small": ("change the memory game to 4 pairs", CONV, None),
     "chain-small": ("change the memory game to 4 pairs", CONV, []),
     "board-medium": ("build me a memory game with animals", NEW_CONV, None),
+    "chain-medium": ("build me a memory game with animals", NEW_CONV, []),
 }
 
 

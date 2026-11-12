@@ -10,8 +10,14 @@ from vaic.shared.hierarchy.factory import Factory
 
 
 def city_deps():  # type: ignore[no-untyped-def]
+    """The Orchestrator chain (``board_sizes`` []): the board path tells its planner the number instead (decision 294)."""
     d = apps_city_deps()
-    return replace(d, factory=Factory(d.ledger, d.bus, d.settings))
+    base = d.settings
+
+    async def chain() -> dict:  # type: ignore[type-arg]
+        return {**await base(), "board_sizes": []}
+
+    return replace(d, factory=Factory(d.ledger, d.bus, chain), settings=chain)
 
 
 VAIC = TurnCtx(agent_id="vaic", role="vaic", department=None, ticket_id="", task_id="")

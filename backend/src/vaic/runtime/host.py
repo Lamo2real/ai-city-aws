@@ -247,7 +247,11 @@ class AgentHost:
                 else None
             )
             env = self.o.env if self.o.env is not None else os.environ
-            if inv.get("model") and inv["role"] in ("manager", "worker") and inv["model"] in build_model_names():
+            if (
+                inv.get("model")
+                and inv["role"] in ("orchestrator", "manager", "worker")
+                and inv["model"] in build_model_names()
+            ):
                 # The board path (decision 289): city code names the build map's model on the message.
                 models = resolve_build_model(inv["role"], str(inv["model"]), env)
             else:

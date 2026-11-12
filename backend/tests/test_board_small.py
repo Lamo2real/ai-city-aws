@@ -4,7 +4,6 @@ Opus review only when risky → the job finished in code and VAIC told. No Orche
 # ruff: noqa: ASYNC240 (test workers write their files like a real worker does)
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -189,14 +188,6 @@ async def test_the_switch_sends_small_jobs_through_the_old_chain() -> None:
     task = await run(city)
     assert "orchestrator" in roles(city)
     assert task.get("path") is None and not [a for a in await city.ledger.list_agents() if a["kind"] == "worker"]
-
-
-async def test_bigger_jobs_still_go_through_the_chain_in_stage_2() -> None:
-    city = city_with(writes("{}"))
-    task = await run(city, "build me a memory game with animals")
-    assert task["size"] == "medium" and task.get("path") is None
-    assert "orchestrator" in roles(city)
-    assert json.dumps(task)  # a plain record
 
 
 async def test_a_board_step_runs_once_in_code_with_no_model_turn() -> None:

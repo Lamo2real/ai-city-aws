@@ -7,7 +7,7 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-5fc2016ff70e",
+   "id": "t-d1c20d97bc55",
    "goal": "change the memory game to 4 pairs",
    "from": "vaic",
    "to": "orchestrator",
@@ -23,8 +23,8 @@
    "size": "small",
    "size_reason": "a change to an existing app",
    "size_by_owner": false,
-   "sizing_ms": 0.035,
-   "vaic_ms": 17,
+   "sizing_ms": 0.039,
+   "vaic_ms": 16,
    "created_at": "2026-11-06T09:00:00.000Z",
    "updated_at": "2026-11-06T09:00:00.000Z"
   },
@@ -48,17 +48,17 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-bd3c48ca3e2b",
+   "id": "t-a869221b4d8a",
    "goal": "change the memory game to 4 pairs",
    "from": "orchestrator",
    "to": "mgr-application",
    "status": "open",
    "department": "Application",
-   "parent_id": "t-5fc2016ff70e",
+   "parent_id": "t-d1c20d97bc55",
    "kind": "assignment",
    "acceptance": "Done exactly as the owner asked: change the memory game to 4 pairs",
    "review_rounds": 0,
-   "task_id": "t-5fc2016ff70e",
+   "task_id": "t-d1c20d97bc55",
    "app_id": "app-0000000000aa",
    "pace": "fastest",
    "path": "board",
@@ -70,7 +70,7 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-5fc2016ff70e",
+   "id": "t-d1c20d97bc55",
    "goal": "change the memory game to 4 pairs",
    "from": "vaic",
    "to": "orchestrator",
@@ -86,9 +86,9 @@
    "size": "small",
    "size_reason": "a change to an existing app",
    "size_by_owner": false,
-   "sizing_ms": 0.035,
+   "sizing_ms": 0.039,
    "path": "board",
-   "vaic_ms": 17,
+   "vaic_ms": 16,
    "created_at": "2026-11-06T09:00:00.000Z",
    "updated_at": "2026-11-06T09:00:00.000Z"
   },
@@ -97,17 +97,17 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-bd3c48ca3e2b",
+   "id": "t-a869221b4d8a",
    "goal": "change the memory game to 4 pairs",
    "from": "orchestrator",
    "to": "mgr-application",
    "status": "in_progress",
    "department": "Application",
-   "parent_id": "t-5fc2016ff70e",
+   "parent_id": "t-d1c20d97bc55",
    "kind": "assignment",
    "acceptance": "Done exactly as the owner asked: change the memory game to 4 pairs",
    "review_rounds": 0,
-   "task_id": "t-5fc2016ff70e",
+   "task_id": "t-d1c20d97bc55",
    "app_id": "app-0000000000aa",
    "pace": "fastest",
    "path": "board",
@@ -119,7 +119,7 @@
  {
   "type": "agent.hired",
   "agent": {
-   "id": "wkr-application-e87f98e514d6",
+   "id": "wkr-application-4ed3dcbcb54e",
    "kind": "worker",
    "role": "Application builder",
    "department": "Application",
@@ -138,17 +138,17 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-9ec577ffc698",
+   "id": "t-bac4552c706d",
    "goal": "change the memory game to 4 pairs",
    "from": "mgr-application",
-   "to": "wkr-application-e87f98e514d6",
+   "to": "wkr-application-4ed3dcbcb54e",
    "status": "open",
    "department": "Application",
-   "parent_id": "t-bd3c48ca3e2b",
+   "parent_id": "t-a869221b4d8a",
    "kind": "assignment",
    "acceptance": "Done exactly as the owner asked: change the memory game to 4 pairs",
    "review_rounds": 0,
-   "task_id": "t-5fc2016ff70e",
+   "task_id": "t-d1c20d97bc55",
    "pace": "fastest",
    "size": "small",
    "path": "board",
@@ -159,7 +159,7 @@
  },
  {
   "type": "worker.state",
-  "id": "wkr-application-e87f98e514d6",
+  "id": "wkr-application-4ed3dcbcb54e",
   "state": "working"
  },
  {
@@ -177,17 +177,17 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-9ec577ffc698",
+   "id": "t-bac4552c706d",
    "goal": "change the memory game to 4 pairs",
    "from": "mgr-application",
-   "to": "wkr-application-e87f98e514d6",
+   "to": "wkr-application-4ed3dcbcb54e",
    "status": "in_progress",
    "department": "Application",
-   "parent_id": "t-bd3c48ca3e2b",
+   "parent_id": "t-a869221b4d8a",
    "kind": "assignment",
    "acceptance": "Done exactly as the owner asked: change the memory game to 4 pairs",
    "review_rounds": 0,
-   "task_id": "t-5fc2016ff70e",
+   "task_id": "t-d1c20d97bc55",
    "pace": "fastest",
    "size": "small",
    "path": "board",
@@ -198,25 +198,25 @@
  },
  {
   "type": "activity",
-  "id": "wkr-application-e87f98e514d6",
+  "id": "wkr-application-4ed3dcbcb54e",
   "activity": "understanding"
  },
  {
   "type": "activity",
-  "id": "wkr-application-e87f98e514d6",
+  "id": "wkr-application-4ed3dcbcb54e",
   "activity": "coding",
   "detail": "Loaded the app: Star Sweeper"
  },
  {
   "type": "activity",
-  "id": "wkr-application-e87f98e514d6",
+  "id": "wkr-application-4ed3dcbcb54e",
   "activity": "coding",
   "detail": "Edited app/game.js"
  },
  {
   "type": "app.preview",
-  "task_id": "t-5fc2016ff70e",
-  "hire_id": "wkr-application-e87f98e514d6",
+  "task_id": "t-d1c20d97bc55",
+  "hire_id": "wkr-application-4ed3dcbcb54e",
   "preview_url": "https://apps.vaic.test/drafts/prv-0123456789abcdef0123456789abcdef/index.html",
   "seq": 1,
   "paths": [
@@ -230,9 +230,9 @@
  },
  {
   "type": "app.draft",
-  "draft_id": "d-t-9ec577ffc698",
-  "ticket_id": "t-9ec577ffc698",
-  "task_id": "t-5fc2016ff70e",
+  "draft_id": "d-t-bac4552c706d",
+  "ticket_id": "t-bac4552c706d",
+  "task_id": "t-d1c20d97bc55",
   "department": "Application",
   "title": "Star Sweeper",
   "status": "ready",
@@ -241,18 +241,18 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-9ec577ffc698",
+   "id": "t-bac4552c706d",
    "goal": "change the memory game to 4 pairs",
    "from": "mgr-application",
-   "to": "wkr-application-e87f98e514d6",
+   "to": "wkr-application-4ed3dcbcb54e",
    "status": "in_review",
    "department": "Application",
-   "parent_id": "t-bd3c48ca3e2b",
+   "parent_id": "t-a869221b4d8a",
    "kind": "assignment",
    "acceptance": "Done exactly as the owner asked: change the memory game to 4 pairs",
    "result": "The game now has 4 pairs.\nArtifacts: none\nChecks: -",
    "review_rounds": 0,
-   "task_id": "t-5fc2016ff70e",
+   "task_id": "t-d1c20d97bc55",
    "pace": "fastest",
    "size": "small",
    "path": "board",
@@ -263,13 +263,13 @@
  },
  {
   "type": "activity",
-  "id": "wkr-application-e87f98e514d6",
+  "id": "wkr-application-4ed3dcbcb54e",
   "activity": "idle"
  },
  {
   "type": "review.result",
-  "ticket_id": "t-9ec577ffc698",
-  "agent": "wkr-application-e87f98e514d6",
+  "ticket_id": "t-bac4552c706d",
+  "agent": "wkr-application-4ed3dcbcb54e",
   "reviewer": "mgr-application",
   "verdict": "PASS",
   "summary": "The tests passed.",
@@ -277,24 +277,24 @@
  },
  {
   "type": "worker.state",
-  "id": "wkr-application-e87f98e514d6",
+  "id": "wkr-application-4ed3dcbcb54e",
   "state": "completed"
  },
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-9ec577ffc698",
+   "id": "t-bac4552c706d",
    "goal": "change the memory game to 4 pairs",
    "from": "mgr-application",
-   "to": "wkr-application-e87f98e514d6",
+   "to": "wkr-application-4ed3dcbcb54e",
    "status": "done",
    "department": "Application",
-   "parent_id": "t-bd3c48ca3e2b",
+   "parent_id": "t-a869221b4d8a",
    "kind": "assignment",
    "acceptance": "Done exactly as the owner asked: change the memory game to 4 pairs",
    "result": "The game now has 4 pairs.\nArtifacts: none\nChecks: -",
    "review_rounds": 0,
-   "task_id": "t-5fc2016ff70e",
+   "task_id": "t-d1c20d97bc55",
    "pace": "fastest",
    "size": "small",
    "path": "board",
@@ -305,23 +305,23 @@
  },
  {
   "type": "agent.retired",
-  "id": "wkr-application-e87f98e514d6"
+  "id": "wkr-application-4ed3dcbcb54e"
  },
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-bd3c48ca3e2b",
+   "id": "t-a869221b4d8a",
    "goal": "change the memory game to 4 pairs",
    "from": "orchestrator",
    "to": "mgr-application",
    "status": "done",
    "department": "Application",
-   "parent_id": "t-5fc2016ff70e",
+   "parent_id": "t-d1c20d97bc55",
    "kind": "assignment",
    "acceptance": "Done exactly as the owner asked: change the memory game to 4 pairs",
    "result": "The game now has 4 pairs.\nArtifacts: none\nChecks: -",
    "review_rounds": 0,
-   "task_id": "t-5fc2016ff70e",
+   "task_id": "t-d1c20d97bc55",
    "app_id": "app-0000000000aa",
    "pace": "fastest",
    "path": "board",
@@ -332,12 +332,12 @@
  },
  {
   "type": "approval.requested",
-  "id": "ap-b511343b7b58",
+  "id": "ap-c48c4061c678",
   "agent": "orchestrator",
   "action": "Update the app \u201cStar Sweeper\u201d to version 2",
   "reason": "Apps run in AI City only after the owner approves them.",
   "kind": "app.publish",
-  "draft_id": "d-t-9ec577ffc698",
+  "draft_id": "d-t-bac4552c706d",
   "preview_url": "https://apps.vaic.test/drafts/d-1/",
   "title": "Star Sweeper",
   "description": "Sweep the stars.",
@@ -348,14 +348,14 @@
  },
  {
   "type": "signoff.result",
-  "ticket_id": "t-5fc2016ff70e",
+  "ticket_id": "t-d1c20d97bc55",
   "verdict": "PASS",
   "summary": "Checked."
  },
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-5fc2016ff70e",
+   "id": "t-d1c20d97bc55",
    "goal": "change the memory game to 4 pairs",
    "from": "vaic",
    "to": "orchestrator",
@@ -372,9 +372,9 @@
    "size": "small",
    "size_reason": "a change to an existing app",
    "size_by_owner": false,
-   "sizing_ms": 0.035,
+   "sizing_ms": 0.039,
    "path": "board",
-   "vaic_ms": 17,
+   "vaic_ms": 16,
    "created_at": "2026-11-06T09:00:00.000Z",
    "updated_at": "2026-11-06T09:00:02.000Z"
   },
@@ -382,11 +382,11 @@
  },
  {
   "type": "approval.withdrawn",
-  "id": "ap-b511343b7b58"
+  "id": "ap-c48c4061c678"
  },
  {
   "type": "result",
-  "ticket_id": "t-5fc2016ff70e",
+  "ticket_id": "t-d1c20d97bc55",
   "summary": "The game now has 4 pairs.\nArtifacts: none\nChecks: -\nThe owner is asked to publish the new version in Needs you; it appears under Apps once they approve it (it is not live yet)."
  },
  {
@@ -399,7 +399,7 @@
   "conversation": "app-app-0000000000aa",
   "text": "Done, Sir: the game has 4 pairs now. The new version is waiting for your OK in Needs you.",
   "done": true,
-  "message_id": "m-21d469bcce38"
+  "message_id": "m-70ba090c54b3"
  },
  {
   "type": "activity",

@@ -35,7 +35,6 @@ from vaic.shared.apps import (
     validate_files,
     version_files,
 )
-from vaic.shared.build_models import models_for
 from vaic.shared.chat_text import worker_name
 from vaic.shared.chief_of_staff import autopilot, review_reason
 from vaic.shared.events import now_iso
@@ -466,7 +465,8 @@ def _vaic_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             },
         )
         if (
-            board.on_board(await d.settings(), sizing.size)
+            sizing.size == "small"
+            and board.on_board(await d.settings(), sizing.size)
             and not refs
             and not choice
             and (target or (verdict is not None and verdict.route == "department"))
@@ -478,6 +478,18 @@ def _vaic_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             )
             await board.start_small(d, t, home, target, extra)
             return f"Started: one worker in {home['name']} is on it now (a small job, no planning needed)."
+        if sizing.size != "small" and board.on_board(await d.settings(), sizing.size) and not refs and not choice:
+            # Medium and bigger (decision 289): a planner writes the parts to the board; each starts as it is written.
+            extra = "\n".join(
+                x
+                for x in (brief_note(brief) if brief else "", f"Constraints: {cons}" if cons else "", hint.strip())
+                if x
+            )
+            await board.start_planned(d, t, target, extra)
+            return (
+                f"Handed to the Orchestrator's planner as a {sizing.size} job on the board: it splits it into parts and "
+                "each starts as it is written" + (f" ({workers} workers)." if workers else ".")
+            )
         body = f"New task from the owner.\nGoal: {a['goal']}\nOwner's words: {a.get('owner_words', '')}"
         if t.get("pace") == UNHURRIED:
             body += "\nPace: the owner said to take your time."
@@ -1128,6 +1140,12 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             )
         return "Signed off. Now report to VAIC."
 
+    async def add_part(a: dict[str, Any]) -> str:
+        return await board.add_part(d, c.task_id, a)
+
+    async def finish_plan(_: dict[str, Any]) -> str:
+        return await board.finish_plan(d, c.task_id)
+
     async def report_to_vaic(a: dict[str, Any]) -> str:
         signed = await d.ledger.table.get(f"TICKET#{c.task_id}", "SIGNOFF")
         if (signed or {}).get("verdict") != "PASS":
@@ -1149,7 +1167,36 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         await send(d, msg)
         return "Reported to VAIC."
 
+    _bool = {"type": "boolean"}
     return [
+        ToolSpec(
+            "add_part",
+            "Board planning only (a job whose brief says Board planning): write one part to the board. It starts at "
+            "once when the parts in `after` are done (or it has none). files: the files this part alone owns. "
+            "trivial: a one-line or config change (runs on Haiku). aws: it creates or changes AWS resources.",
+            _obj(
+                {
+                    "name": _s(2, 80),
+                    "goal": _s(5),
+                    "acceptance": _s(5),
+                    "department": _s(2, 40),
+                    "after": _STRS,
+                    "files": _STRS,
+                    "trivial": _bool,
+                    "risky": _bool,
+                    "aws": _bool,
+                },
+                ("after", "files", "trivial", "risky", "aws"),
+            ),
+            add_part,
+        ),
+        ToolSpec(
+            "finish_plan",
+            "Board planning only: the plan is complete. The whole-app check is added after every part; the board runs "
+            "the rest and tells VAIC.",
+            _obj({}),
+            finish_plan,
+        ),
         ToolSpec(
             "create_department",
             "Create a department (data). Its manager is created dormant and costs nothing until work arrives.",
@@ -1394,7 +1441,7 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             if w and w.get("state") == "retired":
                 return f"PASS recorded. {t['to']} has finished and gone home."
             return f"PASS recorded. {t['to']} still has other work; it goes home when that passes."
-        if t.get("path") == "board" and len(said) >= models_for(str(t.get("size") or "small")).fails_before_takeover:
+        if t.get("path") == "board" and len(said) >= board.fails_allowed(t):
             # The board path (decision 289): a fresh worker on the takeover model gets the part with every reason.
             await d.ledger.set_ticket_status(t["id"], t["status"], "review failed", {"review_rounds": rnd})
             done = await board.take_over(d, t["id"], said)
@@ -1698,6 +1745,27 @@ def _worker_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         )
         return "Reported to your manager. End your turn."
 
+    async def needs_a_team(a: dict[str, Any]) -> str:
+        job = await d.ledger.get_ticket(c.ticket_id)
+        task = await d.ledger.get_ticket(c.task_id)
+        if not job or job.get("path") != "board" or (task or {}).get("planned"):
+            return "Not available for this assignment: finish it, or ask your manager."
+        await send(
+            d,
+            {
+                "role": "manager",
+                "agentId": str(job.get("from")),
+                "department": c.department,
+                "ticketId": c.ticket_id,
+                "taskId": c.task_id,
+                "kind": "report",
+                "from": c.agent_id,
+                "body": hide_token(str(a["findings"]))[:4000],
+                "board": "escalate",
+            },
+        )
+        return "Handed back: a planner splits it into parts for a team now. End your turn."
+
     async def submit_app(a: dict[str, Any]) -> str:
         ws = d.workspace
         if ws is None:
@@ -1708,6 +1776,20 @@ def _worker_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             files = await asyncio.to_thread(_collect_app, home, str(a.get("dir") or "app"))
         except ValueError as e:
             return f"Not submitted: {e}."
+        part = await d.ledger.get_ticket(c.ticket_id)
+        if part and part.get("shared_app") and not part.get("check"):
+            # One app built by several workers (decision 289): only this part's changed files go to the shared copy.
+            seen = await asyncio.to_thread(_loaded_hashes, home)
+            changed = [(p, b) for p, b in files if seen.get(p) != _digest(b)]
+            s3s = await asyncio.to_thread(ws.s3_for, board.shared_hire(c.task_id))
+            prefix = submission_prefix(board.shared_hire(c.task_id))
+            for path, body in changed:
+                await asyncio.to_thread(s3s.put_object, Bucket=ws.bucket, Key=prefix + path, Body=body)
+            await asyncio.to_thread(_remember_hashes, home, {**seen, **{p: _digest(b) for p, b in changed}})
+            return (
+                f"Saved {len(changed)} changed file{'s' if len(changed) != 1 else ''} to the shared copy "
+                f"({', '.join(p for p, _ in changed[:8]) or 'nothing changed'}). Now report_to_manager."
+            )
         bad = validate_files([{"path": p, "size": len(b)} for p, b in files], icon)
         if bad:
             return f"Not submitted: {bad}."
@@ -1737,6 +1819,9 @@ def _worker_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         if ws is None or not ws.apps_url:
             return "Apps cannot be loaded from here."
         app = await get_app(d.ledger, app_id) if app_id else None
+        part = await d.ledger.get_ticket(c.ticket_id)
+        if part and part.get("shared_app"):
+            return await _load_shared(d, ws, c, app)
         if not app:
             return "This task does not change an existing app; build a new one."
         files = version_files(app, await get_draft(d.ledger, str(app.get("draft_id") or "")))
@@ -1755,6 +1840,14 @@ def _worker_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             "Ask your manager a question. Keep working on a sensible default meanwhile.",
             _obj({"question": _s(3)}),
             ask_manager,
+        ),
+        ToolSpec(
+            "needs_a_team",
+            "Only when your assignment is clearly much bigger than one worker can do well (many screens or features, "
+            "several departments): hands the job back to be planned as a team. Say what you found and how you would "
+            "split it. Your part stops here.",
+            _obj({"findings": _s(10)}),
+            needs_a_team,
         ),
         ToolSpec(
             "report_to_manager",
@@ -1794,10 +1887,11 @@ async def board_report(d: CityDeps, c: TurnCtx, job: dict[str, Any], body: str) 
     t0 = time.monotonic()
     root = Path(d.workspace.root) / c.agent_id if d.workspace is not None else Path(f"/tmp/work/{c.agent_id}")  # noqa: S108
     task = await d.ledger.get_ticket(task_id)
-    is_app = bool((task or {}).get("app_id"))
+    is_app = bool((task or {}).get("app_id")) or bool(job.get("shared_app"))
+    delivers = is_app and (not job.get("shared_app") or bool(job.get("check")))  # it hands in the app's draft
     result = await run_checks(root, app=is_app)
     draft = None
-    if result.ok and is_app:
+    if result.ok and delivers:
         # The apps Lambda stages what submit_app sent within seconds; its checks count as tests too.
         for _ in range(60):
             draft = await board.draft_verdict(d, c.ticket_id)
@@ -1822,7 +1916,7 @@ async def board_report(d: CityDeps, c: TurnCtx, job: dict[str, Any], body: str) 
     if not result.ok:
         fails = [*map(str, job.get("review_reasons") or []), f"Tests failed: {result.text(600)}"]
         await d.ledger.set_ticket_status(c.ticket_id, job["status"], "tests failed", {"review_reasons": fails})
-        if len(fails) >= models_for(str(job.get("size") or "small")).fails_before_takeover:
+        if len(fails) >= board.fails_allowed(job):
             await send(
                 d,
                 {
@@ -1837,7 +1931,7 @@ async def board_report(d: CityDeps, c: TurnCtx, job: dict[str, Any], body: str) 
                     "board": "takeover",
                 },
             )
-            return "The tests failed twice, so a fresh worker takes this part over. Stop now and end your turn."
+            return "The tests failed, so a fresh worker takes this part over. Stop now and end your turn."
         return f"Not reported: the tests failed. Fix exactly this, then call report_to_manager again:\n{result.text()}"
     await move(d, c.ticket_id, "in_review", "tests passed", {"result": body, "checks_ran": result.ran})
     await d.ledger.update_agent(c.agent_id, {"worker_state": "review"})
@@ -1873,6 +1967,69 @@ async def task_brief(d: CityDeps, ticket_id: str) -> str | None:
 async def _task_app(d: CityDeps, task_id: str) -> str | None:
     t = await d.ledger.get_ticket(task_id) if task_id else None
     return str(t["app_id"]) if t and t.get("app_id") else None
+
+
+def _digest(b: bytes) -> str:
+    import hashlib
+
+    return hashlib.sha256(b).hexdigest()
+
+
+_LOADED = ".vaic-loaded.json"
+
+
+def _loaded_hashes(home: Path) -> dict[str, str]:
+    import json
+
+    try:
+        return dict(json.loads((home / _LOADED).read_text()))
+    except (OSError, ValueError):
+        return {}
+
+
+def _remember_hashes(home: Path, hashes: dict[str, str]) -> None:
+    import json
+
+    home.mkdir(parents=True, exist_ok=True)
+    (home / _LOADED).write_text(json.dumps(hashes))
+
+
+async def _load_shared(d: CityDeps, ws: Any, c: TurnCtx, app: dict[str, Any] | None) -> str:
+    """A planned app's part (decision 289): the app's current version (if it exists), then every file the other parts
+    saved to the shared copy so far, into app/; what was loaded is remembered so submit_app saves only changes."""
+    from vaic.shared.apps import list_objects
+
+    home = Path(ws.root) / c.agent_id
+    dest = home / "app"
+    n = 0
+    if app:
+        files = version_files(app, await get_draft(d.ledger, str(app.get("draft_id") or "")))
+        if files and all(u.startswith(ws.apps_url.rstrip("/") + "/live/") for _, u in files):
+            try:
+                n = await asyncio.to_thread(_download_app, files, dest, d.fetch)
+            except ValueError as e:
+                return f"Not loaded: {e}."
+    s3 = await asyncio.to_thread(ws.s3_for, board.shared_hire(c.task_id))
+    prefix = submission_prefix(board.shared_hire(c.task_id))
+    shared = 0
+    for o in await list_objects(s3, ws.bucket, prefix):
+        rel = str(o["key"])[len(prefix) :]
+        target = (dest / rel).resolve()
+        if not rel or dest.resolve() not in target.parents:
+            continue
+        obj = await asyncio.to_thread(s3.get_object, Bucket=ws.bucket, Key=str(o["key"]))
+        body = await asyncio.to_thread(obj["Body"].read)
+        await asyncio.to_thread(target.parent.mkdir, parents=True, exist_ok=True)
+        await asyncio.to_thread(target.write_bytes, body)
+        shared += 1
+    dest.mkdir(parents=True, exist_ok=True)
+    loaded = await asyncio.to_thread(_collect_app, home, "app")
+    await asyncio.to_thread(_remember_hashes, home, {p: _digest(b) for p, b in loaded})
+    what = f"“{app['title']}” version {app.get('version') or 1} ({n} files)" if app else "a new app"
+    return (
+        f"Loaded {what} plus {shared} file{'s' if shared != 1 else ''} the other parts saved, into app/. Edit only your "
+        "own files, then submit_app (it saves just your changes to the shared copy)."
+    )
 
 
 def _download_app(files: list[tuple[str, str]], dest: Path, fetch: Callable[[str], bytes]) -> int:
