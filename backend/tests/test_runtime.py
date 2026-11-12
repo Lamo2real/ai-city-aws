@@ -109,6 +109,7 @@ def test_managers_hire_few_and_the_orchestrator_never_staffs_a_one_off() -> None
         "ask_manager",
         "ask_taste",
         "report_to_manager",
+        "needs_a_team",
         "submit_app",
         "search_knowledge",
         "load_app",
