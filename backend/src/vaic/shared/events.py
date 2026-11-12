@@ -312,6 +312,8 @@ class ConnectorUpdated(_E):
     every_department: bool | None = None
     sign: dict[str, Any] | None = None
     """Its logo as City pixels: ``{"size", "colors", "px"}`` (``connector_signs.pixelate``)."""
+    roles: dict[str, str] | None = None
+    """Decision 271: which roles may use it (``vaic``, ``orchestrator``, ``manager``, ``worker`` → ``read``/``all``)."""
 
 
 class ConnectSignin(_E):

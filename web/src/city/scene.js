@@ -610,8 +610,10 @@ function towerShape(b) {
   const X = b.x * TILE, Y = b.y * TILE, W = b.w * TILE, H = b.h * TILE;
   const cx = X + W / 2, foot = Y + H - 14; // the pavement in front takes the last 14 px
   // Sized to the plot (decision 166): wider lots get wider towers, taller lots more floors; three silhouettes.
-  const step = [[1, 0.82, 0.625, 0.41], [1, 0.9, 0.8, 0.45], [1, 0.7, 0.55, 0.4]][hashOf(`shape:${b.dept}`) % 3];
-  const k = Math.max(0.7, (H - 66) / 126), base = W - 32;
+  const step = [[1, 0.92, 0.8, 0.45], [1, 0.96, 0.88, 0.5], [1, 0.86, 0.72, 0.42]][hashOf(`shape:${b.dept}`) % 3]; // broad, close-packed (decision 271)
+  // The body rises to about 40 px over the top of its block (decision 271), the crown and spire above it in the
+  // picture's sky, a little lower on some towers so the skyline stays uneven.
+  const k = Math.max(0.7, (H - 26 - ((H / TILE - BLOCK_H) * TILE - 40) - (hashOf(`rise:${b.dept}`) % 2) * 12) / 126), base = W - 16;
   const tiers = [[base * step[0], 46 * k], [base * step[1], 46 * k], [base * step[2], 34 * k], [base * step[3], 12]].map(([w, h]) => [Math.round(w / 2) * 2, Math.round(h)]); // [width, height] from the street up
   const out = [];
   let top = foot;
@@ -644,10 +646,13 @@ function site(g, b) {
 }
 // The tower alone, drawn once into its own canvas, so it can rise, be built floor by floor, or be pulled down.
 const towerSprites = new Map();
+// A tower's picture has SPRITE_PAD pixels of sky above its lot for the crown and spire (decision 271): the tower
+// rises over the street behind its block, so it is drawn SPRITE_PAD higher than its lot's top.
+const SPRITE_PAD = 48;
 function towerSprite(b) {
   const key = `${b.dept}|${b.slot}|${b.x},${b.y},${b.w},${b.h}`;
   let c = towerSprites.get(key);
-  if (!c) { const t = towerShape(b); const [cv, g] = newCanvas(t.W, t.H); g.translate(-t.X, -t.Y); towerBody(g, b); c = cv; towerSprites.set(key, c); }
+  if (!c) { const t = towerShape(b); const [cv, g] = newCanvas(t.W, t.H + SPRITE_PAD); g.translate(-t.X, -t.Y + SPRITE_PAD); towerBody(g, b); c = cv; towerSprites.set(key, c); }
   return c;
 }
 // The same tower as a soft, cool, blurred silhouette: the placeholder on its lot while the city loads (decision 249).
@@ -891,7 +896,8 @@ function bake(world, skip = new Map(), { now = Date.now(), grow = true } = {}) {
   };
   for (const [x, y, h] of spots) grownTree(g, x, y, rng(`tree:${h}`), sizeAt(x, y));
   const plotOnly = new Set(["rise", "ghost", "focus"]); // the tower itself is drawn live over its plot
-  for (const b of world.buildings) if (b.archived) freeLot(g, b, "ARCHIVED"); else if (plotOnly.has(skip.get(b.dept))) towerPlot(g, b); else if (skip.has(b.dept)) { site(g, b); stumps(g, b); } else tower(g, b);
+  // Back to front (decision 271): a tower rises over the street behind it, so the rows further back go first.
+  for (const b of [...world.buildings].sort((p, q) => p.y + p.h - (q.y + q.h) || p.x - q.x)) if (b.archived) freeLot(g, b, "ARCHIVED"); else if (plotOnly.has(skip.get(b.dept))) towerPlot(g, b); else if (skip.has(b.dept)) { site(g, b); stumps(g, b); } else tower(g, b);
   for (const l of wrecking) site(g, { ...l, dept: l.demolished });
   headquarters(g, world.hq);
   // The neighbourhood (decision 188): apartment buildings and their courtyards, far to near; trees in the parks.
@@ -1226,19 +1232,19 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       // into focus over it, in turn.
       const t = towerShape(b), X = t.X - ox, Y = t.Y - oy, k = a.kind === "focus" ? animProgress(a, now) : 0, e = k * k * (3 - 2 * k);
       const breathe = a.kind === "ghost" && !reduced() ? 0.12 * Math.sin(now / 520 + b.slot * 0.9) : 0;
-      ctx.globalAlpha = (0.66 + breathe) * (1 - e); ctx.drawImage(ghostSprite(b), X, Y);
-      if (e > 0) { ctx.globalAlpha = e; ctx.drawImage(towerSprite(b), X, Y); }
+      ctx.globalAlpha = (0.66 + breathe) * (1 - e); ctx.drawImage(ghostSprite(b), X, Y - SPRITE_PAD);
+      if (e > 0) { ctx.globalAlpha = e; ctx.drawImage(towerSprite(b), X, Y - SPRITE_PAD); }
       ctx.globalAlpha = 1;
       return;
     }
     if (!b || now < a.start) return; // a tower that hasn't had its turn to rise yet stays a plot
     const k = animProgress(a, now), frac = standFraction(a.kind, k), t = towerShape(b), sp = towerSprite(b);
-    const full = t.foot + 3 - t.Y, X = t.X - ox, Y = t.Y - oy, base = t.tiers[0];
+    const full = t.foot + 3 - t.Y + SPRITE_PAD, X = t.X - ox, Y = t.Y - oy - SPRITE_PAD, base = t.tiers[0], tall = t.foot - t.Y + SPRITE_PAD; // Y: the picture's top
     if (a.kind === "build") {
-      const top = Math.round((t.foot - t.Y) * (1 - frac)); // floors go up from the street
+      const top = Math.round(tall * (1 - frac)); // floors go up from the street
       if (full - top > 0) ctx.drawImage(sp, 0, top, t.W, full - top, X, Y + top, t.W, full - top);
       if (k < 1) {
-        const ty = t.Y + top;
+        const ty = t.Y - SPRITE_PAD + top;
         // Scaffolding around the floor going up, and a tower crane lifting the next beam.
         for (let x = base.x - 3; x <= base.x + base.w + 3; x += 8) R(ctx, x - ox, Math.max(ty - 12, t.Y) - oy, 1, Math.min(26, t.foot - ty + 12), "#8a6a44");
         for (const dy of [-12, 0, 12]) if (ty + dy < t.foot && ty + dy > t.Y) R(ctx, base.x - 4 - ox, ty + dy - oy, base.w + 8, 2, "#b5823a");
@@ -1254,7 +1260,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       }
       return;
     }
-    const sink = Math.round((t.foot - t.Y) * (1 - frac)), rows = Math.min(full, full - sink);
+    const sink = Math.round(tall * (1 - frac)), rows = Math.min(full, full - sink);
     const shake = a.kind === "demolish" && k > 0.28 && k < 0.95 ? Math.round(Math.sin(now / 22) * 1.5) : 0;
     if (rows > 0) ctx.drawImage(sp, 0, 0, t.W, rows, X + shake, Y + sink, t.W, rows);
     if (a.kind === "rise" && k < 0.75 && Math.random() < 0.3) dust(t.cx + (Math.random() - 0.5) * base.w, t.foot, 2, POOF, 30, 0.45);
@@ -1703,9 +1709,41 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     root.dataset.signs = String([...signSprites.values()].filter(Boolean).length); // for tests: towers with signs drawn
     return sprite;
   }
+  // HQ's plaques (decision 271): the tools VAIC and the Orchestrator use, in a row on the plaza in front of its doors.
+  let hqSigns = null, hqSignsState = null;
+  function hqSignsOf() {
+    if (state.connectors === hqSignsState && hqSigns !== null) return hqSigns || null;
+    hqSignsState = state.connectors;
+    const q = world.hq, X = q.x * TILE, Y = q.y * TILE, W = q.w * TILE, bx = X + 8, bw = W - 16, by = Y + 8;
+    const slots = plaqueSlots(signsFor(state, "HQ"), { baseX: bx, baseW: bw, cx: X + W / 2, foot: by + 95 });
+    if (!slots.length) { hqSigns = false; root.dataset.hqSigns = "0"; return null; }
+    const [cv, g] = newCanvas(W, 40);
+    g.translate(-X, -(by + 70));
+    for (const p of slots) { R(g, p.x + 1, p.y + PLAQUE, PLAQUE - 1, 1, "rgba(20,18,40,.35)"); g.drawImage(plaque(p), p.x, p.y); }
+    hqSigns = { cv, x: X, y: by + 70 };
+    root.dataset.hqSigns = String(slots.length); // for tests
+    return hqSigns;
+  }
+  const litWindows = (b, ox, oy, below = Infinity) => {
+    const n = counts.get(b.dept)?.n ?? 0, lit = litOrder(b).slice(0, Math.min(litOrder(b).length, n));
+    for (const w of lit) if (w.y < below) { R(ctx, w.x - ox, w.y - oy, w.w, w.h, "#ffdf94"); R(ctx, w.x - ox, w.y - oy, w.w, 1, "#fff3cf"); }
+  };
+  // The part of a tower that rises over the street behind its block (decision 271), drawn again after the cabs and
+  // people there, so whoever is behind the tower is hidden by it, like a street between two New York towers.
+  function drawTowerTops(ox, oy, viewW, viewH, now) {
+    for (const b of [...world.buildings].sort((p, q) => p.y + p.h - (q.y + q.h))) {
+      if (b.archived || anims.has(b.dept)) continue;
+      const t = towerShape(b), blockTop = blockOf(b.slot)[1] * PITCH_Y * TILE, hh = Math.round(blockTop - t.Y);
+      if (t.X - ox > viewW + 10 || t.X + t.W - ox < -10 || t.Y - oy > viewH + 10 || blockTop - oy < -10) continue;
+      ctx.drawImage(towerSprite(b), 0, 0, t.W, hh + SPRITE_PAD, t.X - ox, t.Y - SPRITE_PAD - oy, t.W, hh + SPRITE_PAD);
+      litWindows(b, ox, oy, blockTop);
+      beacon(t, now, ox, oy);
+    }
+  }
   function drawTowerLive(b, now, ox, oy) {
-    const t = towerShape(b), n = counts.get(b.dept)?.n ?? 0, lit = litOrder(b).slice(0, Math.min(litOrder(b).length, n));
-    for (const w of lit) { R(ctx, w.x - ox, w.y - oy, w.w, w.h, "#ffdf94"); R(ctx, w.x - ox, w.y - oy, w.w, 1, "#fff3cf"); }
+    const t = towerShape(b);
+    litWindows(b, ox, oy);
+    const n = counts.get(b.dept)?.n ?? 0;
     // The automatic doors: two glass panels that slide apart; the lobby glows warm behind them.
     const o = doors.get(b.dept) ?? 0, dw = 22, dx = Math.round(t.cx - dw / 2) - ox, dy = t.foot - 22 - oy, half = dw / 2, gap = Math.round(half * o);
     R(ctx, dx, dy, dw, 22, n ? "#ffd98a" : "#6b5a3e");
@@ -1715,6 +1753,9 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     const signs = signsOf(b);
     if (signs) ctx.drawImage(signs, t.X - ox, t.Y - oy);
     // The aircraft beacon on the spire blinks red, like every tower in Manhattan.
+    beacon(t, now, ox, oy);
+  }
+  function beacon(t, now, ox, oy) {
     if (!reduced() && Math.floor(now / 900) % 2) { R(ctx, t.cx - 1.5 - ox, t.top - 32 - oy, 3, 3, "#ff4a3d"); R(ctx, t.cx - 3 - ox, t.top - 33.5 - oy, 6, 6, "rgba(255,74,61,.25)"); }
   }
   // The roof counter: how many are inside. It pops when it changes, and a +1 / −1 floats up from it.
@@ -1770,6 +1811,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     if (hiddenHomes && lastBlock) label(`+${hiddenHomes} MORE IN WORKFORCE`, (lastBlock.x + lastBlock.w / 2) * TILE, lastBlock.y * TILE + 2);
     // The towers' live parts: lit windows for the people inside, the sliding doors, the beacon and the roof counter.
     for (const b of world.buildings) if (!b.archived && !anims.has(b.dept)) drawTowerLive(b, now, ox, oy);
+    const hs = hqSignsOf(); if (hs) ctx.drawImage(hs.cv, hs.x - ox, hs.y - oy);
     for (const [d, a] of anims) drawAnim(d, a, now, ox, oy);
     // Yellow cabs cruising the streets (parked where they are with reduced motion), and the ones driving off.
     if (!reduced() && trafficAt) stepTraffic(traffic, now - trafficAt);
@@ -1824,6 +1866,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       ctx.globalAlpha = 1;
     }
     for (const p of order) drawPerson(p, now, f);
+    drawTowerTops(ox, oy, w, h, now);
     if (root.dataset.taxiCalls !== String(calls)) root.dataset.taxiCalls = String(calls); // for tests
     if (root.dataset.glowingCabs !== String(glowing)) root.dataset.glowingCabs = String(glowing);
     drawMail(now);

@@ -218,3 +218,16 @@ def test_the_snapshot_and_events_carry_only_what_the_city_draws() -> None:
     ]
     e = event({"id": "late", "label": "Late", "status": "needs_login"})
     assert "sign" not in e and "departments" not in e
+
+
+def test_the_city_learns_who_may_use_a_connector() -> None:
+    """Decision 271: a tower shows a tool its team can use, HQ the ones VAIC can; only valid roles and levels pass."""
+    rec = {
+        "id": "jira",
+        "label": "Jira",
+        "status": "ready",
+        "roles": {"vaic": "all", "manager": "read", "bogus": "all", "worker": "nope"},
+    }
+    assert city_signs([rec])[0]["roles"] == {"vaic": "all", "manager": "read"}
+    assert event(rec)["roles"] == {"vaic": "all", "manager": "read"}
+    assert "roles" not in event({"id": "x", "label": "X", "status": "ready"})

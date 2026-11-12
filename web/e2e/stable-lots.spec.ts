@@ -59,7 +59,7 @@ test("adding and demolishing departments never moves another tower on screen", a
   expect(size.lots.map((l) => l.slot)).toEqual([]); // no empty lots: forest where no tower stands (decision 259)
   // Each lot is as big as the tower that stood on it when the lots were numbered (the server's sizes reach the scene).
   const dims = Object.fromEntries(size.buildings.map((b) => [b.dept, [b.w, b.h]]));
-  expect([dims.Application, dims["IT Infrastructure"], dims["Data & AI"], dims.Marketing]).toEqual([[8, 11], [10, 11], [10, 13], [10, 12]]);
+  expect([dims.Application, dims["IT Infrastructure"], dims["Data & AI"], dims.Marketing]).toEqual([[10, 18], [10, 18], [10, 18], [10, 18]]); // decision 271: full lots over the street behind
 
   // Build: no lot is free, so the town takes the next one (it may reach a new block: the map grows, the camera stays);
   // every other tower stays exactly where it was on the map.

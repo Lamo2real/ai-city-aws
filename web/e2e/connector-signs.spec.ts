@@ -72,6 +72,8 @@ test("connected tools hang their pixel signs by the doors of the departments tha
   await page.goto("/#/city");
   await expect(page.locator("section.city")).toHaveAttribute("data-city-ready", "1");
   await expect.poll(() => signs(page)).toBe("3"); // Jira everywhere, YouTube on Media and Marketing
+  // HQ shows the tools VAIC and the Orchestrator can use (decision 271): both of these.
+  await expect.poll(() => page.locator("section.city").getAttribute("data-hq-signs")).toBe("2");
 
   // Live: Stripe connects for Finance with no logo (a lettered plaque); Media takes on many more tools ("+N").
   m.send({

@@ -109,13 +109,14 @@ test("cabs circle the roundabouts and run at highway pace out in the countryside
   await expect
     .poll(() => hooks(page, (h) => h._traffic!.cars.some((c) => !c.lane)), { timeout: 30_000, intervals: [100] })
     .toBe(true); // someone on a roundabout
-  const pace = await hooks(page, (h) => {
+  const pace = () => hooks(page, (h) => {
     const town = h._traffic!.cars.filter((c) => c.lane && c.d > c.lane.townFrom + 40 && c.d < c.lane.townTo - 40).map((c) => c.v);
     const road = h._traffic!.cars.filter((c) => c.lane && (c.d < c.lane.townFrom - 200 || c.d > c.lane.townTo + 200)).map((c) => c.v);
-    return { town: Math.max(...town), road: Math.max(...road) };
+    return { town: Math.max(0, ...town), road: Math.max(0, ...road) };
   });
-  expect(pace.town).toBeLessThan(45);
-  expect(pace.road).toBeGreaterThan(80);
+  expect((await pace()).town).toBeLessThan(45);
+  // (Fewer cabs since decision 269: wait for one out on the open road.)
+  await expect.poll(async () => (await pace()).road, { timeout: 30_000, intervals: [200] }).toBeGreaterThan(80);
   await zoomTo(page, "roundabout");
   await page.waitForTimeout(600);
   await page.screenshot({ path: info.outputPath("city-roundabout.png") });

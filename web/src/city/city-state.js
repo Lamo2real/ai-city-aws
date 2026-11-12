@@ -318,7 +318,7 @@ function reduceEvent(state, event, now) {
       const connectors = { ...state.connectors };
       if (event.status !== "ready") { if (!connectors[event.id]) return state; delete connectors[event.id]; return { ...state, now, connectors }; }
       const was = connectors[event.id] ?? {};
-      connectors[event.id] = { ...was, id: event.id, label: event.label ?? was.label, status: "ready", ...(event.departments ? { departments: event.departments, every_department: !!event.every_department } : {}), ...(event.sign ? { sign: event.sign } : {}) };
+      connectors[event.id] = { ...was, id: event.id, label: event.label ?? was.label, status: "ready", ...(event.departments ? { departments: event.departments, every_department: !!event.every_department } : {}), ...(event.sign ? { sign: event.sign } : {}), ...(event.roles ? { roles: event.roles } : {}) };
       return { ...state, now, connectors };
     }
     case "app.removed": {
@@ -579,10 +579,13 @@ export const HOMES_PER_BLOCK = 24; // eight residents by each building's door
 const HOMES_PER_APT = HOMES_PER_BLOCK / APARTMENTS.length;
 
 // A tower's footprint and height in tiles, fixed by its name (decision 166): the skyline is uneven like a real
-// one, but a tower still never grows or shrinks with its headcount (decision 117) and never moves.
+// one, but a tower still never grows or shrinks with its headcount (decision 117) and never moves. New York close up
+// (the owner, decision 271): a tower fills its lot, 10 or 11 of the block's 12 tiles wide, and its lot runs 18 or 19
+// tiles deep, over the street behind its 16-tile block (never past it, so no lot overlaps another), so seen from the
+// street in front the tower rises over the street behind it.
 export function towerSize(name) {
   const h = hashOf(`size:${name}`);
-  return { w: 8 + (h % 4), h: 11 + ((h >>> 4) % 5) };
+  return { w: 10 + (h % 2), h: 18 + ((h >>> 4) % 2) };
 }
 // The town is built on a grid of New York blocks (decision 250), the same on a phone and on a Mac or PC: HQ in block
 // (0, 0), the homes in the block south of it, every tower in a block of its own, roads around them. Block (c, r) is c
@@ -1233,20 +1236,14 @@ export function centreLines(world) {
 // a street (it runs north–south), "x" for one over an avenue. Cabs and commuters never stop for one.
 export function footbridges(world) {
   const out = [], L = world.left ?? 0, T = world.top ?? 0;
-  for (const s of world.streets) {
-    const h = Math.round((s.y - BLOCK_H) / PITCH_Y);
-    for (let c = Math.ceil((Math.max(s.x0, L) - 0) / PITCH_X) - 1; c * PITCH_X + BLOCK_W <= Math.min(s.x1, world.width); c++) {
-      const mid = c * PITCH_X + BLOCK_W / 2;
-      if (mid - 2 < Math.max(s.x0, L) || mid + 2 > Math.min(s.x1, world.width)) continue;
-      if (hashOf(`${CITY_SEED}:bridge:s${c},${h}`) % 11 === 0) out.push({ x: mid * TILE, y: (s.y + STREET / 2) * TILE, across: "y" });
-    }
-  }
+  // Only over the avenues (decision 271): a tower now rises over the street behind it, so a bridge over a street
+  // would land on the back of the tower in front.
   for (const l of world.lanes ?? []) {
     const v = Math.round((l.x - BLOCK_W) / PITCH_X);
     for (let r = Math.ceil(Math.max(l.y0, T) / PITCH_Y) - 1; r * PITCH_Y + BLOCK_H <= Math.min(l.y1, world.height); r++) {
       const mid = r * PITCH_Y + BLOCK_H / 2;
       if (mid - 2 < Math.max(l.y0, T) || mid + 2 > Math.min(l.y1, world.height)) continue;
-      if (hashOf(`${CITY_SEED}:bridge:a${v},${r}`) % 11 === 0) out.push({ x: (l.x + STREET / 2) * TILE, y: mid * TILE, across: "x" });
+      if (hashOf(`${CITY_SEED}:bridge:a${v},${r}`) % 5 === 0) out.push({ x: (l.x + STREET / 2) * TILE, y: mid * TILE, across: "x" });
     }
   }
   return out;
@@ -1686,11 +1683,18 @@ export function taxiCall(world, route, ride, from) {
 
 // ---------- Connector signs (decision 173) ----------
 // The connected tools a department uses, in a steady order (those with a logo first, then by name), for the signs
-// by its tower's doors. A tool whose departments are not known yet hangs nowhere; "every department" ones everywhere.
+// by its tower's doors. Decision 271 (the owner: "each building that has an MCP… if we have Jira for all
+// departments, Jira's logo should be on the building"): a tool hangs on a tower when that department's team can use it
+// (its `roles` give managers or workers access) and it is for that department: one for every department (Jira) on
+// every tower, one picked for some departments on theirs, and one whose departments were never worked out on every
+// tower whose team can use it. HQ ("HQ") shows the tools VAIC or the Orchestrator can use. A tool switched off or
+// removed is no longer "ready" and comes down.
 export function signsFor(state, dept) {
-  const k = keyOf(dept);
+  const k = keyOf(dept), hq = dept === "HQ";
+  const can = (c) => (!c.roles ? true : hq ? !!(c.roles.vaic || c.roles.orchestrator) : !!(c.roles.manager || c.roles.worker));
+  const forDept = (c) => hq || c.every_department || !Array.isArray(c.departments) || c.departments.some((d) => keyOf(d) === k);
   return Object.values(state.connectors ?? {})
-    .filter((c) => c.status === "ready" && (c.every_department || (c.departments ?? []).some((d) => keyOf(d) === k)))
+    .filter((c) => c.status === "ready" && can(c) && forDept(c))
     .sort((a, b) => Number(!a.sign) - Number(!b.sign) || String(a.label ?? a.id).localeCompare(String(b.label ?? b.id)) || String(a.id).localeCompare(String(b.id)));
 }
 export const PLAQUE = 14; // a 12-pixel logo in a 1-pixel ink frame

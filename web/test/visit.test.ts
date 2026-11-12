@@ -111,10 +111,10 @@ describe("the towers' sizes", () => {
     expect(sizes.size).toBeGreaterThan(2); // not one size for all
     for (const n of names) {
       const s = towerSize(n);
-      expect(s.w).toBeGreaterThanOrEqual(8);
+      expect(s.w).toBeGreaterThanOrEqual(10); // filling its lot (decision 271)
       expect(s.w).toBeLessThanOrEqual(11);
-      expect(s.h).toBeGreaterThanOrEqual(11);
-      expect(s.h).toBeLessThanOrEqual(15);
+      expect(s.h).toBeGreaterThanOrEqual(18); // over the street behind its 16-tile block
+      expect(s.h).toBeLessThanOrEqual(19); // never past it
     }
   });
   it("HQ stands between the towers on the wide map", () => {

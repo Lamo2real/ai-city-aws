@@ -64,6 +64,40 @@ describe("connector signs", () => {
     expect(signsFor(s, "Finance").map((c) => c.id)).toEqual(["airtable", "jira"]);
   });
 
+  it("hang wherever the team can use them: Jira for every department on every tower, HQ shows VAIC's (decision 271)", () => {
+    const roles = { vaic: "all", manager: "all", worker: "all" };
+    const depts = ["Media", "Marketing", "Finance", "Sales", "Legal"];
+    const s = applySnapshot(
+      initialState(0),
+      {
+        departments: depts.map((name) => ({ name })),
+        connectors: [
+          { id: "jira", label: "Jira", status: "ready", departments: [], every_department: true, roles, sign },
+          { id: "figma", label: "Figma", status: "ready", roles }, // its departments never worked out: on every tower
+          { id: "stripe", label: "Stripe", status: "ready", departments: ["Finance"], every_department: false, roles },
+          { id: "vaic-only", label: "Gmail", status: "ready", every_department: true, departments: [], roles: { vaic: "all" } },
+          { id: "teams-only", label: "Linear", status: "ready", every_department: true, departments: [], roles: { worker: "read" } },
+          { id: "off", label: "Off", status: "disabled", every_department: true, departments: [], roles },
+        ],
+      },
+      1000,
+    );
+    for (const d of depts) {
+      const ids = signsFor(s, d).map((c) => c.id);
+      expect(ids).toContain("jira"); // every tower shows Jira
+      expect(ids).toContain("figma");
+      expect(ids).toContain("teams-only");
+      expect(ids).not.toContain("vaic-only"); // only VAIC may use it
+      expect(ids).not.toContain("off"); // switched off: no sign
+      expect(ids.includes("stripe")).toBe(d === "Finance");
+    }
+    expect(signsFor(s, "HQ").map((c) => c.id).sort()).toEqual(["figma", "jira", "stripe", "vaic-only"]);
+    // A role change arrives live: the sign follows.
+    const t = reduce(s, { type: "connector.updated", id: "jira", label: "Jira", status: "ready", auth: "oauth", roles: { vaic: "all" } }, 2000);
+    expect(signsFor(t, "Sales").map((c) => c.id)).not.toContain("jira");
+    expect(signsFor(t, "HQ").map((c) => c.id)).toContain("jira");
+  });
+
   const geo = (baseW: number) => ({ baseX: 100, baseW, cx: 100 + baseW / 2, foot: 300 });
   const tools = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `t${i}`, label: `T${i}`, status: "ready" }));
 

@@ -104,6 +104,8 @@ def city_sign(rec: Mapping[str, Any]) -> dict[str, Any]:
         out["every_department"] = bool(rec.get("every_department"))
     if isinstance(rec.get("sign"), dict):
         out["sign"] = rec["sign"]
+    if isinstance(rec.get("roles"), dict):  # who may use it, so the City hangs it where it can be used (decision 271)
+        out["roles"] = {str(k): str(v) for k, v in rec["roles"].items() if k in ROLES and v in LEVELS}
     return out
 
 

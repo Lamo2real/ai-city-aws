@@ -55,8 +55,10 @@ describe("the map", () => {
           for (const b of w.homes.apartments) if (a !== b) expect(overlaps(a, b)).toBe(false);
           for (const t of [...w.buildings, w.hq]) expect(overlaps(a, t)).toBe(false);
         }
+        // A tower's footprint is its block (16 tiles); its upper floors rise over the street behind (decision 271).
+        const ground = (t: Box) => ({ ...t, y: t.y + t.h - Math.min(t.h, 16), h: Math.min(t.h, 16) });
         for (const t of [...w.buildings, w.hq])
-          for (const s of w.streets) expect(overlaps(t, { x: s.x0, y: s.y, w: s.x1 - s.x0, h: STREET })).toBe(false);
+          for (const s of w.streets) expect(overlaps(ground(t), { x: s.x0, y: s.y, w: s.x1 - s.x0, h: STREET })).toBe(false);
         expect(w.height).toBeGreaterThanOrEqual(Math.max(...w.homes.apartments.map((a) => a.y + a.h)));
       });
 
