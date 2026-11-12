@@ -189,6 +189,29 @@ class ReviewResult(_E):
     round: float
 
 
+class ReviewStarted(_E):
+    """A department's reviewer starts checking one part (decision 297): the City walks it into its tower."""
+
+    type: Literal["review.started"]
+    ticket_id: str
+    task_id: str | None = None
+    department: str | None = None
+    reviewer: str | None = None
+    round: float = 1
+
+
+class ReviewFinished(_E):
+    """The reviewer is done with that part (sent with its ``review.result``): the City walks it back out."""
+
+    type: Literal["review.finished"]
+    ticket_id: str
+    task_id: str | None = None
+    department: str | None = None
+    reviewer: str | None = None
+    verdict: Literal["PASS", "FAIL"] | None = None
+    round: float | None = None
+
+
 class SignoffResult(_E):
     type: Literal["signoff.result"]
     ticket_id: str
@@ -599,6 +622,8 @@ CityEventModel = Annotated[
     | WorkerStateEvent
     | Activity
     | BuildStage
+    | ReviewStarted
+    | ReviewFinished
     | TicketStatusEvent
     | DepartmentCreated
     | DepartmentDemolished

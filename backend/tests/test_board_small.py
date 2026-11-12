@@ -126,6 +126,22 @@ async def test_a_risky_small_job_gets_the_opus_review_then_finishes() -> None:
     assert inv["model"] == "opus-5-5" and reviewed
     turns = await city.ledger.turns_of("mgr-builders")
     assert [t["model"] for t in turns] == ["opus-5-5"]
+    # The City walks the reviewer in and out on these (decision 297): the department, the reviewer and the part.
+    (started,) = city.bus.of_type("review.started")
+    (finished,) = city.bus.of_type("review.finished")
+    part_id = city.bus.of_type("review.result")[0]["ticket_id"]
+    assert (started["ticket_id"], started["department"], started["reviewer"], started["task_id"]) == (
+        part_id,
+        "Builders",
+        "mgr-builders",
+        task["id"],
+    )
+    assert (finished["ticket_id"], finished["department"], finished["reviewer"], finished["verdict"]) == (
+        part_id,
+        "Builders",
+        "mgr-builders",
+        "PASS",
+    )
     assert "orchestrator" not in roles(city)
 
 

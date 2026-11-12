@@ -1430,6 +1430,17 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 "round": rnd,
             }
         )
+        await d.bus.put(
+            {
+                "type": "review.finished",
+                "ticket_id": t["id"],
+                "task_id": str(t.get("task_id") or c.task_id),
+                "department": dept or t.get("department"),
+                "reviewer": c.agent_id,
+                "verdict": verdict,
+                "round": rnd,
+            }
+        )
         if verdict == "PASS":
             await d.ledger.update_agent(t["to"], {"worker_state": "completed"})
             await d.bus.put({"type": "worker.state", "id": t["to"], "state": "completed"})

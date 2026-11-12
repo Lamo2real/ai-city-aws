@@ -55,6 +55,7 @@ const inside = (page: Page, ids: string[], dept: string) =>
       };
       return {
         inside: list.filter((id) => el._people?.get(id)?.insideOf === d).length,
+        everyone: [...(el._people?.values() ?? [])].filter((p) => p.insideOf).length,
         atWork: Number(el.dataset.atWork ?? -1),
         shown: document.querySelector(".city")?.textContent?.match(/Agents working now\s*(\d+)/)?.[1] ?? null,
       };
@@ -93,8 +94,9 @@ for (const [name, label] of [
       .poll(() => inside(page, riding, "Application").then((c) => c.inside), { timeout: 20_000 })
       .toBe(riding.length);
     const c = await inside(page, riding, "Application");
-    expect(c.atWork).toBe(riding.length);
-    await expect.poll(() => inside(page, riding, "Application").then((x) => x.shown)).toBe(String(riding.length));
+    expect(c.atWork).toBe(c.everyone); // everyone inside a tower, the department's reviewer too when it is reviewing
+    expect(c.atWork).toBeGreaterThanOrEqual(riding.length);
+    await expect.poll(() => inside(page, riding, "Application").then((x) => x.shown)).toBe(String(c.atWork));
     await page.screenshot({ path: `${SHOTS}/city-${name}.png` });
     await replay(page, m, events.slice(cut));
     await expect.poll(() => inside(page, ids, "Application").then((x) => x.atWork), { timeout: 20_000 }).toBe(0);

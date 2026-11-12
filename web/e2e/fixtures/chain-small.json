@@ -7,7 +7,7 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-8310130a3bd0",
+   "id": "t-680b7db44c3b",
    "goal": "change the memory game to 4 pairs",
    "from": "vaic",
    "to": "orchestrator",
@@ -23,7 +23,7 @@
    "size": "small",
    "size_reason": "a change to an existing app",
    "size_by_owner": false,
-   "sizing_ms": 0.042,
+   "sizing_ms": 0.045,
    "vaic_ms": 1,
    "created_at": "2026-11-06T09:00:00.000Z",
    "updated_at": "2026-11-06T09:00:00.000Z"
@@ -45,7 +45,7 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-8310130a3bd0",
+   "id": "t-680b7db44c3b",
    "goal": "change the memory game to 4 pairs",
    "from": "vaic",
    "to": "orchestrator",
@@ -61,7 +61,7 @@
    "size": "small",
    "size_reason": "a change to an existing app",
    "size_by_owner": false,
-   "sizing_ms": 0.042,
+   "sizing_ms": 0.045,
    "vaic_ms": 1,
    "created_at": "2026-11-06T09:00:00.000Z",
    "updated_at": "2026-11-06T09:00:01.000Z"
@@ -91,17 +91,17 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-8fe22a2fe003",
+   "id": "t-316495446193",
    "goal": "Do it",
    "from": "orchestrator",
    "to": "mgr-application",
    "status": "open",
    "department": "Application",
-   "parent_id": "t-8310130a3bd0",
+   "parent_id": "t-680b7db44c3b",
    "kind": "assignment",
    "acceptance": "Done as the owner asked",
    "review_rounds": 0,
-   "task_id": "t-8310130a3bd0",
+   "task_id": "t-680b7db44c3b",
    "app_id": "app-0000000000aa",
    "pace": "fastest",
    "created_at": "2026-11-06T09:00:01.000Z",
@@ -117,17 +117,17 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-8fe22a2fe003",
+   "id": "t-316495446193",
    "goal": "Do it",
    "from": "orchestrator",
    "to": "mgr-application",
    "status": "in_progress",
    "department": "Application",
-   "parent_id": "t-8310130a3bd0",
+   "parent_id": "t-680b7db44c3b",
    "kind": "assignment",
    "acceptance": "Done as the owner asked",
    "review_rounds": 0,
-   "task_id": "t-8310130a3bd0",
+   "task_id": "t-680b7db44c3b",
    "app_id": "app-0000000000aa",
    "pace": "fastest",
    "created_at": "2026-11-06T09:00:01.000Z",
@@ -143,17 +143,17 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-8fe22a2fe003",
+   "id": "t-316495446193",
    "goal": "Do it",
    "from": "orchestrator",
    "to": "mgr-application",
    "status": "in_progress",
    "department": "Application",
-   "parent_id": "t-8310130a3bd0",
+   "parent_id": "t-680b7db44c3b",
    "kind": "assignment",
    "acceptance": "Done as the owner asked",
    "review_rounds": 0,
-   "task_id": "t-8310130a3bd0",
+   "task_id": "t-680b7db44c3b",
    "app_id": "app-0000000000aa",
    "pace": "fastest",
    "created_at": "2026-11-06T09:00:01.000Z",
@@ -164,7 +164,7 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-8310130a3bd0",
+   "id": "t-680b7db44c3b",
    "goal": "change the memory game to 4 pairs",
    "from": "vaic",
    "to": "orchestrator",
@@ -180,7 +180,7 @@
    "size": "small",
    "size_reason": "a change to an existing app",
    "size_by_owner": false,
-   "sizing_ms": 0.042,
+   "sizing_ms": 0.045,
    "vaic_ms": 1,
    "created_at": "2026-11-06T09:00:00.000Z",
    "updated_at": "2026-11-06T09:00:02.000Z"
@@ -190,7 +190,7 @@
  {
   "type": "agent.hired",
   "agent": {
-   "id": "wkr-application-f6f552b560c2",
+   "id": "wkr-application-0495864c4f6a",
    "kind": "worker",
    "role": "JavaScript developer",
    "department": "Application",
@@ -209,17 +209,17 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-7cd23e40a296",
+   "id": "t-86ea89ace853",
    "goal": "implement power",
    "from": "mgr-application",
-   "to": "wkr-application-f6f552b560c2",
+   "to": "wkr-application-0495864c4f6a",
    "status": "open",
    "department": "Application",
-   "parent_id": "t-8fe22a2fe003",
+   "parent_id": "t-316495446193",
    "kind": "assignment",
    "acceptance": "implement power is done and checked",
    "review_rounds": 0,
-   "task_id": "t-8310130a3bd0",
+   "task_id": "t-680b7db44c3b",
    "pace": "fastest",
    "created_at": "2026-11-06T09:00:02.000Z",
    "updated_at": "2026-11-06T09:00:02.000Z"
@@ -228,13 +228,13 @@
  },
  {
   "type": "worker.state",
-  "id": "wkr-application-f6f552b560c2",
+  "id": "wkr-application-0495864c4f6a",
   "state": "working"
  },
  {
   "type": "agent.hired",
   "agent": {
-   "id": "wkr-application-fbbb6538452b",
+   "id": "wkr-application-905542e0d516",
    "kind": "worker",
    "role": "JavaScript developer",
    "department": "Application",
@@ -253,17 +253,17 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-0f59b3d0cfed",
+   "id": "t-632f0ef1c6c0",
    "goal": "write the test",
    "from": "mgr-application",
-   "to": "wkr-application-fbbb6538452b",
+   "to": "wkr-application-905542e0d516",
    "status": "open",
    "department": "Application",
-   "parent_id": "t-8fe22a2fe003",
+   "parent_id": "t-316495446193",
    "kind": "assignment",
    "acceptance": "write the test is done and checked",
    "review_rounds": 0,
-   "task_id": "t-8310130a3bd0",
+   "task_id": "t-680b7db44c3b",
    "pace": "fastest",
    "created_at": "2026-11-06T09:00:02.000Z",
    "updated_at": "2026-11-06T09:00:02.000Z"
@@ -272,13 +272,13 @@
  },
  {
   "type": "worker.state",
-  "id": "wkr-application-fbbb6538452b",
+  "id": "wkr-application-905542e0d516",
   "state": "working"
  },
  {
   "type": "agent.hired",
   "agent": {
-   "id": "wkr-application-ed57a4e6db7d",
+   "id": "wkr-application-66cee460afa0",
    "kind": "worker",
    "role": "JavaScript developer",
    "department": "Application",
@@ -297,17 +297,17 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-e5f53d4c2b53",
+   "id": "t-f4401f304731",
    "goal": "update the docs",
    "from": "mgr-application",
-   "to": "wkr-application-ed57a4e6db7d",
+   "to": "wkr-application-66cee460afa0",
    "status": "open",
    "department": "Application",
-   "parent_id": "t-8fe22a2fe003",
+   "parent_id": "t-316495446193",
    "kind": "assignment",
    "acceptance": "update the docs is done and checked",
    "review_rounds": 0,
-   "task_id": "t-8310130a3bd0",
+   "task_id": "t-680b7db44c3b",
    "pace": "fastest",
    "created_at": "2026-11-06T09:00:02.000Z",
    "updated_at": "2026-11-06T09:00:02.000Z"
@@ -316,7 +316,7 @@
  },
  {
   "type": "worker.state",
-  "id": "wkr-application-ed57a4e6db7d",
+  "id": "wkr-application-66cee460afa0",
   "state": "working"
  },
  {
@@ -327,17 +327,17 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-7cd23e40a296",
+   "id": "t-86ea89ace853",
    "goal": "implement power",
    "from": "mgr-application",
-   "to": "wkr-application-f6f552b560c2",
+   "to": "wkr-application-0495864c4f6a",
    "status": "in_progress",
    "department": "Application",
-   "parent_id": "t-8fe22a2fe003",
+   "parent_id": "t-316495446193",
    "kind": "assignment",
    "acceptance": "implement power is done and checked",
    "review_rounds": 0,
-   "task_id": "t-8310130a3bd0",
+   "task_id": "t-680b7db44c3b",
    "pace": "fastest",
    "created_at": "2026-11-06T09:00:02.000Z",
    "updated_at": "2026-11-06T09:00:03.000Z"
@@ -346,25 +346,25 @@
  },
  {
   "type": "activity",
-  "id": "wkr-application-f6f552b560c2",
+  "id": "wkr-application-0495864c4f6a",
   "activity": "understanding"
  },
  {
   "type": "activity",
-  "id": "wkr-application-f6f552b560c2",
+  "id": "wkr-application-0495864c4f6a",
   "activity": "coding",
   "detail": "Loaded the app: Star Sweeper"
  },
  {
   "type": "activity",
-  "id": "wkr-application-f6f552b560c2",
+  "id": "wkr-application-0495864c4f6a",
   "activity": "coding",
   "detail": "Edited app/game.js"
  },
  {
   "type": "app.preview",
-  "task_id": "t-8310130a3bd0",
-  "hire_id": "wkr-application-f6f552b560c2",
+  "task_id": "t-680b7db44c3b",
+  "hire_id": "wkr-application-0495864c4f6a",
   "preview_url": "https://apps.vaic.test/drafts/prv-0123456789abcdef0123456789abcdef/index.html",
   "seq": 1,
   "paths": [
@@ -378,9 +378,9 @@
  },
  {
   "type": "app.draft",
-  "draft_id": "d-t-7cd23e40a296",
-  "ticket_id": "t-7cd23e40a296",
-  "task_id": "t-8310130a3bd0",
+  "draft_id": "d-t-86ea89ace853",
+  "ticket_id": "t-86ea89ace853",
+  "task_id": "t-680b7db44c3b",
   "department": "Application",
   "title": "Star Sweeper",
   "status": "ready",
@@ -389,18 +389,18 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-7cd23e40a296",
+   "id": "t-86ea89ace853",
    "goal": "implement power",
    "from": "mgr-application",
-   "to": "wkr-application-f6f552b560c2",
+   "to": "wkr-application-0495864c4f6a",
    "status": "in_review",
    "department": "Application",
-   "parent_id": "t-8fe22a2fe003",
+   "parent_id": "t-316495446193",
    "kind": "assignment",
    "acceptance": "implement power is done and checked",
    "result": "The game now has 4 pairs.\nArtifacts: none\nChecks: -",
    "review_rounds": 0,
-   "task_id": "t-8310130a3bd0",
+   "task_id": "t-680b7db44c3b",
    "pace": "fastest",
    "created_at": "2026-11-06T09:00:02.000Z",
    "updated_at": "2026-11-06T09:00:03.000Z"
@@ -409,28 +409,28 @@
  },
  {
   "type": "worker.state",
-  "id": "wkr-application-f6f552b560c2",
+  "id": "wkr-application-0495864c4f6a",
   "state": "reporting"
  },
  {
   "type": "activity",
-  "id": "wkr-application-f6f552b560c2",
+  "id": "wkr-application-0495864c4f6a",
   "activity": "idle"
  },
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-0f59b3d0cfed",
+   "id": "t-632f0ef1c6c0",
    "goal": "write the test",
    "from": "mgr-application",
-   "to": "wkr-application-fbbb6538452b",
+   "to": "wkr-application-905542e0d516",
    "status": "in_progress",
    "department": "Application",
-   "parent_id": "t-8fe22a2fe003",
+   "parent_id": "t-316495446193",
    "kind": "assignment",
    "acceptance": "write the test is done and checked",
    "review_rounds": 0,
-   "task_id": "t-8310130a3bd0",
+   "task_id": "t-680b7db44c3b",
    "pace": "fastest",
    "created_at": "2026-11-06T09:00:02.000Z",
    "updated_at": "2026-11-06T09:00:03.000Z"
@@ -439,25 +439,25 @@
  },
  {
   "type": "activity",
-  "id": "wkr-application-fbbb6538452b",
+  "id": "wkr-application-905542e0d516",
   "activity": "understanding"
  },
  {
   "type": "activity",
-  "id": "wkr-application-fbbb6538452b",
+  "id": "wkr-application-905542e0d516",
   "activity": "coding",
   "detail": "Loaded the app: Star Sweeper"
  },
  {
   "type": "activity",
-  "id": "wkr-application-fbbb6538452b",
+  "id": "wkr-application-905542e0d516",
   "activity": "coding",
   "detail": "Edited app/game.js"
  },
  {
   "type": "app.preview",
-  "task_id": "t-8310130a3bd0",
-  "hire_id": "wkr-application-fbbb6538452b",
+  "task_id": "t-680b7db44c3b",
+  "hire_id": "wkr-application-905542e0d516",
   "preview_url": "https://apps.vaic.test/drafts/prv-0123456789abcdef0123456789abcdef/index.html",
   "seq": 1,
   "paths": [
@@ -471,9 +471,9 @@
  },
  {
   "type": "app.draft",
-  "draft_id": "d-t-0f59b3d0cfed",
-  "ticket_id": "t-0f59b3d0cfed",
-  "task_id": "t-8310130a3bd0",
+  "draft_id": "d-t-632f0ef1c6c0",
+  "ticket_id": "t-632f0ef1c6c0",
+  "task_id": "t-680b7db44c3b",
   "department": "Application",
   "title": "Star Sweeper",
   "status": "ready",
@@ -482,18 +482,18 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-0f59b3d0cfed",
+   "id": "t-632f0ef1c6c0",
    "goal": "write the test",
    "from": "mgr-application",
-   "to": "wkr-application-fbbb6538452b",
+   "to": "wkr-application-905542e0d516",
    "status": "in_review",
    "department": "Application",
-   "parent_id": "t-8fe22a2fe003",
+   "parent_id": "t-316495446193",
    "kind": "assignment",
    "acceptance": "write the test is done and checked",
    "result": "The game now has 4 pairs.\nArtifacts: none\nChecks: -",
    "review_rounds": 0,
-   "task_id": "t-8310130a3bd0",
+   "task_id": "t-680b7db44c3b",
    "pace": "fastest",
    "created_at": "2026-11-06T09:00:02.000Z",
    "updated_at": "2026-11-06T09:00:03.000Z"
@@ -502,28 +502,28 @@
  },
  {
   "type": "worker.state",
-  "id": "wkr-application-fbbb6538452b",
+  "id": "wkr-application-905542e0d516",
   "state": "reporting"
  },
  {
   "type": "activity",
-  "id": "wkr-application-fbbb6538452b",
+  "id": "wkr-application-905542e0d516",
   "activity": "idle"
  },
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-e5f53d4c2b53",
+   "id": "t-f4401f304731",
    "goal": "update the docs",
    "from": "mgr-application",
-   "to": "wkr-application-ed57a4e6db7d",
+   "to": "wkr-application-66cee460afa0",
    "status": "in_progress",
    "department": "Application",
-   "parent_id": "t-8fe22a2fe003",
+   "parent_id": "t-316495446193",
    "kind": "assignment",
    "acceptance": "update the docs is done and checked",
    "review_rounds": 0,
-   "task_id": "t-8310130a3bd0",
+   "task_id": "t-680b7db44c3b",
    "pace": "fastest",
    "created_at": "2026-11-06T09:00:02.000Z",
    "updated_at": "2026-11-06T09:00:03.000Z"
@@ -532,25 +532,25 @@
  },
  {
   "type": "activity",
-  "id": "wkr-application-ed57a4e6db7d",
+  "id": "wkr-application-66cee460afa0",
   "activity": "understanding"
  },
  {
   "type": "activity",
-  "id": "wkr-application-ed57a4e6db7d",
+  "id": "wkr-application-66cee460afa0",
   "activity": "coding",
   "detail": "Loaded the app: Star Sweeper"
  },
  {
   "type": "activity",
-  "id": "wkr-application-ed57a4e6db7d",
+  "id": "wkr-application-66cee460afa0",
   "activity": "coding",
   "detail": "Edited app/game.js"
  },
  {
   "type": "app.preview",
-  "task_id": "t-8310130a3bd0",
-  "hire_id": "wkr-application-ed57a4e6db7d",
+  "task_id": "t-680b7db44c3b",
+  "hire_id": "wkr-application-66cee460afa0",
   "preview_url": "https://apps.vaic.test/drafts/prv-0123456789abcdef0123456789abcdef/index.html",
   "seq": 1,
   "paths": [
@@ -564,9 +564,9 @@
  },
  {
   "type": "app.draft",
-  "draft_id": "d-t-e5f53d4c2b53",
-  "ticket_id": "t-e5f53d4c2b53",
-  "task_id": "t-8310130a3bd0",
+  "draft_id": "d-t-f4401f304731",
+  "ticket_id": "t-f4401f304731",
+  "task_id": "t-680b7db44c3b",
   "department": "Application",
   "title": "Star Sweeper",
   "status": "ready",
@@ -575,18 +575,18 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-e5f53d4c2b53",
+   "id": "t-f4401f304731",
    "goal": "update the docs",
    "from": "mgr-application",
-   "to": "wkr-application-ed57a4e6db7d",
+   "to": "wkr-application-66cee460afa0",
    "status": "in_review",
    "department": "Application",
-   "parent_id": "t-8fe22a2fe003",
+   "parent_id": "t-316495446193",
    "kind": "assignment",
    "acceptance": "update the docs is done and checked",
    "result": "The game now has 4 pairs.\nArtifacts: none\nChecks: -",
    "review_rounds": 0,
-   "task_id": "t-8310130a3bd0",
+   "task_id": "t-680b7db44c3b",
    "pace": "fastest",
    "created_at": "2026-11-06T09:00:02.000Z",
    "updated_at": "2026-11-06T09:00:03.000Z"
@@ -595,12 +595,12 @@
  },
  {
   "type": "worker.state",
-  "id": "wkr-application-ed57a4e6db7d",
+  "id": "wkr-application-66cee460afa0",
   "state": "reporting"
  },
  {
   "type": "activity",
-  "id": "wkr-application-ed57a4e6db7d",
+  "id": "wkr-application-66cee460afa0",
   "activity": "idle"
  },
  {
@@ -610,33 +610,42 @@
  },
  {
   "type": "review.result",
-  "ticket_id": "t-7cd23e40a296",
-  "agent": "wkr-application-f6f552b560c2",
+  "ticket_id": "t-86ea89ace853",
+  "agent": "wkr-application-0495864c4f6a",
   "reviewer": "mgr-application",
   "verdict": "PASS",
   "summary": "Meets the acceptance criteria.",
   "round": 1
  },
  {
+  "type": "review.finished",
+  "ticket_id": "t-86ea89ace853",
+  "task_id": "t-680b7db44c3b",
+  "department": "Application",
+  "reviewer": "mgr-application",
+  "verdict": "PASS",
+  "round": 1
+ },
+ {
   "type": "worker.state",
-  "id": "wkr-application-f6f552b560c2",
+  "id": "wkr-application-0495864c4f6a",
   "state": "completed"
  },
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-7cd23e40a296",
+   "id": "t-86ea89ace853",
    "goal": "implement power",
    "from": "mgr-application",
-   "to": "wkr-application-f6f552b560c2",
+   "to": "wkr-application-0495864c4f6a",
    "status": "done",
    "department": "Application",
-   "parent_id": "t-8fe22a2fe003",
+   "parent_id": "t-316495446193",
    "kind": "assignment",
    "acceptance": "implement power is done and checked",
    "result": "The game now has 4 pairs.\nArtifacts: none\nChecks: -",
    "review_rounds": 1,
-   "task_id": "t-8310130a3bd0",
+   "task_id": "t-680b7db44c3b",
    "pace": "fastest",
    "created_at": "2026-11-06T09:00:02.000Z",
    "updated_at": "2026-11-06T09:00:04.000Z"
@@ -645,32 +654,41 @@
  },
  {
   "type": "agent.retired",
-  "id": "wkr-application-f6f552b560c2"
+  "id": "wkr-application-0495864c4f6a"
  },
  {
   "type": "review.result",
-  "ticket_id": "t-0f59b3d0cfed",
-  "agent": "wkr-application-fbbb6538452b",
+  "ticket_id": "t-632f0ef1c6c0",
+  "agent": "wkr-application-905542e0d516",
   "reviewer": "mgr-application",
   "verdict": "FAIL",
   "summary": "The test does not cover negative exponents.",
   "round": 1
  },
  {
+  "type": "review.finished",
+  "ticket_id": "t-632f0ef1c6c0",
+  "task_id": "t-680b7db44c3b",
+  "department": "Application",
+  "reviewer": "mgr-application",
+  "verdict": "FAIL",
+  "round": 1
+ },
+ {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-0f59b3d0cfed",
+   "id": "t-632f0ef1c6c0",
    "goal": "write the test",
    "from": "mgr-application",
-   "to": "wkr-application-fbbb6538452b",
+   "to": "wkr-application-905542e0d516",
    "status": "in_progress",
    "department": "Application",
-   "parent_id": "t-8fe22a2fe003",
+   "parent_id": "t-316495446193",
    "kind": "assignment",
    "acceptance": "write the test is done and checked",
    "result": "The game now has 4 pairs.\nArtifacts: none\nChecks: -",
    "review_rounds": 1,
-   "task_id": "t-8310130a3bd0",
+   "task_id": "t-680b7db44c3b",
    "pace": "fastest",
    "created_at": "2026-11-06T09:00:02.000Z",
    "updated_at": "2026-11-06T09:00:04.000Z"
@@ -679,39 +697,48 @@
  },
  {
   "type": "worker.state",
-  "id": "wkr-application-fbbb6538452b",
+  "id": "wkr-application-905542e0d516",
   "state": "working",
   "detail": "fixing after review"
  },
  {
   "type": "review.result",
-  "ticket_id": "t-e5f53d4c2b53",
-  "agent": "wkr-application-ed57a4e6db7d",
+  "ticket_id": "t-f4401f304731",
+  "agent": "wkr-application-66cee460afa0",
   "reviewer": "mgr-application",
   "verdict": "PASS",
   "summary": "Meets the acceptance criteria.",
   "round": 1
  },
  {
+  "type": "review.finished",
+  "ticket_id": "t-f4401f304731",
+  "task_id": "t-680b7db44c3b",
+  "department": "Application",
+  "reviewer": "mgr-application",
+  "verdict": "PASS",
+  "round": 1
+ },
+ {
   "type": "worker.state",
-  "id": "wkr-application-ed57a4e6db7d",
+  "id": "wkr-application-66cee460afa0",
   "state": "completed"
  },
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-e5f53d4c2b53",
+   "id": "t-f4401f304731",
    "goal": "update the docs",
    "from": "mgr-application",
-   "to": "wkr-application-ed57a4e6db7d",
+   "to": "wkr-application-66cee460afa0",
    "status": "done",
    "department": "Application",
-   "parent_id": "t-8fe22a2fe003",
+   "parent_id": "t-316495446193",
    "kind": "assignment",
    "acceptance": "update the docs is done and checked",
    "result": "The game now has 4 pairs.\nArtifacts: none\nChecks: -",
    "review_rounds": 1,
-   "task_id": "t-8310130a3bd0",
+   "task_id": "t-680b7db44c3b",
    "pace": "fastest",
    "created_at": "2026-11-06T09:00:02.000Z",
    "updated_at": "2026-11-06T09:00:04.000Z"
@@ -720,7 +747,7 @@
  },
  {
   "type": "agent.retired",
-  "id": "wkr-application-ed57a4e6db7d"
+  "id": "wkr-application-66cee460afa0"
  },
  {
   "type": "activity",
@@ -749,25 +776,25 @@
  },
  {
   "type": "activity",
-  "id": "wkr-application-fbbb6538452b",
+  "id": "wkr-application-905542e0d516",
   "activity": "understanding"
  },
  {
   "type": "activity",
-  "id": "wkr-application-fbbb6538452b",
+  "id": "wkr-application-905542e0d516",
   "activity": "coding",
   "detail": "Loaded the app: Star Sweeper"
  },
  {
   "type": "activity",
-  "id": "wkr-application-fbbb6538452b",
+  "id": "wkr-application-905542e0d516",
   "activity": "coding",
   "detail": "Edited app/game.js"
  },
  {
   "type": "app.preview",
-  "task_id": "t-8310130a3bd0",
-  "hire_id": "wkr-application-fbbb6538452b",
+  "task_id": "t-680b7db44c3b",
+  "hire_id": "wkr-application-905542e0d516",
   "preview_url": "https://apps.vaic.test/drafts/prv-0123456789abcdef0123456789abcdef/index.html",
   "seq": 1,
   "paths": [
@@ -782,18 +809,18 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-0f59b3d0cfed",
+   "id": "t-632f0ef1c6c0",
    "goal": "write the test",
    "from": "mgr-application",
-   "to": "wkr-application-fbbb6538452b",
+   "to": "wkr-application-905542e0d516",
    "status": "in_review",
    "department": "Application",
-   "parent_id": "t-8fe22a2fe003",
+   "parent_id": "t-316495446193",
    "kind": "assignment",
    "acceptance": "write the test is done and checked",
    "result": "The game now has 4 pairs.\nArtifacts: none\nChecks: -",
    "review_rounds": 1,
-   "task_id": "t-8310130a3bd0",
+   "task_id": "t-680b7db44c3b",
    "pace": "fastest",
    "created_at": "2026-11-06T09:00:02.000Z",
    "updated_at": "2026-11-06T09:00:05.000Z"
@@ -802,12 +829,12 @@
  },
  {
   "type": "worker.state",
-  "id": "wkr-application-fbbb6538452b",
+  "id": "wkr-application-905542e0d516",
   "state": "reporting"
  },
  {
   "type": "activity",
-  "id": "wkr-application-fbbb6538452b",
+  "id": "wkr-application-905542e0d516",
   "activity": "idle"
  },
  {
@@ -817,33 +844,42 @@
  },
  {
   "type": "review.result",
-  "ticket_id": "t-0f59b3d0cfed",
-  "agent": "wkr-application-fbbb6538452b",
+  "ticket_id": "t-632f0ef1c6c0",
+  "agent": "wkr-application-905542e0d516",
   "reviewer": "mgr-application",
   "verdict": "PASS",
   "summary": "Meets the acceptance criteria.",
   "round": 2
  },
  {
+  "type": "review.finished",
+  "ticket_id": "t-632f0ef1c6c0",
+  "task_id": "t-680b7db44c3b",
+  "department": "Application",
+  "reviewer": "mgr-application",
+  "verdict": "PASS",
+  "round": 2
+ },
+ {
   "type": "worker.state",
-  "id": "wkr-application-fbbb6538452b",
+  "id": "wkr-application-905542e0d516",
   "state": "completed"
  },
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-0f59b3d0cfed",
+   "id": "t-632f0ef1c6c0",
    "goal": "write the test",
    "from": "mgr-application",
-   "to": "wkr-application-fbbb6538452b",
+   "to": "wkr-application-905542e0d516",
    "status": "done",
    "department": "Application",
-   "parent_id": "t-8fe22a2fe003",
+   "parent_id": "t-316495446193",
    "kind": "assignment",
    "acceptance": "write the test is done and checked",
    "result": "The game now has 4 pairs.\nArtifacts: none\nChecks: -",
    "review_rounds": 2,
-   "task_id": "t-8310130a3bd0",
+   "task_id": "t-680b7db44c3b",
    "pace": "fastest",
    "created_at": "2026-11-06T09:00:02.000Z",
    "updated_at": "2026-11-06T09:00:06.000Z"
@@ -852,23 +888,23 @@
  },
  {
   "type": "agent.retired",
-  "id": "wkr-application-fbbb6538452b"
+  "id": "wkr-application-905542e0d516"
  },
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-8fe22a2fe003",
+   "id": "t-316495446193",
    "goal": "Do it",
    "from": "orchestrator",
    "to": "mgr-application",
    "status": "in_review",
    "department": "Application",
-   "parent_id": "t-8310130a3bd0",
+   "parent_id": "t-680b7db44c3b",
    "kind": "assignment",
    "acceptance": "Done as the owner asked",
    "result": "power(a, b) implemented, tested (incl. negative exponents) and documented on branch vaic/power.",
    "review_rounds": 0,
-   "task_id": "t-8310130a3bd0",
+   "task_id": "t-680b7db44c3b",
    "app_id": "app-0000000000aa",
    "pace": "fastest",
    "created_at": "2026-11-06T09:00:01.000Z",
@@ -889,18 +925,18 @@
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-8fe22a2fe003",
+   "id": "t-316495446193",
    "goal": "Do it",
    "from": "orchestrator",
    "to": "mgr-application",
    "status": "done",
    "department": "Application",
-   "parent_id": "t-8310130a3bd0",
+   "parent_id": "t-680b7db44c3b",
    "kind": "assignment",
    "acceptance": "Done as the owner asked",
    "result": "power(a, b) implemented, tested (incl. negative exponents) and documented on branch vaic/power.",
    "review_rounds": 0,
-   "task_id": "t-8310130a3bd0",
+   "task_id": "t-680b7db44c3b",
    "app_id": "app-0000000000aa",
    "pace": "fastest",
    "created_at": "2026-11-06T09:00:01.000Z",
@@ -910,12 +946,12 @@
  },
  {
   "type": "approval.requested",
-  "id": "ap-82b6de7a2e08",
+  "id": "ap-febdd30ecf47",
   "agent": "orchestrator",
   "action": "Update the app \u201cStar Sweeper\u201d to version 2",
   "reason": "Apps run in AI City only after the owner approves them.",
   "kind": "app.publish",
-  "draft_id": "d-t-0f59b3d0cfed",
+  "draft_id": "d-t-632f0ef1c6c0",
   "preview_url": "https://apps.vaic.test/drafts/d-1/",
   "title": "Star Sweeper",
   "description": "Sweep the stars.",
@@ -926,12 +962,12 @@
  },
  {
   "type": "approval.requested",
-  "id": "ap-0d7165b3f327",
+  "id": "ap-adf79f80dae9",
   "agent": "orchestrator",
   "action": "Update the app \u201cStar Sweeper\u201d to version 2",
   "reason": "Apps run in AI City only after the owner approves them.",
   "kind": "app.publish",
-  "draft_id": "d-t-7cd23e40a296",
+  "draft_id": "d-t-86ea89ace853",
   "preview_url": "https://apps.vaic.test/drafts/d-1/",
   "title": "Star Sweeper",
   "description": "Sweep the stars.",
@@ -942,12 +978,12 @@
  },
  {
   "type": "approval.requested",
-  "id": "ap-b3a3cef9d35f",
+  "id": "ap-1da056343ec6",
   "agent": "orchestrator",
   "action": "Update the app \u201cStar Sweeper\u201d to version 2",
   "reason": "Apps run in AI City only after the owner approves them.",
   "kind": "app.publish",
-  "draft_id": "d-t-e5f53d4c2b53",
+  "draft_id": "d-t-f4401f304731",
   "preview_url": "https://apps.vaic.test/drafts/d-1/",
   "title": "Star Sweeper",
   "description": "Sweep the stars.",
@@ -958,14 +994,14 @@
  },
  {
   "type": "signoff.result",
-  "ticket_id": "t-8310130a3bd0",
+  "ticket_id": "t-680b7db44c3b",
   "verdict": "PASS",
   "summary": "Meets the ask."
  },
  {
   "type": "ticket.status",
   "ticket": {
-   "id": "t-8310130a3bd0",
+   "id": "t-680b7db44c3b",
    "goal": "change the memory game to 4 pairs",
    "from": "vaic",
    "to": "orchestrator",
@@ -982,7 +1018,7 @@
    "size": "small",
    "size_reason": "a change to an existing app",
    "size_by_owner": false,
-   "sizing_ms": 0.042,
+   "sizing_ms": 0.045,
    "vaic_ms": 1,
    "created_at": "2026-11-06T09:00:00.000Z",
    "updated_at": "2026-11-06T09:00:07.000Z"
@@ -991,19 +1027,19 @@
  },
  {
   "type": "approval.withdrawn",
-  "id": "ap-b3a3cef9d35f"
+  "id": "ap-febdd30ecf47"
  },
  {
   "type": "approval.withdrawn",
-  "id": "ap-82b6de7a2e08"
+  "id": "ap-1da056343ec6"
  },
  {
   "type": "approval.withdrawn",
-  "id": "ap-0d7165b3f327"
+  "id": "ap-adf79f80dae9"
  },
  {
   "type": "result",
-  "ticket_id": "t-8310130a3bd0",
+  "ticket_id": "t-680b7db44c3b",
   "summary": "The game has 4 pairs."
  },
  {
@@ -1021,7 +1057,7 @@
   "conversation": "app-app-0000000000aa",
   "text": "Done, Sir: the game has 4 pairs now. The new version is waiting for your OK in Needs you.",
   "done": true,
-  "message_id": "m-0330967c8b12"
+  "message_id": "m-c98e0ef0d7ca"
  },
  {
   "type": "activity",

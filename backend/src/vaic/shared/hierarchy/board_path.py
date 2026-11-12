@@ -239,6 +239,16 @@ async def after_tests(d: CityDeps, part: Record, summary: str, checked: bool) ->
         reviewer = models_for(size).reviewer
         await d.bus.put({"type": "worker.state", "id": str(part["to"]), "state": "reporting"})
         await stage(d, str(part["task_id"]), "review", "start", str(part["id"]))
+        await d.bus.put(
+            {
+                "type": "review.started",
+                "ticket_id": str(part["id"]),
+                "task_id": str(part["task_id"]),
+                "department": part.get("department"),
+                "reviewer": mgr,
+                "round": float(part.get("review_rounds") or 0) + 1,
+            }
+        )
         await send(
             d,
             {
