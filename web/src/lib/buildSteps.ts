@@ -30,7 +30,8 @@ const read = (): Record<string, Step[]> => {
 export function conversationOf(city: CityState, agentId: string): string | null {
   const tickets = city.tickets as Record<string, CityTicket & { conversation?: string | null }>;
   const agent = city.agents[agentId] as { ticket_id?: string } | undefined;
-  let t = (agent?.ticket_id ? tickets[agent.ticket_id] : undefined) ?? Object.values(tickets).find((x) => x.to === agentId);
+  let t =
+    (agent?.ticket_id ? tickets[agent.ticket_id] : undefined) ?? Object.values(tickets).find((x) => x.to === agentId);
   for (let hops = 0; t && hops < 20; hops++) {
     if (t.conversation?.startsWith("app-")) return t.conversation;
     t = t.parent_id ? tickets[t.parent_id] : undefined;
@@ -42,7 +43,7 @@ export function conversationOf(city: CityState, agentId: string): string | null 
 export function building(city: CityState, conv: string): boolean {
   const tickets = city.tickets as Record<string, CityTicket & { conversation?: string | null }>;
   const top = (t: CityTicket & { conversation?: string | null }) => {
-    let x: (typeof t) | undefined = t;
+    let x: typeof t | undefined = t;
     for (let hops = 0; x && hops < 20; hops++) {
       if (x.conversation) return x.conversation;
       x = x.parent_id ? tickets[x.parent_id] : undefined;
@@ -112,7 +113,12 @@ class Steps {
     if (e.type !== "activity" || typeof e.detail !== "string" || !e.detail || typeof e.id !== "string") return;
     const conv = conversationOf(city, e.id);
     if (!conv) return;
-    const step: Step = { at: Date.now(), agent: e.id, activity: String(e.activity ?? ""), text: e.detail.slice(0, 240) };
+    const step: Step = {
+      at: Date.now(),
+      agent: e.id,
+      activity: String(e.activity ?? ""),
+      text: e.detail.slice(0, 240),
+    };
     const list = [...(this.state[conv] ?? []), step].slice(-PER_PROJECT);
     this.state = { ...this.state, [conv]: list };
     try {
@@ -134,3 +140,23 @@ class Steps {
 export const buildSteps = new Steps();
 export const useBuildSteps = (conv: string): Step[] | undefined =>
   useSyncExternalStore(buildSteps.subscribe, () => buildSteps.get()[conv]);
+
+export type TimelineEntry<L> = { kind: "line"; line: L } | { kind: "steps"; steps: Step[] };
+/** The project chat as one list, oldest first (decision 281): the owner's messages, VAIC's replies and the builders'
+ * steps by when they happened, steps in a row kept together (they fold by kind inside a run). On the same
+ * millisecond a message comes before a step. */
+export function timeline<L extends { at: number }>(lines: L[], steps: Step[]): Array<TimelineEntry<L>> {
+  const all: Array<{ at: number; order: number; line?: L; step?: Step }> = [
+    ...lines.map((line, i) => ({ at: line.at, order: i, line })),
+    ...steps.map((step, i) => ({ at: step.at, order: lines.length + i, step })),
+  ];
+  all.sort((a, b) => a.at - b.at || a.order - b.order);
+  const out: Array<TimelineEntry<L>> = [];
+  for (const x of all) {
+    const last = out.at(-1);
+    if (x.line) out.push({ kind: "line", line: x.line });
+    else if (last?.kind === "steps") last.steps.push(x.step!);
+    else out.push({ kind: "steps", steps: [x.step!] });
+  }
+  return out;
+}

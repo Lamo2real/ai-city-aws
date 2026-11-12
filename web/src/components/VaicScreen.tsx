@@ -38,6 +38,7 @@ import { MicWave, VoiceVisualizer } from "./VoiceVisualizer.tsx";
 import { WorkflowCard } from "./WorkflowCard.tsx";
 import { SkillPanel, useShownDraft, useWide } from "./SkillDraft.tsx";
 import { workflows } from "../lib/workflows.ts";
+import { NewBelow, useStickToBottom } from "../lib/stickToBottom.tsx";
 
 export { MicIcon } from "./ui.tsx";
 
@@ -146,39 +147,12 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
     }
   }, [text]);
   // The chat stays pinned to the newest line while anything below grows (VAIC's reply being revealed, its steps,
-  // a Yes/No card), unless the owner scrolled up to read. A new message from the owner or a new reply from VAIC
-  // always brings the chat down to it (the owner, 2026-11-11: "I'm not left above where there is more messages").
-  const stick = useRef(true);
+  // a Yes/No card), unless the owner scrolled up to read: then "↓ New messages" shows. A new message from the owner
+  // or a new reply from VAIC always brings the chat down to it (the owner, 2026-11-11: "I'm not left above where
+  // there is more messages"). The same hook keeps a project's chat (decision 281).
   const lastVaic = chat.filter((l) => l.who === "vaic").length;
   const lastOwner = chat.filter((l) => l.who === "owner").length;
-  useEffect(() => {
-    stick.current = true;
-    log.current?.scrollTo({ top: log.current.scrollHeight });
-  }, [lastVaic, lastOwner]);
-  useEffect(() => {
-    const el = log.current;
-    if (!el) return;
-    const onScroll = () => {
-      stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-    };
-    const keep = () => {
-      if (stick.current) el.scrollTop = el.scrollHeight;
-    };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    const mo = new MutationObserver(keep);
-    mo.observe(el, { childList: true, subtree: true, characterData: true });
-    const ro = new ResizeObserver(keep);
-    ro.observe(el);
-    return () => {
-      el.removeEventListener("scroll", onScroll);
-      mo.disconnect();
-      ro.disconnect();
-    };
-  }, []);
-  const follow = () => {
-    const el = log.current;
-    if (el && stick.current) el.scrollTop = el.scrollHeight;
-  };
+  const { newBelow, toBottom, follow } = useStickToBottom(log, `${lastVaic}/${lastOwner}`);
 
   // The box before dictation started, so × puts it back exactly as it was.
   const beforeDictation = useRef("");
@@ -474,6 +448,7 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
               <VaicStatus turn={turn} />
             </article>
           ) : null}
+          <NewBelow show={newBelow} onClick={() => toBottom()} />
         </div>
         {voice.conversation || (voice.listening && !voice.dictating) ? (
           // While the voice conversation is on (or dictation listens): who is talking, as the moving line.

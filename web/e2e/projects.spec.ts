@@ -297,7 +297,7 @@ test("while the builders work, the project chat shows their steps like Claude: g
   // A step from another project's worker never shows here.
   m.send({ type: "activity", id: "someone-else", activity: "running", detail: "Ran rm -rf nothing" });
 
-  const log = page.getByRole("region", { name: "What the builders are doing" });
+  const log = page.locator(".pj-log");
   await expect(log.getByText("Searched your knowledge: animal pictures")).toBeVisible();
   const cmds = log.locator("details").filter({ hasText: "Ran 2 commands" });
   await expect(cmds).toBeVisible();
@@ -424,7 +424,7 @@ test("while the builders work, the right side shows the app live, with who is ed
 
   // "In the log" goes to the build log.
   await editors.getByRole("button", { name: "Frontend dev: show in the build log" }).click();
-  await expect(page.getByRole("region", { name: "What the builders are doing" })).toBeInViewport();
+  await expect(page.locator("#buildlog")).toBeInViewport();
 
   // The version is done and published: the studio shows that version, the live copy is put away.
   m.send({ type: "ticket.status", previous: "in_progress", ticket: { ...part, status: "done" } });
@@ -436,4 +436,88 @@ test("while the builders work, the right side shows the app live, with who is ed
   await expect(page).toHaveURL(/#\/apps\/memory-zoo$/);
   await expect(page.getByRole("list", { name: "Who is changing the app" })).toHaveCount(0);
   await expect(page.locator(".studio-preview iframe")).toHaveAttribute("src", zoo.url);
+});
+
+test("the project chat is one timeline, oldest first, and stays on its newest line unless the owner reads above", async ({
+  page,
+}) => {
+  const m = await mockBackend(page);
+  await page.goto("/#/apps");
+  await page.getByRole("button", { name: /New project/ }).click();
+  const dialog = page.getByRole("dialog", { name: "What should your app do?" });
+  await dialog.getByPlaceholder("Describe your app in one sentence").fill("A memory game with animal cards");
+  await dialog.getByRole("button", { name: "Start building" }).click();
+  await expect(page).toHaveURL(/#\/apps\/new-[a-z0-9]+$/);
+  const conv = `app-${page.url().split("/apps/")[1]}`;
+  m.send({ type: "vaic.reply", conversation: conv, text: "On it. The builders are starting.", done: true });
+  const root = {
+    id: "t-mz",
+    from: "vaic",
+    to: "orchestrator",
+    goal: "Memory game",
+    kind: "task",
+    department: null,
+    conversation: conv,
+  };
+  const part = {
+    id: "t-mz-1",
+    parent_id: "t-mz",
+    from: "mgr-apps",
+    to: "wkr-dev",
+    goal: "Build it",
+    kind: "task",
+    department: "Application",
+  };
+  m.send({ type: "ticket.status", previous: null, ticket: { ...root, status: "open" } });
+  m.send({ type: "ticket.status", previous: null, ticket: { ...part, status: "in_progress" } });
+  for (let i = 0; i < 14; i++)
+    m.send({
+      type: "activity",
+      id: "wkr-dev",
+      activity: "researching",
+      detail: `Searched your knowledge: animals ${i}`,
+    });
+  m.send({ type: "activity", id: "wkr-dev", activity: "hiring", detail: "Hired a worker" });
+  const log = page.locator(".pj-log");
+  await expect(log.getByText("Hired a worker")).toBeVisible();
+  const gap = () => log.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight);
+
+  // He scrolls up to read, then writes: the chat goes down to his message at once.
+  await log.evaluate((el) => el.scrollTo({ top: 0 }));
+  await page.getByRole("textbox", { name: /Message VAIC about/ }).fill("whats the status");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect.poll(gap).toBeLessThanOrEqual(2);
+  await expect(log.locator(".pj-owner").last()).toBeInViewport();
+
+  // The reply streams in word by word, below the builders' steps; the view ticks down with every new line.
+  const long = Array.from({ length: 24 }, (_, i) => `Line ${i + 1}: the memory game is coming along.`);
+  for (let n = 1; n <= long.length; n += 3) {
+    m.send({ type: "vaic.reply", conversation: conv, text: long.slice(0, n).join("\n\n"), done: false });
+    await expect.poll(gap).toBeLessThanOrEqual(2);
+  }
+  m.send({ type: "vaic.reply", conversation: conv, text: long.join("\n\n"), done: true });
+  await expect(log.getByText("Line 24: the memory game is coming along.")).toBeInViewport();
+  await expect.poll(gap).toBeLessThanOrEqual(2);
+  const reply = log.locator(".pj-vaic").last();
+  const steps = log.getByText("Hired a worker");
+  expect((await reply.boundingBox())!.y).toBeGreaterThan((await steps.boundingBox())!.y);
+  const order = await log.evaluate((el) =>
+    [...el.querySelectorAll(".pj-msg, .buildlog")].map((x) =>
+      x.classList.contains("buildlog") ? "steps" : x.classList.contains("pj-owner") ? "owner" : "vaic",
+    ),
+  );
+  expect(order).toEqual(["owner", "vaic", "steps", "owner", "vaic"]);
+
+  // Scrolled up to read, a new reply and new steps don't pull him down; "New messages" takes him there.
+  await log.evaluate((el) => el.scrollTo({ top: 0 }));
+  await page.waitForTimeout(150);
+  m.send({ type: "activity", id: "wkr-dev", activity: "running", detail: "Ran node --test tests/" });
+  m.send({ type: "vaic.reply", conversation: conv, text: "Tests pass.\n\nThe cards flip now.", done: false });
+  const button = page.getByRole("button", { name: "New messages" });
+  await expect(button).toBeVisible();
+  expect(await log.evaluate((el) => el.scrollTop)).toBe(0);
+  await page.screenshot({ path: `${SHOTS}/project-chat-new-below.png` });
+  await button.click();
+  await expect.poll(gap).toBeLessThanOrEqual(2);
+  await expect(button).toHaveCount(0);
 });

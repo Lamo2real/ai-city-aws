@@ -19,10 +19,20 @@ import {
   ZOOMS,
   type Device,
   type Project,
+  type ProjectLine,
   type TimelineItem,
 } from "../lib/projects.ts";
 import { useHud } from "../lib/store.ts";
-import { building, groupLabel, groupSteps, useBuildSteps, type StepKind } from "../lib/buildSteps.ts";
+import {
+  building,
+  groupLabel,
+  groupSteps,
+  timeline,
+  useBuildSteps,
+  type Step,
+  type StepKind,
+} from "../lib/buildSteps.ts";
+import { NewBelow, useStickToBottom } from "../lib/stickToBottom.tsx";
 import { frameSrc, useLiveCopy, type LiveCopy } from "../lib/livePreview.ts";
 import { AppFrame, AppIcon, GrantList, PinButton, problem } from "./Apps.tsx";
 import { Banner, Button, Confirm, SendIcon, toast } from "./ui.tsx";
@@ -410,11 +420,12 @@ function ProjectChat({ project }: { project: Project }) {
   const [text, setText] = useState("");
   const log = useRef<HTMLDivElement>(null);
   const chat = lines ?? [];
-  const stepCount = useBuildSteps(conv)?.length ?? 0;
-  useEffect(() => {
-    const el = log.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [chat.length, chat.at(-1)?.text, ask, thinking, stepCount]);
+  const steps = useBuildSteps(conv);
+  const active = useHud((s) => building(s.city, conv));
+  const entries = useMemo(() => timeline(chat, steps ?? []), [chat, steps]);
+  const lastRun = entries.findLastIndex((e) => e.kind === "steps");
+  // His own message always brings the chat down to it; anything else follows only while he is at the bottom.
+  const { newBelow, toBottom } = useStickToBottom(log, chat.filter((l) => l.who === "owner").length);
   const send = async (words: string) => {
     try {
       await projects.send(conv, words);
@@ -450,21 +461,13 @@ function ProjectChat({ project }: { project: Project }) {
             ) : null}
           </div>
         ) : null}
-        {chat.map((l) => (
-          <article key={l.id} className={`pj-msg pj-${l.who}`} aria-busy={l.state === "streaming" || undefined}>
-            <span className="sr">{l.who === "vaic" ? "VAIC:" : "You:"}</span>
-            {l.who === "vaic" ? l.text ? <Markdown text={l.text} /> : null : <p>{l.text}</p>}
-            {l.files?.length ? <FileCards files={l.files} label={l.filesLabel} /> : null}
-            {l.state === "failed" ? (
-              <span className="pj-note">
-                Not sent.{" "}
-                <button type="button" className="btn btn-quiet" onClick={() => void projects.retry(conv, l.id)}>
-                  Send again
-                </button>
-              </span>
-            ) : null}
-          </article>
-        ))}
+        {entries.map((e, n) =>
+          e.kind === "steps" ? (
+            <StepRun key={`steps-${e.steps[0]!.at}-${n}`} steps={e.steps} last={n === lastRun} />
+          ) : (
+            <ChatLine key={e.line.id} l={e.line} conv={conv} />
+          ),
+        )}
         {thinking && chat.at(-1)?.who !== "vaic" ? (
           <article className="pj-msg pj-vaic pj-thinking" aria-label="VAIC is thinking">
             <span className="dots" aria-hidden="true">
@@ -474,7 +477,16 @@ function ProjectChat({ project }: { project: Project }) {
             </span>
           </article>
         ) : null}
-        <BuildLog conv={conv} />
+        {active ? (
+          <div className="bl-working" role="status">
+            <span className="bl-ring" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </span>
+            <span className="sr">The builders are working</span>
+          </div>
+        ) : null}
         {ask ? (
           <div className="pj-ask" role="group" aria-label={ask.question}>
             <p className="pj-ask-q">{ask.question}</p>
@@ -487,6 +499,7 @@ function ProjectChat({ project }: { project: Project }) {
             </div>
           </div>
         ) : null}
+        <NewBelow show={newBelow} onClick={() => toBottom()} />
       </div>
       <form className="pj-composer" onSubmit={submit}>
         <label className="sr" htmlFor="pj-text">
@@ -508,6 +521,24 @@ function ProjectChat({ project }: { project: Project }) {
         </button>
       </form>
     </div>
+  );
+}
+
+function ChatLine({ l, conv }: { l: ProjectLine; conv: string }) {
+  return (
+    <article className={`pj-msg pj-${l.who}`} aria-busy={l.state === "streaming" || undefined}>
+      <span className="sr">{l.who === "vaic" ? "VAIC:" : "You:"}</span>
+      {l.who === "vaic" ? l.text ? <Markdown text={l.text} /> : null : <p>{l.text}</p>}
+      {l.files?.length ? <FileCards files={l.files} label={l.filesLabel} /> : null}
+      {l.state === "failed" ? (
+        <span className="pj-note">
+          Not sent.{" "}
+          <button type="button" className="btn btn-quiet" onClick={() => void projects.retry(conv, l.id)}>
+            Send again
+          </button>
+        </span>
+      ) : null}
+    </article>
   );
 }
 
@@ -895,16 +926,12 @@ function StepIcon({ kind }: { kind: StepKind }) {
   );
 }
 
-/** The builders' steps under the conversation, the way Claude shows its own: runs of one kind fold into a line
- * ("Ran 3 commands ›") that opens to every step, and a ring with three dots turns while they work (decision 204). */
-function BuildLog({ conv }: { conv: string }) {
-  const list = useBuildSteps(conv);
-  const active = useHud((s) => building(s.city, conv));
-  if (!list?.length && !active) return null;
-  const groups = groupSteps(list ?? []);
+/** A run of the builders' steps between messages, the way Claude shows its own: steps of one kind in a row fold
+ * into a line ("Ran 3 commands ›") that opens to every step (decision 204). The last run is where "In the log" goes. */
+function StepRun({ steps, last }: { steps: Step[]; last: boolean }) {
   return (
-    <section className="buildlog" id="buildlog" aria-label="What the builders are doing">
-      {groups.map((g, i) =>
+    <section className="buildlog" id={last ? "buildlog" : undefined} aria-label="What the builders did">
+      {groupSteps(steps).map((g, i) =>
         g.steps.length === 1 ? (
           <p key={`${g.steps[0]!.at}-${i}`} className="bl-step">
             <StepIcon kind={g.kind} />
@@ -920,23 +947,13 @@ function BuildLog({ conv }: { conv: string }) {
               </svg>
             </summary>
             <ol>
-              {g.steps.map((s, j) => (
-                <li key={`${s.at}-${j}`}>{s.text}</li>
+              {g.steps.map((x, j) => (
+                <li key={`${x.at}-${j}`}>{x.text}</li>
               ))}
             </ol>
           </details>
         ),
       )}
-      {active ? (
-        <div className="bl-working" role="status">
-          <span className="bl-ring" aria-hidden="true">
-            <i />
-            <i />
-            <i />
-          </span>
-          <span className="sr">The builders are working</span>
-        </div>
-      ) : null}
     </section>
   );
 }
