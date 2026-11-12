@@ -33,6 +33,7 @@ SECRET_ROUTES: tuple[tuple[str, str], ...] = (
 )
 SELF_ROUTES: tuple[tuple[str, str], ...] = (
     ("POST", r"/messages"),
+    ("POST", r"/conversations/[^/]+/lines"),  # a device uploading its own chat history
     ("POST", r"/wake-check"),
     ("POST", r"/voice/.*"),
     ("POST", r"/speech"),

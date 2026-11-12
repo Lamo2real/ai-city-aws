@@ -93,7 +93,10 @@ describe("new versions", () => {
     expect(screen.getByText(/Version 2 is deleted and Snake opens as it was before/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Go back" }));
     await waitFor(() =>
-      expect(calls).toEqual([{ url: "https://api.vaic.test/apps/app-snake/rollback", method: "POST" }]),
+      // Reading the project chat from the server (decision 299) is not a change.
+      expect(calls.filter((c) => !c.url.includes("/conversations/"))).toEqual([
+        { url: "https://api.vaic.test/apps/app-snake/rollback", method: "POST" },
+      ]),
     );
     await waitFor(() => expect(store.get().city.apps["app-snake"]?.version).toBe(1));
     expect(screen.queryByRole("button", { name: /Go back to version/ })).toBeNull();

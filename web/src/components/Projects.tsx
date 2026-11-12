@@ -424,6 +424,17 @@ function ProjectChat({ project }: { project: Project }) {
   const active = useHud((s) => building(s.city, conv));
   const entries = useMemo(() => timeline(chat, steps ?? []), [chat, steps]);
   const lastRun = entries.findLastIndex((e) => e.kind === "steps");
+  // The chat lives on the server (decision 299): what he wrote on another device shows here on open and on return.
+  useEffect(() => {
+    void projects.loadChat(conv);
+    const back = () => document.visibilityState === "visible" && void projects.loadChat(conv);
+    window.addEventListener("focus", back);
+    document.addEventListener("visibilitychange", back);
+    return () => {
+      window.removeEventListener("focus", back);
+      document.removeEventListener("visibilitychange", back);
+    };
+  }, [conv]);
   // His own message always brings the chat down to it; anything else follows only while he is at the bottom.
   const { newBelow, toBottom } = useStickToBottom(log, chat.filter((l) => l.who === "owner").length);
   const send = async (words: string) => {

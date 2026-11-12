@@ -186,7 +186,17 @@ export async function bootAuth(
 export async function signOutHere() {
   await auth().signOut();
   try {
-    for (const k of ["vaic.chat", "vaic.draft", "vaic.cards", "vaic.buildsteps"]) localStorage.removeItem(k);
+    // Only this device's cache: the server keeps the chats and projects (decision 299).
+    for (const k of [
+      "vaic.chat",
+      "vaic.draft",
+      "vaic.cards",
+      "vaic.buildsteps",
+      "vaic.projects.chats",
+      "vaic.projects.new",
+      "vaic.projects.uploaded",
+    ])
+      localStorage.removeItem(k);
   } catch {
     /* no storage */
   }

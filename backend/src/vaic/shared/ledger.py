@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import itertools
+import re
 import time
 from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
@@ -759,9 +760,60 @@ class Ledger:
                 "who": who,
                 "text": (no_ids(text) if who == "vaic" else text)[:4000],
                 "at": at,
-                "ttl": self.now_ms() // 1000 + 30 * 86_400,
+                # A project's chat (``app-…``) is the project's record and stays (decision 299).
+                **({} if conversation.startswith("app-") else {"ttl": self.now_ms() // 1000 + 30 * 86_400}),
             }
         )
+
+    async def conversation_lines(self, conversation: str, n: int = 200) -> list[Record]:
+        """The last ``n`` lines of a conversation for the owner's devices: ``id`` (the sort key), who, text, at."""
+        out: list[Record] = []
+        for i in (await self.table.query(f"CONV#{conversation}"))[-n:]:
+            if i.get("who") not in ("owner", "vaic") or not str(i.get("text") or "").strip():
+                continue
+            out.append({"id": str(i["sk"]), "who": i["who"], "text": str(i["text"]), "at": str(i.get("at") or "")})
+        return out
+
+    async def import_conversation_lines(self, conversation: str, lines: list[Record]) -> int:
+        """Lines a device kept before chats lived here (decision 299). The sort key comes from the line's own time
+        and id, so uploading the same line twice writes it once."""
+        n = 0
+        for line in lines[:200]:
+            who = "vaic" if line.get("who") in ("vaic", "ace") else "owner" if line.get("who") == "owner" else None
+            text = line.get("text")
+            at, id = line.get("at"), line.get("id")
+            if not who or not isinstance(text, str) or not text.strip():
+                continue
+            if not isinstance(at, int) or at <= 0 or not isinstance(id, str) or not re.fullmatch(r"[\w-]{1,64}", id):
+                continue
+            iso = now_iso(datetime.fromtimestamp(at / 1000, UTC))
+            item: Record = {
+                "pk": f"CONV#{conversation}",
+                "sk": f"{iso}#c-{id}",
+                "who": who,
+                "text": (no_ids(text) if who == "vaic" else text)[:4000],
+                "at": iso,
+            }
+            if not conversation.startswith("app-"):
+                item["ttl"] = at // 1000 + 30 * 86_400
+            await self.table.put(item)
+            n += 1
+        return n
+
+    async def save_project(self, key: str, idea: str, title: str, at: int) -> Record:
+        """A project the owner started that isn't published yet (decision 299): one record per project."""
+        rec: Record = {"key": key, "idea": idea[:2000], "title": title[:40], "at": at}
+        await self.table.put({"pk": "PROJECTS", "sk": key, **rec})
+        return rec
+
+    async def projects(self) -> list[Record]:
+        return [
+            {"key": i["sk"], "idea": i.get("idea", ""), "title": i.get("title", ""), "at": int(i.get("at") or 0)}
+            for i in await self.table.query("PROJECTS")
+        ]
+
+    async def remove_project(self, key: str) -> bool:
+        return await self.table.delete_if_exists("PROJECTS", key)
 
     async def recent_conversation(self, conversation: str, n: int = 12) -> list[Record]:
         return [_strip(i) for i in (await self.table.query(f"CONV#{conversation}"))[-n:]]

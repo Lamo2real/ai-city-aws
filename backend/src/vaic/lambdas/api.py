@@ -214,6 +214,11 @@ ROUTES: list[tuple[str, str]] = [
     ("POST", "/mail/rules"),
     ("DELETE", "/mail/rules/rule-1"),
     ("GET", "/apps"),
+    ("GET", "/projects"),
+    ("PUT", "/projects/new-abc12345"),
+    ("DELETE", "/projects/new-abc12345"),
+    ("GET", "/conversations/app-new-abc12345/lines"),
+    ("POST", "/conversations/app-new-abc12345/lines"),
     ("GET", "/apps/app-1/activity"),
     ("DELETE", "/apps/app-1"),
     ("PUT", "/apps/app-1"),
@@ -817,6 +822,18 @@ async def _workflow_routes(method: str, path: str, event: dict[str, Any], d: Api
     return reply(200, {"run": pub})
 
 
+async def _tell(d: ApiDeps, e: dict[str, Any]) -> None:
+    """An event for the owner's other devices; a bus hiccup never fails the request that caused it."""
+    try:
+        await d.bus.put(e)
+    except Exception as err:
+        log("warn", "api.tell_failed", type=e.get("type"), error=f"{type(err).__name__}: {err}")
+
+
+def _now_ms() -> int:
+    return int(time.time() * 1000)
+
+
 async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
     method = event["requestContext"]["http"]["method"].upper()
     path = event.get("rawPath", "/").rstrip("/") or "/"
@@ -889,6 +906,8 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         conversation = conv if isinstance(conv, str) and re.fullmatch(r"[\w-]{1,64}", conv) else "main"
         cid = b.get("client_id")
         id = f"owner-{cid}" if isinstance(cid, str) and re.fullmatch(r"[\w-]{8,64}", cid) else new_id("owner")
+        if isinstance(cid, str) and re.fullmatch(r"[\w-]{8,64}", cid):
+            await _tell(d, {"type": "owner.line", "conversation": conversation, "text": text, "client_id": cid})
         if await _status_fast(d, id, text, conversation):
             return reply(202, {"accepted": True, "conversation": conversation, "answered": True})
         await d.queue.send(
@@ -1029,6 +1048,31 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         if not isinstance(b.get("approved"), bool):
             raise BadRequest("Say approve or refuse.")
         return await decide_approval(d, seg[1], b["approved"], b.get("grants"), b.get("pinned"))
+    # Projects and their chats live here, so every device shows them (decision 299).
+    if is_("GET", r"/projects"):
+        live = {str(a.get("conversation")) for a in await list_apps(d.ledger) if a.get("conversation")}
+        drafts = [p for p in await d.ledger.projects() if f"app-{p['key']}" not in live]
+        return reply(200, {"projects": sorted(drafts, key=lambda p: -int(p["at"]))})
+    if is_("PUT", r"/projects/new-[\w-]{1,40}"):
+        b = _body(event)
+        idea = _str(b.get("idea"), "Idea", 2000)
+        title = _str(b.get("title"), "Title", 80)
+        at = b.get("at")
+        rec = await d.ledger.save_project(seg[1], idea, title, at if isinstance(at, int) and at > 0 else _now_ms())
+        await _tell(d, {"type": "project.saved", "project": rec})
+        return reply(200, {"project": rec})
+    if is_("DELETE", r"/projects/new-[\w-]{1,40}"):
+        if await d.ledger.remove_project(seg[1]):
+            await _tell(d, {"type": "project.removed", "key": seg[1]})
+        return reply(200, {"removed": True})
+    if is_("GET", r"/conversations/[\w-]{1,64}/lines"):
+        return reply(200, {"lines": await d.ledger.conversation_lines(seg[1])})
+    if is_("POST", r"/conversations/[\w-]{1,64}/lines"):
+        lines = _body(event).get("lines")
+        if not isinstance(lines, list):
+            raise BadRequest("Send the lines as a list.")
+        n = await d.ledger.import_conversation_lines(seg[1], [x for x in lines if isinstance(x, dict)])
+        return reply(200, {"imported": n})
     if is_("GET", r"/apps"):
         return reply(200, {"apps": await list_apps(d.ledger)})
     if is_("GET", r"/apps/[\w-]+/activity"):

@@ -252,7 +252,10 @@ locals {
     # Taste questions (decision 127): asked along the way, answered from the card, never waited on.
     "GET /workflows/taste", "POST /workflows/taste/{id}",
     "POST /workers/home", "POST /tasks/{id}/cancel", "POST /messages/{id}/stop", "POST /city/reset", "POST /agents/{id}/home",
-    "GET /memory", "POST /notes", "GET /apps", "DELETE /apps/{id}", "PUT /apps/{id}",
+    "GET /memory", "POST /notes",
+    # Projects and their chats on the server, for every device (decision 299).
+    "GET /projects", "PUT /projects/{id}", "DELETE /projects/{id}", "GET /conversations/{id}/lines", "POST /conversations/{id}/lines",
+    "GET /apps", "DELETE /apps/{id}", "PUT /apps/{id}",
     "POST /apps/{id}/bridge", "POST /apps/{id}/proposals", "POST /apps/{id}/rollback", "GET /apps/{id}/activity",
     "GET /knowledge", "GET /knowledge/{id}", "POST /knowledge/uploads", "POST /knowledge/uploads/{id}/complete", "POST /knowledge/links",
     "POST /knowledge/text", "PUT /knowledge/{id}", "DELETE /knowledge/{id}",

@@ -616,6 +616,34 @@ class VaicFiles(_E):
     """A heading over the cards ("References for this build"); empty for files VAIC simply shows."""
 
 
+class ProjectRecord(_M):
+    key: str
+    idea: str
+    title: str
+    at: int
+
+
+class ProjectSaved(_E):
+    """The API → every device: a project that isn't published yet was started or renamed (decision 299)."""
+
+    type: Literal["project.saved"]
+    project: ProjectRecord
+
+
+class ProjectRemoved(_E):
+    type: Literal["project.removed"]
+    key: str
+
+
+class OwnerLine(_E):
+    """The API → every device: the owner wrote in a conversation, so his other devices show the line too."""
+
+    type: Literal["owner.line"]
+    conversation: str
+    text: str
+    client_id: str
+
+
 CityEventModel = Annotated[
     AgentHired
     | AgentRetired
@@ -665,7 +693,10 @@ CityEventModel = Annotated[
     | FilesUpdated
     | VaicFiles
     | WorkflowUpdated
-    | SupportTicket,
+    | SupportTicket
+    | ProjectSaved
+    | ProjectRemoved
+    | OwnerLine,
     Field(discriminator="type"),
 ]
 _ADAPTER: TypeAdapter[Any] = TypeAdapter(CityEventModel)

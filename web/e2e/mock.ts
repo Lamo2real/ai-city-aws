@@ -142,6 +142,21 @@ document.getElementById("iso").textContent = storage + ", " + parentDoc;
 </script></body>`;
 export const at = () => new Date().toISOString();
 
+/** The server's copy of projects and chats (decision 299), shared by every device (browser context) given it. */
+export class Cloud {
+  projects: Record<string, Record<string, unknown>> = {};
+  lines: Record<string, Array<{ id: string; who: string; text: string; at: string }>> = {};
+  /** Each device's event stream: the server's events reach them all. */
+  devices = new Set<(e: Record<string, unknown>) => void>();
+  private n = 0;
+  tell(e: Record<string, unknown>) {
+    for (const d of this.devices) d(e);
+  }
+  add(conv: string, who: string, text: string) {
+    (this.lines[conv] ??= []).push({ id: `l${++this.n}`, who, text, at: new Date().toISOString() });
+  }
+}
+
 export interface Mock {
   calls: Array<{ method: string; path: string; body: unknown }>;
   ws: () => WebSocketRoute;
@@ -285,8 +300,11 @@ export async function mockBackend(
     realVoice?: boolean;
     /** The City's Departments and Activity boxes start closed for the owner; most tests want them open. */
     foldsClosed?: boolean;
+    /** Share projects and chats with other devices (browser contexts) in the same test. */
+    cloud?: Cloud;
   } = {},
 ): Promise<Mock> {
+  const cloud = opts.cloud ?? new Cloud();
   // Events sent before the page's WebSocket connects are held and delivered on connect.
   const pending: Array<Record<string, unknown>> = [];
   const built: string[] = []; // departments built through POST /departments, so DELETE can find them
@@ -798,7 +816,33 @@ export async function mockBackend(
       if (m.chief && typeof body?.chief_of_staff_enabled === "boolean") m.chief.enabled = body.chief_of_staff_enabled;
       return ok({ settings: m.settings });
     }
-    if (path === "/messages") return ok({ accepted: true, conversation: body?.conversation ?? "main" }, 202);
+    if (path === "/projects") return ok({ projects: Object.values(cloud.projects) });
+    const proj = path.match(/^\/projects\/(new-[\w-]+)$/);
+    if (proj && req.method() === "PUT") {
+      const project = { key: proj[1], idea: body?.idea, title: body?.title, at: body?.at };
+      cloud.projects[proj[1]!] = project;
+      cloud.tell({ type: "project.saved", project });
+      return ok({ project });
+    }
+    if (proj && req.method() === "DELETE") {
+      delete cloud.projects[proj[1]!];
+      cloud.tell({ type: "project.removed", key: proj[1] });
+      return ok({ removed: true });
+    }
+    const conv = path.match(/^\/conversations\/([\w-]+)\/lines$/);
+    if (conv && req.method() === "GET") return ok({ lines: cloud.lines[conv[1]!] ?? [] });
+    if (conv && req.method() === "POST") {
+      const list = (body?.lines ?? []) as Array<{ who: string; text: string }>;
+      for (const l of list) cloud.add(conv[1]!, l.who, l.text);
+      return ok({ imported: list.length });
+    }
+    if (path === "/messages") {
+      const c = typeof body?.conversation === "string" ? body.conversation : "main";
+      cloud.add(c, "owner", String(body?.text ?? ""));
+      if (typeof body?.client_id === "string")
+        cloud.tell({ type: "owner.line", conversation: c, text: body.text, client_id: body.client_id });
+      return ok({ accepted: true, conversation: c }, 202);
+    }
     if (/^\/messages\/[\w-]+\/stop$/.test(path)) return ok({ stopped: true }, 202);
     if (/^\/tasks\/[\w-]+\/cancel$/.test(path)) return ok({ jobs: 2, workers: 1 });
     if (path.startsWith("/questions/"))
@@ -1482,6 +1526,7 @@ export async function mockBackend(
   await page.routeWebSocket(`${CONFIG.wsUrl}**`, (ws) => {
     m.ws = () => ws;
     m.send = (e) => ws.send(JSON.stringify({ at: at(), ...e }));
+    cloud.devices.add((e) => m.send(e));
     setTimeout(() => {
       for (const e of pending.splice(0)) m.send(e);
     }, 200);

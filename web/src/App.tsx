@@ -119,9 +119,20 @@ export function App() {
           // Events may have been missed: start again from a fresh snapshot (then what the Chief of Staff decided).
           void loadCity().finally(() => void chief.load());
           void flushOutbox();
+          void projects.sync(); // projects and chats live on the server (decision 299)
+          void store.loadChat();
         }
       });
       void live.start();
+      void projects.sync();
+      void store.loadChat();
+      const back = () => {
+        if (document.visibilityState !== "visible") return;
+        void projects.sync();
+        void store.loadChat();
+      };
+      window.addEventListener("focus", back);
+      document.addEventListener("visibilitychange", back);
       // Back from a provider's sign-in page (connectors and mail accounts share /?connect=return).
       void connectReturn().then((r) => r && toast({ text: r.message, tone: r.ok ? "good" : "bad" }));
       const s = await api<{ settings: Record<string, unknown> }>("/settings").catch(() => null);

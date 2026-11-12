@@ -8,6 +8,7 @@ import { useSyncExternalStore } from "react";
 import type { CityApp } from "../city/city-state.js";
 import { api, ApiError } from "./api.ts";
 import { appList, capped } from "./apps.ts";
+import { loadLines, mergeLines, missingOnServer, type ServerLine } from "./cloudChat.ts";
 import { looksLikeKey } from "./connect.ts";
 
 export interface ProjectLine {
@@ -35,6 +36,8 @@ export interface NewProject {
   idea: string;
   title: string;
   at: number;
+  /** Not on the server yet (saving failed): saved again on the next sync. */
+  local?: boolean;
 }
 export interface Project {
   /** Route slug: the app's slug, or "new-<id>". */
@@ -57,6 +60,9 @@ interface State {
 
 const CHATS = "vaic.projects.chats";
 const DRAFTS = "vaic.projects.new";
+/** Set once this device's projects and chats from before decision 299 are on the server. */
+const UPLOADED = "vaic.projects.uploaded";
+
 const read = <T>(key: string, fallback: T): T => {
   try {
     return (JSON.parse(localStorage.getItem(key) ?? "null") as T) ?? fallback;
@@ -179,6 +185,7 @@ class Projects {
       at: Date.now(),
     };
     this.set({ drafts: [p, ...this.state.drafts].slice(0, 30) });
+    void this.save(p);
     this.addFeed(`app-${p.key}`, "You", "You started this project");
     await this.send(`app-${p.key}`, idea);
     return p;
@@ -204,15 +211,129 @@ class Projects {
       thinking: busy ? { ...thinking, [to]: busy } : thinking,
       drafts: this.state.drafts.filter((d) => d.key !== key),
     });
+    void api(`/projects/${encodeURIComponent(key)}`, { method: "DELETE" }).catch(() => undefined);
   }
   forget(key: string) {
     const { [`app-${key}`]: _gone, ...chats } = this.state.chats;
     this.set({ drafts: this.state.drafts.filter((d) => d.key !== key), chats });
+    void api(`/projects/${encodeURIComponent(key)}`, { method: "DELETE" }).catch(() => undefined);
+  }
+
+  // ---------- the server's copy (decision 299) ----------
+  private async save(p: NewProject): Promise<boolean> {
+    try {
+      await api(`/projects/${encodeURIComponent(p.key)}`, {
+        method: "PUT",
+        body: { idea: p.idea, title: p.title, at: p.at },
+      });
+      if (p.local) this.set({ drafts: this.state.drafts.map((d) => (d.key === p.key ? { ...d, local: false } : d)) });
+      return true;
+    } catch {
+      this.set({ drafts: this.state.drafts.map((d) => (d.key === p.key ? { ...d, local: true } : d)) });
+      return false;
+    }
+  }
+  private syncing: Promise<void> | null = null;
+  /** On open, on return to the page and after a reconnect: the projects list from the server, once uploading what
+   *  this device kept before projects lived there. */
+  sync(): Promise<void> {
+    this.syncing ??= this.doSync().finally(() => (this.syncing = null));
+    return this.syncing;
+  }
+  private async doSync() {
+    let uploaded = false;
+    try {
+      uploaded = localStorage.getItem(UPLOADED) === "1";
+    } catch {
+      /* no storage: nothing kept here to upload */
+    }
+    if (!uploaded && !(await this.upload())) return;
+    for (const d of this.state.drafts.filter((x) => x.local)) await this.save(d);
+    let list: NewProject[];
+    try {
+      list = (await api<{ projects?: NewProject[] }>("/projects")).projects ?? [];
+    } catch {
+      return; // offline: the cache stands
+    }
+    const server = list
+      .filter((p) => p && typeof p.key === "string" && p.key.startsWith("new-"))
+      .map((p) => ({ key: p.key, idea: capped(p.idea, 2000), title: capped(p.title, 40), at: Number(p.at) || 0 }));
+    const have = new Set(server.map((p) => p.key));
+    const pending = this.state.drafts.filter((d) => d.local && !have.has(d.key));
+    this.set({ drafts: [...pending, ...server].sort((a, b) => b.at - a.at).slice(0, 30) });
+  }
+  /** The one-time upload: this device's drafts, and the chat lines the server doesn't have. False = try again. */
+  private async upload(): Promise<boolean> {
+    try {
+      for (const d of this.state.drafts)
+        await api(`/projects/${encodeURIComponent(d.key)}`, {
+          method: "PUT",
+          body: { idea: d.idea, title: d.title, at: d.at },
+        });
+      for (const [conv, lines] of Object.entries(this.state.chats)) {
+        const server = await loadLines(conv);
+        if (!server) return false;
+        const missing = missingOnServer(lines, server, "vaic");
+        if (missing.length)
+          await api(`/conversations/${encodeURIComponent(conv)}/lines`, {
+            method: "POST",
+            body: { lines: missing.map((l) => ({ id: l.id, who: l.who, text: l.text, at: l.at })) },
+          });
+      }
+      localStorage.setItem(UPLOADED, "1");
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  /** A project's chat from the server, added to what this device has. */
+  async loadChat(conv: string) {
+    const server = await loadLines(conv);
+    if (!server?.length) return;
+    const make = (s: ServerLine, who: "owner" | "vaic"): ProjectLine => ({
+      id: `s-${s.id.replace(/[^\w-]/g, "")}`,
+      who,
+      text: s.text,
+      state: who === "vaic" ? "done" : "sent",
+      at: Date.parse(s.at) || 0,
+    });
+    const next = mergeLines(this.lines(conv), server, make, "vaic");
+    if (next !== this.lines(conv)) this.putLines(conv, next);
   }
 
   /** City events: replies and questions for project conversations, and timeline lines about apps. */
   event(e: { type: string; [k: string]: unknown }) {
     const conv = typeof e.conversation === "string" ? e.conversation : "";
+    if (e.type === "project.saved") {
+      const p = (e.project ?? {}) as Partial<NewProject>;
+      if (typeof p.key !== "string" || !p.key.startsWith("new-")) return;
+      const rec = {
+        key: p.key,
+        idea: capped(p.idea, 2000),
+        title: capped(p.title, 40),
+        at: Number(p.at) || Date.now(),
+      };
+      const rest = this.state.drafts.filter((d) => d.key !== rec.key);
+      return this.set({ drafts: [rec, ...rest].sort((a, b) => b.at - a.at).slice(0, 30) });
+    }
+    if (e.type === "project.removed" && typeof e.key === "string") {
+      if (!this.state.drafts.some((d) => d.key === e.key)) return;
+      return this.set({ drafts: this.state.drafts.filter((d) => d.key !== e.key) });
+    }
+    if (e.type === "owner.line" && conv.startsWith("app-")) {
+      // The owner wrote from another device: the line shows here too (this device already has its own).
+      const id = String(e.client_id ?? "");
+      if (!id || this.lines(conv).some((l) => l.id === id)) return;
+      const line: ProjectLine = {
+        id,
+        who: "owner",
+        text: String(e.text ?? "").slice(0, 8000),
+        state: "sent",
+        at: Date.now(),
+      };
+      this.set({ thinking: { ...this.state.thinking, [conv]: true } });
+      return this.putLines(conv, [...this.lines(conv), line]);
+    }
     if (e.type === "vaic.reply" && conv.startsWith("app-")) return this.reply(conv, String(e.text ?? ""), !!e.done);
     if (e.type === "vaic.files" && conv.startsWith("app-")) {
       const files = (Array.isArray(e.files) ? e.files : []) as FileCardData[];

@@ -1,5 +1,6 @@
 // One store for the whole HUD: the city (via the ported reducer), VAIC's chat, connection status and
 // the owner's outbox. Every screen reads from here; the WebSocket and API write to it.
+import { loadLines, mergeLines, type ServerLine } from "./cloudChat.ts";
 import { ordered, readPicker, type DeptPicker } from "./deptPick.ts";
 import { hudAction } from "./hudAction.ts";
 import { needsCount } from "./needs.ts";
@@ -293,6 +294,21 @@ class Store {
     }
     for (const l of this.listeners) l();
   }
+  /** VAIC's chat from the server (decision 299): lines from the owner's other devices are added on open and on
+   *  return; this device's copy is only a cache. */
+  async loadChat() {
+    const server = await loadLines("main");
+    if (!server?.length) return;
+    const make = (l: ServerLine, who: "owner" | "vaic"): ChatLine => ({
+      id: `s-${l.id.replace(/[^\w-]/g, "")}`,
+      who,
+      text: l.text,
+      state: who === "vaic" ? "done" : "sent",
+      at: Date.parse(l.at) || 0,
+    });
+    const next = mergeLines(this.state.chat, server.slice(-60), make, "vaic");
+    if (next !== this.state.chat) this.set({ chat: next.slice(-60) });
+  }
   /** Events that arrive while a snapshot is loading are replayed on top of it, so none are lost. */
   private during: unknown[] | null = null;
   beginSnapshot() {
@@ -343,6 +359,19 @@ class Store {
     if ((e.type === "vaic.reply" || e.type === "vaic.question") && String(e.conversation ?? "").startsWith("app-"))
       return;
     if (e.type === "hud.action") return hudAction(e);
+    if (e.type === "owner.line") {
+      // The owner wrote from another device (decision 299): the line shows here too.
+      const id = String(e.client_id ?? "");
+      if (String(e.conversation ?? "") !== "main" || !id || this.state.chat.some((l) => l.id === id)) return;
+      const line: ChatLine = {
+        id,
+        who: "owner",
+        text: String(e.text ?? "").slice(0, 8000),
+        state: "sent",
+        at: Date.now(),
+      };
+      return this.set({ chat: [...this.state.chat, line], presence: "thinking" });
+    }
     if (e.type === "vaic.question") return this.askEvent(e);
     if (e.type === "vaic.browser") return this.browserEvent(e);
     if (e.type === "vaic.change") return this.changeEvent(e);
@@ -697,7 +726,9 @@ class Store {
     const i = chat.findIndex((l) => l.id === lineId && l.who === "owner");
     if (i < 0) return;
     const steps = [...new Set(tools.map((t) => stepWords(t.activity, t.detail)).filter((w): w is string => !!w))];
-    const handedOn = tools.some((t) => t.activity === "delegating" || /start_job|delegate_to_orchestrator/.test(t.detail ?? ""));
+    const handedOn = tools.some(
+      (t) => t.activity === "delegating" || /start_job|delegate_to_orchestrator/.test(t.detail ?? ""),
+    );
     const line = chat[i]!;
     // Only VAIC's half-written answer to this message goes, never a reply to a message sent after it.
     const end = chat.findIndex((l, j) => j > i && l.who === "owner");
