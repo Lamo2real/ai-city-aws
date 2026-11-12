@@ -299,7 +299,7 @@ function reduceEvent(state, event, now) {
     }
     case "review.started": {
       const t = state.tickets[event.ticket_id], department = reviewDept(state, event, t);
-      return { ...state, now, reviews: { ...state.reviews, [event.ticket_id]: { round: event.round, verdict: null, at: now, agent: t?.to ?? null, department } }, feed: feed(state, `The ${department ?? "department"} reviewer is checking ${t?.to ?? event.ticket_id}'s work (round ${event.round ?? 1})`, "review", now) };
+      return { ...state, now, reviews: { ...state.reviews, [event.ticket_id]: { round: event.round, verdict: null, at: now, agent: t?.to ?? null, department } }, feed: feed(state, `The ${department ?? "department"} reviewer is checking ${t?.to ? `the work of ${plainWho(state, t.to).replace(/^The /, "the ")}` : "a part"}${(event.round ?? 1) > 1 ? ` (round ${event.round})` : ""}`, "review", now) }; // in words, never an id
     }
     case "review.result":
     case "review.finished": {

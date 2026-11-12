@@ -54,3 +54,14 @@ describe("the reviewer on the project board (decision 294)", () => {
     expect(isReviewing(s, "mgr-research", 11)).toBe(false); // sent back to work: out again
   });
 });
+
+describe("the reviewer's Activity line", () => {
+  it("names who is being checked in words, never an id", () => {
+    let s = town();
+    s = reduce(s, { type: "ticket.status", previous: null, ticket: { id: "p1", to: "w1", from: "mgr-research", goal: "a part", status: "in_progress", department: "Research" } }, 5);
+    s = reduce(s, { type: "review.started", ticket_id: "p1", task_id: "job1", department: "Research", reviewer: "mgr-research", round: 1 }, 6);
+    const line = s.feed.find((f) => f.text.includes("reviewer is checking"))!.text;
+    expect(line).toBe("The Research reviewer is checking the work of the analyst in Research");
+    expect(line).not.toMatch(/w1|p1/);
+  });
+});
