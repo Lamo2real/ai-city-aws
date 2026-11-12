@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -139,6 +140,7 @@ class AgentHost:
                 reason="this message already had its turn",
             )
             return ""
+        turn_started_ms = int(time.time() * 1000)
         acted = False  # VAIC called a tool: a failed turn is not given back for a retry (it would act twice)
         try:
             await self.ensure_core()
@@ -186,6 +188,7 @@ class AgentHost:
                 owner_text=str(inv.get("body") or "")[:4000]
                 if inv.get("from") == "owner" and inv.get("kind") == "task"
                 else "",
+                started_ms=turn_started_ms,
             )
             system, builtins = await self._system(agent, inv)
             system += await self._owner_knowledge(ctx.role, await self._department_name(agent, inv))

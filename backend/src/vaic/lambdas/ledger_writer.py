@@ -1,6 +1,8 @@
-"""EventBridge rule → this Lambda: every city event is appended to its ticket's trace in the ledger.
+"""EventBridge rule → this Lambda: every city event is appended to its ticket's trace in the ledger, and folded
+into its job's project board (decision 289).
 
-So a ticket's full story survives. Events are validated; anything else is ignored.
+So a ticket's full story survives. Events are validated; anything else is ignored. A board write that fails is
+logged and never loses the trace.
 """
 
 from __future__ import annotations
@@ -10,8 +12,10 @@ from typing import Any
 from pydantic import ValidationError
 
 from vaic.shared.aws import aws_city
+from vaic.shared.board import Board
 from vaic.shared.events import CityEvent, parse_event
 from vaic.shared.ledger import Ledger
+from vaic.shared.log import log
 
 from ._runtime import run
 
@@ -36,6 +40,10 @@ async def write_event(raw: dict[str, Any], ledger: Ledger) -> bool:
     ticket = ticket_of(e)
     if ticket:
         await ledger.append_event(ticket, e)
+    try:
+        await Board(ledger.table, ledger.get_ticket).project(dict(e))
+    except Exception as err:  # the board is a projection: the trace above already holds the event
+        log("warn", "board.project_failed", type=e["type"], error=type(err).__name__, detail=str(err)[:300])
     return bool(ticket)
 
 

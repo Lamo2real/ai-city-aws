@@ -11,6 +11,7 @@ import base64
 import json
 import os
 import re
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -36,6 +37,7 @@ from vaic.shared.apps import (
     update_app,
 )
 from vaic.shared.aws import aws_city
+from vaic.shared.board import Board
 from vaic.shared.caps import settings_patch
 from vaic.shared.chief_of_staff import CHIEF, away_summary, record_decision
 from vaic.shared.chief_of_staff import status as chief_status
@@ -48,6 +50,7 @@ from vaic.shared.files.service import NotFound as FileNotFound
 from vaic.shared.files.wiring import files_from_env
 from vaic.shared.github import GitHubDeps, GitHubError, github_token_secret, whoami
 from vaic.shared.hierarchy.actions import CityDeps, answer_question, send_home, send_workers_home, sweep_stale_asks
+from vaic.shared.hierarchy.board_status import status_reply
 from vaic.shared.hierarchy.departments import (
     DepartmentError,
     build_department,
@@ -102,6 +105,28 @@ RESET_ROUND_S = 18.0
 """How long one `POST /city/reset` round deletes before answering `done: false` (the Lambda and API Gateway allow 30)."""
 ALL = (*LIVE, "parked", "done", "failed", "cancelled")
 
+
+async def _status_fast(d: ApiDeps, id: str, text: str, conversation: str) -> bool:
+    """A plain status question ("how's it going?") is answered here from the project board, with no model call and
+    no runtime (decision 289): the same reply event and chat lines VAIC's own turn would write. False = VAIC's model
+    answers as before (anything else, or a failure here)."""
+    t0 = time.perf_counter()
+    try:
+        answer = await status_reply(d.ledger, Board(d.ledger.table, d.ledger.get_ticket), text, conversation)
+    except Exception as e:  # never in the owner's way: the model answers instead
+        log("warn", "vaic.status_fast_failed", error=type(e).__name__, detail=str(e)[:300])
+        return False
+    if answer is None or not await d.ledger.claim(f"vaic-turn:{id}"):
+        return False
+    await d.ledger.add_conversation_line(conversation, "owner", text)
+    await d.ledger.add_conversation_line(conversation, "vaic", answer)
+    await d.bus.put(
+        {"type": "vaic.reply", "conversation": conversation, "text": answer, "done": True, "message_id": id}
+    )
+    log("info", "vaic.status_fast", conversation=conversation, ms=round((time.perf_counter() - t0) * 1000, 1))
+    return True
+
+
 ROUTES: list[tuple[str, str]] = [
     ("GET", "/city"),
     ("GET", "/city/agent?id=x"),
@@ -112,6 +137,7 @@ ROUTES: list[tuple[str, str]] = [
     ("GET", "/tickets"),
     ("GET", "/tickets/t-1"),
     ("GET", "/jobs"),
+    ("GET", "/jobs/t-1/board"),
     ("GET", "/departments"),
     ("POST", "/departments"),
     ("DELETE", "/departments/customer-success"),
@@ -863,6 +889,8 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         conversation = conv if isinstance(conv, str) and re.fullmatch(r"[\w-]{1,64}", conv) else "main"
         cid = b.get("client_id")
         id = f"owner-{cid}" if isinstance(cid, str) and re.fullmatch(r"[\w-]{8,64}", cid) else new_id("owner")
+        if await _status_fast(d, id, text, conversation):
+            return reply(202, {"accepted": True, "conversation": conversation, "answered": True})
         await d.queue.send(
             cast(
                 WorkMessage,
@@ -896,6 +924,11 @@ async def _route(event: dict[str, Any], d: ApiDeps) -> dict[str, Any]:
         return reply(200, {"addressed": addressed})
     if is_("GET", r"/jobs"):
         return reply(200, {"jobs": await job_rows(d.ledger, finished=q.get("status") == "done")})
+    if is_("GET", r"/jobs/[\w-]+/board"):
+        board = await Board(d.ledger.table, d.ledger.get_ticket).read(seg[1])
+        if board is None:
+            return problem(404, "That job has no board.")
+        return reply(200, {"board": board})
     if is_("GET", r"/tickets"):
         status = q.get("status")
         which = ALL if status == "all" else ("done", "failed", "cancelled") if status == "done" else LIVE

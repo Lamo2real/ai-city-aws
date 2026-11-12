@@ -196,8 +196,9 @@ locals {
       { Action = ["sqs:SendMessage", "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"], Resource = values(var.queue_arns) },
       { Action = ["bedrock-agentcore:InvokeAgentRuntime"], Resource = concat(values(var.runtime_arns), [for a in values(var.runtime_arns) : "${a}/*"]) },
     ]
-    factory       = [{ Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] }, { Action = ["events:PutEvents"], Resource = [var.bus_arn] }]
-    ledger-writer = [{ Action = ["dynamodb:PutItem"], Resource = [var.ledger_arn] }]
+    factory = [{ Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] }, { Action = ["events:PutEvents"], Resource = [var.bus_arn] }]
+    # The project board (decision 289) is folded from the same events: it reads a ticket's parents and the board.
+    ledger-writer = [{ Action = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:Query"], Resource = [var.ledger_arn] }]
     scheduler = [
       { Action = local.ledger_rw, Resource = [var.ledger_arn, "${var.ledger_arn}/index/*"] },
       # The calendar import removes events that are gone in one batch (features/calendar.py).
@@ -240,7 +241,7 @@ locals {
     ]
   }
   routes = [
-    "GET /city", "GET /city/agent", "POST /city/instruct", "POST /messages", "POST /wake-check", "GET /tickets", "GET /tickets/{id}", "GET /jobs",
+    "GET /city", "GET /city/agent", "POST /city/instruct", "POST /messages", "POST /wake-check", "GET /tickets", "GET /tickets/{id}", "GET /jobs", "GET /jobs/{id}/board",
     "GET /departments", "POST /departments", "DELETE /departments/{id}", "GET /departments/presets", "GET /departments/choices", "POST /departments/recommend", "GET /agents", "GET /workforce", "GET /costs", "GET /health", "GET /questions", "POST /questions/{id}/answer",
     "POST /questions/{id}/default", "POST /approvals/{id}", "GET /settings", "PUT /settings", "GET /chief-of-staff",
     # Autopilot (decision 125): while the owner is away.

@@ -88,6 +88,7 @@ from vaic.shared.log import log
 from vaic.shared.models import model_label, model_name_for
 from vaic.shared.policy import decide, gate
 from vaic.shared.presets import overlapping, preset_for, replaced_by
+from vaic.shared.sizing import size_job
 from vaic.shared.speed import FASTEST, UNHURRIED, pace_from_words, policy_for, speed_brief
 from vaic.shared.table import UpdateOptions
 from vaic.shared.utility import UtilityDeps, about_ai_city, triage
@@ -120,6 +121,8 @@ class TurnCtx:
     """The turn's input is the owner's own message (typed or spoken), not a report, answer or reminder."""
     owner_text: str = ""
     """That message's words, when ``from_owner`` (the departments the owner names are read from them in code)."""
+    started_ms: int = 0
+    """When the turn started (epoch ms): the board's VAIC stage timing (decision 289); 0 = unknown."""
 
 
 @dataclass(frozen=True)
@@ -426,6 +429,10 @@ def _vaic_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 "call delegate_to_orchestrator again with confirm=true (and the same workers); on a no or anything "
                 "unclear, start nothing."
             )
+        t0 = time.perf_counter()
+        sizing = size_job(str(a.get("owner_words") or ""), str(a["goal"]), existing_app=bool(target), workers=workers)
+        sizing_ms = round((time.perf_counter() - t0) * 1000, 3)
+        log("info", "vaic.sized", size=sizing.size, reason=sizing.reason, by_owner=sizing.by_owner, ms=sizing_ms)
         t = await new_ticket(
             d,
             {
@@ -445,6 +452,13 @@ def _vaic_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 "owner_words": str(a.get("owner_words", ""))[:500],  # so "the Porsche thing" finds it later
                 # Fastest unless the owner asked for time in so many words (decision 287).
                 "pace": pace_from_words(f"{a.get('owner_words') or ''} {a['goal']} {cons or ''}"),
+                # VAIC's sizing, in code; the owner's words win (decision 289). Recorded on the board; stage 1 of
+                # the migration still runs every size through the Orchestrator.
+                "size": sizing.size,
+                "size_reason": sizing.reason,
+                "size_by_owner": sizing.by_owner,
+                "sizing_ms": sizing_ms,
+                **({"vaic_ms": max(0, int(time.time() * 1000) - c.started_ms)} if c.started_ms else {}),
             },
         )
         body = f"New task from the owner.\nGoal: {a['goal']}\nOwner's words: {a.get('owner_words', '')}"
@@ -986,6 +1000,7 @@ def _orchestrator_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 "to": dept["manager_id"],
                 "department": dept["name"],
                 "parent_id": c.task_id,
+                "task_id": c.task_id,
                 "kind": "assignment",
                 **({"workers": workers} if workers else {}),
                 **({"app_id": task_app} if (task_app := await _task_app(d, c.task_id)) else {}),
@@ -1285,6 +1300,7 @@ def _manager_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 "to": w["id"],
                 "department": dept,
                 "parent_id": c.ticket_id,
+                "task_id": c.task_id,
                 "kind": "assignment",
                 "pace": policy_for((goal_t or {}).get("pace")).pace,  # the part's time budget (decision 287)
             },

@@ -38,6 +38,7 @@ RESET_KINDS = frozenset(
         "STEWARD",
         "EXECREC",
         "LOT",
+        "BOARD",
     }
 )
 """The key kinds (the part of ``pk`` before ``#``) that ``Ledger.reset_city`` removes. Anything else is kept."""

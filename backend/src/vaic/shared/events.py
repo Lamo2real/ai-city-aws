@@ -59,6 +59,19 @@ class TicketRecord(_M):
     """VAIC's conversation the task came from, so the result is spoken back there."""
     standing_order: str | None = None
     """The standing order that started this job (decision 125); None for the owner's own jobs."""
+    task_id: str | None = None
+    """The owner's job a goal or part belongs to (decision 289: the project board files it there)."""
+    owner_words: str | None = None
+    app_id: str | None = None
+    pace: str | None = None
+    workers: float | None = None
+    size: str | None = None
+    """small, medium, large or extreme: VAIC's sizing of the job (decision 289)."""
+    size_reason: str | None = None
+    size_by_owner: bool | None = None
+    sizing_ms: float | None = None
+    vaic_ms: float | None = None
+    """From VAIC's turn starting to the job being handed on (stage timings, decision 289)."""
     created_at: str
     updated_at: str
 
