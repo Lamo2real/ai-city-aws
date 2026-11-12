@@ -332,3 +332,104 @@ async def test_an_executives_change_is_checked_when_staged_and_takes_everyday_wo
     after = json.loads((await t["city_api"].handler({"method": "GET", "path": "/executives"})).split(" ", 1)[1])
     coo = next(r for r in after["reviews"] if r["id"] == "coo-bottleneck-review")
     assert coo["enabled"] is True and coo["every_days"] == 1
+
+
+# ---------- skills VAIC writes (decision 257) ----------
+def draft(**kw: Any) -> dict[str, Any]:
+    return {
+        "name": "code-animation",
+        "description": "Silent code-made videos for Media: 1 to 2 second intense scenes.",
+        "instructions": "# Code animation\n\n1. Storyboard with Video production.\n2. Keep every scene 1 to 2 seconds.",
+        **kw,
+    }
+
+
+def skills_wired() -> tuple[City, Any, dict[str, Any]]:
+    from test_skills import FakeS3
+    from vaic.lambdas.skills_api import SkillsApi
+
+    c, api, t = wired()
+    api.skills = SkillsApi(api.ledger, FakeS3(), "vaic-prod-skills")
+    return c, api, t
+
+
+async def test_a_drafted_skill_is_staged_with_its_files_and_previewed() -> None:
+    c, api, t = skills_wired()
+    bus: MemoryBus = c.bus  # type: ignore[assignment]
+    out = await t["draft_skill"].handler(draft(roles=["worker"]))
+    assert "Staged, NOT saved" in out and "Add this skill?" in out
+    q = [e for e in bus.events if e["type"] == "vaic.question"][-1]
+    assert q["options"] == ["Add", "Not now"] and q["title"] == "Add the skill code-animation"
+    sk = q["skill"]
+    assert sk["name"] == "code-animation" and sk["replacing"] is False and sk["files"] == []
+    assert sk["markdown"].startswith('---\nname: "code-animation"\n') and "# Code animation" in sk["markdown"]
+    assert await api.skills.ledger.table.get("SKILLS", "SKILL#code-animation") is None  # nothing saved yet
+    out = await turn(c)["save_change"].handler({"answer": "yes"})
+    assert out.startswith("Saved")
+    row = await api.skills.ledger.table.get("SKILLS", "SKILL#code-animation")
+    assert row and row["roles"] == ["worker"] and row["source"] == "upload"
+    stored = api.skills.s3.objects[f"skills/code-animation/{row['version']}/SKILL.md"].decode()
+    assert stored == sk["markdown"]  # Yes saves exactly what the owner read
+    assert [e["saved"] for e in bus.events if e["type"] == "vaic.change"] == [True]
+
+
+@pytest.mark.parametrize(
+    ("kw", "why"),
+    [
+        ({"name": "Code Animation!"}, "lower-case"),
+        ({"description": "   "}, "description"),
+        ({"description": "x" * 1100}, "1,024"),
+        ({"name": "catalog"}, "catalog"),
+        ({"instructions": "y" * 50_000}, "at most 48,000"),
+        ({"files": [{"path": "../evil.sh", "content": "rm"}]}, "relative path"),
+        ({"files": [{"path": "hooks/x.json", "content": "{}"}]}, "refused"),
+        ({"roles": ["janitor"]}, "Roles"),
+    ],
+)
+async def test_a_draft_the_save_would_refuse_is_refused_at_staging(kw: dict[str, Any], why: str) -> None:
+    c, _, t = skills_wired()
+    out = await t["draft_skill"].handler(draft(**kw))
+    assert out.startswith("Not staged") and why in out and "draft_skill again" in out
+    assert "Nothing is waiting" in await turn(c)["save_change"].handler({"answer": "yes"})
+
+
+async def test_no_discards_a_drafted_skill() -> None:
+    c, api, t = skills_wired()
+    await t["draft_skill"].handler(draft())
+    assert (await turn(c)["save_change"].handler({"answer": "no"})).startswith("Discarded")
+    assert await api.skills.ledger.table.get("SKILLS", "SKILL#code-animation") is None
+
+
+async def test_a_redraft_replaces_the_shown_one_and_an_existing_skill_is_updated() -> None:
+    c, api, t = skills_wired()
+    bus: MemoryBus = c.bus  # type: ignore[assignment]
+    await t["draft_skill"].handler(draft())
+    await turn(c)["draft_skill"].handler(draft(instructions="# Code animation\n\nScenes of 1 second only."))
+    await turn(c)["save_change"].handler({"answer": "yes"})
+    row = await api.skills.ledger.table.get("SKILLS", "SKILL#code-animation")
+    md = api.skills.s3.objects[f"skills/code-animation/{row['version']}/SKILL.md"].decode()
+    assert "1 second only" in md and "Storyboard" not in md
+    # Editing it: a new version under the same name, previewed as an update.
+    await turn(c)["draft_skill"].handler(
+        draft(
+            instructions="# Code animation\n\nTwo seconds max.",
+            files=[{"path": "examples/scene.md", "content": "a scene"}],
+        )
+    )
+    q = [e for e in bus.events if e["type"] == "vaic.question"][-1]
+    assert q["title"] == "Update the skill code-animation" and q["options"] == ["Save", "Not now"]
+    assert q["skill"]["replacing"] is True and q["skill"]["files"] == ["examples/scene.md"]
+    await turn(c)["save_change"].handler({"answer": "yes"})
+    row = await api.skills.ledger.table.get("SKILLS", "SKILL#code-animation")
+    assert [f["path"] for f in row["files"]] == ["SKILL.md", "examples/scene.md"]
+
+
+async def test_city_api_post_skills_is_checked_the_same_way() -> None:
+    _, _, t = skills_wired()
+    out = await t["city_api"].handler({"method": "POST", "path": "/skills", "body": {"name": "code-animation"}})
+    assert out.startswith("Not staged") and "files" in out
+
+
+async def test_only_the_owner_drafts_skills() -> None:
+    _, _, t = wired(from_owner=False)
+    assert "Only the owner's own message" in await t["draft_skill"].handler(draft())

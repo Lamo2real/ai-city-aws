@@ -90,6 +90,8 @@ export type ConnectCardState = (
       title?: string;
       lines?: string[];
       detail?: string;
+      /** A skill VAIC wrote (decision 257): its SKILL.md is read beside the chat (a sheet on the phone) before Add. */
+      skill?: SkillDraft;
       /** The answer the owner tapped, while VAIC saves it. */
       answered?: string;
       result?: "saved" | "discarded" | "failed";
@@ -99,6 +101,26 @@ export type ConnectCardState = (
    * messages and replies go below it (decision 164). */
   after?: string;
 };
+/** A skill VAIC drafted, exactly as Add saves it (`vaic.question`'s `skill`, decision 257). */
+export interface SkillDraft {
+  name: string;
+  description: string;
+  markdown: string;
+  files: string[];
+  replacing: boolean;
+}
+function skillDraft(v: unknown): SkillDraft | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const o = v as Record<string, unknown>;
+  if (typeof o.name !== "string" || typeof o.markdown !== "string") return undefined;
+  return {
+    name: o.name,
+    description: String(o.description ?? ""),
+    markdown: o.markdown,
+    files: Array.isArray(o.files) ? o.files.map(String) : [],
+    replacing: o.replacing === true,
+  };
+}
 export type Presence = "idle" | "listening" | "thinking" | "speaking" | "waiting";
 
 export interface HudState {
@@ -337,6 +359,7 @@ class Store {
       ...(e.title ? { title: String(e.title) } : {}),
       ...(lines.length ? { lines } : {}),
       ...(e.detail ? { detail: String(e.detail) } : {}),
+      ...(skillDraft(e.skill) ? { skill: skillDraft(e.skill) } : {}),
     });
   }
   /** A staged change was saved or discarded: its card says so and its buttons go. */

@@ -7766,3 +7766,187 @@ a.btn-primary.chat-file-dl,
   color: var(--gtext);
   font-weight: 600;
 }
+
+/* ---------- a skill VAIC wrote, read before Add (decision 257) ---------- */
+/* Wide screens: the chat narrows to the left and the SKILL.md opens on the right, like an artifact panel. */
+.vaic.has-skill {
+  max-width: 1600px;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 46%);
+  gap: var(--s4);
+}
+.skill-side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 24px;
+  animation: skill-in 0.22s ease-out;
+}
+.skill-side:not(.is-sheet) {
+  background: var(--glass);
+}
+/* Like the chat, it runs up behind the floating top bar. */
+.view-vaic .vaic.has-skill .skill-side {
+  padding-top: var(--top-h, 64px);
+  border-top: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+@keyframes skill-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+.skill-side-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s4) var(--s4) var(--s2);
+}
+.skill-side-head h2 {
+  margin: 0;
+  font-size: var(--fs-l);
+  overflow-wrap: anywhere;
+}
+.skill-side-head .eyebrow {
+  margin: 0 0 var(--s1);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gmute);
+}
+.skill-x {
+  font-size: 22px;
+  line-height: 1;
+  color: var(--gmute);
+}
+.skill-tabs {
+  display: flex;
+  gap: var(--s1);
+  padding: 0 var(--s4) var(--s2);
+}
+.skill-tab {
+  padding: var(--s1) var(--s3);
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--gmute);
+  font-weight: 700;
+}
+.skill-tab[aria-selected="true"] {
+  background: var(--glass-2);
+  border-color: var(--edge-2);
+  color: var(--gtext);
+}
+.skill-doc {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--s2) var(--s4) var(--s4);
+  border-top: 1px solid var(--edge);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.skill-desc {
+  font-weight: 700;
+}
+.skill-md :is(h3, h4, h5, h6) {
+  margin: var(--s4) 0 var(--s2);
+  line-height: 1.3;
+  font-weight: 800;
+}
+.skill-md h3 {
+  font-size: var(--fs-l);
+}
+.skill-md :is(ul, ol) {
+  padding-left: 1.4em;
+}
+.skill-md code,
+.skill-raw {
+  font:
+    500 0.92em ui-monospace,
+    monospace;
+}
+.skill-md code {
+  background: var(--glass-deep);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.skill-md pre,
+.skill-raw {
+  padding: var(--s3);
+  overflow-x: auto;
+  background: var(--glass-deep);
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+}
+.skill-raw {
+  white-space: pre-wrap;
+  margin: var(--s2) 0;
+}
+.skill-md pre code {
+  background: none;
+  padding: 0;
+}
+.skill-side-foot {
+  padding: var(--s3) var(--s4) var(--s4);
+  border-top: 1px solid var(--edge);
+  display: grid;
+  gap: var(--s2);
+}
+.skill-side-foot p {
+  margin: 0;
+}
+.skill-q {
+  font-weight: 700;
+}
+.skill-side .choice-yes {
+  background: var(--accent-fill);
+  color: var(--accent-ink);
+}
+.skill-side .ask-done {
+  font-weight: 700;
+}
+.skill-excerpt {
+  display: grid;
+  gap: var(--s2);
+  justify-items: start;
+}
+.skill-excerpt p {
+  margin: 0;
+}
+/* Phones and narrow windows: a full-screen sheet with Add / Not now at the bottom. */
+/* The sheet blurs the chat itself: a blur inside the scrim's own blur would only see the scrim. */
+.skill-scrim {
+  padding: 0;
+  place-items: stretch;
+  background: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.skill-side.is-sheet {
+  /* Solid: the page's own sky under a raised glass, so the chat never shows through the text. */
+  background: linear-gradient(var(--glass), var(--glass)), var(--sky-bg);
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  padding-top: env(safe-area-inset-top);
+  animation-name: skill-up;
+}
+.skill-side.is-sheet .skill-side-foot {
+  padding-bottom: calc(var(--s4) + env(safe-area-inset-bottom));
+}
+@keyframes skill-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skill-side {
+    animation: none;
+  }
+}

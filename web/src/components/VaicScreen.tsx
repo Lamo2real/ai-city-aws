@@ -35,6 +35,7 @@ import { FileCards } from "./FileCards.tsx";
 import { Banner, ClearIcon, ClockIcon, MicIcon, SendIcon, StopIcon, toast, WaveIcon } from "./ui.tsx";
 import { MicWave, VoiceVisualizer } from "./VoiceVisualizer.tsx";
 import { WorkflowCard } from "./WorkflowCard.tsx";
+import { SkillPanel, useShownDraft, useWide } from "./SkillDraft.tsx";
 import { workflows } from "../lib/workflows.ts";
 
 export { MicIcon } from "./ui.tsx";
@@ -52,6 +53,9 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
   const chat = useHud((s) => s.chat);
   const cards = useHud((s) => s.cards);
   const placed = placeCards(chat, cards);
+  // A skill VAIC wrote: beside the chat on a wide screen, a sheet on the phone (decision 257).
+  const skillDraft = useShownDraft();
+  const wide = useWide();
   const presence = useHud((s) => s.presence);
   // "While you were away": opens by itself after more than 12 hours away, and from the clock any time.
   const [away, setAway] = useState<number | null>(() => (cameBack() ? awayStart() : null));
@@ -321,7 +325,10 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
   const unsent = chat.filter((l) => l.who === "owner" && l.state === "failed").length;
 
   return (
-    <section className={`vaic${voice.conversation ? " voice-live" : ""}`} aria-labelledby="vaic-title">
+    <section
+      className={`vaic${voice.conversation ? " voice-live" : ""}${skillDraft && wide ? " has-skill" : ""}`}
+      aria-labelledby="vaic-title"
+    >
       <h1 id="vaic-title" className="sr">
         Talk to VAIC
       </h1>
@@ -597,6 +604,7 @@ export function VaicScreen({ go }: { go: (view: string) => void }) {
           </div>
         </form>
       </div>
+      {skillDraft ? <SkillPanel d={skillDraft} sheet={!wide} /> : null}
     </section>
   );
 }

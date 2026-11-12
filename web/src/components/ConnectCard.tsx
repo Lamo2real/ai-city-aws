@@ -10,6 +10,7 @@ import { serviceFor, useCatalog } from "../lib/catalog.ts";
 import { store, type ConnectCardState } from "../lib/store.ts";
 import { Button, errorText, LiveDot } from "./ui.tsx";
 import { Select } from "./Select.tsx";
+import { SkillExcerpt } from "./SkillDraft.tsx";
 
 /** "No account yet?": the service's own sign-up page, checked by scripts/check-signup-links.mjs, in a new tab. */
 export function SignupLink(p: { href?: string; service: string }) {
@@ -378,11 +379,11 @@ export function AskCard(p: AskProps) {
           ))}
         </ul>
       ) : null}
-      {p.detail ? <p className="mute">{p.detail}</p> : null}
+      {p.skill ? <SkillExcerpt d={p} /> : p.detail ? <p className="mute">{p.detail}</p> : null}
       <p>{p.question}</p>
       {p.result ? (
         <p className={p.result === "saved" ? "ask-done" : "mute"} role="status">
-          {SETTLED[p.result]}
+          {p.skill && p.result === "saved" ? "Added. It's on the Skills page." : SETTLED[p.result]}
         </p>
       ) : p.answered ? (
         <p className="mute" role="status">{`${p.answered}: saving…`}</p>

@@ -3,7 +3,9 @@
 Since decision 206 (the owner, 2026-11-11) a change is staged first: ``city_api`` with PUT, POST or DELETE shows the
 owner what will change with Yes / No buttons in the chat ("Do you want to save these changes?") and saves nothing;
 ``save_change`` saves or discards it on the owner's next message (a tap, typed words or speech). ``find_skill`` looks
-up the skill catalog: one match is staged as a skill card with Add, several are offered as choices.
+up the skill catalog: one match is staged as a skill card with Add, several are offered as choices. ``draft_skill``
+(decision 257) writes a new skill, or a new version of one, and stages it with its files, checked by the same rules
+the save uses, so the owner reads the whole SKILL.md beside the chat before Add and Yes can't fail for its files.
 
 ``city_api`` runs any HUD route as the owner (read and write: settings, connectors, departments, knowledge, skills,
 standing orders, apps, mail, calendar…) through the API's own code and checks. ``hud_action`` does what lives on the
@@ -13,10 +15,12 @@ so a document, email or worker report can never steer them.
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 from typing import Any
 
+from vaic.lambdas.skills_api import prepare as prepare_skill
 from vaic.shared import executives as execs
 from vaic.shared import owner_api, skills_catalog
 from vaic.shared.ad_spend import AdLimitStore
@@ -25,6 +29,8 @@ from vaic.shared.events import now_iso
 from vaic.shared.hierarchy.actions import CityDeps
 from vaic.shared.log import log
 from vaic.shared.skills import PK as SKILLS_PK
+from vaic.shared.skills import SkillInvalid, valid_roles
+from vaic.shared.skills import sk as skill_sk
 
 from .tools import ToolSpec, TurnCtx, _obj, _s
 
@@ -62,6 +68,10 @@ NOT_A_SETTING = (
     + ", ".join(k for k in SETTING_KEYS if k != "first_run_done")
     + ". Safety rules, IAM, the policy file and self-improvement are never settings."
 )
+
+
+DRAFT_MAX_BYTES = 48_000
+"""A skill VAIC writes in the chat stays readable beside it; bigger ones are uploaded on the Skills page."""
 
 
 def _show(v: Any, key: str) -> str:
@@ -106,9 +116,17 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         p = owner_api.clean_path(path)
         question, options = SAVE_QUESTION, ["Yes", "No"]
         title, lines, detail = summary or f"{method} {p}", [], ""
+        preview: dict[str, Any] | None = None
+        if card is None and method == "POST" and p == "/skills":
+            # A skill written in the chat: checked now with the save's own rules (decision 257).
+            built_or_why = await drafted(body)
+            if isinstance(built_or_why, str):
+                return built_or_why
+            body, card = built_or_why
         if card is not None:
             title, lines, detail = card["title"], card["lines"], card.get("detail", "")
             question, options = card["question"], card["options"]
+            preview = card.get("skill")
         elif method == "PUT" and p == "/settings":
             given = body or {}
             unknown = [k for k in given if k not in SETTING_KEYS or k == "first_run_done"]
@@ -184,6 +202,7 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
                 "title": title[:120],
                 "lines": [x[:200] for x in lines][:12],
                 "detail": detail[:300],
+                **({"skill": preview} if preview else {}),
             }
         )
         said = "; ".join(lines) if lines else title
@@ -193,6 +212,66 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             f"(a tap on {options[0]}, or typed or spoken) call save_change with answer yes; on no, answer no. If "
             "they ask for something different instead, stage the new change (it replaces this one)."
         )
+
+    async def drafted(body: dict[str, Any] | None) -> tuple[dict[str, Any], dict[str, Any]] | str:
+        """The checked body (with the reduced SKILL.md the save will store) and its card, or why it's refused."""
+        b = body or {}
+        try:
+            name, description, files, removed = prepare_skill(b)
+            roles = valid_roles(b["roles"]) if b.get("roles") else None
+        except SkillInvalid as why:
+            return f"Not staged, the city would refuse this skill: {why} Fix it and call draft_skill again."
+        size = sum(len(v) for v in files.values())
+        if size > DRAFT_MAX_BYTES:
+            return (
+                f"Not staged: the skill is {size:,} bytes, and one written in the chat can be at most "
+                f"{DRAFT_MAX_BYTES:,}. Make it shorter and call draft_skill again (bigger ones are uploaded on the "
+                "Skills page)."
+            )
+        text = {p: v.decode("utf-8", "replace") for p, v in files.items()}
+        old = await d.ledger.table.get(SKILLS_PK, skill_sk(name))
+        checked: dict[str, Any] = {
+            "files": [{"path": p, "content_base64": base64.b64encode(v).decode()} for p, v in sorted(files.items())],
+            **({"roles": roles} if roles else {}),
+        }
+        who = f"For: {', '.join(roles)}." if roles else ("Same roles as now." if old else "For every role.")
+        extra = sorted(p for p in text if p != "SKILL.md")
+        dropped = f" Removed from the frontmatter: {', '.join(removed)}." if removed else ""
+        card = {
+            "title": f"{'Update' if old else 'Add'} the skill {name}",
+            "lines": [description],
+            "detail": " ".join(x for x in (who, f"Also: {', '.join(extra)}." if extra else "", dropped) if x),
+            "question": "Save this new version?" if old else "Add this skill?",
+            "options": ["Save", "Not now"] if old else ["Add", "Not now"],
+            "skill": {
+                "name": name,
+                "description": description,
+                "markdown": text["SKILL.md"],
+                "files": extra,
+                "replacing": old is not None,
+            },
+        }
+        return checked, card
+
+    async def draft_skill(a: dict[str, Any]) -> str:
+        if not c.from_owner:
+            return NOT_OWNER
+        if d.owner_api is None:
+            return "The API isn't wired to this runtime yet (VAIC_API_FUNCTION is not set)."
+        name = str(a.get("name") or "").strip()
+        description = " ".join(str(a.get("description") or "").split())
+        body = str(a.get("instructions") or "").strip()
+        if not body:
+            return "Write the skill's instructions (the SKILL.md body) and call draft_skill again."
+        md = f"---\nname: {name}\ndescription: {description}\n---\n\n{body}\n"
+        files = [{"path": "SKILL.md", "content_base64": base64.b64encode(md.encode()).decode()}]
+        for f in a.get("files") or []:
+            if isinstance(f, dict):
+                content = str(f.get("content") or "").encode()
+                files.append({"path": str(f.get("path") or ""), "content_base64": base64.b64encode(content).decode()})
+        roles = a.get("roles")
+        req: dict[str, Any] = {"files": files, **({"roles": roles} if isinstance(roles, list) and roles else {})}
+        return await stage("POST", "/skills", req, "")
 
     def skill_card(e: dict[str, Any], body: dict[str, Any] | None) -> dict[str, Any]:
         roles = (body or {}).get("roles")
@@ -423,7 +502,7 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
         ),
         ToolSpec(
             "save_change",
-            "Save or discard the change you staged with city_api or find_skill, on the owner's answer in their new "
+            "Save or discard the change you staged with city_api, find_skill or draft_skill, on the owner's answer in their new "
             "message: answer yes when they said yes, save, add, go ahead or tapped Yes / Add; no when they said no, "
             "cancel, not now or tapped No / Not now. Never in the same turn you staged it.",
             _obj({"answer": {"type": "string", "enum": ["yes", "no"]}}),
@@ -446,6 +525,36 @@ def owner_tools(d: CityDeps, c: TurnCtx) -> list[ToolSpec]:
             ),
             find_skill,
             step=lambda a: f"Looking for the skill {str(a.get('query') or '')[:40]}",
+        ),
+        ToolSpec(
+            "draft_skill",
+            "Write a skill for the owner (one that isn't in the catalog, or a new version of one they have) and "
+            "stage it: the whole SKILL.md opens beside the chat for the owner to read, with Add / Not now, and "
+            "save_change saves exactly that on their yes. Write it in full first; never ask whether to write it. "
+            "name: lower-case letters, digits and dashes; description: one or two sentences on what it does and when "
+            "to use it (at most 1,024 characters); instructions: the SKILL.md body in Markdown (a # title, then "
+            "clear steps, rules and examples); roles: who gets it (vaic, orchestrator, manager, worker), every role "
+            "when not said; files: extra text files only when the skill needs them. To change a skill, GET "
+            "/skills/<name> with city_api, then draft_skill the whole new version under the same name. When the "
+            "owner asks for changes, call it again: the new draft replaces the shown one.",
+            _obj(
+                {
+                    "name": _s(1, 64),
+                    "description": _s(1, 1024),
+                    "instructions": _s(1, DRAFT_MAX_BYTES),
+                    "roles": {
+                        "type": "array",
+                        "items": {"type": "string", "enum": ["vaic", "orchestrator", "manager", "worker"]},
+                    },
+                    "files": {
+                        "type": "array",
+                        "items": _obj({"path": _s(1, 200), "content": _s(0, DRAFT_MAX_BYTES)}),
+                    },
+                },
+                ("roles", "files"),
+            ),
+            draft_skill,
+            step=lambda a: f"Writing the skill {str(a.get('name') or '')[:40]}",
         ),
         ToolSpec(
             "hud_action",

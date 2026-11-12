@@ -381,6 +381,9 @@ class VaicQuestion(_E):
     lines: list[str] = []
     """What will change, one line each ("Per goal (one manager's team): 64 → 65"), or what a skill does."""
     detail: str = ""
+    skill: dict[str, Any] | None = None
+    """A skill VAIC drafted (decision 257): ``name``, ``description``, ``markdown`` (the SKILL.md that Yes saves,
+    exactly), ``files`` (its other paths) and ``replacing``. The HUD shows it beside the chat to read before Add."""
 
 
 class CallRequested(_E):
