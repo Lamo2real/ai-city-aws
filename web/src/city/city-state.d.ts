@@ -343,10 +343,12 @@ export const CAB_PX_S: number;
 export const CAB_GAP_PX: number;
 export const CAB_FADE_PX: number;
 export const MAP_MARGIN: number;
+export const WORLD_MARGIN: number;
+export const FAR_PX_S: number;
 export function edgeAlpha(pos: number, from: number, to: number): number;
 export function avenueLanes(world: CityWorld): Array<{ x0: number; x1: number; y0: number; y1: number; off0: boolean; off1: boolean }>;
 export type CityJunction = { id: string; street: number; road: number; v: number; h: number; cx: number; cy: number; kind: "light" | "roundabout" | "giveway"; offset?: number; arms: { w: boolean; e: boolean; n: boolean; s: boolean } };
-export type CityLane = { id: string; axis: "x" | "y"; dir: 1 | -1; at: number; from: number; to: number; span: number; len: number; townFrom: number; townTo: number; startOff?: boolean; endOff?: boolean; endJ?: CityJunction | null; controls: Array<{ j: CityJunction; dc: number; entryD: number; exitD: number; entryAng: number; exitAng: number }> };
+export type CityLane = { id: string; axis: "x" | "y"; dir: 1 | -1; at: number; from: number; to: number; span: number; len: number; townFrom: number; townTo: number; nearFrom?: number; nearTo?: number; startOff?: boolean; endOff?: boolean; endJ?: CityJunction | null; controls: Array<{ j: CityJunction; dc: number; entryD: number; exitD: number; entryAng: number; exitAng: number }> };
 export type CityCar = { id: string; lane: CityLane | null; d: number; v: number; f: number; lap: number; rare: RareCar | boolean; commit: string | null; stopFor: string | null; braking: boolean; ring: { j: CityJunction; ang: number; exitAng: number; toLane: CityLane; toD: number } | null; next?: { l: CityLane; c: CityLane["controls"][number]; j: CityJunction; at: number } | null; decided?: string | null; turnedAt?: string | null; turn?: { x: number; y: number; t: number } | null };
 export type CityGuest = { id?: string; x: number; y: number; vertical: boolean; commit: string | null; rv?: number; ring: { j: CityJunction; ang: number } | null };
 export type CityTraffic = { world: CityWorld; lanes: CityLane[]; junctions: CityJunction[]; cars: CityCar[]; guests: CityGuest[]; t: number; rand: () => number; margin: number; arrivals: number; rareRand: () => number; entries?: CityLane[] };
@@ -397,3 +399,5 @@ export function taxiCall(world: CityWorld, route: CityPoint[], ride: boolean[], 
 export const BEND_R: number;
 export function centreLines(world: CityWorld): { runs: Array<{ axis: "x" | "y"; at: number; from: number; to: number; cap0: false | "bend" | "junction"; cap1: false | "bend" | "junction" }>; bends: Array<{ cx: number; cy: number; r: number; from: CityPoint; to: CityPoint; j: string }> };
 export const CAB_KEEP: number;
+/** Who is working in each department's building right now (decision 279): one lit window each. */
+export function workingIn(state: CityState): Record<string, Array<{ id: string; what: string | null }>>;

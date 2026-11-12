@@ -129,17 +129,18 @@ describe("the traffic as a whole", () => {
     expect(CAB_GAP_PX).toBe(44 * TILE);
     for (const [n, portrait] of [[2, false], [4, false], [8, false], [12, false], [6, true]] as const) {
       const sim = createTraffic(city(n, portrait));
-      const before = sim.lanes.map((l) => Math.max(1, Math.round(l.span / CAB_GAP_PX))); // after decision 180
+      const near = (l: (typeof sim.lanes)[number]) => Math.min(l.span, l.nearTo!) - Math.max(0, l.nearFrom!); // the roads out to MAP_MARGIN (decision 279)
+      const before = sim.lanes.map((l) => Math.max(1, Math.round(near(l) / CAB_GAP_PX))); // after decision 180
       const total = before.reduce((a, b) => a + b, 0);
       // Half again, but every lane keeps at least one (the town's short roads too, decision 259).
       // Then three in four of those (decision 269).
-      const was = cabsPerLane(sim.lanes.map((l) => l.span)).reduce((a, b) => a + b, 0);
+      const was = cabsPerLane(sim.lanes.map(near)).reduce((a, b) => a + b, 0);
       expect(was).toBeGreaterThanOrEqual(Math.max(sim.lanes.length, Math.round(total / 2)));
       expect(was).toBeLessThanOrEqual(Math.round(total / 2) + sim.lanes.length);
       expect(sim.cars.length).toBe(Math.round(was * 0.75));
       expect(CAB_KEEP).toBe(0.75);
       for (const c of sim.cars) expect(c.lane!.startOff && c.d <= 0).toBe(true); // queued on a road in from the edge
-      const first = sim.lanes.reduce((k, l) => k + Math.max(1, Math.round(l.span / (22 * TILE))), 0); // before any halving
+      const first = sim.lanes.reduce((k, l) => k + Math.max(1, Math.round(near(l) / (22 * TILE))), 0); // before any halving
       expect(sim.cars.length / first).toBeLessThan(0.4); // about three sixteenths
     }
   });
@@ -232,7 +233,7 @@ describe("footbridges (decision 262)", () => {
     let stoppedUnder = 0;
     const lights = sim.junctions.filter((j) => j.kind === "light");
     const seen = new Set<string>();
-    for (let t = 0; t < 300_000; t += 50) { // a bigger town with fewer cabs since decisions 269 and 275: give them time
+    for (let t = 0; t < 480_000; t += 50) { // a bigger town and world with fewer cabs since decisions 269 and 275: give them time
       stepTraffic(sim, 50);
       for (const c of trafficCars(sim)) {
         if (c.ring) continue;

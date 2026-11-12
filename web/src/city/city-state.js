@@ -568,6 +568,11 @@ export const TOWER_H = 12;
 const SEATS_PER_ROW = 4, STREET = 3;
 // How far the countryside and the roads run on past the town on every side, in tiles (the owner: a larger map).
 export const MAP_MARGIN = 48;
+// How far the world runs on past the town on every side, in tiles (decision 279, the owner: "make the entire map
+// larger so I can scroll and drag much further"): forest, with the street past the homes and the avenue past HQ
+// running on to its edge. The baked town picture keeps MAP_MARGIN of countryside; the rest is drawn in tiles as it
+// comes into view.
+export const WORLD_MARGIN = 200;
 
 // The three apartment buildings of a block of homes (decision 188), [kind, x, y, w, h] in tiles inside a box
 // APT_BOX_W wide and APT_BOX_H deep: a tall slim brick tower, a wide shorter one at the back, a brownstone mid-rise
@@ -718,21 +723,9 @@ export function layout(state, { portrait = false, seats = {}, homes = 0 } = {}) 
     for (let r = r0; r <= r1; r++) if (isBuilt(c, r) || isBuilt(c + 1, r)) { y0 = Math.min(y0, r * PITCH_Y - STREET); y1 = Math.max(y1, (r + 1) * PITCH_Y); }
     if (y0 < Infinity) lanes.push({ x: colX(c) + colW(c), y0, y1 });
   }
-  // The neighbours (decision 275): every other lot of a built block holds a building that is nobody's department,
-  // shoulder to shoulder with the department's tower: tall towers in the middle of town, mid-rises further out,
-  // low-rises at the edge, where now and then a lot is left to the trees. Each is fixed by its place, so a neighbour,
-  // once there, stays.
+  // No neighbours any more (decision 279, the owner: "remove all buildings that are not a department"): a block's
+  // other lots are small parks of trees between the towers.
   const neighbours = [];
-  for (const key of built) {
-    const [c, r] = key.split(",").map(Number), o = corner(c, r), d = blockScore(c, r), special = (c === 0 && r === 0) || (c === HOMES_BLOCK[0] && r === HOMES_BLOCK[1]);
-    for (let li = 0; li < lotsAcross(c); li++) {
-      if (special ? li === 0 : li === deptLot(c, r)) continue;
-      const h = hashOf(`${CITY_SEED}:nb:${c},${r},${li}`);
-      if (d > 4.2 && h % 5 < 2) continue; // the edge of town thins out to trees
-      const w = 9 + (h % 3), tall = d < 2.2 ? 18 + ((h >>> 3) % 2) : d < 3.4 ? 14 + ((h >>> 3) % 3) : 9 + ((h >>> 3) % 3);
-      neighbours.push({ id: `nb:${c},${r},${li}`, x: o.x + li * LOT_W + Math.floor((LOT_W - w) / 2), y: o.y + BLOCK_H - tall, w, h: tall, c, r, lot: { x: o.x + li * LOT_W, y: o.y, w: LOT_W, h: BLOCK_H }, rise: d < 2.2 ? "tall" : d < 3.4 ? "mid" : "low" });
-    }
-  }
   const blocks = [...built].map((k) => { const [c, r] = k.split(",").map(Number); return { x: colX(c), y: r * PITCH_Y, w: colW(c), h: BLOCK_H, c, r }; });
   const hq = { dept: "HQ", x: 0, y: BLOCK_H - HQ_DRAW_H, w: LOT_W, h: HQ_DRAW_H, color: DEPT_COLOR.HQ };
   // The homes (decision 188): one block of three apartment buildings at the foot of its block, a small park behind.
@@ -875,7 +868,22 @@ export function departmentPanel(state, dept) {
   };
 }
 
-// How many agents stand at work in a department building (not HQ). The City counts lit windows the same way.
+// Who is working in each department's building right now (decision 279, the owner: windows lit "only … if there are
+// people working inside… working on a project inside that department"): its workers on a job (working or
+// reporting, as "Agents working now" counts them) and its manager while a ticket of theirs is in progress. One lit
+// window each; none working, the building is dark. { dept: [{ id, what }] }, `what` the job's title where known.
+export function workingIn(state) {
+  const out = {};
+  for (const a of Object.values(state.agents)) {
+    if (CORE.has(a.id) || a.kind === "core" || a.kind === "specialist" || a.state === "retired") continue;
+    const on = a.kind === "worker" ? BUSY.has(a.worker_state) : a.kind === "manager" && Object.values(state.tickets).some((t) => t.to === a.id && t.status === "in_progress");
+    if (!on) continue;
+    const dept = deptOf(a), t = currentTicket(state, a.id);
+    (out[dept] ??= []).push({ id: a.id, what: t?.title ?? t?.goal ?? null });
+  }
+  return out;
+}
+// How many agents stand at work in a department building (not HQ).
 export const agentsAtWork = (state) => Object.values(state.agents).filter((a) => !CORE.has(a.id) && a.kind !== "core" && placement(state, a.id).place === "station").length;
 
 // Running right now: a worker waiting for an answer or whose work is in review is not working (the owner,
@@ -1161,6 +1169,7 @@ export function cabsPerLane(spans) {
   return out;
 }
 export const CAB_KEEP = 0.75; // the share of those that drive (decision 269)
+export const FAR_PX_S = 220;
 export const TOWN_PX_S = CAB_PX_S, HIGHWAY_PX_S = 96, RING_PX_S = 22, ACCEL_PX_S2 = 44, BRAKE_PX_S2 = 50, CAR_GAP_PX = 6;
 export const JUNCTION_HALF = 24, STOP_AT = 36, RING_R = 40; // a roundabout twice the size it was, so the circling shows (decision 252)
 const CAR_LEN = { x: 24, y: 18 }, RING_LEN = 20, LOOKAHEAD = 420, TAU = Math.PI * 2;
@@ -1179,8 +1188,8 @@ export function signalAt(junction, t) {
 // The roads that run north–south right through the map: the avenue and, when there are towers west of HQ, the road
 // west of HQ (in tiles). The short side streets between towers carry no traffic.
 export function throughRoads(world) {
-  const top = (world.top ?? 0) - MAP_MARGIN;
-  return [{ x: world.avenue, y0: top, y1: world.height + MAP_MARGIN }, ...(world.lanes ?? [])]; // every avenue carries cabs (decision 259)
+  const top = (world.top ?? 0) - WORLD_MARGIN;
+  return [{ x: world.avenue, y0: top, y1: world.height + WORLD_MARGIN }, ...(world.lanes ?? [])]; // every avenue carries cabs (decision 259)
 }
 // Each street has two lanes, westbound above the centre line and eastbound below it; each through road has two,
 // southbound on the left and northbound on the right. A road either runs out through the countryside to the map's
@@ -1188,14 +1197,14 @@ export function throughRoads(world) {
 // it, or ends at a crossing (a T or a corner), where its lanes end at the crossing's centre and a cab turns onto the
 // other road (decision 267). No lane ends anywhere else.
 export function streetLanes(world) {
-  const M = MAP_MARGIN * TILE, L = world.left ?? 0, x0 = L * TILE - M, x1 = world.width * TILE + M;
+  const M = WORLD_MARGIN * TILE, L = world.left ?? 0, x0 = L * TILE - M, x1 = world.width * TILE + M;
   return world.streets.map((s) => {
     const off0 = s.y === world.hqStreet, off1 = off0; // only the street between HQ and the homes runs off the map
     return { y0: s.y * TILE + 17, y1: s.y * TILE + 33, x0: off0 ? x0 : (s.x0 + STREET / 2) * TILE, x1: off1 ? x1 : (s.x1 - STREET / 2) * TILE, off0, off1 };
   });
 }
 export function avenueLanes(world) {
-  const top = (world.top ?? 0) - MAP_MARGIN, bottom = world.height + MAP_MARGIN;
+  const top = (world.top ?? 0) - WORLD_MARGIN, bottom = world.height + WORLD_MARGIN;
   return throughRoads(world).map((r) => {
     const off0 = r.y0 <= top, off1 = r.y1 >= bottom;
     return { x0: r.x * TILE + 18, x1: r.x * TILE + 30, y0: off0 ? r.y0 * TILE : (r.y0 + STREET / 2) * TILE, y1: off1 ? r.y1 * TILE : (r.y1 - STREET / 2) * TILE, off0, off1 };
@@ -1247,7 +1256,7 @@ export function junctions(world) {
 export const BEND_R = 24;
 export function centreLines(world) {
   const js = junctions(world), runs = [], bends = [], H = BEND_R;
-  const M = MAP_MARGIN, L = world.left ?? 0;
+  const M = WORLD_MARGIN, L = world.left ?? 0;
   const cut = (axis, at, from, to, stops) => {
     let a = from, capA = false;
     for (const st of stops.sort((p, q) => p.c - q.c)) {
@@ -1328,6 +1337,10 @@ export function createTraffic(world, seed = "traffic", rareSeed, { warmMs = 0 } 
     lane.span = lane.to - lane.from; lane.len = CAR_LEN[lane.axis];
     const [lo, hi] = lane.axis === "x" ? [(world.left ?? 0) * TILE, W] : [(world.top ?? 0) * TILE, H], a = dOf(lane, lo), b = dOf(lane, hi);
     lane.townFrom = Math.min(a, b); lane.townTo = Math.max(a, b);
+    // Out past MAP_MARGIN (the far countryside, decision 279) a cab drives at FAR_PX_S, so the bigger world doesn't
+    // keep it away from town for long.
+    const nm = MAP_MARGIN * TILE, na = dOf(lane, lo - nm), nb = dOf(lane, hi + nm);
+    lane.nearFrom = Math.min(na, nb); lane.nearTo = Math.max(na, nb);
     lane.controls = [];
     for (const j of js) {
       if (lane.axis === "x" ? lane.street !== j.street : lane.road !== j.road) continue;
@@ -1341,7 +1354,8 @@ export function createTraffic(world, seed = "traffic", rareSeed, { warmMs = 0 } 
     // A lane that ends at a crossing: the crossing it ends at.
     lane.endJ = lane.endOff ? null : (lane.controls.find((c) => Math.abs(c.dc - lane.span) < 1)?.j ?? null);
   }
-  const cars = [], counts = cabsPerLane(lanes.map((l) => l.span));
+  // How many: as many as the roads out to MAP_MARGIN carry (the far countryside adds none, decision 279).
+  const cars = [], counts = cabsPerLane(lanes.map((l) => Math.min(l.span, l.nearTo) - Math.max(0, l.nearFrom)));
   const sim = { world, lanes, junctions: js, cars, guests: [], t: 0, rand: rngOf(seed), margin: M, arrivals: 0, rareRand: rngOf(`rare:${seed}:${rareSeed ?? Math.floor(Math.random() * 2 ** 31)}`) };
   sim.entries = lanes.filter((l) => l.startOff);
   // Every cab starts beyond the map's edge, queued on the roads that come in from it.
@@ -1427,9 +1441,10 @@ function tick(sim, dt) {
     const list = byLane.get(lane);
     list.forEach((car, i) => {
       const L = lane.len, d = car.d;
-      const base = (d >= lane.townFrom && d <= lane.townTo ? TOWN_PX_S : HIGHWAY_PX_S) * car.f;
+      const base = (d >= lane.townFrom && d <= lane.townTo ? TOWN_PX_S : d < lane.nearFrom || d > lane.nearTo ? FAR_PX_S : HIGHWAY_PX_S) * car.f;
       let cap = base, hold = Infinity;
       if (d < lane.townFrom) cap = Math.min(cap, reach(TOWN_PX_S * car.f, lane.townFrom - d)); // easing off the highway into town
+      if (d < lane.nearFrom) cap = Math.min(cap, reach(HIGHWAY_PX_S * car.f, lane.nearFrom - d) + 0); // and off the far road onto the highway
       const lead = list[i + 1] ?? null, leadD = lead ? lead.d : Infinity;
       if (lead) { const gap = leadD - lead.lane.len / 2 - d - L / 2 - CAR_GAP_PX; cap = Math.min(cap, reach(lead.v, gap)); hold = Math.min(hold, d + Math.max(0, gap)); }
       const ctl = lane.controls.find((c) => (c.j.kind === "roundabout" ? c.entryD > d : c.dc + JUNCTION_HALF + L / 2 > d));

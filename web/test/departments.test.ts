@@ -8,6 +8,7 @@ import {
   RISE_STAGGER_MS,
   CAB_FADE_PX,
   MAP_MARGIN,
+  WORLD_MARGIN,
   TILE,
   animProgress,
   avenueLanes,
@@ -181,7 +182,8 @@ describe("yellow cabs", () => {
   });
 
   it("come in only from beyond the map's edge and leave only past it: never appearing, fading or vanishing mid-road (decision 267)", () => {
-    const M = MAP_MARGIN * TILE;
+    const M = WORLD_MARGIN * TILE; // the world runs on past the town (decision 279)
+    void MAP_MARGIN;
     // The street between HQ and the homes runs right through the countryside to the map's border (decision 259);
     // every other street ends at a crossing.
     expect(streetLanes(w).some((l) => l.x0 === w.left * TILE - M && l.x1 === w.width * TILE + M)).toBe(true);
@@ -208,7 +210,7 @@ describe("yellow cabs", () => {
           if (c.alpha < 1) expect(out(c)).toBe(true); // faded only out by the border
           if (p.alpha === 0 && c.alpha > 0) { appeared++; expect(out(c)).toBe(true); } // comes in from beyond the edge
           if (p.alpha > 0 && c.alpha === 0) expect(out(p)).toBe(true); // and leaves past it
-          if (p.alpha > 0 && c.alpha > 0 && !c.ring && !p.ring) expect(Math.hypot(c.x - p.x, c.y - p.y)).toBeLessThan(12); // never jumps
+          if (p.alpha > 0 && c.alpha > 0 && !c.ring && !p.ring) expect(Math.hypot(c.x - p.x, c.y - p.y)).toBeLessThan(16); // never jumps (the far road runs at FAR_PX_S, decision 279)
         }
         prev = new Map(trafficCars(sim).map((c) => [c.id, c]));
       }

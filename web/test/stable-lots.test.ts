@@ -76,7 +76,7 @@ describe("the town", () => {
     expect(d.some((x, i) => i > 0 && x < d[i - 1]! - 0.1)).toBe(true);
   });
 
-  it("packs each block shoulder to shoulder: neighbours never overlap a tower, each other or a road, and never move (decision 275)", () => {
+  it("blocks of two or three lots (decision 275) hold only departments' towers, never filler buildings (decision 279), and nothing overlaps", () => {
     type Box = { x: number; y: number; w: number; h: number };
     const ground = (t: Box) => ({ ...t, y: t.y + t.h - Math.min(t.h, 16), h: Math.min(t.h, 16) }); // its footprint on its block
     const hit = (a: Box, b: Box) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
@@ -91,9 +91,8 @@ describe("the town", () => {
       for (const n of before.neighbours) expect(w.neighbours).toContainEqual(n); // a neighbour, once there, stays
       before = w;
     }
-    // Dense: most lots of the town hold a building; the middle is tall, the edge low.
-    expect(before.neighbours.length).toBeGreaterThan(before.buildings.length);
-    expect(before.neighbours.some((n) => n.rise === "tall") && before.neighbours.some((n) => n.rise === "low")).toBe(true);
+    // The only large buildings are the departments' and HQ (decision 279).
+    expect(before.neighbours).toEqual([]);
   });
 
   it("a phone and a Mac or PC draw the very same map", () => {

@@ -4,7 +4,7 @@
 // Reviewer; each department's manager stands at its door; panels are React (see CityView.tsx).
 // The City View: a small game world of the agents, drawn pixel by pixel on a canvas from city-state.js.
 // All of the art is drawn here in code. Every person on screen is a real agent; only the scenery moves on its own.
-import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, lotsMemory, readLotsMemory, footbridges, PITCH_X, PITCH_Y, BLOCK_W, BLOCK_H, blockOf, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, carryTraffic, centreLines, WARM_MS, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf, taxiCall, RIDE_PX_S, TO_WORK_BOOST, HOMES_PER_BLOCK } from "./city-state.js";
+import { PLAQUE, plaqueSlots, signsFor, COST_NOTE, CORE, INTEGRATION_MEANS, MODEL_NAME, TILE, VISUALS, ageText, agentPanel, agentStatus, applyLive, applySnapshot, assignSlots, checkText, cityMessage, courierFor, departmentNames, departmentPanel, deptColor, deptOf, doingWords, estUsd, plainText, ticketTone, ticketWords, gateStatus, hashOf, homeOf, homeSpot, identity, initialState, integrationGroups, layout, parkedRows, placement, walksOut, propFor, reduce, relTime, residents, seatSpot, stockholmTime, topBar, traceLines, usdRows, visitAllowed, visualState, walkRoute, workforceGroups, MAP_MARGIN, edgeAlpha, commuteRoute, doorOf, staggerMs, walkSpeed, ANIM_MS, animProgress, entranceAnims, lotsMemory, readLotsMemory, footbridges, PITCH_X, PITCH_Y, BLOCK_W, BLOCK_H, blockOf, standFraction, mailFor, enqueueMail, bikeSpeed, createTraffic, carryTraffic, WORLD_MARGIN, workingIn, centreLines, WARM_MS, stepTraffic, trafficCars, signalAt, junctions, JUNCTION_HALF, STOP_AT, rideLegs, arrive, roundaboutDetours, rideStep, ringOf, taxiCall, RIDE_PX_S, TO_WORK_BOOST, HOMES_PER_BLOCK } from "./city-state.js";
 
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const INK = "#1d1c36";
@@ -434,17 +434,22 @@ function street(g, x0, x1, y, seed, avenues, joins = [], ends = { w: false, e: f
 }
 // The centre lines (decision 269): dashes evenly spaced along each run between junctions, ending clear of the
 // junction's crossing and stop lines, running right up to a corner's bend, which bends the line round the turn.
-const LINE_Y = "#b9a45a", DASH = 10, DASH_GAP = 10;
+const LINE_Y = "#b9a45a", LINE_SOFT = "#7c7563", DASH = 10, DASH_GAP = 10, DASH_PHASE = 4;
 function centreLinePaint(g, { runs, bends }) {
   for (const r of runs) {
     const in0 = r.cap0 === "junction" ? 12 : 0, in1 = r.cap1 === "junction" ? 12 : 0, a = r.from + in0, b = r.to - in1, len = b - a;
     if (len < DASH) continue;
     // Whole dashes only, centred in the run (so both ends look the same); a run ending at a bend starts its dash there.
     const n = Math.floor((len + DASH_GAP) / (DASH + DASH_GAP)), used = n * (DASH + DASH_GAP) - DASH_GAP;
-    const start = r.cap0 === "bend" ? a : r.cap1 === "bend" ? b - used : a + Math.floor((len - used) / 2);
-    for (let k = 0; k < n; k++) {
+    // A line that runs off the map keeps the far road's beat (decision 279), so it carries on without a seam.
+    const beat = (p) => Math.ceil((p - DASH_PHASE) / (DASH + DASH_GAP)) * (DASH + DASH_GAP) + DASH_PHASE;
+    const off = !r.cap0 || !r.cap1, start = off ? beat(a) : r.cap0 === "bend" ? a : r.cap1 === "bend" ? b - used : a + Math.floor((len - used) / 2);
+    for (let k = 0; k < n + 1; k++) {
       const p = start + k * (DASH + DASH_GAP);
-      if (r.axis === "x") R(g, p, r.at - 1, DASH, 2, LINE_Y); else R(g, r.at - 1, p, 2, DASH, LINE_Y);
+      if (p + DASH > b) break;
+      // Soft ends (decision 279): the dash's end pixels in a half tone, so it reads as a painted stroke, not a block.
+      if (r.axis === "x") { R(g, p + 1, r.at - 1, DASH - 2, 2, LINE_Y); R(g, p, r.at - 1, 1, 2, LINE_SOFT); R(g, p + DASH - 1, r.at - 1, 1, 2, LINE_SOFT); }
+      else { R(g, r.at - 1, p + 1, 2, DASH - 2, LINE_Y); R(g, r.at - 1, p, 2, 1, LINE_SOFT); R(g, r.at - 1, p + DASH - 1, 2, 1, LINE_SOFT); }
     }
   }
   for (const bd of bends) {
@@ -472,6 +477,7 @@ function junctionMarks(g, j) {
   const { cx, cy } = j, s = STOP_AT, LINE = "#e8e6f0";
   const teeth = (x, y, w, h) => { for (let k = 0; k < Math.max(w, h); k += 4) R(g, x + (w > h ? k : 0), y + (w > h ? 0 : k), w > h ? 2 : w, w > h ? h : 2, LINE); };
   const arm = j.arms ?? { w: true, e: true, n: true, s: true }; // paint only on the roads that come in (decision 267)
+  if (j.kind !== "roundabout") roundCorners(g, j, arm);
   if (j.kind === "light") {
     if (arm.w) R(g, cx - s - 2, cy, 2, 16, LINE); if (arm.e) R(g, cx + s, cy - 16, 2, 16, LINE); // eastbound, westbound
     if (arm.n) R(g, cx - 16, cy - s - 2, 16, 2, LINE); if (arm.s) R(g, cx, cy + s, 16, 2, LINE); // southbound, northbound
@@ -524,6 +530,28 @@ function roundabout(g, j) {
     R(g, cx - 2, cy - 10, 4, 17, INK); R(g, cx - 1, cy - 9, 2, 15, "#3a4058"); // the lamp-post clock's column
     oval(g, cx, cy - 15, 7, 7, INK); oval(g, cx, cy - 15, 6, 6, "#fff6e0"); R(g, cx, cy - 19, 1, 4, INK); R(g, cx, cy - 15, 3, 1, INK); // its face
     R(g, cx - 5, cy + 5, 10, 3, INK); R(g, cx - 4, cy + 5, 8, 2, "#3a4058");
+  }
+}
+// Rounded kerbs (decision 279, the owner: "smooth out the edges of the road"): where two roads meet, the pavement's
+// corner between them curves (a quarter circle of radius 8 round the block's corner); where both roads turn away (the
+// outside of a corner), the carriageway's outer corner is rounded to follow the bend in the centre line.
+const ROAD = "#3f4168", KERB = "#65617c";
+function roundCorners(g, j, arm) {
+  const { cx, cy } = j;
+  for (const [h, v, a, b] of [[1, 1, "e", "s"], [-1, 1, "w", "s"], [1, -1, "e", "n"], [-1, -1, "w", "n"]]) {
+    if (arm[a] && arm[b]) { // between two roads: a curved kerb on the block's corner
+      const kx = cx + h * 24, ky = cy + v * 24;
+      for (let dy = 0; dy < 8; dy++) for (let dx = 0; dx < 8; dx++) {
+        const x = kx - h * (dx + 1), y = ky - v * (dy + 1), d = Math.hypot(dx + 0.5, dy + 0.5);
+        if (d > 8.6) R(g, x, y, 1, 1, ROAD); else if (d > 7.4) R(g, x, y, 1, 1, KERB);
+      }
+    } else if (!arm[a] && !arm[b]) { // the outside of a turn: round the carriageway's corner into the pavement
+      const ox = cx + h * 16, oy = cy + v * 16;
+      for (let dy = 0; dy < 16; dy++) for (let dx = 0; dx < 16; dx++) {
+        const x = ox - h * (dx + 1), y = oy - v * (dy + 1), d = Math.hypot(15.5 - dx, 15.5 - dy);
+        if (d > 16.6) R(g, x, y, 1, 1, WALK[0]); else if (d > 15.4) R(g, x, y, 1, 1, KERB);
+      }
+    }
   }
 }
 // A traffic light on its pole at the kerb, facing the traffic it holds: red, amber and green, one of them lit.
@@ -924,7 +952,7 @@ function apartment(g, a) {
   const wins = aptWindows(a);
   for (const [i, w] of wins.entries()) {
     R(g, w.x - 1, w.y - 2, w.w + 2, 1, STONE); R(g, w.x - 1, w.y - 1, w.w + 2, w.h + 2, INK);
-    const lit = hashOf(`${a.x},${a.y}:${i}`) % 7 === 0;
+    const lit = false; // a home's windows light only for whoever is in (decision 279), live
     R(g, w.x, w.y, w.w, w.h, lit ? LIT : GLASS); R(g, w.x, w.y, w.w, 1, lit ? LIT_TOP : "rgba(255,255,255,.14)");
     R(g, w.x, w.y + 4, w.w, 1, INK);
   }
@@ -1037,11 +1065,46 @@ function bake(world, skip = new Map(), { now = Date.now(), grow = true } = {}) {
   near.sort((p, q) => p[0] - q[0]).forEach(([, draw]) => draw());
   const FW = W - L + M * 2, FH = H - T + M * 2, X0 = L - M, Y0 = T - M;
   g.fillStyle = "rgba(38,30,78,.14)"; g.fillRect(X0, Y0, FW, FH); // the dusk wash over all of it
-  // The map's border fades softly into the night, so roads and cabs run off into it rather than stopping at an edge.
-  const E = EDGE * TILE, fade = (x0, y0, x1, y1, rx, ry, rw, rh) => { const gr = g.createLinearGradient(x0, y0, x1, y1); gr.addColorStop(0, "rgba(22,30,40,.92)"); gr.addColorStop(1, "rgba(22,30,40,0)"); g.fillStyle = gr; g.fillRect(rx, ry, rw, rh); };
-  fade(X0, 0, X0 + E, 0, X0, Y0, E, FH); fade(W + M, 0, W + M - E, 0, W + M - E, Y0, E, FH);
-  fade(0, Y0, 0, Y0 + E, X0, Y0, FW, E); fade(0, H + M, 0, H + M - E, X0, H + M - E, FW, E);
+  // (The world's border, now far out past this picture, fades into the night live: `worldEdge`, decision 279.)
   return c;
+}
+
+// ---------- The far countryside (decision 279): the world past the baked town picture, out to WORLD_MARGIN ----------
+// Forest on the same fixed tree grid as the town's, and the street past the homes and the avenue past HQ running on
+// to the edge, drawn in FAR_TILE tiles as they come into view (a bigger single picture would be too big for a phone),
+// or, zoomed far out, from one picture of the whole world at 1/FAR_LOW scale.
+const FAR_TILE = 512, FAR_LOW = 4, FAR_SWITCH = 0.6, FAR_KEEP = 90;
+function farGround(g, x0, y0, w, h, world, low = false) { // art pixels; `low`: a tree is a quick blob (the far-out picture)
+  const T = TILE, hy = world.hqStreet * T, ax = world.avenue * T, M = MARGIN * T;
+  const bake = { x0: (world.left ?? 0) * T - M, y0: (world.top ?? 0) * T - M, x1: world.width * T + M, y1: world.height * T + M };
+  lawn(g, x0, y0, w, h, "far");
+  const spots = [];
+  for (let j = Math.floor((y0 - 40) / TREE_H); j * TREE_H < y0 + h + 40; j++) for (let i = Math.floor((x0 - 30) / TREE_W); i * TREE_W < x0 + w + 30; i++) {
+    const k = hashOf(`tree:${i},${j}`);
+    if (k % 1000 >= 144) continue;
+    const x = i * TREE_W + TREE_W / 2 + ((k >>> 10) % 7) - 3, y = j * TREE_H + TREE_H / 2 + ((k >>> 14) % 5) - 2;
+    if (x > bake.x0 - 12 && x < bake.x1 + 12 && y > bake.y0 - 2 && y < bake.y1 + 34) continue; // the town picture has its own
+    if (y > hy - 2 && y < hy + 3 * T + 34) continue; // the road out
+    if (x > ax - 12 && x < ax + 3 * T + 12) continue;
+    spots.push([x, y, k]);
+  }
+  spots.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+  if (low) for (const [x, y] of spots) { R(g, x - 9, y - 22, 18, 18, "#1f4d3c"); R(g, x - 7, y - 20, 14, 14, "#2f7a52"); R(g, x - 1, y - 6, 3, 6, "#6b4226"); }
+  else for (const [x, y, k] of spots) grownTree(g, x, y, rng(`tree:${k}`), 1);
+  if (hy + 3 * T > y0 && hy < y0 + h) farRoad(g, "x", hy, x0, x0 + w);
+  if (ax + 3 * T > x0 && ax < x0 + w) farRoad(g, "y", ax, y0, y0 + h);
+  g.fillStyle = "rgba(38,30,78,.14)"; g.fillRect(x0, y0, w, h); // the dusk wash, as on the town
+}
+// A straight stretch of road out in the country: pavements, carriageway, and its centre line on the same 20-pixel beat
+// as the town's lines that run out to it (`centreLinePaint`).
+function farRoad(g, axis, at, a, b) {
+  if (axis === "x") {
+    paving(g, a, at, b - a, 8, WALK, "#65617c", `farx${a}`); paving(g, a, at + 40, b - a, 8, WALK, "#65617c", `farx2${a}`); roadH(g, a, at + 8, b - a, 32, `farx${a}`);
+    for (let p = Math.ceil((a - DASH_PHASE) / (DASH + DASH_GAP)) * (DASH + DASH_GAP) + DASH_PHASE; p < b; p += DASH + DASH_GAP) { R(g, p + 1, at + 23, DASH - 2, 2, LINE_Y); R(g, p, at + 23, 1, 2, LINE_SOFT); R(g, p + DASH - 1, at + 23, 1, 2, LINE_SOFT); }
+  } else {
+    paving(g, at, a, 8, b - a, WALK, "#65617c", `fary${a}`); paving(g, at + 40, a, 8, b - a, WALK, "#65617c", `fary2${a}`); roadH(g, at + 8, a, 32, b - a, `fary${a}`);
+    for (let p = Math.ceil((a - DASH_PHASE) / (DASH + DASH_GAP)) * (DASH + DASH_GAP) + DASH_PHASE; p < b; p += DASH + DASH_GAP) { R(g, at + 23, p + 1, 2, DASH - 2, LINE_Y); R(g, at + 23, p, 2, 1, LINE_SOFT); R(g, at + 23, p + DASH - 1, 2, 1, LINE_SOFT); }
+  }
 }
 
 // How far to move along a route this frame: a gentle start and a gentle stop (never slower than a third of the
@@ -1513,7 +1576,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   }
   // Pan anywhere over the countryside, never past where the map has faded out (centred when it all fits).
   function clampCam(x, y) {
-    const { w, h } = viewSize(), L = (world.left ?? 0) * TILE, T = (world.top ?? 0) * TILE, W = world.width * TILE, H = world.height * TILE, M = (MARGIN - EDGE / 2) * TILE;
+    const { w, h } = viewSize(), L = (world.left ?? 0) * TILE, T = (world.top ?? 0) * TILE, W = world.width * TILE, H = world.height * TILE, M = (WORLD_MARGIN - EDGE / 2) * TILE; // out to the world's edge (decision 279)
     const keep = (v, lo, hi, size) => (hi - lo <= size ? (lo + hi - size) / 2 : Math.max(lo, Math.min(hi - size, v)));
     return [keep(x, L - M, W + M, w), keep(y, T - M, H + M, h)];
   }
@@ -1542,7 +1605,7 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   function clampZoom(z) {
     let lo = ZOOM_MIN;
     if (world && root.clientWidth) {
-      const M = (MARGIN - EDGE / 2) * TILE, W = (world.width - (world.left ?? 0)) * TILE, H = (world.height - (world.top ?? 0)) * TILE;
+      const M = (WORLD_MARGIN * 0.6) * TILE, W = (world.width - (world.left ?? 0)) * TILE, H = (world.height - (world.top ?? 0)) * TILE; // far enough out to see much of the world
       // Never further out than the whole countryside; and never so close that the whole town can't be on screen
       // (on a phone the oval town is wider than ZOOM_MIN allows, decision 261).
       const area = safeArea(), town = Math.min(Math.max(1, area.r - area.l) / W, Math.max(1, area.b - area.t) / H); // the part the panels leave free
@@ -1646,7 +1709,15 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
   });
   canvas.addEventListener("pointermove", (ev) => {
     if (!pointers.has(ev.pointerId)) {
-      if (ev.pointerType !== "touch") { const p = pickAgent(ev); const next = p?.id ?? null; if (next !== hover) { hover = next; wake(); } canvas.style.cursor = next || pickApp(ev) || pickBuilding(ev) ? "pointer" : "grab"; }
+      if (ev.pointerType !== "touch") {
+        const p = pickAgent(ev); const next = p?.id ?? null; if (next !== hover) { hover = next; wake(); }
+        const bd = next ? null : pickBuilding(ev);
+        canvas.style.cursor = next || pickApp(ev) || bd ? "pointer" : "grab";
+        // Hovering a lit tower says who is at work in it and on what (decision 279).
+        const on = bd && bd !== "HQ" ? workingNow(bd) : [];
+        const tip = on.length ? `${bd}: ${on.length} working${on.some((w) => w.what) ? ` on ${[...new Set(on.map((w) => w.what).filter(Boolean))].slice(0, 3).join(", ")}` : ""}` : "";
+        if (canvas.title !== tip) canvas.title = tip;
+      }
       return;
     }
     pointers.set(ev.pointerId, at(ev));
@@ -1847,8 +1918,11 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     root.dataset.hqSigns = String(slots.length); // for tests
     return hqSigns;
   }
+  // Who is working in each department right now (decision 279), worked out once per change of the city's state.
+  let workingState = null, working = {};
+  const workingNow = (dept) => { if (state !== workingState) { workingState = state; working = workingIn(state); root.dataset.lit = Object.entries(working).map(([d, l]) => `${d}:${l.length}`).sort().join(","); } return working[dept] ?? []; };
   const litWindows = (b, ox, oy, below = Infinity) => {
-    const n = counts.get(b.dept)?.n ?? 0, lit = litOrder(b).slice(0, Math.min(litOrder(b).length, n));
+    const n = workingNow(b.dept).length, lit = litOrder(b).slice(0, Math.min(litOrder(b).length, n)); // one per agent working there (decision 279)
     for (const w of lit) if (w.y < below) { R(ctx, w.x - ox, w.y - oy, w.w, w.h, "#ffdf94"); R(ctx, w.x - ox, w.y - oy, w.w, 1, "#fff3cf"); }
   };
   // The part of a tower that rises over the street behind its block (decision 271), drawn again after the cabs and
@@ -1864,6 +1938,44 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
       if (!b.neighbour) litWindows(b, ox, oy, blockTop);
       beacon(t, now, ox, oy);
     }
+  }
+  // The far countryside (decision 279): its tiles, made as they come into view (a few a frame) and kept FAR_KEEP at a
+  // time, or far out one small picture of the whole world.
+  const farTiles = new Map();
+  let farSig = "", farLow = null, farLowAt = null;
+  function drawFar(ox, oy, w, h) {
+    const sig = JSON.stringify([world.left, world.top, world.width, world.height, world.hqStreet, world.avenue]);
+    if (sig !== farSig) { farSig = sig; farTiles.clear(); farLow = null; }
+    const WM = WORLD_MARGIN * TILE, X0 = (world.left ?? 0) * TILE - WM, Y0 = (world.top ?? 0) * TILE - WM, X1 = world.width * TILE + WM, Y1 = world.height * TILE + WM;
+    if (cam.zoom < FAR_SWITCH) {
+      if (!farLow) {
+        const [c, g] = newCanvas((X1 - X0) / FAR_LOW, (Y1 - Y0) / FAR_LOW);
+        g.scale(1 / FAR_LOW, 1 / FAR_LOW); g.translate(-X0, -Y0); farGround(g, X0, Y0, X1 - X0, Y1 - Y0, world, true);
+        farLow = c; farLowAt = { x: X0, y: Y0 };
+      }
+      const sx = Math.max(0, ox - farLowAt.x), sy = Math.max(0, oy - farLowAt.y);
+      ctx.drawImage(farLow, sx / FAR_LOW, sy / FAR_LOW, w / FAR_LOW, h / FAR_LOW, sx + farLowAt.x - ox, sy + farLowAt.y - oy, w, h);
+      return;
+    }
+    let made = 0;
+    for (let j = Math.floor(oy / FAR_TILE); j * FAR_TILE < oy + h; j++) for (let i = Math.floor(ox / FAR_TILE); i * FAR_TILE < ox + w; i++) {
+      const x = i * FAR_TILE, y = j * FAR_TILE;
+      if (x + FAR_TILE < X0 || y + FAR_TILE < Y0 || x > X1 || y > Y1) continue;
+      const key = `${i},${j}`;
+      let t = farTiles.get(key);
+      if (!t && made < 4) { const [c, g] = newCanvas(FAR_TILE, FAR_TILE); g.translate(-x, -y); farGround(g, x, y, FAR_TILE, FAR_TILE, world); t = c; made++; }
+      else if (!t) { needDraw = true; continue; } // the rest next frame
+      farTiles.delete(key); farTiles.set(key, t); // most recently used last
+      ctx.drawImage(t, x - ox, y - oy);
+    }
+    while (farTiles.size > FAR_KEEP) farTiles.delete(farTiles.keys().next().value);
+  }
+  // The world's border fades softly into the night, so the roads and cabs run off into it rather than stopping.
+  function worldEdge(ox, oy, w, h) {
+    const WM = WORLD_MARGIN * TILE, E = EDGE * TILE, X0 = (world.left ?? 0) * TILE - WM - ox, Y0 = (world.top ?? 0) * TILE - WM - oy, X1 = world.width * TILE + WM - ox, Y1 = world.height * TILE + WM - oy;
+    const fade = (x0, y0, x1, y1, rx, ry, rw, rh) => { if (rx > w || ry > h || rx + rw < 0 || ry + rh < 0) return; const gr = ctx.createLinearGradient(x0, y0, x1, y1); gr.addColorStop(0, "rgba(22,30,40,.92)"); gr.addColorStop(1, "rgba(22,30,40,0)"); ctx.fillStyle = gr; ctx.fillRect(rx, ry, rw, rh); };
+    fade(X0, 0, X0 + E, 0, X0, Y0, E, Y1 - Y0); fade(X1, 0, X1 - E, 0, X1 - E, Y0, E, Y1 - Y0);
+    fade(0, Y0, 0, Y0 + E, X0, Y0, X1 - X0, E); fade(0, Y1, 0, Y1 - E, X0, Y1 - E, X1 - X0, E);
   }
   function drawTowerLive(b, now, ox, oy) {
     const t = towerShape(b);
@@ -1904,9 +2016,11 @@ export function mountCity(root, { canvas: canvasEl, insets = () => ({ l: 0, t: 0
     ctx.fillStyle = "#2d5d53"; ctx.fillRect(0, 0, w, h);
     const ox = Math.round(cam.x), oy = Math.round(cam.y);
     OX = ox; OY = oy;
+    drawFar(ox, oy, w, h);
     const M = MARGIN * TILE, gx = (world.left ?? 0) * TILE - M, gy = (world.top ?? 0) * TILE - M; // where the baked ground starts
     const sx = Math.max(0, ox - gx), sy = Math.max(0, oy - gy), dw = Math.min(w, ground.width - sx), dh = Math.min(h, ground.height - sy);
     if (dw > 0 && dh > 0) ctx.drawImage(ground, sx, sy, dw, dh, sx + gx - ox, sy + gy - oy, dw, dh); // only the part on screen
+    worldEdge(ox, oy, w, h);
     // Scenery that moves: the fountain's jet and ripples.
     const fx = world.hq.x * TILE + FOUNTAIN[0] - ox, fy = world.hq.y * TILE + FOUNTAIN[1] - oy;
     const jet = [13, 15, 14, 16][f];
